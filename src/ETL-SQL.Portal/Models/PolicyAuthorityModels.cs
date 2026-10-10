@@ -2,6 +2,10 @@ using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Portal.Models;
 
+public record PolicyAuthorityStatusDto(bool Configured, string? SigningPublicKeyPem = null, string? Error = null);
+
+public record PolicyValidationDto(bool IsValid, IReadOnlyList<string> Errors);
+
 public record PolicyValidateRequest(string PolicyJson);
 
 public record PolicyPublishRequest(

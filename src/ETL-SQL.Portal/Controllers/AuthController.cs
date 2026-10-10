@@ -37,12 +37,7 @@ public class AuthController(
         var oidcEnabled = config.SharedTenancy.Enabled
             ? await sharedIdentityAuthorities.ResolveForRequestAsync(Request, ct) is not null
             : config.Identity.Oidc.Enabled;
-        return Ok(new
-        {
-            local = true,
-            oidcEnabled,
-            oidcLoginUrl = oidcEnabled ? "/api/auth/oidc/login" : null
-        });
+        return Ok(new AuthProvidersResponse(true, oidcEnabled, oidcEnabled ? "/api/auth/oidc/login" : null));
     }
 
     [HttpPost("login")]

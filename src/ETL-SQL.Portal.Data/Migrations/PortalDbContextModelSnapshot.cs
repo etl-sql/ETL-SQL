@@ -21,2941 +21,3732 @@ namespace ETL_SQL.Portal.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<int>("Attempts")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("attempts");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("completed_at_utc");
 
                     b.Property<string>("Detail")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("detail");
 
                     b.Property<string>("NodeName")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("node_name");
 
                     b.Property<string>("Outcome")
                         .IsRequired()
                         .HasMaxLength(20)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("outcome");
 
                     b.Property<string>("ServiceName")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("service_name");
 
                     b.Property<DateTime>("StartedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("started_at_utc");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_admin_service_runs");
 
-                    b.HasIndex("ServiceName", "StartedAtUtc");
+                    b.HasIndex("ServiceName", "StartedAtUtc")
+                        .HasDatabaseName("ix_admin_service_runs_service_name_started_at_utc");
 
-                    b.ToTable("AdminServiceRuns");
+                    b.ToTable("admin_service_runs");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.AlertNotification", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<int>("AlertId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("alert_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("NotificationName")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("notification_name");
 
                     b.Property<string>("OrchestratorAlias")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("orchestrator_alias");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_alert_notifications");
 
                     b.HasIndex("AlertId", "OrchestratorAlias", "NotificationName")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_alert_notifications_alert_id_orchestrator_alias_notification_name");
 
-                    b.ToTable("AlertNotifications");
+                    b.ToTable("alert_notifications");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.AuditLog", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("action");
 
                     b.Property<string>("ActorId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor_id");
 
                     b.Property<string>("ActorType")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
-                        .HasDefaultValue("User");
+                        .HasDefaultValue("User")
+                        .HasColumnName("actor_type");
 
                     b.Property<string>("CorrelationId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("correlation_id");
 
                     b.Property<string>("Detail")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("detail");
 
                     b.Property<string>("EffectiveScopes")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("effective_scopes");
 
                     b.Property<string>("ResourceId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("resource_id");
 
                     b.Property<string>("ResourceType")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("resource_type");
 
                     b.Property<string>("StudioCapability")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("studio_capability");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("Timestamp")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("timestamp");
 
                     b.Property<int?>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_audit_logs");
 
-                    b.HasIndex("TenantId", "Timestamp");
+                    b.HasIndex("TenantId", "Timestamp")
+                        .HasDatabaseName("ix_audit_logs_tenant_id_timestamp");
 
-                    b.HasIndex("TenantId", "Action", "Timestamp");
+                    b.HasIndex("TenantId", "Action", "Timestamp")
+                        .HasDatabaseName("ix_audit_logs_tenant_id_action_timestamp");
 
-                    b.HasIndex("TenantId", "ResourceType", "ResourceId");
+                    b.HasIndex("TenantId", "ResourceType", "ResourceId")
+                        .HasDatabaseName("ix_audit_logs_tenant_id_resource_type_resource_id");
 
-                    b.ToTable("AuditLogs");
+                    b.ToTable("audit_logs");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.AuditOutboxMessage", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("action");
 
                     b.Property<string>("ActorId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor_id");
 
                     b.Property<string>("ActorType")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
-                        .HasDefaultValue("User");
+                        .HasDefaultValue("User")
+                        .HasColumnName("actor_type");
 
                     b.Property<int>("Attempts")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("attempts");
 
                     b.Property<int?>("AuditLogId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("audit_log_id");
 
                     b.Property<string>("CorrelationId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("correlation_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<DateTime?>("DeliveredAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("delivered_at");
 
                     b.Property<string>("EffectiveScopes")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("effective_scopes");
 
                     b.Property<string>("EventId")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("event_id");
 
                     b.Property<string>("LastError")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_error");
 
                     b.Property<DateTime?>("LockedUntil")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("locked_until");
 
                     b.Property<DateTime?>("NextAttemptAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("next_attempt_at");
 
                     b.Property<DateTime>("OccurredAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("occurred_at");
 
                     b.Property<string>("PayloadJson")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("payload_json");
 
                     b.Property<string>("ResourceId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("resource_id");
 
                     b.Property<string>("ResourceType")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("resource_type");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
 
                     b.Property<string>("StudioCapability")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("studio_capability");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
 
                     b.Property<int?>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_audit_outbox_messages");
 
-                    b.HasIndex("AuditLogId");
+                    b.HasIndex("AuditLogId")
+                        .HasDatabaseName("ix_audit_outbox_messages_audit_log_id");
 
-                    b.HasIndex("TenantId", "AuditLogId");
+                    b.HasIndex("TenantId", "AuditLogId")
+                        .HasDatabaseName("ix_audit_outbox_messages_tenant_id_audit_log_id");
 
                     b.HasIndex("TenantId", "EventId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_audit_outbox_messages_tenant_id_event_id");
 
-                    b.HasIndex("TenantId", "Status", "NextAttemptAt");
+                    b.HasIndex("TenantId", "Status", "NextAttemptAt")
+                        .HasDatabaseName("ix_audit_outbox_messages_tenant_id_status_next_attempt_at");
 
-                    b.ToTable("AuditOutboxMessages");
+                    b.ToTable("audit_outbox_messages");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Dataset", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<int>("AccessLevel")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("access_level");
 
                     b.Property<string>("AtRestKeyVersion")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("at_rest_key_version");
 
                     b.Property<string>("ColumnSchema")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("column_schema");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<int?>("CreatedBy")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("created_by");
 
                     b.Property<int>("EncryptionMode")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("encryption_mode");
 
                     b.Property<int?>("FolderId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("folder_id");
 
                     b.Property<string>("FolderPath")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("folder_path");
 
                     b.Property<DateTime?>("LastRefresh")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_refresh");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
 
                     b.Property<int?>("OwningReportId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("owning_report_id");
 
                     b.Property<string>("ParquetFilePath")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("parquet_file_path");
 
                     b.Property<string>("RefreshInterval")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("refresh_interval");
 
                     b.Property<long>("RowCount")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("row_count");
 
                     b.Property<string>("SourceQuery")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("source_query");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("Ttl")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ttl");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_datasets");
 
-                    b.HasIndex("FolderId");
+                    b.HasIndex("FolderId")
+                        .HasDatabaseName("ix_datasets_folder_id");
 
-                    b.HasIndex("OwningReportId");
+                    b.HasIndex("OwningReportId")
+                        .HasDatabaseName("ix_datasets_owning_report_id");
 
                     b.HasIndex("TenantId", "Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_datasets_tenant_id_name");
 
-                    b.ToTable("Datasets");
+                    b.ToTable("datasets");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.DatasetAcl", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<int>("DatasetId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("dataset_id");
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("group_id");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("permission");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_dataset_acls");
 
-                    b.HasIndex("DatasetId");
+                    b.HasIndex("DatasetId")
+                        .HasDatabaseName("ix_dataset_acls_dataset_id");
 
-                    b.HasIndex("GroupId");
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_dataset_acls_group_id");
 
-                    b.ToTable("DatasetAcls");
+                    b.ToTable("dataset_acls");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.DatasetUserAcl", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<int>("DatasetId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("dataset_id");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("permission");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_dataset_user_acls");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_dataset_user_acls_user_id");
 
                     b.HasIndex("DatasetId", "UserId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_dataset_user_acls_dataset_id_user_id");
 
-                    b.ToTable("DatasetUserAcls");
+                    b.ToTable("dataset_user_acls");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Folder", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
 
                     b.Property<int>("OwnerId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("owner_id");
 
                     b.Property<int?>("ParentId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("parent_id");
 
                     b.Property<string>("Path")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("path");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_folders");
 
-                    b.HasIndex("ParentId");
+                    b.HasIndex("ParentId")
+                        .HasDatabaseName("ix_folders_parent_id");
 
                     b.HasIndex("TenantId", "Path")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_folders_tenant_id_path");
 
-                    b.ToTable("Folders");
+                    b.ToTable("folders");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.FolderAcl", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<int>("FolderId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("folder_id");
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("group_id");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("permission");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_folder_acls");
 
-                    b.HasIndex("FolderId");
+                    b.HasIndex("FolderId")
+                        .HasDatabaseName("ix_folder_acls_folder_id");
 
-                    b.HasIndex("GroupId");
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_folder_acls_group_id");
 
-                    b.ToTable("FolderAcls");
+                    b.ToTable("folder_acls");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.GatewayAmbiguousWriteCase", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("CorrelationId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("correlation_id");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<DateTime>("ExecutedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("executed_at_utc");
 
                     b.Property<string>("GatewayId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("gateway_id");
 
                     b.Property<string>("OperationId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("operation_id");
 
                     b.Property<string>("Owner")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("owner");
 
                     b.Property<string>("Priority")
                         .IsRequired()
                         .HasMaxLength(16)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("priority");
 
                     b.Property<string>("Resolution")
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("resolution");
 
                     b.Property<string>("ResourceId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("resource_id");
 
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("state");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_gateway_ambiguous_write_cases");
 
                     b.HasIndex("TenantId", "OperationId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_gateway_ambiguous_write_cases_tenant_id_operation_id");
 
-                    b.ToTable("GatewayAmbiguousWriteCases");
+                    b.ToTable("gateway_ambiguous_write_cases");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.GatewayAmbiguousWriteEvent", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("Actor")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor");
 
                     b.Property<long>("CaseId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("case_id");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<string>("EventType")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("event_type");
 
                     b.Property<string>("EvidenceReference")
                         .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("evidence_reference");
 
                     b.Property<string>("Note")
                         .HasMaxLength(4000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("note");
 
                     b.Property<string>("Resolution")
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("resolution");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_gateway_ambiguous_write_events");
 
-                    b.HasIndex("CaseId");
+                    b.HasIndex("CaseId")
+                        .HasDatabaseName("ix_gateway_ambiguous_write_events_case_id");
 
-                    b.HasIndex("TenantId", "CaseId", "Id");
+                    b.HasIndex("TenantId", "CaseId", "Id")
+                        .HasDatabaseName("ix_gateway_ambiguous_write_events_tenant_id_case_id_id");
 
-                    b.ToTable("GatewayAmbiguousWriteEvents");
+                    b.ToTable("gateway_ambiguous_write_events");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.GatewayEnrollmentEntity", b =>
                 {
                     b.Property<string>("EnrollmentId")
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("enrollment_id");
 
                     b.Property<DateTimeOffset?>("ConsumedUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("consumed_utc");
 
                     b.Property<DateTimeOffset>("CreatedUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_utc");
 
                     b.Property<DateTimeOffset>("ExpiresUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("expires_utc");
 
                     b.Property<string>("GatewayId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("gateway_id");
 
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(16)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("state");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("TokenHash")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("token_hash");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
                     b.Property<string>("WorkloadPublicKeyThumbprint")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("workload_public_key_thumbprint");
 
-                    b.HasKey("EnrollmentId");
+                    b.HasKey("EnrollmentId")
+                        .HasName("pk_gateway_enrollments");
 
-                    b.HasIndex("TenantId", "GatewayId");
+                    b.HasIndex("TenantId", "GatewayId")
+                        .HasDatabaseName("ix_gateway_enrollments_tenant_id_gateway_id");
 
                     b.HasIndex("TenantId", "TokenHash")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_gateway_enrollments_tenant_id_token_hash");
 
-                    b.ToTable("GatewayEnrollments");
+                    b.ToTable("gateway_enrollments");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Group", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("AdGroup")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("ad_group");
 
                     b.Property<string>("Description")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
 
                     b.Property<string>("PrincipalKey")
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("principal_key");
 
                     b.Property<string>("Provider")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("provider");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_groups");
 
                     b.HasIndex("PrincipalKey")
                         .IsUnique()
-                        .HasFilter("\"PrincipalKey\" IS NOT NULL");
+                        .HasDatabaseName("ix_groups_principal_key")
+                        .HasFilter("\"principal_key\" IS NOT NULL");
 
                     b.HasIndex("TenantId", "Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_groups_tenant_id_name");
 
-                    b.ToTable("Groups");
+                    b.ToTable("groups");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.GroupStudioCapability", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("Capability")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("capability");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("group_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_group_studio_capabilities");
 
                     b.HasIndex("GroupId", "Capability")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_group_studio_capabilities_group_id_capability");
 
-                    b.ToTable("GroupStudioCapabilities");
+                    b.ToTable("group_studio_capabilities");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.PolicyMachineEntity", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("CanaryGroup")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("canary_group");
 
                     b.Property<string>("ClientCertificateThumbprint")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("client_certificate_thumbprint");
 
                     b.Property<string>("EnrollmentId")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("enrollment_id");
 
                     b.Property<string>("Environment")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("environment");
 
                     b.Property<DateTimeOffset?>("LastSeenAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_seen_at_utc");
 
                     b.Property<string>("MachineId")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("machine_id");
 
                     b.Property<DateTimeOffset>("RegisteredAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("registered_at_utc");
 
                     b.Property<bool>("Revoked")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("revoked");
 
                     b.Property<DateTimeOffset?>("RevokedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("revoked_at_utc");
 
                     b.Property<string>("RevokedReason")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("revoked_reason");
 
                     b.Property<string>("Tenant")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_policy_machines");
 
                     b.HasIndex("MachineId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_policy_machines_machine_id");
 
-                    b.HasIndex("Tenant", "Environment");
+                    b.HasIndex("Tenant", "Environment")
+                        .HasDatabaseName("ix_policy_machines_tenant_environment");
 
-                    b.ToTable("PolicyMachines");
+                    b.ToTable("policy_machines");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.PolicyVersionEntity", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("Author")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("author");
 
                     b.Property<string>("CanaryGroup")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("canary_group");
 
                     b.Property<int?>("CanaryPercentage")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("canary_percentage");
 
                     b.Property<string>("Environment")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("environment");
 
                     b.Property<DateTimeOffset>("ExpiresAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("expires_at_utc");
 
                     b.Property<DateTimeOffset>("IssuedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("issued_at_utc");
 
                     b.Property<string>("PolicyHash")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("policy_hash");
 
                     b.Property<string>("PolicyVersion")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("policy_version");
 
                     b.Property<DateTimeOffset>("PublishedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("published_at_utc");
 
                     b.Property<string>("Reviewer")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reviewer");
 
                     b.Property<string>("RolloutState")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("rollout_state");
 
                     b.Property<string>("SignedEnvelopeJson")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("signed_envelope_json");
 
                     b.Property<string>("SupersededVersion")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("superseded_version");
 
                     b.Property<string>("Tenant")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_policy_versions");
 
                     b.HasIndex("Tenant", "Environment", "PolicyVersion")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_policy_versions_tenant_environment_policy_version");
 
-                    b.HasIndex("Tenant", "Environment", "RolloutState");
+                    b.HasIndex("Tenant", "Environment", "RolloutState")
+                        .HasDatabaseName("ix_policy_versions_tenant_environment_rollout_state");
 
-                    b.ToTable("PolicyVersions");
+                    b.ToTable("policy_versions");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.PortalExecutionJob", b =>
                 {
                     b.Property<string>("Id")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
 
                     b.Property<string>("ActorId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor_id");
 
                     b.Property<string>("ActorType")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
-                        .HasDefaultValue("User");
+                        .HasDefaultValue("User")
+                        .HasColumnName("actor_type");
 
                     b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("completed_at");
 
                     b.Property<string>("CorrelationId")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("correlation_id");
 
                     b.Property<double>("CpuTimeSeconds")
-                        .HasColumnType("REAL");
+                        .HasColumnType("REAL")
+                        .HasColumnName("cpu_time_seconds");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("EffectiveScopes")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("effective_scopes");
 
                     b.Property<string>("Error")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("error");
 
                     b.Property<string>("Kind")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("kind");
 
                     b.Property<string>("ManifestPath")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("manifest_path");
 
                     b.Property<long>("PeakMemoryBytes")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("peak_memory_bytes");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("report_id");
 
                     b.Property<long>("RowsProcessed")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("rows_processed");
 
                     b.Property<DateTime?>("StartedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("started_at");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_portal_execution_jobs");
 
-                    b.HasIndex("TenantId", "CompletedAt");
+                    b.HasIndex("TenantId", "CompletedAt")
+                        .HasDatabaseName("ix_portal_execution_jobs_tenant_id_completed_at");
 
                     b.HasIndex("TenantId", "ReportId", "Kind")
                         .IsUnique()
-                        .HasFilter("\"Kind\" = 'Refresh' AND \"Status\" IN ('Pending', 'Running')");
+                        .HasDatabaseName("ix_portal_execution_jobs_tenant_id_report_id_kind")
+                        .HasFilter("\"kind\" = 'Refresh' AND \"status\" IN ('Pending', 'Running')");
 
-                    b.ToTable("PortalExecutionJobs");
+                    b.ToTable("portal_execution_jobs");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.PortalRole", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("concurrency_stamp");
 
                     b.Property<string>("Name")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
 
                     b.Property<string>("NormalizedName")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("normalized_name");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_asp_net_roles");
 
                     b.HasIndex("NormalizedName")
                         .IsUnique()
-                        .HasDatabaseName("RoleNameIndex");
+                        .HasDatabaseName("role_name_index");
 
-                    b.ToTable("AspNetRoles", (string)null);
+                    b.ToTable("asp_net_roles", (string)null);
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.PortalSecret", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("created_by_user_id");
 
                     b.Property<bool>("Disabled")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("disabled");
 
                     b.Property<string>("EncryptedValue")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("encrypted_value");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("updated_by_user_id");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_portal_secrets");
 
                     b.HasIndex("TenantId", "Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_portal_secrets_tenant_id_name");
 
-                    b.ToTable("PortalSecrets");
+                    b.ToTable("portal_secrets");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.PortalSharedConnection", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("Alias")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("alias");
 
                     b.Property<string>("ConnectorType")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("connector_type");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("created_by_user_id");
 
                     b.Property<bool>("Disabled")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("disabled");
 
                     b.Property<string>("EnvironmentScope")
                         .HasMaxLength(100)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("environment_scope");
 
                     b.Property<DateTime?>("LastUsedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_used_at_utc");
 
                     b.Property<DateTime?>("LastVerifiedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_verified_at_utc");
 
                     b.Property<string>("OptionsJson")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("options_json");
 
                     b.Property<int?>("OwnerUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("owner_user_id");
 
                     b.Property<string>("SensitiveFieldsCsv")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("sensitive_fields_csv");
 
                     b.Property<string>("Target")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("target");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("updated_by_user_id");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_portal_shared_connections");
 
                     b.HasIndex("TenantId", "Alias")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_portal_shared_connections_tenant_id_alias");
 
-                    b.ToTable("PortalSharedConnections");
+                    b.ToTable("portal_shared_connections");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.PortalUser", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<int>("AccessFailedCount")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("access_failed_count");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("concurrency_stamp");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("Email")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("email");
 
                     b.Property<bool>("EmailConfirmed")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("email_confirmed");
 
                     b.Property<string>("ExternalIssuer")
                         .HasMaxLength(2048)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("external_issuer");
 
                     b.Property<string>("ExternalSubject")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("external_subject");
 
                     b.Property<string>("FirstName")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("first_name");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_active");
 
                     b.Property<string>("LastName")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_name");
 
                     b.Property<bool>("LockoutEnabled")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("lockout_enabled");
 
                     b.Property<DateTimeOffset?>("LockoutEnd")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("lockout_end");
 
                     b.Property<string>("MiddleInitial")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("middle_initial");
 
                     b.Property<bool>("MustChangePassword")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("must_change_password");
 
                     b.Property<string>("NormalizedEmail")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("normalized_email");
 
                     b.Property<string>("NormalizedUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("normalized_user_name");
 
                     b.Property<string>("PasswordHash")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("password_hash");
 
                     b.Property<string>("PhoneNumber")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("phone_number");
 
                     b.Property<bool>("PhoneNumberConfirmed")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("phone_number_confirmed");
 
                     b.Property<string>("PrincipalKey")
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("principal_key");
 
                     b.Property<string>("Provider")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("provider");
 
                     b.Property<string>("SecurityStamp")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("security_stamp");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<bool>("TwoFactorEnabled")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("two_factor_enabled");
 
                     b.Property<string>("UserName")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("user_name");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_asp_net_users");
 
                     b.HasIndex("NormalizedEmail")
-                        .HasDatabaseName("EmailIndex");
+                        .HasDatabaseName("email_index");
 
                     b.HasIndex("NormalizedUserName")
-                        .HasDatabaseName("UserNameIndex");
+                        .HasDatabaseName("user_name_index");
 
                     b.HasIndex("PrincipalKey")
                         .IsUnique()
-                        .HasFilter("\"PrincipalKey\" IS NOT NULL");
+                        .HasDatabaseName("ix_asp_net_users_principal_key")
+                        .HasFilter("\"principal_key\" IS NOT NULL");
 
                     b.HasIndex("TenantId", "NormalizedUserName")
                         .IsUnique()
-                        .HasFilter("\"NormalizedUserName\" IS NOT NULL");
+                        .HasDatabaseName("ix_asp_net_users_tenant_id_normalized_user_name")
+                        .HasFilter("\"normalized_user_name\" IS NOT NULL");
 
                     b.HasIndex("TenantId", "Provider", "ExternalIssuer", "ExternalSubject")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_asp_net_users_tenant_id_provider_external_issuer_external_subject");
 
-                    b.ToTable("AspNetUsers", (string)null);
+                    b.ToTable("asp_net_users", (string)null);
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.RefreshToken", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("expires_at");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("revoked_at");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("Token")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("token");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_refresh_tokens");
 
                     b.HasIndex("Token")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_refresh_tokens_token");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_refresh_tokens_user_id");
 
-                    b.HasIndex("TenantId", "UserId");
+                    b.HasIndex("TenantId", "UserId")
+                        .HasDatabaseName("ix_refresh_tokens_tenant_id_user_id");
 
-                    b.ToTable("RefreshTokens");
+                    b.ToTable("refresh_tokens");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Report", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("Category")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("category");
 
                     b.Property<string>("Certification")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("certification");
 
                     b.Property<string>("Contact")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("contact");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<int>("CreatedBy")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("created_by");
 
                     b.Property<string>("Description")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
 
                     b.Property<string>("Domain")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("domain");
 
                     b.Property<DateTime?>("EditSessionExpiresAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("edit_session_expires_at_utc");
 
                     b.Property<int?>("EditSessionUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("edit_session_user_id");
 
                     b.Property<string>("EditSessionUserName")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("edit_session_user_name");
 
                     b.Property<int>("FolderId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("folder_id");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_deleted");
 
                     b.Property<string>("Kind")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
                         .HasColumnType("TEXT")
-                        .HasDefaultValue("Report");
+                        .HasDefaultValue("Report")
+                        .HasColumnName("kind");
 
                     b.Property<DateTime?>("LastRefreshCompletedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_refresh_completed_at");
 
                     b.Property<long?>("LastRefreshDurationMs")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("last_refresh_duration_ms");
 
                     b.Property<string>("LastRefreshError")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_refresh_error");
 
                     b.Property<DateTime?>("LastRefreshStartedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_refresh_started_at");
 
                     b.Property<string>("LastRefreshStatus")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_refresh_status");
 
                     b.Property<DateTime?>("LastViewedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_viewed_at");
 
                     b.Property<string>("MetadataJson")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("metadata_json");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
 
                     b.Property<string>("Owner")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("owner");
 
                     b.Property<string>("PublishedScriptHash")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("published_script_hash");
 
                     b.Property<DateTime>("ScriptLastModified")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("script_last_modified");
 
                     b.Property<string>("ScriptPath")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("script_path");
 
                     b.Property<string>("Steward")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("steward");
 
                     b.Property<string>("Tags")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tags");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_reports");
 
-                    b.HasIndex("FolderId");
+                    b.HasIndex("FolderId")
+                        .HasDatabaseName("ix_reports_folder_id");
 
-                    b.HasIndex("TenantId", "FolderId");
+                    b.HasIndex("TenantId", "FolderId")
+                        .HasDatabaseName("ix_reports_tenant_id_folder_id");
 
-                    b.ToTable("Reports");
+                    b.ToTable("reports");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportAccessRequest", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<DateTime?>("DecidedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("decided_at");
 
                     b.Property<int?>("DecidedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("decided_by_user_id");
 
                     b.Property<string>("DecisionReason")
                         .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("decision_reason");
 
                     b.Property<string>("Reason")
                         .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reason");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("report_id");
 
                     b.Property<int>("RequesterUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("requester_user_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_access_requests");
 
-                    b.HasIndex("DecidedByUserId");
+                    b.HasIndex("DecidedByUserId")
+                        .HasDatabaseName("ix_report_access_requests_decided_by_user_id");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_report_access_requests_report_id");
 
                     b.HasIndex("RequesterUserId", "ReportId")
                         .IsUnique()
-                        .HasFilter("\"Status\" = 'Pending'");
+                        .HasDatabaseName("ix_report_access_requests_requester_user_id_report_id")
+                        .HasFilter("\"status\" = 'Pending'");
 
-                    b.ToTable("ReportAccessRequests");
+                    b.ToTable("report_access_requests");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportAcl", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<int?>("GroupId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("group_id");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("permission");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("report_id");
 
                     b.Property<int?>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_acls");
 
-                    b.HasIndex("GroupId");
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_report_acls_group_id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_report_acls_user_id");
 
                     b.HasIndex("ReportId", "GroupId")
                         .IsUnique()
-                        .HasFilter("\"GroupId\" IS NOT NULL");
+                        .HasDatabaseName("ix_report_acls_report_id_group_id")
+                        .HasFilter("\"group_id\" IS NOT NULL");
 
                     b.HasIndex("ReportId", "UserId")
                         .IsUnique()
-                        .HasFilter("\"UserId\" IS NOT NULL");
+                        .HasDatabaseName("ix_report_acls_report_id_user_id")
+                        .HasFilter("\"user_id\" IS NOT NULL");
 
-                    b.ToTable("ReportAcls");
+                    b.ToTable("report_acls");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportAlert", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
 
                     b.Property<string>("DisplayName")
                         .HasMaxLength(300)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("display_name");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_active");
 
                     b.Property<DateTime?>("LastCheckedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_checked_at");
 
                     b.Property<DateTime?>("LastEvaluatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_evaluated_at");
 
                     b.Property<DateTime?>("LastNotifiedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_notified_at");
 
                     b.Property<string>("LastState")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_state");
 
                     b.Property<DateTime?>("LastTriggeredAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_triggered_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
 
                     b.Property<string>("Operator")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("operator");
 
                     b.Property<string>("OptionsJson")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("options_json");
 
                     b.Property<int>("OwnerId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("owner_id");
 
                     b.Property<string>("Recipient")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("recipient");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("report_id");
 
                     b.Property<string>("SmtpAlias")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("smtp_alias");
 
                     b.Property<decimal>("Threshold")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("threshold");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
 
                     b.Property<string>("VisualName")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("visual_name");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_alerts");
 
                     b.HasIndex("Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_alerts_name");
 
-                    b.HasIndex("OwnerId");
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_report_alerts_owner_id");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_report_alerts_report_id");
 
-                    b.ToTable("ReportAlerts");
+                    b.ToTable("report_alerts");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportEmbedToken", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<int>("CreatedBy")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("created_by");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("expires_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("report_id");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("revoked_at");
 
                     b.Property<string>("Token")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("token");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_embed_tokens");
 
-                    b.HasIndex("CreatedBy");
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_report_embed_tokens_created_by");
 
                     b.HasIndex("Token")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_embed_tokens_token");
 
                     b.HasIndex("ReportId", "Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_embed_tokens_report_id_name");
 
-                    b.ToTable("ReportEmbedTokens");
+                    b.ToTable("report_embed_tokens");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportFavorite", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("report_id");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_favorites");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_report_favorites_report_id");
 
                     b.HasIndex("UserId", "ReportId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_favorites_user_id_report_id");
 
-                    b.ToTable("ReportFavorites");
+                    b.ToTable("report_favorites");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportJobLink", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("JobName")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("job_name");
 
                     b.Property<DateTime?>("LastRefreshedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_refreshed_at");
 
                     b.Property<string>("OrchestratorAlias")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("orchestrator_alias");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("report_id");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_job_links");
 
-                    b.HasIndex("JobName");
+                    b.HasIndex("JobName")
+                        .HasDatabaseName("ix_report_job_links_job_name");
 
                     b.HasIndex("ReportId", "OrchestratorAlias", "JobName")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_job_links_report_id_orchestrator_alias_job_name");
 
-                    b.ToTable("ReportJobLinks");
+                    b.ToTable("report_job_links");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportScriptDraft", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<int?>("ApprovedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("approved_by_user_id");
 
                     b.Property<string>("ApprovedByUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("approved_by_user_name");
 
                     b.Property<int>("AuthorUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("author_user_id");
 
                     b.Property<string>("AuthorUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("author_user_name");
 
                     b.Property<string>("BaseScriptHash")
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("base_script_hash");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<DateTime?>("DecidedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("decided_at_utc");
 
                     b.Property<DateTime?>("EditSessionExpiresAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("edit_session_expires_at_utc");
 
                     b.Property<int?>("EditSessionUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("edit_session_user_id");
 
                     b.Property<string>("EditSessionUserName")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("edit_session_user_name");
 
                     b.Property<DateTime?>("PublishedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("published_at_utc");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("report_id");
 
                     b.Property<string>("ScriptHash")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("script_hash");
 
                     b.Property<string>("ScriptText")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("script_text");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
 
                     b.Property<DateTime?>("SubmittedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("submitted_at_utc");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<long>("Version")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_script_drafts");
 
-                    b.HasIndex("ReportId", "Status");
+                    b.HasIndex("ReportId", "Status")
+                        .HasDatabaseName("ix_report_script_drafts_report_id_status");
 
-                    b.ToTable("ReportScriptDrafts");
+                    b.ToTable("report_script_drafts");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportScriptDraftDecision", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime>("DecidedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("decided_at_utc");
 
                     b.Property<int>("DecidedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("decided_by_user_id");
 
                     b.Property<string>("DecidedByUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("decided_by_user_name");
 
                     b.Property<string>("Decision")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("decision");
 
                     b.Property<int>("DraftId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("draft_id");
 
                     b.Property<string>("Reason")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reason");
 
                     b.Property<string>("ScriptHash")
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("script_hash");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_script_draft_decisions");
 
-                    b.HasIndex("DraftId", "DecidedAtUtc");
+                    b.HasIndex("DraftId", "DecidedAtUtc")
+                        .HasDatabaseName("ix_report_script_draft_decisions_draft_id_decided_at_utc");
 
-                    b.ToTable("ReportScriptDraftDecisions");
+                    b.ToTable("report_script_draft_decisions");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportShareLink", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<int>("CreatedBy")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("created_by");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("expires_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("report_id");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("revoked_at");
 
                     b.Property<string>("Token")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("token");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_share_links");
 
-                    b.HasIndex("CreatedBy");
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_report_share_links_created_by");
 
                     b.HasIndex("Token")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_share_links_token");
 
                     b.HasIndex("ReportId", "Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_share_links_report_id_name");
 
-                    b.ToTable("ReportShareLinks");
+                    b.ToTable("report_share_links");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportSnapshot", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime>("BuiltAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("built_at");
 
                     b.Property<int>("BuiltBy")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("built_by");
 
                     b.Property<bool?>("HashMatched")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("hash_matched");
 
                     b.Property<string>("ManifestPath")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("manifest_path");
 
                     b.Property<string>("ParametersJson")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("parameters_json");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("report_id");
 
                     b.Property<string>("ScriptHashAtRunTime")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("script_hash_at_run_time");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_snapshots");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_report_snapshots_report_id");
 
-                    b.ToTable("ReportSnapshots");
+                    b.ToTable("report_snapshots");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SavedReportView", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("FiltersJson")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("filters_json");
 
                     b.Property<bool>("IsDefault")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_default");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
 
                     b.Property<string>("ParametersJson")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("parameters_json");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("report_id");
 
                     b.Property<string>("ScriptHash")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("script_hash");
 
                     b.Property<string>("StateJson")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("state_json");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_saved_report_views");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_saved_report_views_report_id");
 
                     b.HasIndex("UserId", "ReportId", "Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_saved_report_views_user_id_report_id_name");
 
-                    b.ToTable("SavedReportViews");
+                    b.ToTable("saved_report_views");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ServiceAccount", b =>
                 {
                     b.Property<string>("Id")
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
 
                     b.Property<string>("ClientId")
                         .IsRequired()
                         .HasMaxLength(35)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("client_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("Description")
                         .HasMaxLength(500)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("expires_at");
 
                     b.Property<bool>("IsEnabled")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_enabled");
 
                     b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_used_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
 
                     b.Property<string>("NormalizedName")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("normalized_name");
 
                     b.Property<int>("OwnerUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("owner_user_id");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("revoked_at");
 
                     b.Property<string>("RoleNames")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("role_names");
 
                     b.Property<string>("Scopes")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("scopes");
 
                     b.Property<string>("SecretHash")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("secret_hash");
 
                     b.Property<string>("SecurityStamp")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("security_stamp");
 
                     b.Property<string>("StudioCapabilities")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("studio_capabilities");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_service_accounts");
 
                     b.HasIndex("ClientId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_service_accounts_client_id");
 
-                    b.HasIndex("OwnerUserId");
+                    b.HasIndex("OwnerUserId")
+                        .HasDatabaseName("ix_service_accounts_owner_user_id");
 
                     b.HasIndex("TenantId", "NormalizedName")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_service_accounts_tenant_id_normalized_name");
 
-                    b.ToTable("ServiceAccounts");
+                    b.ToTable("service_accounts");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SharedConnectionAcl", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("group_id");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("permission");
 
                     b.Property<int>("SharedConnectionId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("shared_connection_id");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_shared_connection_acls");
 
-                    b.HasIndex("GroupId");
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_shared_connection_acls_group_id");
 
-                    b.HasIndex("SharedConnectionId");
+                    b.HasIndex("SharedConnectionId")
+                        .HasDatabaseName("ix_shared_connection_acls_shared_connection_id");
 
                     b.HasIndex("TenantId", "SharedConnectionId", "GroupId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_connection_acls_tenant_id_shared_connection_id_group_id");
 
-                    b.ToTable("SharedConnectionAcls");
+                    b.ToTable("shared_connection_acls");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SharedConnectionUsage", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("ConsumerUser")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("consumer_user");
 
                     b.Property<DateTime>("LastUsedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_used_at_utc");
 
                     b.Property<int>("SharedConnectionId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("shared_connection_id");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<long>("UseCount")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("use_count");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_shared_connection_usages");
 
-                    b.HasIndex("SharedConnectionId");
+                    b.HasIndex("SharedConnectionId")
+                        .HasDatabaseName("ix_shared_connection_usages_shared_connection_id");
 
                     b.HasIndex("TenantId", "SharedConnectionId", "ConsumerUser")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_connection_usages_tenant_id_shared_connection_id_consumer_user");
 
-                    b.ToTable("SharedConnectionUsages");
+                    b.ToTable("shared_connection_usages");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SharedIdentityAuthority", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("AuthorityId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("authority_id");
 
                     b.Property<string>("ClientId")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("client_id");
 
                     b.Property<string>("ClientSecretReference")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("client_secret_reference");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<bool>("Enabled")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enabled");
 
                     b.Property<string>("Issuer")
                         .IsRequired()
                         .HasMaxLength(2048)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("issuer");
 
                     b.Property<string>("LoginDomain")
                         .IsRequired()
                         .HasMaxLength(253)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("login_domain");
 
                     b.Property<string>("PortalHost")
                         .IsRequired()
                         .HasMaxLength(253)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("portal_host");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_shared_identity_authorities");
 
                     b.HasIndex("AuthorityId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_identity_authorities_authority_id");
 
                     b.HasIndex("LoginDomain")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_identity_authorities_login_domain");
 
                     b.HasIndex("PortalHost")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_identity_authorities_portal_host");
 
-                    b.HasIndex("TenantId", "Issuer");
+                    b.HasIndex("TenantId", "Issuer")
+                        .HasDatabaseName("ix_shared_identity_authorities_tenant_id_issuer");
 
-                    b.ToTable("SharedIdentityAuthorities");
+                    b.ToTable("shared_identity_authorities");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SharedTenantLifecycle", b =>
                 {
                     b.Property<string>("TenantId")
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("ActiveRelease")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("active_release");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<DateTime?>("DeletedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("deleted_at_utc");
 
                     b.Property<long>("FenceEpoch")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("fence_epoch");
 
                     b.Property<int>("MaxConcurrentJobs")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("max_concurrent_jobs");
 
                     b.Property<int>("MaxReportSessions")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("max_report_sessions");
 
                     b.Property<int>("MaxStorageMb")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("max_storage_mb");
 
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("state");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("TenantId");
+                    b.HasKey("TenantId")
+                        .HasName("pk_shared_tenant_lifecycles");
 
-                    b.HasIndex("State");
+                    b.HasIndex("State")
+                        .HasDatabaseName("ix_shared_tenant_lifecycles_state");
 
-                    b.ToTable("SharedTenantLifecycles");
+                    b.ToTable("shared_tenant_lifecycles");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SharedTenantLifecycleOperation", b =>
                 {
                     b.Property<string>("OperationId")
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("operation_id");
 
                     b.Property<DateTime>("AuthorizationExpiresUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("authorization_expires_utc");
 
                     b.Property<string>("AuthorizationReference")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("authorization_reference");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("completed_at_utc");
 
                     b.Property<string>("FailureCode")
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("failure_code");
 
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(16)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("kind");
 
                     b.Property<string>("Phase")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("phase");
 
                     b.Property<string>("PlatformOperator")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("platform_operator");
 
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reason");
 
                     b.Property<DateTime>("StartedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("started_at_utc");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
 
                     b.Property<string>("TargetClientId")
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("target_client_id");
 
                     b.Property<string>("TargetClientSecretReference")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("target_client_secret_reference");
 
                     b.Property<string>("TargetIssuer")
                         .HasMaxLength(2048)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("target_issuer");
 
                     b.Property<string>("TargetLoginDomain")
                         .HasMaxLength(253)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("target_login_domain");
 
                     b.Property<int?>("TargetMaxConcurrentJobs")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("target_max_concurrent_jobs");
 
                     b.Property<int?>("TargetMaxReportSessions")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("target_max_report_sessions");
 
                     b.Property<int?>("TargetMaxStorageMb")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("target_max_storage_mb");
 
                     b.Property<string>("TargetPortalHost")
                         .HasMaxLength(253)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("target_portal_host");
 
                     b.Property<string>("TargetRelease")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("target_release");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("OperationId");
+                    b.HasKey("OperationId")
+                        .HasName("pk_shared_tenant_lifecycle_operations");
 
                     b.HasIndex("Kind", "AuthorizationReference")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_tenant_lifecycle_operations_kind_authorization_reference");
 
-                    b.HasIndex("TenantId", "Status");
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("ix_shared_tenant_lifecycle_operations_tenant_id_status");
 
-                    b.ToTable("SharedTenantLifecycleOperations");
+                    b.ToTable("shared_tenant_lifecycle_operations");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SharedTenantResource", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("kind");
 
                     b.Property<string>("LogicalId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("logical_id");
 
                     b.Property<string>("ScopedId")
                         .IsRequired()
                         .HasMaxLength(300)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("scoped_id");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_shared_tenant_resources");
 
                     b.HasIndex("TenantId", "ScopedId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_tenant_resources_tenant_id_scoped_id");
 
-                    b.HasIndex("TenantId", "Kind", "Id");
+                    b.HasIndex("TenantId", "Kind", "Id")
+                        .HasDatabaseName("ix_shared_tenant_resources_tenant_id_kind_id");
 
                     b.HasIndex("TenantId", "Kind", "LogicalId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_tenant_resources_tenant_id_kind_logical_id");
 
-                    b.ToTable("SharedTenantResources");
+                    b.ToTable("shared_tenant_resources");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipAssetBadge", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("AssetKey")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("asset_key");
 
                     b.Property<string>("AssetVersion")
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("asset_version");
 
                     b.Property<DateTime>("AssignedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("assigned_at_utc");
 
                     b.Property<int?>("AssignedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("assigned_by_user_id");
 
                     b.Property<string>("Badge")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("badge");
 
                     b.Property<string>("Reason")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reason");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<long>("Version")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_asset_badges");
 
                     b.HasIndex("TenantId", "AssetKey", "Badge")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_stewardship_asset_badges_tenant_id_asset_key_badge");
 
-                    b.ToTable("StewardshipAssetBadges");
+                    b.ToTable("stewardship_asset_badges");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipAssetReview", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("AssetKey")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("asset_key");
 
                     b.Property<string>("Note")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("note");
 
                     b.Property<DateTime>("ReviewedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reviewed_at_utc");
 
                     b.Property<int?>("ReviewedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("reviewed_by_user_id");
 
                     b.Property<string>("ReviewedVersion")
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reviewed_version");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<long>("Version")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_asset_reviews");
 
                     b.HasIndex("TenantId", "AssetKey")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_stewardship_asset_reviews_tenant_id_asset_key");
 
-                    b.ToTable("StewardshipAssetReviews");
+                    b.ToTable("stewardship_asset_reviews");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipFinding", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("AssetKey")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("asset_key");
 
                     b.Property<string>("AssetVersion")
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("asset_version");
 
                     b.Property<string>("Detail")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("detail");
 
                     b.Property<DateTime>("FirstSeenUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("first_seen_utc");
 
                     b.Property<DateTime>("LastSeenUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_seen_utc");
 
                     b.Property<DateTime?>("ResolvedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("resolved_at_utc");
 
                     b.Property<string>("RuleKey")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("rule_key");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
 
                     b.Property<DateTime?>("SuppressedUntilUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("suppressed_until_utc");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<long>("Version")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_findings");
 
-                    b.HasIndex("TenantId", "Status");
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("ix_stewardship_findings_tenant_id_status");
 
                     b.HasIndex("TenantId", "AssetKey", "RuleKey")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_stewardship_findings_tenant_id_asset_key_rule_key");
 
-                    b.ToTable("StewardshipFindings");
+                    b.ToTable("stewardship_findings");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipFindingDecision", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("AssetVersion")
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("asset_version");
 
                     b.Property<string>("CategoryValue")
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("category_value");
 
                     b.Property<DateTime>("DecidedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("decided_at_utc");
 
                     b.Property<int?>("DecidedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("decided_by_user_id");
 
                     b.Property<string>("DecidedByUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("decided_by_user_name");
 
                     b.Property<string>("Decision")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("decision");
 
                     b.Property<int>("FindingId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("finding_id");
 
                     b.Property<string>("Reason")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reason");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_finding_decisions");
 
-                    b.HasIndex("FindingId");
+                    b.HasIndex("FindingId")
+                        .HasDatabaseName("ix_stewardship_finding_decisions_finding_id");
 
-                    b.HasIndex("TenantId", "FindingId", "DecidedAtUtc");
+                    b.HasIndex("TenantId", "FindingId", "DecidedAtUtc")
+                        .HasDatabaseName("ix_stewardship_finding_decisions_tenant_id_finding_id_decided_at_utc");
 
-                    b.ToTable("StewardshipFindingDecisions");
+                    b.ToTable("stewardship_finding_decisions");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipGlossaryTerm", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("Aliases")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("aliases");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("created_by_user_id");
 
                     b.Property<string>("DataType")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("data_type");
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("description");
 
                     b.Property<bool>("Disabled")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("disabled");
 
                     b.Property<string>("Formula")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("formula");
 
                     b.Property<string>("Steward")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("steward");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("Term")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("term");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("updated_by_user_id");
 
                     b.Property<long>("Version")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_glossary_terms");
 
                     b.HasIndex("TenantId", "Term")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_stewardship_glossary_terms_tenant_id_term");
 
-                    b.ToTable("StewardshipGlossaryTerms");
+                    b.ToTable("stewardship_glossary_terms");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipResolutionCategory", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("Color")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("color");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("created_by_user_id");
 
                     b.Property<bool>("Disabled")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("disabled");
 
                     b.Property<int?>("ExpiryDays")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("expiry_days");
 
                     b.Property<string>("Label")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("label");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("value");
 
                     b.Property<long>("Version")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_resolution_categories");
 
                     b.HasIndex("TenantId", "Value")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_stewardship_resolution_categories_tenant_id_value");
 
-                    b.ToTable("StewardshipResolutionCategories");
+                    b.ToTable("stewardship_resolution_categories");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipScan", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<int>("AssetsScanned")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("assets_scanned");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("completed_at_utc");
 
                     b.Property<string>("Error")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("error");
 
                     b.Property<int>("FindingsOpened")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("findings_opened");
 
                     b.Property<int>("FindingsReopened")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("findings_reopened");
 
                     b.Property<int>("FindingsResolved")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("findings_resolved");
 
                     b.Property<DateTime>("StartedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("started_at_utc");
 
                     b.Property<int?>("StartedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("started_by_user_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("Trigger")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("trigger");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_scans");
 
-                    b.HasIndex("TenantId", "StartedAtUtc");
+                    b.HasIndex("TenantId", "StartedAtUtc")
+                        .HasDatabaseName("ix_stewardship_scans_tenant_id_started_at_utc");
 
-                    b.ToTable("StewardshipScans");
+                    b.ToTable("stewardship_scans");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipSettings", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<int>("DeductGlossary")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("deduct_glossary");
 
                     b.Property<int>("DeductMetadata")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("deduct_metadata");
 
                     b.Property<int>("DeductProtectedData")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("deduct_protected_data");
 
                     b.Property<int>("DeductStaleness")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("deduct_staleness");
 
                     b.Property<bool>("EnableGlossaryCheck")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enable_glossary_check");
 
                     b.Property<bool>("EnableMetadataCheck")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enable_metadata_check");
 
                     b.Property<bool>("EnableProtectedDataCheck")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enable_protected_data_check");
 
                     b.Property<bool>("EnableStalenessCheck")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("enable_staleness_check");
 
                     b.Property<string>("PolicyLevel")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("policy_level");
 
                     b.Property<string>("Scope")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("scope");
 
                     b.Property<int>("StaleAfterDays")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("stale_after_days");
 
                     b.Property<int>("TargetScore")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("target_score");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("updated_by_user_id");
 
                     b.Property<long>("Version")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_settings");
 
                     b.HasIndex("TenantId", "Scope")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_stewardship_settings_tenant_id_scope");
 
-                    b.ToTable("StewardshipSettings");
+                    b.ToTable("stewardship_settings");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StudioRecoveryDraft", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("BaseSourceRevision")
                         .HasMaxLength(200)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("base_source_revision");
 
                     b.Property<long?>("BaseVersion")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("base_version");
 
                     b.Property<string>("Content")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("content");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("report_id");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_studio_recovery_drafts");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_studio_recovery_drafts_report_id");
 
                     b.HasIndex("UserId", "ReportId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_studio_recovery_drafts_user_id_report_id");
 
-                    b.ToTable("StudioRecoveryDrafts");
+                    b.ToTable("studio_recovery_drafts");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Subscription", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("AtTime")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("at_time");
 
                     b.Property<bool>("DeliverOnRefresh")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("deliver_on_refresh");
 
                     b.Property<int>("FailCount")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("fail_count");
 
                     b.Property<int>("Format")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("format");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_active");
 
                     b.Property<DateTime?>("LastSentAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_sent_at");
 
                     b.Property<DateTime?>("LastTriggeredAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_triggered_at");
 
                     b.Property<string>("Name")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
 
                     b.Property<DateTime?>("NextRunAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("next_run_at");
 
                     b.Property<string>("ParametersJson")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("parameters_json");
 
                     b.Property<string>("Recipients")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("recipients");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("report_id");
 
                     b.Property<string>("Schedule")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("schedule");
 
                     b.Property<string>("ScriptPath")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("script_path");
 
                     b.Property<string>("SmtpAlias")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("smtp_alias");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_subscriptions");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_subscriptions_report_id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_subscriptions_user_id");
 
-                    b.ToTable("Subscriptions");
+                    b.ToTable("subscriptions");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SubscriptionDelivery", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("completed_at");
 
                     b.Property<string>("DeliveryId")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("delivery_id");
 
                     b.Property<string>("Detail")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("detail");
 
                     b.Property<string>("Outcome")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("outcome");
 
                     b.Property<string>("RecipientKey")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("recipient_key");
 
                     b.Property<string>("Recipients")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("recipients");
 
                     b.Property<DateTime>("StartedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("started_at");
 
                     b.Property<int>("SubscriptionId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("subscription_id");
 
                     b.Property<string>("TriggerKey")
                         .IsRequired()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("trigger_key");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_subscription_deliveries");
 
-                    b.HasIndex("DeliveryId");
+                    b.HasIndex("DeliveryId")
+                        .HasDatabaseName("ix_subscription_deliveries_delivery_id");
 
                     b.HasIndex("SubscriptionId", "TriggerKey", "RecipientKey")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_subscription_deliveries_subscription_id_trigger_key_recipient_key");
 
-                    b.ToTable("SubscriptionDeliveries");
+                    b.ToTable("subscription_deliveries");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.UserGroup", b =>
                 {
                     b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("group_id");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
-                    b.HasKey("UserId", "GroupId");
+                    b.HasKey("UserId", "GroupId")
+                        .HasName("pk_user_groups");
 
-                    b.HasIndex("GroupId");
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_user_groups_group_id");
 
                     b.HasIndex("TenantId", "UserId", "GroupId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_user_groups_tenant_id_user_id_group_id");
 
-                    b.ToTable("UserGroups");
+                    b.ToTable("user_groups");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.WorkloadIdentityReplay", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("BindingId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("binding_id");
 
                     b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("expires_at");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("TokenIdHash")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("token_id_hash");
 
                     b.Property<DateTime>("UsedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("used_at");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_workload_identity_replays");
 
-                    b.HasIndex("ExpiresAt");
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_workload_identity_replays_expires_at");
 
                     b.HasIndex("TenantId", "BindingId", "TokenIdHash")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_workload_identity_replays_tenant_id_binding_id_token_id_hash");
 
-                    b.ToTable("WorkloadIdentityReplays");
+                    b.ToTable("workload_identity_replays");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<int>", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("ClaimType")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("claim_type");
 
                     b.Property<string>("ClaimValue")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("claim_value");
 
                     b.Property<int>("RoleId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("role_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_asp_net_role_claims");
 
-                    b.HasIndex("RoleId");
+                    b.HasIndex("RoleId")
+                        .HasDatabaseName("ix_asp_net_role_claims_role_id");
 
-                    b.ToTable("AspNetRoleClaims", (string)null);
+                    b.ToTable("asp_net_role_claims", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<int>", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
 
                     b.Property<string>("ClaimType")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("claim_type");
 
                     b.Property<string>("ClaimValue")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("claim_value");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_asp_net_user_claims");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_asp_net_user_claims_user_id");
 
-                    b.ToTable("AspNetUserClaims", (string)null);
+                    b.ToTable("asp_net_user_claims", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<int>", b =>
                 {
                     b.Property<string>("LoginProvider")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("login_provider");
 
                     b.Property<string>("ProviderKey")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("provider_key");
 
                     b.Property<string>("ProviderDisplayName")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("provider_display_name");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("LoginProvider", "ProviderKey");
+                    b.HasKey("LoginProvider", "ProviderKey")
+                        .HasName("pk_asp_net_user_logins");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_asp_net_user_logins_user_id");
 
-                    b.ToTable("AspNetUserLogins", (string)null);
+                    b.ToTable("asp_net_user_logins", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<int>", b =>
                 {
                     b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
                     b.Property<int>("RoleId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("role_id");
 
-                    b.HasKey("UserId", "RoleId");
+                    b.HasKey("UserId", "RoleId")
+                        .HasName("pk_asp_net_user_roles");
 
-                    b.HasIndex("RoleId");
+                    b.HasIndex("RoleId")
+                        .HasDatabaseName("ix_asp_net_user_roles_role_id");
 
-                    b.ToTable("AspNetUserRoles", (string)null);
+                    b.ToTable("asp_net_user_roles", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<int>", b =>
                 {
                     b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("user_id");
 
                     b.Property<string>("LoginProvider")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("login_provider");
 
                     b.Property<string>("Name")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
 
                     b.Property<string>("Value")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .HasColumnName("value");
 
-                    b.HasKey("UserId", "LoginProvider", "Name");
+                    b.HasKey("UserId", "LoginProvider", "Name")
+                        .HasName("pk_asp_net_user_tokens");
 
-                    b.ToTable("AspNetUserTokens", (string)null);
+                    b.ToTable("asp_net_user_tokens", (string)null);
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.AlertNotification", b =>
@@ -2964,7 +3755,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("Notifications")
                         .HasForeignKey("AlertId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_alert_notifications_report_alerts_alert_id");
 
                     b.Navigation("Alert");
                 });
@@ -2974,7 +3766,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.HasOne("ETL_SQL.Portal.Data.AuditLog", "AuditLog")
                         .WithMany("OutboxMessages")
                         .HasForeignKey("AuditLogId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_audit_outbox_messages_audit_logs_audit_log_id");
 
                     b.Navigation("AuditLog");
                 });
@@ -2984,12 +3777,14 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.HasOne("ETL_SQL.Portal.Data.Folder", null)
                         .WithMany()
                         .HasForeignKey("FolderId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_datasets_folders_folder_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.Report", "OwningReport")
                         .WithMany()
                         .HasForeignKey("OwningReportId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_datasets_reports_owning_report_id");
 
                     b.Navigation("OwningReport");
                 });
@@ -3000,13 +3795,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("Acls")
                         .HasForeignKey("DatasetId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_dataset_acls_datasets_dataset_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.Group", "Group")
                         .WithMany("DatasetAcls")
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_dataset_acls_groups_group_id");
 
                     b.Navigation("Dataset");
 
@@ -3019,13 +3816,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("UserAcls")
                         .HasForeignKey("DatasetId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_dataset_user_acls_datasets_dataset_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_dataset_user_acls_asp_net_users_user_id");
 
                     b.Navigation("Dataset");
 
@@ -3036,7 +3835,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                 {
                     b.HasOne("ETL_SQL.Portal.Data.Folder", "Parent")
                         .WithMany("Children")
-                        .HasForeignKey("ParentId");
+                        .HasForeignKey("ParentId")
+                        .HasConstraintName("fk_folders_folders_parent_id");
 
                     b.Navigation("Parent");
                 });
@@ -3047,13 +3847,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("Acls")
                         .HasForeignKey("FolderId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_folder_acls_folders_folder_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.Group", "Group")
                         .WithMany("FolderAcls")
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_folder_acls_groups_group_id");
 
                     b.Navigation("Folder");
 
@@ -3066,7 +3868,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("Events")
                         .HasForeignKey("CaseId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_gateway_ambiguous_write_events_gateway_ambiguous_write_cases_case_id");
 
                     b.Navigation("Case");
                 });
@@ -3077,7 +3880,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("StudioCapabilities")
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_group_studio_capabilities_groups_group_id");
 
                     b.Navigation("Group");
                 });
@@ -3088,7 +3892,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("RefreshTokens")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_refresh_tokens_asp_net_users_user_id");
 
                     b.Navigation("User");
                 });
@@ -3099,7 +3904,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("Reports")
                         .HasForeignKey("FolderId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_reports_folders_folder_id");
 
                     b.Navigation("Folder");
                 });
@@ -3109,19 +3915,22 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "DecidedBy")
                         .WithMany()
                         .HasForeignKey("DecidedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_report_access_requests_asp_net_users_decided_by_user_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
                         .WithMany()
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_access_requests_reports_report_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "Requester")
                         .WithMany()
                         .HasForeignKey("RequesterUserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_access_requests_asp_net_users_requester_user_id");
 
                     b.Navigation("DecidedBy");
 
@@ -3135,18 +3944,21 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.HasOne("ETL_SQL.Portal.Data.Group", "Group")
                         .WithMany()
                         .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_report_acls_groups_group_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
                         .WithMany("Acls")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_acls_reports_report_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_report_acls_asp_net_users_user_id");
 
                     b.Navigation("Group");
 
@@ -3161,13 +3973,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("ReportAlerts")
                         .HasForeignKey("OwnerId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_alerts_asp_net_users_owner_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
                         .WithMany("Alerts")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_alerts_reports_report_id");
 
                     b.Navigation("Owner");
 
@@ -3180,13 +3994,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany()
                         .HasForeignKey("CreatedBy")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_embed_tokens_asp_net_users_created_by");
 
                     b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
                         .WithMany("EmbedTokens")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_embed_tokens_reports_report_id");
 
                     b.Navigation("Creator");
 
@@ -3199,13 +4015,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("Favorites")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_favorites_reports_report_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
                         .WithMany("ReportFavorites")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_favorites_asp_net_users_user_id");
 
                     b.Navigation("Report");
 
@@ -3218,7 +4036,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("ReportJobLinks")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_job_links_reports_report_id");
 
                     b.Navigation("Report");
                 });
@@ -3229,7 +4048,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany()
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_script_drafts_reports_report_id");
 
                     b.Navigation("Report");
                 });
@@ -3240,7 +4060,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("Decisions")
                         .HasForeignKey("DraftId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_script_draft_decisions_report_script_drafts_draft_id");
 
                     b.Navigation("Draft");
                 });
@@ -3251,13 +4072,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany()
                         .HasForeignKey("CreatedBy")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_share_links_asp_net_users_created_by");
 
                     b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
                         .WithMany("ShareLinks")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_share_links_reports_report_id");
 
                     b.Navigation("Creator");
 
@@ -3270,7 +4093,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("Snapshots")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_snapshots_reports_report_id");
 
                     b.Navigation("Report");
                 });
@@ -3281,13 +4105,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("SavedViews")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_saved_report_views_reports_report_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
                         .WithMany("SavedViews")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_saved_report_views_asp_net_users_user_id");
 
                     b.Navigation("Report");
 
@@ -3300,7 +4126,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany()
                         .HasForeignKey("OwnerUserId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_service_accounts_asp_net_users_owner_user_id");
 
                     b.Navigation("OwnerUser");
                 });
@@ -3311,13 +4138,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany()
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_shared_connection_acls_groups_group_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalSharedConnection", "SharedConnection")
                         .WithMany("Acls")
                         .HasForeignKey("SharedConnectionId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_shared_connection_acls_portal_shared_connections_shared_connection_id");
 
                     b.Navigation("Group");
 
@@ -3330,7 +4159,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany()
                         .HasForeignKey("SharedConnectionId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_shared_connection_usages_portal_shared_connections_shared_connection_id");
 
                     b.Navigation("SharedConnection");
                 });
@@ -3341,7 +4171,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("Decisions")
                         .HasForeignKey("FindingId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_stewardship_finding_decisions_stewardship_findings_finding_id");
 
                     b.Navigation("Finding");
                 });
@@ -3352,13 +4183,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany()
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_studio_recovery_drafts_reports_report_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_studio_recovery_drafts_asp_net_users_user_id");
 
                     b.Navigation("Report");
 
@@ -3371,13 +4204,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("Subscriptions")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_subscriptions_reports_report_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
                         .WithMany("Subscriptions")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_subscriptions_asp_net_users_user_id");
 
                     b.Navigation("Report");
 
@@ -3390,13 +4225,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany("UserGroups")
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_user_groups_groups_group_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
                         .WithMany("UserGroups")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_user_groups_asp_net_users_user_id");
 
                     b.Navigation("Group");
 
@@ -3409,7 +4246,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany()
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_asp_net_role_claims_asp_net_roles_role_id");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<int>", b =>
@@ -3418,7 +4256,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_asp_net_user_claims_asp_net_users_user_id");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<int>", b =>
@@ -3427,7 +4266,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_asp_net_user_logins_asp_net_users_user_id");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<int>", b =>
@@ -3436,13 +4276,15 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany()
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_asp_net_user_roles_asp_net_roles_role_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_asp_net_user_roles_asp_net_users_user_id");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<int>", b =>
@@ -3451,7 +4293,8 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_asp_net_user_tokens_asp_net_users_user_id");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.AuditLog", b =>

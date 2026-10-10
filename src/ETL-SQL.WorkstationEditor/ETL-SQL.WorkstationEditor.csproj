@@ -9,6 +9,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Both editor shells use Portal's canonical styling, including standalone publishes. -->
+    <Content Include="..\ETL-SQL.Portal\wwwroot\css\portal.css" Link="wwwroot\css\portal.css">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\ETL-SQL.Analysis\ETL-SQL.Analysis.csproj" />
     <ProjectReference Include="..\ETL-SQL.Connectors.Common\ETL-SQL.Connectors.Common.csproj" />
     <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />

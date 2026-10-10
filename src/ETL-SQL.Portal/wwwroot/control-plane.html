@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -116,6 +116,12 @@
     .cp-state-maintenance { background: var(--portal-warning-soft); color: var(--portal-warning); }
     .cp-state-quarantined { background: var(--portal-danger-soft); color: var(--portal-danger); }
     .cp-state-deleting { background: var(--portal-danger-soft); color: var(--portal-danger); }
+    .app-shell { grid-template-columns: minmax(0, 1fr); }
+    .app-body { width: 100%; min-width: 0; }
+    .cp-tabs { overflow-x: auto; }
+    .data-table td { padding: 10px 16px; font-size: 0.85rem; border-bottom: 1px solid var(--portal-border-soft); }
+    .btn-quota, .btn-state { padding: 4px 8px; font-size: 0.75rem; border: 1px solid var(--portal-border); border-radius: 3px; background: var(--portal-surface-subtle); color: var(--portal-text); cursor: pointer; }
+    button:disabled { opacity: 0.55; cursor: default; }
   </style>
 </head>
 <body>
@@ -126,13 +132,18 @@
       <span class="cp-badge">SaaS Control Plane</span>
     </div>
     <div style="font-size:0.85rem;color:#94a3b8;" id="operatorInfo">
-      Platform Operator: <strong>Attributed (Read-Only)</strong>
+      <strong>Platform administration</strong>
     </div>
   </div>
 
   <div class="app-body admin-body" style="padding:24px;max-width:1400px;margin:0 auto;">
     <div class="cp-security-banner">
-      <strong>Zero-Trust Platform Boundary:</strong> The Control Plane enforces Platform Identity Isolation (<code>PlatformAccessGrant</code>). It observes fleet health, quotas, worker capacity, and Gateway Broker connections. It physically cannot peek at customer scripts, datasets, query parameters, or raw row data.
+      <strong>Zero-Trust Platform Boundary:</strong> Platform Identity Isolation requires dedicated platform management credentials. Tenant JWTs do not authorize these endpoints. Responses contain operational metadata and counts, without customer scripts, datasets, query parameters, or raw row data.
+    </div>
+
+    <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px;">
+      <button type="button" class="btn" id="btnRefreshControlPlane">Refresh</button>
+      <p id="controlPlaneStatus" role="status" aria-live="polite" style="margin:0;">Loading control-plane metadata...</p>
     </div>
 
     <!-- KPI Strip -->
@@ -150,7 +161,7 @@
       <div class="cp-kpi">
         <span class="cp-kpi-label">Connected Gateways</span>
         <span class="cp-kpi-val" id="kpiGateways">-</span>
-        <span class="cp-kpi-sub" id="kpiGatewayTenants">Across 0 tenants</span>
+        <span class="cp-kpi-sub" id="kpiGatewayTenants">Tenant count pending</span>
       </div>
       <div class="cp-kpi">
         <span class="cp-kpi-label">Audit Outbox</span>
@@ -160,14 +171,14 @@
     </div>
 
     <!-- Tabs -->
-    <div class="cp-tabs" role="tablist">
-      <button class="cp-tab active" data-tab="tenants">Tenant Estate</button>
-      <button class="cp-tab" data-tab="audit">Platform Audit Log</button>
-      <button class="cp-tab" data-tab="fleet">Worker &amp; Gateway Fleet</button>
+    <div class="cp-tabs" role="tablist" aria-label="Control plane views">
+      <button class="cp-tab active" id="tab-tenants" role="tab" aria-controls="panel-tenants" aria-selected="true" data-tab="tenants">Tenant Estate</button>
+      <button class="cp-tab" id="tab-audit" role="tab" aria-controls="panel-audit" aria-selected="false" tabindex="-1" data-tab="audit">Platform Audit Log</button>
+      <button class="cp-tab" id="tab-fleet" role="tab" aria-controls="panel-fleet" aria-selected="false" tabindex="-1" data-tab="fleet">Worker &amp; Gateway Fleet</button>
     </div>
 
     <!-- Panels -->
-    <div class="cp-panel active" id="panel-tenants">
+    <div class="cp-panel active" id="panel-tenants" role="tabpanel" aria-labelledby="tab-tenants">
       <div class="card">
         <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
           <div>
@@ -175,11 +186,11 @@
             <p style="margin:4px 0 0;font-size:0.85rem;color:var(--portal-muted);">Operational status and quota allocations for all registered tenants.</p>
           </div>
           <div style="display:flex;gap:12px;align-items:center;">
-            <input type="search" id="tenantSearch" placeholder="Filter tenants..." style="padding:6px 12px;border:1px solid var(--portal-border);border-radius:4px;font-size:0.85rem;width:200px;">
+            <input type="search" id="tenantSearch" aria-label="Filter tenants" placeholder="Filter tenants..." style="padding:6px 12px;border:1px solid var(--portal-border);border-radius:4px;font-size:0.85rem;width:200px;">
             <button class="btn btn-primary" id="btnOpenProvision" style="padding:6px 14px;font-size:0.85rem;cursor:pointer;background:var(--portal-accent);color:#fff;border:none;border-radius:4px;font-weight:600;">+ Provision Tenant</button>
           </div>
         </div>
-        <div id="receiptAlert" style="display:none;padding:12px 16px;margin:12px 16px;background:rgba(16,185,129,0.1);border:1px solid #10b981;border-radius:6px;font-size:0.85rem;color:#10b981;"></div>
+        <div id="receiptAlert" role="status" aria-live="polite" style="display:none;padding:12px 16px;margin:12px 16px;background:rgba(16,185,129,0.1);border:1px solid #10b981;border-radius:6px;font-size:0.85rem;color:var(--portal-text);"></div>
         <div class="card-body" style="padding:0;overflow-x:auto;">
           <table class="data-table" style="width:100%;border-collapse:collapse;" id="tenantTable">
             <thead>
@@ -203,11 +214,11 @@
       </div>
     </div>
 
-    <div class="cp-panel" id="panel-audit">
+    <div class="cp-panel" id="panel-audit" role="tabpanel" aria-labelledby="tab-audit">
       <div class="card">
         <div class="card-header">
           <h3 style="margin:0;font-size:1.1rem;">Platform Audit Trail</h3>
-          <p style="margin:4px 0 0;font-size:0.85rem;color:var(--portal-muted);">Immutable audit receipts for operator-driven lifecycle actions.</p>
+          <p style="margin:4px 0 0;font-size:0.85rem;color:var(--portal-muted);">The latest platform lifecycle receipts, including status and operator attribution.</p>
         </div>
         <div class="card-body" style="padding:0;overflow-x:auto;">
           <table class="data-table" style="width:100%;border-collapse:collapse;" id="auditTable">
@@ -231,21 +242,20 @@
       </div>
     </div>
 
-    <div class="cp-panel" id="panel-fleet">
+    <div class="cp-panel" id="panel-fleet" role="tabpanel" aria-labelledby="tab-fleet">
       <div class="card">
         <div class="card-header">
           <h3 style="margin:0;font-size:1.1rem;">Worker Pool &amp; Gateway Capacity</h3>
-          <p style="margin:4px 0 0;font-size:0.85rem;color:var(--portal-muted);">Shared compute nodes, OCI sandbox limits, and Gateway broker health.</p>
+          <p style="margin:4px 0 0;font-size:0.85rem;color:var(--portal-muted);">Deployment configuration reference. Live worker health and sandbox attestation are not reported by this dashboard.</p>
         </div>
         <div class="card-body" style="padding:20px;">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
             <div style="background:var(--portal-surface-subtle);padding:16px;border-radius:6px;border:1px solid var(--portal-border);">
               <h4 style="margin:0 0 10px;font-size:0.95rem;">Compute &amp; Sandboxing</h4>
               <ul style="margin:0;padding-left:20px;font-size:0.85rem;color:var(--portal-text-soft);line-height:1.6;">
-                <li>Isolation Profile: <strong>Hardened OCI Sandbox (runc)</strong></li>
-                <li>Mount Policy: <strong>Per-Attempt Scratch Mounts (No cross-tenant residue)</strong></li>
-                <li>Process Trimming: <strong>Lean Evaluator Profile</strong></li>
-                <li>Noisy Neighbor Protection: <strong>Strict Fair-Share Fifo Queues</strong></li>
+                <li>Standard OCI runtime: <strong>runc</strong></li>
+                <li>Hardened isolation requires the configured runtime and deployment evidence.</li>
+                <li>Verify scratch-mount cleanup and worker limits in the deployment's operational evidence.</li>
               </ul>
             </div>
             <div style="background:var(--portal-surface-subtle);padding:16px;border-radius:6px;border:1px solid var(--portal-border);">
@@ -265,21 +275,22 @@
 </div>
 
 <!-- Modal: Provision Tenant -->
-<div id="modalProvision" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+<div id="modalProvision" role="dialog" aria-modal="true" aria-labelledby="provisionTitle" aria-hidden="true" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
   <div style="background:var(--portal-surface);border:1px solid var(--portal-border);border-radius:8px;width:100%;max-width:480px;padding:24px;box-shadow:0 12px 32px rgba(0,0,0,0.4);">
-    <h3 style="margin:0 0 16px;font-size:1.15rem;">Provision New Tenant</h3>
+    <h3 id="provisionTitle" style="margin:0 0 16px;font-size:1.15rem;">Provision New Tenant</h3>
     <form id="formProvision" style="display:flex;flex-direction:column;gap:12px;">
+      <p role="alert" style="margin:0;color:var(--portal-danger);"></p>
       <div>
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Tenant ID *</label>
+        <label for="provTenantId" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Tenant ID *</label>
         <input type="text" id="provTenantId" required placeholder="e.g. tenant-acme" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div>
-          <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Max Jobs</label>
+          <label for="provMaxJobs" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Max Jobs</label>
           <input type="number" id="provMaxJobs" value="10" min="1" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
         </div>
         <div>
-          <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Storage (MB)</label>
+          <label for="provStorageMb" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Storage (MB)</label>
           <input type="number" id="provStorageMb" value="20480" min="512" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
         </div>
       </div>
@@ -287,19 +298,19 @@
         <span style="font-size:0.75rem;font-weight:600;color:var(--portal-accent);text-transform:uppercase;">Attributed Operator Authority</span>
       </div>
       <div>
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Operator Identity *</label>
+        <label for="provOperator" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Operator Identity *</label>
         <input type="text" id="provOperator" required placeholder="e.g. operator@platform.internal" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
       </div>
       <div>
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Authorization Reference *</label>
+        <label for="provAuthRef" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Authorization Reference *</label>
         <input type="text" id="provAuthRef" required placeholder="e.g. CHG-2026-0819" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
       </div>
       <div>
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Reason *</label>
+        <label for="provReason" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Reason *</label>
         <input type="text" id="provReason" required placeholder="e.g. New customer onboarding" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
       </div>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px;">
-        <button type="button" class="btn-cancel" style="padding:8px 16px;border:1px solid var(--portal-border);border-radius:4px;background:transparent;color:var(--portal-text);cursor:pointer;">Cancel</button>
+        <button type="button" class="btn-cancel" data-dialog-close style="padding:8px 16px;border:1px solid var(--portal-border);border-radius:4px;background:transparent;color:var(--portal-text);cursor:pointer;">Cancel</button>
         <button type="submit" style="padding:8px 16px;border:none;border-radius:4px;background:var(--portal-accent);color:#fff;font-weight:600;cursor:pointer;">Provision</button>
       </div>
     </form>
@@ -307,38 +318,39 @@
 </div>
 
 <!-- Modal: Edit Quotas -->
-<div id="modalQuotas" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+<div id="modalQuotas" role="dialog" aria-modal="true" aria-labelledby="quotasTitle" aria-hidden="true" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
   <div style="background:var(--portal-surface);border:1px solid var(--portal-border);border-radius:8px;width:100%;max-width:440px;padding:24px;box-shadow:0 12px 32px rgba(0,0,0,0.4);">
-    <h3 style="margin:0 0 16px;font-size:1.15rem;">Update Tenant Quotas</h3>
+    <h3 id="quotasTitle" style="margin:0 0 16px;font-size:1.15rem;">Update Tenant Quotas</h3>
     <form id="formQuotas" style="display:flex;flex-direction:column;gap:12px;">
+      <p role="alert" style="margin:0;color:var(--portal-danger);"></p>
       <div>
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Tenant ID</label>
+        <label for="quotaTenantId" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Tenant ID</label>
         <input type="text" id="quotaTenantId" readonly style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-surface-subtle);color:var(--portal-muted);font-family:monospace;">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div>
-          <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Concurrent Jobs</label>
+          <label for="quotaMaxJobs" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Concurrent Jobs</label>
           <input type="number" id="quotaMaxJobs" min="1" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
         </div>
         <div>
-          <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Storage (MB)</label>
+          <label for="quotaStorageMb" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Storage (MB)</label>
           <input type="number" id="quotaStorageMb" min="512" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
         </div>
       </div>
       <div>
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Operator Identity *</label>
+        <label for="quotaOperator" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Operator Identity *</label>
         <input type="text" id="quotaOperator" required placeholder="operator@platform.internal" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
       </div>
       <div>
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Authorization Reference *</label>
+        <label for="quotaAuthRef" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Authorization Reference *</label>
         <input type="text" id="quotaAuthRef" required placeholder="CHG-2026-XXXX" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
       </div>
       <div>
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Reason *</label>
+        <label for="quotaReason" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Reason *</label>
         <input type="text" id="quotaReason" required placeholder="Quota expansion request" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
       </div>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px;">
-        <button type="button" class="btn-cancel" style="padding:8px 16px;border:1px solid var(--portal-border);border-radius:4px;background:transparent;color:var(--portal-text);cursor:pointer;">Cancel</button>
+        <button type="button" class="btn-cancel" data-dialog-close style="padding:8px 16px;border:1px solid var(--portal-border);border-radius:4px;background:transparent;color:var(--portal-text);cursor:pointer;">Cancel</button>
         <button type="submit" style="padding:8px 16px;border:none;border-radius:4px;background:var(--portal-accent);color:#fff;font-weight:600;cursor:pointer;">Save Quotas</button>
       </div>
     </form>
@@ -346,16 +358,17 @@
 </div>
 
 <!-- Modal: Change State -->
-<div id="modalState" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
+<div id="modalState" role="dialog" aria-modal="true" aria-labelledby="stateTitle" aria-hidden="true" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;">
   <div style="background:var(--portal-surface);border:1px solid var(--portal-border);border-radius:8px;width:100%;max-width:440px;padding:24px;box-shadow:0 12px 32px rgba(0,0,0,0.4);">
-    <h3 style="margin:0 0 16px;font-size:1.15rem;">Set Tenant Operational State</h3>
+    <h3 id="stateTitle" style="margin:0 0 16px;font-size:1.15rem;">Set Tenant Operational State</h3>
     <form id="formState" style="display:flex;flex-direction:column;gap:12px;">
+      <p role="alert" style="margin:0;color:var(--portal-danger);"></p>
       <div>
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Tenant ID</label>
+        <label for="stateTenantId" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Tenant ID</label>
         <input type="text" id="stateTenantId" readonly style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-surface-subtle);color:var(--portal-muted);font-family:monospace;">
       </div>
       <div>
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Target State</label>
+        <label for="stateSelect" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Target State</label>
         <select id="stateSelect" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
           <option value="Active">Active</option>
           <option value="Maintenance">Maintenance</option>
@@ -363,19 +376,19 @@
         </select>
       </div>
       <div>
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Operator Identity *</label>
+        <label for="stateOperator" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Operator Identity *</label>
         <input type="text" id="stateOperator" required placeholder="operator@platform.internal" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
       </div>
       <div>
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Authorization Reference *</label>
+        <label for="stateAuthRef" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Authorization Reference *</label>
         <input type="text" id="stateAuthRef" required placeholder="INC-2026-XXXX" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
       </div>
       <div>
-        <label style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Reason *</label>
+        <label for="stateReason" style="display:block;font-size:0.8rem;margin-bottom:4px;color:var(--portal-muted);">Reason *</label>
         <input type="text" id="stateReason" required placeholder="Scheduled maintenance window" style="width:100%;padding:8px 10px;border:1px solid var(--portal-border);border-radius:4px;background:var(--portal-bg);color:var(--portal-text);">
       </div>
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px;">
-        <button type="button" class="btn-cancel" style="padding:8px 16px;border:1px solid var(--portal-border);border-radius:4px;background:transparent;color:var(--portal-text);cursor:pointer;">Cancel</button>
+        <button type="button" class="btn-cancel" data-dialog-close style="padding:8px 16px;border:1px solid var(--portal-border);border-radius:4px;background:transparent;color:var(--portal-text);cursor:pointer;">Cancel</button>
         <button type="submit" style="padding:8px 16px;border:none;border-radius:4px;background:var(--portal-accent);color:#fff;font-weight:600;cursor:pointer;">Update State</button>
       </div>
     </form>
@@ -383,6 +396,6 @@
 </div>
 
 <script src="/js/feedback.js?v=0.20.1"></script>
-<script src="/js/control-plane.js?v=0.20.1"></script>
+<script type="module" src="/js/control-plane.js?v=0.20.1"></script>
 </body>
 </html>

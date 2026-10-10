@@ -280,12 +280,8 @@ try {
     await vscodeStoryTemp.cleanup();
   }
 
-  const lineageCatalogStory = await fs.readFile(path.resolve('tools/ui-sandbox/stories/lineage-catalog.story.js'), 'utf8');
-  for (const expectedText of ["{ id: 'impact'", "async function impact", "catalogApi: { lineage, impact"]) {
-    if (!lineageCatalogStory.includes(expectedText)) {
-      throw new Error(`Lineage catalog story missing impact coverage marker: ${expectedText}`);
-    }
-  }
+  // Fixture response contracts are exercised by test-lineage-catalog-responses.mjs and the
+  // browser stories; their object-literal layout is not part of the catalog's public contract.
 
   // Markup plus the page module: the routing this asserts on moved out of an inline
   // <script type="module"> block into wwwroot/js/pages/index.js, so reading the .html alone
@@ -296,7 +292,8 @@ try {
       throw new Error(`Portal governance routing missing: ${expectedText}`);
     }
   }
-  const lineageCatalog = await fs.readFile(path.resolve('src/ETL-SQL.Portal/wwwroot/js/lineage-catalog.js'), 'utf8');
+  const lineageCatalog = (await Promise.all(['lineage-catalog.js', 'lineage-catalog-view.js']
+    .map(file => fs.readFile(path.resolve('src/ETL-SQL.Portal/wwwroot/js', file), 'utf8')))).join('\n');
   for (const expectedText of ['allowAudit = true', 'onModeChange(state.mode)', 'allowAudit ? `<button']) {
     if (!lineageCatalog.includes(expectedText)) {
       throw new Error(`Lineage catalog route/role contract missing: ${expectedText}`);

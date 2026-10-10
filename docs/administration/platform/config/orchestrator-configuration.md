@@ -32,6 +32,33 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 | `Orchestrator:DatabasePath` | string | `null` | SQLite database path. `null` uses the canonical `%LocalAppData%/ETL-SQL/etlsql.db` default. |
 | `Orchestrator:ScriptRoot` | string | `""` | Target folder for Orchestrator scripts and scheduling plans. |
 
+### Scheduled-job activity API
+
+For v0.21.0, `GET /api/scheduled-jobs/activity` provides tenant-scoped activity and outcome filters.
+The Portal proxy is `GET /api/orchestrator/jobs/activity`. Both preserve the caller's job-read
+permissions; counts include only readable scheduled jobs.
+
+- `filter`: `all`, `active`, `queued`, `completedToday`, or `failedToday`; default `all`.
+- `status`: `all`, `enabled`, or `disabled`; default `all`.
+- `search`: text matched against job name, display name, description, target/script, schedule, and owner.
+- `limit`: page size from 1 through 1000; default 25.
+- `offset`: nonnegative number of matching jobs to skip; default 0.
+
+“Today” starts at **00:00 UTC**, independent of the browser or service time zone. Completed and
+failed counts identify distinct jobs with a persisted `SUCCESS` or `FAILURE`/`BLOCKED` outcome
+ending today. A retried job may appear in both groups. Active means executing with a current lease;
+queued means waiting for concurrency capacity. Retry backoff belongs to neither group.
+
+Each response includes `asOfUtc`, `dayStartUtc`, counts over all readable jobs, the filtered `total`,
+and the requested page. Counts stay independent of search and enabled-status filters. Invalid
+queries return 400; unavailable evidence returns 503. Run the same scheduler version on all nodes
+sharing the store so every node records the activity state.
+
+Select a metric chip on the Portal Orchestrator page to filter its job table. Search and enabled-status
+filters apply within that selection; clearing the chip preserves those criteria. Refresh keeps the
+selected chip. If activity cannot be read, the page clears its rows and displays unavailable counts.
+Polling reloads the table and timeline catalog when the connection recovers.
+
 ---
 
 ## Statement and History Retention

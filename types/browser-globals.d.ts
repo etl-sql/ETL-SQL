@@ -74,9 +74,23 @@ interface EtlSqlArrow {
 }
 
 /** ECharts host shim. See src/ETL-SQL.Portal/wwwroot/js/native-charts.js. */
+interface EtlSqlOperationalChartEvent {
+    name?: string;
+    dataIndex: number;
+    event: { event: MouseEvent };
+}
+
+interface EtlSqlOperationalChart {
+    setOption(option: unknown): void;
+    resize(): void;
+    dispose(): void;
+    on(name: string, callback: (event: EtlSqlOperationalChartEvent) => void): void;
+    dispatchAction(...args: unknown[]): void;
+}
+
 interface EtlSqlNativeCharts {
-    init(host: HTMLElement, option?: unknown): unknown;
-    getInstanceByDom(host: HTMLElement): unknown;
+    init(host: HTMLElement, option?: unknown): EtlSqlOperationalChart;
+    getInstanceByDom(host: HTMLElement): EtlSqlOperationalChart | undefined;
 }
 
 /**
@@ -175,7 +189,7 @@ interface Window {
     /** The Studio instance, for the browser tests. Set by js/pages/studio.js. */
     __STUDIO__?: unknown;
     /** Set by js/control-plane.js. */
-    ControlPlaneUI?: unknown;
+    ControlPlaneUI?: typeof import('../src/ETL-SQL.Portal/BrowserSources/control-plane.js').ControlPlaneUI;
 
     // ── Vendored library globals ───────────────────────────────────────────────────────────
     /** Apache Arrow, from js/arrow.min.js. Loaded as a classic script, so it arrives as a global. */

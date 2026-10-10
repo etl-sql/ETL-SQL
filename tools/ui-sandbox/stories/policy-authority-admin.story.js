@@ -1,7 +1,7 @@
 // Admin -> Policy Authority surface driven by a fixture-backed fake API.
 import { importFresh } from '../util.js';
 
-function makeFakeApi({ configured = true, empty = false } = {}) {
+export function makeFakeApi({ configured = true, empty = false, mode = 'healthy' } = {}) {
   let versions = empty ? [] : [
     {
       tenant: 'acme', environment: 'prod', policyVersion: '2026.07.10.1',
@@ -45,8 +45,14 @@ function makeFakeApi({ configured = true, empty = false } = {}) {
       registeredAtUtc: '2026-07-01T09:00:00Z', lastSeenAtUtc: '2026-07-10T19:55:00Z',
     },
   ];
+  versions = versions.map(version => ({ ...version, policyHash: version.policyHash.padEnd(64, '0'),
+    publishedAtUtc: version.issuedAtUtc, supersededVersion: null,
+    canaryGroup: version.canaryGroup ?? null, canaryPercentage: version.canaryPercentage ?? null }));
+  machines = machines.map(machine => ({ ...machine, canaryGroup: null }));
+  const calls = [], queued = [], waiters = [];
+  let pause = null;
   const err = (message) => Object.assign(new Error(message), { status: 400, body: { error: message } });
-  return {
+  const api = {
     async status() {
       return configured
         ? { configured: true, signingPublicKeyPem: '-----BEGIN PUBLIC KEY-----\\n...\\n-----END PUBLIC KEY-----' }
@@ -68,7 +74,8 @@ function makeFakeApi({ configured = true, empty = false } = {}) {
       if (!body.policyVersion) throw err('Policy version is required.');
       const row = {
         tenant: body.tenant, environment: body.environment, policyVersion: body.policyVersion,
-        policyHash: Math.random().toString(16).slice(2).padEnd(40, '0').slice(0, 40),
+        policyHash: 'ab'.repeat(32), supersededVersion: null, publishedAtUtc: new Date().toISOString(),
+        canaryGroup: null, canaryPercentage: null,
         issuedAtUtc: new Date().toISOString(), expiresAtUtc: body.expiresAtUtc,
         author: 'admin', reviewer: body.reviewer, rolloutState: body.staged ? 'Staged' : 'Active',
       };
@@ -77,6 +84,7 @@ function makeFakeApi({ configured = true, empty = false } = {}) {
       return row;
     },
     async activate(tenant, environment, policyVersion) {
+      if (!versions.some(version => version.tenant === tenant && version.environment === environment && version.policyVersion === policyVersion)) throw err('Version not found in this scope.');
       versions = versions.map((v) => v.tenant === tenant && v.environment === environment
         ? { ...v, rolloutState: v.policyVersion === policyVersion ? 'Active' : (v.rolloutState === 'Active' ? 'Superseded' : v.rolloutState) }
         : v);
@@ -101,7 +109,7 @@ function makeFakeApi({ configured = true, empty = false } = {}) {
       if (versions.some((v) => v.rolloutState === 'Canary')) throw err('A canary is already in progress; promote or halt it first.');
       const row = {
         tenant: body.tenant, environment: body.environment, policyVersion: body.policyVersion,
-        policyHash: Math.random().toString(16).slice(2).padEnd(40, '0').slice(0, 40),
+        policyHash: 'ab'.repeat(32), supersededVersion: null, publishedAtUtc: new Date().toISOString(),
         issuedAtUtc: new Date().toISOString(), expiresAtUtc: body.expiresAtUtc,
         author: 'admin', reviewer: body.reviewer, rolloutState: 'Canary',
         canaryGroup: body.canaryGroup ?? null, canaryPercentage: body.canaryPercentage ?? null,
@@ -122,7 +130,7 @@ function makeFakeApi({ configured = true, empty = false } = {}) {
       const row = {
         ...(active || { tenant, environment, author: 'admin', expiresAtUtc: new Date().toISOString() }),
         policyVersion: `${active ? active.policyVersion : '1.0.0'}+halt`,
-        policyHash: Math.random().toString(16).slice(2).padEnd(40, '0').slice(0, 40),
+        policyHash: active?.policyHash ?? 'ab'.repeat(32), supersededVersion: active?.policyVersion ?? null, publishedAtUtc: new Date().toISOString(),
         issuedAtUtc: new Date().toISOString(), rolloutState: 'Active',
         canaryGroup: null, canaryPercentage: null,
       };
@@ -139,6 +147,7 @@ function makeFakeApi({ configured = true, empty = false } = {}) {
         requiresClientCertificate: !!body.clientCertificateThumbprint,
         revoked: false, revokedAtUtc: null, revokedReason: null,
         registeredAtUtc: new Date().toISOString(), lastSeenAtUtc: null,
+        canaryGroup: body.canaryGroup ?? null,
       };
       machines = machines.filter((m) => m.machineId !== row.machineId).concat(row);
       return row;
@@ -150,6 +159,27 @@ function makeFakeApi({ configured = true, empty = false } = {}) {
       return machines.find((m) => m.machineId === machineId);
     },
   };
+  return {
+    calls, setMode(value) { mode = value; },
+    pause(kind) { pause = kind; },
+    whenPaused(kind) { return queued.some(value => value.kind === kind) ? Promise.resolve() : new Promise(resolve => waiters.push({ kind, resolve })); },
+    release() { for (const value of queued.splice(0)) value.resolve(); },
+    ...Object.fromEntries(Object.entries(api).map(([kind, implementation]) => [kind, async (...args) => {
+      calls.push({ kind, args: args.filter(value => !(value instanceof AbortSignal)) });
+      let value = await implementation(...args);
+      if (mode === 'unavailable' && ['status', 'versions', 'machines'].includes(kind)) value = null;
+      if (mode === 'invalid' && kind === 'status') value = { configured: 'false' };
+      if (mode === 'invalid-receipt' && ['publish', 'publishCanary', 'activate', 'registerMachine', 'revokeMachine'].includes(kind)) value = {};
+      if (mode === 'invalid-validation' && kind === 'validate') value = { isValid: true };
+      const snapshot = structuredClone(value);
+      if (pause !== kind) return snapshot;
+      pause = null;
+      return new Promise(resolve => {
+        queued.push({ kind, resolve: () => resolve(snapshot) });
+        for (const waiting of waiters.filter(value => value.kind === kind)) waiting.resolve();
+      });
+    }]))
+  };
 }
 
 export default {
@@ -160,6 +190,8 @@ export default {
     { id: 'configured', label: 'Configured authority' },
     { id: 'unconfigured', label: 'Missing signing cert' },
     { id: 'empty', label: 'Empty scope' },
+    { id: 'unavailable', label: 'Missing authority metadata' },
+    { id: 'invalid', label: 'Malformed signer status' },
   ],
   async mount(stage, fixtureId, ctx) {
     const { createPolicyAuthorityAdmin } = await importFresh('/src/ETL-SQL.Portal/wwwroot/js/policy-authority-admin.js');
@@ -167,10 +199,13 @@ export default {
     const policyAuthorityApi = makeFakeApi({
       configured: fixtureId !== 'unconfigured',
       empty: fixtureId === 'empty',
+      mode: fixtureId,
     });
     const surface = createPolicyAuthorityAdmin({ host: stage, policyAuthorityApi });
+    stage.querySelector('#pa-tenant').value = 'acme';
+    window.__policyAuthority = { api: policyAuthorityApi, surface };
     await surface.load();
     ctx.stat('createPolicyAuthorityAdmin() - publish, activate, rollback, canary promote/halt, machine revocation');
-    return { dispose() {}, resize() {} };
+    return { dispose() { surface.dispose?.(); delete window.__policyAuthority; }, resize() {} };
   },
 };

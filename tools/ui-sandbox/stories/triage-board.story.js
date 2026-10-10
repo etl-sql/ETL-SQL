@@ -1,10 +1,9 @@
 import {
-  renderTriageBoard,
   renderIncident,
   formatOverdue,
-  selectedJobNames,
   renderRunEvidence,
 } from '../../../src/ETL-SQL.Portal/wwwroot/js/triage-ui.js';
+import { createTriageController } from '../../../src/ETL-SQL.Portal/wwwroot/js/triage-controller.js';
 
 // The 03:00 shape: one source database down, every dependent job failing identically, plus an
 // unrelated deadlock so the board has to prove it keeps distinct incidents distinct.
@@ -119,6 +118,21 @@ const runDetails = new Map([[14355, {
   ],
 }]]);
 
+for (const run of board.running) Object.assign(run, {
+  rowsQuarantined: 0, rowsWarned: 0, dataQualityFailures: null, errorMessage: null,
+  scriptHashAtRunTime: null, hashMatched: null
+});
+for (const detail of runDetails.values()) {
+  for (const statement of detail.statements) Object.assign(statement, {
+    cpu_time_ms: 0, spill_read_bytes: 0, partitions: 0, index_used: null,
+    dq_rows_validated: 0, dq_rows_quarantined: 0, dq_rows_warned: 0, dq_validation_ms: 0
+  });
+  for (const failure of detail.qualityFailures) Object.assign(failure, {
+    runId: detail.run.id, jobName: detail.run.jobName, startTime: detail.run.startTime,
+    endTime: detail.run.endTime, status: detail.run.status
+  });
+}
+
 export default {
   id: 'triage-board',
   title: 'Orchestrator — Triage Board',
@@ -128,72 +142,73 @@ export default {
   fixtures: [
     { id: 'busy', label: 'Busy morning' },
     { id: 'quiet', label: 'Nothing to triage' },
+    { id: 'invalid', label: 'Incomplete board response' },
+    { id: 'invalid-detail', label: 'Incomplete run evidence' },
     { id: 'truncated', label: 'History clipped' }
   ],
-  async mount(stage, fixtureId, ctx) {
-    const state = { expanded: new Set(), selected: new Set(), openRuns: new Set(), details: runDetails };
-    let current = { busy: board, quiet: quietBoard, truncated: truncatedBoard }[fixtureId] || board;
-
-    stage.innerHTML = `
-      <div id="triage-host"></div>
-      <pre id="triage-log" class="story-log"></pre>`;
-
-    const host = stage.querySelector('#triage-host');
-    const log = stage.querySelector('#triage-log');
-
-    const draw = () => { host.innerHTML = renderTriageBoard(current, state); };
-
-    // Event wiring lives with the host page in production too; the sandbox stands in for it so the
-    // expand/select behaviour is exercised without a portal, a catalog, or an Orchestrator.
-    const onClick = event => {
-      const toggle = event.target.closest('.triage-incident-toggle');
-      if (toggle) {
-        const i = Number(toggle.dataset.incident);
-        state.expanded.has(i) ? state.expanded.delete(i) : state.expanded.add(i);
-        draw();
-        return;
-      }
-      const rerun = event.target.closest('.triage-rerun-selected');
-      if (rerun) {
-        log.textContent = `POST /api/orchestrator/jobs/rerun\n` +
-          JSON.stringify({ jobNames: selectedJobNames(current, state.selected) }, null, 2);
-        return;
-      }
-      const evidence = event.target.closest('.triage-run-evidence');
-      if (evidence) {
-        const runId = Number(evidence.dataset.run);
-        state.openRuns.has(runId) ? state.openRuns.delete(runId) : state.openRuns.add(runId);
-        if (!state.details.has(runId)) state.details.set(runId, { status: 'loading' });
-        log.textContent = `GET /api/orchestrator/triage/runs/${runId}`;
-        draw();
-        return;
-      }
-      const one = event.target.closest('.triage-rerun-one');
-      if (one) {
-        log.textContent = `POST /api/orchestrator/jobs/rerun\n` +
-          JSON.stringify({ jobNames: [one.dataset.job] }, null, 2);
+  async mount(stage, fixtureId) {
+    let current = structuredClone({ busy: board, quiet: quietBoard, truncated: truncatedBoard,
+      invalid: { ...quietBoard, failureCount: 1, incidents: undefined } }[fixtureId] || board);
+    const evidence = structuredClone(runDetails);
+    if (fixtureId === 'invalid-detail') evidence.get(14355).qualityFailures = undefined;
+    stage.innerHTML = '<button id="triage-refresh" type="button" class="btn btn-outline">Refresh</button>'
+      + '<label for="triage-window">Window</label><select id="triage-window"><option value="24">24h</option><option value="48">48h</option></select>'
+      + '<div id="triage-host"></div><pre id="triage-log" class="story-log"></pre>';
+    const host = stage.querySelector('#triage-host'), log = stage.querySelector('#triage-log');
+    const calls = [], queued = { board: [], detail: [], rerun: [] };
+    const paused = new Set();
+    let rerunMode = 'success';
+    function answer(kind, value) {
+      if (!paused.delete(kind)) return Promise.resolve(value);
+      return new Promise(resolve => queued[kind].push(() => resolve(value)));
+    }
+    const api = {
+      board(hours) {
+        calls.push({ kind: 'board', hours });
+        const payload = structuredClone(current);
+        if (payload && typeof payload.lookbackHours === 'number') payload.lookbackHours = hours;
+        return answer('board', payload);
+      },
+      detail(id) {
+        calls.push({ kind: 'detail', id });
+        log.textContent = `GET /api/orchestrator/triage/runs/${id}`;
+        return answer('detail', structuredClone(evidence.get(id) ?? null));
+      },
+      rerun(names) {
+        calls.push({ kind: 'rerun', names: [...names] });
+        log.textContent = 'POST /api/orchestrator/jobs/rerun\n' + JSON.stringify({ jobNames: names }, null, 2);
+        const results = names.map((jobName, i) => ({
+          jobName, triggered: rerunMode !== 'partial' || i === 0,
+          error: rerunMode === 'partial' && i > 0 ? 'Service unavailable.' : null
+        }));
+        return answer('rerun', rerunMode === 'invalid' ? {} : {
+          requested: names.length, triggered: results.filter(result => result.triggered).length, results
+        });
       }
     };
-
-    const onChange = event => {
-      const check = event.target.closest('.triage-incident-check');
-      if (!check) return;
-      const i = Number(check.dataset.incident);
-      check.checked ? state.selected.add(i) : state.selected.delete(i);
-      draw();
+    const options = {
+      root: host, api, refreshButton: stage.querySelector('#triage-refresh'), lookback: stage.querySelector('#triage-window'),
+      runOne(name) { log.textContent = `Open per-job overrides for ${name}`; },
+      async confirmRerun() { return true; },
+      notify(message) { log.textContent += '\n' + message; }
     };
-
-    host.addEventListener('click', onClick);
-    host.addEventListener('change', onChange);
-
-    draw();
-
-    return {
-      dispose() {
-        host.removeEventListener('click', onClick);
-        host.removeEventListener('change', onChange);
-      }
+    const controller = createTriageController(options);
+    window.__triage = {
+      controller, options, calls,
+      pause(kind) { paused.add(kind); },
+      release(kind) { for (const resolve of queued[kind].splice(0)) resolve(); },
+      setBoard(value) { current = structuredClone(value); },
+      reverse() { current.incidents.reverse(); },
+      restore() { current = structuredClone(board); },
+      setDetail(id, value) { evidence.set(id, structuredClone(value)); },
+      setRerunMode(value) { rerunMode = value; }
     };
+    await controller.reload();
+    if (fixtureId === 'invalid-detail') {
+      host.querySelector('[data-incident="2"].triage-incident-toggle').click();
+      host.querySelector('[data-run="14355"]').click();
+    }
+    return { dispose() { controller.dispose(); delete window.__triage; } };
   },
 };
 

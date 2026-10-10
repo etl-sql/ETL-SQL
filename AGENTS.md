@@ -222,7 +222,7 @@ The repository has three browser/extension surfaces. Follow the conventions and 
 | :--- | :--- | :--- | :--- |
 | VS Code extension | `src/etl-sql-vscode/src/` | Strict TypeScript, CommonJS, ES2020 | From `src/etl-sql-vscode`: `npm run compile`, `npm run lint`, `npm run test:unit` |
 | VS Code UI | `src/etl-sql-vscode/ui/src/` | React, TSX, Vite, browser DOM | From `src/etl-sql-vscode/ui`: `npm run lint`, `npm run build`, `npm run test:unit` |
-| Portal/report runtime | Portal `wwwroot` sources and `src/ETL-SQL.ReportRuntime/Resources/Shared/` | HTML, CSS, browser JavaScript checked with `tsc --checkJs` and ESLint | `node scripts/typecheck-browser.mjs` and `node scripts/lint-browser.mjs`, plus the UI sandbox and the asset-sync checks in [§12](#12-shared-report-runtime-assets) |
+| Portal/report runtime | Portal `BrowserSources/`, ReportRuntime `Resources/TypeScript/`, and remaining authored `wwwroot`/`Shared` assets | Strict TypeScript; remaining JavaScript checked with `tsc --checkJs`; ESLint | `node scripts/typecheck-browser.mjs` and `node scripts/lint-browser.mjs`, plus the UI sandbox and the asset-sync checks in [§12](#12-shared-report-runtime-assets) |
 
 - Keep TypeScript strict. Do not weaken compiler or ESLint rules to make a change pass.
 - Preserve the module system and JavaScript target configured by the package you are editing; the extension and UI use different targets.
@@ -259,6 +259,18 @@ The repository has three browser/extension surfaces. Follow the conventions and 
 ---
 
 ## 9. Build, Test & Run
+
+Prepare browser assets from the repository root before .NET build/test/publish or an IDE build:
+
+```powershell
+npm ci --prefix scripts/typecheck
+node scripts\sync-assets.js
+node scripts\sync-assets.js -Check
+```
+
+Use Node.js 22, as pinned in CI and container build stages. Install dependencies again when the lock
+file changes. `Directory.Build.targets` verifies the prepared source/asset hashes without invoking
+Node; missing, changed, or newly added browser sources require preparation before the next build.
 
 Solution file: `ETL-SQL.slnx`. The canonical engine/CLI composition root is `DependencyInjectionSetup.BuildServiceProvider()` in `src/ETL-SQL.App/App/DependencyInjectionSetup.cs`. Host-specific roots, such as the TUI setup, may add presentation services; focused tests may construct isolated service collections. Configuration lives in `src/appsettings.json` (engine tuning, security boundaries, connector defaults, logging).
 
@@ -440,9 +452,12 @@ concatenated offline bundle `report-runtime.bundle.js`) are generated; edit the 
 `sync-assets.js` compiles TypeScript modules before bundling and copying.
 Install the pinned compiler with `npm ci --prefix scripts/typecheck`. For sandbox development,
 run `node scripts/compile-browser.mjs --watch` and reload after successful compilation. Sandbox
-startup also compiles once. `sync-assets.js -Check` verifies compiled output without repairing it;
+startup also prepares assets once. `sync-assets.js -Check` verifies compiled output without repairing it;
 the browser type gate checks strict TypeScript plus remaining JavaScript. No Node step is added
-to .NET builds. See the asset standards for source and output ownership.
+to .NET builds; they verify the generated manifest from preparation. Portal-owned TypeScript lives
+under `src/ETL-SQL.Portal/BrowserSources/` and emits to the existing `wwwroot/js/` URLs. See the asset
+standards for source and output ownership. Generated outputs remain tracked until the source-only
+and packaged-host acceptance checks in `TODO.md` §1.1 pass.
 
 1. Edit the canonical file in `src/ETL-SQL.ReportRuntime/Resources/Shared/`, or its TypeScript owner
    when the JavaScript banner identifies generated output.

@@ -8,6 +8,7 @@
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/feedback.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 "use strict";
 /*
  * ETL-SQL shared feedback system.

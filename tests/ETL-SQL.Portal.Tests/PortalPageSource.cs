@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace ETL_SQL.Portal.Tests;
 
 /// <summary>
-/// Reads a Portal page as its markup plus the page module it loads.
+/// Reads a Portal page as its markup plus the first-party modules it loads directly.
 /// </summary>
 /// <remarks>
 /// <para>Each page's behaviour used to sit in an inline <c>&lt;script type="module"&gt;</c> block
@@ -18,7 +18,7 @@ namespace ETL_SQL.Portal.Tests;
 internal static class PortalPageSource
 {
     private static readonly Regex PageModuleTag =
-        new(@"<script\b[^>]*\bsrc=""(/js/pages/[^""?]+)(?:\?[^""]*)?""[^>]*>",
+        new(@"<script\b(?=[^>]*\btype=""module"")[^>]*\bsrc=""(/js/[^""?]+)(?:\?[^""]*)?""[^>]*>",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public static string WwwRoot(string repoRoot) =>

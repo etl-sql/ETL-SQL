@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import ts from './typecheck/node_modules/typescript/lib/typescript.js';
 import { readPortalPageMarkup, readPortalPageModule } from './lib/portal-page.mjs';
+import { hasRole } from '../src/ETL-SQL.Portal/wwwroot/js/session-identity.js';
 
 // What this check used to assert, and why it no longer can:
 //
@@ -40,12 +43,37 @@ assert.deepEqual(offeredBeforeRole, [], `Offered before any role is known: ${off
 // ── Half two: every gated route redirects to lineage rather than rendering a 403 ─────────────────
 assert.ok(flat.includes('let canGovernanceOverview = false;'), 'canGovernanceOverview does not start closed.');
 assert.ok(flat.includes('let canQuarantine = false;'), 'canQuarantine does not start closed.');
-assert.ok(
-  flat.includes("canGovernanceOverview = hasRole(identity, 'Admin', 'GovernanceManager', 'DataSteward', 'GovernanceViewer');"),
-  'canGovernanceOverview is not derived from the roles its API accepts.');
-assert.ok(
-  flat.includes("canQuarantine = hasRole(identity, 'Admin', 'DataSteward');"),
-  'canQuarantine is not derived from the roles its API accepts.');
+// Exercise the actual permission expressions. An exact source-string check had accepted a
+// role list that omitted the Portal's seeded stewardship roles and rejected reusing that list.
+const syntax = ts.createSourceFile('index.ts', pageModule, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+let governanceExpression;
+const permissions = new Map();
+function inspect(node) {
+  if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === 'isGovUser') {
+    governanceExpression = node.initializer?.getText(syntax);
+  }
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      && ts.isIdentifier(node.left) && ['canGovernanceOverview', 'canQuarantine'].includes(node.left.text)) {
+    permissions.set(node.left.text, node.right.getText(syntax));
+  }
+  ts.forEachChild(node, inspect);
+}
+inspect(syntax);
+assert.ok(governanceExpression, 'Governance navigation has no permission expression.');
+for (const [role, overview, quarantine] of [
+  ['Admin', true, true], ['GovernanceManager', true, false], ['StewardshipManager', true, false],
+  ['DataSteward', true, true], ['GovernanceViewer', true, false], ['StewardshipViewer', true, false],
+  ['Viewer', false, false], ['Publisher', false, false], ['OrchestratorManager', false, false],
+  ['OrchestratorViewer', false, false], ['', false, false],
+]) {
+  for (const [flag, expected] of [['canGovernanceOverview', overview], ['canQuarantine', quarantine]]) {
+    const expression = permissions.get(flag);
+    assert.ok(expression, `${flag} has no permission assignment.`);
+    const actual = vm.runInNewContext(`const isGovUser = ${governanceExpression}; (${expression});`,
+      { identity: { roles: role ? [role] : [] }, hasRole });
+    assert.equal(actual, expected, `${role || 'No role'} has an incorrect ${flag} permission.`);
+  }
+}
 
 const gatedViews = {
   overview: 'canGovernanceOverview',

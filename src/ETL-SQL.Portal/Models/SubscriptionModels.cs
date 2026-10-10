@@ -52,6 +52,8 @@ public record BulkSubscriptionStatusRequest(IList<VersionedResourceRequest>? Sub
     public IList<int> SubscriptionIds => (Subscriptions ?? []).Select(x => x.Id).ToList();
 }
 
+public record BulkSubscriptionStatusResponse(int Updated, IReadOnlyList<BulkMutationResult> Results);
+
 public record SmtpConnectionDto(
     int Id,
     string Alias,

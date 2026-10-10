@@ -1125,7 +1125,7 @@ public class DesignerController : ControllerBase
                 .SetProperty(d => d.EditSessionUserName, userName)
                 .SetProperty(d => d.EditSessionExpiresAtUtc, expiresAt), cancellationToken);
 
-        return Ok(new { acquired = true, owner = userName, expiresAt });
+        return Ok(new DesignerLeaseResponse(true, userName, expiresAt));
     }
 
     [HttpDelete("lease/{reportId:int}")]
@@ -1364,20 +1364,12 @@ public class DesignerController : ControllerBase
 
         return result.Outcome switch
         {
-            DesignerSnapshotService.SnapshotOutcome.Ok => Ok(new
-            {
-                reportName = result.Package!.ReportName,
-                builtAt = result.Package.BuiltAt,
-                sampleRows = result.Package.SampleRows,
-                columns = result.Package.Columns,
-                metadata = new
-                {
-                    isSampled = result.Package.Metadata.IsSampled,
-                    rlsEnforced = result.Package.Metadata.RlsEnforced,
-                    totalRows = result.Package.Metadata.TotalRows,
-                    returnedRows = result.Package.Metadata.ReturnedRows,
-                },
-            }),
+            DesignerSnapshotService.SnapshotOutcome.Ok => Ok(new DesignerSnapshotResponse(
+                result.Package!.ReportName,
+                result.Package.BuiltAt,
+                result.Package.SampleRows,
+                result.Package.Columns,
+                result.Package.Metadata)),
             DesignerSnapshotService.SnapshotOutcome.ReportNotFound => NotFound(),
             DesignerSnapshotService.SnapshotOutcome.Forbidden => Forbid(),
             _ => NotFound(new { error = "No snapshot available." }),

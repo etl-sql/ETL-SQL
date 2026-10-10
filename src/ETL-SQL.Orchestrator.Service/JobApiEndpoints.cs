@@ -62,7 +62,7 @@ namespace ETL_SQL.Orchestrator.Service
     ///   GET    /management/status  — uptime, version, process info
     ///   POST   /management/stop    — graceful stop (OS supervisor restarts)
     /// </summary>
-    public static class JobApiEndpoints
+    public static partial class JobApiEndpoints
     {
         private static readonly ConcurrentDictionary<string, JobEntry> _jobs = new();
         private static readonly DateTime _startTime = DateTime.UtcNow;
@@ -275,6 +275,8 @@ namespace ETL_SQL.Orchestrator.Service
             }).WithName("getJobStatus");
 
             // ── Scheduled job management ──────────────────────────────────────
+
+            app.MapScheduledJobActivity();
 
             app.MapGet("/api/scheduled-jobs", async (HttpContext ctx, IJobHistoryStore store,
                 OrchestratorObjectAuthorizationService authorization, IConfiguration cfg,
@@ -3009,7 +3011,7 @@ namespace ETL_SQL.Orchestrator.Service
         );
 
         /// <summary>One object an administrator has to make someone accountable for.</summary>
-        private sealed record UnownedObjectResponse(string ObjectId, string Kind, string Name)
+        public sealed record UnownedObjectResponse(string ObjectId, string Kind, string Name)
         {
             public static UnownedObjectResponse From(OrchestratorObjectOwnership ownership) => new(
                 ownership.ObjectId, ownership.ObjectKind.ToString().ToUpperInvariant(), ownership.Name);
@@ -3025,7 +3027,7 @@ namespace ETL_SQL.Orchestrator.Service
         /// <c>toUpperCase</c> on one and rendered nothing at all. Naming them here makes the response
         /// round-trip into the request that produced it.</para>
         /// </summary>
-        private sealed record ObjectGrantResponse(
+        public sealed record ObjectGrantResponse(
             string ObjectId,
             string ObjectKind,
             string PrincipalKind,

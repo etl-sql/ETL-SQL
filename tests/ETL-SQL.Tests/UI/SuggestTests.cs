@@ -27,7 +27,7 @@ namespace ETL_SQL.Tests.UI
             // every real connector as "unknown" whenever it happens to run after this class, a
             // failure that only surfaced under coverage ordering. UseScoped puts the previous
             // registry back on dispose, so the restore cannot be forgotten or half-written.
-            _registryScope = ConnectorRegistry.UseScoped(new ConnectorRegistry(new List<IConnector>
+            _registryScope = ConnectorRegistry.UseScoped(() => new ConnectorRegistry(new List<IConnector>
             {
                 new MockDbConnector(),
                 new FlatFileConnector()

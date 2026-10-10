@@ -31,6 +31,15 @@ public sealed class GatewayEnrollmentController(
         string GatewayId,
         int? ExpirationMinutes = null);
 
+    public sealed record IssuedGatewayEnrollmentDto(
+        string EnrollmentId,
+        string GatewayId,
+        string TenantId,
+        string OneTimeToken,
+        DateTimeOffset ExpiresUtc);
+
+    public sealed record GatewayRevocationDto(bool Success, string GatewayId);
+
     public sealed record GatewayDiscoveredResourceDto(
         string ResourceId,
         string ConnectorType,
@@ -132,14 +141,9 @@ public sealed class GatewayEnrollmentController(
                 resourceId: request.GatewayId.Trim(),
                 detail: $"Issued one-time enrollment for Gateway '{request.GatewayId.Trim()}'. Expires at {expiresUtc:u}.");
 
-            return Ok(new
-            {
-                enrollmentId = enrollment.EnrollmentId,
-                gatewayId = enrollment.GatewayId,
-                tenantId = enrollment.TenantId,
-                oneTimeToken = oneTimeToken, // Only returned once upon generation
-                expiresUtc = enrollment.ExpiresUtc
-            });
+            return Ok(new IssuedGatewayEnrollmentDto(
+                enrollment.EnrollmentId, enrollment.GatewayId, enrollment.TenantId,
+                oneTimeToken, enrollment.ExpiresUtc)); // Only returned once upon generation.
         }
         catch (ArgumentException ex)
         {
@@ -232,6 +236,6 @@ public sealed class GatewayEnrollmentController(
             resourceId: gatewayId.Trim(),
             detail: $"Revoked Gateway '{gatewayId.Trim()}'.");
 
-        return Ok(new { success = true, gatewayId = gatewayId.Trim() });
+        return Ok(new GatewayRevocationDto(true, gatewayId.Trim()));
     }
 }

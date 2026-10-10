@@ -79,6 +79,22 @@ public class OrchestratorProxyService(
         catch (Exception ex) { logger.LogDebug(ex, "Orchestrator job list unavailable."); return []; }
     }
 
+    public async Task<HttpResponseMessage?> GetJobActivityAsync(
+        string filter, string status, string? search, int limit, int offset, CancellationToken ct = default)
+    {
+        try
+        {
+            var path = $"api/scheduled-jobs/activity?filter={Uri.EscapeDataString(filter)}"
+                + $"&status={Uri.EscapeDataString(status)}&search={Uri.EscapeDataString(search ?? "")}&limit={limit}&offset={offset}";
+            return await SendAsync(HttpMethod.Get, path, cancellationToken: ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Orchestrator activity unavailable.");
+            return null;
+        }
+    }
+
     public async Task<HttpResponseMessage?> CreateJobAsync(CreateJobRequest req)
     {
         try { return await SendAsync(HttpMethod.Post, "api/scheduled-jobs", req); }

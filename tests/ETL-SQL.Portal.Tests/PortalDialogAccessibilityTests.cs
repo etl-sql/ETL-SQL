@@ -140,7 +140,7 @@ public sealed class PortalDialogAccessibilityTests
             var hasOwnTrap = source.Contains("_trapFocus", StringComparison.Ordinal)
                 || source.Contains("e.key === 'Tab'", StringComparison.Ordinal)
                 || source.Contains("event.key === 'Tab'", StringComparison.Ordinal);
-            var usesSharedModule = source.Contains("installDialogAccessibility()", StringComparison.Ordinal);
+            var usesSharedModule = Regex.IsMatch(source, @"\binstallDialogAccessibility\s*\(");
 
             if (!hasOwnTrap && !usesSharedModule)
                 untrapped.Add(Path.GetFileName(file));

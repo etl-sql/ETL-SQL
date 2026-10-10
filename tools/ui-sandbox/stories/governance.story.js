@@ -1,4 +1,4 @@
-import { createGovernancePortal } from '../../../src/ETL-SQL.Portal/wwwroot/js/governance-portal.js';
+import { importFresh } from '../util.js';
 
 // This story drives the *real* governance module against a mock API. It used to be a 2,200-line
 // re-implementation with its own hard-coded assets, which meant the sandbox could look perfect
@@ -164,53 +164,151 @@ const summaryFor = (rows, findings) => ({
 /** Rejects the way the portal's fetch wrapper does, so the module's 403 branch is really exercised. */
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 
-function mockApi(mode) {
-  const allFindings = [...assets.flatMap(a => a.findings), ...suppressedFindings];
-  const rows = mode === 'empty' ? [] : assets;
-  const findings = mode === 'empty' ? [] : allFindings;
-
-  const scanFor = () => {
-    if (mode === 'never-scanned') return null;
-    if (mode === 'scan-failed') return failedScan;
-    return completedScan;
-  };
-
+export function createGovernanceMock(mode = 'live') {
+  let heldMethod = null, resume = null, reached = null, paused = null;
+  const localAssets = mode === 'empty' ? [] : structuredClone(assets);
+  const localFindings = mode === 'empty' ? [] : [...localAssets.flatMap(a => a.findings), ...structuredClone(suppressedFindings)];
+  const localCategories = structuredClone(categories), localGlossary = mode === 'empty' ? [] : structuredClone(glossary);
+  let localSettings = structuredClone(settings);
+  let localScan = mode === 'never-scanned' ? null : structuredClone(completedScan), nextDecisionId = 99;
+  const calls = [];
   const guard = () => {
     if (mode === 'unauthorized') throw httpError(403, 'Forbidden');
     if (mode === 'failed') throw httpError(503, 'The governance API could not be reached.');
   };
-
-  const settle = async () => {
-    guard();
-    // Never resolves, pinning the loading state so it can be inspected.
-    if (mode === 'loading') await new Promise(() => { });
+  const wait = async method => {
+    if (heldMethod === method) {
+      heldMethod = null;
+      await new Promise(resolve => { resume = resolve; reached?.(); });
+    }
   };
-
+  const settle = async () => { guard(); if (mode === 'loading') await new Promise(() => {}); };
+  const write = async (method, payload, action) => {
+    guard(); calls.push({ method, payload: structuredClone(payload) });
+    await wait(method);
+    const receipt = action();
+    if (mode === 'write-unavailable') throw httpError(503, 'Write outcome unavailable');
+    return mode === 'bad-receipt' ? {} : structuredClone(receipt);
+  };
+  const scanFor = () => mode === 'scan-failed' ? failedScan
+    : mode === 'scan-running' ? { ...completedScan, status: 'running', completedAtUtc: null } : localScan;
   return {
-    async dashboard() {
+    calls,
+    setMode(value) { mode = value; },
+    setGlossaryFlags(term, flags) { Object.assign(localGlossary.find(item => item.term === term), flags); },
+    pause(method) { heldMethod = method; paused = new Promise(resolve => { reached = resolve; }); },
+    whenPaused() { return paused; },
+    release() { resume?.(); resume = null; },
+    async confirmChange(message, options) { calls.push({ method: 'confirm', payload: { message, options } }); await wait('confirm'); return true; },
+    async dashboard({ scope = 'all' } = {}) {
       await settle();
-      return { summary: summaryFor(rows, findings), assets: rows, lastScan: scanFor() };
+      const rows = localAssets.filter(row => scope !== 'mine' || row.steward === 'chuck').map(row => ({ ...row,
+        governed: row.score >= localSettings.targetScore, findings: localFindings.filter(f => f.assetKey === row.assetKey) }));
+      const result = { summary: { ...summaryFor(rows, localFindings), targetScore: localSettings.targetScore },
+        assets: mode === 'malformed' ? null : rows, lastScan: scanFor() };
+      await wait('dashboard'); return structuredClone(result);
     },
-    async findings() { await settle(); return findings; },
-    async categories() { await settle(); return categories; },
-    async glossary() { await settle(); return mode === 'empty' ? [] : glossary; },
-    async settings() { await settle(); return settings; },
-    async scan() { guard(); return completedScan; },
-    async decideFinding() { guard(); return allFindings[0]; },
-    async reviewAsset() { guard(); return {}; },
-    async assignBadge() { guard(); return {}; },
-    async removeBadge() { guard(); return {}; },
-    async saveSettings() { guard(); return settings; },
-    async saveCategory() { guard(); return categories[0]; },
-    async disableCategory() { guard(); return {}; },
-    async saveGlossaryTerm() { guard(); return glossary[0]; },
-    async deleteGlossaryTerm() { guard(); return {}; },
+    async findings() { await settle(); return structuredClone(localFindings); },
+    async categories() { await settle(); return structuredClone(localCategories); },
+    async glossary() { await settle(); return structuredClone(localGlossary); },
+    async settings() { await settle(); return structuredClone(localSettings); },
+    scan: () => write('scan', null, () => {
+      localScan = { ...completedScan, id: (localScan?.id ?? 0) + 1 }; return localScan;
+    }),
+    decideFinding: (id, body) => write('decideFinding', { id, ...body }, () => {
+      const finding = localFindings.find(item => item.id === id);
+      finding.status = body.decision === 'ignore' ? 'ignored' : body.decision === 'accept-risk' ? 'accepted-risk' : 'reopened';
+      if (body.decision !== 'reopen') finding.assetVersion = body.assetVersion;
+      finding.decisions.unshift({ id: nextDecisionId++, ...body, categoryValue: body.categoryValue ?? null, assetVersion: body.assetVersion,
+        decidedAtUtc: '2026-10-08T10:00:00Z', decidedBy: 'chuck' });
+      return finding;
+    }),
+    reviewAsset: body => write('reviewAsset', body, () => {
+      const asset = localAssets.find(item => item.assetKey === body.assetKey);
+      asset.reviewedVersion = body.assetVersion; asset.reviewedAtUtc = '2026-10-08T10:00:00Z';
+      return { assetKey: body.assetKey, assetVersion: body.assetVersion, reviewedAtUtc: asset.reviewedAtUtc };
+    }),
+    assignBadge: body => write('assignBadge', body, () => {
+      const asset = localAssets.find(item => item.assetKey === body.assetKey);
+      if (!asset.assignedBadges.includes(body.badge)) asset.assignedBadges.push(body.badge);
+      return { assetKey: body.assetKey, badge: body.badge };
+    }),
+    removeBadge: body => write('removeBadge', body, () => {
+      const asset = localAssets.find(item => item.assetKey === body.assetKey);
+      asset.assignedBadges = asset.assignedBadges.filter(value => value !== body.badge); return null;
+    }),
+    saveSettings: body => write('saveSettings', body, () => {
+      localSettings = { ...localSettings, ...body, version: localSettings.version + 1, updatedAtUtc: '2026-10-08T10:00:00Z' };
+      return localSettings;
+    }),
+    saveCategory: body => write('saveCategory', body, () => {
+      let category = localCategories.find(item => item.value === body.value);
+      if (!category) { category = { id: 99 }; localCategories.push(category); }
+      Object.assign(category, body); return category;
+    }),
+    disableCategory: value => write('disableCategory', value, () => {
+      localCategories.find(item => item.value === value).disabled = true; return null;
+    }),
+    saveGlossaryTerm: body => write('saveGlossaryTerm', body, () => {
+      let term = localGlossary.find(item => item.term === body.term);
+      if (!term) { term = { id: 99 }; localGlossary.push(term); }
+      Object.assign(term, body, { steward: body.steward ?? null, updatedAtUtc: '2026-10-08T10:00:00Z' }); return term;
+    }),
+    deleteGlossaryTerm: term => write('deleteGlossaryTerm', term, () => {
+      const index = localGlossary.findIndex(item => item.term === term); if (index >= 0) localGlossary.splice(index, 1); return null;
+    }),
+  };
+}
+
+export function createGovernanceQualityMock() {
+  let unavailable = false;
+  let jobNames = ['nightly_import', 'finance_load'];
+  const failedJobs = new Set();
+  let heldJob = null, reached = null, resume = null, paused = null;
+  const guard = () => { if (unavailable) throw httpError(503, 'Quality evidence unavailable'); };
+  return {
+    setUnavailable(value) { unavailable = value; },
+    setJobNames(value) { jobNames = value; },
+    failTrend(jobName) { failedJobs.add(jobName); },
+    pauseTrend(jobName) { heldJob = jobName; paused = new Promise(resolve => { reached = resolve; }); },
+    whenPaused() { return paused; },
+    release() { resume?.(); resume = null; },
+    qualityJobs: async () => {
+      guard();
+      return jobNames.map(name => ({ name, displayName: name === 'nightly_import' ? 'Nightly Import' : name === 'finance_load' ? 'Finance Load' : name,
+        description: 'Recorded quality pipeline.', script: '' }));
+    },
+    qualityTrend: async ({ jobName }) => {
+      guard();
+      if (failedJobs.has(jobName)) throw httpError(503, 'Trend evidence unavailable');
+      if (heldJob === jobName) {
+        heldJob = null;
+        await new Promise(resolve => { resume = resolve; reached?.(); });
+      }
+      return {
+        jobName, runCount: 1, totalRowsProcessed: 1000, totalRowsQuarantined: 40, totalRowsWarned: 2,
+        latestQuarantineRate: 0.04, averageQuarantineRate: 0.04, quarantineRateDelta: null,
+        runs: [{ historyId: 7, jobName, startTime: '2026-08-04T12:00:00Z', endTime: '2026-08-04T12:05:00Z',
+          status: 'Completed', rowsProcessed: 1000, rowsQuarantined: 40, rowsWarned: 2,
+          quarantineRate: 0.04, warnRate: 0.002, ruleFailures: [] }],
+        topRuleFailures: [],
+      };
+    },
+    qualityRules: async () => { guard(); return []; },
+    qualityRulesAll: async () => {
+      guard();
+      return [
+        { jobName: 'nightly_import', targetTable: 'staging_users', targetColumn: 'email', ruleClause: 'EXPECT', rule: "MATCHES '^[^@]+@[^@]+$'", action: 'QUARANTINE', sourceFile: 'import.etlsql', line: 12 },
+        { jobName: 'finance_load', targetTable: 'prod_transactions', targetColumn: 'amount', ruleClause: 'EXPECT', rule: '> 0', action: 'WARN', sourceFile: 'finance.etlsql', line: 45 },
+      ];
+    },
+    quarantineQueue: async () => { guard(); return []; },
   };
 }
 
 const settleTick = () => new Promise(resolve => setTimeout(resolve, 0));
 
-const STATE_FIXTURES = ['never-scanned', 'empty', 'unauthorized', 'failed', 'scan-failed', 'loading'];
+const STATE_FIXTURES = ['never-scanned', 'empty', 'unauthorized', 'failed', 'scan-failed', 'scan-running', 'loading'];
 
 const STATE_NOTES = {
   'never-scanned': 'never scanned — tiles read zero because nothing has been computed',
@@ -231,14 +329,17 @@ export default {
     { id: 'exceptions', label: 'Exceptions (suppressed, with reasons)' },
     { id: 'glossary', label: 'Glossary' },
     { id: 'settings', label: 'Settings (scoring + categories)' },
+    { id: 'quality', label: 'Data quality (recorded outcomes)' },
     { id: 'never-scanned', label: 'Never scanned (not "no findings")' },
     { id: 'empty', label: 'Empty estate (scanned, nothing found)' },
     { id: 'unauthorized', label: 'Unauthorized (403)' },
     { id: 'failed', label: 'API failure' },
     { id: 'scan-failed', label: 'Last scan failed' },
+    { id: 'scan-running', label: 'Scan still running' },
     { id: 'loading', label: 'Loading' },
   ],
   async mount(stage, fixtureId, ctx) {
+    const { createGovernancePortal } = await importFresh('/src/ETL-SQL.Portal/wwwroot/js/governance-portal.js');
     stage.classList.add('portal-page');
     const host = document.createElement('div');
     stage.replaceChildren(host);
@@ -248,44 +349,23 @@ export default {
       ? (fixtureId === 'empty' ? 'workqueue' : 'overview')
       : fixtureId;
 
+    const governanceApi = createGovernanceMock(mode);
+    const dataQualityApi = createGovernanceQualityMock();
+    const messages = [];
     const portal = createGovernancePortal({
       host,
-      governanceApi: mockApi(mode),
-      dataQualityApi: {
-        qualityJobs: async () => [
-          { name: 'nightly_import', displayName: 'Nightly Import', description: 'Loads raw user logs and stages them.' },
-          { name: 'finance_load', displayName: 'Finance Load', description: 'Daily aggregation of finance records.' }
-        ],
-        qualityTrend: async () => ({
-          jobName: 'nightly_import',
-          runCount: 5,
-          totalRowsProcessed: 5000,
-          totalRowsQuarantined: 200,
-          totalRowsWarned: 10,
-          latestQuarantineRate: 0.04,
-          averageQuarantineRate: 0.04,
-          quarantineRateDelta: 0,
-          runs: [
-            { startTime: '2026-08-04T12:00:00Z', endTime: '2026-08-04T12:05:00Z', status: 'Completed', rowsProcessed: 1000, rowsQuarantined: 40, rowsWarned: 2, quarantineRate: 0.04 }
-          ],
-          topRuleFailures: []
-        }),
-        qualityRules: async () => [],
-        qualityRulesAll: async () => [
-          { jobName: 'nightly_import', targetTable: 'staging_users', targetColumn: 'email', ruleClause: 'EXPECT', rule: "MATCHES '^[^@]+@[^@]+$'", action: 'QUARANTINE', sourceFile: 'import.etlsql', line: 12 },
-          { jobName: 'finance_load', targetTable: 'prod_transactions', targetColumn: 'amount', ruleClause: 'EXPECT', rule: '> 0', action: 'WARN', sourceFile: 'finance.etlsql', line: 45 }
-        ],
-        quarantineQueue: async () => []
-      },
+      governanceApi,
+      dataQualityApi,
       // Keep sandbox runs quiet and non-blocking; the portal supplies the real implementations.
-      notify: (message, o) => ctx.stat(`${o?.title || 'Governance'}: ${message}`),
-      confirm: async () => true,
+      notifyFn: (message, o) => { messages.push({ message, options: o }); return ctx.stat(`${o?.title || 'Governance'}: ${message}`); },
+      confirmFn: (message, options) => governanceApi.confirmChange(message, options),
     });
 
     portal.state.tab = tab;
     const rendered = portal.render();
     if (mode !== 'loading') await rendered;
     await settleTick();
+    window.__governance = { portal, governanceApi, dataQualityApi, host, messages };
 
     const shown = host.querySelector('[data-gov-state]')?.getAttribute('data-gov-state');
     ctx.stat(STATE_NOTES[mode] || `${assets.length} assets · state=${shown || 'ready'}`);

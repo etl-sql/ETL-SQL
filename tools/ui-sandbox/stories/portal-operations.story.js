@@ -1,54 +1,119 @@
-const fixtures = [
-  { id: 'attention', label: 'Needs attention' },
-  { id: 'steady', label: 'Steady state' },
-];
-
-function metric(label, value, note, tone = '') {
-  return `<article class="ops-signal ${tone}"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`;
-}
-
-function markup(fixtureId) {
-  const attention = fixtureId === 'attention';
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="/src/ETL-SQL.Portal/wwwroot/css/portal.css"></head><body><main class="ops-hub">
-    <header class="ops-heading"><div><span class="library-kicker">Operations</span><h1>Control room</h1><p>Trace live signals to the identity, access grant, node, or service run responsible.</p></div><button class="btn btn-outline btn-sm">Refresh snapshot</button></header>
-    <nav class="ops-signal-rail" aria-label="Operational signals">
-      ${metric('Fleet', attention ? 'Degraded' : 'Healthy', '1 environment · schema current', attention ? 'is-warning' : 'is-good')}
-      ${metric('Execution queue', attention ? '12' : '2', attention ? 'Oldest waiting 4m' : 'Within capacity')}
-      ${metric('Approvals', attention ? '3' : '0', attention ? 'Awaiting a decision' : 'Nothing pending', attention ? 'is-warning' : '')}
-      ${metric('Audit delivery', attention ? '18' : '0', attention ? 'Oldest pending 9m' : 'Outbox clear', attention ? 'is-warning' : 'is-good')}
-      ${metric('Ambiguous writes', attention ? '1' : '0', attention ? 'Retry blocked · operator evidence required' : 'No unresolved Gateway writes', attention ? 'is-warning' : 'is-good')}
-    </nav>
-    <section class="ops-lane"><header><span>01</span><div><h2>Now</h2><p>Runtime health and deployment readiness.</p></div></header><div class="ops-grid">
-      <article class="card ops-card"><div class="card-header"><h3>Fleet status</h3><span class="status-badge ${attention ? 'status-warning' : 'status-success'}">${attention ? 'Degraded' : 'Healthy'}</span></div><dl class="ops-facts"><div><dt>Node</dt><dd>portal-chi-01</dd></div><div><dt>Version</dt><dd>0.17.0</dd></div><div><dt>Schema</dt><dd>Current</dd></div><div><dt>Upgrade</dt><dd>Ready</dd></div></dl></article>
-      <article class="card ops-card"><div class="card-header"><h3>Workload</h3><span>24-hour window</span></div><dl class="ops-facts"><div><dt>Active</dt><dd>4 / 16</dd></div><div><dt>Failures</dt><dd>${attention ? '7' : '0'} / 182</dd></div><div><dt>Stale datasets</dt><dd>${attention ? '2' : '0'}</dd></div><div><dt>Storage</dt><dd>18.4 GB</dd></div></dl></article>
-    </div></section>
-    <section class="ops-lane"><header><span>02</span><div><h2>Ambiguous Gateway writes</h2><p>High-priority cases that must be reconciled before any retry.</p></div></header>
-      ${attention ? `<div class="table-scroll"><table class="data-table"><thead><tr><th>Priority</th><th>Operation</th><th>Tenant / Gateway / Resource</th><th>Correlation</th><th>Executed</th><th>Owner</th><th>State</th><th></th></tr></thead><tbody><tr><td><span class="chip chip-inactive">High</span></td><td><code>op-write-7f3a</code></td><td>tenant-a<small class="ops-cell-note">hq-gateway / corp-sql-sales</small></td><td><code>corr-98d1</code></td><td>Today, 9:42 AM</td><td>database-operations</td><td><span class="chip chip-inactive">Acknowledged</span></td><td><button class="btn btn-outline btn-sm">Review case</button></td></tr></tbody></table></div>` : '<div class="empty-state">No ambiguous Gateway writes have been recorded.</div>'}
-    </section>
-    <section class="ops-lane"><header><span>03</span><div><h2>Authority</h2><p>Machine identities, requests, and anonymous report access.</p></div></header><div class="ops-grid ops-grid-wide">
-      <article class="card ops-card"><div class="card-header"><h3>Pending approvals</h3><button class="btn btn-primary btn-sm">Review ${attention ? '3' : '0'}</button></div><p class="text-muted">Report access decisions waiting for a manager.</p></article>
-      <article class="card ops-card"><div class="card-header"><h3>Service accounts</h3><button class="btn btn-outline btn-sm">New account</button></div><p><strong>4 active</strong> · 1 expires within 30 days</p><small class="text-muted">Last machine use 11 minutes ago</small></article>
-      <article class="card ops-card"><div class="card-header"><h3>Anonymous access</h3><button class="btn btn-outline btn-sm">Inspect</button></div><p><strong>6 active</strong> share or embed grants</p><small class="text-muted">2 created by a disabled user</small></article>
-    </div></section>
-    <section class="ops-lane"><header><span>04</span><div><h2>Automation</h2><p>Native administrative services and durable run history.</p></div></header><div class="card ops-service-list">
-      ${[['Failure digest','Enabled','Succeeded · 07:00'],['Backup report','Enabled', attention ? 'Failed · 06:00' : 'Succeeded · 06:00'],['Capacity report','Disabled','No recent run']].map(([name,state,last]) => `<button><span class="ops-service-dot"></span><strong>${name}</strong><span>${state}</span><small>${last}</small><span aria-hidden="true">›</span></button>`).join('')}
-    </div></section>
-  </main></body></html>`;
+export function makeOperationsApi(fixtureId = 'attention') {
+  const attention = fixtureId === 'attention', now = '2026-10-07T14:42:00Z';
+  const item = { id: 7, operationId: 'op-write-7f3a', tenantId: 'tenant-a', gatewayId: 'hq-gateway',
+    resourceId: 'corp-sql-sales', correlationId: 'corr-98d1', executedAtUtc: now,
+    state: 'Acknowledged', priority: 'High', owner: 'database-operations', resolution: null,
+    version: 2, events: [{ eventType: 'Detected', actor: 'Gateway', note: 'Ambiguous outcome.',
+      evidenceReference: null, resolution: null, createdAtUtc: now }] };
+  const accounts = [{ id: 'machine-1', clientId: 'client-1', name: 'Nightly reports', ownerUserId: 1,
+    scopes: ['portal.read'], isEnabled: true, revokedAt: null, expiresAt: null, lastUsedAt: now, version: 1 }];
+  let approvals = attention ? [{ id: 3, reportTitle: 'Revenue', requesterUserName: 'reader',
+    requesterEmail: 'reader@example.test', reason: 'Monthly review', createdAt: now }] : [];
+  const audit = [];
+  const record = (account, action) => audit.push({ timestamp: now, username: 'admin', userId: 1,
+    action, detail: account.name, resourceId: account.id });
+  const accountFor = (id, version) => {
+    const account = accounts.find(value => value.id === id);
+    if (!account || account.version !== version) throw new Error('Account changed. Refresh and try again.');
+    return account;
+  };
+  const changeCase = (id, body, eventType) => {
+    if (id !== item.id || body.version !== item.version) throw new Error('Case changed. Refresh and try again.');
+    if (eventType === 'Resolved' && !body.evidenceReference?.trim()) throw new Error('Reconciliation evidence is required.');
+    if (eventType === 'Assigned') item.owner = body.owner;
+    if (eventType === 'Resolved' || eventType === 'Acknowledged') item.state = eventType;
+    if (eventType === 'Resolved') item.resolution = body.resolution;
+    item.version++;
+    item.events.push({ eventType, actor: 'admin', note: body.note, evidenceReference: body.evidenceReference,
+      resolution: body.resolution, createdAtUtc: now });
+    return structuredClone(item);
+  };
+  const api = {
+    async operationalMetrics() { return {
+      queuedExecutions: attention ? 12 : 0, activeExecutions: 4, executionCap: 16,
+      auditOutboxPending: attention ? 18 : 0, auditOutboxFailed: 0, auditOutboxOldestPendingAgeSeconds: 540,
+      windowHours: 24, recentExecutionFailures: attention ? 7 : 0, recentExecutions: 182,
+      staleDatasets: attention ? 2 : 0, datasetStorageBytes: 19756849561,
+      securityEventPending: 0, securityEventFailed: 0, nodeId: 'portal-chi-01', schemaUpToDate: true
+    }; },
+    async fleetStatus() { return { status: attention ? 'Degraded' : 'Healthy', environment: 'Test',
+      storage: 'ok', inventory: { nodeId: 'portal-chi-01', installedVersion: '0.21.0',
+        upgradeReadiness: { ready: true, findings: [] } } }; },
+    async gatewayAmbiguousWrites() { return attention ? structuredClone([item]) : []; },
+    async pendingAccessRequests() { return structuredClone(approvals); },
+    async listServiceAccounts() { return structuredClone(accounts); },
+    async anonymousReportAccess() { return []; },
+    async listAdminServices() { return [{ name: 'failure-digest', enabled: true, intervalHours: 24,
+      smtpAlias: 'operations-mail', recipients: 'ops@example.test;oncall@example.test', lastRun: { outcome: 'Sent', startedAtUtc: now,
+        completedAtUtc: now, attempts: 1, nodeName: 'portal-chi-01', detail: null } }]; },
+    async listUsers() { return [{ id: 1, username: 'admin', email: null, isActive: true }]; },
+    async adminServiceHistory() { return [{ outcome: 'Sent', startedAtUtc: now, completedAtUtc: now,
+      attempts: 1, nodeName: 'portal-chi-01', detail: null }]; },
+    async auditLog(_page, _pageSize, _action, _user, _type, id) {
+      const items = audit.filter(value => value.resourceId === id);
+      return { items: structuredClone(items), total: items.length, page: 1, pageSize: 100 };
+    },
+    async createServiceAccount(body) {
+      const id = 'machine-' + (accounts.length + 1);
+      const account = { ...body, id, clientId: 'client-' + id, version: 1, isEnabled: true,
+        revokedAt: null, lastUsedAt: null };
+      accounts.push(account); record(account, 'CREATE_SERVICE_ACCOUNT');
+      return { account: structuredClone(account), clientSecret: 'fixture-one-time-value' };
+    },
+    async rotateServiceAccount(id, version) {
+      const account = accountFor(id, version); account.version++; record(account, 'ROTATE_SERVICE_ACCOUNT');
+      return { account: structuredClone(account), clientSecret: 'fixture-one-time-value' };
+    },
+    async revokeServiceAccount(id, version) {
+      const account = accountFor(id, version); account.revokedAt = now; account.version++;
+      record(account, 'REVOKE_SERVICE_ACCOUNT'); return structuredClone(account);
+    },
+    async approveAccessRequest(id) { approvals = approvals.filter(value => value.id !== id); return {}; },
+    async denyAccessRequest(id) { approvals = approvals.filter(value => value.id !== id); return {}; },
+    async revokeAnonymousReportAccess() { return {}; },
+    async acknowledgeGatewayAmbiguousWrite(id, body) { return changeCase(id, body, 'Acknowledged'); },
+    async assignGatewayAmbiguousWrite(id, body) { return changeCase(id, body, 'Assigned'); },
+    async addGatewayAmbiguousWriteEvidence(id, body) { return changeCase(id, body, 'EvidenceAdded'); },
+    async resolveGatewayAmbiguousWrite(id, body) { return changeCase(id, body, 'Resolved'); }
+  };
+  if (fixtureId === 'unavailable') {
+    const unavailable = async () => { throw new Error('Service temporarily unavailable.'); };
+    api.operationalMetrics = unavailable;
+    api.pendingAccessRequests = unavailable;
+    api.gatewayAmbiguousWrites = unavailable;
+  }
+  if (fixtureId === 'invalid') {
+    api.operationalMetrics = async () => ({ queuedExecutions: '0' });
+    api.listServiceAccounts = async () => [{ id: 'machine-1', scopes: 'portal.read' }];
+    api.gatewayAmbiguousWrites = async () => ({ items: [] });
+  }
+  return api;
 }
 
 export default {
-  id: 'portal-operations',
-  title: 'Portal Operations hub',
+  id: 'portal-operations', title: 'Portal Operations hub',
   subtitle: 'A signal-to-owner control room for administrators',
-  fixtures,
+  fixtures: [
+    { id: 'attention', label: 'Needs attention' }, { id: 'steady', label: 'Steady state' },
+    { id: 'unavailable', label: 'Sources unavailable' }, { id: 'invalid', label: 'Malformed responses' }
+  ],
   async mount(stage, fixtureId, ctx) {
     const frame = document.createElement('iframe');
     frame.title = `Portal Operations — ${fixtureId}`;
     frame.style.cssText = 'display:block;width:100%;height:100%;min-height:820px;border:0;background:white';
-    frame.srcdoc = markup(fixtureId);
+    const loaded = new Promise(resolve => frame.addEventListener('load', resolve, { once: true }));
+    frame.srcdoc = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+      <link rel="stylesheet" href="/src/ETL-SQL.Portal/wwwroot/css/portal.css"></head>
+      <body><main id="operations"></main><script type="module">
+      import { createOperationsAdmin } from '/src/ETL-SQL.Portal/wwwroot/js/operations-admin.js';
+      import { makeOperationsApi } from '/tools/ui-sandbox/stories/portal-operations.story.js';
+      window.__operationsApi = makeOperationsApi(${JSON.stringify(fixtureId)});
+      window.__operations = createOperationsAdmin({ host: document.getElementById('operations'), adminApi: window.__operationsApi });
+      await window.__operations.load();
+      </script></body></html>`;
     stage.replaceChildren(frame);
-    ctx.stat(fixtureId === 'attention' ? 'Attention state' : 'Steady state');
-    return { resize() {} };
-  },
+    await loaded;
+    ctx.stat('Operations controller — native controls and partial-source failures');
+    return { dispose() { frame.contentWindow?.__operations?.dispose(); }, resize() {} };
+  }
 };

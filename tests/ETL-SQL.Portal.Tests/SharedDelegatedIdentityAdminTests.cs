@@ -18,6 +18,31 @@ namespace ETL_SQL.Portal.Tests;
 public sealed class SharedDelegatedIdentityAdminTests
 {
     [Fact]
+    public async Task UnknownRoleCreationLeavesNoTenantAccountOrAuditEntry()
+    {
+        using var factory = new SharedAdminFactory();
+        var seeded = await SeedAsync(factory);
+        using var alpha = Client(factory, seeded.AlphaToken);
+        var username = "unknown-" + Guid.NewGuid().ToString("N");
+        HttpResponseMessage? response = null;
+        var failure = await Record.ExceptionAsync(async () => response = await alpha.PostAsJsonAsync("/api/admin/users", new
+        {
+            username,
+            email = username + "@example.test",
+            password = "Strong@Tenant99!",
+            role = "NotAnExistingRole",
+        }));
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.False(await db.Users.AnyAsync(user => user.UserName == username),
+            $"Rejected role creation left a tenant account ({failure?.GetType().Name ?? response?.StatusCode.ToString()}).");
+        Assert.False(await db.AuditLogs.AnyAsync(log => log.Action == "CREATE_USER" && log.Detail == username));
+        Assert.Null(failure);
+        Assert.NotNull(response);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task TenantAdminsCannotEnumerateOrMutateTheOtherIdentityPartition()
     {
         using var factory = new SharedAdminFactory();
@@ -55,6 +80,25 @@ public sealed class SharedDelegatedIdentityAdminTests
         crossMembership.Headers.IfMatch.Add(new EntityTagHeaderValue("\"1\""));
         Assert.Equal(HttpStatusCode.NotFound, (await alpha.SendAsync(crossMembership)).StatusCode);
 
+        var memberCatalog = await alpha.GetFromJsonAsync<ETL_SQL.Portal.Models.GroupMemberCatalogResponse>(
+            $"/api/admin/groups/{seeded.AlphaGroupId}/members/catalog");
+        Assert.NotNull(memberCatalog);
+        Assert.Equal(seeded.AlphaGroupId, memberCatalog.GroupId);
+        Assert.Empty(memberCatalog.Items);
+        var crossBulkMembership = new HttpRequestMessage(
+            HttpMethod.Post, $"/api/admin/groups/{seeded.AlphaGroupId}/members/bulk-add")
+        {
+            Content = JsonContent.Create(new { userIds = new[] { seeded.BetaUserId } })
+        };
+        crossBulkMembership.Headers.IfMatch.Add(new EntityTagHeaderValue($"\"{memberCatalog.Version}\""));
+        var crossBulkResponse = await alpha.SendAsync(crossBulkMembership);
+        Assert.Equal(HttpStatusCode.OK, crossBulkResponse.StatusCode);
+        var crossBulkReceipt = await crossBulkResponse.Content.ReadFromJsonAsync<ETL_SQL.Portal.Models.BulkAddGroupMembersResponse>();
+        Assert.NotNull(crossBulkReceipt);
+        Assert.Equal(0, crossBulkReceipt.Added);
+        Assert.Empty(crossBulkReceipt.ChangedUserIds);
+        Assert.Equal(new[] { seeded.BetaUserId }, crossBulkReceipt.SkippedUserIds);
+
         var alphaSessions = await alpha.GetStringAsync("/api/admin/sessions");
         Assert.Contains(seeded.AlphaRefreshId.ToString(), alphaSessions);
         Assert.DoesNotContain($"\"id\":{seeded.BetaRefreshId}", alphaSessions);
@@ -77,6 +121,21 @@ public sealed class SharedDelegatedIdentityAdminTests
         var equalUsers = await db.Users.Where(user => user.UserName == "equal-local").ToListAsync();
         Assert.Equal(2, equalUsers.Count);
         Assert.Equal(["tenant-alpha", "tenant-beta"], equalUsers.OrderBy(x => x.TenantId).Select(x => x.TenantId));
+        foreach (var user in equalUsers)
+        {
+            var roles = await db.UserRoles.Where(link => link.UserId == user.Id)
+                .Join(db.Roles, link => link.RoleId, role => role.Id, (_, role) => role.Name).ToListAsync();
+            Assert.Equal(["Viewer"], roles);
+        }
+        var betaUser = equalUsers.Single(user => user.TenantId == "tenant-beta");
+        var promoted = await PutAsync(beta, $"/api/admin/users/{betaUser.Id}", new { role = "Publisher" }, betaUser.Version);
+        Assert.Equal(HttpStatusCode.OK, promoted.StatusCode);
+        foreach (var user in equalUsers)
+        {
+            var roles = await db.UserRoles.Where(link => link.UserId == user.Id)
+                .Join(db.Roles, link => link.RoleId, role => role.Id, (_, role) => role.Name).ToListAsync();
+            Assert.Equal([user.TenantId == "tenant-beta" ? "Publisher" : "Viewer"], roles);
+        }
         Assert.False(await db.UserGroups.AnyAsync(membership =>
             membership.GroupId == seeded.AlphaGroupId && membership.UserId == seeded.BetaUserId));
     }

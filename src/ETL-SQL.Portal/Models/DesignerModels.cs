@@ -7,6 +7,15 @@ public record ParseDesignerRequest(string Script);
 
 public record ParseDesignerResponse(DesignerStateDto DesignState, string? Error);
 
+public sealed record DesignerLeaseResponse(bool Acquired, string Owner, DateTime ExpiresAt);
+
+public sealed record DesignerSnapshotResponse(
+    string ReportName,
+    DateTime BuiltAt,
+    IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyList<string?>>> SampleRows,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> Columns,
+    ETL_SQL.Portal.Services.DesignerSnapshotMetadata Metadata);
+
 public record AnalyzeDesignerRequest(
     string Script,
     string? Dialect = null,

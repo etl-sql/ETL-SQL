@@ -58,7 +58,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private readonly ITenantMeteringLedger? _meteringLedger;
         private CancellationTokenSource? _cts;
         private readonly System.Collections.Concurrent.ConcurrentDictionary<long, CancellationTokenSource> _runningJobs = new();
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _scheduledJobStarts = new(StringComparer.OrdinalIgnoreCase);
+        // COMPAT_BREAK: 0.21.0 — equal job names in different tenants can run independently.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<JobId, byte> _scheduledJobStarts = new();
         private readonly System.Collections.Concurrent.ConcurrentDictionary<long, Task> _jobTasks = new();
         private long _nextJobTaskId;
 
@@ -175,7 +176,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }
         }
 
-        private void QueueJob(string jobName, Func<Task> execute)
+        private void QueueJob(JobDefinition job, Func<Task> execute)
         {
             var taskId = Interlocked.Increment(ref _nextJobTaskId);
             var task = Task.Run(async () =>
@@ -186,7 +187,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 }
                 finally
                 {
-                    _scheduledJobStarts.TryRemove(jobName, out _);
+                    _scheduledJobStarts.TryRemove(job.Id, out _);
                 }
             }, CancellationToken.None);
             _jobTasks[taskId] = task;
@@ -194,7 +195,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             {
                 _jobTasks.TryRemove(taskId, out _);
                 if (completed.IsFaulted)
-                    _logger.LogError(completed.Exception, "Job {JobName}: queued execution terminated unexpectedly.", jobName);
+                    _logger.LogError(completed.Exception, "Job {JobName}: queued execution terminated unexpectedly.", job.Name);
             }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
 
@@ -247,12 +248,12 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
                     foreach (var job in dueJobs)
                     {
-                        if (!_scheduledJobStarts.TryAdd(job.Name, 0))
+                        if (!_scheduledJobStarts.TryAdd(job.Id, 0))
                         {
                             continue;
                         }
 
-                        QueueJob(job.Name, () => ExecuteJobAsync(job));
+                        QueueJob(job, () => ExecuteJobAsync(job));
                     }
 
                     // Resolve intervals from configuration with safe defaults
@@ -427,7 +428,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
             // Same start guard as the scheduling loop: one execution of a job at a time. A
             // trigger racing an in-flight run coalesces with it instead of starting a duplicate.
-            if (!_scheduledJobStarts.TryAdd(job.Name, 0))
+            if (!_scheduledJobStarts.TryAdd(job.Id, 0))
             {
                 _logger.LogInformation(
                     "Job {JobName}: manual trigger rejected because an execution is already in progress.",
@@ -435,7 +436,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 return ManualTriggerResult.AlreadyRunning;
             }
 
-            QueueJob(job.Name, () => ExecuteJobAsync(job, capturedOverrides));
+            QueueJob(job, () => ExecuteJobAsync(job, capturedOverrides));
             return ManualTriggerResult.Accepted;
         }
 
@@ -501,12 +502,12 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     "The current saved script could not be validated for checkpoint resume.");
             }
 
-            if (!_scheduledJobStarts.TryAdd(job.Name, 0))
+            if (!_scheduledJobStarts.TryAdd(job.Id, 0))
                 return new(ResumeTriggerStatus.AlreadyRunning,
                     history.CheckpointLabel,
                     "The job already has an execution in progress.");
 
-            QueueJob(job.Name, () => ExecuteJobAsync(
+            QueueJob(job, () => ExecuteJobAsync(
                 job, initialSessionId: history.SessionId, resumeFromCheckpoint: true));
 
             return new(ResumeTriggerStatus.Accepted, history.CheckpointLabel);
@@ -643,6 +644,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             {
                 for (int attempt = 1; attempt <= maxAttempts; attempt++)
                 {
+                    if (cycleCts.IsCancellationRequested) break;
                     if (lastHistoryId > 0)
                     {
                         _runningJobs.TryRemove(lastHistoryId, out _);
@@ -670,8 +672,11 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     var usedSandbox = false;
                     try
                     {
+                        await SetRunStateOrCancelAsync(job, fenceToken, ScheduledJobRunState.Queued, cycleCts);
                         var throttleSw = System.Diagnostics.Stopwatch.StartNew();
                         await using var slot = (IAsyncDisposable)await _throttle.AcquireAsync(job.Name, cycleCts.Token);
+                        // COMPAT_BREAK: 0.21.0 — a lease lost while queued cannot start execution.
+                        await SetRunStateOrCancelAsync(job, fenceToken, ScheduledJobRunState.Running, cycleCts);
                         throttleSw.Stop();
                         var queueWaitMs = throttleSw.ElapsedMilliseconds;
                         attemptQueueWaitMs = queueWaitMs;
@@ -741,6 +746,20 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     }
                     finally
                     {
+                        // This is outside the execution/retry catch. A state-write outage cannot
+                        // change a completed outcome into a retry of external writes.
+                        try
+                        {
+                            if (_store is IScheduledJobActivityStore activityStore
+                                && !await activityStore.TrySetScheduledJobRunStateAsync(
+                                    job.Id, _leaseOwnerId, fenceToken, ScheduledJobRunState.Idle))
+                                cycleCts.Cancel();
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Job {JobName}: failed to clear its recorded run state.", job.Name);
+                            cycleCts.Cancel();
+                        }
                         attemptSw.Stop();
                         SchedulerObservability.CompleteScheduledJobActivity(
                             attemptActivity,
@@ -826,6 +845,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         }
                     }
 
+                    if (cycleCts.IsCancellationRequested) break;
+
                     if (lastResult?.RetryAllowed == false)
                     {
                         _logger.LogError(
@@ -893,6 +914,25 @@ namespace ETL_SQL.Orchestrator.Scheduling
             if (!double.IsFinite(seconds) || seconds <= 0) return 0;
             var value = seconds * 1000d;
             return value >= long.MaxValue ? long.MaxValue : checked((long)Math.Round(value));
+        }
+
+        private async Task SetRunStateOrCancelAsync(
+            JobDefinition job, long fenceToken, ScheduledJobRunState state, CancellationTokenSource cycleCts)
+        {
+            if (_store is not IScheduledJobActivityStore activityStore) return;
+            try
+            {
+                if (await activityStore.TrySetScheduledJobRunStateAsync(
+                        job.Id, _leaseOwnerId, fenceToken, state, cycleCts.Token))
+                    return;
+            }
+            catch
+            {
+                cycleCts.Cancel();
+                throw;
+            }
+            cycleCts.Cancel();
+            throw new OperationCanceledException("The scheduled job execution lease is no longer current.", cycleCts.Token);
         }
 
         private async Task PersistAttemptEvidenceAsync(JobDefinition job, long historyId, string status,

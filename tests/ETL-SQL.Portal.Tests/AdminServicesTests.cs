@@ -310,6 +310,9 @@ public class AdminServicesTests
         var capacity = body.Single(n => n!["name"]!.GetValue<string>() == "capacity-report");
         Assert.True(capacity!["enabled"]!.GetValue<bool>());
         Assert.Equal("Sent", capacity["lastRun"]!["outcome"]!.GetValue<string>());
+        var schedule = factory.Services.GetRequiredService<PortalConfig>().AdminServices.CapacityReport;
+        Assert.Equal(schedule.Recipients, capacity["recipients"]!.GetValue<string>());
+        Assert.Equal(schedule.SmtpAlias, capacity["smtpAlias"]!.GetValue<string>());
 
         var history = await SendAsync(client, HttpMethod.Get, token, "/api/admin/services/capacity-report/history");
         Assert.Equal(HttpStatusCode.OK, history.StatusCode);

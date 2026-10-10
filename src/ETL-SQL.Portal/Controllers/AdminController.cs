@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Claims;
 using System.Text;
 using ETL_SQL.Common;
@@ -142,6 +143,14 @@ public class AdminController(
 
     // ── Users ─────────────────────────────────────────────────────────────────
 
+    [HttpGet("roles")]
+    public async Task<IActionResult> GetRoles(CancellationToken cancellationToken) =>
+        Ok(await db.Roles.AsNoTracking()
+            .Where(role => role.Name != null && role.Name != "")
+            .OrderBy(role => role.Name)
+            .Select(role => new AdminRoleOptionDto(role.Name!))
+            .ToListAsync(cancellationToken));
+
     [HttpGet("users")]
     public async Task<IActionResult> GetUsers(
         [FromQuery] int page = 1,
@@ -230,9 +239,13 @@ public class AdminController(
     }
 
     [HttpPost("users")]
-    public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest req)
+    public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest req, CancellationToken cancellationToken = default)
     {
         if (DenyIfTokenIsElevatingToAdmin(req.Role) is { } denied) return denied;
+        var requestedRole = await ResolveRoleAsync(req.Role, cancellationToken);
+        var roleName = requestedRole?.Name;
+        if (!string.IsNullOrWhiteSpace(req.Role) && roleName is null)
+            return BadRequest(new { errors = new[] { "The requested role does not exist." } });
 
         var provider = req.Provider ?? "Local";
         var user = new PortalUser
@@ -247,11 +260,12 @@ public class AdminController(
             Provider = provider
         };
 
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         IdentityResult result;
         if (config.SharedTenancy.Enabled)
         {
             var normalizedName = userManager.NormalizeName(user.UserName!);
-            if (await TenantUsers.AnyAsync(candidate => candidate.NormalizedUserName == normalizedName))
+            if (await TenantUsers.AnyAsync(candidate => candidate.NormalizedUserName == normalizedName, cancellationToken))
                 return Conflict(new { error = $"User '{req.Username}' already exists" });
             user.NormalizedUserName = normalizedName;
             user.NormalizedEmail = userManager.NormalizeEmail(user.Email);
@@ -270,7 +284,7 @@ public class AdminController(
                 user.PasswordHash = userManager.PasswordHasher.HashPassword(user, req.Password);
             }
             db.Users.Add(user);
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(cancellationToken);
             result = IdentityResult.Success;
         }
         else if (provider == "LDAP")
@@ -287,14 +301,34 @@ public class AdminController(
         if (!result.Succeeded)
             return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
 
-        if (!string.IsNullOrWhiteSpace(req.Role))
-            await userManager.AddToRoleAsync(user, req.Role);
+        if (roleName is not null)
+        {
+            if (config.SharedTenancy.Enabled)
+            {
+                // Shared names are unique within a tenant; Identity's update validators use a global lookup.
+                db.UserRoles.Add(new IdentityUserRole<int> { UserId = user.Id, RoleId = requestedRole!.Id });
+            }
+            else
+            {
+                var assignment = await userManager.AddToRoleAsync(user, roleName);
+                if (!assignment.Succeeded)
+                    return BadRequest(new { errors = assignment.Errors.Select(error => error.Description) });
+            }
+        }
 
-        await audit.LogAsync(CurrentUserId, "CREATE_USER", "User", user.Id.ToString(), req.Username);
+        audit.Stage(CurrentUserId, "CREATE_USER", "User", user.Id.ToString(), req.Username);
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return CreatedAtAction(nameof(GetUser), new { id = user.Id },
             new UserDto(user.Id, user.UserName!, user.Email, user.FirstName, user.LastName,
-                true, user.MustChangePassword, user.CreatedAt, [req.Role], [], user.Provider, user.Version));
+                true, user.MustChangePassword, user.CreatedAt, roleName is null ? [] : [roleName], [], user.Provider, user.Version));
     }
+
+    private Task<PortalRole?> ResolveRoleAsync(string? requestedRole, CancellationToken cancellationToken) =>
+        string.IsNullOrWhiteSpace(requestedRole) ? Task.FromResult<PortalRole?>(null)
+            : db.Roles.AsNoTracking()
+                .Where(role => role.Name != null && role.NormalizedName == userManager.NormalizeName(requestedRole))
+                .SingleOrDefaultAsync(cancellationToken);
 
     [HttpGet("users/{id:int}")]
     public async Task<IActionResult> GetUser(int id)
@@ -312,12 +346,16 @@ public class AdminController(
     }
 
     [HttpPut("users/{id:int}")]
-    public async Task<IActionResult> UpdateUser(int id, [FromBody] UpdateUserRequest req)
+    public async Task<IActionResult> UpdateUser(int id, [FromBody] UpdateUserRequest req, CancellationToken cancellationToken = default)
     {
         if (DenyIfTokenIsElevatingToAdmin(req.Role) is { } denied) return denied;
 
-        var user = await TenantUsers.SingleOrDefaultAsync(value => value.Id == id);
+        var user = await TenantUsers.SingleOrDefaultAsync(value => value.Id == id, cancellationToken);
         if (user is null) return NotFound();
+        var requestedRole = await ResolveRoleAsync(req.Role, cancellationToken);
+        var roleName = requestedRole?.Name;
+        if (req.Role is not null && roleName is null)
+            return BadRequest(new { errors = new[] { "The requested role does not exist." } });
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
             return OptimisticConcurrency.MissingVersion(this);
@@ -326,21 +364,33 @@ public class AdminController(
 
         var wasActive = user.IsActive;
         var roleChanged = false;
-        await using var transaction = await db.Database.BeginTransactionAsync();
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         if (req.Email is not null) user.Email = req.Email;
         if (req.FirstName is not null) user.FirstName = req.FirstName;
         if (req.LastName is not null) user.LastName = req.LastName;
         if (req.IsActive.HasValue) user.IsActive = req.IsActive.Value;
 
-        if (req.Role is not null)
+        if (roleName is not null)
         {
             var currentRoles = await userManager.GetRolesAsync(user);
             roleChanged = currentRoles.Count != 1
-                || !string.Equals(currentRoles[0], req.Role, StringComparison.OrdinalIgnoreCase);
+                || !string.Equals(currentRoles[0], roleName, StringComparison.OrdinalIgnoreCase);
             if (roleChanged)
             {
-                await userManager.RemoveFromRolesAsync(user, currentRoles);
-                await userManager.AddToRoleAsync(user, req.Role);
+                if (config.SharedTenancy.Enabled)
+                {
+                    db.UserRoles.RemoveRange(await db.UserRoles.Where(link => link.UserId == id).ToListAsync(cancellationToken));
+                    db.UserRoles.Add(new IdentityUserRole<int> { UserId = id, RoleId = requestedRole!.Id });
+                }
+                else
+                {
+                    var removal = await userManager.RemoveFromRolesAsync(user, currentRoles);
+                    if (!removal.Succeeded)
+                        return BadRequest(new { errors = removal.Errors.Select(error => error.Description) });
+                    var assignment = await userManager.AddToRoleAsync(user, roleName);
+                    if (!assignment.Succeeded)
+                        return BadRequest(new { errors = assignment.Errors.Select(error => error.Description) });
+                }
             }
         }
 
@@ -351,7 +401,7 @@ public class AdminController(
         {
             try
             {
-                await db.SaveChangesAsync();
+                await db.SaveChangesAsync(cancellationToken);
                 result = IdentityResult.Success;
             }
             catch (DbUpdateConcurrencyException)
@@ -369,7 +419,7 @@ public class AdminController(
         }
         if (!result.Succeeded)
         {
-            await transaction.RollbackAsync();
+            await transaction.RollbackAsync(cancellationToken);
             if (result.Errors.Any(error => error.Code == "ConcurrencyFailure"))
             {
                 await db.Entry(user).ReloadAsync();
@@ -377,7 +427,7 @@ public class AdminController(
             }
             return BadRequest(new { errors = result.Errors.Select(error => error.Description) });
         }
-        await transaction.CommitAsync();
+        await transaction.CommitAsync(cancellationToken);
         if (roleChanged || (req.IsActive.HasValue && req.IsActive.Value != wasActive))
         {
             await securitySessions.InvalidateUserAsync(id);
@@ -434,7 +484,7 @@ public class AdminController(
             await securitySessions.RevokeAnonymousCapabilitiesAsync(updatedIds);
         await audit.LogAsync(CurrentUserId, "BULK_UPDATE_USER_STATUS", "User", null,
             $"{updatedIds.Count} users set active={req.IsActive}");
-        return Ok(new { Updated = updatedIds.Count, Results = results });
+        return Ok(new BulkUserStatusResponse(updatedIds.Count, results));
     }
 
     [HttpDelete("users/{id:int}")]
@@ -991,7 +1041,7 @@ public class AdminController(
         }
         await securitySessions.InvalidateUsersAsync(affectedUserIds);
         await audit.LogAsync(CurrentUserId, "BULK_DELETE_GROUPS", "Group", null, $"{deleted} groups deleted");
-        return Ok(new { Deleted = deleted, Results = results });
+        return Ok(new BulkDeleteGroupsResponse(deleted, results));
     }
 
     // ── Departmental environments ────────────────────────────────────────────
@@ -1378,7 +1428,12 @@ public class AdminController(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25)
     {
-        if (!await TenantGroups.AnyAsync(g => g.Id == id)) return NotFound();
+        var cancellationToken = HttpContext.RequestAborted;
+        // The version and displayed membership must describe the same database snapshot.
+        await using var snapshot = await db.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.Serializable, cancellationToken);
+        var group = await TenantGroups.AsNoTracking().SingleOrDefaultAsync(g => g.Id == id, cancellationToken);
+        if (group is null) return NotFound();
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
         var query = TenantMemberships
@@ -1387,7 +1442,7 @@ public class AdminController(
                 (ug, u) => u);
         if (!string.IsNullOrWhiteSpace(q))
         {
-            var allUsers = await query.ToListAsync();
+            var allUsers = await query.ToListAsync(cancellationToken);
             var term = q.Trim();
             var matchedUsers = allUsers.Where(u =>
                 (u.UserName != null && u.UserName.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
@@ -1401,18 +1456,20 @@ public class AdminController(
                 .Take(pageSize)
                 .Select(u => new GroupMemberDto(u.Id, u.UserName!, u.Email, u.IsActive))
                 .ToList();
-            return Ok(new PagedResult<GroupMemberDto>(items, total, page, pageSize));
+            await snapshot.CommitAsync(cancellationToken);
+            return Ok(new GroupMemberCatalogResponse(id, group.Version, items, total, page, pageSize));
         }
         else
         {
-            var total = await query.CountAsync();
+            var total = await query.CountAsync(cancellationToken);
             var items = await query
                 .OrderBy(u => u.UserName)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(u => new GroupMemberDto(u.Id, u.UserName!, u.Email, u.IsActive))
-                .ToListAsync();
-            return Ok(new PagedResult<GroupMemberDto>(items, total, page, pageSize));
+                .ToListAsync(cancellationToken);
+            await snapshot.CommitAsync(cancellationToken);
+            return Ok(new GroupMemberCatalogResponse(id, group.Version, items, total, page, pageSize));
         }
     }
 
@@ -1451,7 +1508,7 @@ public class AdminController(
         }
         await securitySessions.InvalidateUserAsync(user.Id);
         OptimisticConcurrency.SetETag(Response, group.Version);
-        return Ok(new { group.Version });
+        return Ok(new GroupMembershipResponse(id, user.Id, group.Version));
     }
 
     [HttpPost("groups/{id:int}/members/bulk-add")]
@@ -1489,7 +1546,8 @@ public class AdminController(
         }
         await securitySessions.InvalidateUsersAsync(validIds);
         OptimisticConcurrency.SetETag(Response, group.Version);
-        return Ok(new { Added = validIds.Count, group.Version });
+        return Ok(new BulkAddGroupMembersResponse(id, validIds.Count, group.Version,
+            validIds, ids.Except(validIds).ToList()));
     }
 
     [HttpPost("groups/{id:int}/members/bulk-remove")]
@@ -1521,7 +1579,9 @@ public class AdminController(
         }
         await securitySessions.InvalidateUsersAsync(memberships.Select(membership => membership.UserId));
         OptimisticConcurrency.SetETag(Response, group.Version);
-        return Ok(new { Removed = memberships.Count, group.Version });
+        var changedIds = memberships.Select(membership => membership.UserId).ToList();
+        return Ok(new BulkRemoveGroupMembersResponse(id, changedIds.Count, group.Version,
+            changedIds, ids.Except(changedIds).ToList()));
     }
 
     [HttpDelete("groups/{id:int}/members/{userId:int}")]
@@ -1549,7 +1609,7 @@ public class AdminController(
         }
         await securitySessions.InvalidateUserAsync(userId);
         OptimisticConcurrency.SetETag(Response, group.Version);
-        return Ok(new { group.Version });
+        return Ok(new GroupMembershipResponse(id, userId, group.Version));
     }
 
     // ── Reports ───────────────────────────────────────────────────────────────
@@ -1561,20 +1621,12 @@ public class AdminController(
             .Include(r => r.Folder)
             .Where(r => !r.IsDeleted)
             .OrderBy(r => r.Folder!.Path).ThenBy(r => r.Name)
-            .Select(r => new
-            {
-                r.Id,
-                r.Name,
-                r.Description,
-                r.ScriptPath,
-                r.FolderId,
-                FolderName = r.Folder != null ? r.Folder.Name : "Root",
-                FolderPath = r.Folder != null ? r.Folder.Path : "/",
-                r.CreatedAt,
-                r.UpdatedAt,
-                r.Version
-            })
-            .ToListAsync();
+            .Select(r => new AdminReportDto(
+                r.Id, r.Name, r.Description, r.ScriptPath, r.FolderId,
+                r.Folder != null ? r.Folder.Name : "Root",
+                r.Folder != null ? r.Folder.Path : "/",
+                r.CreatedAt, r.UpdatedAt, r.Version))
+            .ToListAsync(HttpContext.RequestAborted);
 
         return Ok(reports);
     }
@@ -1787,26 +1839,30 @@ public class AdminController(
         [FromQuery] string? resourceId = null)
     {
         pageSize = Math.Clamp(pageSize, 1, 200);
-        var query = db.AuditLogs.Where(a => a.TenantId == TenantId);
+        var cancellationToken = HttpContext.RequestAborted;
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        var query = db.AuditLogs.AsNoTracking().Where(a => a.TenantId == TenantId);
         if (action is not null) query = query.Where(a => a.Action == action);
         if (userId.HasValue) query = query.Where(a => a.UserId == userId);
         if (!string.IsNullOrWhiteSpace(resourceType)) query = query.Where(a => a.ResourceType == resourceType);
         if (!string.IsNullOrWhiteSpace(resourceId)) query = query.Where(a => a.ResourceId == resourceId);
 
-        var total = await query.CountAsync();
-        var items = await query
+        var total = await query.CountAsync(cancellationToken);
+        page = Math.Clamp(page, 1, total == 0 ? 1 : ((total - 1) / pageSize) + 1);
+        var pageQuery = query
             .OrderByDescending(a => a.Timestamp)
+            .ThenByDescending(a => a.Id)
             .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-#pragma warning disable CS8602
-            .Join(TenantUsers.DefaultIfEmpty(),
-                  a => a.UserId,
-                  u => (int?)u.Id,
-                  (a, u) => new AuditLogDto(a.Id, a.UserId, u != null ? u.UserName! : null,
-                      a.Action, a.ResourceType, a.ResourceId, a.Timestamp, a.Detail, a.CorrelationId,
-                      a.StudioCapability))
-#pragma warning restore CS8602
-            .ToListAsync();
+            .Take(pageSize);
+        var items = await (from entry in pageQuery
+                           join account in TenantUsers.AsNoTracking() on entry.UserId equals (int?)account.Id into accounts
+                           from account in accounts.DefaultIfEmpty()
+                           orderby entry.Timestamp descending, entry.Id descending
+                           select new AuditLogDto(entry.Id, entry.UserId, account == null ? null : account.UserName,
+                               entry.Action, entry.ResourceType, entry.ResourceId, entry.Timestamp, entry.Detail,
+                               entry.CorrelationId, entry.StudioCapability))
+            .ToListAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return Ok(new PagedResult<AuditLogDto>(items, total, page, pageSize));
     }
@@ -1817,23 +1873,25 @@ public class AdminController(
         [FromQuery] int? userId = null)
     {
         // COMPAT_BREAK: 0.10
-        await audit.LogAsync(CurrentUserId, "EXPORT_AUDIT_LOG", "AuditLog", null,
+        var cancellationToken = HttpContext.RequestAborted;
+        audit.Stage(CurrentUserId, "EXPORT_AUDIT_LOG", "AuditLog", null,
             $"action={action ?? "*"};userId={userId?.ToString() ?? "*"}");
+        await db.SaveChangesAsync(cancellationToken);
 
-        var query = db.AuditLogs.Where(a => a.TenantId == TenantId);
+        var query = db.AuditLogs.AsNoTracking().Where(a => a.TenantId == TenantId);
         if (action is not null) query = query.Where(a => a.Action == action);
         if (userId.HasValue) query = query.Where(a => a.UserId == userId);
 
-        var items = await query
+        var exportQuery = query
             .OrderByDescending(a => a.Timestamp)
-            .Take(10_000)
-#pragma warning disable CS8602
-            .Join(TenantUsers.DefaultIfEmpty(),
-                  a => a.UserId,
-                  u => (int?)u.Id,
-                  (a, u) => new { a, Username = u != null ? u.UserName : null })
-#pragma warning restore CS8602
-            .ToListAsync();
+            .ThenByDescending(a => a.Id)
+            .Take(10_000);
+        var items = await (from entry in exportQuery
+                           join account in TenantUsers.AsNoTracking() on entry.UserId equals (int?)account.Id into accounts
+                           from account in accounts.DefaultIfEmpty()
+                           select new { a = entry, Username = account == null ? null : account.UserName })
+            .OrderByDescending(row => row.a.Timestamp).ThenByDescending(row => row.a.Id)
+            .ToListAsync(cancellationToken);
 
         var sb = new StringBuilder();
         sb.AppendLine("Id,Timestamp,UserId,Username,Action,ResourceType,ResourceId,Detail,CorrelationId");

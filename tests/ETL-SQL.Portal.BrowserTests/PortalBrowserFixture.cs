@@ -17,12 +17,16 @@ public class PortalBrowserFixture : IAsyncLifetime
     private IPlaywright? playwright;
     private IBrowser? browser;
 
-    public PortalBrowserFactory Factory { get; } = new();
+    public PortalBrowserFixture() : this(new PortalBrowserFactory()) { }
+
+    internal PortalBrowserFixture(PortalBrowserFactory factory) => Factory = factory;
+
+    public PortalBrowserFactory Factory { get; }
 
     /// <summary>Base URL of the Portal under test, without a trailing slash.</summary>
     public string BaseUrl => Factory.ServerAddress.TrimEnd('/');
 
-    public async Task InitializeAsync()
+    public virtual async Task InitializeAsync()
     {
         // Resolving a client is what builds and starts the host, which is what assigns the port.
         // Wrapped so the assembly-wide failure names this fixture and carries the factory's own
@@ -124,7 +128,7 @@ public class PortalBrowserFixture : IAsyncLifetime
         return await BrowserSession.CreateAsync(context);
     }
 
-    public async Task DisposeAsync()
+    public virtual async Task DisposeAsync()
     {
         if (browser is not null) await browser.CloseAsync();
         playwright?.Dispose();

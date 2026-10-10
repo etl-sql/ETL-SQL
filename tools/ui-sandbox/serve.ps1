@@ -54,8 +54,8 @@ if ($Stop) {
     }
 }
 
-& node (Join-Path $RepoRoot 'scripts/compile-browser.mjs')
-if ($LASTEXITCODE -ne 0) { throw 'Browser compilation failed; sandbox was not started.' }
+& node (Join-Path $RepoRoot 'scripts/sync-assets.js')
+if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed; sandbox was not started.' }
 
 $mime = @{
     '.html' = 'text/html; charset=utf-8'

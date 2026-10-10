@@ -1,421 +1,264 @@
-// Canonical "Data Gateways" admin surface (Admin → Data Gateways) over api/admin/gateways.
-import { createConnectionWizard } from '../designer/connection-wizard.js';
-import { connectionsApi, secretsApi } from './api.js';
-
-function esc(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-function escAttr(s) {
-  return esc(s).replace(/'/g, '&#39;');
-}
-function formatDate(value) {
-  return value ? new Date(value).toLocaleString() : '—';
-}
-
-const PANEL_HTML = `
-  <div class="card">
-    <div class="card-header">
-      <div>
-        <span class="section-kicker">Hybrid Connectivity</span>
-        <h3>Data Gateways</h3>
-      </div>
-      <div class="admin-action-group">
-        <span id="gw-status" class="form-hint"></span>
-        <button class="btn btn-outline btn-sm" id="gw-enrollBtn">Enroll Gateway</button>
-        <button class="btn btn-outline btn-sm" id="gw-refreshBtn">Refresh</button>
-      </div>
-    </div>
-    <div id="gw-tableWrap"><div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading gateways…</span></div></div>
-  </div>
-
-  <div class="card" id="gw-enrollCard">
-    <div class="card-header"><h3>Enroll a data gateway</h3></div>
-    <div id="gw-enrollForm">
-      <div class="form-row">
-        <div class="form-group">
-          <label for="gw-input-id">Gateway Cluster ID</label>
-          <input id="gw-input-id" type="text" placeholder="corp-mssql-gw" autocomplete="off">
-        </div>
-        <div class="form-group">
-          <label for="gw-input-expiry">Token Expiration (minutes)</label>
-          <input id="gw-input-expiry" type="number" value="60" min="5" max="1440">
-        </div>
-      </div>
-      <div id="gw-enroll-error" class="error-msg"></div>
-      <div class="form-actions">
-        <button class="btn btn-primary btn-sm" id="gw-enrollSubmitBtn">Generate Token</button>
-        <span class="form-hint">Issues a cryptographically verified one-time enrollment token to connect an on-premises Gateway daemon cluster to this Portal.</span>
-      </div>
-    </div>
-
-    <div id="gw-enrollResult" style="display:none">
-      <div class="status-banner status-banner-info">
-        <div>
-          <strong>Enrollment Token Generated!</strong>
-          <div class="text-sm">This token is shown only once. Use it to install or start your on-premises Gateway daemon.</div>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="gw-result-token">One-Time Token</label>
-          <div class="inline-control inline-control-gap">
-            <input id="gw-result-token" type="text" readonly class="param-input" style="font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .85em;">
-            <button class="btn btn-outline btn-sm" id="gw-copyTokenBtn">Copy</button>
-          </div>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="gw-result-cmd">Quick Setup Command</label>
-          <div class="inline-control inline-control-gap">
-            <input id="gw-result-cmd" type="text" readonly class="param-input" style="font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .85em;">
-            <button class="btn btn-outline btn-sm" id="gw-copyCmdBtn">Copy</button>
-          </div>
-        </div>
-      </div>
-      <div class="form-actions">
-        <button class="btn btn-primary btn-sm" id="gw-enrollDoneBtn">Done</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Cluster Nodes Modal -->
-  <div class="modal-overlay" id="gw-nodesModal" style="display:none" role="dialog" aria-modal="true" aria-labelledby="gw-nodesModal-title">
-    <div class="modal-card modal-lg">
-      <div class="modal-header">
-        <div>
-          <span class="section-kicker">Cluster Nodes</span>
-          <h3 class="modal-title" id="gw-nodesModal-title">Cluster Nodes — <code id="gw-nodesModalGatewayId"></code></h3>
-        </div>
-        <button class="btn btn-ghost btn-sm" id="gw-nodesCloseBtn" aria-label="Close" style="font-size: 1.1em; line-height: 1;">✕</button>
-      </div>
-      <div class="modal-body">
-        <div id="gw-nodesTableWrap"></div>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-outline btn-sm" id="gw-nodesDismissBtn">Close</button>
-      </div>
-    </div>
-  </div>
-`;
-
-export function createGatewaysAdmin({ host, gatewaysApi }) {
-  if (!host) throw new Error('host element required');
-  if (!gatewaysApi) throw new Error('gatewaysApi required');
-
-  host.innerHTML = PANEL_HTML;
-
-  const $status = host.querySelector('#gw-status');
-  const $tableWrap = host.querySelector('#gw-tableWrap');
-  const $enrollBtn = host.querySelector('#gw-enrollBtn');
-  const $refreshBtn = host.querySelector('#gw-refreshBtn');
-
-  // Enroll elements
-  const $enrollForm = host.querySelector('#gw-enrollForm');
-  const $enrollResult = host.querySelector('#gw-enrollResult');
-  const $inputId = host.querySelector('#gw-input-id');
-  const $inputExpiry = host.querySelector('#gw-input-expiry');
-  const $enrollError = host.querySelector('#gw-enroll-error');
-  const $enrollSubmitBtn = host.querySelector('#gw-enrollSubmitBtn');
-  const $enrollDoneBtn = host.querySelector('#gw-enrollDoneBtn');
-  const $resultToken = host.querySelector('#gw-result-token');
-  const $resultCmd = host.querySelector('#gw-result-cmd');
-  const $copyTokenBtn = host.querySelector('#gw-copyTokenBtn');
-  const $copyCmdBtn = host.querySelector('#gw-copyCmdBtn');
-
-  // Nodes modal elements
-  const $nodesModal = host.querySelector('#gw-nodesModal');
-  const $nodesModalGatewayId = host.querySelector('#gw-nodesModalGatewayId');
-  const $nodesTableWrap = host.querySelector('#gw-nodesTableWrap');
-  const $nodesCloseBtn = host.querySelector('#gw-nodesCloseBtn');
-  const $nodesDismissBtn = host.querySelector('#gw-nodesDismissBtn');
-
-  let gatewaysCache = [];
-
-  function focusEnrollForm() {
-    $enrollForm.style.display = '';
-    $enrollResult.style.display = 'none';
-    $inputId.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    $inputId.focus();
-  }
-
-  async function load() {
-    $tableWrap.innerHTML = '<div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading gateways…</span></div>';
-    try {
-      const list = await gatewaysApi.list();
-      gatewaysCache = list || [];
-      render();
-    } catch (err) {
-      $tableWrap.innerHTML = `<div class="error-msg show">${esc(err.message || 'Failed to load gateways.')}</div>`;
-    }
-  }
-
-  function render() {
-    if (!gatewaysCache.length) {
-      $tableWrap.innerHTML = `
-        <div class="empty-state">
-          <h2>No Data Gateways Enrolled</h2>
-          <p class="form-hint" style="margin: 8px auto 16px; max-width: 460px;">Enroll an on-premises Data Gateway to securely query internal databases without opening firewall ports.</p>
-          <button class="btn btn-primary btn-sm" id="gw-emptyEnrollBtn">Enroll First Gateway</button>
-        </div>`;
-      host.querySelector('#gw-emptyEnrollBtn')?.addEventListener('click', focusEnrollForm);
-      $status.textContent = '0 Gateways';
-      return;
-    }
-
-    const totalNodes = gatewaysCache.reduce((sum, g) => sum + (g.activeNodes || 0), 0);
-    $status.textContent = `${gatewaysCache.length} Gateway${gatewaysCache.length === 1 ? '' : 's'} • ${totalNodes} Active Node${totalNodes === 1 ? '' : 's'}`;
-
-    let html = `
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Gateway ID</th>
-            <th>Status</th>
-            <th>Cluster Nodes</th>
-            <th>Enrolled</th>
-            <th>Workload Identity</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>`;
-
-    for (const g of gatewaysCache) {
-      let statusBadge;
-      if (g.state === 'Revoked') {
-        statusBadge = '<span class="chip chip-inactive">Revoked</span>';
-      } else if (g.state === 'Pending') {
-        statusBadge = '<span class="badge badge-warning">Enrollment Pending</span>';
-      } else if (g.isOnline) {
-        statusBadge = `<span class="chip chip-active">● ${g.activeNodes} Node${g.activeNodes === 1 ? '' : 's'} Online</span>`;
-      } else {
-        statusBadge = '<span class="badge badge-neutral">○ Disconnected</span>';
-      }
-
-      const thumbprint = g.workloadPublicKeyThumbprint
-        ? `<code>${esc(g.workloadPublicKeyThumbprint.substring(0, 12))}…</code>`
-        : '<span class="text-muted">—</span>';
-
-      const nodesCountText = g.nodes && g.nodes.length > 0
-        ? `<a href="#" class="gw-view-nodes btn-link" data-gw-id="${escAttr(g.gatewayId)}">${g.activeNodes} / ${g.totalNodes} Active</a>`
-        : `${g.activeNodes} Active`;
-
-      const enrolledDate = g.consumedUtc || g.createdUtc || g.consumedAtUtc || g.issuedAtUtc;
-
-      html += `
-        <tr data-gw-id="${escAttr(g.gatewayId)}">
-          <td><code>${esc(g.gatewayId)}</code></td>
-          <td>${statusBadge}</td>
-          <td>${nodesCountText}</td>
-          <td>${esc(formatDate(enrolledDate))}</td>
-          <td>${thumbprint}</td>
-          <td class="table-actions">
-            ${g.state !== 'Revoked' && g.isOnline ? `<button class="btn btn-outline btn-sm gw-create-conn-btn" data-gw-id="${escAttr(g.gatewayId)}">Bind Connection</button>` : ''}
-            ${g.nodes && g.nodes.length > 0 ? `<button class="btn btn-outline btn-sm gw-view-nodes-btn" data-gw-id="${escAttr(g.gatewayId)}">Nodes</button>` : ''}
-            ${g.state !== 'Revoked' ? `<button class="btn btn-danger-soft btn-sm gw-revoke-btn" data-gw-id="${escAttr(g.gatewayId)}">Revoke</button>` : ''}
-          </td>
-        </tr>`;
-    }
-
-    html += '</tbody></table>';
-    $tableWrap.innerHTML = html;
-
-    // Attach row events
-    $tableWrap.querySelectorAll('.gw-create-conn-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const gwId = btn.getAttribute('data-gw-id');
-        launchConnectionWizard(gwId);
-      });
-    });
-
-    $tableWrap.querySelectorAll('.gw-view-nodes, .gw-view-nodes-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        const gwId = btn.getAttribute('data-gw-id');
-        openNodesModal(gwId);
-      });
-    });
-
-    $tableWrap.querySelectorAll('.gw-revoke-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const gwId = btn.getAttribute('data-gw-id');
-        const confirmed = await window.ETLSQLFeedback.confirm(`Are you sure you want to revoke Gateway '${gwId}'?`, {
-          title: 'Revoke Gateway',
-          impact: 'Connected nodes will be disconnected immediately.',
-          confirmLabel: 'Revoke gateway',
-          danger: true,
-          auditAction: 'admin.gateway.revoke'
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.Portal/BrowserSources/gateways-admin.ts
+ * Run: node scripts/sync-assets.js
+ */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
+import { installDialogAccessibility } from './dialog-a11y.js';
+import { readGatewayFleet, currentGatewayFleet, readIssuedGateway, readGatewayRevocation } from './gateway-responses.js';
+import { PANEL_HTML, renderGatewayFleet, renderGatewayNodes, gatewaySetupCommand } from './gateways-view.js';
+import { createGatewayWizardLauncher } from './gateway-wizard.js';
+const controllers = new WeakMap();
+export function createGatewaysAdmin({ host: suppliedHost, gatewaysApi, wizardApi = undefined }) {
+    if (!suppliedHost)
+        throw new Error('Gateway host element required.');
+    const host = suppliedHost;
+    const existing = controllers.get(host);
+    if (existing)
+        return existing;
+    host.innerHTML = PANEL_HTML;
+    const listeners = new AbortController(), lifetime = new AbortController();
+    const removeDialogs = installDialogAccessibility(host);
+    const element = (id) => {
+        const found = host.querySelector('#' + id);
+        if (!found)
+            throw new Error(`Missing gateway field ${id}.`);
+        return found;
+    };
+    const input = (id) => element(id);
+    const button = (id) => element(id);
+    const table = element('gw-tableWrap'), status = element('gw-status'), actionStatus = element('gw-action-status');
+    const enrollError = element('gw-enroll-error'), nodesModal = element('gw-nodesModal');
+    let disposed = false, loadVersion = 0, loading = false, enrolling = false, enrollmentUncertain = false, copyVersion = 0;
+    let fleet = null, reads = null;
+    const revoking = new Set(), revocationUncertain = new Set(), copyTimers = new Set();
+    const wizard = createGatewayWizardLauncher(document.body, message => { actionStatus.textContent = message; }, alias => { actionStatus.textContent = `Connection '${alias}' saved.`; }, wizardApi);
+    function updateControls() {
+        button('gw-enrollSubmitBtn').disabled = disposed || loading || fleet === null || enrolling || enrollmentUncertain;
+        button('gw-enrollBtn').disabled = disposed || enrolling;
+        table.querySelectorAll('.gw-revoke-btn, .gw-create-conn-btn').forEach(target => {
+            const id = target.dataset.gwId || '';
+            target.disabled = disposed || loading || revoking.has(id) || revocationUncertain.has(id);
         });
-        if (!confirmed) return;
-
-        try {
-          await gatewaysApi.revoke(gwId);
-          window.ETLSQLFeedback.notify(`Gateway '${gwId}' revoked.`, { title: 'Gateway Revoked', tone: 'success' });
-          await load();
-        } catch (err) {
-          window.ETLSQLFeedback.notify(err.message || 'Failed to revoke gateway.', { title: 'Revocation failed', tone: 'error' });
-        }
-      });
-    });
-  }
-
-  function launchConnectionWizard(gatewayId, resourceId = '') {
-    createConnectionWizard({
-      host: document.body,
-      mode: 'admin',
-      initialGateway: gatewayId,
-      initialResourceId: resourceId,
-      fetchSchemas: async () => {
-        const res = await fetch('/api/connectors/schema');
-        const json = await res.json();
-        return Array.isArray(json) ? json : (json.schemas || []);
-      },
-      fetchGateways: async () => {
-        try {
-          const json = await fetch('/api/connectors/gateways').then(r => r.json());
-          return Array.isArray(json) ? json : (json.gateways || []);
-        } catch {
-          return [];
-        }
-      },
-      fetchGatewayResources: async (gwId) => {
-        const res = await fetch(`/api/connectors/gateways/${encodeURIComponent(gwId)}/resources`);
-        if (!res.ok) throw new Error('Gateway resource discovery failed.');
-        const json = await res.json();
-        return Array.isArray(json) ? json : (json.resources || []);
-      },
-      fetchSecrets: async () => {
-        try {
-          // `window.secretsApi` was never assigned by anything, so this used to be a permanently
-          // false test whose fallback re-spelt the endpoint by hand. The module's own client is
-          // the one that carries the auth header and the error handling.
-          const list = await secretsApi.list();
-          return Array.isArray(list) ? list.map(s => s.name || s) : [];
-        } catch {
-          return [];
-        }
-      },
-      onTest: async (req) => {
-        const res = await fetch('/api/connectors/test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(req)
-        });
-        return await res.json();
-      },
-      onSave: async (entry) => {
-        await connectionsApi.set(entry.alias, {
-          connectorType: entry.connectorType,
-          target: entry.target,
-          options: entry.options,
-          gateway: entry.gateway,
-          environmentScope: entry.environmentScope,
-          sensitiveFields: []
-        });
-      }
-    });
-  }
-
-  function openNodesModal(gatewayId) {
-    const gw = gatewaysCache.find(g => (g.gatewayId || '').toLowerCase() === (gatewayId || '').toLowerCase());
-    if (!gw) return;
-
-    $nodesModalGatewayId.textContent = gw.gatewayId;
-    if (!gw.nodes || !gw.nodes.length) {
-      $nodesTableWrap.innerHTML = '<p class="form-hint" style="padding: 16px; margin: 0;">No live nodes connected to this gateway cluster.</p>';
-    } else {
-      let nodeHtml = `
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Node Identifier</th>
-              <th>Status</th>
-              <th>Connected Since</th>
-              <th>Identity Thumbprint</th>
-            </tr>
-          </thead>
-          <tbody>`;
-      for (const node of gw.nodes) {
-        const isOnline = node.isActive || node.status === 'Active';
-        const connectedDate = node.connectedUtc || node.connectedAtUtc;
-        const thumbprint = node.workloadPublicKeyThumbprint
-          ? `<code>${esc(node.workloadPublicKeyThumbprint.substring(0, 12))}…</code>`
-          : '<span class="text-muted">—</span>';
-        nodeHtml += `
-          <tr>
-            <td><code>${esc(node.nodeId)}</code></td>
-            <td>${isOnline ? '<span class="chip chip-active">● Online</span>' : '<span class="chip chip-inactive">○ Disconnected</span>'}</td>
-            <td>${esc(formatDate(connectedDate))}</td>
-            <td>${thumbprint}</td>
-          </tr>`;
-      }
-      nodeHtml += '</tbody></table>';
-      $nodesTableWrap.innerHTML = nodeHtml;
+        host.setAttribute('aria-busy', String(loading));
     }
-    $nodesModal.style.display = 'flex';
-  }
-
-  function closeNodesModal() {
-    $nodesModal.style.display = 'none';
-  }
-
-  // Event bindings
-  $refreshBtn.addEventListener('click', load);
-  $enrollBtn.addEventListener('click', focusEnrollForm);
-  $nodesCloseBtn.addEventListener('click', closeNodesModal);
-  $nodesDismissBtn.addEventListener('click', closeNodesModal);
-  $nodesModal.addEventListener('click', (e) => {
-    if (e.target === $nodesModal) closeNodesModal();
-  });
-
-  $enrollSubmitBtn.addEventListener('click', async () => {
-    const gatewayId = $inputId.value.trim();
-    const expiry = parseInt($inputExpiry.value, 10) || 60;
-    if (!gatewayId) {
-      $enrollError.textContent = 'Please enter a Gateway ID.';
-      $enrollError.classList.add('show');
-      return;
+    function clearCredential() {
+        copyVersion++;
+        for (const timer of copyTimers)
+            window.clearTimeout(timer);
+        copyTimers.clear();
+        input('gw-result-token').value = '';
+        input('gw-result-cmd').value = '';
+        button('gw-copyTokenBtn').textContent = 'Copy';
+        button('gw-copyCmdBtn').textContent = 'Copy';
+        element('gw-enrollResult').style.display = 'none';
+        element('gw-enrollForm').style.display = '';
     }
-
-    $enrollSubmitBtn.disabled = true;
-    $enrollError.textContent = '';
-    $enrollError.classList.remove('show');
-    try {
-      const res = await gatewaysApi.enroll(gatewayId, expiry);
-      $resultToken.value = res.oneTimeToken;
-      const portalOrigin = window.location.origin;
-      $resultCmd.value = `etlsql gateway setup --portal ${portalOrigin} --tenant ${res.tenantId || 'default'} --gateway-id ${res.gatewayId || gatewayId} --token ${res.oneTimeToken}`;
-      $enrollForm.style.display = 'none';
-      $enrollResult.style.display = '';
-    } catch (err) {
-      $enrollError.textContent = err.message || 'Failed to generate enrollment token.';
-      $enrollError.classList.add('show');
-    } finally {
-      $enrollSubmitBtn.disabled = false;
+    function focusEnrollment() {
+        if (disposed || enrolling)
+            return;
+        clearCredential();
+        enrollError.textContent = '';
+        enrollError.classList.remove('show');
+        input('gw-input-id').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        input('gw-input-id').focus();
     }
-  });
-
-  $enrollDoneBtn.addEventListener('click', () => {
-    $inputId.value = '';
-    $inputExpiry.value = '60';
-    $enrollResult.style.display = 'none';
-    $enrollForm.style.display = '';
-    load();
-  });
-
-  $copyTokenBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText($resultToken.value);
-    $copyTokenBtn.textContent = 'Copied!';
-    setTimeout(() => { $copyTokenBtn.textContent = 'Copy'; }, 2000);
-  });
-
-  $copyCmdBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText($resultCmd.value);
-    $copyCmdBtn.textContent = 'Copied!';
-    setTimeout(() => { $copyCmdBtn.textContent = 'Copy'; }, 2000);
-  });
-
-  return {
-    load
-  };
+    function closeNodes() { nodesModal.style.display = 'none'; }
+    async function load(recover = true) {
+        if (disposed)
+            return;
+        const version = ++loadVersion;
+        reads?.abort();
+        reads = new AbortController();
+        loading = true;
+        closeNodes();
+        wizard.close();
+        status.textContent = 'Loading gateways…';
+        table.innerHTML = '<div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading gateways…</span></div>';
+        updateControls();
+        try {
+            const entries = currentGatewayFleet(readGatewayFleet(await gatewaysApi.list(reads.signal)));
+            if (disposed || version !== loadVersion)
+                return;
+            fleet = entries;
+            if (recover && !enrolling && !revoking.size) {
+                enrollmentUncertain = false;
+                revocationUncertain.clear();
+                actionStatus.textContent = '';
+                enrollError.textContent = '';
+                enrollError.classList.remove('show');
+            }
+            table.innerHTML = renderGatewayFleet(entries);
+            const nodes = entries.reduce((sum, entry) => sum + entry.activeNodes, 0);
+            status.textContent = `${entries.length} Gateway${entries.length === 1 ? '' : 's'} • ${nodes} Active Node${nodes === 1 ? '' : 's'}`;
+        }
+        catch {
+            if (disposed || version !== loadVersion)
+                return;
+            fleet = null;
+            status.textContent = 'Gateway fleet unavailable';
+            table.innerHTML = '<div class="error-msg show" role="alert">Gateway fleet metadata is unavailable or incomplete. Refresh to retry.</div>';
+        }
+        finally {
+            if (!disposed && version === loadVersion) {
+                loading = false;
+                updateControls();
+            }
+        }
+    }
+    async function revoke(id) {
+        const gateway = fleet?.find(entry => entry.gatewayId === id);
+        if (disposed || loading || !gateway || gateway.state === 'Revoked' || revoking.has(id) || revocationUncertain.has(id))
+            return;
+        const version = loadVersion;
+        revoking.add(id);
+        updateControls();
+        let sent = false;
+        try {
+            const feedback = window.ETLSQLFeedback;
+            if (!feedback)
+                throw new Error('Gateway confirmation is unavailable.');
+            const confirmed = await feedback.confirm(`Are you sure you want to revoke Gateway '${id}'?`, {
+                title: 'Revoke Gateway', impact: 'Enrollment is revoked and connected nodes will be disconnected.',
+                confirmLabel: 'Revoke gateway', danger: true, auditAction: 'admin.gateway.revoke'
+            });
+            if (!confirmed || disposed || version !== loadVersion)
+                return;
+            sent = true;
+            readGatewayRevocation(await gatewaysApi.revoke(id, lifetime.signal), id);
+            if (disposed)
+                return;
+            actionStatus.textContent = `Gateway '${id}' revoked.`;
+            await load(false);
+        }
+        catch {
+            if (disposed)
+                return;
+            if (sent)
+                revocationUncertain.add(id);
+            actionStatus.textContent = sent ? 'Gateway revocation is unconfirmed. Refresh and inspect the gateway before retrying.'
+                : 'Gateway confirmation is unavailable. Try again.';
+        }
+        finally {
+            revoking.delete(id);
+            if (!disposed)
+                updateControls();
+        }
+    }
+    async function enroll() {
+        if (disposed || loading || !fleet || enrolling || enrollmentUncertain)
+            return;
+        const id = input('gw-input-id').value.trim(), expiry = Number(input('gw-input-expiry').value);
+        if (!id || !Number.isInteger(expiry) || expiry < 5 || expiry > 1440) {
+            enrollError.textContent = !id ? 'Please enter a Gateway ID.' : 'Expiration must be a whole number from 5 to 1440 minutes.';
+            enrollError.classList.add('show');
+            return;
+        }
+        enrolling = true;
+        clearCredential();
+        enrollError.textContent = '';
+        enrollError.classList.remove('show');
+        updateControls();
+        try {
+            const receipt = readIssuedGateway(await gatewaysApi.enroll(id, expiry, lifetime.signal), id);
+            if (disposed)
+                return;
+            input('gw-result-token').value = receipt.oneTimeToken;
+            input('gw-result-cmd').value = gatewaySetupCommand(window.location.origin, receipt);
+            element('gw-enrollForm').style.display = 'none';
+            element('gw-enrollResult').style.display = '';
+            button('gw-enrollDoneBtn').focus();
+        }
+        catch {
+            if (disposed)
+                return;
+            enrollmentUncertain = true;
+            enrollError.textContent = 'Enrollment outcome is unconfirmed. Refresh and inspect the gateway before issuing another token.';
+            enrollError.classList.add('show');
+        }
+        finally {
+            enrolling = false;
+            if (!disposed)
+                updateControls();
+        }
+    }
+    async function copy(field, id) {
+        const value = input(field).value, version = copyVersion;
+        if (disposed || !value)
+            return;
+        try {
+            await navigator.clipboard.writeText(value);
+            if (disposed || version !== copyVersion)
+                return;
+            button(id).textContent = 'Copied!';
+            const timer = window.setTimeout(() => { copyTimers.delete(timer); if (!disposed && version === copyVersion)
+                button(id).textContent = 'Copy'; }, 2000);
+            copyTimers.add(timer);
+        }
+        catch {
+            if (!disposed && version === copyVersion)
+                actionStatus.textContent = 'Copy failed. Select the value and copy it manually.';
+        }
+    }
+    host.addEventListener('click', event => {
+        const target = event.target instanceof Element ? event.target.closest('button') : null;
+        if (!target || disposed || target.disabled)
+            return;
+        const id = target.dataset.gwId;
+        if (target.id === 'gw-refreshBtn')
+            void load();
+        else if (target.id === 'gw-enrollBtn' || target.id === 'gw-emptyEnrollBtn')
+            focusEnrollment();
+        else if (target.id === 'gw-enrollSubmitBtn')
+            void enroll();
+        else if (target.id === 'gw-enrollDoneBtn') {
+            clearCredential();
+            input('gw-input-id').value = '';
+            input('gw-input-expiry').value = '60';
+            input('gw-input-id').focus();
+            void load(false);
+        }
+        else if (target.id === 'gw-copyTokenBtn')
+            void copy('gw-result-token', target.id);
+        else if (target.id === 'gw-copyCmdBtn')
+            void copy('gw-result-cmd', target.id);
+        else if (target.id === 'gw-nodesCloseBtn' || target.id === 'gw-nodesDismissBtn')
+            closeNodes();
+        else if (id && !loading && target.classList.contains('gw-view-nodes-btn')) {
+            const gateway = fleet?.find(entry => entry.gatewayId === id);
+            if (gateway) {
+                element('gw-nodesModalGatewayId').textContent = id;
+                element('gw-nodesTableWrap').innerHTML = renderGatewayNodes(gateway);
+                nodesModal.removeAttribute('aria-hidden');
+                nodesModal.style.display = 'flex';
+            }
+        }
+        else if (id && target.classList.contains('gw-revoke-btn'))
+            void revoke(id);
+        else if (id && !loading && target.classList.contains('gw-create-conn-btn'))
+            void wizard.launch(id);
+    }, { signal: listeners.signal });
+    nodesModal.addEventListener('click', event => { if (event.target === nodesModal)
+        closeNodes(); }, { signal: listeners.signal });
+    const controller = { load,
+        dispose() {
+            if (disposed)
+                return;
+            disposed = true;
+            loadVersion++;
+            listeners.abort();
+            lifetime.abort();
+            reads?.abort();
+            clearCredential();
+            closeNodes();
+            wizard.dispose();
+            removeDialogs?.();
+            fleet = null;
+            loading = false;
+            updateControls();
+            controllers.delete(host);
+        }
+    };
+    updateControls();
+    controllers.set(host, controller);
+    return controller;
 }

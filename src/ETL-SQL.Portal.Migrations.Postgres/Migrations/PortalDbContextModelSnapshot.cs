@@ -26,3041 +26,3832 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("Attempts")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at_utc");
 
                     b.Property<string>("Detail")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("detail");
 
                     b.Property<string>("NodeName")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("node_name");
 
                     b.Property<string>("Outcome")
                         .IsRequired()
                         .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("outcome");
 
                     b.Property<string>("ServiceName")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("service_name");
 
                     b.Property<DateTime>("StartedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at_utc");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_admin_service_runs");
 
-                    b.HasIndex("ServiceName", "StartedAtUtc");
+                    b.HasIndex("ServiceName", "StartedAtUtc")
+                        .HasDatabaseName("ix_admin_service_runs_service_name_started_at_utc");
 
-                    b.ToTable("AdminServiceRuns");
+                    b.ToTable("admin_service_runs");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.AlertNotification", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("AlertId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("alert_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("NotificationName")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("notification_name");
 
                     b.Property<string>("OrchestratorAlias")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("orchestrator_alias");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_alert_notifications");
 
                     b.HasIndex("AlertId", "OrchestratorAlias", "NotificationName")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_alert_notifications_alert_id_orchestrator_alias_notificatio~");
 
-                    b.ToTable("AlertNotifications");
+                    b.ToTable("alert_notifications");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.AuditLog", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("action");
 
                     b.Property<string>("ActorId")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("actor_id");
 
                     b.Property<string>("ActorType")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("text")
-                        .HasDefaultValue("User");
+                        .HasDefaultValue("User")
+                        .HasColumnName("actor_type");
 
                     b.Property<string>("CorrelationId")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("correlation_id");
 
                     b.Property<string>("Detail")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("detail");
 
                     b.Property<string>("EffectiveScopes")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("effective_scopes");
 
                     b.Property<string>("ResourceId")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("resource_id");
 
                     b.Property<string>("ResourceType")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("resource_type");
 
                     b.Property<string>("StudioCapability")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("studio_capability");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("Timestamp")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("timestamp");
 
                     b.Property<int?>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_audit_logs");
 
-                    b.HasIndex("TenantId", "Timestamp");
+                    b.HasIndex("TenantId", "Timestamp")
+                        .HasDatabaseName("ix_audit_logs_tenant_id_timestamp");
 
-                    b.HasIndex("TenantId", "Action", "Timestamp");
+                    b.HasIndex("TenantId", "Action", "Timestamp")
+                        .HasDatabaseName("ix_audit_logs_tenant_id_action_timestamp");
 
-                    b.HasIndex("TenantId", "ResourceType", "ResourceId");
+                    b.HasIndex("TenantId", "ResourceType", "ResourceId")
+                        .HasDatabaseName("ix_audit_logs_tenant_id_resource_type_resource_id");
 
-                    b.ToTable("AuditLogs");
+                    b.ToTable("audit_logs");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.AuditOutboxMessage", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("action");
 
                     b.Property<string>("ActorId")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("actor_id");
 
                     b.Property<string>("ActorType")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("text")
-                        .HasDefaultValue("User");
+                        .HasDefaultValue("User")
+                        .HasColumnName("actor_type");
 
                     b.Property<int>("Attempts")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
 
                     b.Property<int?>("AuditLogId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("audit_log_id");
 
                     b.Property<string>("CorrelationId")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("correlation_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<DateTime?>("DeliveredAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("delivered_at");
 
                     b.Property<string>("EffectiveScopes")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("effective_scopes");
 
                     b.Property<string>("EventId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("event_id");
 
                     b.Property<string>("LastError")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("last_error");
 
                     b.Property<DateTime?>("LockedUntil")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("locked_until");
 
                     b.Property<DateTime?>("NextAttemptAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
 
                     b.Property<DateTime>("OccurredAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
 
                     b.Property<string>("PayloadJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("payload_json");
 
                     b.Property<string>("ResourceId")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("resource_id");
 
                     b.Property<string>("ResourceType")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("resource_type");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("status");
 
                     b.Property<string>("StudioCapability")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("studio_capability");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
 
                     b.Property<int?>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_audit_outbox_messages");
 
-                    b.HasIndex("AuditLogId");
+                    b.HasIndex("AuditLogId")
+                        .HasDatabaseName("ix_audit_outbox_messages_audit_log_id");
 
-                    b.HasIndex("TenantId", "AuditLogId");
+                    b.HasIndex("TenantId", "AuditLogId")
+                        .HasDatabaseName("ix_audit_outbox_messages_tenant_id_audit_log_id");
 
                     b.HasIndex("TenantId", "EventId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_audit_outbox_messages_tenant_id_event_id");
 
-                    b.HasIndex("TenantId", "Status", "NextAttemptAt");
+                    b.HasIndex("TenantId", "Status", "NextAttemptAt")
+                        .HasDatabaseName("ix_audit_outbox_messages_tenant_id_status_next_attempt_at");
 
-                    b.ToTable("AuditOutboxMessages");
+                    b.ToTable("audit_outbox_messages");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Dataset", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("AccessLevel")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("access_level");
 
                     b.Property<string>("AtRestKeyVersion")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("at_rest_key_version");
 
                     b.Property<string>("ColumnSchema")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("column_schema");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<int?>("CreatedBy")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("created_by");
 
                     b.Property<int>("EncryptionMode")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("encryption_mode");
 
                     b.Property<int?>("FolderId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("folder_id");
 
                     b.Property<string>("FolderPath")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("folder_path");
 
                     b.Property<DateTime?>("LastRefresh")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_refresh");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("name");
 
                     b.Property<int?>("OwningReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("owning_report_id");
 
                     b.Property<string>("ParquetFilePath")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("parquet_file_path");
 
                     b.Property<string>("RefreshInterval")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("refresh_interval");
 
                     b.Property<long>("RowCount")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("row_count");
 
                     b.Property<string>("SourceQuery")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("source_query");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("Ttl")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("ttl");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_datasets");
 
-                    b.HasIndex("FolderId");
+                    b.HasIndex("FolderId")
+                        .HasDatabaseName("ix_datasets_folder_id");
 
-                    b.HasIndex("OwningReportId");
+                    b.HasIndex("OwningReportId")
+                        .HasDatabaseName("ix_datasets_owning_report_id");
 
                     b.HasIndex("TenantId", "Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_datasets_tenant_id_name");
 
-                    b.ToTable("Datasets");
+                    b.ToTable("datasets");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.DatasetAcl", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("DatasetId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("dataset_id");
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("group_id");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("permission");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_dataset_acls");
 
-                    b.HasIndex("DatasetId");
+                    b.HasIndex("DatasetId")
+                        .HasDatabaseName("ix_dataset_acls_dataset_id");
 
-                    b.HasIndex("GroupId");
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_dataset_acls_group_id");
 
-                    b.ToTable("DatasetAcls");
+                    b.ToTable("dataset_acls");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.DatasetUserAcl", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<int>("DatasetId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("dataset_id");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("permission");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_dataset_user_acls");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_dataset_user_acls_user_id");
 
                     b.HasIndex("DatasetId", "UserId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_dataset_user_acls_dataset_id_user_id");
 
-                    b.ToTable("DatasetUserAcls");
+                    b.ToTable("dataset_user_acls");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Folder", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("name");
 
                     b.Property<int>("OwnerId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("owner_id");
 
                     b.Property<int?>("ParentId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("parent_id");
 
                     b.Property<string>("Path")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("path");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_folders");
 
-                    b.HasIndex("ParentId");
+                    b.HasIndex("ParentId")
+                        .HasDatabaseName("ix_folders_parent_id");
 
                     b.HasIndex("TenantId", "Path")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_folders_tenant_id_path");
 
-                    b.ToTable("Folders");
+                    b.ToTable("folders");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.FolderAcl", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("FolderId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("folder_id");
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("group_id");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("permission");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_folder_acls");
 
-                    b.HasIndex("FolderId");
+                    b.HasIndex("FolderId")
+                        .HasDatabaseName("ix_folder_acls_folder_id");
 
-                    b.HasIndex("GroupId");
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_folder_acls_group_id");
 
-                    b.ToTable("FolderAcls");
+                    b.ToTable("folder_acls");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.GatewayAmbiguousWriteCase", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("CorrelationId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("correlation_id");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<DateTime>("ExecutedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("executed_at_utc");
 
                     b.Property<string>("GatewayId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("gateway_id");
 
                     b.Property<string>("OperationId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("operation_id");
 
                     b.Property<string>("Owner")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("owner");
 
                     b.Property<string>("Priority")
                         .IsRequired()
                         .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("priority");
 
                     b.Property<string>("Resolution")
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("resolution");
 
                     b.Property<string>("ResourceId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("resource_id");
 
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("state");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_gateway_ambiguous_write_cases");
 
                     b.HasIndex("TenantId", "OperationId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_gateway_ambiguous_write_cases_tenant_id_operation_id");
 
-                    b.ToTable("GatewayAmbiguousWriteCases");
+                    b.ToTable("gateway_ambiguous_write_cases");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.GatewayAmbiguousWriteEvent", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Actor")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("actor");
 
                     b.Property<long>("CaseId")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("case_id");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<string>("EventType")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("event_type");
 
                     b.Property<string>("EvidenceReference")
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("evidence_reference");
 
                     b.Property<string>("Note")
                         .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("note");
 
                     b.Property<string>("Resolution")
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("resolution");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_gateway_ambiguous_write_events");
 
-                    b.HasIndex("CaseId");
+                    b.HasIndex("CaseId")
+                        .HasDatabaseName("ix_gateway_ambiguous_write_events_case_id");
 
-                    b.HasIndex("TenantId", "CaseId", "Id");
+                    b.HasIndex("TenantId", "CaseId", "Id")
+                        .HasDatabaseName("ix_gateway_ambiguous_write_events_tenant_id_case_id_id");
 
-                    b.ToTable("GatewayAmbiguousWriteEvents");
+                    b.ToTable("gateway_ambiguous_write_events");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.GatewayEnrollmentEntity", b =>
                 {
                     b.Property<string>("EnrollmentId")
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("enrollment_id");
 
                     b.Property<DateTimeOffset?>("ConsumedUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consumed_utc");
 
                     b.Property<DateTimeOffset>("CreatedUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_utc");
 
                     b.Property<DateTimeOffset>("ExpiresUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_utc");
 
                     b.Property<string>("GatewayId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("gateway_id");
 
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("state");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("TokenHash")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
                     b.Property<string>("WorkloadPublicKeyThumbprint")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("workload_public_key_thumbprint");
 
-                    b.HasKey("EnrollmentId");
+                    b.HasKey("EnrollmentId")
+                        .HasName("pk_gateway_enrollments");
 
-                    b.HasIndex("TenantId", "GatewayId");
+                    b.HasIndex("TenantId", "GatewayId")
+                        .HasDatabaseName("ix_gateway_enrollments_tenant_id_gateway_id");
 
                     b.HasIndex("TenantId", "TokenHash")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_gateway_enrollments_tenant_id_token_hash");
 
-                    b.ToTable("GatewayEnrollments");
+                    b.ToTable("gateway_enrollments");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Group", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AdGroup")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("ad_group");
 
                     b.Property<string>("Description")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("description");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("name");
 
                     b.Property<string>("PrincipalKey")
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("principal_key");
 
                     b.Property<string>("Provider")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("provider");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_groups");
 
                     b.HasIndex("PrincipalKey")
                         .IsUnique()
-                        .HasFilter("\"PrincipalKey\" IS NOT NULL");
+                        .HasDatabaseName("ix_groups_principal_key")
+                        .HasFilter("\"principal_key\" IS NOT NULL");
 
                     b.HasIndex("TenantId", "Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_groups_tenant_id_name");
 
-                    b.ToTable("Groups");
+                    b.ToTable("groups");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.GroupStudioCapability", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Capability")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("capability");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("group_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_group_studio_capabilities");
 
                     b.HasIndex("GroupId", "Capability")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_group_studio_capabilities_group_id_capability");
 
-                    b.ToTable("GroupStudioCapabilities");
+                    b.ToTable("group_studio_capabilities");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.PolicyMachineEntity", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("CanaryGroup")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("canary_group");
 
                     b.Property<string>("ClientCertificateThumbprint")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("client_certificate_thumbprint");
 
                     b.Property<string>("EnrollmentId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("enrollment_id");
 
                     b.Property<string>("Environment")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("environment");
 
                     b.Property<DateTimeOffset?>("LastSeenAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at_utc");
 
                     b.Property<string>("MachineId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("machine_id");
 
                     b.Property<DateTimeOffset>("RegisteredAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("registered_at_utc");
 
                     b.Property<bool>("Revoked")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("revoked");
 
                     b.Property<DateTimeOffset?>("RevokedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at_utc");
 
                     b.Property<string>("RevokedReason")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("revoked_reason");
 
                     b.Property<string>("Tenant")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("tenant");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_policy_machines");
 
                     b.HasIndex("MachineId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_policy_machines_machine_id");
 
-                    b.HasIndex("Tenant", "Environment");
+                    b.HasIndex("Tenant", "Environment")
+                        .HasDatabaseName("ix_policy_machines_tenant_environment");
 
-                    b.ToTable("PolicyMachines");
+                    b.ToTable("policy_machines");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.PolicyVersionEntity", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Author")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("author");
 
                     b.Property<string>("CanaryGroup")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("canary_group");
 
                     b.Property<int?>("CanaryPercentage")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("canary_percentage");
 
                     b.Property<string>("Environment")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("environment");
 
                     b.Property<DateTimeOffset>("ExpiresAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at_utc");
 
                     b.Property<DateTimeOffset>("IssuedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("issued_at_utc");
 
                     b.Property<string>("PolicyHash")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("policy_hash");
 
                     b.Property<string>("PolicyVersion")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("policy_version");
 
                     b.Property<DateTimeOffset>("PublishedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at_utc");
 
                     b.Property<string>("Reviewer")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("reviewer");
 
                     b.Property<string>("RolloutState")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("rollout_state");
 
                     b.Property<string>("SignedEnvelopeJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("signed_envelope_json");
 
                     b.Property<string>("SupersededVersion")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("superseded_version");
 
                     b.Property<string>("Tenant")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("tenant");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_policy_versions");
 
                     b.HasIndex("Tenant", "Environment", "PolicyVersion")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_policy_versions_tenant_environment_policy_version");
 
-                    b.HasIndex("Tenant", "Environment", "RolloutState");
+                    b.HasIndex("Tenant", "Environment", "RolloutState")
+                        .HasDatabaseName("ix_policy_versions_tenant_environment_rollout_state");
 
-                    b.ToTable("PolicyVersions");
+                    b.ToTable("policy_versions");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.PortalExecutionJob", b =>
                 {
                     b.Property<string>("Id")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("id");
 
                     b.Property<string>("ActorId")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("actor_id");
 
                     b.Property<string>("ActorType")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("text")
-                        .HasDefaultValue("User");
+                        .HasDefaultValue("User")
+                        .HasColumnName("actor_type");
 
                     b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
 
                     b.Property<string>("CorrelationId")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("correlation_id");
 
                     b.Property<double>("CpuTimeSeconds")
-                        .HasColumnType("double precision");
+                        .HasColumnType("double precision")
+                        .HasColumnName("cpu_time_seconds");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("EffectiveScopes")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("effective_scopes");
 
                     b.Property<string>("Error")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("error");
 
                     b.Property<string>("Kind")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
 
                     b.Property<string>("ManifestPath")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("manifest_path");
 
                     b.Property<long>("PeakMemoryBytes")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("peak_memory_bytes");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("report_id");
 
                     b.Property<long>("RowsProcessed")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("rows_processed");
 
                     b.Property<DateTime?>("StartedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("status");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_portal_execution_jobs");
 
-                    b.HasIndex("TenantId", "CompletedAt");
+                    b.HasIndex("TenantId", "CompletedAt")
+                        .HasDatabaseName("ix_portal_execution_jobs_tenant_id_completed_at");
 
                     b.HasIndex("TenantId", "ReportId", "Kind")
                         .IsUnique()
-                        .HasFilter("\"Kind\" = 'Refresh' AND \"Status\" IN ('Pending', 'Running')");
+                        .HasDatabaseName("ix_portal_execution_jobs_tenant_id_report_id_kind")
+                        .HasFilter("\"kind\" = 'Refresh' AND \"status\" IN ('Pending', 'Running')");
 
-                    b.ToTable("PortalExecutionJobs");
+                    b.ToTable("portal_execution_jobs");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.PortalRole", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("concurrency_stamp");
 
                     b.Property<string>("Name")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("name");
 
                     b.Property<string>("NormalizedName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("normalized_name");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_asp_net_roles");
 
                     b.HasIndex("NormalizedName")
                         .IsUnique()
-                        .HasDatabaseName("RoleNameIndex");
+                        .HasDatabaseName("role_name_index");
 
-                    b.ToTable("AspNetRoles", (string)null);
+                    b.ToTable("asp_net_roles", (string)null);
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.PortalSecret", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("created_by_user_id");
 
                     b.Property<bool>("Disabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("disabled");
 
                     b.Property<string>("EncryptedValue")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("encrypted_value");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("updated_by_user_id");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_portal_secrets");
 
                     b.HasIndex("TenantId", "Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_portal_secrets_tenant_id_name");
 
-                    b.ToTable("PortalSecrets");
+                    b.ToTable("portal_secrets");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.PortalSharedConnection", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Alias")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("alias");
 
                     b.Property<string>("ConnectorType")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("connector_type");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("created_by_user_id");
 
                     b.Property<bool>("Disabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("disabled");
 
                     b.Property<string>("EnvironmentScope")
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("environment_scope");
 
                     b.Property<DateTime?>("LastUsedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at_utc");
 
                     b.Property<DateTime?>("LastVerifiedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_verified_at_utc");
 
                     b.Property<string>("OptionsJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("options_json");
 
                     b.Property<int?>("OwnerUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("owner_user_id");
 
                     b.Property<string>("SensitiveFieldsCsv")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("sensitive_fields_csv");
 
                     b.Property<string>("Target")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("target");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("updated_by_user_id");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_portal_shared_connections");
 
                     b.HasIndex("TenantId", "Alias")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_portal_shared_connections_tenant_id_alias");
 
-                    b.ToTable("PortalSharedConnections");
+                    b.ToTable("portal_shared_connections");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.PortalUser", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("AccessFailedCount")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("access_failed_count");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("concurrency_stamp");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("Email")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("email");
 
                     b.Property<bool>("EmailConfirmed")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("email_confirmed");
 
                     b.Property<string>("ExternalIssuer")
                         .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("external_issuer");
 
                     b.Property<string>("ExternalSubject")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("external_subject");
 
                     b.Property<string>("FirstName")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("first_name");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
 
                     b.Property<string>("LastName")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("last_name");
 
                     b.Property<bool>("LockoutEnabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("lockout_enabled");
 
                     b.Property<DateTimeOffset?>("LockoutEnd")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lockout_end");
 
                     b.Property<string>("MiddleInitial")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("middle_initial");
 
                     b.Property<bool>("MustChangePassword")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("must_change_password");
 
                     b.Property<string>("NormalizedEmail")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("normalized_email");
 
                     b.Property<string>("NormalizedUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("normalized_user_name");
 
                     b.Property<string>("PasswordHash")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("password_hash");
 
                     b.Property<string>("PhoneNumber")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("phone_number");
 
                     b.Property<bool>("PhoneNumberConfirmed")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("phone_number_confirmed");
 
                     b.Property<string>("PrincipalKey")
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("principal_key");
 
                     b.Property<string>("Provider")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("provider");
 
                     b.Property<string>("SecurityStamp")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("security_stamp");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<bool>("TwoFactorEnabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("two_factor_enabled");
 
                     b.Property<string>("UserName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("user_name");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_asp_net_users");
 
                     b.HasIndex("NormalizedEmail")
-                        .HasDatabaseName("EmailIndex");
+                        .HasDatabaseName("email_index");
 
                     b.HasIndex("NormalizedUserName")
-                        .HasDatabaseName("UserNameIndex");
+                        .HasDatabaseName("user_name_index");
 
                     b.HasIndex("PrincipalKey")
                         .IsUnique()
-                        .HasFilter("\"PrincipalKey\" IS NOT NULL");
+                        .HasDatabaseName("ix_asp_net_users_principal_key")
+                        .HasFilter("\"principal_key\" IS NOT NULL");
 
                     b.HasIndex("TenantId", "NormalizedUserName")
                         .IsUnique()
-                        .HasFilter("\"NormalizedUserName\" IS NOT NULL");
+                        .HasDatabaseName("ix_asp_net_users_tenant_id_normalized_user_name")
+                        .HasFilter("\"normalized_user_name\" IS NOT NULL");
 
                     b.HasIndex("TenantId", "Provider", "ExternalIssuer", "ExternalSubject")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_asp_net_users_tenant_id_provider_external_issuer_external_s~");
 
-                    b.ToTable("AspNetUsers", (string)null);
+                    b.ToTable("asp_net_users", (string)null);
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.RefreshToken", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("Token")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("token");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_refresh_tokens");
 
                     b.HasIndex("Token")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_refresh_tokens_token");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_refresh_tokens_user_id");
 
-                    b.HasIndex("TenantId", "UserId");
+                    b.HasIndex("TenantId", "UserId")
+                        .HasDatabaseName("ix_refresh_tokens_tenant_id_user_id");
 
-                    b.ToTable("RefreshTokens");
+                    b.ToTable("refresh_tokens");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Report", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Category")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("category");
 
                     b.Property<string>("Certification")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("certification");
 
                     b.Property<string>("Contact")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("contact");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<int>("CreatedBy")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("created_by");
 
                     b.Property<string>("Description")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("description");
 
                     b.Property<string>("Domain")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("domain");
 
                     b.Property<DateTime?>("EditSessionExpiresAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("edit_session_expires_at_utc");
 
                     b.Property<int?>("EditSessionUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("edit_session_user_id");
 
                     b.Property<string>("EditSessionUserName")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("edit_session_user_name");
 
                     b.Property<int>("FolderId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("folder_id");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
 
                     b.Property<string>("Kind")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
-                        .HasDefaultValue("Report");
+                        .HasDefaultValue("Report")
+                        .HasColumnName("kind");
 
                     b.Property<DateTime?>("LastRefreshCompletedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_refresh_completed_at");
 
                     b.Property<long?>("LastRefreshDurationMs")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_refresh_duration_ms");
 
                     b.Property<string>("LastRefreshError")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("last_refresh_error");
 
                     b.Property<DateTime?>("LastRefreshStartedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_refresh_started_at");
 
                     b.Property<string>("LastRefreshStatus")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("last_refresh_status");
 
                     b.Property<DateTime?>("LastViewedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_viewed_at");
 
                     b.Property<string>("MetadataJson")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("metadata_json");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("name");
 
                     b.Property<string>("Owner")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("owner");
 
                     b.Property<string>("PublishedScriptHash")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("published_script_hash");
 
                     b.Property<DateTime>("ScriptLastModified")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("script_last_modified");
 
                     b.Property<string>("ScriptPath")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("script_path");
 
                     b.Property<string>("Steward")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("steward");
 
                     b.Property<string>("Tags")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("tags");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_reports");
 
-                    b.HasIndex("FolderId");
+                    b.HasIndex("FolderId")
+                        .HasDatabaseName("ix_reports_folder_id");
 
-                    b.HasIndex("TenantId", "FolderId");
+                    b.HasIndex("TenantId", "FolderId")
+                        .HasDatabaseName("ix_reports_tenant_id_folder_id");
 
-                    b.ToTable("Reports");
+                    b.ToTable("reports");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportAccessRequest", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<DateTime?>("DecidedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
 
                     b.Property<int?>("DecidedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("decided_by_user_id");
 
                     b.Property<string>("DecisionReason")
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("decision_reason");
 
                     b.Property<string>("Reason")
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("reason");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("report_id");
 
                     b.Property<int>("RequesterUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("requester_user_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_access_requests");
 
-                    b.HasIndex("DecidedByUserId");
+                    b.HasIndex("DecidedByUserId")
+                        .HasDatabaseName("ix_report_access_requests_decided_by_user_id");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_report_access_requests_report_id");
 
                     b.HasIndex("RequesterUserId", "ReportId")
                         .IsUnique()
-                        .HasFilter("\"Status\" = 'Pending'");
+                        .HasDatabaseName("ix_report_access_requests_requester_user_id_report_id")
+                        .HasFilter("\"status\" = 'Pending'");
 
-                    b.ToTable("ReportAccessRequests");
+                    b.ToTable("report_access_requests");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportAcl", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<int?>("GroupId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("group_id");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("permission");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("report_id");
 
                     b.Property<int?>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_acls");
 
-                    b.HasIndex("GroupId");
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_report_acls_group_id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_report_acls_user_id");
 
                     b.HasIndex("ReportId", "GroupId")
                         .IsUnique()
-                        .HasFilter("\"GroupId\" IS NOT NULL");
+                        .HasDatabaseName("ix_report_acls_report_id_group_id")
+                        .HasFilter("\"group_id\" IS NOT NULL");
 
                     b.HasIndex("ReportId", "UserId")
                         .IsUnique()
-                        .HasFilter("\"UserId\" IS NOT NULL");
+                        .HasDatabaseName("ix_report_acls_report_id_user_id")
+                        .HasFilter("\"user_id\" IS NOT NULL");
 
-                    b.ToTable("ReportAcls");
+                    b.ToTable("report_acls");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportAlert", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("description");
 
                     b.Property<string>("DisplayName")
                         .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("display_name");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
 
                     b.Property<DateTime?>("LastCheckedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_checked_at");
 
                     b.Property<DateTime?>("LastEvaluatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_evaluated_at");
 
                     b.Property<DateTime?>("LastNotifiedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_notified_at");
 
                     b.Property<string>("LastState")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("last_state");
 
                     b.Property<DateTime?>("LastTriggeredAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_triggered_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("name");
 
                     b.Property<string>("Operator")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("operator");
 
                     b.Property<string>("OptionsJson")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("options_json");
 
                     b.Property<int>("OwnerId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("owner_id");
 
                     b.Property<string>("Recipient")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("recipient");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("report_id");
 
                     b.Property<string>("SmtpAlias")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("smtp_alias");
 
                     b.Property<decimal>("Threshold")
-                        .HasColumnType("numeric");
+                        .HasColumnType("numeric")
+                        .HasColumnName("threshold");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
 
                     b.Property<string>("VisualName")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("visual_name");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_alerts");
 
                     b.HasIndex("Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_alerts_name");
 
-                    b.HasIndex("OwnerId");
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_report_alerts_owner_id");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_report_alerts_report_id");
 
-                    b.ToTable("ReportAlerts");
+                    b.ToTable("report_alerts");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportEmbedToken", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<int>("CreatedBy")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("created_by");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("report_id");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
 
                     b.Property<string>("Token")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("token");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_embed_tokens");
 
-                    b.HasIndex("CreatedBy");
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_report_embed_tokens_created_by");
 
                     b.HasIndex("Token")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_embed_tokens_token");
 
                     b.HasIndex("ReportId", "Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_embed_tokens_report_id_name");
 
-                    b.ToTable("ReportEmbedTokens");
+                    b.ToTable("report_embed_tokens");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportFavorite", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("report_id");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_favorites");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_report_favorites_report_id");
 
                     b.HasIndex("UserId", "ReportId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_favorites_user_id_report_id");
 
-                    b.ToTable("ReportFavorites");
+                    b.ToTable("report_favorites");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportJobLink", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("JobName")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("job_name");
 
                     b.Property<DateTime?>("LastRefreshedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_refreshed_at");
 
                     b.Property<string>("OrchestratorAlias")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("orchestrator_alias");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("report_id");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_job_links");
 
-                    b.HasIndex("JobName");
+                    b.HasIndex("JobName")
+                        .HasDatabaseName("ix_report_job_links_job_name");
 
                     b.HasIndex("ReportId", "OrchestratorAlias", "JobName")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_job_links_report_id_orchestrator_alias_job_name");
 
-                    b.ToTable("ReportJobLinks");
+                    b.ToTable("report_job_links");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportScriptDraft", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int?>("ApprovedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("approved_by_user_id");
 
                     b.Property<string>("ApprovedByUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("approved_by_user_name");
 
                     b.Property<int>("AuthorUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("author_user_id");
 
                     b.Property<string>("AuthorUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("author_user_name");
 
                     b.Property<string>("BaseScriptHash")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("base_script_hash");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<DateTime?>("DecidedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at_utc");
 
                     b.Property<DateTime?>("EditSessionExpiresAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("edit_session_expires_at_utc");
 
                     b.Property<int?>("EditSessionUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("edit_session_user_id");
 
                     b.Property<string>("EditSessionUserName")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("edit_session_user_name");
 
                     b.Property<DateTime?>("PublishedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at_utc");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("report_id");
 
                     b.Property<string>("ScriptHash")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("script_hash");
 
                     b.Property<string>("ScriptText")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("script_text");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
 
                     b.Property<DateTime?>("SubmittedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at_utc");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<long>("Version")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_script_drafts");
 
-                    b.HasIndex("ReportId", "Status");
+                    b.HasIndex("ReportId", "Status")
+                        .HasDatabaseName("ix_report_script_drafts_report_id_status");
 
-                    b.ToTable("ReportScriptDrafts");
+                    b.ToTable("report_script_drafts");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportScriptDraftDecision", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("DecidedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at_utc");
 
                     b.Property<int>("DecidedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("decided_by_user_id");
 
                     b.Property<string>("DecidedByUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("decided_by_user_name");
 
                     b.Property<string>("Decision")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("decision");
 
                     b.Property<int>("DraftId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("draft_id");
 
                     b.Property<string>("Reason")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
 
                     b.Property<string>("ScriptHash")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("script_hash");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_script_draft_decisions");
 
-                    b.HasIndex("DraftId", "DecidedAtUtc");
+                    b.HasIndex("DraftId", "DecidedAtUtc")
+                        .HasDatabaseName("ix_report_script_draft_decisions_draft_id_decided_at_utc");
 
-                    b.ToTable("ReportScriptDraftDecisions");
+                    b.ToTable("report_script_draft_decisions");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportShareLink", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<int>("CreatedBy")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("created_by");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("report_id");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
 
                     b.Property<string>("Token")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("token");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_share_links");
 
-                    b.HasIndex("CreatedBy");
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_report_share_links_created_by");
 
                     b.HasIndex("Token")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_share_links_token");
 
                     b.HasIndex("ReportId", "Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_share_links_report_id_name");
 
-                    b.ToTable("ReportShareLinks");
+                    b.ToTable("report_share_links");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ReportSnapshot", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("BuiltAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("built_at");
 
                     b.Property<int>("BuiltBy")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("built_by");
 
                     b.Property<bool?>("HashMatched")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("hash_matched");
 
                     b.Property<string>("ManifestPath")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("manifest_path");
 
                     b.Property<string>("ParametersJson")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("parameters_json");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("report_id");
 
                     b.Property<string>("ScriptHashAtRunTime")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("script_hash_at_run_time");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_report_snapshots");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_report_snapshots_report_id");
 
-                    b.ToTable("ReportSnapshots");
+                    b.ToTable("report_snapshots");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SavedReportView", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("FiltersJson")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("filters_json");
 
                     b.Property<bool>("IsDefault")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_default");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("name");
 
                     b.Property<string>("ParametersJson")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("parameters_json");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("report_id");
 
                     b.Property<string>("ScriptHash")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("script_hash");
 
                     b.Property<string>("StateJson")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("state_json");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_saved_report_views");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_saved_report_views_report_id");
 
                     b.HasIndex("UserId", "ReportId", "Name")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_saved_report_views_user_id_report_id_name");
 
-                    b.ToTable("SavedReportViews");
+                    b.ToTable("saved_report_views");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.ServiceAccount", b =>
                 {
                     b.Property<string>("Id")
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("id");
 
                     b.Property<string>("ClientId")
                         .IsRequired()
                         .HasMaxLength(35)
-                        .HasColumnType("character varying(35)");
+                        .HasColumnType("character varying(35)")
+                        .HasColumnName("client_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("Description")
                         .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
 
                     b.Property<bool>("IsEnabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_enabled");
 
                     b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
 
                     b.Property<string>("NormalizedName")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("normalized_name");
 
                     b.Property<int>("OwnerUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("owner_user_id");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
 
                     b.Property<string>("RoleNames")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("role_names");
 
                     b.Property<string>("Scopes")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("scopes");
 
                     b.Property<string>("SecretHash")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("secret_hash");
 
                     b.Property<string>("SecurityStamp")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("security_stamp");
 
                     b.Property<string>("StudioCapabilities")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("studio_capabilities");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_service_accounts");
 
                     b.HasIndex("ClientId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_service_accounts_client_id");
 
-                    b.HasIndex("OwnerUserId");
+                    b.HasIndex("OwnerUserId")
+                        .HasDatabaseName("ix_service_accounts_owner_user_id");
 
                     b.HasIndex("TenantId", "NormalizedName")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_service_accounts_tenant_id_normalized_name");
 
-                    b.ToTable("ServiceAccounts");
+                    b.ToTable("service_accounts");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SharedConnectionAcl", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("group_id");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("permission");
 
                     b.Property<int>("SharedConnectionId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("shared_connection_id");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_shared_connection_acls");
 
-                    b.HasIndex("GroupId");
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_shared_connection_acls_group_id");
 
-                    b.HasIndex("SharedConnectionId");
+                    b.HasIndex("SharedConnectionId")
+                        .HasDatabaseName("ix_shared_connection_acls_shared_connection_id");
 
                     b.HasIndex("TenantId", "SharedConnectionId", "GroupId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_connection_acls_tenant_id_shared_connection_id_group~");
 
-                    b.ToTable("SharedConnectionAcls");
+                    b.ToTable("shared_connection_acls");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SharedConnectionUsage", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("ConsumerUser")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("consumer_user");
 
                     b.Property<DateTime>("LastUsedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at_utc");
 
                     b.Property<int>("SharedConnectionId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("shared_connection_id");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<long>("UseCount")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("use_count");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_shared_connection_usages");
 
-                    b.HasIndex("SharedConnectionId");
+                    b.HasIndex("SharedConnectionId")
+                        .HasDatabaseName("ix_shared_connection_usages_shared_connection_id");
 
                     b.HasIndex("TenantId", "SharedConnectionId", "ConsumerUser")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_connection_usages_tenant_id_shared_connection_id_con~");
 
-                    b.ToTable("SharedConnectionUsages");
+                    b.ToTable("shared_connection_usages");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SharedIdentityAuthority", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AuthorityId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("authority_id");
 
                     b.Property<string>("ClientId")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("client_id");
 
                     b.Property<string>("ClientSecretReference")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("client_secret_reference");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<bool>("Enabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
 
                     b.Property<string>("Issuer")
                         .IsRequired()
                         .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("issuer");
 
                     b.Property<string>("LoginDomain")
                         .IsRequired()
                         .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
+                        .HasColumnType("character varying(253)")
+                        .HasColumnName("login_domain");
 
                     b.Property<string>("PortalHost")
                         .IsRequired()
                         .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
+                        .HasColumnType("character varying(253)")
+                        .HasColumnName("portal_host");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_shared_identity_authorities");
 
                     b.HasIndex("AuthorityId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_identity_authorities_authority_id");
 
                     b.HasIndex("LoginDomain")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_identity_authorities_login_domain");
 
                     b.HasIndex("PortalHost")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_identity_authorities_portal_host");
 
-                    b.HasIndex("TenantId", "Issuer");
+                    b.HasIndex("TenantId", "Issuer")
+                        .HasDatabaseName("ix_shared_identity_authorities_tenant_id_issuer");
 
-                    b.ToTable("SharedIdentityAuthorities");
+                    b.ToTable("shared_identity_authorities");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SharedTenantLifecycle", b =>
                 {
                     b.Property<string>("TenantId")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("ActiveRelease")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("active_release");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<DateTime?>("DeletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at_utc");
 
                     b.Property<long>("FenceEpoch")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("fence_epoch");
 
                     b.Property<int>("MaxConcurrentJobs")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("max_concurrent_jobs");
 
                     b.Property<int>("MaxReportSessions")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("max_report_sessions");
 
                     b.Property<int>("MaxStorageMb")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("max_storage_mb");
 
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("state");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("TenantId");
+                    b.HasKey("TenantId")
+                        .HasName("pk_shared_tenant_lifecycles");
 
-                    b.HasIndex("State");
+                    b.HasIndex("State")
+                        .HasDatabaseName("ix_shared_tenant_lifecycles_state");
 
-                    b.ToTable("SharedTenantLifecycles");
+                    b.ToTable("shared_tenant_lifecycles");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SharedTenantLifecycleOperation", b =>
                 {
                     b.Property<string>("OperationId")
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("operation_id");
 
                     b.Property<DateTime>("AuthorizationExpiresUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("authorization_expires_utc");
 
                     b.Property<string>("AuthorizationReference")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("authorization_reference");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at_utc");
 
                     b.Property<string>("FailureCode")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("failure_code");
 
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
 
                     b.Property<string>("Phase")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("phase");
 
                     b.Property<string>("PlatformOperator")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("platform_operator");
 
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("reason");
 
                     b.Property<DateTime>("StartedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at_utc");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
 
                     b.Property<string>("TargetClientId")
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("target_client_id");
 
                     b.Property<string>("TargetClientSecretReference")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("target_client_secret_reference");
 
                     b.Property<string>("TargetIssuer")
                         .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("target_issuer");
 
                     b.Property<string>("TargetLoginDomain")
                         .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
+                        .HasColumnType("character varying(253)")
+                        .HasColumnName("target_login_domain");
 
                     b.Property<int?>("TargetMaxConcurrentJobs")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("target_max_concurrent_jobs");
 
                     b.Property<int?>("TargetMaxReportSessions")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("target_max_report_sessions");
 
                     b.Property<int?>("TargetMaxStorageMb")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("target_max_storage_mb");
 
                     b.Property<string>("TargetPortalHost")
                         .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
+                        .HasColumnType("character varying(253)")
+                        .HasColumnName("target_portal_host");
 
                     b.Property<string>("TargetRelease")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("target_release");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("OperationId");
+                    b.HasKey("OperationId")
+                        .HasName("pk_shared_tenant_lifecycle_operations");
 
                     b.HasIndex("Kind", "AuthorizationReference")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_tenant_lifecycle_operations_kind_authorization_refer~");
 
-                    b.HasIndex("TenantId", "Status");
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("ix_shared_tenant_lifecycle_operations_tenant_id_status");
 
-                    b.ToTable("SharedTenantLifecycleOperations");
+                    b.ToTable("shared_tenant_lifecycle_operations");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SharedTenantResource", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
 
                     b.Property<string>("LogicalId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("logical_id");
 
                     b.Property<string>("ScopedId")
                         .IsRequired()
                         .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("scoped_id");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_shared_tenant_resources");
 
                     b.HasIndex("TenantId", "ScopedId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_tenant_resources_tenant_id_scoped_id");
 
-                    b.HasIndex("TenantId", "Kind", "Id");
+                    b.HasIndex("TenantId", "Kind", "Id")
+                        .HasDatabaseName("ix_shared_tenant_resources_tenant_id_kind_id");
 
                     b.HasIndex("TenantId", "Kind", "LogicalId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_tenant_resources_tenant_id_kind_logical_id");
 
-                    b.ToTable("SharedTenantResources");
+                    b.ToTable("shared_tenant_resources");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipAssetBadge", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AssetKey")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("asset_key");
 
                     b.Property<string>("AssetVersion")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("asset_version");
 
                     b.Property<DateTime>("AssignedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("assigned_at_utc");
 
                     b.Property<int?>("AssignedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("assigned_by_user_id");
 
                     b.Property<string>("Badge")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("badge");
 
                     b.Property<string>("Reason")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<long>("Version")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_asset_badges");
 
                     b.HasIndex("TenantId", "AssetKey", "Badge")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_stewardship_asset_badges_tenant_id_asset_key_badge");
 
-                    b.ToTable("StewardshipAssetBadges");
+                    b.ToTable("stewardship_asset_badges");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipAssetReview", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AssetKey")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("asset_key");
 
                     b.Property<string>("Note")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("note");
 
                     b.Property<DateTime>("ReviewedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at_utc");
 
                     b.Property<int?>("ReviewedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("reviewed_by_user_id");
 
                     b.Property<string>("ReviewedVersion")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("reviewed_version");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<long>("Version")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_asset_reviews");
 
                     b.HasIndex("TenantId", "AssetKey")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_stewardship_asset_reviews_tenant_id_asset_key");
 
-                    b.ToTable("StewardshipAssetReviews");
+                    b.ToTable("stewardship_asset_reviews");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipFinding", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AssetKey")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("asset_key");
 
                     b.Property<string>("AssetVersion")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("asset_version");
 
                     b.Property<string>("Detail")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("detail");
 
                     b.Property<DateTime>("FirstSeenUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_utc");
 
                     b.Property<DateTime>("LastSeenUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_utc");
 
                     b.Property<DateTime?>("ResolvedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at_utc");
 
                     b.Property<string>("RuleKey")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("rule_key");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
 
                     b.Property<DateTime?>("SuppressedUntilUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("suppressed_until_utc");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<long>("Version")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_findings");
 
-                    b.HasIndex("TenantId", "Status");
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("ix_stewardship_findings_tenant_id_status");
 
                     b.HasIndex("TenantId", "AssetKey", "RuleKey")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_stewardship_findings_tenant_id_asset_key_rule_key");
 
-                    b.ToTable("StewardshipFindings");
+                    b.ToTable("stewardship_findings");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipFindingDecision", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AssetVersion")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("asset_version");
 
                     b.Property<string>("CategoryValue")
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("category_value");
 
                     b.Property<DateTime>("DecidedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at_utc");
 
                     b.Property<int?>("DecidedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("decided_by_user_id");
 
                     b.Property<string>("DecidedByUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("decided_by_user_name");
 
                     b.Property<string>("Decision")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("decision");
 
                     b.Property<int>("FindingId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("finding_id");
 
                     b.Property<string>("Reason")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_finding_decisions");
 
-                    b.HasIndex("FindingId");
+                    b.HasIndex("FindingId")
+                        .HasDatabaseName("ix_stewardship_finding_decisions_finding_id");
 
-                    b.HasIndex("TenantId", "FindingId", "DecidedAtUtc");
+                    b.HasIndex("TenantId", "FindingId", "DecidedAtUtc")
+                        .HasDatabaseName("ix_stewardship_finding_decisions_tenant_id_finding_id_decided_~");
 
-                    b.ToTable("StewardshipFindingDecisions");
+                    b.ToTable("stewardship_finding_decisions");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipGlossaryTerm", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Aliases")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("aliases");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("created_by_user_id");
 
                     b.Property<string>("DataType")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("data_type");
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("description");
 
                     b.Property<bool>("Disabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("disabled");
 
                     b.Property<string>("Formula")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("formula");
 
                     b.Property<string>("Steward")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("steward");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("Term")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("term");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("updated_by_user_id");
 
                     b.Property<long>("Version")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_glossary_terms");
 
                     b.HasIndex("TenantId", "Term")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_stewardship_glossary_terms_tenant_id_term");
 
-                    b.ToTable("StewardshipGlossaryTerms");
+                    b.ToTable("stewardship_glossary_terms");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipResolutionCategory", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Color")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("color");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
 
                     b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("created_by_user_id");
 
                     b.Property<bool>("Disabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("disabled");
 
                     b.Property<int?>("ExpiryDays")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("expiry_days");
 
                     b.Property<string>("Label")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("label");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("value");
 
                     b.Property<long>("Version")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_resolution_categories");
 
                     b.HasIndex("TenantId", "Value")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_stewardship_resolution_categories_tenant_id_value");
 
-                    b.ToTable("StewardshipResolutionCategories");
+                    b.ToTable("stewardship_resolution_categories");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipScan", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("AssetsScanned")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("assets_scanned");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at_utc");
 
                     b.Property<string>("Error")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("error");
 
                     b.Property<int>("FindingsOpened")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("findings_opened");
 
                     b.Property<int>("FindingsReopened")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("findings_reopened");
 
                     b.Property<int>("FindingsResolved")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("findings_resolved");
 
                     b.Property<DateTime>("StartedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at_utc");
 
                     b.Property<int?>("StartedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("started_by_user_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("Trigger")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("trigger");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_scans");
 
-                    b.HasIndex("TenantId", "StartedAtUtc");
+                    b.HasIndex("TenantId", "StartedAtUtc")
+                        .HasDatabaseName("ix_stewardship_scans_tenant_id_started_at_utc");
 
-                    b.ToTable("StewardshipScans");
+                    b.ToTable("stewardship_scans");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipSettings", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<int>("DeductGlossary")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("deduct_glossary");
 
                     b.Property<int>("DeductMetadata")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("deduct_metadata");
 
                     b.Property<int>("DeductProtectedData")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("deduct_protected_data");
 
                     b.Property<int>("DeductStaleness")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("deduct_staleness");
 
                     b.Property<bool>("EnableGlossaryCheck")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("enable_glossary_check");
 
                     b.Property<bool>("EnableMetadataCheck")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("enable_metadata_check");
 
                     b.Property<bool>("EnableProtectedDataCheck")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("enable_protected_data_check");
 
                     b.Property<bool>("EnableStalenessCheck")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("enable_staleness_check");
 
                     b.Property<string>("PolicyLevel")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("policy_level");
 
                     b.Property<string>("Scope")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("scope");
 
                     b.Property<int>("StaleAfterDays")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("stale_after_days");
 
                     b.Property<int>("TargetScore")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("target_score");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
 
                     b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("updated_by_user_id");
 
                     b.Property<long>("Version")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_stewardship_settings");
 
                     b.HasIndex("TenantId", "Scope")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_stewardship_settings_tenant_id_scope");
 
-                    b.ToTable("StewardshipSettings");
+                    b.ToTable("stewardship_settings");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.StudioRecoveryDraft", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("BaseSourceRevision")
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("base_source_revision");
 
                     b.Property<long?>("BaseVersion")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("base_version");
 
                     b.Property<string>("Content")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("content");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("report_id");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_studio_recovery_drafts");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_studio_recovery_drafts_report_id");
 
                     b.HasIndex("UserId", "ReportId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_studio_recovery_drafts_user_id_report_id");
 
-                    b.ToTable("StudioRecoveryDrafts");
+                    b.ToTable("studio_recovery_drafts");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Subscription", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AtTime")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("at_time");
 
                     b.Property<bool>("DeliverOnRefresh")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("deliver_on_refresh");
 
                     b.Property<int>("FailCount")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("fail_count");
 
                     b.Property<int>("Format")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("format");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
 
                     b.Property<DateTime?>("LastSentAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_sent_at");
 
                     b.Property<DateTime?>("LastTriggeredAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_triggered_at");
 
                     b.Property<string>("Name")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("name");
 
                     b.Property<DateTime?>("NextRunAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_run_at");
 
                     b.Property<string>("ParametersJson")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("parameters_json");
 
                     b.Property<string>("Recipients")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("recipients");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("report_id");
 
                     b.Property<string>("Schedule")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("schedule");
 
                     b.Property<string>("ScriptPath")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("script_path");
 
                     b.Property<string>("SmtpAlias")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("smtp_alias");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_subscriptions");
 
-                    b.HasIndex("ReportId");
+                    b.HasIndex("ReportId")
+                        .HasDatabaseName("ix_subscriptions_report_id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_subscriptions_user_id");
 
-                    b.ToTable("Subscriptions");
+                    b.ToTable("subscriptions");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.SubscriptionDelivery", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
 
                     b.Property<string>("DeliveryId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("delivery_id");
 
                     b.Property<string>("Detail")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("detail");
 
                     b.Property<string>("Outcome")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("outcome");
 
                     b.Property<string>("RecipientKey")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("recipient_key");
 
                     b.Property<string>("Recipients")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("recipients");
 
                     b.Property<DateTime>("StartedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
 
                     b.Property<int>("SubscriptionId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("subscription_id");
 
                     b.Property<string>("TriggerKey")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("trigger_key");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_subscription_deliveries");
 
-                    b.HasIndex("DeliveryId");
+                    b.HasIndex("DeliveryId")
+                        .HasDatabaseName("ix_subscription_deliveries_delivery_id");
 
                     b.HasIndex("SubscriptionId", "TriggerKey", "RecipientKey")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_subscription_deliveries_subscription_id_trigger_key_recipie~");
 
-                    b.ToTable("SubscriptionDeliveries");
+                    b.ToTable("subscription_deliveries");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.UserGroup", b =>
                 {
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("group_id");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
-                    b.HasKey("UserId", "GroupId");
+                    b.HasKey("UserId", "GroupId")
+                        .HasName("pk_user_groups");
 
-                    b.HasIndex("GroupId");
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_user_groups_group_id");
 
                     b.HasIndex("TenantId", "UserId", "GroupId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_user_groups_tenant_id_user_id_group_id");
 
-                    b.ToTable("UserGroups");
+                    b.ToTable("user_groups");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.WorkloadIdentityReplay", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("BindingId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("binding_id");
 
                     b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("TokenIdHash")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_id_hash");
 
                     b.Property<DateTime>("UsedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("used_at");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_workload_identity_replays");
 
-                    b.HasIndex("ExpiresAt");
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_workload_identity_replays_expires_at");
 
                     b.HasIndex("TenantId", "BindingId", "TokenIdHash")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_workload_identity_replays_tenant_id_binding_id_token_id_hash");
 
-                    b.ToTable("WorkloadIdentityReplays");
+                    b.ToTable("workload_identity_replays");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<int>", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("ClaimType")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("claim_type");
 
                     b.Property<string>("ClaimValue")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("claim_value");
 
                     b.Property<int>("RoleId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("role_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_asp_net_role_claims");
 
-                    b.HasIndex("RoleId");
+                    b.HasIndex("RoleId")
+                        .HasDatabaseName("ix_asp_net_role_claims_role_id");
 
-                    b.ToTable("AspNetRoleClaims", (string)null);
+                    b.ToTable("asp_net_role_claims", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<int>", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("ClaimType")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("claim_type");
 
                     b.Property<string>("ClaimValue")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("claim_value");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_asp_net_user_claims");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_asp_net_user_claims_user_id");
 
-                    b.ToTable("AspNetUserClaims", (string)null);
+                    b.ToTable("asp_net_user_claims", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<int>", b =>
                 {
                     b.Property<string>("LoginProvider")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("login_provider");
 
                     b.Property<string>("ProviderKey")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("provider_key");
 
                     b.Property<string>("ProviderDisplayName")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("provider_display_name");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
-                    b.HasKey("LoginProvider", "ProviderKey");
+                    b.HasKey("LoginProvider", "ProviderKey")
+                        .HasName("pk_asp_net_user_logins");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_asp_net_user_logins_user_id");
 
-                    b.ToTable("AspNetUserLogins", (string)null);
+                    b.ToTable("asp_net_user_logins", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<int>", b =>
                 {
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
                     b.Property<int>("RoleId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("role_id");
 
-                    b.HasKey("UserId", "RoleId");
+                    b.HasKey("UserId", "RoleId")
+                        .HasName("pk_asp_net_user_roles");
 
-                    b.HasIndex("RoleId");
+                    b.HasIndex("RoleId")
+                        .HasDatabaseName("ix_asp_net_user_roles_role_id");
 
-                    b.ToTable("AspNetUserRoles", (string)null);
+                    b.ToTable("asp_net_user_roles", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<int>", b =>
                 {
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
 
                     b.Property<string>("LoginProvider")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("login_provider");
 
                     b.Property<string>("Name")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("name");
 
                     b.Property<string>("Value")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("value");
 
-                    b.HasKey("UserId", "LoginProvider", "Name");
+                    b.HasKey("UserId", "LoginProvider", "Name")
+                        .HasName("pk_asp_net_user_tokens");
 
-                    b.ToTable("AspNetUserTokens", (string)null);
+                    b.ToTable("asp_net_user_tokens", (string)null);
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.AlertNotification", b =>
@@ -3069,7 +3860,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("Notifications")
                         .HasForeignKey("AlertId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_alert_notifications_report_alerts_alert_id");
 
                     b.Navigation("Alert");
                 });
@@ -3079,7 +3871,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.HasOne("ETL_SQL.Portal.Data.AuditLog", "AuditLog")
                         .WithMany("OutboxMessages")
                         .HasForeignKey("AuditLogId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_audit_outbox_messages_audit_logs_audit_log_id");
 
                     b.Navigation("AuditLog");
                 });
@@ -3089,12 +3882,14 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.HasOne("ETL_SQL.Portal.Data.Folder", null)
                         .WithMany()
                         .HasForeignKey("FolderId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_datasets_folders_folder_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.Report", "OwningReport")
                         .WithMany()
                         .HasForeignKey("OwningReportId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_datasets_reports_owning_report_id");
 
                     b.Navigation("OwningReport");
                 });
@@ -3105,13 +3900,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("Acls")
                         .HasForeignKey("DatasetId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_dataset_acls_datasets_dataset_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.Group", "Group")
                         .WithMany("DatasetAcls")
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_dataset_acls_groups_group_id");
 
                     b.Navigation("Dataset");
 
@@ -3124,13 +3921,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("UserAcls")
                         .HasForeignKey("DatasetId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_dataset_user_acls_datasets_dataset_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_dataset_user_acls_asp_net_users_user_id");
 
                     b.Navigation("Dataset");
 
@@ -3141,7 +3940,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.HasOne("ETL_SQL.Portal.Data.Folder", "Parent")
                         .WithMany("Children")
-                        .HasForeignKey("ParentId");
+                        .HasForeignKey("ParentId")
+                        .HasConstraintName("fk_folders_folders_parent_id");
 
                     b.Navigation("Parent");
                 });
@@ -3152,13 +3952,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("Acls")
                         .HasForeignKey("FolderId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_folder_acls_folders_folder_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.Group", "Group")
                         .WithMany("FolderAcls")
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_folder_acls_groups_group_id");
 
                     b.Navigation("Folder");
 
@@ -3171,7 +3973,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("Events")
                         .HasForeignKey("CaseId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_gateway_ambiguous_write_events_gateway_ambiguous_write_case~");
 
                     b.Navigation("Case");
                 });
@@ -3182,7 +3985,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("StudioCapabilities")
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_group_studio_capabilities_groups_group_id");
 
                     b.Navigation("Group");
                 });
@@ -3193,7 +3997,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("RefreshTokens")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_refresh_tokens_asp_net_users_user_id");
 
                     b.Navigation("User");
                 });
@@ -3204,7 +4009,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("Reports")
                         .HasForeignKey("FolderId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_reports_folders_folder_id");
 
                     b.Navigation("Folder");
                 });
@@ -3214,19 +4020,22 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "DecidedBy")
                         .WithMany()
                         .HasForeignKey("DecidedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_report_access_requests_asp_net_users_decided_by_user_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
                         .WithMany()
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_access_requests_reports_report_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "Requester")
                         .WithMany()
                         .HasForeignKey("RequesterUserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_access_requests_asp_net_users_requester_user_id");
 
                     b.Navigation("DecidedBy");
 
@@ -3240,18 +4049,21 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.HasOne("ETL_SQL.Portal.Data.Group", "Group")
                         .WithMany()
                         .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_report_acls_groups_group_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
                         .WithMany("Acls")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_acls_reports_report_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_report_acls_asp_net_users_user_id");
 
                     b.Navigation("Group");
 
@@ -3266,13 +4078,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("ReportAlerts")
                         .HasForeignKey("OwnerId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_alerts_asp_net_users_owner_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
                         .WithMany("Alerts")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_alerts_reports_report_id");
 
                     b.Navigation("Owner");
 
@@ -3285,13 +4099,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany()
                         .HasForeignKey("CreatedBy")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_embed_tokens_asp_net_users_created_by");
 
                     b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
                         .WithMany("EmbedTokens")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_embed_tokens_reports_report_id");
 
                     b.Navigation("Creator");
 
@@ -3304,13 +4120,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("Favorites")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_favorites_reports_report_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
                         .WithMany("ReportFavorites")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_favorites_asp_net_users_user_id");
 
                     b.Navigation("Report");
 
@@ -3323,7 +4141,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("ReportJobLinks")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_job_links_reports_report_id");
 
                     b.Navigation("Report");
                 });
@@ -3334,7 +4153,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany()
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_script_drafts_reports_report_id");
 
                     b.Navigation("Report");
                 });
@@ -3345,7 +4165,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("Decisions")
                         .HasForeignKey("DraftId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_script_draft_decisions_report_script_drafts_draft_id");
 
                     b.Navigation("Draft");
                 });
@@ -3356,13 +4177,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany()
                         .HasForeignKey("CreatedBy")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_share_links_asp_net_users_created_by");
 
                     b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
                         .WithMany("ShareLinks")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_share_links_reports_report_id");
 
                     b.Navigation("Creator");
 
@@ -3375,7 +4198,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("Snapshots")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_report_snapshots_reports_report_id");
 
                     b.Navigation("Report");
                 });
@@ -3386,13 +4210,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("SavedViews")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_saved_report_views_reports_report_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
                         .WithMany("SavedViews")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_saved_report_views_asp_net_users_user_id");
 
                     b.Navigation("Report");
 
@@ -3405,7 +4231,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany()
                         .HasForeignKey("OwnerUserId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_service_accounts_asp_net_users_owner_user_id");
 
                     b.Navigation("OwnerUser");
                 });
@@ -3416,13 +4243,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany()
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_shared_connection_acls_groups_group_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalSharedConnection", "SharedConnection")
                         .WithMany("Acls")
                         .HasForeignKey("SharedConnectionId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_shared_connection_acls_portal_shared_connections_shared_con~");
 
                     b.Navigation("Group");
 
@@ -3435,7 +4264,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany()
                         .HasForeignKey("SharedConnectionId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_shared_connection_usages_portal_shared_connections_shared_c~");
 
                     b.Navigation("SharedConnection");
                 });
@@ -3446,7 +4276,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("Decisions")
                         .HasForeignKey("FindingId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_stewardship_finding_decisions_stewardship_findings_finding_~");
 
                     b.Navigation("Finding");
                 });
@@ -3457,13 +4288,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany()
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_studio_recovery_drafts_reports_report_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_studio_recovery_drafts_asp_net_users_user_id");
 
                     b.Navigation("Report");
 
@@ -3476,13 +4309,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("Subscriptions")
                         .HasForeignKey("ReportId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_subscriptions_reports_report_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
                         .WithMany("Subscriptions")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_subscriptions_asp_net_users_user_id");
 
                     b.Navigation("Report");
 
@@ -3495,13 +4330,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany("UserGroups")
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_user_groups_groups_group_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
                         .WithMany("UserGroups")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_user_groups_asp_net_users_user_id");
 
                     b.Navigation("Group");
 
@@ -3514,7 +4351,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany()
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_asp_net_role_claims_asp_net_roles_role_id");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<int>", b =>
@@ -3523,7 +4361,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_asp_net_user_claims_asp_net_users_user_id");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<int>", b =>
@@ -3532,7 +4371,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_asp_net_user_logins_asp_net_users_user_id");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<int>", b =>
@@ -3541,13 +4381,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany()
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_asp_net_user_roles_asp_net_roles_role_id");
 
                     b.HasOne("ETL_SQL.Portal.Data.PortalUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_asp_net_user_roles_asp_net_users_user_id");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<int>", b =>
@@ -3556,7 +4398,8 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_asp_net_user_tokens_asp_net_users_user_id");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.AuditLog", b =>

@@ -72,11 +72,11 @@ public class PolicyAuthorityController(
     {
         try
         {
-            return Ok(new { configured = true, signingPublicKeyPem = signer.PublicKeyPem });
+            return Ok(new PolicyAuthorityStatusDto(true, signer.PublicKeyPem));
         }
         catch (PolicyAuthorityException ex)
         {
-            return Ok(new { configured = false, error = ex.Message });
+            return Ok(new PolicyAuthorityStatusDto(false, Error: ex.Message));
         }
     }
 
@@ -87,11 +87,11 @@ public class PolicyAuthorityController(
         {
             var document = OrganizationPolicySchema.ParseJson(request.PolicyJson);
             var result = OrganizationPolicySchema.Validate(document);
-            return Ok(new { isValid = result.IsValid, errors = result.Errors });
+            return Ok(new PolicyValidationDto(result.IsValid, result.Errors));
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException)
         {
-            return Ok(new { isValid = false, errors = new[] { ex.Message } });
+            return Ok(new PolicyValidationDto(false, [ex.Message]));
         }
     }
 

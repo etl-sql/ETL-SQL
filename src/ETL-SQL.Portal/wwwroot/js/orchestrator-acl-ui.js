@@ -1,3 +1,8 @@
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.Portal/BrowserSources/orchestrator-acl-ui.ts
+ * Run: node scripts/sync-assets.js
+ */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 // Access panel for one Orchestrator object — its owner, and who has been granted what.
 //
 // Why this module exists: until now grants were unreachable through the product. The per-object model
@@ -11,13 +16,10 @@
 //
 // Rendering only: every function here is pure, so the panel's rules can be tested without a portal,
 // a browser, or a running Orchestrator. Fetching and wiring live in orchestrator.html.
-
 /** The permission ladder, widest last. MANAGE includes all; EXECUTE includes READ. */
 export const PERMISSIONS = ['READ', 'EXECUTE', 'OVERRIDE', 'MANAGE'];
-
 /** The principal kinds a grant can name. */
 export const PRINCIPAL_KINDS = ['USER', 'GROUP', 'SERVICE'];
-
 /**
  * The principal kinds that can *own* an object — one fewer than can be granted on it.
  *
@@ -26,7 +28,6 @@ export const PRINCIPAL_KINDS = ['USER', 'GROUP', 'SERVICE'];
  * produce a form whose only outcome is a 400.
  */
 export const OWNER_KINDS = ['USER', 'SERVICE'];
-
 /**
  * Splits a stored principal reference like `user:3f2a…` into its kind and key.
  * Attribution is written as `kind:key`, and the two halves mean different things: the kind selects
@@ -34,13 +35,13 @@ export const OWNER_KINDS = ['USER', 'SERVICE'];
  */
 export function splitPrincipal(value) {
     const text = (value || '').trim();
-    if (!text) return null;
+    if (!text)
+        return null;
     const separator = text.indexOf(':');
     return separator <= 0
         ? { kind: 'USER', key: text }
         : { kind: text.slice(0, separator).toUpperCase(), key: text.slice(separator + 1) };
 }
-
 /**
  * How an owner should read in the panel.
  *
@@ -50,10 +51,10 @@ export function splitPrincipal(value) {
  */
 export function ownerLabel(createdBy) {
     const principal = splitPrincipal(createdBy);
-    if (!principal) return 'No recorded owner — administrators only, until it is adopted.';
+    if (!principal)
+        return 'No recorded owner — administrators only, until it is adopted.';
     return `${principal.kind.charAt(0)}${principal.kind.slice(1).toLowerCase()} ${principal.key}`;
 }
-
 /**
  * Whether to offer the editing controls.
  *
@@ -66,7 +67,6 @@ export function ownerLabel(createdBy) {
 export function canAdminister(state) {
     return !!state && !state.error && Array.isArray(state.grants);
 }
-
 /**
  * Table body for the grants on one object.
  *
@@ -90,7 +90,6 @@ export function grantRowsHtml(grants, esc, escAttr, editable) {
         </tr>`;
     }).join('');
 }
-
 /**
  * The objects nobody is accountable for, as a list an administrator can act on.
  *
@@ -108,7 +107,6 @@ export function unownedListHtml(objects, esc) {
         ? `<table class="data-table"><tbody>${rows}</tbody></table>`
         : `<div class="empty-state">${esc('Every job, schedule, and notification has a recorded owner.')}</div>`;
 }
-
 /**
  * Whether to offer owner reassignment.
  *
@@ -120,7 +118,6 @@ export function unownedListHtml(objects, esc) {
 export function canReassignOwner(state) {
     return !!state && !state.error && state.isAdmin === true;
 }
-
 /**
  * The owner-reassignment control.
  *
@@ -130,7 +127,8 @@ export function canReassignOwner(state) {
  * transferring was something else.
  */
 export function ownerFormHtml(state) {
-    if (!canReassignOwner(state)) return '';
+    if (!canReassignOwner(state))
+        return '';
     return `
         <div class="orch-acl-owner-set">
           <select id="aclOwnerKind" aria-label="Owner kind">
@@ -140,7 +138,6 @@ export function ownerFormHtml(state) {
           <button class="btn btn-sm btn-outline" id="aclOwnerBtn">Set owner</button>
         </div>`;
 }
-
 /**
  * The whole panel: owner, grants, and — for someone who may administer them — the add form.
  *
@@ -151,16 +148,13 @@ export function ownerFormHtml(state) {
 export function accessPanelHtml(state, esc, escAttr) {
     const { job, grants, error } = state || {};
     const editable = canAdminister(state);
-
     if (error) {
         return `<div class="orch-acl-error empty-state">${esc(error)}</div>`;
     }
-
     const rows = grantRowsHtml(grants, esc, escAttr, editable);
     const emptyMessage = editable
         ? 'No grants. Only the owner and administrators can reach this object.'
         : 'No grants.';
-
     const form = editable ? `
         <div class="orch-acl-add">
           <select id="aclPrincipalKind" aria-label="Principal kind">
@@ -176,7 +170,6 @@ export function accessPanelHtml(state, esc, escAttr) {
           The principal <em>key</em>, not a username — a name can be reassigned, and a grant that
           followed one would move with it.
         </p>` : '';
-
     return `
         <div class="orch-acl-owner">
           <label>Owner</label>

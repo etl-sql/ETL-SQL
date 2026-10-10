@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
@@ -20,6 +21,7 @@ namespace ETL_SQL.Portal.Tests;
 /// else the stored mode) — not by Dataset.EncryptionMode, which records the CREATE transport clause and
 /// is unreliable at rest. Constructs DatasetViewerService directly over a temp SQLite PortalDbContext.
 /// </summary>
+[Trait("CompatBreak", "0.21.0")]
 public sealed class DatasetViewerServiceTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "dsv_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -261,6 +263,76 @@ public sealed class DatasetViewerServiceTests : IDisposable
         var result = await viewer.QueryAsync(id, 1, 100, null, null, null, []);
 
         AssertSeedRows(result.Rows.ToList());
+    }
+
+    [Fact]
+    public async Task View_TextCacheValuesSerializeAsStringsAndPreserveEmptyUnicodeAndNull()
+    {
+        var path = Path.Combine(_root, "text.parquet");
+        var batch = new ETL_SQL.Data.DataTable();
+        batch.ColumnNames.Add("text");
+        string?[] values = ["row20", "", null, "Café 🦀"];
+        foreach (var value in values)
+        {
+            var row = new ETL_SQL.Data.Row();
+            row["text"] = value;
+            await batch.AddRowAsync(row);
+        }
+        await using var writer = new ETL_SQL.Connectors.Parquet.ParquetDataSource(SystemExecutionContext.Instance, path);
+        await writer.WriteBatches(new[] { batch }.ToAsyncEnumerable(), false, default);
+        await using var db = NewDb(out var config, atRestKey: null);
+        var id = AddDataset(db, "#text", path, DatasetEncryptionMode.None, values.Length);
+        var dataset = await db.Datasets.SingleAsync(item => item.Id == id);
+        dataset.ColumnSchema = """[{"name":"text","type":"NVARCHAR"}]""";
+        await db.SaveChangesAsync();
+        var viewer = NewViewer(db, config);
+        var result = await viewer.QueryAsync(id, 1, 50, null, null, null, []);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var rows = json.RootElement.GetProperty("rows").EnumerateArray().ToArray();
+        Assert.Equal(values.Length, rows.Length);
+        for (var i = 0; i < values.Length; i++)
+        {
+            var cell = rows[i].GetProperty("text");
+            Assert.Equal(values[i] is null ? JsonValueKind.Null : JsonValueKind.String, cell.ValueKind);
+            Assert.Equal(values[i], cell.GetString());
+        }
+        var choices = await viewer.GetColumnValuesAsync(id, "text", null, 50);
+        Assert.Equal(values, choices.Values);
+        var filtered = await viewer.QueryAsync(id, 1, 50, null, null, "Café", []);
+        Assert.Equal("Café 🦀", Assert.Single(filtered.Rows)["text"]);
+    }
+
+    [Theory]
+    [InlineData("gt", "15", null, 1)]
+    [InlineData("lt", "15", null, 1)]
+    [InlineData("gte", "15", null, 1)]
+    [InlineData("lte", "15", null, 1)]
+    [InlineData("between", "10", "20", 2)]
+    public async Task View_NumericFiltersExcludeNullCellsFromRowsStatisticsAndExports(string op, string threshold, string? maximum, int expected)
+    {
+        var path = Path.Combine(_root, "nullable_numeric.parquet");
+        var batch = new ETL_SQL.Data.DataTable();
+        batch.ColumnNames.Add("v");
+        foreach (var value in new decimal?[] { 10m, 20m, null })
+        {
+            var row = new ETL_SQL.Data.Row(); row["v"] = value;
+            await batch.AddRowAsync(row);
+        }
+        await using var writer = new ETL_SQL.Connectors.Parquet.ParquetDataSource(SystemExecutionContext.Instance, path);
+        await writer.WriteBatches(new[] { batch }.ToAsyncEnumerable(), false, default);
+        await using var db = NewDb(out var config, atRestKey: null);
+        var id = AddDataset(db, "#nullable", path, DatasetEncryptionMode.None, 3);
+        var viewer = NewViewer(db, config);
+        DatasetColumnFilterDto[] filters = [new("v", op, threshold, maximum)];
+        var result = await viewer.QueryAsync(id, 1, 50, null, null, null, filters);
+        Assert.Equal(expected, result.FilteredCount);
+        Assert.All(result.Rows, row => Assert.NotNull(row["v"]));
+        Assert.Equal(0, Assert.Single(await viewer.GetStatsAsync(id, filters)).NullCount);
+        var export = await viewer.PrepareExportAsync(id, null, null, null, filters);
+        Assert.Equal(expected, export.rows.Count());
+        var nulls = await viewer.QueryAsync(id, 1, 50, null, null, null, [new("v", "is_null", null, null)]);
+        Assert.Equal(1, nulls.FilteredCount);
+        Assert.Null(Assert.Single(nulls.Rows)["v"]);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

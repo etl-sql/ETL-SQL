@@ -23,6 +23,9 @@ public sealed class ControlPlaneDashboardUiTests(PortalAdminFixture fixture)
 
         // Assert KPI strip
         await Expect(page.Locator("#kpiStrip")).ToBeVisibleAsync();
+        await Expect(page.Locator("#controlPlaneStatus")).ToContainTextAsync("unavailable in this deployment");
+        await Expect(page.Locator("#kpiAuditOutbox")).ToHaveTextAsync("Unavailable");
+        await Expect(page.Locator("#btnOpenProvision")).ToBeDisabledAsync();
 
         // Assert tabs exist and clicking switches panels
         await Expect(page.Locator(".cp-tab[data-tab='audit']")).ToBeVisibleAsync();
@@ -32,7 +35,7 @@ public sealed class ControlPlaneDashboardUiTests(PortalAdminFixture fixture)
 
         await page.ClickAsync(".cp-tab[data-tab='fleet']");
         await Expect(page.Locator("#panel-fleet")).ToBeVisibleAsync();
-        await Expect(page.Locator("#panel-fleet")).ToContainTextAsync("Hardened OCI Sandbox");
+        await Expect(page.Locator("#panel-fleet")).ToContainTextAsync("Live worker health and sandbox attestation are not reported");
 
         Assert.Empty(session.PageErrors);
     }

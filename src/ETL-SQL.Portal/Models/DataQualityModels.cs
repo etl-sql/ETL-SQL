@@ -1,5 +1,7 @@
 namespace ETL_SQL.Portal.Models;
 
+public sealed record DataQualityJobDto(string Name, string DisplayName, string Script, string? Description);
+
 public sealed record QuarantineQueueItemDto(
     string JobName,
     string? ScriptPath,
@@ -46,7 +48,9 @@ public sealed record QuarantineDispositionRequest(
     /// the capture schema is frozen on first write, and an audit row cannot be edited afterwards
     /// the way a note column could.
     /// </summary>
-    string? Note = null);
+    string? Note = null,
+    /// <summary>The observed row state required by the update; recovery explicitly targets replaying rows.</summary>
+    string ExpectedStatus = "quarantined");
 
 public sealed record QuarantineDispositionResponse(
     string JobId,

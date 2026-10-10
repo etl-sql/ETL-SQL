@@ -34,6 +34,12 @@ public class ConnectionsAdminController(
         List<string>? SensitiveFields = null,
         GatewayResourceBinding? Gateway = null);
 
+    public sealed record SharedConnectionVerificationDto(string Alias, string Status, int SecretReferences);
+    public sealed record SharedConnectionDiagnosticStepDto(string Layer, string Status, string Detail, string? Remedy);
+    public sealed record SharedConnectionDiagnosticDto(string Alias, bool Succeeded, IReadOnlyList<SharedConnectionDiagnosticStepDto> Steps);
+    public sealed record SharedConnectionImportDto(int Created, int Updated);
+    public sealed record ConnectionHelpDto(string Content);
+
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -99,7 +105,7 @@ public class ConnectionsAdminController(
                 var secretCount = await catalog.VerifySecretReferencesAsync(alias, secrets, ct);
                 await catalog.SaveAsync(ct);
                 outcome = "ok";
-                result = Ok(new { alias, status = "ok", secretReferences = secretCount });
+                result = Ok(new SharedConnectionVerificationDto(alias, "ok", secretCount));
             }
             catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
             {
@@ -156,18 +162,9 @@ public class ConnectionsAdminController(
             : report.Succeeded ? "ok" : "failed";
         await audit.LogAsync(CurrentUserId, "SHARED_CONNECTION_TEST", "PortalSharedConnection", alias, $"Outcome={outcome}");
 
-        return Ok(new
-        {
-            alias,
-            succeeded = report.Succeeded,
-            steps = report.Steps.Select(s => new
-            {
-                layer = s.Layer,
-                status = s.Status.ToString().ToLowerInvariant(),
-                detail = s.Detail,
-                remedy = s.Remedy,
-            }),
-        });
+        return Ok(new SharedConnectionDiagnosticDto(alias, report.Succeeded,
+            report.Steps.Select(s => new SharedConnectionDiagnosticStepDto(
+                s.Layer, s.Status.ToString().ToLowerInvariant(), s.Detail, s.Remedy)).ToArray()));
     }
 
     private async Task<Dictionary<string, string>> ResolveSecretReferencesAsync(
@@ -233,7 +230,7 @@ public class ConnectionsAdminController(
         if (string.IsNullOrEmpty(helpText))
             return NotFound(new { error = $"Help documentation for connector type '{connectorType}' not found." });
 
-        return Ok(new { content = helpText });
+        return Ok(new ConnectionHelpDto(helpText));
     }
 
     /// <summary>What breaks if this entry is disabled or deleted: referencing scripts + recorded consumers.</summary>
@@ -324,7 +321,7 @@ public class ConnectionsAdminController(
             }
 
             await catalog.SaveAsync(ct);
-            return Ok(new { created, updated });
+            return Ok(new SharedConnectionImportDto(created, updated));
         }
         catch (ArgumentException ex)
         {

@@ -1,7 +1,13 @@
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using ETL_SQL.Analysis.Services;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Portal.Controllers;
 using ETL_SQL.Portal.Models;
+using DocumentationDocument = ETL_SQL.Portal.Services.DocumentationDocument;
+using DocumentationSearchResult = ETL_SQL.Portal.Services.DocumentationSearchResult;
 
 namespace ETL_SQL.Portal.Tests;
 
@@ -22,11 +28,11 @@ internal static class BrowserContractsGenerator
     /// <summary>
     /// The enums whose values cross the wire as strings.
     ///
-    /// <para>Both are matched case-insensitively on the way in (<see cref="PipelineTaskKinds.Parse"/>),
-    /// but the canvas writes and the palette declares the lowercase form, so that is the form
-    /// declared here. A union of the other casings would let a chip id that no palette uses pass.</para>
+    /// <para>Pipeline values use the lowercase form written by the canvas and palette. Dataset
+    /// access levels and permissions use the enum names returned by their DTOs.</para>
     /// </summary>
-    private static readonly Type[] StringEnums = [typeof(PipelineTaskKind), typeof(PipelineEdgeCondition)];
+    private static readonly Type[] LowercaseStringEnums = [typeof(PipelineTaskKind), typeof(PipelineEdgeCondition)];
+    private static readonly Type[] StringEnums = [.. LowercaseStringEnums, typeof(DatasetPermission), typeof(DatasetAccessLevel)];
 
     /// <summary>
     /// The records the browser receives or sends. Nested record types they reference are pulled in
@@ -51,6 +57,172 @@ internal static class BrowserContractsGenerator
         typeof(ScriptDagEdgeDto),
         typeof(ScriptDagDto),
         typeof(ScriptDagProjection),
+        typeof(NavDestinationDto),
+        typeof(PortalBrandingDto),
+        typeof(OrchestratorSettingsDto),
+        typeof(OrchestratorConnectionStatusDto),
+        typeof(OrchestratorStatusDto),
+        typeof(FolderDto),
+        typeof(CreateFolderRequest),
+        typeof(GrantPermissionRequest),
+        typeof(FolderAclCatalogResponse),
+        typeof(FolderAclGrantResponse),
+        typeof(FolderAclRevokeResponse),
+        typeof(DatasetAclEntryDto),
+        typeof(DatasetDto),
+        typeof(DatasetRowsDto),
+        typeof(DatasetColumnFilterDto),
+        typeof(DatasetColumnStatsDto),
+        typeof(DatasetColumnValuesDto),
+        typeof(DatasetRefreshAcceptedDto),
+        typeof(DatasetVersionResponse),
+        typeof(GroupDto),
+        typeof(GroupMemberCatalogResponse),
+        typeof(GroupMembershipResponse),
+        typeof(BulkAddGroupMembersResponse),
+        typeof(BulkRemoveGroupMembersResponse),
+        typeof(BulkDeleteGroupsResponse),
+        typeof(BulkGroupMembershipRequest),
+        typeof(BulkDeleteGroupsRequest),
+        typeof(LoginResponse),
+        typeof(AuthProvidersResponse),
+        typeof(StudioSessionDto),
+        typeof(StudioReportDto),
+        typeof(StudioFolderDto),
+        typeof(StudioRecoveryDraftDto),
+        typeof(CreateStudioReportRequest),
+        typeof(ScriptContentResponse),
+        typeof(SaveDesignerResponse),
+        typeof(ReportDto),
+        typeof(AdminReportDto),
+        typeof(ReportScriptValidationDto),
+        typeof(ValidateReportScriptRequest),
+        typeof(DesignerLeaseResponse),
+        typeof(DesignerSnapshotResponse),
+        typeof(DocumentationSearchResult),
+        typeof(DocumentationDocument),
+        typeof(PagedResult<>),
+        typeof(JobHistoryEntry),
+        typeof(CatalogLineageHistoryDto),
+        typeof(StewardshipCatalogDto),
+        typeof(GovernanceDashboardDto),
+        typeof(StewardshipFindingDto),
+        typeof(StewardshipScanDto),
+        typeof(StewardshipSettingsDto),
+        typeof(GovernanceCategoryDto),
+        typeof(StewardshipGlossaryTermDto),
+        typeof(GovernanceAssetReviewDto),
+        typeof(GovernanceBadgeAssignmentDto),
+        typeof(LineageImpactDto),
+        typeof(ProtectedLineageHistoryEntry),
+        typeof(ProtectedDataSuggestionEntry),
+        typeof(DownstreamReportDto),
+        typeof(ReportDependencyDto),
+        typeof(JobDefinitionDto),
+        typeof(ScheduledJobActivityPage),
+        typeof(TriageBoardDto),
+        typeof(GatewayEnrollmentController.GatewayEnrollmentDto),
+        typeof(GatewayEnrollmentController.IssueEnrollmentRequest),
+        typeof(GatewayEnrollmentController.IssuedGatewayEnrollmentDto),
+        typeof(GatewayEnrollmentController.GatewayRevocationDto),
+        typeof(ConnectorsController.DiscoveredGatewayDto),
+        typeof(ConnectorsController.TestConnectionRequest),
+        typeof(ETL_SQL.Data.ConnectorSchemaDescriptor),
+        typeof(ETL_SQL.Core.Diagnostics.DiagnosticReport),
+        typeof(TriageRunDetailDto),
+        typeof(ETL_SQL.Core.Profiling.StatementMetricsPayload),
+        typeof(TriageRerunRequest),
+        typeof(TriageRerunResponseDto),
+        typeof(ScheduleDefinitionDto),
+        typeof(NotificationDefinitionDto),
+        typeof(JobStateEntryDto),
+        typeof(ETL_SQL.Portal.Data.AuditLog),
+        typeof(ETL_SQL.Orchestrator.Service.JobApiEndpoints.ObjectGrantResponse),
+        typeof(ETL_SQL.Orchestrator.Service.JobApiEndpoints.UnownedObjectResponse),
+        typeof(ETL_SQL.Portal.Services.PortalSecretSummary),
+        typeof(ETL_SQL.Portal.Services.SecretKeyRingCheckResult),
+        typeof(ETL_SQL.Portal.Services.ImpactReport),
+        typeof(ETL_SQL.Portal.Services.ControlPlaneFleetOverview),
+        typeof(ETL_SQL.Portal.Services.ControlPlaneTenantDto),
+        typeof(ETL_SQL.Portal.Services.PlatformAuditReceiptDto),
+        typeof(ETL_SQL.Portal.Services.ProvisionTenantAdminRequest),
+        typeof(ETL_SQL.Portal.Services.UpdateTenantQuotasAdminRequest),
+        typeof(ETL_SQL.Portal.Services.UpdateTenantStateAdminRequest),
+        typeof(ETL_SQL.Portal.Services.OperationalMetricsService.OperationalMetrics),
+        typeof(ETL_SQL.Portal.Services.FleetEnvironmentStatus),
+        typeof(ETL_SQL.Portal.Services.GatewayAmbiguousWriteCaseDto),
+        typeof(ServiceAccountDto),
+        typeof(ServiceAccountCreatedResponse),
+        typeof(CreateServiceAccountRequest),
+        typeof(PendingAccessRequestDto),
+        typeof(AnonymousReportAccessDto),
+        typeof(UserDto),
+        typeof(AdminRoleOptionDto),
+        typeof(BulkUserStatusResponse),
+        typeof(SubscriptionDto),
+        typeof(BulkSubscriptionStatusRequest),
+        typeof(BulkSubscriptionStatusResponse),
+        typeof(AuditLogDto),
+        typeof(AdminServiceStatus),
+        typeof(ApproveReportAccessRequestDto),
+        typeof(DenyReportAccessRequestDto),
+        typeof(ETL_SQL.Portal.Controllers.GatewayAmbiguousWritesController.CaseNoteRequest),
+        typeof(ETL_SQL.Portal.Controllers.GatewayAmbiguousWritesController.AssignCaseRequest),
+        typeof(ETL_SQL.Portal.Controllers.GatewayAmbiguousWritesController.EvidenceRequest),
+        typeof(ETL_SQL.Portal.Controllers.GatewayAmbiguousWritesController.ResolveCaseRequest),
+        typeof(UpdateFolderRequest),
+        typeof(PublishReportRequest),
+        typeof(UpdateReportRequest),
+        typeof(CreateSubscriptionRequest),
+        typeof(UpdateSubscriptionRequest),
+        typeof(UpdateDatasetRequest),
+        typeof(CreateUserRequest),
+        typeof(UpdateUserRequest),
+        typeof(CreateGroupRequest),
+        typeof(UpdateGroupRequest),
+        typeof(VersionedResourceRequest),
+        typeof(UpdateServiceAccountRequest),
+        typeof(UpdateStewardshipSettingsRequest),
+        typeof(SaveGovernanceCategoryRequest),
+        typeof(SaveGlossaryTermRequest),
+        typeof(DecideFindingRequest),
+        typeof(ReviewAssetRequest),
+        typeof(AssignBadgeRequest),
+        typeof(QuarantineDispositionRequest),
+        typeof(DataQualityJobDto),
+        typeof(QuarantineQueueItemDto),
+        typeof(QuarantineRowsResponse),
+        typeof(ReplayQuarantineRequest),
+        typeof(ReplayQuarantineResponse),
+        typeof(QuarantineDispositionResponse),
+        typeof(QuarantineSubmissionStatusDto),
+        typeof(DataQualityTrendDto),
+        typeof(DataQualityRuleDefinitionDto),
+        typeof(PolicyPublishRequest),
+        typeof(PolicyAuthorityStatusDto),
+        typeof(PolicyValidationDto),
+        typeof(PolicyVersionDto),
+        typeof(PolicyMachineDto),
+        typeof(PolicyValidateRequest),
+        typeof(PolicyActivateRequest),
+        typeof(PolicyCanaryPromoteRequest),
+        typeof(PolicyCanaryHaltRequest),
+        typeof(PolicyMachineRevokeRequest),
+        typeof(PolicyRollbackRequest),
+        typeof(PolicyCanaryPublishRequest),
+        typeof(PolicyMachineRegisterRequest),
+        typeof(UpdateOrchestratorSettingsRequest),
+        typeof(UpdatePortalBrandingRequest),
+        typeof(ETL_SQL.Portal.Controllers.ConnectionsAdminController.SetConnectionRequest),
+        typeof(ETL_SQL.Portal.Services.PortalSharedConnectionExport),
+        typeof(ETL_SQL.Portal.Services.PortalSharedConnectionSummary),
+        typeof(ETL_SQL.Portal.Services.PortalSharedConnectionDetail),
+        typeof(ETL_SQL.Portal.Controllers.ConnectionsAdminController.SharedConnectionVerificationDto),
+        typeof(ETL_SQL.Portal.Controllers.ConnectionsAdminController.SharedConnectionDiagnosticDto),
+        typeof(ETL_SQL.Portal.Controllers.ConnectionsAdminController.SharedConnectionImportDto),
+        typeof(ETL_SQL.Portal.Controllers.ConnectionsAdminController.ConnectionHelpDto),
+        typeof(ETL_SQL.Portal.Controllers.ConnectorsController.ParseConnectionStringRequest),
+        typeof(ETL_SQL.Connectors.ParsedConnectionStringResult),
     ];
 
     /// <summary>
@@ -93,7 +265,7 @@ internal static class BrowserContractsGenerator
 
         foreach (var type in StringEnums)
         {
-            var members = Enum.GetNames(type).Select(name => $"'{name.ToLowerInvariant()}'");
+            var members = Enum.GetNames(type).Select(name => $"'{(LowercaseStringEnums.Contains(type) ? name.ToLowerInvariant() : name)}'");
             builder.Append($"/** {type.Name}, as it crosses the wire. Matched case-insensitively on the way in. */\n");
             builder.Append($"type {type.Name} =\n    | {string.Join("\n    | ", members)};\n\n");
         }
@@ -111,19 +283,24 @@ internal static class BrowserContractsGenerator
                 .Where(p => p.GetIndexParameters().Length == 0 && p.CanRead)
                 // EqualityContract is a record implementation detail and never serialised.
                 .Where(p => p.Name != "EqualityContract")
+                .Where(p => p.GetCustomAttribute<JsonIgnoreAttribute>()?.Condition != JsonIgnoreCondition.Always)
                 .ToList();
 
             var body = new StringBuilder();
-            body.Append($"interface {type.Name} {{\n");
+            var name = type.IsGenericType ? type.Name[..type.Name.IndexOf('`')] : type.Name;
+            var parameters = type.IsGenericTypeDefinition
+                ? $"<{string.Join(", ", type.GetGenericArguments().Select(t => t.Name))}>" : "";
+            body.Append($"interface {name}{parameters} {{\n");
             foreach (var property in properties)
             {
                 var (declared, optional) = TypeScriptFor(property, queue);
                 if (VocabularyOverrides.TryGetValue((type, property.Name), out var vocabulary))
                     declared = vocabulary;
-                body.Append($"    {Camel(property.Name)}{(optional ? "?" : "")}: {declared};\n");
+                var field = property.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? Camel(property.Name);
+                body.Append($"    {field}{(optional ? "?" : "")}: {declared};\n");
             }
             body.Append("}\n");
-            emitted[type.Name] = body.ToString();
+            emitted[name] = body.ToString();
         }
 
         builder.Append(string.Join("\n", emitted.Values));
@@ -135,18 +312,34 @@ internal static class BrowserContractsGenerator
     {
         var type = property.PropertyType;
 
-        // A nullable value type is optional and its underlying type is what is declared.
+        // Nullable values may be omitted or explicitly null in JSON. Both cases must be visible
+        // to strict browser callers; optional alone only covers an absent property.
         var underlying = Nullable.GetUnderlyingType(type);
         var optional = underlying is not null || IsNullableReference(property);
         type = underlying ?? type;
 
-        return (Declare(type, queue), optional);
+        var declared = Declare(type, queue, new NullabilityInfoContext().Create(property), includeNull: false);
+        return (optional && declared != "unknown" ? $"{declared} | null" : declared, optional);
     }
 
-    private static string Declare(Type type, Queue<Type> queue)
+    private static string Declare(Type type, Queue<Type> queue, NullabilityInfo? nullability = null, bool includeNull = true)
+    {
+        var underlying = Nullable.GetUnderlyingType(type);
+        var declared = DeclareNonNullable(underlying ?? type, queue, nullability);
+        var nullable = underlying is not null || (!type.IsGenericParameter && nullability?.ReadState == NullabilityState.Nullable);
+        return includeNull && nullable && declared != "unknown" ? $"{declared} | null" : declared;
+    }
+
+    private static string DeclareNonNullable(Type type, Queue<Type> queue, NullabilityInfo? nullability)
     {
         if (StringEnums.Contains(type)) return type.Name;
         if (type == typeof(string)) return "string";
+        if (type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(Guid)) return "string";
+        // These value objects have explicit converters: assigned IDs are strings and the empty
+        // sentinel is null. Their CLR properties are not their browser representation.
+        if (type == typeof(JobId) || type == typeof(ScheduleId) || type == typeof(NotificationId))
+            return "string | null";
+        if (type.IsGenericParameter) return type.Name;
         if (type == typeof(bool)) return "boolean";
         if (type == typeof(int) || type == typeof(long) || type == typeof(double)
             || type == typeof(decimal) || type == typeof(float)) return "number";
@@ -159,16 +352,36 @@ internal static class BrowserContractsGenerator
             && (type.GetGenericTypeDefinition() == typeof(Dictionary<,>)
                 || type.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)))
         {
-            return $"Record<string, {Declare(type.GetGenericArguments()[1], queue)}>";
+            return $"Record<string, {Declare(type.GetGenericArguments()[1], queue, nullability?.GenericTypeArguments.ElementAtOrDefault(1))}>";
         }
 
-        if (type.IsEnum) return string.Join(" | ", Enum.GetNames(type).Select(n => $"'{n}'"));
+        // Type-level converters are part of the wire contract too. Let the actual serializer
+        // distinguish string enums from ordinary numeric enums instead of guessing their casing.
+        if (type.IsEnum) return string.Join(" | ", Enum.GetValues(type).Cast<object>()
+            .Select(value => JsonSerializer.Serialize(value, type, new JsonSerializerOptions(JsonSerializerDefaults.Web)))
+            .Distinct());
 
         var element = ElementTypeOf(type);
-        if (element is not null) return $"{Declare(element, queue)}[]";
-
-        if (IsRecord(type))
+        if (element is not null)
         {
+            var elementNullability = type.IsArray ? nullability?.ElementType
+                : nullability?.GenericTypeArguments.ElementAtOrDefault(0);
+            var item = Declare(element, queue, elementNullability);
+            var union = Nullable.GetUnderlyingType(element) is not null
+                || (!element.IsGenericParameter && elementNullability?.ReadState == NullabilityState.Nullable)
+                || (element.IsEnum && !StringEnums.Contains(element));
+            return union ? $"({item})[]" : $"{item}[]";
+        }
+
+        if (IsRecord(type) || Records.Contains(type))
+        {
+            if (type.IsGenericType)
+            {
+                queue.Enqueue(type.GetGenericTypeDefinition());
+                var name = type.Name[..type.Name.IndexOf('`')];
+                return $"{name}<{string.Join(", ", type.GetGenericArguments().Select((t, i) =>
+                    Declare(t, queue, nullability?.GenericTypeArguments.ElementAtOrDefault(i))))}>";
+            }
             queue.Enqueue(type);
             return type.Name;
         }

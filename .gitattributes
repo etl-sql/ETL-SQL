@@ -17,6 +17,9 @@
 # file missed by a per-name pin fails `sync-assets.js --check` only on a fresh clone with
 # core.autocrlf=true, where the cause is invisible.
 src/ETL-SQL.ReportRuntime/Resources/Shared/**   text eol=lf
+src/ETL-SQL.ReportRuntime/Resources/TypeScript/** text eol=lf
+src/ETL-SQL.Portal/BrowserSources/**             text eol=lf
+types/**/*.d.ts                                text eol=lf
 src/ETL-SQL.Portal/wwwroot/**/*.js              text eol=lf
 src/ETL-SQL.Portal/wwwroot/**/*.css             text eol=lf
 src/ETL-SQL.Portal/wwwroot/**/*.html            text eol=lf

@@ -22,17 +22,14 @@ namespace ETL_SQL.Portal.BrowserTests;
 // (SandboxStoryTests), without paying twenty host starts for classes that hold one test each.
 //
 // xunit keys a collection fixture by its exact type, so each group needs its own subclass and each
-// test class asks for that subclass by name. The subclasses add no behaviour on purpose — all of it
-// belongs in PortalBrowserFixture, where it stays shared.
+// test class asks for that subclass by name. Browser/session behaviour stays in PortalBrowserFixture.
+// PortalJourneyFixture also owns the real Orchestrator used by its page journeys.
 
 /// <summary>Portal for the Studio author journeys — the end-to-end runs that drive the UI.</summary>
 public sealed class StudioAuthoringFixture : PortalBrowserFixture;
 
 /// <summary>Portal for the Studio surface and contract checks that are not full journeys.</summary>
 public sealed class StudioSurfaceFixture : PortalBrowserFixture;
-
-/// <summary>Portal for the Portal's own journeys: sign-in, roles, accessibility, surface snapshots.</summary>
-public sealed class PortalJourneyFixture : PortalBrowserFixture;
 
 /// <summary>Portal for the administrative and dashboard surfaces.</summary>
 public sealed class PortalAdminFixture : PortalBrowserFixture;

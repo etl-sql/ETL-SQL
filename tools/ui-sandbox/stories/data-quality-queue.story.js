@@ -130,7 +130,8 @@ const degradingRuns = [
   { historyId: 3, jobName: 'nightly_import', startTime: '2026-07-22T02:00:00Z', endTime: '2026-07-22T02:12:00Z', status: 'SUCCESS', rowsProcessed: 1005, rowsQuarantined: 10, rowsWarned: 7, quarantineRate: 0.00995, warnRate: 0.007, ruleFailures: [{ column: 'Email', rule: "MATCHES '^[^@]+@[^@]+$'", count: 10 }] },
   { historyId: 2, jobName: 'nightly_import', startTime: '2026-07-21T02:00:00Z', endTime: '2026-07-21T02:12:00Z', status: 'SUCCESS', rowsProcessed: 1000, rowsQuarantined: 9, rowsWarned: 6, quarantineRate: 0.009, warnRate: 0.006, ruleFailures: [{ column: 'Email', rule: "MATCHES '^[^@]+@[^@]+$'", count: 9 }] },
   { historyId: 1, jobName: 'nightly_import', startTime: '2026-07-20T02:00:00Z', endTime: '2026-07-20T02:11:00Z', status: 'SUCCESS', rowsProcessed: 995, rowsQuarantined: 8, rowsWarned: 5, quarantineRate: 0.008, warnRate: 0.005, ruleFailures: [{ column: 'Email', rule: "MATCHES '^[^@]+@[^@]+$'", count: 8 }] },
-];
+].map(run => ({ ...run, quarantineRate: run.rowsQuarantined / run.rowsProcessed, warnRate: run.rowsWarned / run.rowsProcessed,
+  ruleFailures: run.ruleFailures.map(failure => ({ ...failure, targetTable: null, action: null, owner: null, countsOnly: true })) }));
 
 const trends = {
   degrading: {
@@ -139,24 +140,24 @@ const trends = {
     totalRowsProcessed: degradingRuns.reduce((s, r) => s + r.rowsProcessed, 0),
     totalRowsQuarantined: degradingRuns.reduce((s, r) => s + r.rowsQuarantined, 0),
     totalRowsWarned: degradingRuns.reduce((s, r) => s + r.rowsWarned, 0),
-    averageQuarantineRate: 0.0435,
+    averageQuarantineRate: degradingRuns.reduce((sum, run) => sum + run.quarantineRate, 0) / degradingRuns.length,
     latestQuarantineRate: 0.2,
-    quarantineRateDelta: 0.188,
+    quarantineRateDelta: degradingRuns[0].quarantineRate - degradingRuns.slice(1).reduce((sum, run) => sum + run.quarantineRate, 0) / (degradingRuns.length - 1),
     // Two structured rows plus one counts-only row from a run recorded before per-rule capture.
     // The two `Email` rows are the case worth having a fixture for: same column, different target
     // tables, which used to render as two indistinguishable rows with different numbers.
     topRuleFailures: [
       {
         column: 'Email', rule: "MATCHES '^[^@]+@[^@]+$'", count: 240,
-        targetTable: 'warehouse.Customers', action: 'QUARANTINE', owner: 'DataSteward'
+        targetTable: 'warehouse.Customers', action: 'QUARANTINE', owner: 'DataSteward', countsOnly: false
       },
       {
         column: 'Email', rule: "MATCHES '^[^@]+@[^@]+$'", count: 31,
-        targetTable: 'warehouse.Leads', action: 'WARN', owner: 'GrowthTeam'
+        targetTable: 'warehouse.Leads', action: 'WARN', owner: 'GrowthTeam', countsOnly: false
       },
       {
         column: 'Age', rule: '>= 0', count: 20,
-        targetTable: 'warehouse.Customers', action: 'WARN', owner: 'DataSteward'
+        targetTable: 'warehouse.Customers', action: 'WARN', owner: 'DataSteward', countsOnly: false
       },
       { column: 'Email', rule: 'NOT NULL', count: 88, countsOnly: true },
     ],
@@ -219,9 +220,13 @@ function viewOnlyTargetError(target, from = manifests) {
     { status: 409 });
 }
 
-function mockApi(trendKey, queueManifests = manifests, unknownJobStatus = false) {
-  return {
-    quarantineQueue: async () => queueManifests,
+export function mockApi(trendKey, queueManifests = manifests, unknownJobStatus = false) {
+  let mode = 'healthy', paused = null;
+  const calls = [], queued = [], waiters = [];
+  let nextId = 0;
+  const submissions = new Map();
+  const api = {
+    quarantineQueue: async ({ q = '', replayable = '' } = {}) => queueManifests.filter(item => (!q || JSON.stringify(item).toLowerCase().includes(q.toLowerCase())) && (!replayable || String(item.isReplayable) === replayable)),
     quarantineRows: async ({ quarantineTarget, status }) => {
       const item = queueManifests.find(m => m.quarantineTarget === quarantineTarget);
       if (item && item.rowsReadable === false) throw viewOnlyTargetError(quarantineTarget, queueManifests);
@@ -230,13 +235,21 @@ function mockApi(trendKey, queueManifests = manifests, unknownJobStatus = false)
         : (rowsByStatus[status] || []);
       return { quarantineTarget, status, columns: rowColumns, rows, capped: false };
     },
-    replayQuarantine: async () => ({ jobId: 'job-1', replayStatement: 'REPLAY QUARANTINE warehouse.quarantine_users;' }),
-    updateQuarantineDisposition: async () => ({ jobId: 'job-2', dispositionStatement: 'UPDATE ...' }),
-    qualityTrend: async () => trends[trendKey],
+    replayQuarantine: async (quarantineTarget, jobName) => {
+      const jobId = 'job-' + ++nextId;
+      submissions.set(jobId, { kind: 'Replay', quarantineTarget, jobName });
+      return { jobId, replayStatement: 'REPLAY QUARANTINE ' + quarantineTarget + ';' };
+    },
+    updateQuarantineDisposition: async ({ quarantineTarget, jobName }) => {
+      const jobId = 'job-' + ++nextId;
+      submissions.set(jobId, { kind: 'Disposition', quarantineTarget, jobName });
+      return { jobId, dispositionStatement: 'UPDATE ' + quarantineTarget + ' SET __dq_status = ...;' };
+    },
+    qualityTrend: async ({ jobName }) => ({ ...trends[trendKey], jobName, runs: trends[trendKey].runs.map(run => ({ ...run, jobName })) }),
     qualityJobs: async () => [
-      { name: 'nightly_import', displayName: 'Nightly Import' },
-      { name: 'finance_load', displayName: 'Finance Load' },
-      { name: 'sessions_import', displayName: 'Sessions Import' },
+      { name: 'nightly_import', displayName: 'Nightly Import', script: 'ASSERT TRUE;', description: null },
+      { name: 'finance_load', displayName: 'Finance Load', script: 'ASSERT TRUE;', description: null },
+      { name: 'sessions_import', displayName: 'Sessions Import', script: 'ASSERT TRUE;', description: null },
     ],
     qualityRules: async () => [
       { targetTable: 'clean_users', targetColumn: 'Email', ruleClause: 'EXPECT', rule: "MATCHES '^[^@]+@[^@]+$'", action: 'QUARANTINE', sourceFile: 'loads/users.etlsql', line: 18 },
@@ -247,22 +260,57 @@ function mockApi(trendKey, queueManifests = manifests, unknownJobStatus = false)
     jobStatus: async jobId => (
       unknownJobStatus
         ? {
-          jobId, kind: 'Replay', quarantineTarget: 'warehouse.quarantine_users',
+          jobId, ...submissions.get(jobId),
           status: 'Unknown', isTerminal: true,
           submittedAtUtc: '2026-08-02T14:30:00Z', statusUpdatedAtUtc: '2026-08-02T14:30:05Z',
           unknownReason: 'The service that was running this job no longer has a record of it, '
             + 'usually because it restarted. Check the job history for the outcome.'
         }
         : {
-          jobId, kind: 'Replay', quarantineTarget: 'warehouse.quarantine_users',
+          jobId, ...submissions.get(jobId),
           status: 'Completed', isTerminal: true,
           submittedAtUtc: '2026-08-02T14:30:00Z', statusUpdatedAtUtc: '2026-08-02T14:30:03Z'
         }),
   };
+  return {
+    calls, setMode(value) { mode = value; }, pause(kind) { paused = kind; },
+    whenPaused(kind) { return queued.some(value => value.kind === kind) ? Promise.resolve() : new Promise(resolve => waiters.push({ kind, resolve })); },
+    release() { for (const value of queued.splice(0)) value.resolve(); },
+    ...Object.fromEntries(Object.entries(api).map(([kind, implementation]) => [kind, async (...args) => {
+      calls.push({ kind, args: structuredClone(args.filter(value => !(value instanceof AbortSignal))) });
+      if (mode === 'rules-unavailable' && kind === 'qualityRules') throw new Error('Quality rules temporarily unavailable.');
+      if (mode === 'jobs-unavailable' && kind === 'qualityJobs') throw new Error('Job inventory temporarily unavailable.');
+      if (mode === 'trend-unavailable' && kind === 'qualityTrend') throw new Error('Quality trend temporarily unavailable.');
+      let value = await implementation(...args);
+      if (mode === 'status-running' && kind === 'jobStatus') value = { ...value, status: 'Running', isTerminal: false };
+      if (mode === 'invalid-status' && kind === 'jobStatus') value = { ...value, quarantineTarget: 'another_target' };
+      if (mode === 'wrong-rows' && kind === 'quarantineRows') value = { ...value, quarantineTarget: 'another_target' };
+      if (mode === 'prototype-keys' && kind === 'quarantineRows') value = { ...value,
+        columns: [...rowColumns, '__proto__'],
+        rows: [{ ...rowsByStatus.quarantined[0], __dq_row_id: '__proto__', ['__proto__']: 'Original source value' }] };
+      if (mode === 'rows-revoked' && kind === 'quarantineQueue') value = value.map(item => ({ ...item,
+        rowsReadable: false, rowsUnavailableReason: 'Preview permission has been revoked.' }));
+      if (mode === 'missing-queue' && kind === 'quarantineQueue') value = null;
+      if (mode === 'invalid-receipt' && ['replayQuarantine', 'updateQuarantineDisposition'].includes(kind)) value = {};
+      const snapshot = structuredClone(value);
+      if (paused !== kind) return snapshot;
+      paused = null;
+      return new Promise(resolve => {
+        queued.push({ kind, resolve: () => resolve(snapshot) });
+        for (const waiting of waiters.filter(value => value.kind === kind)) waiting.resolve();
+      });
+    }]))
+  };
 }
 
-/** Lets the queue's own load + the follow-up panel load settle before we assert on the DOM. */
-const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+function rendered(host, selector, predicate = () => true) {
+  const ready = () => { const element = host.querySelector(selector); return element && predicate(element); };
+  if (ready()) return Promise.resolve();
+  return new Promise(resolve => {
+    const observer = new MutationObserver(() => { if (ready()) { observer.disconnect(); resolve(); } });
+    observer.observe(host, { childList: true, subtree: true, characterData: true });
+  });
+}
 
 export default {
   id: 'data-quality-queue',
@@ -286,17 +334,17 @@ export default {
 
     const trendKey = fixtureId === 'trend-empty' ? 'empty' : 'degrading';
     const shown = fixtureId === 'preview-off' ? previewOffManifests : manifests;
+    const dataQualityApi = mockApi(trendKey, shown, fixtureId === 'job-status-unknown');
     const queue = createDataQualityQueue({
       host,
-      dataQualityApi: mockApi(trendKey, shown, fixtureId === 'job-status-unknown')
+      dataQualityApi, storageScope: 'sandbox-data-quality-' + crypto.randomUUID()
     });
-    queue.show();
-    await settle();
+    window.__dataQuality = { api: dataQualityApi, queue };
+    await queue.show();
 
     if (fixtureId === 'job-status' || fixtureId === 'job-status-unknown') {
       host.querySelector('[data-replay-target="warehouse.quarantine_users"]')?.click();
-      await settle();
-      await settle();
+      await rendered(host, '.dq-job-row .dq-status', element => element.textContent === (fixtureId === 'job-status-unknown' ? 'Unknown' : 'Completed'));
       ctx.stat(fixtureId === 'job-status-unknown'
         // The state a restart leaves behind: not success, not failure, and not a spinner.
         ? 'Replay submission whose outcome the service can no longer report'
@@ -304,15 +352,16 @@ export default {
     } else if (fixtureId === 'trend' || fixtureId === 'trend-empty') {
       // Open the trend panel for the first manifest so the fixture lands on it directly.
       host.querySelector('[data-trend-job]')?.click();
+      await rendered(host, '[data-dq-dialog="trend"]', element => !element.querySelector('.loading-state'));
       ctx.stat(trendKey === 'empty' ? 'trend panel — empty state' : 'trend panel — degrading quality');
     } else if (fixtureId === 'rows' || fixtureId === 'rows-replaying') {
       host.querySelector('[data-review-target="warehouse.quarantine_users"]')?.click();
-      await settle();
+      await rendered(host, '.dq-rows-table');
       if (fixtureId === 'rows-replaying') {
         const status = host.querySelector('#dqRowsStatus');
         status.value = 'replaying';
         status.dispatchEvent(new Event('change'));
-        await settle();
+        await rendered(host, '[data-release-row="f6"]');
       }
       ctx.stat(fixtureId === 'rows'
         ? 'row editor — edit cells, add an audited reason, release or discard'
@@ -328,6 +377,6 @@ export default {
       ctx.stat(`${manifests.length} manifests`);
     }
 
-    return { dispose() { queue.dispose?.(); }, resize() {} };
+    return { dispose() { queue.dispose?.(); delete window.__dataQuality; }, resize() {} };
   },
 };

@@ -25,9 +25,9 @@ public class OrchestratorController(
     public async Task<IActionResult> GetStatus()
     {
         var online = await proxy.IsOnlineAsync();
-        if (!online) return Ok(new { Online = false, Status = "Offline" });
+        if (!online) return Ok(new OrchestratorConnectionStatusDto(false, "Offline"));
         var status = await proxy.GetStatusAsync();
-        return Ok(new { Online = true, Status = status });
+        return Ok(new OrchestratorConnectionStatusDto(true, status));
     }
 
     [HttpGet("metrics")]
@@ -45,6 +45,16 @@ public class OrchestratorController(
     {
         var jobs = await proxy.GetJobsAsync();
         return Ok(jobs);
+    }
+
+    [HttpGet("jobs/activity")]
+    public async Task<IActionResult> GetJobActivity(
+        [FromQuery] string filter = "all", [FromQuery] string status = "all",
+        [FromQuery] string? search = null, [FromQuery] int limit = 25, [FromQuery] int offset = 0,
+        CancellationToken ct = default)
+    {
+        Response.Headers.CacheControl = "no-store";
+        return await RelayAsync(() => proxy.GetJobActivityAsync(filter, status, search, limit, offset, ct));
     }
 
     [HttpPost("jobs")]

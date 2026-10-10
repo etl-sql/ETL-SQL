@@ -250,3 +250,5 @@ scripts/lint/node_modules/
 # Temp ES-module copies made by scripts/lib/import-source-module.mjs; a check that throws
 # mid-run leaves one beside its source, and it must never reach a commit or the asset sync.
 *.__test-*.mjs
+/.browser-assets.lock
+scripts/vsix/node_modules/

@@ -29,6 +29,7 @@ public sealed class AdminIdentityScopeTests : IDisposable
 
     [Theory]
     [InlineData("GET", "/api/admin/users")]
+    [InlineData("GET", "/api/admin/roles")]
     [InlineData("POST", "/api/admin/users")]
     [InlineData("GET", "/api/admin/users/42")]
     [InlineData("PUT", "/api/admin/users/42")]
@@ -62,6 +63,8 @@ public sealed class AdminIdentityScopeTests : IDisposable
     [Theory]
     [InlineData("POST", "/api/admin/datasets/rotate-at-rest-key")]
     [InlineData("GET", "/api/admin/support-bundle")]
+    [InlineData("POST", "/api/admin/roles")]
+    [InlineData("PUT", "/api/admin/roles/1")]
     [InlineData("GET", "/api/admin/configuration/export")]
     [InlineData("GET", "/api/admin/audit")]
     [InlineData("GET", "/api/admin/audit/export/csv")]

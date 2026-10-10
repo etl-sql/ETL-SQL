@@ -8,6 +8,7 @@
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/studio-git-diff.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 export function buildSideBySideDiff(baselineContent, workingContent) {
     const left = String(baselineContent ?? '').replace(/\r\n?/g, '\n').split('\n');
     const right = String(workingContent ?? '').replace(/\r\n?/g, '\n').split('\n');

@@ -42,6 +42,9 @@ assert(select.innerHTML.includes('value="2"'), 'destination select populated');
 assert(select.value === '2', 'selectedId applied to destination select');
 assert(parentSelect.innerHTML.startsWith('<option value="">— Root —</option>'), 'parent select has Root option first');
 assert(returned.length === 3, 'returns the flat list');
+const parentOnly = { innerHTML: '' };
+await populateFolderSelects({ foldersApi, esc, parentSelect: parentOnly });
+assert(parentOnly.innerHTML.includes('value="2"'), 'parent-only picker works without a destination select');
 
 // 4. createFolderInline trims the name, coerces the parent to a number, returns the DTO.
 const created = await createFolderInline({ foldersApi, name: '  Q3  ', parentId: '1' });

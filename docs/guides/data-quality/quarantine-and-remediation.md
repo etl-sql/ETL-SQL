@@ -141,6 +141,28 @@ WHERE __dq_rule = 'NOT NULL';
 
 ## Common Pitfalls
 
+### Portal queue in v0.21.0
+
+The quarantine queue distinguishes unavailable data from confirmed empty results. Use Refresh to
+retry a failed queue read. Close and reopen a failed trend panel to retry its recorded outcomes and
+rule inventory. Row preview requires both an enabled connection-preview setting and your own grant
+on the captured target's governed connection; a view-only target explains why rows cannot be opened.
+If a refreshed queue reports that the open target is unavailable or preview permission was revoked,
+its preview and unsaved corrections are cleared. After access is restored, use Reload to read rows again.
+
+Save + Release and Discard submit work to the job channel. A submission ID acknowledges queued work;
+the Submitted work panel reports its later execution status. A completed disposition leaves your
+current edits and audited reason intact. Use Reload in the row panel to inspect the persisted result.
+If an acknowledgement is incomplete or status becomes Unknown, inspect job history before refreshing
+the queue and retrying. Unknown does not establish that the original work failed.
+
+For an incomplete replay claim, select the `replaying` row filter. Return to released or Mark replayed
+after checking the destination and job history. These recovery actions preserve captured source
+values and apply only while the row still has the status you reviewed. Ordinary corrections and
+discard actions remain available for `quarantined` and `released` rows.
+
+### Capture and editing limits
+
 - **Quarantining into `#temp` tables**: Except when using `HANDLING = SCRIPT`, quarantine targets must be **durable database tables**, not session `#temp` tables. `#temp` tables are destroyed when the session exits, which destroys the quarantine evidence.
 - **Modifying diagnostic columns**: When updating rows for replay, edit only the source columns (e.g. `Email`, `Age`). Do not alter `__dq_rule` or `__dq_row_id`.
 

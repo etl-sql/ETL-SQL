@@ -59,7 +59,7 @@
 
   <Target Name="CopyManualAssetsOnPublish" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
     <ItemGroup>
-      <_PortalRoot Include="wwwroot\**\*" />
+      <_PortalRoot Include="wwwroot\**\*" Exclude="wwwroot\**\*.__test-*.mjs" />
     </ItemGroup>
     <Copy SourceFiles="@(_PortalRoot)" DestinationFolder="$(PublishDir)wwwroot\%(RecursiveDir)" SkipUnchangedFiles="true" />
   </Target>

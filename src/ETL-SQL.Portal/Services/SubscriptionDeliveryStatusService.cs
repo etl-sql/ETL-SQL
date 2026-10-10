@@ -4,6 +4,11 @@ using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Portal.Data;
 namespace ETL_SQL.Portal.Services;
 
+public sealed class SubscriptionHistoryUnavailableException(Exception inner)
+    : Exception("Scheduler trigger history is temporarily unavailable.", inner)
+{
+}
+
 public class SubscriptionDeliveryStatusService(
     OrchestratorDbLocator dbLocator,
     IOrchestratorStoreFactory orchestratorStoreFactory,
@@ -34,9 +39,9 @@ public class SubscriptionDeliveryStatusService(
         }
         catch (Exception ex)
         {
-            log.LogWarning("Unable to read Orchestrator history for subscription {SubscriptionId}: {Message}",
-                subscription.Id, ex.Message);
-            return [];
+            log.LogWarning("Unable to read Orchestrator history for subscription {SubscriptionId} ({FailureType}).",
+                subscription.Id, ex.GetType().Name);
+            throw new SubscriptionHistoryUnavailableException(ex);
         }
 
         // Orchestrator history now describes only the credential-free scheduler trigger.

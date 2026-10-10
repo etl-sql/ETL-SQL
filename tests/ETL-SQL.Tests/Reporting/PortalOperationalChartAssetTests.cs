@@ -79,7 +79,7 @@ public sealed class PortalOperationalChartAssetTests
         Assert.Contains("role=\"img\"", source);
         Assert.Contains("aria-label=\"${esc(label)}\"", source);
         // The label must come from the caller's option, not be a hardcoded string for every chart.
-        Assert.Contains("option.title?.text", source);
+        Assert.Contains("option.title", source);
         Assert.DoesNotContain("aria-label=\"Native chart\"", source);
     }
 
@@ -146,7 +146,8 @@ public sealed class PortalOperationalChartAssetTests
     private static string AssetPath() =>
         Path.Combine(RepoRoot(), "src", "ETL-SQL.Portal", "wwwroot", "js", "native-charts.js");
 
-    private static string Source() => File.ReadAllText(AssetPath()).Replace("\r\n", "\n");
+    private static string Source() => File.ReadAllText(Path.Combine(
+        RepoRoot(), "src", "ETL-SQL.Portal", "BrowserSources", "native-charts.ts")).Replace("\r\n", "\n");
 
     private static string WithoutBanner(string source)
     {

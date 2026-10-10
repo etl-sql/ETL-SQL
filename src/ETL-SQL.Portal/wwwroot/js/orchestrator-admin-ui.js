@@ -1,98 +1,108 @@
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.Portal/BrowserSources/orchestrator-admin-ui.ts
+ * Run: node scripts/sync-assets.js
+ */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Orchestrator Admin UI rendering components and helpers.
  * Covers Schedules catalog, Notifications catalog, Watermark state,
  * Definition Change Log (Audit), Cross-Job Dependency View, Data Quality & Stewardship metrics,
  * Table Search/Filter/Pagination, and Multi-Day Calendar View.
  */
-
 export function escHtml(str) {
-  if (str === null || str === undefined) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+    if (str === null || str === undefined)
+        return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
-
 export function fmtDt(isoStr) {
-  if (!isoStr) return '—';
-  try {
-    const d = new Date(isoStr);
-    if (isNaN(d.getTime())) return '—';
-    return d.toLocaleString([], {
-      month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit'
-    });
-  } catch { return '—'; }
+    if (!isoStr)
+        return '—';
+    try {
+        const d = new Date(isoStr);
+        if (isNaN(d.getTime()))
+            return '—';
+        return d.toLocaleString([], {
+            month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+    }
+    catch {
+        return '—';
+    }
 }
-
 export function fmtTimeAgo(isoStr) {
-  if (!isoStr) return '—';
-  try {
-    const d = new Date(isoStr);
-    if (isNaN(d.getTime())) return '—';
-    const sec = Math.floor((Date.now() - d.getTime()) / 1000);
-    if (sec < 60) return `${sec}s ago`;
-    const min = Math.floor(sec / 60);
-    if (min < 60) return `${min}m ago`;
-    const hr = Math.floor(min / 60);
-    if (hr < 24) return `${hr}h ago`;
-    const day = Math.floor(hr / 24);
-    return `${day}d ago`;
-  } catch { return '—'; }
+    if (!isoStr)
+        return '—';
+    try {
+        const d = new Date(isoStr);
+        if (isNaN(d.getTime()))
+            return '—';
+        const sec = Math.floor((Date.now() - d.getTime()) / 1000);
+        if (sec < 60)
+            return `${sec}s ago`;
+        const min = Math.floor(sec / 60);
+        if (min < 60)
+            return `${min}m ago`;
+        const hr = Math.floor(min / 60);
+        if (hr < 24)
+            return `${hr}h ago`;
+        const day = Math.floor(hr / 24);
+        return `${day}d ago`;
+    }
+    catch {
+        return '—';
+    }
 }
-
 // ── Search, Filter & Pagination ───────────────────────────────────────────────
-
 export function filterAndPaginateJobs(jobs, { search = '', status = 'all', page = 1, pageSize = 25 }) {
-  const query = search.trim().toLowerCase();
-  let filtered = (jobs || []).filter(j => {
-    // Status filter
-    const isEnabled = j.IsEnabled ?? j.isEnabled ?? true;
-    if (status === 'enabled' && !isEnabled) return false;
-    if (status === 'disabled' && isEnabled) return false;
-
-    // Search query
-    if (!query) return true;
-    const name = (j.Name ?? j.name ?? '').toLowerCase();
-    const disp = (j.DisplayName ?? j.displayName ?? '').toLowerCase();
-    const desc = (j.Description ?? j.description ?? '').toLowerCase();
-    const target = (j.TargetPath ?? j.targetPath ?? j.Script ?? j.script ?? '').toLowerCase();
-    const sched = `${j.Interval ?? j.interval ?? ''} ${j.Unit ?? j.unit ?? ''} ${j.AtTime ?? j.atTime ?? ''}`.toLowerCase();
-    const owner = (j.CreatedBy ?? j.createdBy ?? '').toLowerCase();
-
-    return name.includes(query) || disp.includes(query) || desc.includes(query) ||
-      target.includes(query) || sched.includes(query) || owner.includes(query);
-  });
-
-  const total = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const currentPage = Math.min(Math.max(1, page), totalPages);
-  const startIdx = (currentPage - 1) * pageSize;
-  const paged = filtered.slice(startIdx, startIdx + pageSize);
-
-  return {
-    items: paged,
-    total,
-    page: currentPage,
-    totalPages,
-    pageSize,
-    startIdx: total === 0 ? 0 : startIdx + 1,
-    endIdx: Math.min(startIdx + pageSize, total)
-  };
+    const query = search.trim().toLowerCase();
+    const filtered = (jobs || []).filter(j => {
+        // Status filter
+        const isEnabled = j.IsEnabled ?? j.isEnabled ?? true;
+        if (status === 'enabled' && !isEnabled)
+            return false;
+        if (status === 'disabled' && isEnabled)
+            return false;
+        // Search query
+        if (!query)
+            return true;
+        const name = (j.Name ?? j.name ?? '').toLowerCase();
+        const disp = (j.DisplayName ?? j.displayName ?? '').toLowerCase();
+        const desc = (j.Description ?? j.description ?? '').toLowerCase();
+        const target = (j.TargetPath ?? j.targetPath ?? j.Script ?? j.script ?? '').toLowerCase();
+        const sched = `${j.Interval ?? j.interval ?? ''} ${j.Unit ?? j.unit ?? ''} ${j.AtTime ?? j.atTime ?? ''}`.toLowerCase();
+        const owner = (j.CreatedBy ?? j.createdBy ?? '').toLowerCase();
+        return name.includes(query) || disp.includes(query) || desc.includes(query) ||
+            target.includes(query) || sched.includes(query) || owner.includes(query);
+    });
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const currentPage = Math.min(Math.max(1, page), totalPages);
+    const startIdx = (currentPage - 1) * pageSize;
+    const paged = filtered.slice(startIdx, startIdx + pageSize);
+    return {
+        items: paged,
+        total,
+        page: currentPage,
+        totalPages,
+        pageSize,
+        startIdx: total === 0 ? 0 : startIdx + 1,
+        endIdx: Math.min(startIdx + pageSize, total)
+    };
 }
-
 // ── Schedules Catalog Table ───────────────────────────────────────────────────
-
 export function renderSchedulesTable(schedules, linkedCounts = {}) {
-  if (!schedules || !schedules.length) {
-    return `<div class="empty-state" style="padding:32px 0;text-align:center;color:var(--portal-muted)">
+    if (!schedules || !schedules.length) {
+        return `<div class="empty-state" style="padding:32px 0;text-align:center;color:var(--portal-muted)">
       No shared schedules defined yet. Click <strong>+ New Schedule</strong> to create one.
     </div>`;
-  }
-
-  return `
+    }
+    return `
     <div style="overflow-x:auto;">
     <table class="data-table">
       <thead><tr>
@@ -106,7 +116,7 @@ export function renderSchedulesTable(schedules, linkedCounts = {}) {
       </tr></thead>
       <tbody>
       ${schedules.map(s => {
-        const name = s.Name ?? s.name;
+        const name = s.Name ?? s.name ?? '';
         const disp = s.DisplayName ?? s.displayName ?? name;
         const cron = s.Cron ?? s.cron;
         const tz = s.TimeZone ?? s.timeZone ?? 'UTC';
@@ -114,7 +124,6 @@ export function renderSchedulesTable(schedules, linkedCounts = {}) {
         const linkedCount = linkedCounts[name] || 0;
         const owner = s.CreatedBy ?? s.createdBy ?? '—';
         const version = s.Version ?? s.version ?? 1;
-
         return `
           <tr data-schedule-name="${escHtml(name)}">
             <td>
@@ -147,22 +156,19 @@ export function renderSchedulesTable(schedules, linkedCounts = {}) {
               </div>
             </td>
           </tr>`;
-      }).join('')}
+    }).join('')}
       </tbody>
     </table>
     </div>`;
 }
-
 // ── Notifications Catalog Table ───────────────────────────────────────────────
-
 export function renderNotificationsTable(notifications, linkedCounts = {}) {
-  if (!notifications || !notifications.length) {
-    return `<div class="empty-state" style="padding:32px 0;text-align:center;color:var(--portal-muted)">
+    if (!notifications || !notifications.length) {
+        return `<div class="empty-state" style="padding:32px 0;text-align:center;color:var(--portal-muted)">
       No notifications configured yet. Click <strong>+ New Notification</strong> to configure delivery channels.
     </div>`;
-  }
-
-  return `
+    }
+    return `
     <div style="overflow-x:auto;">
     <table class="data-table">
       <thead><tr>
@@ -176,14 +182,13 @@ export function renderNotificationsTable(notifications, linkedCounts = {}) {
       </tr></thead>
       <tbody>
       ${notifications.map(n => {
-        const name = n.Name ?? n.name;
+        const name = n.Name ?? n.name ?? '';
         const disp = n.DisplayName ?? n.displayName ?? name;
         const conn = n.ConnectionName ?? n.connectionName;
         const recipient = n.Recipient ?? n.recipient ?? '—';
         const isEnabled = n.IsEnabled ?? n.isEnabled ?? true;
         const linkedCount = linkedCounts[name] || 0;
         const owner = n.CreatedBy ?? n.createdBy ?? '—';
-
         return `
           <tr data-notification-name="${escHtml(name)}">
             <td>
@@ -211,25 +216,22 @@ export function renderNotificationsTable(notifications, linkedCounts = {}) {
               </div>
             </td>
           </tr>`;
-      }).join('')}
+    }).join('')}
       </tbody>
     </table>
     </div>`;
 }
-
 // ── Watermarks & Incremental State ────────────────────────────────────────────
-
 export function renderWatermarksTable(states, jobName) {
-  if (!states || !states.length) {
-    return `<div class="empty-state" style="padding:16px 0;text-align:center;color:var(--portal-muted);font-size:.85em;">
+    if (!states || !states.length) {
+        return `<div class="empty-state" style="padding:16px 0;text-align:center;color:var(--portal-muted);font-size:.85em;">
       No high-water marks or incremental state keys recorded for this job.
       <div style="margin-top:8px;">
         <button class="btn btn-sm btn-outline" id="addStateBtn" data-job="${escHtml(jobName)}">+ Set Watermark Key</button>
       </div>
     </div>`;
-  }
-
-  return `
+    }
+    return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
       <span style="font-size:.82em;color:var(--portal-muted)">${states.length} recorded state key${states.length === 1 ? '' : 's'}</span>
       <button class="btn btn-sm btn-outline" id="addStateBtn" data-job="${escHtml(jobName)}">+ Add Key</button>
@@ -247,7 +249,6 @@ export function renderWatermarksTable(states, jobName) {
         const key = s.StateKey ?? s.stateKey ?? s.Key ?? s.key;
         const val = s.StateValue ?? s.stateValue ?? s.Value ?? s.value ?? '<null>';
         const updated = s.UpdatedAt ?? s.updatedAt;
-
         return `
           <tr>
             <td><code>${escHtml(key)}</code></td>
@@ -262,22 +263,19 @@ export function renderWatermarksTable(states, jobName) {
               </div>
             </td>
           </tr>`;
-      }).join('')}
+    }).join('')}
       </tbody>
     </table>
     </div>`;
 }
-
 // ── Definition Change Log (Audit Trail) ───────────────────────────────────────
-
 export function renderJobAuditTrail(auditEntries) {
-  if (!auditEntries || !auditEntries.length) {
-    return `<div class="empty-state" style="padding:24px 0;text-align:center;color:var(--portal-muted);font-size:.85em;">
+    if (!auditEntries || !auditEntries.length) {
+        return `<div class="empty-state" style="padding:24px 0;text-align:center;color:var(--portal-muted);font-size:.85em;">
       No audit records found for this job.
     </div>`;
-  }
-
-  return `
+    }
+    return `
     <div class="orch-audit-timeline" style="display:flex;flex-direction:column;gap:12px;padding:8px 0;">
       ${auditEntries.map(entry => {
         const action = entry.Action ?? entry.action ?? 'Action';
@@ -285,7 +283,6 @@ export function renderJobAuditTrail(auditEntries) {
         const actor = entry.ActorId ?? entry.actorId ?? (entry.UserId ? `User #${entry.UserId}` : 'System');
         const detail = entry.Detail ?? entry.detail ?? '';
         const cap = entry.StudioCapability ?? entry.studioCapability;
-
         return `
           <div class="orch-audit-card" style="padding:10px 14px;background:var(--portal-surface-subtle);border-radius:6px;border:1px solid var(--portal-border-soft);font-size:.82em;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -298,27 +295,23 @@ export function renderJobAuditTrail(auditEntries) {
             </div>
             ${detail ? `<div style="color:var(--portal-muted);font-size:.78em;font-family:var(--portal-mono);word-break:break-all;margin-top:4px;">${escHtml(detail)}</div>` : ''}
           </div>`;
-      }).join('')}
+    }).join('')}
     </div>`;
 }
-
 // ── Multi-Day Calendar View ───────────────────────────────────────────────────
-
 export function renderCalendarTimeline(jobs, daysCount = 7) {
-  const now = new Date();
-  const startDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-
-  const days = [];
-  for (let i = 0; i < daysCount; i++) {
-    const dayDate = new Date(startDay.getTime() + i * 24 * 60 * 60 * 1000);
-    days.push({
-      date: dayDate,
-      label: dayDate.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }),
-      isToday: i === 0
-    });
-  }
-
-  return `
+    const now = new Date();
+    const startDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const days = [];
+    for (let i = 0; i < daysCount; i++) {
+        const dayDate = new Date(startDay.getTime() + i * 24 * 60 * 60 * 1000);
+        days.push({
+            date: dayDate,
+            label: dayDate.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }),
+            isToday: i === 0
+        });
+    }
+    return `
     <div class="orch-calendar-grid" style="display:grid;grid-template-columns:repeat(${daysCount}, 1fr);gap:8px;padding:12px 16px;background:var(--portal-surface-subtle);border-radius:8px;border:1px solid var(--portal-border-soft);">
       ${days.map(d => `
         <div class="orch-calendar-day" style="background:var(--portal-surface);padding:8px;border-radius:6px;border:1px solid ${d.isToday ? 'var(--portal-accent)' : 'var(--portal-border-soft)'};min-height:160px;">
@@ -327,22 +320,22 @@ export function renderCalendarTimeline(jobs, daysCount = 7) {
           </div>
           <div class="orch-calendar-events" style="display:flex;flex-direction:column;gap:6px;">
             ${(jobs || []).filter(j => {
-              const nextRun = j.NextRun ?? j.nextRun;
-              if (!nextRun) return false;
-              const dt = new Date(nextRun);
-              return dt.getDate() === d.date.getDate() && dt.getMonth() === d.date.getMonth() && dt.getFullYear() === d.date.getFullYear();
-            }).map(j => {
-              const name = j.Name ?? j.name;
-              const nextRun = new Date(j.NextRun ?? j.nextRun);
-              const timeStr = nextRun.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              const isEnabled = j.IsEnabled ?? j.isEnabled ?? true;
-
-              return `
+        const nextRun = j.NextRun ?? j.nextRun;
+        if (!nextRun)
+            return false;
+        const dt = new Date(nextRun);
+        return dt.getDate() === d.date.getDate() && dt.getMonth() === d.date.getMonth() && dt.getFullYear() === d.date.getFullYear();
+    }).map(j => {
+        const name = j.Name ?? j.name;
+        const nextRun = new Date(j.NextRun ?? j.nextRun ?? '');
+        const timeStr = nextRun.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const isEnabled = j.IsEnabled ?? j.isEnabled ?? true;
+        return `
                 <div class="orch-calendar-item" data-job="${escHtml(name)}" style="padding:4px 6px;background:${isEnabled ? 'var(--portal-surface-subtle)' : 'var(--portal-border-soft)'};border-left:3px solid ${isEnabled ? 'var(--portal-accent)' : 'var(--portal-muted)'};border-radius:3px;font-size:.75em;cursor:pointer;" title="${escHtml(name)} at ${timeStr}">
                   <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(name)}</div>
                   <div style="color:var(--portal-muted);font-size:.72em;">${timeStr}</div>
                 </div>`;
-            }).join('') || '<span style="color:var(--portal-muted);font-size:.72em;">No runs scheduled</span>'}
+    }).join('') || '<span style="color:var(--portal-muted);font-size:.72em;">No runs scheduled</span>'}
           </div>
         </div>`).join('')}
     </div>`;

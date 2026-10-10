@@ -86,6 +86,12 @@ class load and shared background-service state from its startup/shutdown observa
   machine-wide security-event SQLite outbox. Browser factories now use isolated outbox paths and a
   shared collection fixture, preserving a useful reminder that cross-process local database paths
   are part of test and deployment isolation.
+- **v0.21.0 — Portal journey dependencies:** The Orchestrator page's new activity requests exposed
+  a missing backend in the shared journey fixture: console checks received 503 responses from an
+  unconfigured proxy target. `PortalJourneyFixture` now starts an isolated real Orchestrator and
+  routes the Portal's authenticated client to its HTTP test server. It disables scheduler loops,
+  starts the service before the Portal, and disposes the Portal before the service. Console checks
+  retain their assertions and use the existing network-idle wait without an extra fixed sleep.
 
 - **v0.19.0 — the browser lane fails as a whole under gate load, and says nothing useful when it
   does.** Inside the release gate, after roughly forty minutes of other lanes, the lane reports
@@ -162,29 +168,25 @@ class load and shared background-service state from its startup/shutdown observa
   other four groups ran and reported normally. Before the split the same failure was 178 tests
   reporting a message that named nothing.
 
-  **The cascade itself is not fixed, and it is no longer only a gate-load phenomenon.** It
-  reproduced on a developer machine during this work with no load applied: 178/53 once before the
-  split, then 138, 61 and 40 failures across later runs, interleaved with clean 231/231 runs of the
-  same binary. Two attempts to trigger it deliberately — a single-class run immediately before a
-  full lane — both passed, so it is not a simple back-to-back collision. The one correlation worth
-  carrying forward is duration: **a failing run finishes far faster than a passing one** (40 s to
-  3 m 46 s against roughly 5 m), which is consistent with a fixture failing early rather than tests
-  failing on their merits.
+  During the initial split the startup race still reproduced locally, including a contained
+  failure of all 70 portal-journey tests while the other groups passed. CreateHost returned without
+  throwing, then CreateClient found a TestServer whose Application had not yet been assigned.
 
-  **The split then caught it with its cause attached, and the lead is specific.** One contained
-  occurrence failed all 70 `portal-journeys` tests while the other four groups passed, reporting
-  `TestServer.get_Application()` throwing "The server has not been started or no web application was
-  configured" from `WebApplicationFactory.CreateClient`.
+- **v0.21.0 — wait for each host's own startup signal.** The builder supplied to the browser factory
+  is a DeferredHostBuilder. Both built hosts share its completion source: after Kestrel starts,
+  Start() on the TestServer host can return before that host has started. PortalBrowserFactory now
+  waits for each host's ApplicationStarted signal with a named timeout. Async teardown stops
+  Kestrel before deleting the shared test files.
 
-  What matters is what is *absent*: `PortalBrowserFactory.CreateHost` did not throw. Its own
-  step-naming wrapper would have said which step failed, and it said nothing — so both hosts were
-  built and started, and the `TestServer` still had no `Application`. `CreateHost` builds the same
-  `IHostBuilder` twice — once for the TestServer host, then again after
-  `ConfigureWebHost(webHost => webHost.UseKestrel())` for the loopback host — and starts the Kestrel
-  one first. If the two hosts resolve the same `IServer` singleton, the surviving `TestServer` never
-  has its `Application` assigned and `CreateClient` fails exactly this way, intermittently and
-  without any step throwing. **Suspect the double `Build()` in `CreateHost` before suspecting load,
-  memory or the tests.**
+  The repaired browser lane passed 580 tests without skips. After the latest Portal-module changes,
+  affected Portal journeys passed 26 tests and sandbox stories passed 69. The ordinary Portal lane
+  passed 1,352 tests; its separate hosted-service lane passed six. Commands and TRX evidence belong
+  under artifacts/section1; the final release still reruns the lanes against its complete source.
+
+  Scoped connector-registry tests now capture the previous registry before invoking a constructor
+  that publishes globally. The scope restores it on disposal and if construction throws. The
+  focused dialect/suggestion run passed 30 tests, including both restoration regressions.
+
 
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
 diagnostics belong in generated evidence, not a new release-specific tracking file.

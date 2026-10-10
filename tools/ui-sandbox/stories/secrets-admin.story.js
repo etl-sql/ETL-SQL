@@ -54,6 +54,8 @@ export default {
     { id: 'healthy', label: 'Healthy store' },
     { id: 'keyring-broken', label: 'Wrong key ring (verify fails)' },
     { id: 'empty', label: 'Empty store' },
+    { id: 'invalid-list', label: 'Malformed list response' },
+    { id: 'invalid-check', label: 'Malformed verification response' },
   ],
   async mount(stage, fixtureId, ctx) {
     const { createSecretsAdmin } = await importFresh('/src/ETL-SQL.Portal/wwwroot/js/secrets-admin.js');
@@ -63,10 +65,12 @@ export default {
       fixtureId === 'empty' ? makeFakeApi([]) :
       fixtureId === 'keyring-broken' ? makeFakeApi(seed, { failVerify: ['sales_db_password', 'archive_access_key'], keyRingBroken: true }) :
       makeFakeApi(seed);
+    if (fixtureId === 'invalid-list') secretsApi.list = async () => [{ ...seed[0], name: null }];
+    if (fixtureId === 'invalid-check') secretsApi.verifyAll = async () => ({ secretCount: 3, failedCount: '0' });
 
     const surface = createSecretsAdmin({ host: stage, secretsApi });
     await surface.load();
     ctx.stat('createSecretsAdmin() — values are write-only; verify/disable/delete mutate the fake in-memory store');
-    return { dispose() {}, resize() {} };
+    return { dispose() { surface.dispose(); }, resize() {} };
   },
 };

@@ -17,6 +17,27 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.21.0 — Runtime: Numeric dataset filters exclude null cells
+- **What changed**: Inclusive numeric comparisons and ranges in the Portal dataset viewer previously treated null as equal to a threshold, including it in matching rows, statistics, and exports. Numeric comparisons now exclude null cells.
+- **Who is affected**: Dataset API consumers and viewer users filtering nullable numeric columns with `gte`, `lte`, or `between`.
+- **Migration**: Use the explicit `is_null` filter to select null cells. Refresh filtered views and recreate exports affected by the old counts.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.21.0 — Runtime: Dataset cache text serializes as scalar strings
+- **What changed**: The Portal dataset data and distinct-value APIs previously serialized Parquet character memory as character arrays. They now return text as strings, preserving Unicode, empty strings, and nulls.
+- **Who is affected**: Consumers of dataset viewer and column-value API responses. The viewer previously displayed `row20` as `r,o,w,2,0`; column-value validation could reject those arrays.
+- **Migration**: Consume text cells and distinct values as strings. Remove workarounds that join character arrays. Parquet files and script syntax do not change.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.21.0 — Runtime: Scheduled starts use job identity and recheck the lease after queuing
+- **What changed**: Jobs with the same name in different tenants previously shared a local start guard. They now start independently by immutable job ID. A job whose lease expires or is reclaimed while it waits for a throttle slot now refuses execution when it receives that slot.
+- **Who is affected**: Multi-tenant schedulers and jobs waiting for concurrency capacity during a lease loss or storage outage.
+- **Migration**: No script change. Restore lease-store availability before retrying a refused occurrence; keep scheduler versions aligned when sharing a job store.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.20.0 — Runtime: Bounded HA runners reject manual certification plans
 - **What changed**: Native large-job and fault runners previously accepted ManualCertification plans and labelled bounded local checks as manual evidence. They now reject those plans. Both validators reject relabelled native reports.
 - **Who is affected**: Operators using `admin ha-soak large-job-run` or `fault-run` with manual plans.

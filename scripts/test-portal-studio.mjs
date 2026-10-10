@@ -46,6 +46,7 @@ function assertAbsentEverywhere(pattern, what) {
 }
 
 const moduleSource = readPortalPageModule('studio');
+const studioHostSource = await read('src/ETL-SQL.Portal/wwwroot/js/portal-studio-host.js');
 assert.ok(moduleSource, 'Studio page module script was not found.');
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 new AsyncFunction(moduleSource.replace(/^import .*;$/gm, ''));
@@ -58,7 +59,8 @@ assert.match(controller, /FolderPermission\.Manage/);
 assert.match(controller, /CREATE_STUDIO_REPORT/);
 assert.doesNotMatch(studio, /scriptPath/);
 assert.match(studio, /createStudioWorkbench/);
-assert.match(studio, /\/api\/designer\/save/);
+assert.match(studio, /createPortalStudioHost/);
+assert.match(studioHostSource, /\/api\/designer\/save/);
 assert.match(designer, /id="dsgn-design-mode"/);
 assert.match(designer, /id="dsgn-code-mode"/);
 assert.match(designerPersistenceSource, /\/api\/studio\/reports/);
@@ -89,9 +91,9 @@ assert.match(program, /isStudioEntry/);
 assert.match(portalHeader, /studioNav/);
 assert.match(portalHeader, /display:none/);
 assert.match(indexPage, /studioApi\.session\(\)/);
-assert.match(adminPage, /studioApi\.session\(\)/);
-assert.match(adminPage, /studioSession\?\.mode === 'CatalogOnly'/);
-assert.match(adminPage, /Open in Studio/);
-assert.match(adminPage, /exposesExternalSource/);
+assert.match(adminPage, /createAdminReports\(\)/);
+// The delegated controller's policy modes are exercised through the report API consumer check
+// and SandboxStoryTests.AdminReports_DeploymentPolicyControlsSourceExposureAndPublication.
+// Keep this check on page composition instead of the extracted controller's private variable names.
 
 console.log('Portal catalog-scoped Studio, equal Code/Design modes, and disabled-authoring fencing contract passed.');

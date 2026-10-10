@@ -15,6 +15,8 @@ $Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else {
 }
 $ReleaseRoot = Join-Path $RepoRoot "release"
 $SampleSource = Join-Path $RepoRoot "samples"
+& node (Join-Path $RepoRoot 'scripts/sync-assets.js')
+if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed. Run npm ci --prefix scripts/typecheck first.' }
 . (Join-Path $PSScriptRoot 'ReleaseEvidence.Helpers.ps1')
 $explicitEvidenceRoot = -not [string]::IsNullOrWhiteSpace($CertificationEvidenceRoot)
 if (-not $explicitEvidenceRoot) {

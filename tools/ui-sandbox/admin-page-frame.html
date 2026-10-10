@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Admin page sandbox frame</title></head>
+<body>
+<script type="module">
+  import { mountAdminPageFrame } from './stories/admin-page.story.js';
+  await mountAdminPageFrame(new URLSearchParams(location.search).get('fixture') || 'healthy');
+</script>
+</body>
+</html>

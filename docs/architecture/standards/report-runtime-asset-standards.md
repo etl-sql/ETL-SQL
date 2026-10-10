@@ -94,12 +94,11 @@ it by hand. Add each new part to `RUNTIME_PARTS` in `sync-assets.js`; an unliste
 The generator strips supported module syntax, checks that the result parses, and wraps it in a
 classic-script IIFE for `OfflineSnapshotViewer`. Online hosts use `type="module"` on the entry.
 
-### Planned TypeScript compilation and ownership
+### TypeScript compilation and ownership
 
-The pipeline designed on 2026-09-08 compiles the shared runtime and designer modules.
-The source roots, compiler, drift checks, sync integration, and sandbox startup compilation are
-implemented. Portal-owned pages remain JavaScript under `wwwroot/js/pages/`, covered by the
-browser type and lint gates. The Portal TypeScript root below is available for future conversions.
+The pipeline compiles shared runtime/designer modules and migrated Portal-owned modules and pages.
+Remaining authored Portal JavaScript stays under `wwwroot/js/`, covered by the browser type and lint
+gates. `TODO.md` tracks the remaining conversions and the source-control cleanup acceptance checks.
 
 Preserve browser URLs and the existing offline concatenator. Use the pinned TypeScript toolchain
 under `scripts/typecheck`; do not add another bundler or a Node invocation to the .NET build.
@@ -110,8 +109,9 @@ under `scripts/typecheck`; do not add another bundler or a Node invocation to th
 | Portal-owned pages and modules | `src/ETL-SQL.Portal/BrowserSources/` | Matching relative path under `wwwroot/js/` |
 
 Keep unmigrated JavaScript where it is. A migrated module has exactly one authored implementation:
-its `.ts` file. Its old `.js` path becomes checked-in generated output, with a banner identifying
-the TypeScript source. Shared host copies and `report-runtime.bundle.js` remain checked-in outputs.
+its `.ts` file. Its old `.js` path becomes generated output, with a banner identifying the TypeScript
+source. These outputs remain tracked until the clean-checkout and packaged-host checks in `TODO.md`
+§1.1 pass. Do not untrack them individually ahead of the verified preparation workflow.
 Portal's generated shared copies must never become Portal-owned TypeScript inputs.
 
 Preparation emits into memory, validates the offline bundle and host import closures, then preflights
@@ -212,7 +212,9 @@ attempt to emit outside the corresponding JavaScript root.
 
 The installed TypeScript 6.0.3 resolver supports mixed siblings with `.js` specifiers.
 `scripts/test-browser-compiler.mjs` exercises the compiler host with stale generated files present,
-unmigrated JS imports, strict errors, idempotence, orphan rejection, and unchanged outputs on failure.
+unmigrated JS imports, strict errors, exact import casing, idempotence, orphan rejection in check
+mode, cleanup in normal mode, and unchanged outputs on failure. Portal imports of shared host URLs
+resolve to the original TypeScript owner before host copies exist.
 
 Use `strict`, `noEmitOnError`, ES2022, ESNext modules, Bundler resolution, DOM libraries,
 `verbatimModuleSyntax`, `erasableSyntaxOnly`, and `allowJs`. Keep `checkJs` off in the strict migration program and run
@@ -242,11 +244,33 @@ Reject TypeScript constructs whose emitted helpers or module syntax violate thos
 do not silently strip unsupported output or introduce a second bundle path.
 
 The UI sandbox continues serving the same JavaScript paths. Use
-`node scripts/compile-browser.mjs --watch` for source editing; sandbox startup compiles once.
+`node scripts/compile-browser.mjs --watch` for source editing; it runs full preparation, including
+host sync and manifest updates, after source changes. Sandbox startup prepares once.
 Reload alone cannot compile `.ts`.
-CI and pre-push must run compilation drift checks before type/lint and consumer checks. Published
-.NET hosts consume checked-in generated assets and require no Node installation. Update `AGENTS.md`
-and these current-workflow instructions in the implementation commit, not before the pipeline exists.
+CI and pre-push prepare assets before drift, type/lint, and consumer checks. Published .NET hosts
+include prepared assets and require no Node installation. `artifacts/browser-assets.props` is a
+generated, ignored build manifest; it records source and asset hashes. The .NET verifier performs
+read-only checks, so parallel project builds do not race writes to shared outputs. Preparation and
+verification take an exclusive `.browser-assets.lock`; concurrent writers fail clearly, and .NET
+builds refuse to consume assets during preparation. If a preparation process is interrupted, confirm
+it has stopped before removing its leftover lock.
+
+Preparation verifies that authored inputs stayed unchanged through compilation, synchronization,
+and final manifest creation. An edit during that work invalidates the preparation; rerun sync.
+Watch mode schedules another preparation for edits made while a previous run finishes and releases
+its lock when interrupted. Temporary consumer-test modules named `*.__test-*.mjs` are excluded from
+compilation discovery, sync inventories, MSBuild discovery, and packages.
+
+`artifacts/browser-assets.json` records every output's kind and canonical owner. It includes
+TypeScript emits, the offline bundle, copied CSS/maps, and vendor host copies. Canonical CSS/maps,
+vendor libraries, `.d.ts` contracts, the generated Studio route `.ts`, and the schema-generated Portal
+API validator remain tracked inputs. Their existing generators own changes; do not hand-edit them.
+The inventory is generated from discovered source paths and host import closures, so new migrations
+enter the output set automatically. No broad JavaScript ignore is needed to identify outputs.
+
+`scripts/test-asset-generation.mjs` runs preparation in an isolated source-only tree. It covers
+missing directories and outputs, repeat-run stability, rename/delete cleanup, import closure,
+failed compilation, and the MSBuild verifier's missing/stale/new-source failures.
 
 #### Pilot acceptance
 
@@ -357,15 +381,15 @@ Two things follow, and any future footprint claim has to respect both:
 
 ## 7. Portal Operational UI Assets
 
-`src/ETL-SQL.Portal/wwwroot/js/native-charts.js` is **not** a shared report runtime asset and is not
-governed by sections 1–3. It is a Portal-owned internal-UI adapter driving the orchestrator page's
+`src/ETL-SQL.Portal/BrowserSources/native-charts.ts` owns the compiled
+`wwwroot/js/native-charts.js` classic script. It is a Portal-owned internal-UI adapter driving the orchestrator page's
 Gantt, sparkline, and dependency-graph views. Keeping it separate is deliberate: see
 [Portal UI](../portal-ui.md#native-chartsjs-ownership-boundary).
 
 The boundary, restated so nobody has to infer it:
 
-- It is **not** in `Resources/Shared/`, **not** synchronized by `scripts/sync-assets.js`, and **not**
-  in the Report-SQL capability matrix.
+- It is **not** in `Resources/Shared/` or the Report-SQL capability matrix. Asset preparation compiles
+  its Portal output; it does not copy this adapter to report hosts.
 - It is **not** a `PlotPlan` consumer and must not become one. Report visuals resolve through
   `PlotPlan` or through the focused layout modules; operational graphics do neither.
 - It ships to Portal operators, not to report viewers, so it never appears in report page weight.

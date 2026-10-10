@@ -5,6 +5,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace ETL_SQL.Portal.BrowserTests;
 
@@ -18,9 +19,9 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// fixtures people open least are the failure states, which is precisely where a rendering bug is
 /// least likely to be noticed and most likely to matter.</para>
 ///
-/// <para>The assertions are deliberately shallow — mounts, does not throw, does not overflow. A
-/// sandbox test that asserted on rendered content would duplicate the component's own tests and
-/// break every time the fixtures changed, which would end with it being deleted.</para>
+/// <para>Generic fixture checks cover mounting, page errors, and overflow. Focused regressions also
+/// verify response contracts, failure states, request ordering, disposal, and keyboard interactions
+/// through the canonical components and controlled API responses.</para>
 /// </summary>
 [Trait("Category", "Browser")]
 [Collection(SandboxStoryCollection.Name)]
@@ -70,6 +71,2146 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         if (host is null) return;
         await host.StopAsync(TimeSpan.FromSeconds(10));
         host.Dispose();
+    }
+
+    [Fact]
+    public async Task AdminUsers_EditingRetainsTheExistingStewardshipRole()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='admin-page']").ClickAsync();
+        var frame = page.FrameLocator("#stage iframe");
+        await Expect(frame.Locator("body")).ToHaveAttributeAsync("data-admin-sandbox-ready", "true");
+        await frame.Locator("#userFilter").FillAsync("data");
+        await Expect(frame.Locator("#userTableWrap")).ToContainTextAsync("data-steward");
+        await frame.Locator("[data-action='edit-user'][data-id='2']").ClickAsync();
+        await Expect(frame.Locator("#nu-saveBtn")).ToBeEnabledAsync();
+        var path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "stewardship-role.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await frame.Locator("#newUserForm").ScreenshotAsync(new() { Path = path });
+        await Expect(frame.Locator("#nu-role")).ToHaveValueAsync("DataSteward");
+        await Expect(frame.Locator("#nu-role option[value='StewardshipManager']")).ToHaveCountAsync(1);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminUsers_FailedPasswordResetDoesNotAnnounceSuccess()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='admin-page']").ClickAsync();
+        var frame = page.FrameLocator("#stage iframe");
+        await Expect(frame.Locator("body")).ToHaveAttributeAsync("data-admin-sandbox-ready", "true");
+        await frame.Locator("#userFilter").FillAsync("data");
+        await Expect(frame.Locator("#userTableWrap")).ToContainTextAsync("data-steward");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('resetFailed')");
+        await frame.Locator("[data-action='reset'][data-id='2']").ClickAsync();
+        await frame.GetByLabel("Temporary password", new() { Exact = true }).FillAsync("Str0ng@Passw0rd!");
+        await frame.GetByRole(AriaRole.Button, new() { Name = "Reset password", Exact = true }).ClickAsync();
+        await Expect(frame.Locator("body")).ToContainTextAsync("The requested change was rejected.");
+        await frame.Locator("body").EvaluateAsync("() => new Promise(requestAnimationFrame)");
+        Assert.Equal(0, await frame.Locator("body").EvaluateAsync<int>(
+            "() => window.__adminFeedbackMessages.filter(item => item.options.tone === 'success').length"));
+        var path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "reset-rejected.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = path });
+        await Expect(frame.Locator("body")).Not.ToContainTextAsync("The temporary password was set.");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminUsers_InitialLoadAndUnassignedEditPreserveRoles()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var frame = await OpenAdminUsersSandboxAsync(page);
+        await Expect(frame.Locator("#userTableWrap")).ToContainTextAsync("unassigned");
+        await frame.Locator("[data-action='edit-user'][data-id='3']").ClickAsync();
+        await Expect(frame.Locator("#nu-saveBtn")).ToBeEnabledAsync();
+        await Expect(frame.Locator("#nu-role")).ToHaveValueAsync("");
+        await frame.Locator("#nu-email").FillAsync("changed@example.test");
+        await frame.Locator("#nu-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#newUserForm")).ToBeHiddenAsync();
+        var body = await frame.Locator("body").EvaluateAsync<JsonElement>(
+            "() => window.__adminMock.calls.find(item => item.method === 'PUT').body");
+        Assert.False(body.TryGetProperty("role", out _));
+        Assert.Equal("changed@example.test", body.GetProperty("email").GetString());
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setUserRoles(2, ['DataSteward', 'Publisher'])");
+        await frame.Locator("#usersRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#userTableWrap")).ToContainTextAsync("Publisher");
+        await frame.Locator("[data-action='edit-user'][data-id='2']").ClickAsync();
+        await Expect(frame.Locator("#nu-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#nu-email").FillAsync("multiple@example.test");
+        await frame.Locator("#nu-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#newUserForm")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#userTableWrap")).ToContainTextAsync("Publisher");
+        var multipleBody = await frame.Locator("body").EvaluateAsync<JsonElement>(
+            "() => window.__adminMock.calls.filter(item => item.method === 'PUT').at(-1).body");
+        Assert.False(multipleBody.TryGetProperty("role", out _));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminUsers_PendingCreationIsSingleAndCannotCloseANewDraft()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var frame = await OpenAdminUsersSandboxAsync(page);
+        await frame.Locator("#newUserBtn").ClickAsync();
+        await Expect(frame.Locator("#nu-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#nu-username").FillAsync("new-steward");
+        await frame.Locator("#nu-password").FillAsync("Str0ng@Passw0rd!");
+        await frame.Locator("#nu-role").SelectOptionAsync("DataSteward");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextWrite()");
+        await frame.Locator("#nu-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#nu-saveBtn")).ToBeDisabledAsync();
+        await frame.Locator("body").EvaluateAsync("() => document.getElementById('nu-saveBtn').click()");
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>(
+            "() => window.__adminMock.calls.filter(item => item.method === 'POST' && item.route === '/api/admin/users').length"));
+        await frame.Locator("#nu-cancelBtn").ClickAsync();
+        await Expect(frame.Locator("#nu-password")).ToHaveValueAsync("");
+        await frame.Locator("#newUserBtn").ClickAsync();
+        await frame.Locator("#nu-username").FillAsync("next-draft");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.releaseWrites()");
+        await Expect(frame.Locator("#userTableWrap")).ToContainTextAsync("new-steward");
+        await Expect(frame.Locator("#newUserForm")).ToBeVisibleAsync();
+        await Expect(frame.Locator("#nu-username")).ToHaveValueAsync("next-draft");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminUsers_UnconfirmedCreationRequiresSuccessfulExplicitRefresh()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var frame = await OpenAdminUsersSandboxAsync(page);
+        await frame.Locator("#newUserBtn").ClickAsync();
+        await Expect(frame.Locator("#nu-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#nu-username").FillAsync("uncertain-user");
+        await frame.Locator("#nu-password").FillAsync("Str0ng@Passw0rd!");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('invalidReceipt')");
+        await frame.Locator("#nu-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#usersMutationStatus")).ToContainTextAsync("unconfirmed");
+        await Expect(frame.Locator("#nu-saveBtn")).ToBeDisabledAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('usersFailed')");
+        await frame.Locator("#usersRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#userTableWrap")).ToContainTextAsync("Failed to load users.");
+        await Expect(frame.Locator("#nu-saveBtn")).ToBeDisabledAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('healthy')");
+        await frame.Locator("#userFilter").FillAsync("uncertain");
+        await Expect(frame.Locator("#userTableWrap")).ToContainTextAsync("uncertain-user");
+        await Expect(frame.Locator("#nu-saveBtn")).ToBeDisabledAsync();
+        await frame.Locator("#usersRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#nu-saveBtn")).ToBeEnabledAsync();
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>(
+            "() => window.__adminMock.calls.filter(item => item.method === 'POST' && item.route === '/api/admin/users').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminUsers_FilterOrderingCannotRestoreAnOlderCatalog()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var frame = await OpenAdminUsersSandboxAsync(page);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextRead()");
+        await frame.Locator("#userFilter").FillAsync("data");
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingReads ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("#userFilter").FillAsync("unassigned");
+        await Expect(frame.Locator("#userTableWrap")).ToContainTextAsync("unassigned");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseReads(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator("#userTableWrap")).Not.ToContainTextAsync("data-steward");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("rolesFailed")]
+    [InlineData("rolesInvalid")]
+    public async Task AdminUsers_UnavailableRolesKeepDraftsAndBlockSaving(string failure)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var frame = await OpenAdminUsersSandboxAsync(page);
+        await frame.Locator("body").EvaluateAsync("(_, mode) => window.__adminMock.setFailure(mode)", failure);
+        await frame.Locator("#newUserBtn").ClickAsync();
+        await frame.Locator("#nu-username").FillAsync("retained-draft");
+        await Expect(frame.Locator("#nu-error")).ToContainTextAsync("Roles could not be loaded.");
+        await Expect(frame.Locator("#nu-saveBtn")).ToBeDisabledAsync();
+        await Expect(frame.Locator("#nu-username")).ToHaveValueAsync("retained-draft");
+        await frame.Locator("#nu-password").FillAsync("Retained@TestPassword!");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('healthy')");
+        await frame.Locator("#nu-reloadRolesBtn").ClickAsync();
+        await Expect(frame.Locator("#nu-saveBtn")).ToBeEnabledAsync();
+        await Expect(frame.Locator("#nu-username")).ToHaveValueAsync("retained-draft");
+        await Expect(frame.Locator("#nu-password")).ToHaveValueAsync("Retained@TestPassword!");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminUsers_DisposalClearsPasswordsAndRejectsLateMutationRendering()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var frame = await OpenAdminUsersSandboxAsync(page);
+        await frame.Locator("#newUserBtn").ClickAsync();
+        await Expect(frame.Locator("#nu-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#nu-username").FillAsync("disposed-create");
+        await frame.Locator("#nu-password").FillAsync("Str0ng@Passw0rd!");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextWrite()");
+        await frame.Locator("#nu-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#nu-saveBtn")).ToBeDisabledAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.dispatchEvent(new PageTransitionEvent('pagehide'))");
+        await Expect(frame.Locator("#nu-password")).ToHaveValueAsync("");
+        await Expect(frame.Locator("#newUserForm")).ToBeHiddenAsync();
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseWrites(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator("#userTableWrap")).Not.ToContainTextAsync("disposed-create");
+        Assert.Equal(0, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminFeedbackMessages.length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    private async Task<IFrameLocator> OpenAdminUsersSandboxAsync(IPage page)
+    {
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='admin-page']").ClickAsync();
+        var frame = page.FrameLocator("#stage iframe");
+        await Expect(frame.Locator("body")).ToHaveAttributeAsync("data-admin-sandbox-ready", "true");
+        await Expect(frame.Locator("#userTableWrap")).ToHaveAttributeAsync("data-users-state", "ready");
+        return frame;
+    }
+
+    [Fact]
+    public async Task AdminGroups_SupersededMembershipReadCannotRenderUnderAnotherGroup()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var frame = await OpenAdminUsersSandboxAsync(page);
+        await frame.Locator(".admin-tab[data-tab='groups']").ClickAsync();
+        await Expect(frame.Locator("#groupTableWrap")).ToContainTextAsync("Finance");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextMemberRead()");
+        await frame.Locator("[data-action='members'][data-id='10']").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingMembers ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("[data-action='members'][data-id='11']").ClickAsync();
+        await Expect(frame.Locator("#memberTableWrap")).ToContainTextAsync("unassigned");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseMembers(); await new Promise(requestAnimationFrame); }");
+        var path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "groups-member-ordering.png");
+        await frame.Locator("#membersPanel").ScreenshotAsync(new() { Path = path });
+        await Expect(frame.Locator("#memberGroupName")).ToHaveTextAsync("Operations");
+        await Expect(frame.Locator("#memberTableWrap")).Not.ToContainTextAsync("data-steward");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminGroups_RejectedMembershipWriteKeepsItsPicker()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var frame = await OpenAdminUsersSandboxAsync(page);
+        await frame.Locator(".admin-tab[data-tab='groups']").ClickAsync();
+        await Expect(frame.Locator("#groupTableWrap")).ToContainTextAsync("Finance");
+        await frame.Locator("[data-action='members'][data-id='10']").ClickAsync();
+        await Expect(frame.Locator("#memberTableWrap")).ToContainTextAsync("data-steward");
+        await frame.Locator("#addMemberBtn").ClickAsync();
+        await Expect(frame.Locator("#addMemberSelect option[value='1']")).ToHaveCountAsync(1);
+        await frame.Locator("#addMemberSelect").SelectOptionAsync("1");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('writeFailed')");
+        await frame.Locator("#am-saveBtn").ClickAsync();
+        await Expect(frame.Locator("body")).ToContainTextAsync("The requested change was rejected.");
+        await frame.Locator("body").EvaluateAsync("() => new Promise(requestAnimationFrame)");
+        var path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "groups-picker-rejected.png");
+        await frame.Locator("#membersPanel").ScreenshotAsync(new() { Path = path });
+        await Expect(frame.Locator("#addMemberForm")).ToBeVisibleAsync();
+        await Expect(frame.Locator("#addMemberSelect")).ToHaveValuesAsync(["1"]);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminGroups_LateConfirmationKeepsItsOriginalGroup()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminGroupsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='members'][data-id='10']").ClickAsync();
+        await Expect(frame.Locator("#memberTableWrap")).ToContainTextAsync("data-steward");
+        await frame.Locator("#memberTableWrap [data-select-id='2']").CheckAsync();
+        await frame.Locator("body").EvaluateAsync("() => { window.ETLSQLFeedback.confirm = () => new Promise(resolve => { window.__finishGroupConfirm = resolve; }); }");
+        await frame.Locator("#membersRemoveBtn").ClickAsync();
+        Assert.True(await frame.Locator("body").EvaluateAsync<bool>("() => !!window.__finishGroupConfirm"));
+        await frame.Locator("[data-action='members'][data-id='11']").ClickAsync();
+        await Expect(frame.Locator("#memberTableWrap")).ToContainTextAsync("unassigned");
+        await frame.Locator("body").EvaluateAsync("() => window.__finishGroupConfirm(true)");
+        await Expect(frame.Locator("#ng-saveBtn")).ToBeEnabledAsync();
+        await Expect(frame.Locator("#groupTableWrap")).ToHaveAttributeAsync("data-groups-state", "ready");
+        await Expect(frame.Locator("#memberGroupName")).ToHaveTextAsync("Operations");
+        await Expect(frame.Locator("#memberTableWrap")).ToContainTextAsync("unassigned");
+        Assert.Equal("/api/admin/groups/10/members/bulk-remove", await frame.Locator("body").EvaluateAsync<string>(
+            "() => window.__adminMock.calls.find(item => item.method === 'POST' && item.route.endsWith('/bulk-remove')).route"));
+        await frame.Locator("[data-action='members'][data-id='10']").ClickAsync();
+        await Expect(frame.Locator("#memberTableWrap")).ToContainTextAsync("No members.");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminGroups_PendingCreationIsSingleAndCannotCloseANewDraft()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminGroupsSandboxAsync(session.Page);
+        await frame.Locator("#newGroupBtn").ClickAsync();
+        await frame.Locator("#ng-name").FillAsync("First group");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextWrite()");
+        await frame.Locator("#ng-saveBtn").EvaluateAsync("button => { button.click(); button.click(); }");
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingWrites ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("#ng-cancelBtn").ClickAsync();
+        await frame.Locator("#newGroupBtn").ClickAsync();
+        await frame.Locator("#ng-name").FillAsync("Later draft");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.releaseWrites()");
+        await Expect(frame.Locator("#groupTableWrap")).ToContainTextAsync("First group");
+        await Expect(frame.Locator("#newGroupForm")).ToBeVisibleAsync();
+        await Expect(frame.Locator("#ng-name")).ToHaveValueAsync("Later draft");
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>(
+            "() => window.__adminMock.calls.filter(item => item.method === 'POST' && item.route === '/api/admin/groups').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminGroups_PickerSearchCannotRestoreAnOlderDirectory()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminGroupsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='members'][data-id='10']").ClickAsync();
+        await Expect(frame.Locator("#memberTableWrap")).ToHaveAttributeAsync("data-members-state", "ready");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextRead()");
+        await frame.Locator("#addMemberBtn").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingReads ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("#addMemberSearch").FillAsync("unassigned");
+        await Expect(frame.Locator("#addMemberSelect option")).ToHaveCountAsync(1);
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseReads(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator("#addMemberSelect option")).ToHaveCountAsync(1);
+        await Expect(frame.Locator("#addMemberSelect")).Not.ToContainTextAsync("data-steward");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("membersFailed")]
+    [InlineData("membersInvalid")]
+    public async Task AdminGroups_UnavailableMembershipCannotRetainMutationActions(string failure)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminGroupsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='members'][data-id='10']").ClickAsync();
+        await Expect(frame.Locator("#memberTableWrap")).ToContainTextAsync("data-steward");
+        await frame.Locator("#addMemberBtn").ClickAsync();
+        await Expect(frame.Locator("#addMemberSelect option[value='1']")).ToHaveCountAsync(1);
+        await frame.Locator("#addMemberSelect").SelectOptionAsync("1");
+        await frame.Locator("body").EvaluateAsync("(_, mode) => window.__adminMock.setFailure(mode)", failure);
+        await frame.Locator("#membersRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#memberTableWrap")).ToHaveAttributeAsync("data-members-state", "failed");
+        await Expect(frame.Locator("#memberTableWrap")).ToContainTextAsync("Group members could not be loaded.");
+        await Expect(frame.Locator("#memberTableWrap")).Not.ToContainTextAsync("No members.");
+        await Expect(frame.Locator("#am-saveBtn")).ToBeDisabledAsync();
+        await Expect(frame.Locator("#addMemberBtn")).ToBeDisabledAsync();
+        await Expect(frame.Locator("#addMemberSelect")).ToHaveValuesAsync(["1"]);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminGroups_UnconfirmedMembershipRequiresSuccessfulExplicitRefresh()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminGroupsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='members'][data-id='10']").ClickAsync();
+        await Expect(frame.Locator("#memberTableWrap")).ToContainTextAsync("data-steward");
+        await frame.Locator("#addMemberBtn").ClickAsync();
+        await Expect(frame.Locator("#addMemberSelect option[value='1']")).ToHaveCountAsync(1);
+        await frame.Locator("#addMemberSelect").SelectOptionAsync("1");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('groupsInvalidReceipt')");
+        await frame.Locator("#am-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#groupsMutationStatus")).ToBeVisibleAsync();
+        await Expect(frame.Locator("#addMemberForm")).ToBeVisibleAsync();
+        await frame.Locator("#groupFilter").FillAsync("Finance");
+        await Expect(frame.Locator("#groupTableWrap")).ToHaveAttributeAsync("data-groups-state", "ready");
+        await Expect(frame.Locator("#am-saveBtn")).ToBeDisabledAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('membersFailed')");
+        await frame.Locator("#groupsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#memberTableWrap")).ToHaveAttributeAsync("data-members-state", "failed");
+        await Expect(frame.Locator("#groupsMutationStatus")).ToBeVisibleAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('healthy')");
+        await frame.Locator("#groupsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#groupsMutationStatus")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#memberTableWrap")).ToContainTextAsync("sandbox-admin");
+        await Expect(frame.Locator("#am-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#am-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#addMemberForm")).ToBeHiddenAsync();
+        await Expect(frame.Locator("body")).ToContainTextAsync("0 users added. 1 users were not added");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminGroups_DisposalRejectsLateMembershipAndMutationRendering()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminGroupsSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextMemberRead()");
+        await frame.Locator("[data-action='members'][data-id='10']").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingMembers ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("#newGroupBtn").ClickAsync();
+        await frame.Locator("#ng-name").FillAsync("Disposed group");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextWrite()");
+        await frame.Locator("#ng-saveBtn").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingWrites ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("body").EvaluateAsync("async () => { window.dispatchEvent(new Event('pagehide')); window.__adminMock.releaseMembers(); window.__adminMock.releaseWrites(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator("#newGroupForm")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#groupTableWrap")).Not.ToContainTextAsync("Disposed group");
+        await Expect(frame.Locator("#memberTableWrap")).Not.ToContainTextAsync("data-steward");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminGroups_RefreshResolvesAnUnconfirmedDeletionOfTheSelectedGroup()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminGroupsSandboxAsync(session.Page);
+        await frame.Locator("#newGroupBtn").ClickAsync();
+        await frame.Locator("#ng-name").FillAsync("Unconfirmed deletion");
+        await frame.Locator("#ng-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#groupTableWrap")).ToContainTextAsync("Unconfirmed deletion");
+        await Expect(frame.Locator("#ng-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("[data-action='members'][data-id='12']").ClickAsync();
+        await Expect(frame.Locator("#memberTableWrap")).ToHaveAttributeAsync("data-members-state", "ready");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('groupsDeleteUnconfirmed')");
+        await frame.Locator("#groupTableWrap [data-action='delete'][data-id='12']").ClickAsync();
+        await frame.GetByRole(AriaRole.Button, new() { Name = "Delete group", Exact = true }).ClickAsync();
+        await Expect(frame.Locator("#groupsMutationStatus")).ToBeVisibleAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('healthy')");
+        await frame.Locator("#groupsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#groupsMutationStatus")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#membersPanel")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#groupTableWrap")).Not.ToContainTextAsync("Unconfirmed deletion");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminFolders_NestedFoldersRemainVisibleAndAvailableAsParents()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminFoldersSandboxAsync(session.Page);
+        await frame.Locator("#newFolderBtn").ClickAsync();
+        var path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "folders-hierarchy.png");
+        await frame.Locator("#panel-folders").ScreenshotAsync(new() { Path = path });
+        await Expect(frame.Locator("#folderTableWrap")).ToContainTextAsync("/Reports/Child");
+        await Expect(frame.Locator("#nf-parent option[value='21']")).ToHaveCountAsync(1);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminFolders_SupersededPermissionReadCannotRenderUnderAnotherFolder()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminFoldersSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextAclRead()");
+        await frame.Locator("[data-action='acl'][data-id='20']").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingAcls ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("[data-action='acl'][data-id='30']").ClickAsync();
+        await Expect(frame.Locator("#aclTableWrap")).ToContainTextAsync("Operations");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseAcls(); await new Promise(requestAnimationFrame); }");
+        var path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "folders-acl-ordering.png");
+        await frame.Locator("#aclPanel").ScreenshotAsync(new() { Path = path });
+        await Expect(frame.Locator("#aclFolderName")).ToHaveTextAsync("Operations");
+        await Expect(frame.Locator("#aclTableWrap")).Not.ToContainTextAsync("Finance");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminFolders_GrantOpensAnUsableEditor()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminFoldersSandboxAsync(session.Page);
+        await frame.Locator("[data-action='acl'][data-id='20']").ClickAsync();
+        await Expect(frame.Locator("#aclTableWrap")).ToContainTextAsync("Finance");
+        await frame.Locator("#addAclBtn").ClickAsync();
+        var path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "folders-grant.png");
+        await frame.Locator("#aclPanel").ScreenshotAsync(new() { Path = path });
+        await Expect(frame.Locator("#addAclForm")).ToBeVisibleAsync();
+        await Expect(frame.Locator("#aclGroupSelect option")).Not.ToHaveCountAsync(0);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminFolders_PermissionsShowTheirNamesAndPreserveStorageValues()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminFoldersSandboxAsync(session.Page);
+        await frame.Locator("[data-action='acl'][data-id='20']").ClickAsync();
+        await Expect(frame.Locator("#aclTableWrap")).ToContainTextAsync("Finance");
+        await Expect(frame.Locator("#aclTableWrap")).ToContainTextAsync("Manage");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminFolders_RejectedGrantKeepsItsSelectionAndPermissionForRetry()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminFoldersSandboxAsync(session.Page);
+        await frame.Locator("[data-action='acl'][data-id='20']").ClickAsync();
+        await Expect(frame.Locator("#aclTableWrap")).ToHaveAttributeAsync("data-acl-state", "ready");
+        await frame.Locator("#addAclBtn").ClickAsync();
+        await Expect(frame.Locator("#aclGroupSelect option[value='10']")).ToHaveCountAsync(1);
+        await frame.Locator("#aclGroupSelect").SelectOptionAsync("10");
+        await frame.Locator("#aclPermSelect").SelectOptionAsync("3");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('writeFailed')");
+        await frame.Locator("#acl-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#acl-error")).ToContainTextAsync("rejected");
+        await Expect(frame.Locator("#addAclForm")).ToBeVisibleAsync();
+        await Expect(frame.Locator("#aclGroupSelect")).ToHaveValueAsync("10");
+        await Expect(frame.Locator("#aclPermSelect")).ToHaveValueAsync("3");
+        await Expect(frame.Locator("#acl-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('healthy')");
+        await frame.Locator("#acl-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#addAclForm")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#aclTableWrap")).ToContainTextAsync("Author");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminFolders_CatalogRefreshCannotSilentlyUpgradeAnOpenedGrant()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminFoldersSandboxAsync(session.Page);
+        await frame.Locator("[data-action='acl'][data-id='20']").ClickAsync();
+        await Expect(frame.Locator("#aclTableWrap")).ToHaveAttributeAsync("data-acl-state", "ready");
+        await frame.Locator("#addAclBtn").ClickAsync();
+        await Expect(frame.Locator("#aclGroupSelect option[value='10']")).ToHaveCountAsync(1);
+        await frame.Locator("#aclGroupSelect").SelectOptionAsync("10");
+        await frame.Locator("#aclPermSelect").SelectOptionAsync("3");
+        await frame.Locator("body").EvaluateAsync("""
+            async () => {
+              const response = await window.__adminMock.fetch('/api/folders/20', { method: 'PUT',
+                headers: { 'If-Match': '"1"' }, body: JSON.stringify({ name: 'Reports external', parentId: null }) });
+              if (response.status !== 200) throw new Error('External update failed');
+            }
+            """);
+        await frame.Locator("#foldersRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#aclFolderName")).ToHaveTextAsync("Reports external");
+        await Expect(frame.Locator("#aclTableWrap")).ToHaveAttributeAsync("data-acl-state", "ready");
+        await frame.Locator("#acl-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#acl-error")).ToContainTextAsync("changed");
+        Assert.Equal("\"1\"", await frame.Locator("body").EvaluateAsync<string>("() => window.__adminMock.calls.find(item => item.route === '/api/folders/20/acl' && item.method === 'POST').ifMatch"));
+        await Expect(frame.Locator("#aclPermSelect")).ToHaveValueAsync("3");
+        await Expect(frame.Locator("#foldersMutationStatus")).ToBeHiddenAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminFolders_LateRevokeConfirmationKeepsItsOriginalFolder()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminFoldersSandboxAsync(session.Page);
+        await frame.Locator("[data-action='acl'][data-id='20']").ClickAsync();
+        await Expect(frame.Locator("#aclTableWrap")).ToHaveAttributeAsync("data-acl-state", "ready");
+        await frame.Locator("body").EvaluateAsync("() => { window.ETLSQLFeedback.confirm = () => new Promise(resolve => { window.__folderConfirm = resolve; }); }");
+        await frame.Locator("#aclTableWrap [data-gid='10']").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__folderConfirm ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("[data-action='acl'][data-id='30']").ClickAsync();
+        await Expect(frame.Locator("#aclTableWrap")).ToContainTextAsync("Operations");
+        await frame.Locator("body").EvaluateAsync("() => window.__folderConfirm(true)");
+        await Expect(frame.Locator("#nf-saveBtn")).ToBeEnabledAsync();
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(item => item.route === '/api/folders/20/acl/10' && item.method === 'DELETE').length"));
+        await Expect(frame.Locator("#aclFolderName")).ToHaveTextAsync("Operations");
+        await Expect(frame.Locator("#aclTableWrap")).ToContainTextAsync("Operations");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminFolders_PendingCreationIsSingleAndCannotCloseANewDraft()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminFoldersSandboxAsync(session.Page);
+        await frame.Locator("#newFolderBtn").ClickAsync();
+        await frame.Locator("#nf-name").FillAsync("First folder");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextWrite()");
+        await frame.Locator("#nf-saveBtn").ClickAsync();
+        await WaitForAdminWriteAsync(frame);
+        await frame.Locator("#nf-saveBtn").EvaluateAsync("button => button.click()");
+        await frame.Locator("#newFolderBtn").ClickAsync();
+        await frame.Locator("#nf-name").FillAsync("Keep this folder draft");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.releaseWrites()");
+        await Expect(frame.Locator("#folderTableWrap")).ToContainTextAsync("First folder");
+        await Expect(frame.Locator("#nf-saveBtn")).ToBeEnabledAsync();
+        await Expect(frame.Locator("#newFolderForm")).ToBeVisibleAsync();
+        await Expect(frame.Locator("#nf-name")).ToHaveValueAsync("Keep this folder draft");
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(item => item.route === '/api/folders' && item.method === 'POST').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminFolders_UnconfirmedGrantRequiresSuccessfulExplicitRefresh()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminFoldersSandboxAsync(session.Page);
+        await frame.Locator("[data-action='acl'][data-id='20']").ClickAsync();
+        await Expect(frame.Locator("#aclTableWrap")).ToHaveAttributeAsync("data-acl-state", "ready");
+        await frame.Locator("#addAclBtn").ClickAsync();
+        await Expect(frame.Locator("#aclGroupSelect option[value='10']")).ToHaveCountAsync(1);
+        await frame.Locator("#aclGroupSelect").SelectOptionAsync("10");
+        await frame.Locator("#aclPermSelect").SelectOptionAsync("3");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('foldersInvalidReceipt')");
+        await frame.Locator("#acl-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#foldersMutationStatus")).ToBeVisibleAsync();
+        await Expect(frame.Locator("#acl-saveBtn")).ToBeDisabledAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('aclFailed')");
+        await frame.Locator("#aclRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#aclTableWrap")).ToHaveAttributeAsync("data-acl-state", "failed");
+        await Expect(frame.Locator("#foldersMutationStatus")).ToBeVisibleAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('healthy')");
+        await frame.Locator("#aclRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#foldersMutationStatus")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#aclTableWrap")).ToContainTextAsync("Author");
+        await Expect(frame.Locator("#acl-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#acl-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#addAclForm")).ToBeHiddenAsync();
+        Assert.Equal("\"2\"", await frame.Locator("body").EvaluateAsync<string>("() => window.__adminMock.calls.filter(item => item.route === '/api/folders/20/acl' && item.method === 'POST').at(-1).ifMatch"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("aclFailed")]
+    [InlineData("aclInvalid")]
+    [InlineData("foldersFailed")]
+    [InlineData("foldersInvalid")]
+    public async Task AdminFolders_UnavailableCatalogsCannotRetainMutationActions(string mode)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminFoldersSandboxAsync(session.Page);
+        await frame.Locator("[data-action='acl'][data-id='20']").ClickAsync();
+        await Expect(frame.Locator("#aclTableWrap")).ToHaveAttributeAsync("data-acl-state", "ready");
+        await frame.Locator("#newFolderBtn").ClickAsync();
+        await frame.Locator("#nf-name").FillAsync("Retain this draft");
+        await frame.Locator("body").EvaluateAsync("(_, value) => window.__adminMock.setFailure(value)", mode);
+        await frame.Locator("#foldersRefreshBtn").ClickAsync();
+        if (mode.StartsWith("acl", StringComparison.Ordinal))
+        {
+            await Expect(frame.Locator("#aclTableWrap")).ToHaveAttributeAsync("data-acl-state", "failed");
+            await Expect(frame.Locator("#aclTableWrap [data-gid]")).ToHaveCountAsync(0);
+            await Expect(frame.Locator("#addAclBtn")).ToBeDisabledAsync();
+        }
+        else
+        {
+            await Expect(frame.Locator("#folderTableWrap")).ToHaveAttributeAsync("data-folders-state", "failed");
+            await Expect(frame.Locator("#nf-saveBtn")).ToBeDisabledAsync();
+            await Expect(frame.Locator("#folderTableWrap")).Not.ToContainTextAsync("No folders.");
+        }
+        await Expect(frame.Locator("#nf-name")).ToHaveValueAsync("Retain this draft");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminFolders_GroupSearchCannotRestoreAnOlderCatalog()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminFoldersSandboxAsync(session.Page);
+        await frame.Locator("[data-action='acl'][data-id='20']").ClickAsync();
+        await Expect(frame.Locator("#aclTableWrap")).ToHaveAttributeAsync("data-acl-state", "ready");
+        await frame.Locator("#addAclBtn").ClickAsync();
+        await Expect(frame.Locator("#aclGroupSelect option[value='10']")).ToHaveCountAsync(1);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextRead()");
+        await frame.Locator("#aclGroupSearch").FillAsync("Finance");
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingReads ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("#aclGroupSearch").FillAsync("Operations");
+        await Expect(frame.Locator("#aclGroupSelect option[value='11']")).ToHaveCountAsync(1);
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseReads(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator("#aclGroupSelect option[value='10']")).ToHaveCountAsync(0);
+        await Expect(frame.Locator("#aclGroupSearch")).ToHaveValueAsync("Operations");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminFolders_DisposalRejectsLatePermissionAndMutationRendering()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminFoldersSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextWrite()");
+        await frame.Locator("#newFolderBtn").ClickAsync();
+        await frame.Locator("#nf-name").FillAsync("Disposed folder");
+        await frame.Locator("#nf-saveBtn").ClickAsync();
+        await WaitForAdminWriteAsync(frame);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextAclRead()");
+        await frame.Locator("[data-action='acl'][data-id='20']").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingAcls ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("body").EvaluateAsync("async () => { window.dispatchEvent(new Event('pagehide')); window.__adminMock.releaseAcls(); window.__adminMock.releaseWrites(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator("#newFolderForm")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#folderTableWrap")).Not.ToContainTextAsync("Disposed folder");
+        await Expect(frame.Locator("#aclTableWrap")).Not.ToContainTextAsync("Finance");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminFolders_RefreshResolvesUnconfirmedCascadeDeletionOfTheSelectedChild()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminFoldersSandboxAsync(session.Page);
+        await frame.Locator("[data-action='acl'][data-id='21']").ClickAsync();
+        await Expect(frame.Locator("#aclTableWrap")).ToHaveAttributeAsync("data-acl-state", "ready");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('foldersDeleteUnconfirmed')");
+        await frame.Locator("#folderTableWrap [data-action='delete'][data-id='20']").ClickAsync();
+        await frame.GetByRole(AriaRole.Button, new() { Name = "Delete folder", Exact = true }).ClickAsync();
+        await Expect(frame.Locator("#foldersMutationStatus")).ToBeVisibleAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('healthy')");
+        await frame.Locator("#foldersRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#foldersMutationStatus")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#aclPanel")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#folderTableWrap")).Not.ToContainTextAsync("/Reports");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminReports_SupersededCatalogCannotReplaceNewerRows()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextReportRead()");
+        await frame.Locator("#reportsRefreshBtn").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingReports ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setReportVersion(40, 2, 'Finance current')");
+        await frame.Locator("#reportsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#reportsTableWrap")).ToContainTextAsync("Finance current");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseReports(); await new Promise(requestAnimationFrame); }");
+        await frame.Locator("#panel-reports").ScreenshotAsync(new() { Path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "reports-ordering-after.png") });
+        await Expect(frame.Locator("#reportsTableWrap")).ToContainTextAsync("Finance current");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminReports_RefreshCannotUpgradeAnOpenedEditorVersion()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='edit-report'][data-id='40']").ClickAsync();
+        await Expect(frame.Locator("#pr-folder option[value='20']")).ToHaveCountAsync(1);
+        await frame.Locator("#pr-desc").FillAsync("Private report draft");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setReportVersion(40, 2, 'Finance external')");
+        await frame.Locator("#reportsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#reportsTableWrap")).ToContainTextAsync("Finance external");
+        await frame.Locator("#pr-saveBtn").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.calls.some(item => item.route === '/api/reports/40' && item.method === 'PUT') ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("#panel-reports").ScreenshotAsync(new() { Path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "reports-opened-version-after.png") });
+        Assert.Equal("\"1\"", await frame.Locator("body").EvaluateAsync<string>("() => window.__adminMock.calls.find(item => item.route === '/api/reports/40' && item.method === 'PUT').ifMatch"));
+        await Expect(frame.Locator("#pr-desc")).ToHaveValueAsync("Private report draft");
+        await Expect(frame.Locator("#publishReportForm")).ToBeVisibleAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminReports_LateValidationCannotReplaceAnotherPathResult()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("#openPublishBtn").ClickAsync();
+        await Expect(frame.Locator("#pr-folder option[value='20']")).ToHaveCountAsync(1);
+        await frame.Locator("#pr-path").FillAsync("reports/finance.rptsql");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextValidation()");
+        await frame.Locator("#pr-validateBtn").ClickAsync();
+        await WaitForAdminValidationAsync(frame);
+        await frame.Locator("#pr-path").FillAsync("reports/operations.rptsql");
+        await frame.Locator("#pr-validateBtn").ClickAsync();
+        await Expect(frame.Locator("#pr-validation")).ToContainTextAsync(new string('b', 64));
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseValidations(); await new Promise(requestAnimationFrame); }");
+        await frame.Locator("#publishReportForm").ScreenshotAsync(new() { Path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "reports-validation-after.png") });
+        await Expect(frame.Locator("#pr-validation")).ToContainTextAsync(new string('b', 64));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminReports_CancelledSaveCannotCloseOrPublishOverANewDraft()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='edit-report'][data-id='40']").ClickAsync();
+        await Expect(frame.Locator("#pr-folder option[value='20']")).ToHaveCountAsync(1);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextValidation()");
+        await frame.Locator("#pr-saveBtn").ClickAsync();
+        await WaitForAdminValidationAsync(frame);
+        await frame.Locator("#pr-cancelBtn").ClickAsync();
+        await frame.Locator("#openPublishBtn").ClickAsync();
+        await frame.Locator("#pr-name").FillAsync("Keep this report draft");
+        await frame.Locator("#pr-path").FillAsync("reports/operations.rptsql");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseValidations(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#panel-reports").ScreenshotAsync(new() { Path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "reports-draft-after.png") });
+        await Expect(frame.Locator("#publishReportForm")).ToBeVisibleAsync();
+        await Expect(frame.Locator("#pr-name")).ToHaveValueAsync("Keep this report draft");
+        Assert.Equal(0, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(item => item.route === '/api/reports/40' && item.method === 'PUT').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("reportsFailed")]
+    [InlineData("reportsInvalid")]
+    [InlineData("sessionFailed")]
+    [InlineData("sessionInvalid")]
+    public async Task AdminReports_UnavailableCatalogClearsRowsAndBlocksSaving(string failure)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='edit-report'][data-id='40']").ClickAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#pr-desc").FillAsync("Retained report draft");
+        await frame.Locator("body").EvaluateAsync("(_, value) => window.__adminMock.setFailure(value)", failure);
+        await frame.Locator("#reportsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#reportsTableWrap")).ToHaveAttributeAsync("data-reports-state", "failed");
+        await Expect(frame.Locator("#reportsTableWrap")).Not.ToContainTextAsync("Finance report");
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeDisabledAsync();
+        await Expect(frame.Locator("#pr-desc")).ToHaveValueAsync("Retained report draft");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('healthy')");
+        await frame.Locator("#reportsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#reportsTableWrap")).ToHaveAttributeAsync("data-reports-state", "ready");
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("scriptsFailed")]
+    [InlineData("scriptsInvalid")]
+    public async Task AdminReports_ScriptPickerRetriesAndHonorsFilteringBeforeTheAnswer(string failure)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("#openPublishBtn").ClickAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#pr-path").FillAsync("keep-this.rptsql");
+        await frame.Locator("body").EvaluateAsync("(_, value) => window.__adminMock.setFailure(value)", failure);
+        await frame.Locator("#pr-browseBtn").ClickAsync();
+        await Expect(frame.Locator("#sb-list")).ToContainTextAsync("Scripts could not be loaded.");
+        await Expect(frame.Locator("#sb-list [data-path]")).ToHaveCountAsync(0);
+        await frame.Locator("body").EvaluateAsync("() => { window.__adminMock.setFailure('healthy'); window.__adminMock.pauseNextScriptRead(); }");
+        await frame.Locator("#sb-retryBtn").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingScripts ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("#sb-filter").FillAsync("operations");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.releaseScripts()");
+        await Expect(frame.Locator("#sb-list [data-path]")).ToHaveCountAsync(1);
+        await Expect(frame.Locator("#sb-list")).Not.ToContainTextAsync("finance.rptsql");
+        await frame.Locator("#scriptBrowserModal").ScreenshotAsync(new() { Path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "reports-script-picker-after.png") });
+        await frame.Locator("#sb-list [data-path]").FocusAsync();
+        await frame.Locator("#sb-list [data-path]").PressAsync("Enter");
+        await Expect(frame.Locator("#pr-path")).ToHaveValueAsync("reports/operations.rptsql");
+        await Expect(frame.Locator("#pr-path")).ToBeFocusedAsync();
+        await Expect(frame.Locator("#scriptBrowserModal")).ToBeHiddenAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminReports_AnEditedPendingPublicationUsesItsCompletedIdentityForTheNextSave()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("#openPublishBtn").ClickAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#pr-name").FillAsync("A single publication");
+        await frame.Locator("#pr-path").FillAsync("reports/finance.rptsql");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextWrite()");
+        await frame.Locator("#pr-saveBtn").ClickAsync();
+        await WaitForAdminWriteAsync(frame);
+        await frame.Locator("#pr-saveBtn").EvaluateAsync("button => button.click()");
+        await frame.Locator("#pr-desc").FillAsync("Edit made while publishing");
+        await frame.Locator("#pr-id").EvaluateAsync("input => { input.value = '999'; }");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.releaseWrites()");
+        await Expect(frame.Locator("#pr-saveBtn")).ToHaveTextAsync("Save Changes");
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        await Expect(frame.Locator("#pr-desc")).ToHaveValueAsync("Edit made while publishing");
+        await frame.Locator("#pr-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#publishReportForm")).ToBeHiddenAsync();
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.route === '/api/reports' && call.method === 'POST').length"));
+        Assert.Equal("\"1\"", await frame.Locator("body").EvaluateAsync<string>("() => window.__adminMock.calls.find(call => call.route === '/api/reports/42' && call.method === 'PUT').ifMatch"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("reportsInvalidReceipt")]
+    [InlineData("reportsServerFailure")]
+    public async Task AdminReports_UnconfirmedUpdateKeepsTheDraftAndRequiresSuccessfulRefresh(string failure)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='edit-report'][data-id='40']").ClickAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#pr-desc").FillAsync("Unconfirmed report draft");
+        await frame.Locator("body").EvaluateAsync("(_, value) => window.__adminMock.setFailure(value)", failure);
+        await frame.Locator("#pr-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#reportsMutationStatus")).ToBeVisibleAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeDisabledAsync();
+        await Expect(frame.Locator("#pr-desc")).ToHaveValueAsync("Unconfirmed report draft");
+        await frame.Locator("#panel-reports").ScreenshotAsync(new() { Path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "reports-unconfirmed-after.png") });
+        Assert.Equal(0, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminFeedbackMessages.filter(message => message.options?.tone === 'success').length"));
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('reportsFailed')");
+        await frame.Locator("#reportsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#reportsTableWrap")).ToHaveAttributeAsync("data-reports-state", "failed");
+        await Expect(frame.Locator("#reportsMutationStatus")).ToBeVisibleAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('healthy')");
+        await frame.Locator("#reportsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#reportsMutationStatus")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#pr-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#pr-error")).ToContainTextAsync("The report has changed.");
+        Assert.Equal("\"1\"", await frame.Locator("body").EvaluateAsync<string>("() => window.__adminMock.calls.filter(call => call.route === '/api/reports/40' && call.method === 'PUT').at(-1).ifMatch"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminReports_UnconfirmedPublicationCannotCreateADuplicateAfterRefresh()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("#openPublishBtn").ClickAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#pr-name").FillAsync("Unconfirmed publication");
+        await frame.Locator("#pr-path").FillAsync("reports/finance.rptsql");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('reportsInvalidReceipt')");
+        await frame.Locator("#pr-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#reportsMutationStatus")).ToBeVisibleAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('healthy')");
+        await frame.Locator("#reportsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#reportsMutationStatus")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#reportsTableWrap")).ToContainTextAsync("Unconfirmed publication");
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeDisabledAsync();
+        await Expect(frame.Locator("#pr-error")).ToContainTextAsync("Reopen a published report");
+        await Expect(frame.Locator("#pr-name")).ToHaveValueAsync("Unconfirmed publication");
+        await frame.Locator("#pr-cancelBtn").ClickAsync();
+        await frame.Locator("[data-action='edit-report'][data-id='42']").ClickAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.route === '/api/reports' && call.method === 'POST').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminReports_AcceptedDeleteRequiresRefreshAndUsesCascadeWithItsOpenedVersion()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('reportsDeleteUnconfirmed')");
+        await frame.Locator("[data-action='delete-report'][data-id='40']").ClickAsync();
+        await frame.GetByRole(AriaRole.Button, new() { Name = "Delete report", Exact = true }).ClickAsync();
+        await Expect(frame.Locator("#reportsMutationStatus")).ToBeVisibleAsync();
+        Assert.Equal("?cascade=true", await frame.Locator("body").EvaluateAsync<string>("() => window.__adminMock.calls.find(call => call.route === '/api/reports/40' && call.method === 'DELETE').query"));
+        Assert.Equal("\"1\"", await frame.Locator("body").EvaluateAsync<string>("() => window.__adminMock.calls.find(call => call.route === '/api/reports/40' && call.method === 'DELETE').ifMatch"));
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('healthy')");
+        await frame.Locator("#reportsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#reportsMutationStatus")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#reportsTableWrap")).Not.ToContainTextAsync("Finance report");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminReports_DisposalDuringAPreflightCannotWriteOrRestoreTheDraft()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='edit-report'][data-id='40']").ClickAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextValidation()");
+        await frame.Locator("#pr-saveBtn").ClickAsync();
+        await WaitForAdminValidationAsync(frame);
+        await frame.Locator("body").EvaluateAsync("async () => { window.dispatchEvent(new PageTransitionEvent('pagehide')); window.__adminMock.releaseValidations(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator("#publishReportForm")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#pr-path")).ToHaveValueAsync("");
+        Assert.Equal(0, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.route === '/api/reports/40' && call.method === 'PUT').length"));
+        Assert.Equal(0, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminFeedbackMessages.length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminReports_InlineFolderCreationRetainsTheReportDraftAndSelectsTheNestedDestination()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("#openPublishBtn").ClickAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#pr-name").FillAsync("Nested destination draft");
+        await frame.Locator("#pr-folder").SelectOptionAsync("21");
+        await frame.Locator("#pr-newFolderToggle").ClickAsync();
+        await frame.Locator("#pr-newFolderName").FillAsync("Published");
+        await frame.Locator("#pr-newFolderCreate").ClickAsync();
+        await Expect(frame.Locator("#pr-newFolderRow")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#pr-folder option:checked")).ToHaveTextAsync("/Reports/Child/Published");
+        await Expect(frame.Locator("#pr-name")).ToHaveValueAsync("Nested destination draft");
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        Assert.Equal(21, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.find(call => call.route === '/api/folders' && call.method === 'POST').body.parentId"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminReports_ACompletedWriteCannotCloseOrRetargetANewerPublicationDraft()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='edit-report'][data-id='40']").ClickAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextWrite()");
+        await frame.Locator("#pr-saveBtn").ClickAsync();
+        await WaitForAdminWriteAsync(frame);
+        await frame.Locator("#pr-cancelBtn").ClickAsync();
+        await frame.Locator("#openPublishBtn").ClickAsync();
+        await frame.Locator("#pr-name").FillAsync("A newer publication draft");
+        await frame.Locator("#pr-path").FillAsync("reports/operations.rptsql");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.releaseWrites()");
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        await Expect(frame.Locator("#publishReportForm")).ToBeVisibleAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToHaveTextAsync("Publish");
+        await Expect(frame.Locator("#pr-name")).ToHaveValueAsync("A newer publication draft");
+        await frame.Locator("#pr-saveBtn").ClickAsync();
+        await Expect(frame.Locator("#publishReportForm")).ToBeHiddenAsync();
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.route === '/api/reports/40' && call.method === 'PUT').length"));
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.route === '/api/reports' && call.method === 'POST').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("foldersFailed")]
+    [InlineData("foldersInvalid")]
+    public async Task AdminReports_UnavailableDestinationsPreserveSelectionAndPreventPublication(string failure)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='edit-report'][data-id='40']").ClickAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        await frame.Locator("#pr-desc").FillAsync("Retained destination draft");
+        await frame.Locator("body").EvaluateAsync("(_, value) => window.__adminMock.setFailure(value)", failure);
+        await frame.Locator("#reportsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#pr-error")).ToContainTextAsync("Destination folders could not be loaded.");
+        await Expect(frame.Locator("#pr-folder")).ToHaveValueAsync("20");
+        await Expect(frame.Locator("#pr-folder")).ToBeDisabledAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeDisabledAsync();
+        await Expect(frame.Locator("#pr-desc")).ToHaveValueAsync("Retained destination draft");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('healthy')");
+        await frame.Locator("#reportsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#pr-saveBtn")).ToBeEnabledAsync();
+        await Expect(frame.Locator("#pr-folder")).ToHaveValueAsync("20");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("CatalogOnly", true)]
+    [InlineData("Disabled", false)]
+    public async Task AdminReports_DeploymentPolicyControlsSourceExposureAndPublication(string mode, bool studioEnabled)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminReportsSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("(_, value) => window.__adminMock.setStudioSession(value.mode, value.studioEnabled ? ['StudioAccess'] : [])",
+            new { mode, studioEnabled });
+        await frame.Locator("#reportsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#reportsTableWrap")).Not.ToContainTextAsync("Script Path");
+        await Expect(frame.Locator("#reportsTableWrap")).Not.ToContainTextAsync("reports/finance.rptsql");
+        if (studioEnabled)
+        {
+            await Expect(frame.Locator("#openPublishBtn")).ToHaveTextAsync("Open Studio");
+            await Expect(frame.Locator("#reportsTableWrap [data-action='edit-report']")).ToHaveTextAsync(new[] { "Open in Studio", "Open in Studio" });
+        }
+        else
+        {
+            await Expect(frame.Locator("#openPublishBtn")).ToBeHiddenAsync();
+            await Expect(frame.Locator("#reportsTableWrap [data-action='edit-report']")).ToHaveCountAsync(0);
+        }
+        await Expect(frame.Locator("#publishReportForm")).ToBeHiddenAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminAudit_PaginationReachesEvidenceBeyondTheFirstFiftyRows()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminAuditSandboxAsync(session.Page);
+        await frame.Locator("#auditPager").ScrollIntoViewIfNeededAsync();
+        await session.Page.Locator("#stage iframe").ScreenshotAsync(new() { Path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "audit-pagination-after.png") });
+        await Expect(frame.Locator("#auditPager")).ToContainTextAsync("525");
+        await frame.GetByRole(AriaRole.Button, new() { Name = "Next", Exact = true }).ClickAsync();
+        await Expect(frame.Locator("#auditTableWrap")).ToContainTextAsync("Audit evidence 475");
+        for (var page = 3; page <= 11; page++)
+        {
+            await frame.GetByRole(AriaRole.Button, new() { Name = "Next", Exact = true }).ClickAsync();
+            await Expect(frame.Locator("#auditPager")).ToContainTextAsync($"Page {page} of 11");
+        }
+        await Expect(frame.Locator("#auditTableWrap tbody tr")).ToHaveCountAsync(25);
+        await Expect(frame.Locator("#auditTableWrap tbody tr").First).ToContainTextAsync("Audit evidence 25");
+        await Expect(frame.GetByRole(AriaRole.Button, new() { Name = "Next", Exact = true })).ToBeDisabledAsync();
+        await frame.GetByRole(AriaRole.Button, new() { Name = "Previous", Exact = true }).PressAsync("Enter");
+        await Expect(frame.Locator("#auditPager")).ToContainTextAsync("Page 10 of 11");
+        await Expect(frame.GetByRole(AriaRole.Button, new() { Name = "Previous", Exact = true })).ToBeFocusedAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminAudit_SupersededReadCannotReplaceTheCurrentEvidence()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminAuditSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextAuditRead()");
+        await frame.Locator("#auditRefreshBtn").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingAuditReads ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setAuditLabel('Current evidence')");
+        await frame.Locator("#auditRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#auditTableWrap")).ToContainTextAsync("Current evidence 525");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseAuditReads(); await new Promise(requestAnimationFrame); }");
+        await session.Page.Locator("#stage iframe").ScreenshotAsync(new() { Path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "audit-ordering-after.png") });
+        await Expect(frame.Locator("#auditTableWrap")).ToContainTextAsync("Current evidence 525");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminAudit_FailedExportCannotDownloadAnErrorBody()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminAuditSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('auditExportFailed')");
+        await frame.Locator("#auditExportBtn").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.downloads.length || window.__adminFeedbackMessages.length ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await session.Page.Locator("#stage iframe").ScreenshotAsync(new() { Path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "audit-export-after.png") });
+        Assert.Equal(0, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.downloads.length"));
+        Assert.Equal("error", await frame.Locator("body").EvaluateAsync<string>("() => window.__adminFeedbackMessages.at(-1).options.tone"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("auditFailed")]
+    [InlineData("auditInvalid")]
+    public async Task AdminAudit_UnavailableCatalogClearsEvidenceAndRecovers(string failure)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminAuditSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("(_, value) => window.__adminMock.setFailure(value)", failure);
+        await frame.Locator("#auditRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#auditTableWrap")).ToHaveAttributeAsync("data-audit-state", "failed");
+        await Expect(frame.Locator("#auditTableWrap tbody tr")).ToHaveCountAsync(0);
+        await Expect(frame.Locator("#auditPager")).ToBeEmptyAsync();
+        await Expect(frame.Locator("#auditExportBtn")).ToBeDisabledAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('audit')");
+        await frame.Locator("#auditRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#auditTableWrap")).ToContainTextAsync("Audit evidence 525");
+        await Expect(frame.Locator("#auditExportBtn")).ToBeEnabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminAudit_FilterSnapshotsIgnoreTheLateUnfilteredReadAndConfirmEmptyResults()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminAuditSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextAuditRead()");
+        await frame.Locator("#auditRefreshBtn").ClickAsync();
+        await WaitForAdminAuditPendingAsync(frame, false);
+        await frame.Locator("#auditFilter").FillAsync("RUN_REPORT");
+        await Expect(frame.Locator("#auditTableWrap")).ToHaveAttributeAsync("data-audit-state", "pending");
+        await Expect(frame.Locator("#auditExportBtn")).ToBeDisabledAsync();
+        await frame.Locator("#auditFilter").PressAsync("Enter");
+        await Expect(frame.Locator("#auditTableWrap tbody tr").First).ToContainTextAsync("Audit evidence 524");
+        await Expect(frame.Locator("#auditPager")).ToContainTextAsync("of 262");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseAuditReads(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator("#auditTableWrap tbody tr").First).ToContainTextAsync("Audit evidence 524");
+        await frame.Locator("#auditFilter").FillAsync("NO_SUCH_ACTION");
+        await frame.Locator("#auditFilter").PressAsync("Enter");
+        await Expect(frame.Locator("#auditTableWrap")).ToHaveAttributeAsync("data-audit-state", "ready");
+        await Expect(frame.Locator("#auditTableWrap")).ToContainTextAsync("No entries match");
+        await Expect(frame.Locator("#auditPager")).ToContainTextAsync("0-0 of 0");
+        await Expect(frame.Locator("#auditExportBtn")).ToBeEnabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("auditExportInvalid")]
+    [InlineData("auditExportEmpty")]
+    public async Task AdminAudit_InvalidCsvCannotStartADownload(string failure)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminAuditSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("(_, value) => window.__adminMock.setFailure(value)", failure);
+        await frame.Locator("#auditExportBtn").ClickAsync();
+        await Expect(frame.Locator("#auditExportStatus")).ToHaveAttributeAsync("role", "alert");
+        Assert.Equal(0, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.downloads.length"));
+        Assert.Equal(0, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.createdUrls.length"));
+        await Expect(frame.Locator("#auditExportBtn")).ToBeEnabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminAudit_ExportUsesTheConfirmedFilterAndReleasesItsDownloadUrl()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminAuditSandboxAsync(session.Page);
+        await frame.Locator("#auditFilter").FillAsync("RUN_REPORT");
+        await frame.Locator("#auditFilter").PressAsync("Enter");
+        await Expect(frame.Locator("#auditExportBtn")).ToBeEnabledAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextAuditExport()");
+        await frame.Locator("#auditExportBtn").ClickAsync();
+        await WaitForAdminAuditPendingAsync(frame, true);
+        await Expect(frame.Locator("#auditExportBtn")).ToBeDisabledAsync();
+        await frame.Locator("#auditExportBtn").EvaluateAsync("button => { button.click(); button.click(); }");
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.route.endsWith('/export/csv')).length"));
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseAuditExports(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator("#auditExportStatus")).ToContainTextAsync("download started");
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.revokedUrls.length ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        Assert.True(await frame.Locator("body").EvaluateAsync<bool>("""
+            () => {
+              const mock = window.__adminMock;
+              return mock.downloads.length === 1 && mock.downloads[0].fileName.endsWith('.csv')
+                && mock.createdUrls.length === 1 && mock.revokedUrls[0] === mock.createdUrls[0]
+                && new URLSearchParams(mock.calls.find(call => call.route.endsWith('/export/csv')).query).get('action') === 'RUN_REPORT';
+            }
+            """));
+        await Expect(frame.Locator("#auditExportLimit")).ToContainTextAsync("10,000 newest");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task AdminAudit_ChangedContextCannotDownloadALateExport(bool dispose, bool changeIdentity)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminAuditSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextAuditExport()");
+        await frame.Locator("#auditExportBtn").ClickAsync();
+        await WaitForAdminAuditPendingAsync(frame, true);
+        if (dispose) await frame.Locator("body").EvaluateAsync("() => window.dispatchEvent(new Event('pagehide'))");
+        else if (changeIdentity) await ChangeAdminAuditIdentityAsync(frame);
+        else await frame.Locator("#auditFilter").FillAsync("RUN_REPORT");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseAuditExports(); await new Promise(requestAnimationFrame); }");
+        Assert.Equal(0, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.downloads.length"));
+        Assert.Equal(0, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminFeedbackMessages.length"));
+        await Expect(frame.Locator("#auditExportStatus")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#auditExportBtn")).ToBeDisabledAsync();
+        if (dispose) await Expect(frame.Locator("#auditTableWrap")).ToBeEmptyAsync();
+        else if (!changeIdentity)
+        {
+            await frame.Locator("#auditFilter").PressAsync("Enter");
+            await Expect(frame.Locator("#auditExportBtn")).ToBeEnabledAsync();
+        }
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static Task WaitForAdminAuditPendingAsync(IFrameLocator frame, bool export) => frame.Locator("body").EvaluateAsync("""
+        (_, isExport) => new Promise(resolve => {
+          const poll = () => (isExport ? window.__adminMock.pendingAuditExports : window.__adminMock.pendingAuditReads) ? resolve() : requestAnimationFrame(poll);
+          poll();
+        })
+        """, export);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AdminAudit_DisposalOrIdentityChangeCannotRevealALateRead(bool dispose)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminAuditSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("() => { window.__adminMock.setAuditLabel('Late identity evidence'); window.__adminMock.pauseNextAuditRead(); }");
+        await frame.Locator("#auditRefreshBtn").ClickAsync();
+        await WaitForAdminAuditPendingAsync(frame, false);
+        if (dispose) await frame.Locator("body").EvaluateAsync("() => window.dispatchEvent(new Event('pagehide'))");
+        else await ChangeAdminAuditIdentityAsync(frame);
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseAuditReads(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator("#auditTableWrap tbody tr")).ToHaveCountAsync(0);
+        await Expect(frame.Locator("#auditExportBtn")).ToBeDisabledAsync();
+        if (dispose) await Expect(frame.Locator("#auditTableWrap")).ToBeEmptyAsync();
+        else await Expect(frame.Locator("#auditTableWrap")).ToContainTextAsync("Portal session changed");
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static Task ChangeAdminAuditIdentityAsync(IFrameLocator frame) => frame.Locator("body").EvaluateAsync("""
+        () => {
+          const parts = sessionStorage.getItem('etlsql_token').split('.');
+          const claims = JSON.parse(atob(parts[1])); claims.sub = 'other-account';
+          parts[1] = btoa(JSON.stringify(claims)); sessionStorage.setItem('etlsql_token', parts.join('.'));
+        }
+        """);
+
+    [Fact]
+    public async Task AdminAudit_UntrustedDetailsRenderAsText()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminAuditSandboxAsync(session.Page);
+        const string detail = "<img src=x onerror=\"window.__auditInjected=true\">";
+        await frame.Locator("body").EvaluateAsync("(_, value) => window.__adminMock.setAuditLabel(value)", detail);
+        await frame.Locator("#auditRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#auditTableWrap tbody tr").First).ToContainTextAsync(detail);
+        await Expect(frame.Locator("#auditTableWrap img")).ToHaveCountAsync(0);
+        Assert.False(await frame.Locator("body").EvaluateAsync<bool>("() => window.__auditInjected === true"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminSubscriptions_LateParameterReadCannotReplaceTheNewDraft()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSubscriptionsSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextParameterRead()");
+        await frame.Locator("[data-action='edit-params'][data-id='60']").ClickAsync();
+        await WaitForSubscriptionPendingAsync(frame, false);
+        await frame.Locator("#editParamsCancelBtn").ClickAsync();
+        await frame.Locator("[data-action='edit-params'][data-id='61']").ClickAsync();
+        await Expect(frame.Locator("#editParamsFields input")).ToHaveValueAsync("South");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseParameters(); await new Promise(requestAnimationFrame); }");
+        await session.Page.Locator("#stage iframe").ScreenshotAsync(new() { Path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "subscriptions-parameters-after.png") });
+        await Expect(frame.Locator("#editParamsTitle")).ToContainTextAsync("Operations delivery");
+        await Expect(frame.Locator("#editParamsFields input")).ToHaveValueAsync("South");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminSubscriptions_LateHistoryCannotReplaceTheCurrentAttempts()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSubscriptionsSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextSubscriptionHistory()");
+        await frame.Locator("[data-action='history'][data-id='60']").ClickAsync();
+        await WaitForSubscriptionPendingAsync(frame, true);
+        await frame.Locator("#subscriptionHistoryCloseBtn").ClickAsync();
+        await frame.Locator("[data-action='history'][data-id='61']").ClickAsync();
+        await Expect(frame.Locator("#subscriptionHistoryBody")).ToContainTextAsync("610");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseSubscriptionHistories(); await new Promise(requestAnimationFrame); }");
+        await session.Page.Locator("#stage iframe").ScreenshotAsync(new() { Path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "subscriptions-history-after.png") });
+        await Expect(frame.Locator("#subscriptionHistoryTitle")).ToContainTextAsync("Operations delivery");
+        await Expect(frame.Locator("#subscriptionHistoryBody")).ToContainTextAsync("610");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminSubscriptions_ParameterSaveRetainsItsDraftAcrossALaterEditor()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSubscriptionsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='edit-params'][data-id='60']").ClickAsync();
+        await Expect(frame.Locator("#editParamsFields input")).ToHaveValueAsync("North");
+        await frame.Locator("#editParamsFields input").FillAsync("East");
+        await frame.Locator("body").EvaluateAsync("() => { window.__adminMock.pauseNextParameterRead(); window.__adminMock.pauseNextWrite(); }");
+        await frame.Locator("#editParamsSaveBtn").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingParameters || window.__adminMock.pendingWrites ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("body").EvaluateAsync("() => { if (!window.__adminMock.pendingParameters) window.__adminMock.releaseParameters(); }");
+        await frame.Locator("#editParamsCancelBtn").ClickAsync();
+        await frame.Locator("[data-action='edit-params'][data-id='61']").ClickAsync();
+        await Expect(frame.Locator("#editParamsFields input")).ToHaveValueAsync("South");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseParameters(); await new Promise(requestAnimationFrame); }");
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingWrites ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseWrites(); await new Promise(requestAnimationFrame); }");
+        await session.Page.Locator("#stage iframe").ScreenshotAsync(new() { Path = Path.Combine(RepoRoot(), "artifacts", "section1", "admin", "subscriptions-save-after.png") });
+        Assert.Equal("East", await frame.Locator("body").EvaluateAsync<string>("() => window.__adminMock.calls.find(call => call.method === 'PUT' && call.route === '/api/subscriptions/60').body.parameters['@Region']"));
+        await Expect(frame.Locator("#editParamsModal")).ToBeVisibleAsync();
+        await Expect(frame.Locator("#editParamsFields input")).ToHaveValueAsync("South");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("subscriptionsParametersUnavailable")]
+    [InlineData("subscriptionsParametersMalformed")]
+    public async Task AdminSubscriptions_UnknownParameterDefinitionsBlockSaveAndCanBeRetried(string failure)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSubscriptionsSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("(_, failure) => window.__adminMock.setFailure(failure)", failure);
+        await frame.Locator("[data-action='edit-params'][data-id='60']").ClickAsync();
+        await Expect(frame.Locator("#editParamsFields")).ToContainTextAsync("could not be loaded");
+        await Expect(frame.Locator("#editParamsSaveBtn")).ToBeDisabledAsync();
+        Assert.Equal(0, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.method === 'PUT' && call.route.startsWith('/api/subscriptions/')).length"));
+        await frame.Locator("#editParamsCancelBtn").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('')");
+        await frame.Locator("[data-action='edit-params'][data-id='60']").ClickAsync();
+        await Expect(frame.Locator("#editParamsFields input")).ToHaveValueAsync("North");
+        await Expect(frame.Locator("#editParamsSaveBtn")).ToBeEnabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminSubscriptions_RequiredValuesBlockSaveAndEmptyOverridesCanBeCleared()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSubscriptionsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='edit-params'][data-id='60']").ClickAsync();
+        await frame.Locator("#editParamsFields input").FillAsync("");
+        await frame.Locator("#editParamsSaveBtn").ClickAsync();
+        await Expect(frame.Locator("#editParamsError")).ToContainTextAsync("requires a value");
+        Assert.Equal(0, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.method === 'PUT').length"));
+        await frame.Locator("#editParamsCancelBtn").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setParameterDefinitions([{ name: '@Region', type: 'STRING', required: false, default: null, description: null }])");
+        await frame.Locator("[data-action='edit-params'][data-id='60']").ClickAsync();
+        await frame.Locator("#editParamsFields input").FillAsync("");
+        await frame.Locator("#editParamsSaveBtn").ClickAsync();
+        await Expect(frame.Locator("#editParamsModal")).ToBeHiddenAsync();
+        Assert.Equal("{}", await frame.Locator("body").EvaluateAsync<string>("() => JSON.stringify(window.__adminMock.calls.find(call => call.method === 'PUT').body.parameters)"));
+        Assert.Equal(2, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.route.endsWith('/parameters')).length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminSubscriptions_ConflictAndCatalogRefreshRetainTheOpenedVersionAndDraft()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSubscriptionsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='edit-params'][data-id='60']").ClickAsync();
+        await frame.Locator("#editParamsFields input").FillAsync("East");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setSubscriptionVersion(60, 2)");
+        await frame.Locator("#editParamsSaveBtn").ClickAsync();
+        await Expect(frame.Locator("#editParamsError")).ToContainTextAsync("changed");
+        await frame.Locator("#editParamsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#subsTableWrap")).ToHaveAttributeAsync("data-subscriptions-state", "ready");
+        await Expect(frame.Locator("#editParamsFields input")).ToHaveValueAsync("East");
+        await frame.Locator("#editParamsSaveBtn").ClickAsync();
+        await Expect(frame.Locator("#editParamsError")).ToContainTextAsync("changed");
+        var versions = await frame.Locator("body").EvaluateAsync<string[]>("() => window.__adminMock.calls.filter(call => call.method === 'PUT' && call.route === '/api/subscriptions/60').map(call => call.ifMatch)");
+        Assert.Equal(["\"1\"", "\"1\""], versions);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("subscriptionsWriteUnavailable")]
+    [InlineData("subscriptionsReceiptMalformed")]
+    public async Task AdminSubscriptions_UnconfirmedSaveLocksWritesUntilTheExactOffPageTargetIsRefreshed(string failure)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSubscriptionsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='edit-params'][data-id='60']").ClickAsync();
+        await frame.Locator("#editParamsFields input").FillAsync("East");
+        await frame.Locator("body").EvaluateAsync("(_, failure) => window.__adminMock.setFailure(failure)", failure);
+        await frame.Locator("#editParamsSaveBtn").ClickAsync();
+        await Expect(frame.Locator("#editParamsError")).ToContainTextAsync("unconfirmed");
+        await Expect(frame.Locator("#editParamsSaveBtn")).ToBeDisabledAsync();
+        await Expect(frame.Locator("[data-action='toggle'][data-id='60']")).ToBeDisabledAsync();
+        await frame.Locator("#subsFilter").FillAsync("Operations");
+        await Expect(frame.Locator("[data-action='toggle'][data-id='60']")).ToHaveCountAsync(0);
+        await Expect(frame.Locator("[data-action='toggle'][data-id='61']")).ToBeDisabledAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('')");
+        await frame.Locator("#editParamsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#editParamsSaveBtn")).ToBeEnabledAsync();
+        await Expect(frame.Locator("#editParamsFields input")).ToHaveValueAsync("East");
+        Assert.True(await frame.Locator("body").EvaluateAsync<bool>("() => window.__adminMock.calls.some(call => call.method === 'GET' && call.route === '/api/subscriptions/60')"));
+        await frame.Locator("#editParamsSaveBtn").ClickAsync();
+        await Expect(frame.Locator("#editParamsModal")).ToBeHiddenAsync();
+        Assert.Equal("\"2\"", await frame.Locator("body").EvaluateAsync<string>("() => window.__adminMock.calls.filter(call => call.method === 'PUT').at(-1).ifMatch"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminSubscriptions_DuplicateSavesAreBlockedWhileTheCapturedWriteIsPending()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSubscriptionsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='edit-params'][data-id='60']").ClickAsync();
+        await frame.Locator("#editParamsFields input").FillAsync("East");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextWrite()");
+        await frame.Locator("#editParamsSaveBtn").ClickAsync();
+        await Expect(frame.Locator("#editParamsSaveBtn")).ToBeDisabledAsync();
+        await frame.Locator("#editParamsSaveBtn").EvaluateAsync("button => button.dispatchEvent(new MouseEvent('click', { bubbles: true }))");
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.method === 'PUT').length"));
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.releaseWrites()");
+        await Expect(frame.Locator("#editParamsModal")).ToBeHiddenAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminSubscriptions_BulkStatusReportsPartialResultsAndUsesSelectedSnapshots()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSubscriptionsSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('subscriptionsBulkPartial')");
+        await frame.Locator("#subsTableWrap [data-select-all]").CheckAsync();
+        await frame.Locator("#subsPauseBtn").ClickAsync();
+        await Expect(frame.Locator("#subsMutationStatus")).ToContainTextAsync("1 subscriptions paused. 1 were not changed");
+        await Expect(frame.Locator("[data-action='toggle'][data-id='60']")).ToHaveTextAsync("Resume");
+        await Expect(frame.Locator("[data-action='toggle'][data-id='61']")).ToHaveTextAsync("Pause");
+        Assert.Equal("[{\"id\":60,\"version\":1},{\"id\":61,\"version\":1}]", await frame.Locator("body").EvaluateAsync<string>("() => JSON.stringify(window.__adminMock.calls.find(call => call.route.endsWith('/bulk-status')).body.subscriptions)"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("subscriptionsCatalogMalformed")]
+    [InlineData("subscriptionsCatalogUnavailable")]
+    public async Task AdminSubscriptions_UnavailableCatalogIsNotAnEmptySuccess(string failure)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSubscriptionsSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("(_, failure) => window.__adminMock.setFailure(failure)", failure);
+        await frame.Locator("#subsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#subsTableWrap")).ToHaveAttributeAsync("data-subscriptions-state", "failed");
+        await Expect(frame.Locator("#subsTableWrap")).ToContainTextAsync("could not be loaded");
+        await Expect(frame.Locator("#subsPauseBtn")).ToBeDisabledAsync();
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('')");
+        await frame.Locator("#subsRefreshBtn").ClickAsync();
+        await Expect(frame.Locator("#subsTableWrap")).ToHaveAttributeAsync("data-subscriptions-state", "ready");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("subscriptionsHistoryMalformed")]
+    [InlineData("subscriptionsHistoryUnavailable")]
+    public async Task AdminSubscriptions_UnavailableHistoryIsNotAnEmptySuccess(string failure)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSubscriptionsSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("(_, failure) => window.__adminMock.setFailure(failure)", failure);
+        await frame.Locator("[data-action='history'][data-id='60']").ClickAsync();
+        await Expect(frame.Locator("#subscriptionHistoryBody")).ToContainTextAsync("could not be loaded");
+        await Expect(frame.Locator("#subscriptionHistoryBody .empty-state")).ToHaveCountAsync(0);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminSubscriptions_LateCatalogCannotReplaceTheCurrentFilter()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSubscriptionsSandboxAsync(session.Page);
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextSubscriptionRead()");
+        await frame.Locator("#subsRefreshBtn").ClickAsync();
+        await frame.Locator("body").EvaluateAsync("""
+            () => new Promise(resolve => {
+              const poll = () => window.__adminMock.pendingSubscriptions ? resolve() : requestAnimationFrame(poll);
+              poll();
+            })
+            """);
+        await frame.Locator("#subsFilter").FillAsync("Operations");
+        await Expect(frame.Locator("#subsTableWrap tbody tr")).ToHaveCountAsync(1);
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseSubscriptions(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator("#subsTableWrap tbody tr")).ToHaveCountAsync(1);
+        await Expect(frame.Locator("#subsTableWrap")).ToContainTextAsync("Operations delivery");
+        await Expect(frame.Locator("[data-action='edit-params'][data-id='60']")).ToHaveCountAsync(0);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminSubscriptions_DisposalPreventsLateWriteCompletionFromUpdatingThePage()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSubscriptionsSandboxAsync(session.Page);
+        await frame.Locator("[data-action='edit-params'][data-id='60']").ClickAsync();
+        await frame.Locator("#editParamsFields input").FillAsync("East");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextWrite()");
+        await frame.Locator("#editParamsSaveBtn").ClickAsync();
+        await Expect(frame.Locator("#editParamsSaveBtn")).ToBeDisabledAsync();
+        await frame.Locator("body").EvaluateAsync("async () => { window.dispatchEvent(new Event('pagehide')); window.__adminMock.releaseWrites(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator("#editParamsModal")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#subsMutationStatus")).ToBeHiddenAsync();
+        await Expect(frame.Locator("#subsRefreshBtn")).ToBeDisabledAsync();
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.method === 'PUT').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminSettings_LateInitialReadPreservesEditedConnectionAndKey()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSettingsSandboxAsync(session.Page, "settingsLateRead");
+        await WaitForSettingsPendingAsync(frame, "pendingSettings");
+        await frame.Locator("#orch-url").FillAsync("https://newer.example.test");
+        await frame.Locator("#orch-key").FillAsync("newer-fixture-key");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseSettings(); await new Promise(requestAnimationFrame); }");
+        await SaveSettingsScreenshotAsync(session.Page, "late-read");
+        await Expect(frame.Locator("#orch-url")).ToHaveValueAsync("https://newer.example.test");
+        await Expect(frame.Locator("#orch-key")).ToHaveValueAsync("newer-fixture-key");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AdminSettings_SavePreservesNewerDraftsInBothForms(bool orchestrator)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSettingsSandboxAsync(session.Page);
+        await Expect(frame.Locator("#orch-url")).ToHaveValueAsync("https://orchestrator.example.test");
+        await Expect(frame.Locator("#brand-footer")).ToHaveValueAsync("Sandbox footer");
+        await frame.Locator("#orch-url").FillAsync("https://captured.example.test");
+        await frame.Locator("#brand-name").FillAsync("Captured branding");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextWrite()");
+        await frame.Locator(orchestrator ? "#orchSaveBtn" : "#brandSaveBtn").ClickAsync();
+        await WaitForSettingsPendingAsync(frame, "pendingWrites");
+        await frame.Locator("#orch-url").FillAsync("https://newer.example.test");
+        await frame.Locator("#orch-key").FillAsync("newer-fixture-key");
+        await frame.Locator("#brand-name").FillAsync("Newer branding draft");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseWrites(); await new Promise(requestAnimationFrame); }");
+        await SaveSettingsScreenshotAsync(session.Page, orchestrator ? "orchestrator-save" : "branding-save");
+        await Expect(frame.Locator("#orch-url")).ToHaveValueAsync("https://newer.example.test");
+        await Expect(frame.Locator("#orch-key")).ToHaveValueAsync("newer-fixture-key");
+        await Expect(frame.Locator("#brand-name")).ToHaveValueAsync("Newer branding draft");
+        var route = orchestrator ? "/api/admin/settings/orchestrator" : "/api/admin/settings/branding";
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>("(_, route) => window.__adminMock.calls.filter(call => call.method === 'PUT' && call.route === route).length", route));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("settingsStatusForbidden")]
+    [InlineData("settingsStatusMalformed")]
+    public async Task AdminSettings_InvalidStatusDoesNotAnnounceConfirmedOffline(string failure)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSettingsSandboxAsync(session.Page);
+        await Expect(frame.Locator("#orch-url")).ToHaveValueAsync("https://orchestrator.example.test");
+        await frame.Locator("body").EvaluateAsync("(_, failure) => window.__adminMock.setFailure(failure)", failure);
+        await frame.Locator("#orchTestBtn").ClickAsync();
+        await SaveSettingsScreenshotAsync(session.Page, failure);
+        await Expect(frame.Locator("#orch-test-result")).ToContainTextAsync("could not be confirmed");
+        await Expect(frame.Locator("#orch-test-result")).Not.ToContainTextAsync("Offline");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("settingsUnavailable", true)]
+    [InlineData("settingsMalformed", true)]
+    [InlineData("brandingUnavailable", false)]
+    [InlineData("brandingMalformed", false)]
+    public async Task AdminSettings_UnknownReadsBlockWritesAndRefreshPreservesDrafts(string failure, bool orchestrator)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSettingsSandboxAsync(session.Page);
+        await Expect(frame.Locator("#brand-footer")).ToHaveValueAsync("Sandbox footer");
+        await Expect(frame.Locator("#orch-url")).ToHaveValueAsync("https://orchestrator.example.test");
+        var field = orchestrator ? "#orch-url" : "#brand-name";
+        var draft = orchestrator ? "https://draft.example.test" : "Draft branding";
+        var refresh = orchestrator ? "#orchRefreshBtn" : "#brandRefreshBtn";
+        var save = orchestrator ? "#orchSaveBtn" : "#brandSaveBtn";
+        await frame.Locator(field).FillAsync(draft);
+        await frame.Locator("body").EvaluateAsync("(_, failure) => window.__adminMock.setFailure(failure)", failure);
+        await frame.Locator(refresh).ClickAsync();
+        await Expect(frame.Locator(orchestrator ? "#orch-error" : "#brand-error")).ToContainTextAsync("could not be loaded");
+        await Expect(frame.Locator(save)).ToBeDisabledAsync();
+        await Expect(frame.Locator(field)).ToHaveValueAsync(draft);
+        if (orchestrator) await Expect(frame.Locator("#orch-key-status")).ToContainTextAsync("unavailable");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('')");
+        await frame.Locator(refresh).ClickAsync();
+        await Expect(frame.Locator(save)).ToBeEnabledAsync();
+        await Expect(frame.Locator(field)).ToHaveValueAsync(draft);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("settingsWriteUnavailable", true)]
+    [InlineData("settingsWriteUnconfirmed", true)]
+    [InlineData("brandingWriteUnavailable", false)]
+    [InlineData("brandingWriteUnconfirmed", false)]
+    public async Task AdminSettings_UnconfirmedWriteRequiresExplicitRefreshWithoutLosingTheDraft(string failure, bool orchestrator)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSettingsSandboxAsync(session.Page);
+        await Expect(frame.Locator("#brand-footer")).ToHaveValueAsync("Sandbox footer");
+        await Expect(frame.Locator("#orch-url")).ToHaveValueAsync("https://orchestrator.example.test");
+        var field = orchestrator ? "#orch-url" : "#brand-name";
+        var draft = orchestrator ? "https://draft.example.test" : "Draft branding";
+        var refresh = orchestrator ? "#orchRefreshBtn" : "#brandRefreshBtn";
+        var save = orchestrator ? "#orchSaveBtn" : "#brandSaveBtn";
+        await frame.Locator(field).FillAsync(draft);
+        await frame.Locator("body").EvaluateAsync("(_, failure) => window.__adminMock.setFailure(failure)", failure);
+        await frame.Locator(save).ClickAsync();
+        await Expect(frame.Locator(orchestrator ? "#orch-error" : "#brand-error")).ToContainTextAsync("outcome is unconfirmed");
+        await Expect(frame.Locator(save)).ToBeDisabledAsync();
+        await Expect(frame.Locator(field)).ToHaveValueAsync(draft);
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.method === 'PUT').length"));
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.setFailure('')");
+        await frame.Locator(refresh).ClickAsync();
+        await Expect(frame.Locator(save)).ToBeEnabledAsync();
+        await Expect(frame.Locator(field)).ToHaveValueAsync(draft);
+        await Expect(frame.Locator(orchestrator ? "#orch-save-result" : "#brand-save-result")).ToContainTextAsync("remains unconfirmed");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminSettings_LateConnectionStatusCannotDescribeANewerDraft()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSettingsSandboxAsync(session.Page);
+        await Expect(frame.Locator("#orch-url")).ToHaveValueAsync("https://orchestrator.example.test");
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextStatusRead()");
+        await frame.Locator("#orchTestBtn").ClickAsync();
+        await WaitForSettingsPendingAsync(frame, "pendingStatus");
+        await frame.Locator("#orch-url").FillAsync("https://newer.example.test");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releaseStatus(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator("#orch-test-result")).ToBeEmptyAsync();
+        await Expect(frame.Locator("#orchTestBtn")).ToBeDisabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AdminSettings_PendingWriteCannotBeDuplicatedOrRepaintAfterDisposal(bool orchestrator)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSettingsSandboxAsync(session.Page);
+        await Expect(frame.Locator("#brand-footer")).ToHaveValueAsync("Sandbox footer");
+        await Expect(frame.Locator("#orch-url")).ToHaveValueAsync("https://orchestrator.example.test");
+        var save = orchestrator ? "#orchSaveBtn" : "#brandSaveBtn";
+        var result = orchestrator ? "#orch-save-result" : "#brand-save-result";
+        await frame.Locator("body").EvaluateAsync("() => window.__adminMock.pauseNextWrite()");
+        await frame.Locator(save).ClickAsync();
+        await WaitForSettingsPendingAsync(frame, "pendingWrites");
+        await Expect(frame.Locator(save)).ToBeDisabledAsync();
+        await frame.Locator(save).EvaluateAsync("button => button.click()");
+        await frame.Locator("body").EvaluateAsync("async () => { window.dispatchEvent(new Event('pagehide')); window.__adminMock.releaseWrites(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator(result)).ToHaveTextAsync("Saving…");
+        await Expect(frame.Locator(save)).ToBeDisabledAsync();
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.method === 'PUT').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminSettings_LateInitialBrandingCannotReplaceAcceptedBranding()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSettingsSandboxAsync(session.Page, "settingsLatePublicBranding");
+        await WaitForSettingsPendingAsync(frame, "pendingPublicBranding");
+        await Expect(frame.Locator("#brand-footer")).ToHaveValueAsync("Sandbox footer");
+        await frame.Locator("#brand-name").FillAsync("Accepted portal name");
+        await frame.Locator("#brandSaveBtn").ClickAsync();
+        await Expect(frame.Locator("#brand-save-result")).ToHaveTextAsync("Saved.");
+        await Expect(frame.Locator(".portal-brand-name")).ToHaveTextAsync("Accepted portal name");
+        await frame.Locator("body").EvaluateAsync("async () => { window.__adminMock.releasePublicBranding(); await new Promise(requestAnimationFrame); }");
+        await Expect(frame.Locator(".portal-brand-name")).ToHaveTextAsync("Accepted portal name");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminPage_TabSwitchPreservesSettingsDraftsAndLoadsEachPanelOnce()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSettingsSandboxAsync(session.Page);
+        await Expect(frame.Locator("#orch-url")).ToHaveValueAsync("https://orchestrator.example.test");
+        await Expect(frame.Locator("#brand-footer")).ToHaveValueAsync("Sandbox footer");
+        await frame.Locator("#orch-url").FillAsync("https://draft.example.test");
+        await frame.Locator("#brand-name").FillAsync("Private branding draft");
+        await frame.Locator(".admin-tab[data-tab='users']").ClickAsync();
+        await Expect(frame.Locator(".admin-tab[data-tab='users']")).ToHaveAttributeAsync("aria-selected", "true");
+        await frame.Locator(".admin-tab[data-tab='settings']").ClickAsync();
+        await Expect(frame.Locator(".admin-tab[data-tab='settings']")).ToHaveAttributeAsync("aria-selected", "true");
+        await Expect(frame.Locator(".admin-tab[data-tab='users']")).ToHaveAttributeAsync("aria-selected", "false");
+        await Expect(frame.Locator("#orch-url")).ToHaveValueAsync("https://draft.example.test");
+        await Expect(frame.Locator("#brand-name")).ToHaveValueAsync("Private branding draft");
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.route === '/api/admin/settings/orchestrator').length"));
+        Assert.Equal(1, await frame.Locator("body").EvaluateAsync<int>("() => window.__adminMock.calls.filter(call => call.route === '/api/admin/settings/branding').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AdminPage_DisposalRemovesTabHandlersAndCannotMountAnotherOwner()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await OpenAdminSettingsSandboxAsync(session.Page);
+        await Expect(frame.Locator("#orch-url")).ToHaveValueAsync("https://orchestrator.example.test");
+        var additional = await frame.Locator("body").EvaluateAsync<int>("""
+            async () => {
+              const before = window.__adminMock.calls.length;
+              window.dispatchEvent(new Event('pagehide'));
+              document.querySelector(".admin-tab[data-tab='datasets']").click();
+              document.querySelector(".admin-tab[data-tab='operations']").click();
+              await new Promise(requestAnimationFrame);
+              return window.__adminMock.calls.length - before;
+            }
+            """);
+        Assert.Equal(0, additional);
+        await Expect(frame.Locator(".admin-tab[data-tab='settings']")).ToHaveAttributeAsync("aria-selected", "true");
+        Assert.Empty(session.PageErrors);
+    }
+
+    private async Task<IFrameLocator> OpenAdminSettingsSandboxAsync(IPage page, string fixtureId = "settings")
+    {
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='admin-page']").ClickAsync();
+        await page.Locator("#fixtureSel").SelectOptionAsync(fixtureId);
+        var frame = page.FrameLocator("#stage iframe");
+        await Expect(frame.Locator("body")).ToHaveAttributeAsync("data-admin-sandbox-ready", "true");
+        return frame;
+    }
+
+    private static Task WaitForSettingsPendingAsync(IFrameLocator frame, string field) => frame.Locator("body").EvaluateAsync("""
+        (_, field) => new Promise(resolve => {
+          const poll = () => window.__adminMock[field] ? resolve() : requestAnimationFrame(poll);
+          poll();
+        })
+        """, field);
+
+    private static async Task SaveSettingsScreenshotAsync(IPage page, string scenario)
+    {
+        var directory = Path.Combine(RepoRoot(), "artifacts", "section1", "admin");
+        Directory.CreateDirectory(directory);
+        await page.Locator("#stage iframe").ScreenshotAsync(new() { Path = Path.Combine(directory, $"settings-{scenario}-after.png") });
+    }
+
+    private static Task WaitForSubscriptionPendingAsync(IFrameLocator frame, bool history) => frame.Locator("body").EvaluateAsync("""
+        (_, history) => new Promise(resolve => {
+          const poll = () => (history ? window.__adminMock.pendingSubscriptionHistories : window.__adminMock.pendingParameters) ? resolve() : requestAnimationFrame(poll);
+          poll();
+        })
+        """, history);
+
+    private async Task<IFrameLocator> OpenAdminSubscriptionsSandboxAsync(IPage page)
+    {
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='admin-page']").ClickAsync();
+        await page.Locator("#fixtureSel").SelectOptionAsync("subscriptions");
+        var frame = page.FrameLocator("#stage iframe");
+        await Expect(frame.Locator("body")).ToHaveAttributeAsync("data-admin-sandbox-ready", "true");
+        await Expect(frame.Locator("#subsTableWrap")).ToContainTextAsync("Finance delivery");
+        return frame;
+    }
+
+    private async Task<IFrameLocator> OpenAdminAuditSandboxAsync(IPage page)
+    {
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='admin-page']").ClickAsync();
+        await page.Locator("#fixtureSel").SelectOptionAsync("audit");
+        var frame = page.FrameLocator("#stage iframe");
+        await Expect(frame.Locator("body")).ToHaveAttributeAsync("data-admin-sandbox-ready", "true");
+        await Expect(frame.Locator("#auditTableWrap")).ToContainTextAsync("Audit evidence 525");
+        return frame;
+    }
+
+    private async Task<IFrameLocator> OpenAdminReportsSandboxAsync(IPage page)
+    {
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='admin-page']").ClickAsync();
+        await page.Locator("#fixtureSel").SelectOptionAsync("reports");
+        var frame = page.FrameLocator("#stage iframe");
+        await Expect(frame.Locator("body")).ToHaveAttributeAsync("data-admin-sandbox-ready", "true");
+        await Expect(frame.Locator("#reportsTableWrap")).ToContainTextAsync("Finance report");
+        return frame;
+    }
+
+    private static Task WaitForAdminValidationAsync(IFrameLocator frame) => frame.Locator("body").EvaluateAsync("""
+        () => new Promise(resolve => {
+          const poll = () => window.__adminMock.pendingValidations ? resolve() : requestAnimationFrame(poll);
+          poll();
+        })
+        """);
+
+    private static Task WaitForAdminWriteAsync(IFrameLocator frame) => frame.Locator("body").EvaluateAsync("""
+        () => new Promise(resolve => {
+          const poll = () => window.__adminMock.pendingWrites ? resolve() : requestAnimationFrame(poll);
+          poll();
+        })
+        """);
+
+    private async Task<IFrameLocator> OpenAdminFoldersSandboxAsync(IPage page)
+    {
+        var frame = await OpenAdminUsersSandboxAsync(page);
+        await frame.Locator(".admin-tab[data-tab='folders']").ClickAsync();
+        await Expect(frame.Locator("#folderTableWrap")).ToContainTextAsync("/Reports");
+        await Expect(frame.Locator("#folderTableWrap")).ToHaveAttributeAsync("data-folders-state", "ready");
+        return frame;
+    }
+
+    private async Task<IFrameLocator> OpenAdminGroupsSandboxAsync(IPage page)
+    {
+        var frame = await OpenAdminUsersSandboxAsync(page);
+        await frame.Locator(".admin-tab[data-tab='groups']").ClickAsync();
+        await Expect(frame.Locator("#groupTableWrap")).ToHaveAttributeAsync("data-groups-state", "ready");
+        return frame;
+    }
+
+    [Fact]
+    public async Task Governance_UnconfirmedScanCannotAnnounceSuccess()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
+        await Expect(page.Locator("[data-gov-state='scanned']")).ToBeVisibleAsync();
+        await page.EvaluateAsync("() => window.__governance.governanceApi.setMode('bad-receipt')");
+        await page.Locator("#btnRunScan").ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__governance.messages.length > 0");
+        var path = Path.Combine(RepoRoot(), "artifacts", "section1", "governance", "scan-unconfirmed.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = path });
+        Assert.Equal(0, await page.EvaluateAsync<int>("() => window.__governance.messages.filter(item => item.options.tone === 'success').length"));
+        await Expect(page.Locator("#stage")).ToContainTextAsync("Change outcome is unconfirmed");
+        await Expect(page.Locator("#btnRunScan")).ToBeDisabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Governance_PendingWriteCannotBeSubmittedTwice()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
+        await Expect(page.Locator("[data-gov-state='scanned']")).ToBeVisibleAsync();
+        await page.EvaluateAsync("() => window.__governance.governanceApi.pause('scan')");
+        await page.Locator("#btnRunScan").ClickAsync();
+        await page.EvaluateAsync("() => window.__governance.governanceApi.whenPaused()");
+        await page.EvaluateAsync("() => document.querySelector('#btnRunScan').click()");
+        Assert.Equal(1, await page.EvaluateAsync<int>("() => window.__governance.governanceApi.calls.filter(item => item.method === 'scan').length"));
+        await page.EvaluateAsync("async () => { window.__governance.governanceApi.release(); await new Promise(requestAnimationFrame); }");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Governance_GlossaryEditPreservesStewardAndDisabledState()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
+        await page.Locator("#fixtureSel").SelectOptionAsync("glossary");
+        await page.WaitForFunctionAsync("() => window.__governance?.portal.state.tab === 'glossary' && window.__governance.portal.state.load === 'ready'");
+        await page.EvaluateAsync("async () => { window.__governance.governanceApi.setGlossaryFlags('revenue', { disabled: true }); await window.__governance.portal.reload(); }");
+        await page.Locator("[data-edit-term='revenue']").ClickAsync();
+        await page.Locator("#glossaryDesc").FillAsync("Updated definition.");
+        await page.Locator("#btnConfirmGlossaryModal").ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__governance.governanceApi.calls.some(item => item.method === 'saveGlossaryTerm')");
+        var payload = await page.EvaluateAsync<System.Text.Json.JsonElement>("() => window.__governance.governanceApi.calls.find(item => item.method === 'saveGlossaryTerm').payload");
+        Assert.True(payload.TryGetProperty("steward", out var steward));
+        Assert.Equal("chuck", steward.GetString());
+        Assert.True(payload.GetProperty("disabled").GetBoolean());
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Governance_CancelRestoresDialogSemanticsAndFocus()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
+        await page.Locator("#fixtureSel").SelectOptionAsync("settings");
+        await page.Locator("#btnAddNewCategory").ClickAsync();
+        await Expect(page.Locator("#catLabel")).ToBeFocusedAsync();
+        await page.Locator("#btnCancelCategoryModal").ClickAsync();
+        await Expect(page.Locator("#categoryModalBackdrop")).ToHaveAttributeAsync("aria-hidden", "true");
+        await Expect(page.Locator("#btnAddNewCategory")).ToBeFocusedAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Governance_UnconfirmedWriteNeedsSuccessfulExplicitRefresh()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenGovernanceSandboxAsync(page);
+        await page.EvaluateAsync("() => window.__governance.governanceApi.setMode('write-unavailable')");
+        await page.Locator("#btnRunScan").ClickAsync();
+        await Expect(page.Locator("#govMutationStatus")).ToContainTextAsync("unconfirmed");
+        await page.EvaluateAsync("async () => { await window.__governance.portal.setTab('settings'); await window.__governance.portal.setTab('overview'); window.__governance.governanceApi.setMode('failed'); }");
+        await Expect(page.Locator("#btnRunScan")).ToBeDisabledAsync();
+        await page.Locator("#btnGovRefresh").ClickAsync();
+        await Expect(page.Locator("[data-gov-state='failed']")).ToBeVisibleAsync();
+        await Expect(page.Locator("#govMutationStatus")).ToContainTextAsync("unconfirmed");
+        await page.EvaluateAsync("() => window.__governance.governanceApi.setMode('live')");
+        await page.Locator("#btnGovRefresh").ClickAsync();
+        await Expect(page.Locator("#btnRunScan")).ToBeEnabledAsync();
+        await Expect(page.Locator("#govMutationStatus")).ToBeHiddenAsync();
+        Assert.Equal(1, await page.EvaluateAsync<int>("() => window.__governance.governanceApi.calls.filter(item => item.method === 'scan').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Governance_LateSettingsSaveKeepsAnotherCategoryDraft()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenGovernanceSandboxAsync(page, "settings");
+        await page.EvaluateAsync("() => window.__governance.governanceApi.pause('saveSettings')");
+        await page.Locator("#settingsDeductMeta").FillAsync("7");
+        await page.Locator("#btnSaveScoringSettings").ClickAsync();
+        await page.EvaluateAsync("() => window.__governance.governanceApi.whenPaused()");
+        await page.Locator("#btnAddNewCategory").ClickAsync();
+        await page.Locator("#catLabel").FillAsync("Draft while saving");
+        await page.EvaluateAsync("() => window.__governance.governanceApi.release()");
+        await page.WaitForFunctionAsync("() => window.__governance.portal.state.mutation === 'idle'");
+        await Expect(page.Locator("#categoryModalBackdrop")).ToBeVisibleAsync();
+        await Expect(page.Locator("#catLabel")).ToHaveValueAsync("Draft while saving");
+        await Expect(page.Locator("#catLabel")).ToBeFocusedAsync();
+        await Expect(page.Locator("#govMutationStatus")).ToContainTextAsync("recorded");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Governance_LateConfirmationCannotDeleteFromAnotherView()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenGovernanceSandboxAsync(page, "glossary");
+        await page.EvaluateAsync("() => window.__governance.governanceApi.pause('confirm')");
+        await page.Locator("[data-delete-term='revenue']").ClickAsync();
+        await page.EvaluateAsync("() => window.__governance.governanceApi.whenPaused()");
+        await page.EvaluateAsync("() => window.__governance.portal.setTab('settings')");
+        await page.EvaluateAsync("async () => { window.__governance.governanceApi.release(); await new Promise(requestAnimationFrame); }");
+        Assert.Equal(0, await page.EvaluateAsync<int>("() => window.__governance.governanceApi.calls.filter(item => item.method === 'deleteGlossaryTerm').length"));
+        await Expect(page.Locator("#btnAddNewCategory")).ToBeVisibleAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Governance_RedrawPreservesSettingsAndDialogDraftsWithKeyboardFocus()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenGovernanceSandboxAsync(page, "settings");
+        await page.Locator("#settingsDeductMeta").FillAsync("7");
+        await page.Locator("#btnAddNewCategory").ClickAsync();
+        await page.Locator("#catLabel").FillAsync("Keep this category draft");
+        await page.EvaluateAsync("() => window.__governance.portal.render()");
+        await Expect(page.Locator("#catLabel")).ToHaveValueAsync("Keep this category draft");
+        await Expect(page.Locator("#catLabel")).ToBeFocusedAsync();
+        await page.Locator("#catLabel").PressAsync("Shift+Tab");
+        await Expect(page.Locator("#btnConfirmCategoryModal")).ToBeFocusedAsync();
+        await page.Locator("#btnConfirmCategoryModal").PressAsync("Escape");
+        await Expect(page.Locator("#categoryModalBackdrop")).ToHaveAttributeAsync("aria-hidden", "true");
+        await Expect(page.Locator("#btnAddNewCategory")).ToBeFocusedAsync();
+        await Expect(page.Locator("#settingsDeductMeta")).ToHaveValueAsync("7");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Governance_RunningScanAndPublicTabFallbackRemainHonest()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenGovernanceSandboxAsync(page, "scan-running");
+        await Expect(page.Locator("[data-gov-state='scan-running']")).ToBeVisibleAsync();
+        await Expect(page.Locator("[data-gov-state='scanned']")).ToHaveCountAsync(0);
+        await Expect(page.Locator("#btnRunScan")).ToBeDisabledAsync();
+        await page.EvaluateAsync("() => window.__governance.portal.setTab('__proto__')");
+        await Expect(page.Locator(".gov-kpis")).ToBeVisibleAsync();
+        await page.EvaluateAsync("() => window.__governance.portal.setTab('badges')");
+        await Expect(page.Locator(".gov-kpis")).ToBeVisibleAsync();
+        await page.Locator("#govScope").SelectOptionAsync("mine");
+        await Expect(page.Locator(".gov-kpi").Filter(new() { HasText = "Governed assets" })).ToContainTextAsync("1/1");
+        await Expect(page.Locator(".gov-kpi").Filter(new() { HasText = "Open findings" })).ToContainTextAsync("2");
+        await Expect(page.Locator(".gov-body")).ToContainTextAsync("Finding totals cover the entire estate");
+        Assert.Empty(session.PageErrors);
+    }
+
+    private async Task OpenGovernanceSandboxAsync(IPage page, string fixtureId = "overview")
+    {
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__governance?.portal.state.load === 'ready'");
+        if (fixtureId != "overview")
+        {
+            await page.Locator("#fixtureSel").SelectOptionAsync(fixtureId);
+            await page.WaitForFunctionAsync("id => window.__governance?.portal.state.load === 'ready' && (id === 'scan-running' ? window.__governance.portal.state.dashboard?.lastScan?.status === 'running' : window.__governance.portal.state.tab === id)", fixtureId);
+        }
+    }
+
+    [Fact]
+    public async Task SandboxReload_RefreshesTransitiveModulesAndRetainsTheSelectedFixtureAndTheme()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var revision = "before";
+        var reads = 0;
+        var source = await File.ReadAllTextAsync(Path.Combine(RepoRoot(), "src", "ETL-SQL.Portal", "wwwroot", "js", "governance-view.js"));
+        Assert.Contains("<h1>Governance</h1>", source);
+        await page.RouteAsync("**/js/governance-view.js*", route =>
+        {
+            Interlocked.Increment(ref reads);
+            return route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "text/javascript",
+                Body = source.Replace("<h1>Governance</h1>", $"<h1>Sandbox dependency {revision}</h1>", StringComparison.Ordinal)
+            });
+        });
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=portal-governance&fixture=empty&theme=dark&sidebar=collapsed");
+        await Expect(page.Locator("#stage h1")).ToHaveTextAsync("Sandbox dependency before");
+        await page.WaitForFunctionAsync("() => window.__governance?.portal.state.load === 'ready'");
+        var originalUrl = page.Url;
+        var evidence = Path.Combine(RepoRoot(), "artifacts", "section1", "sandbox-reload");
+        Directory.CreateDirectory(evidence);
+        await page.ScreenshotAsync(new() { Path = Path.Combine(evidence, "transitive-before.png"), Animations = ScreenshotAnimations.Disabled });
+
+        revision = "after";
+        await page.Locator("#reloadBtn").ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__governance?.portal.state.load === 'ready'");
+        await Expect(page.Locator("#stage h1")).ToHaveTextAsync("Sandbox dependency after");
+        await page.ScreenshotAsync(new() { Path = Path.Combine(evidence, "transitive-after.png"), Animations = ScreenshotAnimations.Disabled });
+        Assert.Equal(2, reads);
+        await Expect(page.Locator("#fixtureSel")).ToHaveValueAsync("empty");
+        await Expect(page.Locator("body")).ToHaveClassAsync(new System.Text.RegularExpressions.Regex("stage-theme-dark"));
+        await Expect(page.Locator("body")).ToHaveClassAsync(new System.Text.RegularExpressions.Regex("sidebar-collapsed"));
+        Assert.Equal(originalUrl, page.Url);
+        Assert.Empty(session.PageErrors);
     }
 
     [Fact]
@@ -197,6 +2338,1863 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         {
             if (!process.HasExited) { process.Kill(entireProcessTree: true); await process.WaitForExitAsync(); }
         }
+    }
+
+    [Fact]
+    public async Task Governance_SandboxReloadFetchesANewControllerAndDisposesThePreviousOne()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var modules = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        page.Request += (_, request) => { if (request.Url.Contains("/js/governance-portal.js?t=", StringComparison.Ordinal)) modules.Enqueue(request.Url); };
+        await OpenGovernanceSandboxAsync(page);
+        await page.EvaluateAsync("""
+            () => {
+              const previous = window.__governance;
+              window.__previousGovernance = previous;
+              window.addEventListener('pagehide', () => sessionStorage.setItem('__sandboxDisposed',
+                String(previous.portal.state.dashboard === null)), { once: true });
+            }
+            """);
+        await page.Locator("#reloadBtn").ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__governance !== window.__previousGovernance && window.__governance?.portal.state.load === 'ready'");
+        Assert.Equal(2, modules.Distinct().Count());
+        Assert.Equal("true", await page.EvaluateAsync<string>("() => sessionStorage.getItem('__sandboxDisposed')"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Governance_LatestScopeWinsAgainstHeldDashboard()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
+        await Expect(page.Locator("[data-gov-state='scanned']")).ToBeVisibleAsync();
+        await page.EvaluateAsync("() => { window.__governance.governanceApi.pause('dashboard'); window.__governance.pending = window.__governance.portal.reload(); }");
+        await page.EvaluateAsync("() => window.__governance.governanceApi.whenPaused()");
+        await page.Locator("#govScope").SelectOptionAsync("mine");
+        await Expect(page.Locator(".gov-kpi").Filter(new() { HasText = "Governed assets" }).Locator(".gov-kpi-value")).ToHaveTextAsync("1/1");
+        await page.EvaluateAsync("async () => { window.__governance.governanceApi.release(); await window.__governance.pending; }");
+        await Expect(page.Locator("#govScope")).ToHaveValueAsync("mine");
+        await Expect(page.Locator(".gov-kpi").Filter(new() { HasText = "Governed assets" }).Locator(".gov-kpi-value")).ToHaveTextAsync("1/1");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Governance_ClosedTrendCannotReplaceAnotherJob()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenGovernanceSandboxAsync(page, "quality");
+        await page.EvaluateAsync("() => window.__governance.dataQualityApi.pauseTrend('nightly_import')");
+        await page.Locator("[data-view-dq-trend='nightly_import']").ClickAsync();
+        await page.EvaluateAsync("() => window.__governance.dataQualityApi.whenPaused()");
+        await page.Locator("#govDqTrendCloseBtn").ClickAsync();
+        await Expect(page.Locator("[data-view-dq-trend='nightly_import']")).ToBeFocusedAsync();
+        await page.Locator("[data-view-dq-trend='finance_load']").ClickAsync();
+        await Expect(page.Locator("#govTrendModalTitle")).ToHaveTextAsync("finance_load");
+        await Expect(page.Locator(".dq-trend-stats")).ToBeVisibleAsync();
+        await page.EvaluateAsync("async () => { window.__governance.dataQualityApi.release(); await new Promise(requestAnimationFrame); }");
+        await Expect(page.Locator("#govTrendModalTitle")).ToHaveTextAsync("finance_load");
+        await page.Locator("#govDqTrendCloseBtn").PressAsync("Escape");
+        await Expect(page.Locator("#govDqTrendDialog")).ToHaveCountAsync(0);
+        await Expect(page.Locator("[data-view-dq-trend='finance_load']")).ToBeFocusedAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Governance_LoadsAllJobTrendsAndKeepsFailedTrendsUnavailable()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenGovernanceSandboxAsync(page, "quality");
+        await page.EvaluateAsync("async () => { window.__governance.dataQualityApi.setJobNames(['one','two','three','four','five','__proto__']); await window.__governance.portal.reload(); }");
+        var row = page.Locator("tr").Filter(new() { Has = page.Locator("[data-view-dq-trend='__proto__']") });
+        await Expect(row).ToContainTextAsync("Completed");
+        await Expect(row).ToContainTextAsync("1,000");
+        await page.EvaluateAsync("async () => { window.__governance.dataQualityApi.failTrend('__proto__'); await window.__governance.portal.reload(); }");
+        await Expect(row).ToContainTextAsync("Unavailable");
+        await Expect(row).Not.ToContainTextAsync("1,000");
+        await Expect(page.Locator(".gov-kpi").Filter(new() { HasText = "Avg Failure Rate" }).Locator(".gov-kpi-value")).ToHaveTextAsync("—");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Governance_UnavailableQualityCannotRetainCountsOrClaimEmpty()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
+        await page.Locator("#fixtureSel").SelectOptionAsync("quality");
+        await Expect(page.GetByRole(AriaRole.Listitem).Filter(new() { HasText = "Jobs Monitored" })).ToHaveAttributeAsync("aria-label", "Jobs Monitored: 2. Configured orchestrator pipelines");
+        await page.EvaluateAsync("async () => { window.__governance.dataQualityApi.setUnavailable(true); await window.__governance.portal.reload(); }");
+        var path = Path.Combine(RepoRoot(), "artifacts", "section1", "governance", "quality-unavailable.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = path });
+        await Expect(page.Locator("#stage")).ToContainTextAsync("Data quality evidence is unavailable");
+        await Expect(page.Locator("#stage .gov-kpi").Filter(new() { HasText = "Jobs Monitored" }).Locator(".gov-kpi-value")).ToHaveTextAsync("—");
+        await Expect(page.Locator("#stage")).Not.ToContainTextAsync("No matching jobs found.");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Governance_MalformedDashboardCannotClaimAnEmptyEstate()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
+        await Expect(page.Locator("[data-gov-state='scanned']")).ToBeVisibleAsync();
+        await page.EvaluateAsync("async () => { window.__governance.governanceApi.setMode('malformed'); await window.__governance.portal.reload(); }");
+        await Expect(page.Locator("[data-gov-state='failed']")).ToBeVisibleAsync();
+        await Expect(page.Locator("#stage .gov-kpis")).ToHaveCountAsync(0);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Governance_DisposedReadCannotReplaceAnotherHost()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
+        await Expect(page.Locator("[data-gov-state='scanned']")).ToBeVisibleAsync();
+        await page.EvaluateAsync("() => { window.__governance.governanceApi.pause('dashboard'); window.__governance.pending = window.__governance.portal.reload(); }");
+        await page.EvaluateAsync("() => window.__governance.governanceApi.whenPaused()");
+        await page.EvaluateAsync("async () => { const view = window.__governance; view.portal.dispose(); view.host.textContent = 'Replacement host'; view.governanceApi.release(); await view.pending; }");
+        await Expect(page.Locator("#stage")).ToHaveTextAsync("Replacement host");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task LineageCatalog_FailedProtectedSourcesCannotClaimEmptyInventory()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
+        await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
+        await page.Locator("#fixtureSel").SelectOptionAsync("protected-unavailable");
+        await Expect(page.Locator("#stage h2").First).ToHaveTextAsync("Protected Data & Tags");
+        await Expect(page.Locator("#lineageResults .loading-state")).ToHaveCountAsync(0);
+        var path = Path.Combine(RepoRoot(), "artifacts", "section1", "lineage", "protected-unavailable.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = path });
+        await Expect(page.Locator("#lineageResults")).ToContainTextAsync("Protected inventory unavailable");
+        await Expect(page.Locator("#lineageResults")).Not.ToContainTextAsync("No protected data or sensitive columns recorded.");
+        await Expect(page.Locator("#lineageResults .stewardship-metric").Filter(new() { HasText = "Protected observations" }).Locator("strong")).ToHaveTextAsync("—");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task LineageCatalog_LateHistoryCannotOverwriteAnotherModeOrDisposedHost()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
+        await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
+        await page.EvaluateAsync("() => window.__lineage.api.pause('lineage')");
+        await page.Locator("#lineageQuery").FillAsync("ExecutiveKpis");
+        await page.Locator("#lineageSearchForm button[type='submit']").ClickAsync();
+        await page.EvaluateAsync("() => window.__lineage.api.whenPaused()");
+        await page.Locator("[data-lineage-mode='stewardship']").ClickAsync();
+        await Expect(page.Locator("#lineageResults .stewardship-overview")).ToBeVisibleAsync();
+        await page.EvaluateAsync("async () => { await window.__lineage.api.release(); await new Promise(requestAnimationFrame); }");
+        await Expect(page.Locator("#lineageResults .stewardship-overview")).ToBeVisibleAsync();
+        await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(0);
+        await page.EvaluateAsync("() => { window.__lineage.api.pause('lineage'); window.__lineage.catalog.setMode('history'); }");
+        await page.EvaluateAsync("() => window.__lineage.api.whenPaused()");
+        await page.EvaluateAsync("async () => { window.__lineage.catalog.dispose(); window.__lineage.host.textContent = 'Replacement host'; await window.__lineage.api.release(); await new Promise(requestAnimationFrame); }");
+        await Expect(page.Locator("#stage")).ToHaveTextAsync("Replacement host");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task LineageCatalog_ProtectedCountsUseTheActualServerShape()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
+        await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
+        await page.Locator("[data-lineage-mode='protected']").ClickAsync();
+        await Expect(page.Locator("#lineageResults .stewardship-metric").Filter(new() { HasText = "Protected observations" }).Locator("strong")).ToHaveTextAsync("1");
+        await Expect(page.Locator("#lineageResults .stewardship-metric").Filter(new() { HasText = "Sensitive" }).Locator("strong")).ToHaveTextAsync("1");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task LineageCatalog_MalformedRowsClearExportAndEditedFiltersInvalidatePendingHistory()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
+        await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
+        await page.EvaluateAsync("() => window.__lineage.api.setMode('malformed')");
+        await page.Locator("#lineageSearchForm button[type='submit']").ClickAsync();
+        await Expect(page.Locator("#lineageResults")).ToContainTextAsync("Lineage query unavailable");
+        await Expect(page.Locator("#lineageExportBtn")).ToBeDisabledAsync();
+        await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(0);
+        await page.EvaluateAsync("() => { window.__lineage.api.setMode('healthy'); window.__lineage.api.pause('lineage'); }");
+        await page.Locator("#lineageSearchForm button[type='submit']").ClickAsync();
+        await page.EvaluateAsync("() => window.__lineage.api.whenPaused()");
+        await page.Locator("#lineageQuery").FillAsync("Changed draft");
+        await page.EvaluateAsync("async () => { await window.__lineage.api.release(); await new Promise(requestAnimationFrame); }");
+        await Expect(page.Locator("#lineageQuery")).ToHaveValueAsync("Changed draft");
+        await Expect(page.Locator("#lineageResults")).ToContainTextAsync("Run the query to inspect these filters.");
+        await Expect(page.Locator("#lineageExportBtn")).ToBeDisabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task LineageCatalog_KeyboardModesFacetsAndImpactRespectTheirContracts()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
+        await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
+        await page.Locator("[data-lineage-mode='history']").FocusAsync();
+        await page.Locator("[data-lineage-mode='history']").PressAsync("ArrowRight");
+        await Expect(page.Locator("[data-lineage-mode='stewardship']")).ToBeFocusedAsync();
+        await Expect(page.Locator("#stewardshipSteward option[value='Maria Chen']")).ToHaveCountAsync(1);
+        await Expect(page.Locator("#lineageSearchForm")).ToBeHiddenAsync();
+        await Expect(page.Locator("#stewardshipSearchForm")).ToBeVisibleAsync();
+        await page.Locator("[data-lineage-mode='stewardship']").PressAsync("ArrowRight");
+        await Expect(page.Locator("[data-lineage-mode='protected']")).ToBeFocusedAsync();
+        await Expect(page.Locator("#protectedSteward option[value='Maria Chen']")).ToHaveCountAsync(1);
+        await page.Locator("[data-lineage-mode='protected']").PressAsync("End");
+        await Expect(page.Locator("[data-lineage-mode='impact']")).ToBeFocusedAsync();
+        await page.Locator("#impactName").FillAsync("edw.Sales");
+        await page.Locator("#impactSearchForm button[type='submit']").ClickAsync();
+        await Expect(page.Locator("#lineageResults .impact-sections")).ToContainTextAsync("Protected data alert");
+        await page.EvaluateAsync("() => window.__lineage.api.setMode('wrong-impact')");
+        await page.Locator("#impactSearchForm button[type='submit']").ClickAsync();
+        await Expect(page.Locator("#lineageResults")).ToContainTextAsync("Impact query unavailable");
+        await Expect(page.Locator("#lineageResults .impact-overview")).ToHaveCountAsync(0);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task LineageCatalog_PartialAuditKeepsUnavailableSourcesDistinctFromEmpty()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
+        await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
+        await page.EvaluateAsync("() => window.__lineage.api.setMode('unavailable')");
+        await page.Locator("[data-lineage-mode='audit']").ClickAsync();
+        await Expect(page.Locator("#lineageResults")).ToContainTextAsync("Protected inventory unavailable");
+        await Expect(page.Locator("#lineageResults .stewardship-metric").Filter(new() { HasText = "Outbox pending" }).Locator("strong")).ToHaveTextAsync("—");
+        await Expect(page.Locator("#lineageResults .stewardship-metric").Filter(new() { HasText = "Impact events" }).Locator("strong")).ToHaveTextAsync("2");
+        await Expect(page.Locator("#lineageResults")).Not.ToContainTextAsync("No protected lineage is currently recorded.");
+        await page.Locator("#fixtureSel").SelectOptionAsync("reader");
+        await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
+        await page.EvaluateAsync("() => window.__lineage.catalog.setMode('audit')");
+        await Expect(page.Locator("[data-lineage-mode='audit']")).ToHaveCountAsync(0);
+        Assert.False(await page.EvaluateAsync<bool>("() => window.__lineage.api.calls.some(call => call.kind === 'auditLog' || call.kind === 'operationalMetrics')"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task LineageCatalog_GraphNamesCannotCollideWithObjectPropertiesOrEdgeSeparators()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
+        await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
+        await page.EvaluateAsync("() => window.__lineage.api.setMode('graph-names')");
+        await page.Locator("#lineageSearchForm button[type='submit']").ClickAsync();
+        await Expect(page.Locator("#lineageResults")).ToContainTextAsync("__proto__");
+        await page.Locator("#lineageViewToggle").ClickAsync();
+        Assert.True(await page.EvaluateAsync<bool>("() => { const graph = window.__lineage.api.graphs.at(-1); return graph.nodes.length === 5 && graph.nodes.some(node => node.label === '__proto__') && graph.edges.length === 3 && graph.edges.every(edge => graph.nodes.some(node => node.id === edge.source) && graph.nodes.some(node => node.id === edge.target)); }"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task LineageCatalog_SavedViewsKeepVisibleFiltersAndStayWithTheirIdentity()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.AddInitScriptAsync("() => sessionStorage.setItem('etlsql_token', 'x.' + btoa(JSON.stringify({iss:'sandbox', tenant_id:'tenant-a', sub:'alice'})) + '.x')");
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
+        await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
+        await page.Locator("#lineageQuery").FillAsync("mart.ExecutiveKpis");
+        await page.Locator("#lineageSaveViewBtn").ClickAsync();
+        var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "Save lineage view" });
+        await Expect(dialog).ToBeVisibleAsync();
+        await dialog.GetByLabel("View name", new() { Exact = true }).FillAsync("My KPI view");
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Save view", Exact = true }).ClickAsync();
+        await Expect(page.Locator("#lineageSavedView")).ToHaveValueAsync("My KPI view");
+        await Expect(page.Locator("#lineageQuery")).ToHaveValueAsync("mart.ExecutiveKpis");
+        await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(1);
+        await page.EvaluateAsync("() => sessionStorage.setItem('etlsql_token', 'x.' + btoa(JSON.stringify({iss:'sandbox', tenant_id:'tenant-a', sub:'bob'})) + '.x')");
+        await page.Locator("#reloadBtn").ClickAsync();
+        await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
+        await Expect(page.Locator("#lineageSavedView option[value='My KPI view']")).ToHaveCountAsync(0);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DatasetsAdmin_UnavailableAndMalformedRowsCannotRetainCountsOrClaimEmpty()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='datasets-admin']").ClickAsync();
+        await Expect(page.Locator("#datasetsTableWrap tbody tr")).ToHaveCountAsync(3);
+        await page.Locator("[data-action='view'][data-id='1']").ClickAsync();
+        await Expect(page.Locator("#dv-totalCount")).ToHaveTextAsync("48");
+        await page.EvaluateAsync("() => window.__datasets.api.setMode('data-unavailable')");
+        await page.Locator("#dv-search").FillAsync("unavailable");
+        await page.Locator("#dv-search").PressAsync("Enter");
+        await Expect(page.Locator("#dv-tableWrap")).ToContainTextAsync("Dataset cache temporarily unavailable.");
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "datasets-unavailable.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#datasetViewerModal").ScreenshotAsync(new() { Path = imagePath });
+        await Expect(page.Locator("#dv-totalCount")).ToHaveTextAsync("—");
+        await Expect(page.Locator("#dv-filteredCount")).ToHaveTextAsync("—");
+        await Expect(page.Locator("#dv-nextBtn")).ToBeDisabledAsync();
+        await page.EvaluateAsync("() => window.__datasets.api.setMode('bad-data')");
+        await page.Locator("#dv-search").PressAsync("Enter");
+        await Expect(page.Locator("#dv-tableWrap")).ToContainTextAsync("Dataset rows are unavailable or incomplete.");
+        await Expect(page.Locator("#dv-tableWrap")).Not.ToContainTextAsync("No rows match");
+        await Expect(page.Locator("#dv-filteredCount")).ToHaveTextAsync("—");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DatasetsAdmin_ClosedViewerCannotReplaceTheNextDatasetsRows()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='datasets-admin']").ClickAsync();
+        await Expect(page.Locator("#datasetsTableWrap tbody tr")).ToHaveCountAsync(3);
+        await page.EvaluateAsync("() => { window.__datasets.api.setMode('target-distinct'); window.__datasets.api.pause('data'); }");
+        await page.Locator("[data-action='view'][data-id='1']").ClickAsync();
+        await page.EvaluateAsync("() => window.__datasets.api.whenPaused('data')");
+        await page.Locator("#dv-closeBtn").ClickAsync();
+        await page.Locator("[data-action='view'][data-id='2']").ClickAsync();
+        await Expect(page.Locator("#dv-title")).ToHaveTextAsync("customer_360");
+        await Expect(page.Locator("#dv-tableWrap tbody tr").First).ToContainTextAsync("Customer snapshot");
+        await page.EvaluateAsync("() => window.__datasets.api.release()");
+        await Expect(page.Locator("#dv-tableWrap tbody tr").First).ToContainTextAsync("Customer snapshot");
+        await page.EvaluateAsync("() => { window.__datasets.api.pause('list'); window.__oldDatasetLoad = window.__datasets.surface.load(); }");
+        await page.EvaluateAsync("() => window.__datasets.api.whenPaused('list')");
+        await page.EvaluateAsync("async () => { window.__datasets.surface.dispose(); window.__datasets.api.release(); await window.__oldDatasetLoad; }");
+        await Expect(page.Locator("#datasetsTableWrap")).ToHaveCountAsync(0);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DatasetsAdmin_SaveKeepsTheNextFormAndUnconfirmedWritesRequireRefresh()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='datasets-admin']").ClickAsync();
+        await Expect(page.Locator("#datasetsTableWrap tbody tr")).ToHaveCountAsync(3);
+        await page.Locator("[data-action='edit'][data-id='1']").ClickAsync();
+        await page.Locator("#ds-ttl").FillAsync("30m");
+        await page.EvaluateAsync("() => window.__datasets.api.pause('update')");
+        await page.Locator("#ds-saveBtn").ClickAsync();
+        await page.EvaluateAsync("() => window.__datasets.api.whenPaused('update')");
+        await page.EvaluateAsync("() => document.querySelector('#ds-saveBtn').dispatchEvent(new MouseEvent('click', { bubbles: true }))");
+        Assert.Equal(1, await page.EvaluateAsync<int>("() => window.__datasets.api.calls.filter(call => call.kind === 'update').length"));
+        await page.Locator("#ds-cancelBtn").ClickAsync();
+        await page.Locator("[data-action='edit'][data-id='2']").ClickAsync();
+        await page.Locator("#ds-ttl").FillAsync("2h");
+        await page.EvaluateAsync("() => window.__datasets.api.release()");
+        await Expect(page.Locator("[data-action='edit'][data-id='1']")).ToBeVisibleAsync();
+        await Expect(page.Locator("#editDatasetForm")).ToBeVisibleAsync();
+        await Expect(page.Locator("#ds-id")).ToHaveValueAsync("2");
+        await Expect(page.Locator("#ds-ttl")).ToHaveValueAsync("2h");
+        await page.Locator("#ds-cancelBtn").ClickAsync();
+        await page.EvaluateAsync("() => window.__datasets.api.setMode('invalid-update')");
+        await page.Locator("[data-action='edit'][data-id='1']").ClickAsync();
+        await page.Locator("#ds-ttl").FillAsync("45m");
+        await page.Locator("#ds-saveBtn").ClickAsync();
+        await Expect(page.Locator("#datasetsStatus")).ToContainTextAsync("outcome is unconfirmed");
+        await Expect(page.Locator("#ds-saveBtn")).ToBeDisabledAsync();
+        await page.EvaluateAsync("() => window.__datasets.api.setMode('healthy')");
+        await page.Locator("#datasetsRefreshBtn").ClickAsync();
+        await page.Locator("[data-action='edit'][data-id='1']").ClickAsync();
+        await Expect(page.Locator("#ds-ttl")).ToHaveValueAsync("45m");
+        await Expect(page.Locator("#ds-saveBtn")).ToBeEnabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DatasetsAdmin_PagingSortFiltersAndExportsKeepTheViewerQuery()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='datasets-admin']").ClickAsync();
+        await Expect(page.Locator("#datasetsTableWrap tbody tr")).ToHaveCountAsync(3);
+        await page.Locator("[data-action='view'][data-id='1']").ClickAsync();
+        await Expect(page.Locator("#dv-totalCount")).ToHaveTextAsync("48");
+        await page.Locator("#dv-pageSize").SelectOptionAsync("25");
+        await Expect(page.Locator("#dv-pageInfo")).ToHaveTextAsync("Page 1 of 2");
+        await page.Locator("#dv-nextBtn").ClickAsync();
+        await Expect(page.Locator("#dv-pageInfo")).ToHaveTextAsync("Page 2 of 2");
+        await Expect(page.Locator("#dv-tableWrap tbody tr")).ToHaveCountAsync(23);
+        await page.Locator(".dv-col-header[data-col='units']").ClickAsync();
+        await Expect(page.Locator("#dv-pageInfo")).ToHaveTextAsync("Page 1 of 2");
+        await page.Locator(".dv-filter-op[data-col='units']").SelectOptionAsync("gte");
+        await page.Locator(".dv-filter-val[data-col='units']").FillAsync("100");
+        await page.Locator(".dv-filter-val[data-col='units']").PressAsync("Enter");
+        await Expect(page.Locator("#dv-filter-badge")).ToHaveTextAsync("1 filter");
+        Assert.True(await page.EvaluateAsync<bool>("() => [...document.querySelectorAll('#dv-tableWrap tbody tr')].every(row => Number(row.children[2].textContent) >= 100)"));
+        await page.Locator("#dv-exportBtn").ClickAsync();
+        await page.Locator("#dv-exportXlsxBtn").ClickAsync();
+        Assert.True(await page.EvaluateAsync<bool>("""
+            () => ['exportCsv', 'exportXlsx'].every(kind => {
+              const call = window.__datasets.api.calls.find(call => call.kind === kind);
+              return call.args[0] === 1 && call.args[2].sort === 'units' && call.args[2].dir === 'asc'
+                && call.args[2].filters[0].col === 'units' && call.args[2].filters[0].op === 'gte' && call.args[2].filters[0].val === '100';
+            })
+            """));
+        await page.Locator("#dv-closeBtn").PressAsync("Escape");
+        await Expect(page.Locator("#datasetViewerModal")).ToBeHiddenAsync();
+        await Expect(page.Locator("[data-action='view'][data-id='1']")).ToBeFocusedAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DatasetsAdmin_ValuePickerKeyboardAndLateSearchStayWithTheCurrentColumn()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='datasets-admin']").ClickAsync();
+        await page.Locator("[data-action='view'][data-id='1']").ClickAsync();
+        await Expect(page.Locator("#dv-totalCount")).ToHaveTextAsync("48");
+        var regionPicker = page.Locator(".dv-picker-btn[data-col='region']");
+        await regionPicker.ClickAsync();
+        await Expect(page.Locator("#dv-pickerList input")).ToHaveCountAsync(4);
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "datasets", "value-picker.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#datasetViewerModal").ScreenshotAsync(new() { Path = imagePath });
+        await Expect(page.Locator("#dv-pickerSearch")).ToBeFocusedAsync();
+        await page.Locator("#dv-pickerSearch").PressAsync("Escape");
+        await Expect(page.Locator("#dv-pickerPopover")).ToBeHiddenAsync();
+        await Expect(page.Locator("#datasetViewerModal")).ToBeVisibleAsync();
+        await Expect(regionPicker).ToBeFocusedAsync();
+        await regionPicker.ClickAsync();
+        await page.EvaluateAsync("() => window.__datasets.api.pause('columnValues')");
+        await page.Locator("#dv-pickerSearch").FillAsync("North");
+        await page.EvaluateAsync("() => window.__datasets.api.whenPaused('columnValues')");
+        await page.Locator("#dv-pickerSearch").FillAsync("South");
+        await Expect(page.Locator("#dv-pickerList")).ToHaveTextAsync("South");
+        await page.EvaluateAsync("() => window.__datasets.api.release()");
+        await Expect(page.Locator("#dv-pickerList")).ToHaveTextAsync("South");
+        await page.Locator("#dv-pickerList input").CheckAsync();
+        await page.Locator("#dv-pickerApply").ClickAsync();
+        await Expect(page.Locator("#dv-filteredCount")).ToHaveTextAsync("12");
+        Assert.True(await page.EvaluateAsync<bool>("() => [...document.querySelectorAll('#dv-tableWrap tbody tr')].every(row => row.children[0].textContent === 'South')"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DatasetsAdmin_IncompleteStatisticsClearTheFooterAndValuesStayLiteral()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='datasets-admin']").ClickAsync();
+        await page.Locator("[data-action='view'][data-id='1']").ClickAsync();
+        await Expect(page.Locator("#dv-tableWrap tfoot td")).ToHaveCountAsync(7);
+        await page.EvaluateAsync("() => window.__datasets.api.setMode('bad-stats')");
+        await page.Locator("#dv-resetBtn").ClickAsync();
+        await Expect(page.Locator("#dv-statsStatus")).ToContainTextAsync("Statistics unavailable");
+        await Expect(page.Locator("#dv-tableWrap tfoot")).ToHaveCountAsync(0);
+        await Expect(page.Locator("#dv-totalCount")).ToHaveTextAsync("48");
+        await page.EvaluateAsync("() => window.__datasets.api.setMode('stats-literal')");
+        await page.Locator("#dv-resetBtn").ClickAsync();
+        var units = page.Locator("#dv-tableWrap tfoot td").Nth(2);
+        await Expect(units).ToContainTextAsync("<img src=x onerror=");
+        await Expect(units).ToContainTextAsync("Max —");
+        await Expect(units).ToContainTextAsync("Avg —");
+        await Expect(units.Locator("img")).ToHaveCountAsync(0);
+        Assert.False(await page.EvaluateAsync<bool>("() => window.__datasetInjected === true"));
+        await page.EvaluateAsync("() => window.__datasets.api.setMode('stats-unavailable')");
+        await page.Locator("#dv-resetBtn").ClickAsync();
+        await Expect(page.Locator("#dv-statsStatus")).ToContainTextAsync("temporarily unavailable");
+        await Expect(page.Locator("#dv-tableWrap tfoot")).ToHaveCountAsync(0);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DatasetsAdmin_ClosedPermissionsAndLineageIgnoreLateResponses()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='datasets-admin']").ClickAsync();
+        await Expect(page.Locator("#datasetsTableWrap tbody tr")).ToHaveCountAsync(3);
+        await page.EvaluateAsync("() => window.__datasets.catalog.pause('lineage')");
+        await page.Locator("[data-action='lineage'][data-id='1']").ClickAsync();
+        await page.EvaluateAsync("() => window.__datasets.catalog.whenPaused('lineage')");
+        await page.Locator("#dsLineageCloseBtn").PressAsync("Escape");
+        await Expect(page.Locator("#datasetLineageModal")).ToBeHiddenAsync();
+        await page.EvaluateAsync("() => window.__datasets.catalog.release()");
+        await Expect(page.Locator("#dsLineageDag svg")).ToHaveCountAsync(0);
+        await page.EvaluateAsync("() => window.__datasets.api.pause('listAcl')");
+        await page.Locator("[data-action='acl'][data-id='1']").ClickAsync();
+        await page.EvaluateAsync("() => window.__datasets.api.whenPaused('listAcl')");
+        await page.Locator("#dsAclCloseBtn").ClickAsync();
+        await page.EvaluateAsync("() => window.__datasets.api.release()");
+        await Expect(page.Locator("#dsAclTableWrap tr")).ToHaveCountAsync(0);
+        await page.EvaluateAsync("() => window.__datasets.api.setMode('bad-acl')");
+        await page.Locator("[data-action='acl'][data-id='2']").ClickAsync();
+        await Expect(page.Locator("#dsAclTableWrap")).ToContainTextAsync("Permissions unavailable");
+        await Expect(page.Locator("#dsAclTableWrap [data-uid], #dsAclTableWrap [data-gid]")).ToHaveCountAsync(0);
+        await page.EvaluateAsync("() => window.__datasets.catalog.setMode('bad-lineage')");
+        await page.Locator("[data-action='lineage'][data-id='2']").ClickAsync();
+        await Expect(page.Locator("#dsLineageDag")).ToContainTextAsync("Lineage unavailable");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DataQualityQueue_FailedSourcesCannotClaimEmptyOrRetainCounts()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='data-quality-queue']").ClickAsync();
+        await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
+        await page.EvaluateAsync("() => window.__dataQuality.api.setMode('trend-unavailable')");
+        await page.Locator("[data-trend-job='nightly_import']").First.ClickAsync();
+        await Expect(page.Locator("#stage [role='dialog']")).ToContainTextAsync("Quality trend temporarily unavailable.");
+        await Expect(page.Locator("#stage [role='dialog']")).ToContainTextAsync("Quality trend unavailable");
+        await Expect(page.Locator("#stage [role='dialog']")).Not.ToContainTextAsync("No recorded runs");
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "data-quality-unavailable.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#stage [role='dialog']").ScreenshotAsync(new() { Path = imagePath });
+        await page.Locator("#dqTrendClose").ClickAsync();
+        await page.EvaluateAsync("() => window.__dataQuality.api.setMode('missing-queue')");
+        await page.Locator("#dqRefreshBtn").ClickAsync();
+        await Expect(page.Locator("#stage .dq-summary")).ToContainTextAsync("— targets");
+        await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(0);
+        await Expect(page.Locator("#stage")).ToContainTextAsync("Quarantine queue unavailable");
+        await Expect(page.Locator("#stage")).Not.ToContainTextAsync("No quarantine manifests");
+        await page.EvaluateAsync("() => window.__dataQuality.api.setMode('jobs-unavailable')");
+        await page.Locator("#dqRefreshBtn").ClickAsync();
+        await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
+        await Expect(page.Locator("#stage")).ToContainTextAsync("Job inventory temporarily unavailable.");
+        await page.EvaluateAsync("() => window.__dataQuality.api.setMode('rules-unavailable')");
+        await page.Locator("[data-trend-job='nightly_import']").First.ClickAsync();
+        await Expect(page.Locator("#stage [role='dialog']")).ToContainTextAsync("Average over 6 run(s)");
+        await Expect(page.Locator("#stage [role='dialog']")).ToContainTextAsync("Rule definitions are unavailable.");
+        await Expect(page.Locator("#stage [role='dialog']")).Not.ToContainTextAsync("No readable rule definitions");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DataQualityQueue_ClosedAndSupersededPanelsKeepTheCurrentTargetAndFilter()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='data-quality-queue']").ClickAsync();
+        await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
+        await page.EvaluateAsync("() => window.__dataQuality.api.pause('quarantineRows')");
+        await page.Locator("[data-review-target='warehouse.quarantine_users']").ClickAsync();
+        await page.EvaluateAsync("() => window.__dataQuality.api.whenPaused('quarantineRows')");
+        await page.Locator("#dqCloseRows").PressAsync("Escape");
+        await Expect(page.Locator("[data-review-target='warehouse.quarantine_users']")).ToBeFocusedAsync();
+        await page.Locator("[data-review-target='warehouse.quarantine_orders']").ClickAsync();
+        await Expect(page.Locator("#dqRowsModalTitle")).ToHaveTextAsync("warehouse.quarantine_orders");
+        await Expect(page.Locator("[data-edit-row='a1'][data-edit-column='Email']")).ToBeVisibleAsync();
+        await page.EvaluateAsync("() => window.__dataQuality.api.release()");
+        await page.Locator("[data-edit-row='a1'][data-edit-column='Email']").FillAsync("retained@example.com");
+        await Expect(page.Locator("#dqRowsModalTitle")).ToHaveTextAsync("warehouse.quarantine_orders");
+        await Expect(page.Locator("[data-edit-row='a1'][data-edit-column='Email']")).ToHaveValueAsync("retained@example.com");
+        await page.EvaluateAsync("() => window.__dataQuality.api.pause('quarantineRows')");
+        await page.Locator("#dqRowsStatus").SelectOptionAsync("all");
+        await page.EvaluateAsync("() => window.__dataQuality.api.whenPaused('quarantineRows')");
+        await page.Locator("#dqRowsStatus").SelectOptionAsync("released");
+        await Expect(page.Locator("[data-edit-row='d4']")).ToHaveCountAsync(3);
+        await page.EvaluateAsync("() => window.__dataQuality.api.release()");
+        await Expect(page.Locator("#dqRowsStatus")).ToHaveValueAsync("released");
+        await Expect(page.Locator("[data-edit-row='a1']")).ToHaveCountAsync(0);
+        await page.Locator("#dqCloseRows").ClickAsync();
+        await page.EvaluateAsync("() => window.__dataQuality.api.pause('qualityTrend')");
+        await page.Locator("[data-trend-job='nightly_import']").First.ClickAsync();
+        await page.EvaluateAsync("() => window.__dataQuality.api.whenPaused('qualityTrend')");
+        await page.Locator("#dqTrendClose").ClickAsync();
+        await page.Locator("[data-trend-job='finance_load']").ClickAsync();
+        await Expect(page.Locator("#dqTrendModalTitle")).ToHaveTextAsync("finance_load");
+        await Expect(page.Locator("#stage [role='dialog']")).ToContainTextAsync("Average over 6 run(s)");
+        await page.EvaluateAsync("() => window.__dataQuality.api.release()");
+        await Expect(page.Locator("#dqTrendModalTitle")).ToHaveTextAsync("finance_load");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DataQualityQueue_UnconfirmedWritesRequireRefreshAndCannotDuplicate()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='data-quality-queue']").ClickAsync();
+        await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
+        await page.EvaluateAsync("() => { window.__dataQuality.api.setMode('invalid-receipt'); window.__dataQuality.api.pause('replayQuarantine'); }");
+        await page.Locator("[data-replay-target='warehouse.quarantine_users']").ClickAsync();
+        await page.EvaluateAsync("() => window.__dataQuality.api.whenPaused('replayQuarantine')");
+        await page.EvaluateAsync("() => document.querySelector('[data-replay-target=\"warehouse.quarantine_users\"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))");
+        Assert.Equal(1, await page.EvaluateAsync<int>("() => window.__dataQuality.api.calls.filter(call => call.kind === 'replayQuarantine').length"));
+        await page.EvaluateAsync("() => window.__dataQuality.api.release()");
+        await Expect(page.Locator("#stage")).ToContainTextAsync("Replay outcome is unconfirmed.");
+        await Expect(page.Locator("#stage .dq-job-row")).ToHaveCountAsync(0);
+        await Expect(page.Locator("[data-replay-target='warehouse.quarantine_users']")).ToBeDisabledAsync();
+        await page.EvaluateAsync("() => window.__dataQuality.api.setMode('healthy')");
+        await page.Locator("#dqRefreshBtn").ClickAsync();
+        await Expect(page.Locator("[data-replay-target='warehouse.quarantine_users']")).ToBeEnabledAsync();
+        await page.Locator("[data-review-target='warehouse.quarantine_users']").ClickAsync();
+        await Expect(page.Locator("[data-edit-row='a1'][data-edit-column='Email']")).ToBeVisibleAsync();
+        await page.Locator("[data-edit-row='a1'][data-edit-column='Email']").FillAsync("fixed@example.com");
+        await page.Locator("[data-note-row='a1']").FillAsync("Reviewed source evidence");
+        await page.Locator("[data-release-row='a1']").ClickAsync();
+        await Expect(page.Locator("#stage .dq-job-row .dq-status")).ToHaveTextAsync("Completed");
+        Assert.True(await page.EvaluateAsync<bool>("() => { const body = window.__dataQuality.api.calls.find(call => call.kind === 'updateQuarantineDisposition').args[0]; return body.quarantineTarget === 'warehouse.quarantine_users' && body.rowIds[0] === 'a1' && body.changes.Email === 'fixed@example.com' && body.note === 'Reviewed source evidence'; }"));
+        await Expect(page.Locator("[data-edit-row='a1'][data-edit-column='Email']")).ToHaveValueAsync("fixed@example.com");
+        await Expect(page.Locator("[data-note-row='a1']")).ToHaveValueAsync("Reviewed source evidence");
+        await Expect(page.Locator("#stage [role='dialog']")).ToContainTextAsync("Reload rows to inspect the result");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DataQualityQueue_WrongJobStatusAndDisposedResponsesCannotAnnounceCompletion()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='data-quality-queue']").ClickAsync();
+        await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
+        await page.EvaluateAsync("() => window.__dataQuality.api.setMode('invalid-status')");
+        await page.Locator("[data-replay-target='warehouse.quarantine_users']").ClickAsync();
+        await Expect(page.Locator("#stage .dq-job-row")).ToContainTextAsync("Job status is unavailable or does not match this submission.");
+        await Expect(page.Locator("#stage .dq-job-row .dq-status")).ToHaveTextAsync("Status unavailable");
+        await Expect(page.Locator("[data-replay-target='warehouse.quarantine_users']")).ToBeDisabledAsync();
+        await page.Locator("#dqQueueSearch").FillAsync("draft filter");
+        await page.EvaluateAsync("() => window.__dataQuality.api.setMode('healthy')");
+        await Expect(page.Locator("#stage .dq-job-row .dq-status")).ToHaveTextAsync("Completed");
+        await Expect(page.Locator("#dqQueueSearch")).ToHaveValueAsync("draft filter");
+        await Expect(page.Locator("#dqQueueSearch")).ToBeFocusedAsync();
+        await page.EvaluateAsync("() => window.__dataQuality.api.pause('qualityTrend')");
+        await page.Locator("[data-trend-job='nightly_import']").First.ClickAsync();
+        await page.EvaluateAsync("() => window.__dataQuality.api.whenPaused('qualityTrend')");
+        await page.EvaluateAsync("async () => { window.__dataQuality.queue.dispose(); window.__dataQuality.api.release(); await window.__dataQuality.queue.show(); }");
+        await Expect(page.Locator("#stage .dq-page")).ToHaveCountAsync(0);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DataQualityQueue_RowAndColumnNamesCannotChangeObjectPrototypes()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='data-quality-queue']").ClickAsync();
+        await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
+        await page.EvaluateAsync("() => window.__dataQuality.api.setMode('prototype-keys')");
+        await page.Locator("[data-review-target='warehouse.quarantine_users']").ClickAsync();
+        var source = page.Locator("[data-edit-row='__proto__'][data-edit-column='__proto__']");
+        await Expect(source).ToBeVisibleAsync();
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "data-quality-source-keys.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#stage [role='dialog']").ScreenshotAsync(new() { Path = imagePath });
+        await Expect(source).ToHaveValueAsync("Original source value");
+        await page.Locator("[data-edit-row='__proto__'][data-edit-column='Email']").FillAsync("safe@example.com");
+        await source.FillAsync("Corrected source value");
+        await page.Locator("[data-note-row='__proto__']").FillAsync("Reviewed unusual column names");
+        Assert.True(await page.EvaluateAsync<bool>("() => !Object.hasOwn(Object.prototype, 'Email') && !Object.hasOwn(Object.prototype, '__dq_row_id')"));
+        await page.Locator("[data-release-row='__proto__']").ClickAsync();
+        await Expect(page.Locator("#stage .dq-job-row .dq-status")).ToHaveTextAsync("Completed");
+        Assert.True(await page.EvaluateAsync<bool>("""
+            () => {
+              const body = window.__dataQuality.api.calls.find(call => call.kind === 'updateQuarantineDisposition').args[0];
+              return body.rowIds[0] === '__proto__' && body.changes.Email === 'safe@example.com'
+                && Object.hasOwn(body.changes, '__proto__') && body.changes.__proto__ === 'Corrected source value'
+                && body.note === 'Reviewed unusual column names' && body.expectedStatus === 'quarantined';
+            }
+            """));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DataQualityQueue_RevokedPreviewCannotRetainRowsOrApplyALateResponse()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='data-quality-queue']").ClickAsync();
+        await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
+        await page.Locator("[data-review-target='warehouse.quarantine_users']").ClickAsync();
+        await Expect(page.Locator("[data-edit-row='a1'][data-edit-column='Email']")).ToBeVisibleAsync();
+        await page.EvaluateAsync("() => window.__dataQuality.api.pause('quarantineRows')");
+        await page.Locator("#dqReloadRows").ClickAsync();
+        await page.EvaluateAsync("() => window.__dataQuality.api.whenPaused('quarantineRows')");
+        await page.EvaluateAsync("() => window.__dataQuality.api.setMode('rows-revoked')");
+        await page.EvaluateAsync("async () => await window.__dataQuality.queue.show()");
+        await Expect(page.Locator("#stage [data-dq-dialog='rows']")).ToContainTextAsync("Preview permission has been revoked.");
+        await Expect(page.Locator("#dqReloadRows")).ToBeDisabledAsync();
+        await page.EvaluateAsync("() => window.__dataQuality.api.release()");
+        await Expect(page.Locator("[data-edit-row='a1']")).ToHaveCountAsync(0);
+        await Expect(page.Locator("[data-release-row]")).ToHaveCountAsync(0);
+        await Expect(page.Locator("#stage [data-dq-dialog='rows']")).ToContainTextAsync("rows unavailable");
+        await page.EvaluateAsync("() => window.__dataQuality.api.setMode('healthy')");
+        await page.EvaluateAsync("async () => await window.__dataQuality.queue.show()");
+        await Expect(page.Locator("#dqReloadRows")).ToBeEnabledAsync();
+        await page.Locator("#dqReloadRows").ClickAsync();
+        await Expect(page.Locator("[data-edit-row='a1'][data-edit-column='Email']")).ToBeVisibleAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DataQualityQueue_RestoredJobsAreRevalidatedAndIsolatedByIdentity()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='data-quality-queue']").ClickAsync();
+        await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
+        await page.EvaluateAsync("""
+            async () => {
+              const host = document.querySelector('#stage .dq-page').parentElement;
+              window.__dataQuality.queue.dispose();
+              sessionStorage.setItem('etlsql_token', 'header.' + btoa(JSON.stringify({ sub: 'steward-a', iss: 'fixture', tenant_id: 'tenant-a' })) + '.signature');
+              const { createDataQualityQueue } = await import('/src/ETL-SQL.Portal/wwwroot/js/data-quality-queue.js');
+              window.__qualityHost = host;
+              window.__qualityFactory = createDataQualityQueue;
+              window.__dataQuality.queue = createDataQualityQueue({ host, dataQualityApi: window.__dataQuality.api });
+              await window.__dataQuality.queue.show();
+            }
+            """);
+        await page.Locator("[data-replay-target='warehouse.quarantine_users']").ClickAsync();
+        await Expect(page.Locator("#stage .dq-job-row .dq-status")).ToHaveTextAsync("Completed");
+        await page.EvaluateAsync("""
+            async () => {
+              window.__dataQuality.queue.dispose();
+              window.__dataQuality.api.setMode('invalid-status');
+              window.__dataQuality.queue = window.__qualityFactory({ host: window.__qualityHost, dataQualityApi: window.__dataQuality.api });
+              await window.__dataQuality.queue.show();
+            }
+            """);
+        await Expect(page.Locator("#stage .dq-job-row .dq-status")).ToHaveTextAsync("Status unavailable");
+        await Expect(page.Locator("#stage .dq-job-row")).ToContainTextAsync("does not match this submission");
+        await page.EvaluateAsync("""
+            async () => {
+              sessionStorage.setItem('etlsql_token', 'header.' + btoa(JSON.stringify({ sub: 'steward-b', iss: 'fixture', tenant_id: 'tenant-a' })) + '.signature');
+              window.__dataQuality.queue = window.__qualityFactory({ host: window.__qualityHost, dataQualityApi: window.__dataQuality.api });
+              await window.__dataQuality.queue.show();
+            }
+            """);
+        await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
+        await Expect(page.Locator("#stage .dq-job-row")).ToHaveCountAsync(0);
+        await page.EvaluateAsync("() => window.__dataQuality.api.pause('quarantineQueue')");
+        await page.Locator("#dqRefreshBtn").ClickAsync();
+        await page.EvaluateAsync("() => window.__dataQuality.api.whenPaused('quarantineQueue')");
+        await page.EvaluateAsync("""
+            () => {
+              sessionStorage.setItem('etlsql_token', 'header.' + btoa(JSON.stringify({ sub: 'steward-b', iss: 'fixture', tenant_id: 'tenant-b' })) + '.signature');
+              window.__dataQuality.api.release();
+            }
+            """);
+        await Expect(page.Locator("#stage .dq-page")).ToHaveCountAsync(0);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ConnectionsAdmin_RetainsGatewayBindingAndRejectsIncompleteDiagnostics()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='connections-admin']").ClickAsync();
+        await Expect(page.Locator("#conn-status")).ToHaveTextAsync("4 shared connection(s).");
+        var row = page.Locator("#conn-tableWrap tr[data-alias='gateway_sales']");
+        await row.GetByRole(AriaRole.Button, new() { Name = "Detail", Exact = true }).ClickAsync();
+        await Expect(page.Locator("#conn-detailBody")).ToContainTextAsync("hq-gateway");
+        await page.Locator("#conn-saveBtn").ClickAsync();
+        await Expect(page.Locator("#conn-status")).ToContainTextAsync("saved.");
+        Assert.True(await page.EvaluateAsync<bool>("() => { const body = window.__connections.api.calls.find(call => call.kind === 'set').args[1]; return body.gateway.gatewayId === 'hq-gateway' && body.gateway.resourceId === 'sales_read' && !body.target && Object.keys(body.options).length === 0; }"));
+        await page.EvaluateAsync("() => window.__connections.api.setMode('invalid-diagnostic')");
+        await row.GetByRole(AriaRole.Button, new() { Name = "Test", Exact = true }).ClickAsync();
+        await Expect(page.Locator("#conn-detailBody")).ToHaveTextAsync("Connection diagnostic unavailable.");
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "connections-diagnostic.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = imagePath });
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ConnectionsAdmin_SupersededReadsAndClosedPanelsCannotReplaceCurrentEdits()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='connections-admin']").ClickAsync();
+        await Expect(page.Locator("#conn-status")).ToHaveTextAsync("4 shared connection(s).");
+        await page.EvaluateAsync("() => window.__connections.api.pause('detail')");
+        await page.Locator("tr[data-alias='sales_dw'] button[data-act='detail']").ClickAsync();
+        await page.EvaluateAsync("() => window.__connections.api.whenPaused('detail')");
+        await page.Locator("#conn-detailCloseBtn").ClickAsync();
+        await page.Locator("#conn-alias").FillAsync("my_new_definition");
+        await page.EvaluateAsync("() => window.__connections.api.release()");
+        await Expect(page.Locator("#conn-detailCard")).ToBeHiddenAsync();
+        await Expect(page.Locator("#conn-alias")).ToHaveValueAsync("my_new_definition");
+        await page.EvaluateAsync("() => window.__connections.api.pause('detail')");
+        await page.Locator("tr[data-alias='sales_dw'] button[data-act='detail']").ClickAsync();
+        await page.EvaluateAsync("() => window.__connections.api.whenPaused('detail')");
+        await page.Locator("#conn-alias").FillAsync("editing_while_loading");
+        await page.EvaluateAsync("() => window.__connections.api.release()");
+        await Expect(page.Locator("#conn-detailBody")).ToContainTextAsync("sql01");
+        await Expect(page.Locator("#conn-alias")).ToHaveValueAsync("editing_while_loading");
+        await page.EvaluateAsync("() => { const mock = window.__connections; mock.api.pause('list'); window.__oldConnectionRead = mock.surface.load(); }");
+        await page.EvaluateAsync("() => window.__connections.api.whenPaused('list')");
+        await page.EvaluateAsync("async () => { window.__connections.api.setMode('unavailable'); await window.__connections.surface.load(); }");
+        await Expect(page.Locator("#conn-status")).ToHaveTextAsync("Connection catalog unavailable.");
+        await page.EvaluateAsync("async () => { window.__connections.api.release(); await window.__oldConnectionRead; }");
+        await Expect(page.Locator("#conn-tableWrap")).ToContainTextAsync("connection catalog is unavailable");
+        await Expect(page.Locator("#conn-tableWrap")).ToContainTextAsync("catalog could not be loaded or validated");
+        await Expect(page.Locator("#conn-saveBtn")).ToBeDisabledAsync();
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "connections-unavailable.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = imagePath });
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ConnectionsAdmin_DuplicateSavesAndUnknownImportOutcomesNeedExplicitRefresh()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='connections-admin']").ClickAsync();
+        await Expect(page.Locator("#conn-status")).ToHaveTextAsync("4 shared connection(s).");
+        await page.Locator("#conn-alias").FillAsync("new_connection");
+        await page.Locator("#conn-options").FillAsync("SERVER=sql01");
+        await page.EvaluateAsync("() => window.__connections.api.pause('set')");
+        await page.Locator("#conn-saveBtn").ClickAsync();
+        await page.EvaluateAsync("() => window.__connections.api.whenPaused('set')");
+        await Expect(page.Locator("#conn-saveBtn")).ToBeDisabledAsync();
+        await page.EvaluateAsync("() => document.getElementById('conn-saveBtn').click()");
+        Assert.Equal(1, await page.EvaluateAsync<int>("() => window.__connections.api.calls.filter(call => call.kind === 'set').length"));
+        await page.EvaluateAsync("() => window.__connections.api.release()");
+        await Expect(page.Locator("#conn-status")).ToContainTextAsync("new_connection' saved.");
+        await page.Locator("#conn-importBtn").ClickAsync();
+        await page.Locator("#conn-importJson").FillAsync("[{\"alias\":\"imported\",\"connectorType\":\"MOCKDB\",\"target\":null,\"options\":{},\"disabled\":true,\"environmentScope\":null}]");
+        await page.EvaluateAsync("() => window.__connections.api.setMode('invalid-import')");
+        await page.Locator("#conn-importRunBtn").ClickAsync();
+        await Expect(page.Locator("#conn-error")).ToContainTextAsync("outcome is unconfirmed");
+        await Expect(page.Locator("#conn-importCard")).ToBeVisibleAsync();
+        await Expect(page.Locator("#conn-saveBtn")).ToBeDisabledAsync();
+        await page.EvaluateAsync("() => window.__connections.api.setMode('healthy')");
+        await page.Locator("#conn-refreshBtn").ClickAsync();
+        await Expect(page.Locator("#conn-saveBtn")).ToBeEnabledAsync();
+        await Expect(page.Locator("tr[data-alias='imported']")).ToContainTextAsync("Disabled");
+        await page.Locator("tr[data-alias='sales_dw'] button[data-act='verify']").ClickAsync();
+        await Expect(page.Locator("tr[data-alias='sales_dw'] .conn-row-status")).ToContainTextAsync("Verified");
+        await page.EvaluateAsync("() => window.__connections.api.setMode('invalid-verify')");
+        await page.Locator("tr[data-alias='sales_dw'] button[data-act='verify']").ClickAsync();
+        await Expect(page.Locator("tr[data-alias='sales_dw'] .conn-row-status")).ToHaveTextAsync("Verification unavailable");
+        await Expect(page.Locator("#conn-saveBtn")).ToBeDisabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ConnectionsAdmin_MaskedValuesAndMalformedOptionsDoNotRoundTripOrLeak()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='connections-admin']").ClickAsync();
+        await Expect(page.Locator("#conn-status")).ToHaveTextAsync("4 shared connection(s).");
+        await page.Locator("tr[data-alias='legacy_ftp'] button[data-act='detail']").ClickAsync();
+        await Expect(page.Locator("#conn-target")).ToHaveValueAsync("Host=ftp01;Password=********");
+        await page.Locator("#conn-saveBtn").ClickAsync();
+        await Expect(page.Locator("#conn-error")).ToContainTextAsync("Replace masked display values");
+        await page.Locator("#conn-target").FillAsync("");
+        await page.Locator("#conn-options").FillAsync("private-fixture-token-without-separator");
+        await page.Locator("#conn-saveBtn").ClickAsync();
+        await Expect(page.Locator("#conn-error")).ToHaveTextAsync("Option line 1 must use KEY=VALUE.");
+        Assert.DoesNotContain("private-fixture-token", await page.Locator("#conn-error").InnerTextAsync());
+        Assert.Equal(0, await page.EvaluateAsync<int>("() => window.__connections.api.calls.filter(call => call.kind === 'set').length"));
+        await page.Locator("#conn-type").SelectOptionAsync("MSSQL");
+        await Expect(page.Locator("#conn-help-content")).ToContainTextAsync("Microsoft SQL Server");
+        await page.Locator("#conn-help-expand-btn").FocusAsync(); await page.Keyboard.PressAsync("Enter");
+        await Expect(page.Locator("#conn-help-modal-close")).ToBeFocusedAsync();
+        await page.Keyboard.PressAsync("Escape");
+        await Expect(page.Locator("#conn-help-modal")).ToBeHiddenAsync();
+        await Expect(page.Locator("#conn-help-expand-btn")).ToBeFocusedAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ConnectionsAdmin_WizardPreflightAndDisposedRequestsCannotOpenLateUi()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='connections-admin']").ClickAsync();
+        await Expect(page.Locator("#conn-status")).ToHaveTextAsync("4 shared connection(s).");
+        await page.EvaluateAsync("() => window.__connections.wizardApi.setInvalid(true)");
+        await page.Locator("#conn-wizardBtn").ClickAsync();
+        await Expect(page.Locator("#conn-error")).ToContainTextAsync("binding is unavailable");
+        await Expect(page.GetByRole(AriaRole.Dialog, new() { Name = "Connection Wizard" })).ToHaveCountAsync(0);
+        await page.EvaluateAsync("() => window.__connections.wizardApi.setInvalid(false)");
+        await page.Locator("#conn-wizardBtn").ClickAsync();
+        await Expect(page.GetByRole(AriaRole.Dialog, new() { Name = "Connection Wizard" })).ToBeVisibleAsync();
+        await page.Locator("#etlsql-cw-close").ClickAsync();
+        await page.EvaluateAsync("() => { window.__connections.api.pause('set'); }");
+        await page.Locator("#conn-alias").FillAsync("disposed_definition");
+        await page.Locator("#conn-saveBtn").ClickAsync();
+        await page.EvaluateAsync("() => window.__connections.api.whenPaused('set')");
+        var message = await page.Locator("#conn-status").InnerTextAsync();
+        await page.EvaluateAsync("() => { window.__connections.surface.dispose(); window.__connections.api.release(); }");
+        await Expect(page.Locator("#conn-status")).ToHaveTextAsync(message);
+        await Expect(page.GetByRole(AriaRole.Dialog, new() { Name = "Connection Wizard" })).ToHaveCountAsync(0);
+        await Expect(page.Locator("#conn-options")).ToHaveValueAsync("");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task TriageBoard_IncompleteEvidenceIsUnavailableAndQuietBoardsKeepRunningJobs()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='triage-board']").ClickAsync();
+        await page.SelectOptionAsync("#fixtureSel", "quiet");
+        await Expect(page.Locator("#stage .triage-empty")).ToContainTextAsync("Nothing to triage");
+        await Expect(page.Locator("#stage")).ToContainTextAsync("hourly_stock");
+        await Expect(page.Locator("#stage")).ToContainTextAsync("In flight (1)");
+        await page.SelectOptionAsync("#fixtureSel", "invalid");
+        await Expect(page.Locator("#triage-host")).ToContainTextAsync("Triage is unavailable");
+        await Expect(page.Locator("#triage-host")).Not.ToContainTextAsync("No failures");
+        await page.SelectOptionAsync("#fixtureSel", "invalid-detail");
+        await Expect(page.Locator("#stage .triage-evidence-row")).ToContainTextAsync("Evidence unavailable");
+        await Expect(page.Locator("#stage .triage-evidence-row")).Not.ToContainTextAsync("No normalized quality-rule failures");
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "triage-unavailable.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = imagePath });
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task PolicyAuthority_ChangedScopeInvalidatesActionsAndLateValidationCannotLabelNewJson()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='policy-authority-admin']").ClickAsync();
+        await Expect(page.Locator("#pa-versionWrap tbody tr")).ToHaveCountAsync(4);
+        await page.Locator("#pa-tenant").FillAsync("other-tenant");
+        await Expect(page.Locator("[data-pa-act='activate']")).ToHaveCountAsync(0);
+        Assert.Equal(0, await page.EvaluateAsync<int>("window.__policyAuthority.api.calls.filter(call => call.kind === 'activate').length"));
+        await page.Locator("#pa-loadVersionsBtn").ClickAsync();
+        await Expect(page.Locator("#pa-versionWrap")).ToContainTextAsync("No policy versions");
+        await page.EvaluateAsync("window.__policyAuthority.api.pause('validate')");
+        await page.Locator("#pa-validateBtn").ClickAsync();
+        await page.EvaluateAsync("window.__policyAuthority.api.whenPaused('validate')");
+        await page.Locator("#pa-policyJson").FillAsync("{ broken");
+        await page.EvaluateAsync("window.__policyAuthority.api.release()");
+        await Expect(page.Locator("#pa-validateResult")).ToHaveTextAsync("");
+        await page.Locator("#pa-validateBtn").ClickAsync();
+        await Expect(page.Locator("#pa-validateResult")).ToContainTextAsync("Invalid:");
+        await page.EvaluateAsync("window.__policyAuthority.api.setMode('invalid-validation')");
+        await page.Locator("#pa-validateBtn").ClickAsync();
+        await Expect(page.Locator("#pa-validateResult")).ToHaveTextAsync("Policy validation unavailable.");
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "policy-authority-validation.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = imagePath });
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task PolicyAuthority_MissingAndMalformedMetadataAreUnavailableAndLateReadsStayInScope()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='policy-authority-admin']").ClickAsync();
+        await page.SelectOptionAsync("#fixtureSel", "unavailable");
+        await Expect(page.Locator("#pa-status")).ToHaveTextAsync("Signer status unavailable");
+        await Expect(page.Locator("#pa-versionWrap")).ToContainTextAsync("unavailable or incomplete");
+        await Expect(page.Locator("#pa-machineWrap")).ToContainTextAsync("unavailable or incomplete");
+        await Expect(page.Locator("#pa-machineWrap")).Not.ToContainTextAsync("No machines registered");
+        await page.SelectOptionAsync("#fixtureSel", "invalid");
+        await Expect(page.Locator("#pa-status")).ToHaveTextAsync("Signer status unavailable");
+        await Expect(page.Locator("#pa-publishBtn")).ToBeDisabledAsync();
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "policy-authority-unavailable.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#stage .card").First.ScreenshotAsync(new() { Path = imagePath });
+        await page.SelectOptionAsync("#fixtureSel", "configured");
+        await Expect(page.Locator("#pa-versionWrap tbody tr")).ToHaveCountAsync(4);
+        await page.EvaluateAsync("() => { const mock = window.__policyAuthority; mock.api.pause('versions'); window.__oldPolicyRead = mock.surface.load(); }");
+        await page.EvaluateAsync("window.__policyAuthority.api.whenPaused('versions')");
+        await page.Locator("#pa-env").FillAsync("staging");
+        await page.Locator("#pa-loadVersionsBtn").ClickAsync();
+        await Expect(page.Locator("#pa-versionWrap")).ToContainTextAsync("No policy versions");
+        await page.EvaluateAsync("async () => { window.__policyAuthority.api.release(); await window.__oldPolicyRead; }");
+        await Expect(page.Locator("#pa-versionWrap tbody tr")).ToHaveCountAsync(0);
+        var unchanged = await page.EvaluateAsync<bool>("""
+            async () => {
+              const mock = window.__policyAuthority;
+              mock.api.pause('versions'); const pending = mock.surface.load();
+              await mock.api.whenPaused('versions'); mock.surface.dispose();
+              const before = document.querySelector('#stage').innerHTML;
+              mock.api.release(); await pending;
+              return before === document.querySelector('#stage').innerHTML;
+            }
+            """);
+        Assert.True(unchanged);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task PolicyAuthority_DuplicateAndUnconfirmedPublishesRequireExplicitRefresh()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='policy-authority-admin']").ClickAsync();
+        await Expect(page.Locator("#pa-versionWrap tbody tr")).ToHaveCountAsync(4);
+        await page.Locator("#pa-version").FillAsync("fixture-new-policy");
+        await page.EvaluateAsync("() => { window.__policyAuthority.api.setMode('invalid-receipt'); window.__policyAuthority.api.pause('publish'); }");
+        await page.Locator("#pa-publishBtn").ClickAsync();
+        await page.EvaluateAsync("window.__policyAuthority.api.whenPaused('publish')");
+        await page.EvaluateAsync("document.querySelector('#pa-publishBtn').dispatchEvent(new MouseEvent('click', { bubbles: true }))");
+        Assert.Equal(1, await page.EvaluateAsync<int>("window.__policyAuthority.api.calls.filter(call => call.kind === 'publish').length"));
+        await page.EvaluateAsync("window.__policyAuthority.api.release()");
+        await Expect(page.Locator("#pa-error")).ToContainTextAsync("unconfirmed");
+        await Expect(page.Locator("#pa-publishBtn")).ToBeDisabledAsync();
+        await Expect(page.Locator("#pa-actionResult")).Not.ToContainTextAsync("published");
+        await page.EvaluateAsync("window.__policyAuthority.api.setMode('healthy')");
+        await page.Locator("#pa-refreshBtn").ClickAsync();
+        await Expect(page.Locator("#pa-actionResult")).ToContainTextAsync("Scope refreshed");
+        await Expect(page.Locator("#pa-publishBtn")).ToBeEnabledAsync();
+        await Expect(page.Locator("#pa-versionWrap tbody tr[data-version='fixture-new-policy']")).ToHaveCountAsync(1);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task PolicyAuthority_ConfirmationAndSentMutationCannotCrossChangedScope()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='policy-authority-admin']").ClickAsync();
+        await Expect(page.Locator("#pa-versionWrap tbody tr")).ToHaveCountAsync(4);
+        await page.Locator("[data-pa-act='promote']").ClickAsync();
+        await Expect(page.GetByRole(AriaRole.Dialog, new() { Name = "Promote policy canary" })).ToBeVisibleAsync();
+        await page.EvaluateAsync("() => { const input = document.querySelector('#pa-tenant'); input.value = 'other'; input.dispatchEvent(new Event('input', { bubbles: true })); }");
+        await page.GetByRole(AriaRole.Button, new() { Name = "Promote canary", Exact = true }).ClickAsync();
+        Assert.Equal(0, await page.EvaluateAsync<int>("window.__policyAuthority.api.calls.filter(call => call.kind === 'promoteCanary').length"));
+        await page.Locator("#pa-tenant").FillAsync("acme");
+        await page.Locator("#pa-refreshBtn").ClickAsync();
+        await Expect(page.Locator("#pa-versionWrap tbody tr")).ToHaveCountAsync(4);
+        await page.Locator("#pa-version").FillAsync("old-scope-policy");
+        await page.EvaluateAsync("window.__policyAuthority.api.pause('publish')");
+        await page.Locator("#pa-publishBtn").ClickAsync();
+        await page.EvaluateAsync("window.__policyAuthority.api.whenPaused('publish')");
+        await page.Locator("#pa-env").FillAsync("staging");
+        await page.EvaluateAsync("window.__policyAuthority.api.release()");
+        await Expect(page.Locator("#pa-actionResult")).Not.ToContainTextAsync("old-scope-policy");
+        await page.Locator("#pa-env").FillAsync("prod");
+        await Expect(page.Locator("#pa-publishBtn")).ToBeDisabledAsync();
+        await page.Locator("#pa-refreshBtn").ClickAsync();
+        await Expect(page.Locator("#pa-actionResult")).ToContainTextAsync("Scope refreshed");
+        await Expect(page.Locator("#pa-versionWrap tbody tr[data-version='old-scope-policy']")).ToHaveCountAsync(1);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task PolicyAuthority_CanaryAndMachineInputsAreValidatedAndDisposedMutationIsSilent()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='policy-authority-admin']").ClickAsync();
+        await Expect(page.Locator("#pa-versionWrap tbody tr")).ToHaveCountAsync(4);
+        await page.Locator("#pa-canaryVersion").FillAsync("fractional-cohort");
+        await page.Locator("#pa-canaryPercentage").FillAsync("1.5");
+        await page.Locator("#pa-publishCanaryBtn").ClickAsync();
+        await Expect(page.Locator("#pa-canaryError")).ToContainTextAsync("whole percentage");
+        Assert.Equal(0, await page.EvaluateAsync<int>("window.__policyAuthority.api.calls.filter(call => call.kind === 'publishCanary').length"));
+        await page.Locator("#pa-machineId").FillAsync("bad-guid");
+        await page.Locator("#pa-registerMachineBtn").ClickAsync();
+        await Expect(page.Locator("#pa-machineError")).ToContainTextAsync("32-character GUIDs");
+        await page.Locator("#pa-version").FillAsync("disposed-policy");
+        await page.EvaluateAsync("window.__policyAuthority.api.pause('publish')");
+        await page.Locator("#pa-publishBtn").ClickAsync();
+        await page.EvaluateAsync("window.__policyAuthority.api.whenPaused('publish')");
+        await page.EvaluateAsync("() => { window.__policyAuthority.surface.dispose(); window.__policyAuthority.api.release(); }");
+        await Expect(page.Locator("#pa-actionResult")).ToHaveTextAsync("");
+        await Expect(page.Locator("#pa-publishBtn")).ToBeDisabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task GatewayAdmin_MissingFleetIsUnavailableAndDismissalClearsCredentials()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='gateways-admin']").ClickAsync();
+        await page.SelectOptionAsync("#fixtureSel", "unavailable");
+        await Expect(page.Locator("#gw-tableWrap")).ToContainTextAsync("unavailable or incomplete");
+        await Expect(page.Locator("#gw-tableWrap")).Not.ToContainTextAsync("No Data Gateways Enrolled");
+        await Expect(page.Locator("#gw-status")).ToHaveTextAsync("Gateway fleet unavailable");
+        await page.SelectOptionAsync("#fixtureSel", "invalid");
+        await Expect(page.Locator("#gw-status")).ToHaveTextAsync("Gateway fleet unavailable");
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "gateway-unavailable.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = imagePath });
+        await page.SelectOptionAsync("#fixtureSel", "healthy-fleet");
+        await page.Locator("#gw-input-id").FillAsync("test-gateway");
+        await page.Locator("#gw-enrollSubmitBtn").ClickAsync();
+        await Expect(page.Locator("#gw-result-token")).ToHaveValueAsync(new string('a', 64));
+        await page.Locator("#gw-enrollDoneBtn").ClickAsync();
+        await Expect(page.Locator("#gw-result-token")).ToHaveValueAsync("");
+        await Expect(page.Locator("#gw-result-cmd")).ToHaveValueAsync("");
+        await page.SelectOptionAsync("#fixtureSel", "invalid-token");
+        await page.Locator("#gw-input-id").FillAsync("unconfirmed-gateway");
+        await page.Locator("#gw-enrollSubmitBtn").ClickAsync();
+        await Expect(page.Locator("#gw-enroll-error")).ToContainTextAsync("unconfirmed");
+        await Expect(page.Locator("#gw-enrollSubmitBtn")).ToBeDisabledAsync();
+        await Expect(page.Locator("#gw-result-token")).ToHaveValueAsync("");
+        await page.EvaluateAsync("async () => { window.__gateways.api.setMode('healthy'); await window.__gateways.surface.load(); }");
+        await Expect(page.Locator("#gw-enrollSubmitBtn")).ToBeEnabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task GatewayAdmin_SupersededAndDisposedReadsCannotRestoreFleet()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='gateways-admin']").ClickAsync();
+        await Expect(page.Locator("#gw-status")).ToContainTextAsync("4 Gateways");
+        await page.EvaluateAsync("""
+            async () => {
+              const { api, surface } = window.__gateways;
+              api.pauseNext(); const old = surface.load();
+              api.setMode('unavailable'); await surface.load();
+              api.release(); await old;
+            }
+            """);
+        await Expect(page.Locator("#gw-status")).ToHaveTextAsync("Gateway fleet unavailable");
+        var unchanged = await page.EvaluateAsync<bool>("""
+            async () => {
+              const { api, surface } = window.__gateways;
+              api.setMode('healthy'); api.pauseNext(); const old = surface.load();
+              surface.dispose(); const before = document.querySelector('#stage').innerHTML;
+              api.release(); await old;
+              return before === document.querySelector('#stage').innerHTML;
+            }
+            """);
+        Assert.True(unchanged);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task GatewayAdmin_EnrollmentValidatesExpiryPreventsDuplicatesAndIgnoresDisposedReceipt()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='gateways-admin']").ClickAsync();
+        await page.Locator("#gw-input-id").FillAsync("branch'; Write-Host ignored; '");
+        await page.Locator("#gw-input-expiry").FillAsync("5.5");
+        await page.Locator("#gw-enrollSubmitBtn").ClickAsync();
+        await Expect(page.Locator("#gw-enroll-error")).ToContainTextAsync("whole number");
+        Assert.Equal(0, await page.EvaluateAsync<int>("window.__gateways.api.calls.filter(call => call.kind === 'enroll').length"));
+        await page.Locator("#gw-input-expiry").FillAsync("60");
+        await page.EvaluateAsync("window.__gateways.api.pauseNext()");
+        await page.Locator("#gw-enrollSubmitBtn").ClickAsync();
+        await page.EvaluateAsync("document.querySelector('#gw-enrollSubmitBtn').dispatchEvent(new MouseEvent('click', { bubbles: true }))");
+        Assert.Equal(1, await page.EvaluateAsync<int>("window.__gateways.api.calls.filter(call => call.kind === 'enroll').length"));
+        await Expect(page.Locator("#gw-enrollBtn")).ToBeDisabledAsync();
+        await page.EvaluateAsync("window.__gateways.api.release()");
+        await Expect(page.Locator("#gw-enrollResult")).ToBeVisibleAsync();
+        Assert.Contains("--gateway-id 'branch''; Write-Host ignored; '''", await page.Locator("#gw-result-cmd").InputValueAsync());
+        await page.Locator("#gw-enrollDoneBtn").ClickAsync();
+        await Expect(page.Locator("#stage")).ToHaveAttributeAsync("aria-busy", "false");
+        await page.Locator("#gw-input-id").FillAsync("late-gateway");
+        await page.EvaluateAsync("window.__gateways.api.pauseNext()");
+        await page.Locator("#gw-enrollSubmitBtn").ClickAsync();
+        await page.EvaluateAsync("() => { window.__gateways.surface.dispose(); window.__gateways.api.release(); }");
+        await Expect(page.Locator("#gw-result-token")).ToHaveValueAsync("");
+        await Expect(page.Locator("#gw-result-cmd")).ToHaveValueAsync("");
+        await Expect(page.Locator("#gw-enrollResult")).ToBeHiddenAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task GatewayAdmin_UnconfirmedRevocationRequiresRefreshAndStaleConfirmationCannotWrite()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='gateways-admin']").ClickAsync();
+        await page.SelectOptionAsync("#fixtureSel", "invalid-revoke");
+        var row = page.Locator("#gw-tableWrap tr[data-gw-id='corp-onprem-gw']");
+        await row.GetByRole(AriaRole.Button, new() { Name = "Revoke", Exact = true }).ClickAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Revoke gateway", Exact = true }).ClickAsync();
+        await Expect(page.Locator("#gw-action-status")).ToContainTextAsync("unconfirmed");
+        await Expect(row.GetByRole(AriaRole.Button, new() { Name = "Revoke", Exact = true })).ToBeDisabledAsync();
+        await Expect(page.Locator("#gw-action-status")).Not.ToContainTextAsync("revoked.");
+        await page.Locator("#gw-refreshBtn").ClickAsync();
+        await Expect(row).ToContainTextAsync("Revoked");
+        await Expect(row.GetByRole(AriaRole.Button, new() { Name = "Revoke", Exact = true })).ToHaveCountAsync(0);
+        await page.SelectOptionAsync("#fixtureSel", "healthy-fleet");
+        await row.GetByRole(AriaRole.Button, new() { Name = "Revoke", Exact = true }).ClickAsync();
+        await Expect(page.GetByRole(AriaRole.Dialog, new() { Name = "Revoke Gateway", Exact = true })).ToBeVisibleAsync();
+        await page.EvaluateAsync("window.__gateways.surface.load()");
+        await page.GetByRole(AriaRole.Button, new() { Name = "Revoke gateway", Exact = true }).ClickAsync();
+        Assert.Equal(0, await page.EvaluateAsync<int>("window.__gateways.api.calls.filter(call => call.kind === 'revoke').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task GatewayAdmin_ClusterHistoryDoesNotInflateCountsAndNodesSupportKeyboardDismissal()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='gateways-admin']").ClickAsync();
+        await Expect(page.Locator("#gw-status")).ToContainTextAsync("4 Gateways");
+        await page.EvaluateAsync("""
+            async () => {
+              const { api, surface } = window.__gateways;
+              const fleet = api.snapshot();
+              fleet[0].nodes[1].isActive = false; fleet[0].activeNodes = 1;
+              const history = { ...structuredClone(fleet[0]), enrollmentId: 'pending-history', state: 'Pending', createdUtc: '2026-10-07T12:00:00Z' };
+              api.setFleet([history, ...fleet]); await surface.load();
+            }
+            """);
+        await Expect(page.Locator("#gw-status")).ToHaveTextAsync("4 Gateways • 2 Active Nodes");
+        var opener = page.Locator("#gw-tableWrap tr[data-gw-id='corp-onprem-gw'] .gw-view-nodes-btn");
+        await opener.FocusAsync(); await page.Keyboard.PressAsync("Enter");
+        await Expect(page.Locator("#gw-nodesModal")).ToBeVisibleAsync();
+        await Expect(page.Locator("#gw-nodesTableWrap")).ToContainTextAsync("PROD-GW-01");
+        await Expect(page.Locator("#gw-nodesTableWrap")).ToContainTextAsync("Disconnected");
+        await Expect(page.Locator("#gw-nodesCloseBtn")).ToBeFocusedAsync();
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "gateway-nodes.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#gw-nodesModal").ScreenshotAsync(new() { Path = imagePath });
+        await page.Keyboard.PressAsync("Escape");
+        await Expect(page.Locator("#gw-nodesModal")).ToBeHiddenAsync();
+        await Expect(opener).ToBeFocusedAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task GatewayAdmin_BindingRequiresValidMetadataAndCannotOpenAfterDisposal()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='gateways-admin']").ClickAsync();
+        await Expect(page.Locator("#gw-status")).ToContainTextAsync("4 Gateways");
+        var bind = page.Locator("#gw-tableWrap tr[data-gw-id='corp-onprem-gw'] .gw-create-conn-btn");
+        await page.EvaluateAsync("window.__gateways.wizardApi.setInvalid(true)");
+        await bind.ClickAsync();
+        await Expect(page.Locator("#gw-action-status")).ToContainTextAsync("binding is unavailable");
+        await Expect(page.GetByRole(AriaRole.Dialog, new() { Name = "Connection Wizard" })).ToHaveCountAsync(0);
+        await page.EvaluateAsync("window.__gateways.wizardApi.setInvalid(false)");
+        await bind.ClickAsync();
+        await Expect(page.GetByRole(AriaRole.Dialog, new() { Name = "Connection Wizard" })).ToBeVisibleAsync();
+        await Expect(page.GetByRole(AriaRole.Dialog, new() { Name = "Connection Wizard" })).ToContainTextAsync("sales_read");
+        await page.Locator("#etlsql-cw-close").ClickAsync();
+        await page.EvaluateAsync("window.__gateways.wizardApi.pauseNext()");
+        await bind.ClickAsync();
+        await page.EvaluateAsync("() => { window.__gateways.surface.dispose(); window.__gateways.wizardApi.release(); }");
+        await Expect(page.GetByRole(AriaRole.Dialog, new() { Name = "Connection Wizard" })).ToHaveCountAsync(0);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task TriageBoard_SelectionAndKeyboardFocusFollowIncidentIdentityDuringRefresh()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='triage-board']").ClickAsync();
+        var checks = page.Locator("#triage-host .triage-incident-check");
+        await Expect(checks).ToHaveCountAsync(3);
+        await checks.Nth(0).FocusAsync();
+        await page.Keyboard.PressAsync("Space");
+        await Expect(checks.Nth(0)).ToBeCheckedAsync();
+        await Expect(checks.Nth(0)).ToBeFocusedAsync();
+        await page.EvaluateAsync("async () => { window.__triage.reverse(); await window.__triage.controller.reload(); }");
+        await Expect(checks.Nth(2)).ToBeCheckedAsync();
+        await Expect(checks.Nth(2)).ToBeFocusedAsync();
+        await Expect(checks.Nth(0)).Not.ToBeCheckedAsync();
+        await checks.Nth(0).CheckAsync(); // Same job in another incident must not duplicate a rerun.
+        await page.Locator("#triage-host .triage-rerun-selected").ClickAsync();
+        await Expect(page.Locator("#triage-log")).ToContainTextAsync("5 of 5 jobs triggered");
+        var submitted = await page.EvaluateAsync<string[]>("window.__triage.calls.find(call => call.kind === 'rerun').names");
+        Assert.Equal(5, submitted.Length);
+        Assert.Equal(1, submitted.Count(name => name == "nightly_sales"));
+        Assert.Contains("finance_load", submitted);
+        Assert.DoesNotContain("finance_merge", submitted);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task TriageBoard_SupersededReadsAndDisposedControllersCannotRestoreStaleData()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='triage-board']").ClickAsync();
+        await Expect(page.Locator("#triage-host .triage-incident")).ToHaveCountAsync(3);
+        await page.EvaluateAsync("""
+            async () => {
+              const mock = window.__triage;
+              mock.pause('board'); const old = mock.controller.reload();
+              mock.setBoard(null); await mock.controller.reload();
+              mock.release('board'); await old;
+            }
+            """);
+        await Expect(page.Locator("#triage-host")).ToContainTextAsync("Triage is unavailable");
+        await Expect(page.Locator("#triage-host .triage-incident")).ToHaveCountAsync(0);
+        await page.EvaluateAsync("window.__triage.restore()");
+        await page.Locator("#triage-host .triage-retry").ClickAsync();
+        await Expect(page.Locator("#triage-host .triage-incident")).ToHaveCountAsync(3);
+        await page.EvaluateAsync("""
+            async () => {
+              const mock = window.__triage;
+              mock.pause('board'); const old = mock.controller.reload();
+              mock.controller.dispose(); mock.release('board'); await old;
+            }
+            """);
+        await Expect(page.Locator("#triage-host")).ToBeEmptyAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task TriageBoard_PartialAndUnconfirmedRerunsRetainTheFailedSelectionAndPreventDuplicates()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='triage-board']").ClickAsync();
+        var checks = page.Locator("#triage-host .triage-incident-check");
+        await Expect(checks).ToHaveCountAsync(3);
+        await checks.Nth(1).CheckAsync(); await checks.Nth(2).CheckAsync();
+        await page.EvaluateAsync("() => { window.__triage.setRerunMode('partial'); window.__triage.pause('rerun'); }");
+        await page.Locator("#triage-host .triage-rerun-selected").ClickAsync();
+        await Expect(page.Locator("#triage-host .triage-rerun-selected")).ToBeDisabledAsync();
+        await page.Locator("#triage-host .triage-rerun-selected").DispatchEventAsync("click");
+        Assert.Equal(1, await page.EvaluateAsync<int>("window.__triage.calls.filter(call => call.kind === 'rerun').length"));
+        await page.EvaluateAsync("window.__triage.release('rerun')");
+        await Expect(page.Locator("#triage-log")).ToContainTextAsync("1 of 2 jobs triggered. Not triggered: nightly_sales");
+        await Expect(checks.Nth(1)).Not.ToBeCheckedAsync();
+        await Expect(checks.Nth(2)).ToBeCheckedAsync();
+        await checks.Nth(1).CheckAsync();
+        await page.EvaluateAsync("window.__triage.setRerunMode('invalid')");
+        await page.Locator("#triage-host .triage-rerun-selected").ClickAsync();
+        await Expect(page.Locator("#triage-log")).ToContainTextAsync("outcome is unconfirmed");
+        await Expect(page.Locator("#triage-host .triage-rerun-selected")).ToBeDisabledAsync();
+        await page.EvaluateAsync("window.__triage.controller.reload()"); // A poll cannot authorize another mutation.
+        await Expect(page.Locator("#triage-host .triage-rerun-selected")).ToBeDisabledAsync();
+        await page.Locator("#triage-refresh").ClickAsync();
+        await Expect(page.Locator("#triage-host .triage-rerun-selected")).ToBeEnabledAsync();
+        Assert.Equal(2, await page.EvaluateAsync<int>("window.__triage.calls.filter(call => call.kind === 'rerun').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task TriageBoard_EvidenceMatchesTheRequestedRunAndLateResponsesCannotReopenIt()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='triage-board']").ClickAsync();
+        await Expect(page.Locator("#triage-host .triage-incident-toggle")).ToHaveCountAsync(3);
+        await page.Locator("#triage-host .triage-incident-toggle").Nth(2).ClickAsync();
+        await page.Locator("#triage-host [data-run='14355']").ClickAsync();
+        await Expect(page.Locator("#triage-host .triage-evidence-row")).ToContainTextAsync("Quality failures (2)");
+        await page.Locator("#triage-host [data-run='14355']").ClickAsync();
+        await page.EvaluateAsync("""
+            async () => {
+              const { _fixtures } = await import('/tools/ui-sandbox/stories/triage-board.story.js');
+              const wrong = structuredClone(_fixtures.runDetails.get(14355)); wrong.run.id++;
+              window.__triage.setDetail(14355, wrong);
+            }
+            """);
+        await page.Locator("#triage-host [data-run='14355']").ClickAsync();
+        await Expect(page.Locator("#triage-host .triage-evidence-row")).ToContainTextAsync("Evidence unavailable");
+        await page.Locator("#triage-host [data-run='14355']").ClickAsync();
+        await page.EvaluateAsync("window.__triage.pause('detail')");
+        await page.Locator("#triage-host [data-run='14355']").ClickAsync();
+        await Expect(page.Locator("#triage-host .triage-evidence-row")).ToContainTextAsync("Loading durable run evidence");
+        await page.Locator("#triage-host [data-run='14355']").ClickAsync();
+        await page.EvaluateAsync("window.__triage.release('detail')");
+        await Expect(page.Locator("#triage-host .triage-evidence-row")).ToHaveCountAsync(0);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task TriageBoard_WindowChangesInvalidateReadsAndDisposalSuppressesPendingMutationOutcomes()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='triage-board']").ClickAsync();
+        await Expect(page.Locator("#triage-host .triage-incident")).ToHaveCountAsync(3);
+        Assert.True(await page.EvaluateAsync<bool>("""
+            async () => {
+              const { createTriageController } = await import('/src/ETL-SQL.Portal/wwwroot/js/triage-controller.js');
+              return createTriageController(window.__triage.options) === window.__triage.controller;
+            }
+            """));
+        await page.Locator("#triage-host .triage-incident-check").Nth(0).CheckAsync();
+        await page.EvaluateAsync("() => { window.__triage.pause('board'); window.__oldTriageRead = window.__triage.controller.reload(); }");
+        await page.SelectOptionAsync("#triage-window", "48");
+        await Expect(page.Locator("#triage-host .triage-meta")).ToContainTextAsync("Last 48h");
+        await page.EvaluateAsync("async () => { window.__triage.release('board'); await window.__oldTriageRead; }");
+        await Expect(page.Locator("#triage-host .triage-meta")).ToContainTextAsync("Last 48h");
+        await Expect(page.Locator("#triage-host .triage-incident-check").Nth(0)).Not.ToBeCheckedAsync();
+        await page.Locator("#triage-host .triage-incident-check").Nth(1).CheckAsync();
+        await page.Locator("#triage-host .triage-incident-check").Nth(2).CheckAsync();
+        await page.EvaluateAsync("window.__triage.pause('rerun')");
+        await page.Locator("#triage-host .triage-rerun-selected").ClickAsync();
+        await Expect(page.Locator("#triage-host .triage-rerun-selected")).ToBeDisabledAsync();
+        await page.SelectOptionAsync("#triage-window", "24");
+        await Expect(page.Locator("#triage-host")).ToContainTextAsync("Re-run outcome is unconfirmed");
+        await page.EvaluateAsync("window.__triage.release('rerun')");
+        await Expect(page.Locator("#triage-log")).Not.ToContainTextAsync("jobs triggered");
+        await page.Locator("#triage-host .triage-incident-check").Nth(1).CheckAsync();
+        await page.Locator("#triage-host .triage-incident-check").Nth(2).CheckAsync();
+        await Expect(page.Locator("#triage-host .triage-rerun-selected")).ToBeDisabledAsync();
+        await page.Locator("#triage-refresh").ClickAsync();
+        await Expect(page.Locator("#triage-host .triage-rerun-selected")).ToBeEnabledAsync();
+        await page.EvaluateAsync("window.__triage.pause('rerun')");
+        await page.Locator("#triage-host .triage-rerun-selected").ClickAsync();
+        await Expect(page.Locator("#triage-host .triage-rerun-selected")).ToBeDisabledAsync();
+        await page.EvaluateAsync("async () => { window.__triage.controller.dispose(); await window.__triage.release('rerun'); }");
+        await Expect(page.Locator("#triage-host")).ToBeEmptyAsync();
+        await Expect(page.Locator("#triage-log")).Not.ToContainTextAsync("jobs triggered");
+        Assert.Equal(2, await page.EvaluateAsync<int>("window.__triage.calls.filter(call => call.kind === 'rerun').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ControlPlaneDashboard_UnavailableSources_ShowErrorsAndRecover()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='control-plane-dashboard']").ClickAsync();
+        await page.SelectOptionAsync("#fixtureSel", "unavailable");
+        var frame = page.FrameLocator("#stage iframe");
+        await Expect(frame.Locator("#tenantTableBody")).ToContainTextAsync("Tenant inventory unavailable.");
+        await Expect(frame.Locator("#kpiTenants")).ToHaveTextAsync("3 / 3");
+        await Expect(frame.Locator("#btnOpenProvision")).ToBeDisabledAsync();
+        await frame.Locator("[data-tab='audit']").ClickAsync();
+        await Expect(frame.Locator("#auditTableBody")).ToContainTextAsync("Platform audit trail unavailable.");
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "control-plane-unavailable.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = imagePath });
+        await page.EvaluateAsync("document.querySelector('#stage iframe').contentWindow.__cpMock.setFailure('healthy')");
+        await frame.Locator("#btnRefreshControlPlane").ClickAsync();
+        await frame.Locator("[data-tab='tenants']").ClickAsync();
+        await Expect(frame.Locator("#tenantTableBody tr")).ToHaveCountAsync(3);
+        await frame.Locator("#tenantSearch").FillAsync("globex");
+        await frame.Locator("#btnRefreshControlPlane").ClickAsync();
+        await Expect(frame.Locator("#tenantTableBody tr")).ToHaveCountAsync(1);
+        await Expect(frame.Locator("#tenantTableBody")).ToContainTextAsync("globex-inc");
+        await Expect(frame.Locator("#btnOpenProvision")).ToBeEnabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    private async Task<IFrameLocator> MountControlPlaneAsync(IPage page, string fixtureId = "healthy")
+    {
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='control-plane-dashboard']").ClickAsync();
+        if (fixtureId != "healthy") await page.SelectOptionAsync("#fixtureSel", fixtureId);
+        var frame = page.FrameLocator($"#stage iframe[title='Control Plane — {fixtureId}']");
+        await Expect(frame.Locator("#controlPlaneStatus")).Not.ToContainTextAsync("Loading");
+        return frame;
+    }
+
+    [Theory]
+    [InlineData("invalid", "Invalid control-plane overview response.")]
+    [InlineData("unauthorized", "Platform management credentials required.")]
+    [InlineData("disabled", "unavailable in this deployment")]
+    public async Task ControlPlaneDashboard_InvalidOrDeniedSources_DisableMutations(string fixtureId, string error)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var frame = await MountControlPlaneAsync(session.Page, fixtureId);
+        await Expect(frame.Locator("#controlPlaneStatus")).ToContainTextAsync(error);
+        await Expect(frame.Locator("#kpiAuditOutbox")).ToHaveTextAsync("Unavailable");
+        await Expect(frame.Locator("#tenantTableBody")).ToContainTextAsync("unavailable");
+        await Expect(frame.Locator("#btnOpenProvision")).ToBeDisabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ControlPlaneDashboard_Quotas_KeepReportLimitAndBindOnce()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var frame = await MountControlPlaneAsync(page);
+        await page.EvaluateAsync("""
+            () => {
+              const w = document.querySelector('#stage iframe').contentWindow;
+              if (w.ControlPlaneUI.init(w.document.body) !== w.ControlPlaneUI.init(w.document.body)) throw Error('Double binding');
+              const button = w.document.querySelector('tr[data-tenant="acme-corp"] .btn-quota');
+              const child = w.document.createElement('span'); child.textContent = 'Quotas'; button.replaceChildren(child);
+            }
+            """);
+        var open = frame.Locator("tr[data-tenant='acme-corp'] .btn-quota");
+        await open.Locator("span").ClickAsync();
+        await Expect(frame.Locator("#quotaTenantId")).ToBeFocusedAsync();
+        await page.Keyboard.PressAsync("Escape");
+        await Expect(frame.Locator("#modalQuotas")).Not.ToBeVisibleAsync();
+        await Expect(open).ToBeFocusedAsync();
+        await open.ClickAsync();
+        await frame.GetByLabel("Concurrent Jobs", new() { Exact = true }).FillAsync("17");
+        await frame.Locator("#quotaStorageMb").FillAsync("40960");
+        await frame.Locator("#quotaOperator").FillAsync("operator@platform.test");
+        await frame.Locator("#quotaAuthRef").FillAsync("CHG-fixture");
+        await frame.Locator("#quotaReason").FillAsync("Increase headroom");
+        await frame.GetByRole(AriaRole.Button, new() { Name = "Save Quotas" }).ClickAsync();
+        await Expect(frame.Locator("#receiptAlert")).ToContainTextAsync("UpdateQuotas — Completed");
+        await Expect(frame.Locator("tr[data-tenant='acme-corp']")).ToContainTextAsync("17 max");
+        Assert.Equal(1, await page.EvaluateAsync<int>("document.querySelector('#stage iframe').contentWindow.__cpMock.calls.filter(c => c.method === 'POST').length"));
+        var inventory = await page.EvaluateAsync<int>("""
+            async () => {
+              const w = document.querySelector('#stage iframe').contentWindow;
+              const response = await w.__cpMock.fetch('/api/platform/control-plane/tenants');
+              return (await response.json()).find(t => t.tenantId === 'acme-corp').maxReportSessions;
+            }
+            """);
+        Assert.Equal(50, inventory);
+        await frame.Locator("[data-tab='tenants']").FocusAsync();
+        await page.Keyboard.PressAsync("ArrowRight");
+        await Expect(frame.Locator("[data-tab='audit']")).ToBeFocusedAsync();
+        await Expect(frame.Locator("#auditTableBody")).ToContainTextAsync("CHG-fixture");
+        await frame.Locator("[data-tab='tenants']").ClickAsync();
+        await open.ClickAsync();
+        await frame.Locator("#quotaMaxJobs").FillAsync("19");
+        await frame.Locator("#quotaOperator").FillAsync("operator@platform.test");
+        await frame.Locator("#quotaAuthRef").FillAsync("CHG-unconfirmed");
+        await frame.Locator("#quotaReason").FillAsync("Increase headroom");
+        await page.EvaluateAsync("document.querySelector('#stage iframe').contentWindow.__cpMock.setFailure('mismatchedQuotas')");
+        await frame.GetByRole(AriaRole.Button, new() { Name = "Save Quotas" }).ClickAsync();
+        await Expect(frame.Locator("#formQuotas [role='alert']")).ToContainTextAsync("receipt quotas do not match");
+        await Expect(frame.Locator("#receiptAlert")).Not.ToBeVisibleAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ControlPlaneDashboard_SupersededLoadsAndDisposal_IgnoreLateResponses()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var frame = await MountControlPlaneAsync(page);
+        await page.EvaluateAsync("""
+            async () => {
+              const w = document.querySelector('#stage iframe').contentWindow;
+              w.__cpMock.pauseNextRead(); w.__oldRead = w.ControlPlaneUI.reload();
+              w.__cpMock.setFailure('invalid'); await w.ControlPlaneUI.reload();
+              w.__cpMock.releaseReads(); await w.__oldRead;
+            }
+            """);
+        await Expect(frame.Locator("#kpiTenants")).ToHaveTextAsync("Unavailable");
+        await Expect(frame.Locator("#tenantTableBody")).ToContainTextAsync("Invalid control-plane tenant inventory");
+        await page.EvaluateAsync("""
+            async () => {
+              const w = document.querySelector('#stage iframe').contentWindow;
+              w.__cpMock.setFailure('healthy'); w.__cpMock.pauseNextRead();
+              const pending = w.ControlPlaneUI.reload(); w.ControlPlaneUI.dispose();
+              const text = w.document.body.textContent;
+              w.__cpMock.releaseReads(); await pending;
+              if (w.document.body.textContent !== text) throw Error('Disposed controller rendered a late response');
+            }
+            """);
+        await Expect(frame.Locator("#btnOpenProvision")).ToBeDisabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ControlPlaneDashboard_CancelDuringMutation_PreventsDuplicateAndLateReceipt()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var frame = await MountControlPlaneAsync(page);
+        await frame.Locator("#btnOpenProvision").ClickAsync();
+        await frame.Locator("#provTenantId").FillAsync("new-tenant");
+        await frame.Locator("#provOperator").FillAsync("operator@platform.test");
+        await frame.Locator("#provAuthRef").FillAsync("CHG-new");
+        await frame.Locator("#provReason").FillAsync("Onboarding");
+        await page.EvaluateAsync("""
+            () => {
+              const w = document.querySelector('#stage iframe').contentWindow;
+              w.__cpMock.pauseNextMutation();
+              w.document.querySelector('#formProvision').requestSubmit();
+              w.document.querySelector('#formProvision').requestSubmit();
+            }
+            """);
+        await Expect(frame.Locator("#formProvision button[type='submit']")).ToBeDisabledAsync();
+        await frame.Locator("#modalProvision .btn-cancel").ClickAsync();
+        await page.EvaluateAsync("document.querySelector('#stage iframe').contentWindow.__cpMock.releaseMutations()");
+        await Expect(frame.Locator("#tenantTableBody tr")).ToHaveCountAsync(4);
+        await Expect(frame.Locator("#modalProvision")).Not.ToBeVisibleAsync();
+        await Expect(frame.Locator("#receiptAlert")).Not.ToBeVisibleAsync();
+        Assert.Equal(1, await page.EvaluateAsync<int>("document.querySelector('#stage iframe').contentWindow.__cpMock.calls.filter(c => c.method === 'POST').length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("invalidReceipt", "Invalid control-plane audit receipt")]
+    [InlineData("mismatchedReceipt", "receipt does not match")]
+    [InlineData("pendingReceipt", "Action reported Pending")]
+    public async Task ControlPlaneDashboard_UnconfirmedMutationReceipt_DoesNotAnnounceSuccess(string failure, string error)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var frame = await MountControlPlaneAsync(page);
+        await frame.Locator("tr[data-tenant='acme-corp'] .btn-state").ClickAsync();
+        await frame.Locator("#stateSelect").SelectOptionAsync("Maintenance");
+        await frame.Locator("#stateOperator").FillAsync("operator@platform.test");
+        await frame.Locator("#stateAuthRef").FillAsync("CHG-state");
+        await frame.Locator("#stateReason").FillAsync("Maintenance window");
+        await page.EvaluateAsync("failure => document.querySelector('#stage iframe').contentWindow.__cpMock.setFailure(failure)", failure);
+        await frame.GetByRole(AriaRole.Button, new() { Name = "Update State" }).ClickAsync();
+        await Expect(frame.Locator("#formState [role='alert']")).ToContainTextAsync(error);
+        await Expect(frame.Locator("#receiptAlert")).Not.ToBeVisibleAsync();
+        await Expect(frame.GetByRole(AriaRole.Button, new() { Name = "Update State" })).ToBeDisabledAsync();
+        await frame.Locator("#modalState .btn-cancel").ClickAsync();
+        await page.EvaluateAsync("document.querySelector('#stage iframe').contentWindow.__cpMock.setFailure('healthy')");
+        await frame.Locator("#btnRefreshControlPlane").ClickAsync();
+        await Expect(frame.Locator("#btnOpenProvision")).ToBeEnabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task PortalAuthoring_SnapshotColumnsAndLoadingErrors()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='portal-authoring']").ClickAsync();
+        await Expect(page.Locator("#stage svg").First).ToBeVisibleAsync();
+        await Expect(page.Locator("#stage")).ToContainTextAsync("North");
+        await Expect(page.Locator("#stage")).ToContainTextAsync("South");
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "portal-authoring-snapshot.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = imagePath });
+        await page.SelectOptionAsync("#fixtureSel", "unavailable");
+        await Expect(page.GetByRole(AriaRole.Alert)).ToContainTextAsync("<img src=x onerror=document.body.dataset.injected=1>");
+        await Expect(page.Locator("#stage img")).ToHaveCountAsync(0);
+        var retry = page.GetByRole(AriaRole.Button, new() { Name = "Retry Connection" });
+        await retry.FocusAsync();
+        await page.Keyboard.PressAsync("Enter");
+        await Expect(page.GetByRole(AriaRole.Alert)).ToContainTextAsync("Retry requested.");
+        await page.SelectOptionAsync("#fixtureSel", "invalid-snapshot");
+        await Expect(page.GetByRole(AriaRole.Alert)).ToContainTextAsync("Invalid designer snapshot response.");
+        await Expect(page.Locator("#stage .etlsql-designer")).ToHaveCountAsync(0);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = Path.Combine(Path.GetDirectoryName(imagePath)!, "portal-authoring-error.png") });
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task PortalOperationalChart_SelectsNestedGraphMarks()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='portal-operational-charts']").ClickAsync();
+        await page.SelectOptionAsync("#fixtureSel", "graph");
+        await Expect(page.GetByRole(AriaRole.Img, new() { Name = "Jobs: extract, validate, load" })).ToBeVisibleAsync();
+        await page.Locator("#stage svg g[data-name='validate'] circle").ClickAsync();
+        await Expect(page.GetByText("Selected: validate", new() { Exact = true })).ToBeVisibleAsync();
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "portal-operational-charts.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = imagePath });
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task SecretsAdmin_SaveAndVerify_KeepValuesOutOfRenderedMetadata()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='secrets-admin']").ClickAsync();
+        await Expect(page.Locator("#stage .data-table tbody tr")).ToHaveCountAsync(3);
+        await page.Locator("#sec-name").FillAsync("sandbox_password");
+        await page.Locator("#sec-value").FillAsync("sandbox-write-only-value");
+        await page.Locator("#sec-saveBtn").ClickAsync();
+        await Expect(page.Locator("#stage .data-table tbody tr")).ToHaveCountAsync(4);
+        await Expect(page.Locator("#sec-value")).ToHaveValueAsync("");
+        Assert.DoesNotContain("sandbox-write-only-value", await page.Locator("#stage").InnerTextAsync());
+        await page.Locator("tr[data-name='old_ftp_password'] button[data-act='verify']").ClickAsync();
+        await Expect(page.Locator("tr[data-name='old_ftp_password'] .badge-error")).ToHaveTextAsync("disabled");
+        await page.Locator("#sec-verifyAllBtn").ClickAsync();
+        await Expect(page.Locator("#sec-status")).ToHaveTextAsync("All 4 secret(s) decryptable.");
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "secrets-admin.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = imagePath });
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task SecretsAdmin_InvalidResponses_ShowErrorsWithoutInventingResults()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='secrets-admin']").ClickAsync();
+        await page.SelectOptionAsync("#fixtureSel", "invalid-list");
+        await Expect(page.Locator("#sec-tableWrap")).ToContainTextAsync("Invalid secret-store list response.");
+        await Expect(page.Locator("#sec-tableWrap tbody tr")).ToHaveCountAsync(0);
+        await page.SelectOptionAsync("#fixtureSel", "invalid-check");
+        await Expect(page.Locator("#stage .data-table tbody tr")).ToHaveCountAsync(3);
+        await page.Locator("#sec-verifyAllBtn").ClickAsync();
+        await Expect(page.Locator("#sec-status")).ToHaveTextAsync("Verify-all failed: Invalid secret-store verification response.");
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task SecretsAdmin_RefreshAndDisposal_IgnoreSupersededRequests()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        var result = await page.EvaluateAsync<string[]>("""
+            async () => {
+              const { createSecretsAdmin } = await import('/src/ETL-SQL.Portal/wwwroot/js/secrets-admin.js');
+              const host = document.createElement('div');
+              document.body.append(host);
+              const requests = [];
+              const surface = createSecretsAdmin({ host, secretsApi: { list: () => new Promise(resolve => requests.push(resolve)) } });
+              const secret = name => ({ name, disabled: false, createdAtUtc: '2026-10-07T00:00:00Z', updatedAtUtc: '2026-10-07T00:00:00Z', version: 1 });
+              const first = surface.load(), second = surface.load();
+              requests[1]([secret('latest')]);
+              await second;
+              requests[0]([secret('superseded')]);
+              await first;
+              const afterRefresh = host.querySelector('tbody').textContent;
+              const pending = surface.load();
+              surface.dispose();
+              requests[2]([secret('after-disposal')]);
+              await pending;
+              const afterDisposal = host.querySelector('tbody').textContent;
+              host.remove();
+              return [afterRefresh, afterDisposal];
+            }
+            """);
+        Assert.All(result, text => Assert.Contains("latest", text));
+        Assert.All(result, text => Assert.DoesNotContain("superseded", text));
+        Assert.All(result, text => Assert.DoesNotContain("after-disposal", text));
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task OrchestratorActivity_FiltersClearSearchAndRefreshUseTheNativeControls()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='orchestrator-activity']").ClickAsync();
+        var rows = page.Locator("#jobsTableWrap tbody tr");
+        await Expect(rows).ToHaveCountAsync(6);
+        await page.Locator("#activeFilterBtn").ClickAsync();
+        await Expect(rows).ToHaveCountAsync(1);
+        await Expect(rows).ToContainTextAsync("active_load");
+        await Expect(page.Locator("#activeFilterBtn")).ToHaveAttributeAsync("aria-pressed", "true");
+        await page.Locator("#queuedFilterBtn").FocusAsync();
+        await page.Keyboard.PressAsync("Enter");
+        await Expect(rows).ToHaveCountAsync(1);
+        await Expect(rows).ToContainTextAsync("queued_load");
+        await Expect(page.Locator("#activeFilterBtn")).ToHaveAttributeAsync("aria-pressed", "false");
+        await page.Locator("#completedTodayFilterBtn").ClickAsync();
+        await Expect(rows).ToHaveCountAsync(2);
+        await Expect(page.Locator("#jobsTableWrap")).ToContainTextAsync("retry_succeeded");
+        await page.Locator("#failedTodayFilterBtn").ClickAsync();
+        await Expect(rows).ToHaveCountAsync(2);
+        await Expect(page.Locator("#jobsTableWrap")).ToContainTextAsync("failed_load");
+        await page.Locator("#clearJobsFilterBtn").ClickAsync();
+        await Expect(rows).ToHaveCountAsync(6);
+        await Expect(page.Locator("#jobsSectionKicker")).ToHaveTextAsync("All jobs");
+        await page.Locator("#jobsSearchInput").FillAsync("retry");
+        await Expect(rows).ToHaveCountAsync(1);
+        await Expect(page.Locator("#completedCount")).ToHaveTextAsync("2");
+        await page.Locator("#jobsSearchClearBtn").ClickAsync();
+        await Expect(rows).ToHaveCountAsync(6);
+        await Expect(page.Locator("#jobsSearchInput")).ToBeFocusedAsync();
+        await page.SelectOptionAsync("#jobsStatusSelect", "disabled");
+        await Expect(rows).ToHaveCountAsync(0);
+        await page.SelectOptionAsync("#jobsStatusSelect", "all");
+        await Expect(rows).ToHaveCountAsync(6);
+        await page.Locator("#activeFilterBtn").ClickAsync();
+        await page.Locator("#refreshJobsBtn").ClickAsync();
+        await Expect(rows).ToHaveCountAsync(0);
+        await Expect(page.Locator("#activeCount")).ToHaveTextAsync("0");
+        await Expect(page.Locator("#activeFilterBtn")).ToHaveAttributeAsync("aria-pressed", "true");
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "orchestrator-activity.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#clearJobsFilterBtn").ClickAsync();
+        await Expect(rows).ToHaveCountAsync(5);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = imagePath });
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task OrchestratorActivity_PaginationAndErrorsDoNotLeaveStaleRowsOrCounts()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='orchestrator-activity']").ClickAsync();
+        await page.SelectOptionAsync("#fixtureSel", "paged");
+        var rows = page.Locator("#jobsTableWrap tbody tr");
+        await Expect(rows).ToHaveCountAsync(25);
+        await Expect(page.Locator("#jobsPaginationInfo")).ToHaveTextAsync("Showing 1–25 of 30 jobs");
+        await page.Locator("#jobsNextPageBtn").ClickAsync();
+        await Expect(rows).ToHaveCountAsync(5);
+        await Expect(page.Locator("#jobsPageIndicator")).ToHaveTextAsync("2 / 2");
+        await page.Locator("#jobsPrevPageBtn").ClickAsync();
+        await Expect(rows).ToHaveCountAsync(25);
+        await page.SelectOptionAsync("#jobsPageSizeSelect", "50");
+        await Expect(rows).ToHaveCountAsync(30);
+        await page.SelectOptionAsync("#fixtureSel", "denied");
+        await Expect(rows).ToHaveCountAsync(0);
+        await Expect(page.Locator("#jobsTableWrap [role='alert']")).ToContainTextAsync("Access denied.");
+        await Expect(page.Locator("#activeCount")).ToHaveTextAsync("—");
+        await page.Locator("#activeFilterBtn").ClickAsync();
+        await Expect(rows).ToHaveCountAsync(0);
+        await Expect(page.Locator("#jobsTableWrap [role='alert']")).ToContainTextAsync("Access denied.");
+        await page.SelectOptionAsync("#fixtureSel", "invalid");
+        await Expect(page.Locator("#jobsTableWrap [role='alert']")).ToContainTextAsync("Invalid scheduled-job activity response.");
+        await Expect(page.Locator("#completedCount")).ToHaveTextAsync("—");
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
     }
 
     [Fact]
@@ -800,6 +4798,141 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task OperationsAdmin_UnavailableSourcesNeverReportAllClearAndRetryRecovers()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.Locator("button.story-link[data-story-id='portal-operations']").ClickAsync();
+        await page.SelectOptionAsync("#fixtureSel", "unavailable");
+        var surface = page.FrameLocator("#stage iframe");
+        await Expect(surface.Locator("#ops-error")).ToContainTextAsync("unavailable");
+        var imagePath = Path.Combine(RepoRoot(), "artifacts", "section1", "qa", "operations-unavailable.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        await page.Locator("#stage").ScreenshotAsync(new() { Path = imagePath });
+        await Expect(surface.Locator("#ops-signals button[data-target='ops-authority']")).ToContainTextAsync("Unavailable");
+        await Expect(surface.Locator("#ops-ambiguous-writes")).ToContainTextAsync("unavailable");
+        Assert.DoesNotContain("Nothing pending", await surface.Locator("#ops-signals").InnerTextAsync());
+        Assert.DoesNotContain("No unresolved", await surface.Locator("#ops-signals").InnerTextAsync());
+        await surface.Locator("#operations").EvaluateAsync("""
+            async () => {
+              const { makeOperationsApi } = await import('/tools/ui-sandbox/stories/portal-operations.story.js');
+              Object.assign(window.__operationsApi, makeOperationsApi('steady'));
+            }
+            """);
+        await surface.GetByRole(AriaRole.Button, new() { Name = "Refresh snapshot" }).FocusAsync();
+        await page.Keyboard.PressAsync("Enter");
+        await Expect(surface.Locator("#ops-signals")).ToContainTextAsync("Nothing pending");
+        await Expect(surface.Locator("#ops-services")).ToContainTextAsync("ops@example.test;oncall@example.test");
+        await page.SelectOptionAsync("#fixtureSel", "invalid");
+        await Expect(surface.Locator("#ops-accounts")).ToContainTextAsync("unavailable");
+        await Expect(surface.Locator("#ops-now-grid")).ToContainTextAsync("Unavailable");
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task OperationsAdmin_RefreshIgnoresLateResultsAndClearsFailedSources()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        var results = await page.EvaluateAsync<string[]>("""
+            async () => {
+              const { createOperationsAdmin } = await import('/src/ETL-SQL.Portal/wwwroot/js/operations-admin.js');
+              const { makeOperationsApi } = await import('/tools/ui-sandbox/stories/portal-operations.story.js');
+              const host = document.createElement('div'); document.body.append(host);
+              const api = makeOperationsApi('steady'), requests = [];
+              api.pendingAccessRequests = () => new Promise(resolve => requests.push(resolve));
+              const surface = createOperationsAdmin({ host, adminApi: api });
+              const first = surface.load(), second = surface.load();
+              await Promise.resolve(); await Promise.resolve();
+              requests[1]([]); await second;
+              const latest = host.querySelector('#ops-signals').textContent;
+              requests[0]([{ id: 42, reportTitle: 'Superseded', requesterUserName: 'old', createdAt: '2026-10-07T00:00:00Z' }]);
+              await first;
+              const afterLate = host.querySelector('#ops-signals').textContent;
+              Object.assign(api, makeOperationsApi('attention')); await surface.load();
+              const attention = host.querySelector('#ops-signals').textContent;
+              api.pendingAccessRequests = async () => { throw new Error('Offline'); };
+              api.gatewayAmbiguousWrites = async () => { throw new Error('Offline'); };
+              await surface.load();
+              const failed = host.querySelector('#ops-signals').textContent;
+              api.pendingAccessRequests = () => new Promise(resolve => requests.push(resolve));
+              const pending = surface.load(); await Promise.resolve(); await Promise.resolve();
+              surface.dispose(); requests[2]([]); await pending;
+              const afterDisposal = host.querySelector('#ops-signals').textContent;
+              host.remove(); return [latest, afterLate, attention, failed, afterDisposal];
+            }
+            """);
+        Assert.Equal(results[0], results[1]);
+        Assert.Contains("Nothing pending", results[0]);
+        Assert.Contains("Awaiting a decision", results[2]);
+        Assert.Contains("Retry blocked", results[2]);
+        Assert.Contains("Unavailable", results[3]);
+        Assert.DoesNotContain("Awaiting a decision", results[3]);
+        Assert.DoesNotContain("No unresolved", results[3]);
+        Assert.DoesNotContain("Nothing pending", results[4]);
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task OperationsAdmin_OneTimeCredentialsClearAndLateMutationsDoNotReopenDialogs()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.EvaluateAsync("""
+            async () => {
+              document.body.innerHTML = '<main id="operations"></main>';
+              const { createOperationsAdmin } = await import('/src/ETL-SQL.Portal/wwwroot/js/operations-admin.js');
+              const { makeOperationsApi } = await import('/tools/ui-sandbox/stories/portal-operations.story.js');
+              const api = makeOperationsApi('steady'), account = (await api.listServiceAccounts())[0];
+              window.__rotationCount = 0;
+              api.rotateServiceAccount = async (id, version) => {
+                window.__rotationCount++;
+                window.__rotationFence = { id, version };
+                return new Promise(resolve => { window.__finishRotation = async () => {
+                  resolve({ account, clientSecret: 'fixture-one-time-value' });
+                  await new Promise(requestAnimationFrame);
+                }; });
+              };
+              window.__operations = createOperationsAdmin({ host: document.getElementById('operations'), adminApi: api });
+              await window.__operations.load();
+            }
+            """);
+        await page.GetByRole(AriaRole.Button, new() { Name = "Rotate", Exact = true }).FocusAsync();
+        await page.Keyboard.PressAsync("Enter");
+        await Expect(page.Locator("#ops-modal [data-dialog-close]")).ToBeFocusedAsync();
+        await page.Locator("#ops-modal-submit").ClickAsync();
+        await Expect(page.Locator("#ops-modal-submit")).ToBeDisabledAsync();
+        await page.Locator("#ops-modal-submit").EvaluateAsync("button => button.click()");
+        Assert.Equal(1, await page.EvaluateAsync<int>("() => window.__rotationCount"));
+        await page.EvaluateAsync("() => window.__finishRotation()");
+        await Expect(page.Locator("#ops-secret-value")).ToHaveTextAsync("fixture-one-time-value");
+        await page.Keyboard.PressAsync("Escape");
+        await Expect(page.Locator("#ops-modal")).ToBeHiddenAsync();
+        Assert.Equal(0, await page.Locator("#ops-secret-value").CountAsync());
+        await page.GetByRole(AriaRole.Button, new() { Name = "Rotate", Exact = true }).ClickAsync();
+        await page.Locator("#ops-modal-submit").ClickAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Cancel", Exact = true }).ClickAsync();
+        await page.EvaluateAsync("() => window.__finishRotation()");
+        await Expect(page.Locator("#ops-modal")).ToBeHiddenAsync();
+        Assert.Equal(0, await page.Locator("#ops-secret-value").CountAsync());
+        await page.GetByRole(AriaRole.Button, new() { Name = "Rotate", Exact = true }).ClickAsync();
+        await page.Locator("#ops-modal-submit").ClickAsync();
+        await page.EvaluateAsync("async () => { window.__operations.dispose(); await window.__finishRotation(); }");
+        await Expect(page.Locator("#ops-modal")).ToBeHiddenAsync();
+        Assert.Equal(0, await page.Locator("#ops-secret-value").CountAsync());
+        var fence = await page.EvaluateAsync<JsonElement>("() => window.__rotationFence");
+        Assert.Equal("machine-1", fence.GetProperty("id").GetString());
+        Assert.Equal(1, fence.GetProperty("version").GetInt32());
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
     public async Task OperationsAdmin_ReconcilesAmbiguousGatewayWriteWithImmutableEvidence()
     {
         await using var session = await fixture.NewSessionAsync();
@@ -825,7 +4958,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
               const admin = createOperationsAdmin({
                 host: document.getElementById('operations-admin'),
                 adminApi: {
-                  operationalMetrics: async () => ({ queuedExecutions: 0, activeExecutions: 1, executionCap: 8, auditOutboxPending: 0, auditOutboxFailed: 0, auditOutboxOldestPendingAgeSeconds: 0, windowHours: 24, recentExecutionFailures: 0, recentExecutions: 1, staleDatasets: 0, datasetStorageBytes: 0, securityEventPending: 0, securityEventFailed: 0 }),
+                  operationalMetrics: async () => ({ queuedExecutions: 0, activeExecutions: 1, executionCap: 8, auditOutboxPending: 0, auditOutboxFailed: 0, auditOutboxOldestPendingAgeSeconds: 0, windowHours: 24, recentExecutionFailures: 0, recentExecutions: 1, staleDatasets: 0, datasetStorageBytes: 0, securityEventPending: 0, securityEventFailed: 0, nodeId: 'test-node', schemaUpToDate: true }),
                   fleetStatus: async () => ({ status: 'Healthy', environment: 'Test', storage: 'Ready', inventory: { nodeId: 'test-node', installedVersion: 'test', upgradeReadiness: { ready: true, findings: [] } } }),
                   gatewayAmbiguousWrites: async () => [item],
                   pendingAccessRequests: empty, listServiceAccounts: empty, anonymousReportAccess: empty,

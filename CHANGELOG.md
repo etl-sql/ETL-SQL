@@ -31,6 +31,52 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   deletion send the loaded version; rejected writes do not produce success notices, and pending
   actions and replaced dialogs ignore duplicate or late work.
 - Update CodeQL security analysis workflow action dependencies to v4.37.9.
+- Compile the admin users panel, API handling, and response validation from strict TypeScript using
+  reflected C# user, role-catalog, and bulk-status contracts.
+- Compile admin groups and membership from strict TypeScript, with reflected C# snapshot and mutation
+  receipts identifying the target group, version, and changed or skipped users.
+- Compile admin folders and permissions from strict TypeScript, with reflected C# ACL snapshots,
+  permission names/ranks, and grant/revoke receipts identifying their targets and new folder version.
+- Compile admin report publication, script selection, API handling, and response validation from strict
+  TypeScript, using reflected C# report catalogs, validation results, and publication requests.
+- Compile admin audit browsing and CSV export from strict TypeScript with reflected C# paged audit contracts.
+- Compile admin subscriptions, parameter editing, API handling, and response validation from strict
+  TypeScript using reflected C# subscription, parameter, history, and bulk-status contracts.
+- Compile admin settings and page composition from strict TypeScript, with reflected C# settings,
+  branding, and connection-status contracts and disposal of every mounted panel.
+- Compile Portal shell, login, documentation, secret administration, operational-chart, and UI helper modules from strict
+  TypeScript. Browser DTO declarations now include generic paged responses and serialized date types.
+- Compile the Portal Designer and Studio pages and catalog persistence callbacks from strict TypeScript,
+  validating authoring responses against C#-generated contracts.
+- Compile the Operations dashboard, response validators, and user-directory paging from strict
+  TypeScript backed by C# browser declarations.
+- Compile the Portal API client and authentication transport from strict TypeScript, with mutation
+  request contracts generated from C# and validated authentication responses.
+- Compile the control-plane dashboard, view rendering, and response validation from strict TypeScript
+  using the live C# platform contracts.
+- Compile triage rendering, response validation, and polling interactions from strict TypeScript
+  backed by C# run, quality-failure, and statement-metric contracts.
+- Compile gateway administration, fleet rendering, response validation, and connection-wizard
+  integration from strict TypeScript with C# enrollment, session, discovery, and diagnostic contracts.
+- Compile policy authority administration, rendering, and response validation from strict TypeScript
+  using C# signer, validation, policy-version, machine, and mutation contracts.
+- Compile shared connection administration and rendering from strict TypeScript, with C# catalog,
+  diagnostic, import, and parsing contracts and the shared authenticated wizard adapter.
+- Compile the data-quality queue, rendering, state, and response validation from strict TypeScript
+  using C# queue, row, trend, rule, and submission contracts.
+- Compile dataset administration, markup, and response validation from strict TypeScript using C#
+  catalog, row, statistics, permissions, and mutation declarations.
+- Compile the lineage catalog controller, rendering, and response validation from strict TypeScript
+  using C# history, stewardship, protected-data, suggestion, impact, and audit declarations.
+- Compile the governance controller, markup, and response validation from strict TypeScript,
+  with governance DTO and mutation receipt declarations reflected from C#.
+- Prepare browser assets before build and packaging entry points. Direct .NET builds verify a hashed
+  asset manifest and fail with the preparation command when assets or sources are missing or stale.
+- Discover browser consumer checks automatically in CI so new checks enter the gate.
+- Add a tenant-scoped scheduled-job activity API with authorized counts, server pagination,
+  lease-backed queued/running state, and UTC-day success/failure membership by immutable job ID.
+- Enable the Portal Orchestrator's four metric chips with server filters, search and status criteria,
+  pagination, and counts limited to readable jobs. Activity loading and polling use strict TypeScript.
 
 ### Fixed
 
@@ -44,8 +90,6 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   sources and missing host outputs without repairing prepared assets.
 - Prepare browser assets before either debug build script invokes .NET. Preserve checkout
   path arguments and propagate failed preparation and asset checks to the caller.
-- Resolve startup PII maintenance table and column names from the live EF mappings so encryption
-  maintenance continues after the snake_case schema migration.
 - Restore the locked browser compiler and prepare assets before CI/release/certification build
   steps. Keep release-tag validation before dependency restore and run all consumer checks in CI.
 - Add lease-fenced scheduled-job activity storage contracts and a tenant-scoped, distinct-job
@@ -59,13 +103,145 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 - Reload the sandbox's complete browser module graph while preserving its selected story, fixture,
   and theme. Dispose the previous story before reload and preserve valid delivery files after a compiler error.
-- Capture each proxied Orchestrator request's destination and key together so concurrent settings
-  changes cannot mix configurations.
 - Preserve saved Orchestrator keys when the key field is blank and retain explicit clears after a
   restart. Persist settings atomically before changing runtime values; failed writes and invalid
   branding URLs leave the previous settings active.
 - Verify staged C# whitespace from an isolated index snapshot so partial commits preserve
   unrelated working-tree edits.
+- Preserve settings and branding drafts across late reads and saves. Require explicit refresh after
+  unconfirmed writes and report failed connection-status reads as unconfirmed. Keep accepted branding
+  when an older public branding read completes.
+- Capture each proxied Orchestrator request's destination and key together so concurrent settings
+  changes cannot mix configurations.
+- Keep subscription parameter and history responses bound to their original dialogs. Capture the
+  target, version, and parameter values before saving; late writes preserve newer drafts. Reject
+  unavailable parameter definitions, clear empty overrides, report partial bulk changes, and require
+  explicit refresh after an unconfirmed write. Offer state refresh inside the parameter dialog.
+  Return sanitized HTTP 503 responses when scheduler trigger history cannot be read.
+- Resolve startup PII maintenance table and column names from the live EF mappings so encryption
+  maintenance continues after the snake_case schema migration.
+- Locate the checkout from its solution marker so documentation checks support isolated .NET build
+  output directories.
+- Retain audit entries with no account, removed accounts, or accounts outside the current tenant.
+  Order timestamp ties by event ID, clamp page bounds, and expose every audit page. Validate CSV status,
+  content type, and body before downloading; refresh expired tokens and discard stale reads/downloads.
+  Show the existing 10,000-entry export limit and keep failed reads distinct from confirmed empty results.
+- Preserve opened report versions and publication drafts across refreshes and delayed work. Keep
+  superseded catalog/validation responses from replacing current results, require confirmed mutation
+  receipts, prevent duplicate retry after unconfirmed publication, and hide publication in Disabled mode.
+- Display nested folders and offer them as parents. Exclude a folder and its descendants from its
+  own parent choices. Wire the folder permission editor and show permission names while preserving
+  their stored numeric values. Preserve opened versions and rejected drafts, bind late ACL reads and
+  confirmations to their original folder, and guard duplicate writes and disposed controllers.
+  Require successful explicit refresh after an unconfirmed change, including cascading deletion.
+  Reject undefined permission values before changing folder versions or recording grants.
+- Keep late membership responses and confirmations bound to their original group. Preserve group
+  editor versions and rejected member-picker selections, block duplicate and unconfirmed writes,
+  and reconcile deleted groups through explicit refresh. Group renames refresh the selected member
+  panel; partial additions, removals, and blocked group deletions report their actual outcomes.
+- Load the initial admin user list after its state is initialized. Offer the server's current roles,
+  including stewardship roles, and preserve unassigned or multiple roles during unrelated profile edits.
+  Use the version captured when opening an editor and the update receipt's version for a following
+  password reset. Announce password-reset success only after HTTP 204. Guard duplicate writes,
+  superseded reads, discarded drafts, and unconfirmed mutation outcomes. Retry role-catalog loading
+  without resetting the draft, and clear passwords when the users controller is disposed.
+- Wait for the destination folder in the browser publish journey, which displays its form before
+  the folder catalog response arrives.
+- Reject unknown user roles before creating accounts or changing existing users. Commit new accounts,
+  role assignments, and audit records together, including rollback when audit persistence fails.
+  Preserve tenant-scoped creation and role changes for equal usernames in different tenants. Create-user
+  receipts report the actual canonical roles, including an empty list when no role was requested.
+- Clear governance quality counts and rows when their source is unavailable, reject malformed
+  dashboards, and prevent superseded or disposed reads from replacing the current view. Validate
+  job-bound trends and rules, load all job trends with bounded concurrency, and keep unavailable
+  trends distinct from recorded zero counts. Closed trend dialogs cannot receive another job's late results.
+- Require matching governance mutation receipts and HTTP statuses before announcing success. Block
+  duplicate writes and require successful explicit refresh after an unconfirmed outcome, including
+  leaving and remounting the view. Preserve glossary stewards, disabled flags, settings edits, and
+  dialog drafts. Cancel and Escape restore dialog semantics and keyboard focus. Distinguish running
+  scans from completed scans and label estate-wide finding totals and exceptions. Offer governance
+  views to the seeded stewardship roles accepted by the server.
+- Distinguish failed lineage and protected-data sources from empty results, reject mismatched impact
+  responses, and prevent late reads from replacing another mode or a disposed explorer. Derive
+  protected counts from the server's actual fields, include alerts in impact, populate ownership
+  filters, isolate saved views by identity, and invalidate CSV export when query inputs change.
+  Show one mode form, preserve keyboard tab focus, and include fractional seconds at the end of
+  a selected UTC date range. Graph names and edge pairs cannot collide with object properties or separators.
+- Clear stale dataset counts and incomplete statistics, reject late reads after viewer/panel changes,
+  and guard duplicate or unconfirmed writes. Preserve opened edit versions and another dataset's draft
+  during a save. Keep filters and sort criteria in CSV/XLSX exports, allow Refresh grants, clear blank
+  TTL values, and keep picker keyboard focus inside the viewer. Serialize Parquet text as strings in
+  dataset row and distinct-value responses, preserving Unicode, empty strings, and nulls.
+- Exclude null cells from inclusive numeric dataset filters and ranges, keeping viewer counts,
+  statistics, and exports consistent. Allow concurrent password-encrypted cache readers without
+  requesting write access or locking other readers out.
+- Distinguish unavailable quality sources from empty results and clear stale queue counts. Reject
+  superseded reads, mismatched submission status, and late work after disposal or identity changes.
+  Require accepted submission receipts, guard duplicate/unconfirmed writes, revalidate stored job
+  metadata per identity, and retain row edits and keyboard focus during polling. Apply disposition
+  updates to the reviewed row status, including recovery of replaying claims without source-value edits.
+  Clear row previews when refreshed target metadata revokes readability, and cancel pending preview
+  reads. Preserve edits for row IDs and column names that match built-in object properties.
+- Preserve gateway bindings and discovered connector types when editing shared connections. Reject
+  incomplete diagnostics, masked display values, and malformed import/verification responses. Guard
+  stale reads and duplicate writes, clear stale verification results, and require refresh after an
+  unconfirmed mutation. Option validation reports line numbers without echoing possible credentials.
+- Bind policy administration rows and pending actions to their loaded tenant/environment. Reject
+  stale validation results and incomplete metadata/receipts, prevent duplicate submissions, and
+  require explicit refresh after unconfirmed mutations. Preserve local expiry time across daylight
+  saving changes and validate canary selectors, machine IDs, and certificate thumbprints.
+- Show missing gateway fleet data as unavailable, count clusters once across enrollment history,
+  and clear one-time tokens and setup commands on dismissal or disposal. Guard stale responses and
+  duplicate mutations, require matching enrollment/revocation receipts, and quote PowerShell setup
+  arguments. Validate binding metadata before opening the wizard and preserve keyboard dialog focus.
+- Keep running jobs visible on quiet triage boards and show incomplete run evidence as unavailable.
+  Preserve incident selection and keyboard focus across reordered polls. Guard late requests and
+  duplicate batch reruns, report per-job outcomes, and require explicit refresh after an unconfirmed response.
+- Show unavailable control-plane metadata instead of empty tenant/audit results after failed requests.
+  Reject superseded loads and unconfirmed mutation receipts, prevent duplicate submissions, and
+  preserve report-session quotas when editing jobs/storage. Add keyboard tabs, dialog focus handling,
+  and explicit refresh recovery. Label static fleet configuration separately from live health evidence.
+- Preserve native HTTP headers and request bodies in the Portal client, including version headers
+  and credentials carried by a `Request`. Attach stored credentials only to same-origin API requests.
+- Share concurrent token refreshes, reject malformed credentials, and prevent late responses from
+  restoring a signed-out session or replacing a new identity. Clear local credentials before logout
+  while preserving server revocation when the access token has expired.
+- Retain HTTP status for malformed error payloads and accept only the password-change middleware's
+  redirect hint. Remove the obsolete unpaged user-list response schema.
+- Clear stale Operations counts and distinguish unavailable sources from empty results. Guard refresh
+  ordering and disposal, prevent duplicate submissions, and clear one-time credentials on dismissal.
+- Read paginated administration user responses correctly and include every page in service-account
+  owner selection. Display administrative-service recipients as the string returned by the server.
+- Release dialog focus handlers when their controller is disposed.
+- Give Portal browser journeys an isolated authenticated Orchestrator so page console checks
+  exercise working activity endpoints. Remove their redundant fixed delay after network-idle readiness.
+- Restore the previous connector registry after scoped tests, including constructor failures.
+- Scan tracked source files directly for developer-specific paths so ignored VS Code test caches
+  and their unreadable runtime endpoints cannot stop documentation validation.
+- Allow equal scheduled-job names in separate tenants to start independently. Recheck the fenced
+  lease after waiting for concurrency capacity so a reclaimed lease cannot start stale execution.
+- Clear stale Orchestrator activity when the connection fails and reload the table and timeline
+  catalog after recovery. Preserve keyboard focus during automatic table refresh.
+- Read the first-login password-change requirement from the issued JWT claim, handle login lockout
+  responses, and reject malformed authentication responses before storing credentials.
+- Sign out from the documentation page through the existing authentication API and show the selected
+  documentation search section in its heading.
+- Reject foreign SSO redirect targets and malformed navigation responses before applying UI changes.
+- Select nested operational graph marks correctly and remove chart click listeners on disposal.
+- Support folder pickers that provide only a parent selector.
+- Generate missing browser host directories and remove obsolete owned outputs after source renames
+  or deletions. Reject incorrectly cased browser imports before they reach Linux packaging.
+- Run the complete browser asset pipeline in watch mode without blocking startup. Reject source
+  changes during preparation before certifying its manifest, and exclude temporary test modules
+  from generated assets and packages.
+- Reject malformed secret-store responses, ignore superseded refreshes, and remove secret-admin
+  listeners on disposal.
+- Include the canonical Portal stylesheet in standalone WorkstationEditor build and publish output.
+- Preserve the original authored script when opening and saving in Designer, refresh expired access
+  tokens through the Portal client, and offer Retry when report/session loading fails.
+- Map compiled snapshot columns by visual name so Designer chart previews receive their data mappings.
+- Preserve nullable cells in generated browser declarations for nested collections. Resolve shared
+  module dependencies against their canonical owners when a Portal module imports them.
 
 ## [0.20.1] — 2026-10-06
 

@@ -1,20 +1,23 @@
 // Admin → Shared Connections surface driven by a fixture-backed fake of api/admin/connections.
 import { importFresh } from '../util.js';
+import { makeWizardApi } from './gateways-admin.story.js';
 
-function makeFakeApi(seed, { unresolvable = [] } = {}) {
+export function makeFakeApi(seed, { unresolvable = [], mode = 'healthy' } = {}) {
   let entries = seed.map((e) => ({ ...e, options: { ...e.options }, sensitiveFields: [...(e.sensitiveFields || [])] }));
   const err = (status, body) => Object.assign(new Error(body.error || body.status || 'error'), { status, body });
   const summary = (e) => ({
     alias: e.alias, connectorType: e.connectorType, disabled: e.disabled, environmentScope: e.environmentScope,
-    createdAtUtc: e.createdAtUtc, updatedAtUtc: e.updatedAtUtc, lastUsedAtUtc: e.lastUsedAtUtc,
-    lastVerifiedAtUtc: e.lastVerifiedAtUtc, version: e.version,
+    createdAtUtc: e.createdAtUtc, updatedAtUtc: e.updatedAtUtc, lastUsedAtUtc: e.lastUsedAtUtc ?? null,
+    lastVerifiedAtUtc: e.lastVerifiedAtUtc ?? null, version: e.version, gateway: e.gateway ?? null,
   });
-  return {
+  const api = {
     async list() { return entries.map(summary); },
     async detail(alias) {
       const e = entries.find((x) => x.alias === alias);
       if (!e) throw err(404, { error: `Shared connection '${alias}' does not exist.` });
-      return { summary: summary(e), target: e.target, options: { ...e.options }, sensitiveFields: [...(e.sensitiveFields || [])] };
+      const options = { ...e.options };
+      for (const field of e.sensitiveFields || []) if (field in options && !/^(SECRET|ENC):/i.test(options[field])) options[field] = '********';
+      return { summary: summary(e), target: e.target ?? null, options, sensitiveFields: [...(e.sensitiveFields || [])], gateway: e.gateway ?? null };
     },
     async set(alias, entry) {
       const raw = Object.entries(entry.options || {}).find(([k, v]) =>
@@ -25,7 +28,6 @@ function makeFakeApi(seed, { unresolvable = [] } = {}) {
       const existing = entries.find((x) => x.alias === alias);
       if (existing) Object.assign(existing, entry, { disabled: false, updatedAtUtc: now, version: existing.version + 1 });
       else entries.push({ alias, ...entry, disabled: false, createdAtUtc: now, updatedAtUtc: now, version: 1 });
-      return {};
     },
     async verify(alias) {
       const e = entries.find((x) => x.alias === alias);
@@ -64,8 +66,8 @@ function makeFakeApi(seed, { unresolvable = [] } = {}) {
         { layer: 'NETWORK', status: 'skipped', detail: `'${e.connectorType}' is a local/file connector — no network diagnostics apply.`, remedy: null },
       ] };
     },
-    async disable(alias) { entries.find((x) => x.alias === alias).disabled = true; return {}; },
-    async enable(alias) { entries.find((x) => x.alias === alias).disabled = false; return {}; },
+    async disable(alias) { entries.find((x) => x.alias === alias).disabled = true; },
+    async enable(alias) { entries.find((x) => x.alias === alias).disabled = false; },
     async impact(alias) {
       return {
         reference: `SHARED:${alias}`,
@@ -77,12 +79,12 @@ function makeFakeApi(seed, { unresolvable = [] } = {}) {
         ],
       };
     },
-    async remove(alias) { entries = entries.filter((x) => x.alias !== alias); return {}; },
+    async remove(alias) { entries = entries.filter((x) => x.alias !== alias); },
     async exportAll() {
       return entries.map((e) => ({
         alias: e.alias, connectorType: e.connectorType, target: e.target,
         options: { ...e.options }, environmentScope: e.environmentScope, disabled: e.disabled,
-        sensitiveFields: [...(e.sensitiveFields || [])],
+        sensitiveFields: [...(e.sensitiveFields || [])], gateway: e.gateway ?? null,
       }));
     },
     async importAll(list) {
@@ -90,6 +92,7 @@ function makeFakeApi(seed, { unresolvable = [] } = {}) {
       for (const entry of list) {
         const existed = entries.some((x) => x.alias === entry.alias);
         await this.set(entry.alias, entry);
+        entries.find(value => value.alias === entry.alias).disabled = entry.disabled;
         if (existed) updated++; else created++;
       }
       return { created, updated };
@@ -106,13 +109,42 @@ function makeFakeApi(seed, { unresolvable = [] } = {}) {
         };
       }
       return {
-        content: `# ${type} Options\n\nStandard option configuration for the **${type}** connector.\n- Consult the [Documentation Guide](file:///Docs/Reference/Data_Connectors.md) for full parameter schema.\n- Mask sensitive parameters by referencing \`SECRET:secret_name\`.`
+        content: `# ${type} Options\n\nStandard option configuration for the **${type}** connector.\n- Consult the [Data Connectors](/docs/reference/connectors/README.md) for the full parameter schema.\n- Mask sensitive parameters by referencing \`SECRET:secret_name\`.`
       };
     },
   };
+  const calls = [], queued = [], waiters = [];
+  let paused = null;
+  return {
+    calls, setMode(value) { mode = value; },
+    pause(kind) { paused = kind; },
+    whenPaused(kind) { return queued.some(value => value.kind === kind) ? Promise.resolve() : new Promise(resolve => waiters.push({ kind, resolve })); },
+    release() { for (const value of queued.splice(0)) value.resolve(); },
+    snapshot() { return structuredClone(entries); },
+    ...Object.fromEntries(Object.entries(api).map(([kind, implementation]) => [kind, async (...args) => {
+      calls.push({ kind, args: structuredClone(args.filter(value => !(value instanceof AbortSignal))) });
+      let value = await implementation.apply(api, args);
+      if (mode === 'unavailable' && kind === 'list') value = null;
+      if (mode === 'invalid-diagnostic' && kind === 'test') value = { alias: args[0], succeeded: true };
+      if (mode === 'invalid-import' && kind === 'importAll') value = { created: 0, updated: 0 };
+      if (mode === 'invalid-verify' && kind === 'verify') value = { alias: 'other', status: 'ok', secretReferences: 2 };
+      const snapshot = structuredClone(value);
+      if (paused !== kind) return snapshot;
+      paused = null;
+      return new Promise(resolve => {
+        queued.push({ kind, resolve: () => resolve(snapshot) });
+        for (const waiting of waiters.filter(value => value.kind === kind)) waiting.resolve();
+      });
+    }]))
+  };
 }
 
-const seed = [
+export const connectionFixtures = [
+  {
+    alias: 'gateway_sales', connectorType: 'MSSQL', disabled: false, environmentScope: 'Prod',
+    target: null, options: {}, gateway: { gatewayId: 'hq-gateway', resourceId: 'sales_read' },
+    createdAtUtc: '2026-06-01T09:00:00Z', updatedAtUtc: '2026-07-08T10:00:00Z', version: 1,
+  },
   {
     alias: 'sales_dw', connectorType: 'MSSQL', disabled: false, environmentScope: 'Prod',
     target: null,
@@ -137,6 +169,16 @@ const seed = [
   },
 ];
 
+export function makeConnectionWizardApi() {
+  const api = makeWizardApi({ snapshot: () => [{ gatewayId: 'hq-gateway', isOnline: true,
+    activeNodes: 1, totalNodes: 1, publishedResources: [{ resourceId: 'sales_read', connectorType: 'MSSQL',
+      state: 'Approved', allowedOperations: 'Read', isOnline: true, lastSeenUtc: null }] }] });
+  return { ...api, async parse(request) {
+    api.calls.push({ kind: 'parse', request });
+    return { detectedProvider: 'MSSQL', options: { SERVER: 'sql01', DATABASE: 'Sales' }, extractedCredential: null, suggestedSecretKey: null };
+  } };
+}
+
 export default {
   id: 'connections-admin',
   title: 'Connections Admin',
@@ -145,6 +187,7 @@ export default {
     { id: 'healthy', label: 'Cataloged connections' },
     { id: 'unresolvable', label: 'Broken secret references' },
     { id: 'empty', label: 'Empty catalog' },
+    { id: 'unavailable', label: 'Missing catalog evidence' },
   ],
   async mount(stage, fixtureId, ctx) {
     const { createConnectionsAdmin } = await importFresh('/src/ETL-SQL.Portal/wwwroot/js/connections-admin.js');
@@ -152,12 +195,14 @@ export default {
 
     const connectionsApi =
       fixtureId === 'empty' ? makeFakeApi([]) :
-      fixtureId === 'unresolvable' ? makeFakeApi(seed, { unresolvable: ['sales_dw', 'archive_s3'] }) :
-      makeFakeApi(seed);
+      fixtureId === 'unresolvable' ? makeFakeApi(connectionFixtures, { unresolvable: ['sales_dw', 'archive_s3'] }) :
+      makeFakeApi(connectionFixtures, { mode: fixtureId });
 
-    const surface = createConnectionsAdmin({ host: stage, connectionsApi });
+    const wizardApi = makeConnectionWizardApi();
+    const surface = createConnectionsAdmin({ host: stage, connectionsApi, wizardApi });
+    window.__connections = { api: connectionsApi, surface, wizardApi };
     await surface.load();
     ctx.stat('createConnectionsAdmin() — detail masks non-reference credentials server-side; save rejects raw credentials');
-    return { dispose() {}, resize() {} };
+    return { dispose() { surface.dispose?.(); delete window.__connections; }, resize() {} };
   },
 };

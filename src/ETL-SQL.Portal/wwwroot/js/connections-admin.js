@@ -1,574 +1,463 @@
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.Portal/BrowserSources/connections-admin.ts
+ * Run: node scripts/sync-assets.js
+ */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 import { bindMarkdownActions, renderMarkdown } from './markdown-renderer.js';
 import { deniedState, failedState, installPortalStateStyles } from './portal-states.js';
-import { createConnectionWizard } from '../designer/connection-wizard.js';
-import { secretsApi } from './api.js';
-
-// Canonical "Shared Connections" admin surface (Admin → Connections) over api/admin/connections.
-//
-// Extracted so it can be previewed in the UI sandbox without the portal. The module owns its
-// markup (renders into `host`) and takes its API client as an injected dependency, so the
-// sandbox story can drive it with a fixture-backed fake. Credential fields hold SECRET:name
-// references, never values — the server rejects raw credentials on save and masks any
-// non-reference credential value in detail responses; this module renders exactly what the
-// server returns and always through esc().
-//
-// Usage (portal):
-//   const connections = createConnectionsAdmin({ host: document.getElementById('panel-connections'), connectionsApi });
-//   connections.load();
-//
-// Injected api contract:
-//   list()            -> [{ alias, connectorType, disabled, environmentScope, createdAtUtc,
-//                           updatedAtUtc, lastUsedAtUtc, lastVerifiedAtUtc, version }]
-//   detail(alias)     -> { summary: {...as list row}, target, options: {KEY: value}, sensitiveFields: [] }
-//   set(alias, entry) -> {}   entry = { connectorType, target, options, environmentScope, sensitiveFields }
-//   verify(alias)     -> { alias, status: 'ok', secretReferences } (throws .status 404/409 otherwise)
-//   test(alias)       -> { alias, succeeded, steps: [{ layer, status, detail, remedy }] } (409 if disabled)
-//   disable(alias)    -> {}
-//   remove(alias)     -> {}
-//   exportAll()       -> [entry...]
-//   importAll(list)   -> { created, updated }
-
-function esc(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-function escAttr(s) {
-  return esc(s).replace(/'/g, '&#39;');
-}
-function formatDate(value) {
-  return value ? new Date(value).toLocaleString() : '—';
-}
-
-const PANEL_HTML = `
-  <div class="card">
-    <div class="card-header">
-      <div>
-        <span class="section-kicker">Connection catalog — scripts use SHARED:alias</span>
-        <h3>Shared Connections</h3>
-      </div>
-      <div class="admin-action-group">
-        <span id="conn-status" class="form-hint"></span>
-        <button class="btn btn-primary btn-sm" id="conn-wizardBtn">Connection Wizard</button>
-        <button class="btn btn-outline btn-sm" id="conn-exportBtn">Export</button>
-        <button class="btn btn-outline btn-sm" id="conn-importBtn">Import</button>
-        <button class="btn btn-outline btn-sm" id="conn-refreshBtn">Refresh</button>
-      </div>
-    </div>
-    <div id="conn-tableWrap"><div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading connections…</span></div></div>
-  </div>
-
-  <div class="card" id="conn-detailCard" style="display:none">
-    <div class="card-header">
-      <h3>Detail — <span id="conn-detailAlias"></span></h3>
-      <button class="btn btn-outline btn-sm" id="conn-detailCloseBtn">Close</button>
-    </div>
-    <div id="conn-detailBody"></div>
-  </div>
-
-  <div class="card" id="conn-importCard" style="display:none">
-    <div class="card-header"><h3>Import entries</h3></div>
-    <div class="form-group">
-      <label for="conn-importJson">Exported JSON (metadata only — options hold SECRET:name references, never values)</label>
-      <textarea id="conn-importJson" rows="8" spellcheck="false"></textarea>
-    </div>
-    <div id="conn-importError" class="error-msg"></div>
-    <div class="form-actions">
-      <button class="btn btn-primary btn-sm" id="conn-importRunBtn">Import</button>
-      <button class="btn btn-outline btn-sm" id="conn-importCancelBtn">Cancel</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-header"><h3>Create / update a shared connection</h3></div>
-    <div class="form-row">
-      <div class="form-group">
-        <label for="conn-alias">Alias</label>
-        <input id="conn-alias" type="text" placeholder="sales_dw" autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label for="conn-type">Connector type</label>
-        <select id="conn-type">
-          <option value="MSSQL">MSSQL</option>
-          <option value="POSTGRES">POSTGRES</option>
-          <option value="ORACLE">ORACLE</option>
-          <option value="MYSQL">MYSQL</option>
-          <option value="SQLITE">SQLITE</option>
-          <option value="SNOWFLAKE">SNOWFLAKE</option>
-          <option value="BIGQUERY">BIGQUERY</option>
-          <option value="FLATFILE">FLATFILE (CSV)</option>
-          <option value="EXCEL">EXCEL</option>
-          <option value="JSON">JSON</option>
-          <option value="XML">XML</option>
-          <option value="PARQUET">PARQUET</option>
-          <option value="AVRO">AVRO</option>
-          <option value="API">API (REST)</option>
-          <option value="SFTP">SFTP</option>
-          <option value="FTP">FTP</option>
-          <option value="AZURE_BLOB">AZURE_BLOB</option>
-          <option value="S3">S3</option>
-          <option value="SHAREPOINT">SHAREPOINT</option>
-          <option value="ACTIVE_DIRECTORY">ACTIVE_DIRECTORY</option>
-          <option value="SMTP">SMTP (Email)</option>
-          <option value="DIRECTORY">DIRECTORY</option>
-          <option value="PORTAL">PORTAL</option>
-          <option value="ORCHESTRATOR">ORCHESTRATOR</option>
-          <option value="MONGODB">MONGODB</option>
-          <option value="KAFKA">KAFKA</option>
-          <option value="NEO4J">NEO4J</option>
-          <option value="ODBC">ODBC</option>
-          <option value="MOCKDB">MOCKDB</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label for="conn-scope">Environment scope (optional)</label>
-        <input id="conn-scope" type="text" placeholder="Prod" autocomplete="off">
-      </div>
-    </div>
-    <div class="form-group">
-      <label for="conn-target">Target connection string (optional; credentials as SECRET:name)</label>
-      <input id="conn-target" type="text" placeholder="Server=sql01;Database=Sales;Password=SECRET:sales_db_password" autocomplete="off">
-    </div>
-    <div class="form-group">
-      <label for="conn-options">Options — one KEY=VALUE per line (credentials as SECRET:name)</label>
-      <div style="display: flex; gap: 16px; align-items: stretch;">
-        <textarea id="conn-options" rows="7" spellcheck="false" placeholder="SERVER=sql01&#10;DATABASE=Sales&#10;PASSWORD=SECRET:sales_db_password" style="flex: 1; min-width: 0;"></textarea>
-        <div id="conn-help-box" style="flex: 1; min-width: 0; border: 1px solid var(--portal-border); border-radius: var(--portal-radius-sm); padding: 12px; font-size: 13px; max-height: 148px; overflow-y: auto; background: var(--portal-bg-hover); display: none;">
-          <div id="conn-help-title" style="margin-top: 0; margin-bottom: 6px; font-size: 13px; font-weight: 700; color: var(--portal-text); display: flex; justify-content: space-between; align-items: center;">
-            <span id="conn-help-title-text">Connection Options Help</span>
-            <button class="btn btn-outline btn-sm" id="conn-help-expand-btn" style="padding: 2px 6px; font-size: 11px; cursor: pointer;">⛶ Expand</button>
-          </div>
-          <div id="conn-help-content" style="white-space: pre-wrap; font-family: inherit; line-height: 1.4;">Loading help...</div>
-        </div>
-      </div>
-    </div>
-    <div class="form-group">
-      <label for="conn-sensitive">Sensitive metadata fields — one field per line or comma-separated</label>
-      <textarea id="conn-sensitive" rows="3" spellcheck="false" placeholder="HOST&#10;BUCKET&#10;PATH"></textarea>
-      <span class="form-hint">These fields are masked in catalog displays and may use SECRET:name references for this shared connection.</span>
-    </div>
-    <div id="conn-error" class="error-msg"></div>
-    <div class="form-actions">
-      <button class="btn btn-primary btn-sm" id="conn-saveBtn">Save</button>
-      <span class="form-hint">Raw credential values are rejected — store them with the secret manager and reference SECRET:name.</span>
-    </div>
-  </div>
-
-  <!-- Help Modal Overlay -->
-  <div id="conn-help-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="conn-help-modal-title">
-    <div class="modal-card modal-lg" style="max-width: 800px; display: flex; flex-direction: column; max-height: 80vh;">
-      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--portal-border); padding-bottom: 12px; margin-bottom: 16px;">
-        <h3 id="conn-help-modal-title" class="modal-title" style="margin: 0; font-size: 18px; color: var(--portal-text);">Connection Help</h3>
-        <button class="btn btn-outline btn-sm" id="conn-help-modal-close" style="padding: 4px 8px; font-size: 12px; cursor: pointer;">✕ Close</button>
-      </div>
-      <div class="modal-body" id="conn-help-modal-content" style="flex: 1; overflow-y: auto; padding: 0 8px; line-height: 1.5; font-size: 14px; color: var(--portal-text);">
-        Loading...
-      </div>
-      <div class="modal-actions" style="margin-top: 16px; border-top: 1px solid var(--portal-border); padding-top: 12px; display: flex; justify-content: flex-end;">
-        <button class="btn btn-outline btn-sm" id="conn-help-modal-close-btn" style="cursor: pointer;">Close</button>
-      </div>
-    </div>
-  </div>`;
-
-export function createConnectionsAdmin({ host, connectionsApi }) {
-  host.innerHTML = PANEL_HTML;
-  const $ = (id) => host.querySelector(`#${id}`);
-
-  async function loadConnectorHelp(type) {
-    const helpBox = $('conn-help-box');
-    const helpContent = $('conn-help-content');
-    const helpTitleText = $('conn-help-title-text');
-    
-    if (!type) {
-      helpBox.style.display = 'none';
-      return;
+import { installDialogAccessibility } from './dialog-a11y.js';
+import { asError, isObject } from './http-error.js';
+import { connectionWizardApi, createConnectionWizardLauncher } from './gateway-wizard.js';
+import { parseConnectionOptions, readConnectionSummaries, readConnectionDetail, readConnectionImpact, readSharedConnectionDiagnostic, readConnectionVerification, readConnectionHelp, readConnectionExports, readConnectionImport } from './connection-responses.js';
+import { PANEL_HTML, renderConnectionTable, renderConnectionDetail, renderConnectionImpact, renderSharedConnectionDiagnostic } from './connections-view.js';
+const surfaces = new WeakMap();
+/** Shared-catalog administration; every displayed outcome comes from a validated server response. */
+export function createConnectionsAdmin({ host, connectionsApi, wizardApi = undefined }) {
+    if (!host)
+        throw new TypeError('Connection administration needs a host.');
+    const root = host;
+    surfaces.get(root)?.dispose();
+    root.innerHTML = PANEL_HTML;
+    const lifetime = new AbortController();
+    const releaseDialogs = installDialogAccessibility(root);
+    let disposed = false, busy = false, loaded = false, uncertain = false, exporting = false;
+    let listVersion = 0, detailVersion = 0, helpVersion = 0, formVersion = 0, importVersion = 0;
+    let listRequest = null, detailRequest = null, helpRequest = null;
+    let entries = new Map();
+    let editing = null;
+    function element(id) {
+        const result = root.querySelector(`#${id}`);
+        if (!result)
+            throw new TypeError(`Missing connection control: ${id}`);
+        return result;
     }
-    
-    if (helpTitleText) {
-      helpTitleText.innerHTML = `<strong>${esc(type)} Connection Options</strong>`;
-    }
-    helpContent.innerHTML = 'Loading help...';
-    helpBox.style.display = 'block';
-    
-    try {
-      const res = await connectionsApi.getHelp(type);
-      if (res && res.content) {
-        helpContent.innerHTML = renderMarkdown(res.content);
-        bindMarkdownActions(helpContent);
-      } else {
-        helpContent.innerHTML = 'No documentation available for this connector.';
-      }
-    } catch (err) {
-      helpContent.innerHTML = `<span style="color: var(--portal-danger);">Failed to load help: ${esc(err.message || err)}</span>`;
-    }
-  }
-
-  function setStatus(text) { $('conn-status').textContent = text || ''; }
-  function setError(id, text) {
-    const box = $(id);
-    box.textContent = text || '';
-    box.classList.toggle('show', !!text);
-  }
-
-  function statusChip(c) {
-    return c.disabled
-      ? '<span class="chip chip-inactive">Disabled</span>'
-      : '<span class="chip chip-active">Active</span>';
-  }
-
-  function parseSensitiveFields(value) {
-    return [...new Set(String(value || '')
-      .split(/[\n,]/)
-      .map((v) => v.trim())
-      .filter(Boolean)
-      .map((v) => v.toUpperCase()))];
-  }
-
-  async function load() {
-    setError('conn-error', '');
-    try {
-      const connections = await connectionsApi.list();
-      if (!connections.length) {
-        $('conn-tableWrap').innerHTML = '<div class="empty-state">No shared connections cataloged yet.</div>';
-        return;
-      }
-
-      $('conn-tableWrap').innerHTML = `
-        <table class="data-table">
-          <thead><tr><th>Alias</th><th>Type</th><th>Scope</th><th>Status</th><th>Last used</th><th>Last verified</th><th></th></tr></thead>
-          <tbody>
-            ${connections.map((c) => `
-              <tr data-alias="${escAttr(c.alias)}">
-                <td><code>${esc(c.alias)}</code>${c.gateway ? ` <span class="chip chip-active" style="font-size: 0.7rem; padding: 2px 5px;" title="Gateway: ${esc(c.gateway.gatewayId)} / Resource: ${esc(c.gateway.resourceId)}">⚡ ${esc(c.gateway.gatewayId)}</span>` : ''}</td>
-                <td>${esc(c.connectorType)}</td>
-                <td>${esc(c.environmentScope || '—')}</td>
-                <td class="conn-row-status">${statusChip(c)}</td>
-                <td>${esc(formatDate(c.lastUsedAtUtc))}</td>
-                <td>${esc(formatDate(c.lastVerifiedAtUtc))}</td>
-                <td class="table-actions">
-                  <button class="btn btn-outline btn-sm" data-act="detail">Detail</button>
-                  <button class="btn btn-outline btn-sm" data-act="impact">Impact</button>
-                  <button class="btn btn-outline btn-sm" data-act="verify">Verify</button>
-                  <button class="btn btn-outline btn-sm" data-act="test">Test</button>
-                  ${c.disabled
-                    ? '<button class="btn btn-outline btn-sm" data-act="enable">Enable</button>'
-                    : '<button class="btn btn-outline btn-sm" data-act="disable">Disable</button>'}
-                  <button class="btn btn-danger-soft btn-sm" data-act="delete">Delete</button>
-                </td>
-              </tr>`).join('')}
-          </tbody>
-        </table>`;
-    } catch (err) {
-      // A 403 and an unreachable service produced the same message here, which told the reader the
-      // wrong thing half the time: "could not load" reads as a fault to report, when the answer may
-      // simply be that this account may not see the catalog.
-      installPortalStateStyles();
-      $('conn-tableWrap').innerHTML = err?.status === 403 || err?.status === 401
-        ? deniedState({
-          title: 'You do not have access to the connection catalog.',
-          roles: ['Admin'],
-        })
-        : failedState({
-          title: 'The connection catalog is unavailable.',
-          body: err?.message,
-          retryId: 'conn-retry',
-        });
-      document.getElementById('conn-retry')?.addEventListener('click', () => load());
-    }
-  }
-
-  async function showDetail(alias) {
-    const detail = await connectionsApi.detail(alias);
-    $('conn-detailAlias').textContent = alias;
-    const options = Object.entries(detail.options || {});
-    const sensitiveFields = detail.sensitiveFields || [];
-    $('conn-detailBody').innerHTML = `
-      <div class="form-hint">${esc(detail.summary.connectorType)}${detail.summary.environmentScope ? ` · ${esc(detail.summary.environmentScope)}` : ''}
-        · created ${esc(formatDate(detail.summary.createdAtUtc))} · updated ${esc(formatDate(detail.summary.updatedAtUtc))}</div>
-      ${detail.gateway ? `<p><strong>Gateway Binding:</strong> <code>${esc(detail.gateway.gatewayId)}</code> → <code>${esc(detail.gateway.resourceId)}</code> <span class="chip chip-active" style="font-size: 0.72rem;">Gateway Bound</span></p>` : ''}
-      ${detail.target ? `<p><strong>Target:</strong> <code>${esc(detail.target)}</code></p>` : ''}
-      ${sensitiveFields.length ? `<p><strong>Sensitive fields:</strong> ${sensitiveFields.map((f) => `<code>${esc(f)}</code>`).join(' ')}</p>` : ''}
-      ${options.length ? `
-        <table class="data-table">
-          <thead><tr><th>Option</th><th>Value</th></tr></thead>
-          <tbody>${options.map(([k, v]) => `<tr><td>${esc(k)}</td><td><code>${esc(v)}</code></td></tr>`).join('')}</tbody>
-        </table>` : '<div class="empty-state">No options.</div>'}`;
-    $('conn-detailCard').style.display = '';
-
-    // Pre-fill the edit form for quick updates.
-    $('conn-alias').value = alias;
-    $('conn-type').value = detail.summary.connectorType;
-    $('conn-scope').value = detail.summary.environmentScope || '';
-    $('conn-target').value = detail.target || '';
-    $('conn-options').value = options.map(([k, v]) => `${k}=${v}`).join('\n');
-    $('conn-sensitive').value = sensitiveFields.join('\n');
-    loadConnectorHelp(detail.summary.connectorType);
-  }
-
-  async function showImpact(alias) {
-    const impact = await connectionsApi.impact(alias);
-    $('conn-detailAlias').textContent = `${alias} — impact`;
-    $('conn-detailBody').innerHTML = renderImpact(impact);
-    $('conn-detailCard').style.display = '';
-  }
-
-  function renderImpact(impact) {
-    if (!impact.consumers.length) {
-      return '<div class="empty-state">No known consumers reference this entry.</div>';
-    }
-    return `
-      <div class="form-hint">${esc(impact.consumerCount)} consumer(s) reference <code>${esc(impact.reference)}</code>. Review before disabling or deleting.</div>
-      <table class="data-table">
-        <thead><tr><th>Type</th><th>Name</th><th>Detail</th><th>Last used</th><th>Uses</th></tr></thead>
-        <tbody>${impact.consumers.map((c) => `
-          <tr>
-            <td>${esc(c.type)}</td>
-            <td>${esc(c.name)}</td>
-            <td>${esc(c.detail || '—')}</td>
-            <td>${esc(formatDate(c.lastUsedAtUtc))}</td>
-            <td>${esc(c.useCount ?? '—')}</td>
-          </tr>`).join('')}</tbody>
-      </table>`;
-  }
-
-  function diagStatusBadge(status) {
-    const s = String(status || '').toLowerCase();
-    if (s === 'ok') return '<span class="badge badge-ok">OK</span>';
-    if (s === 'failed') return '<span class="badge badge-error">FAIL</span>';
-    if (s === 'denied') return '<span class="badge badge-error">DENIED</span>';
-    return '<span class="badge">—</span>';
-  }
-
-  function renderDiagnostic(report) {
-    const steps = report.steps || [];
-    const summary = report.succeeded
-      ? '<div class="form-hint">All attempted checks passed.</div>'
-      : '<div class="form-hint">One or more checks did not pass — see the remedies below.</div>';
-    if (!steps.length) return `${summary}<div class="empty-state">No diagnostic steps returned.</div>`;
-    return `
-      ${summary}
-      <table class="data-table">
-        <thead><tr><th>Layer</th><th>Status</th><th>Detail</th><th>Remedy</th></tr></thead>
-        <tbody>${steps.map((s) => `
-          <tr>
-            <td><code>${esc(s.layer)}</code></td>
-            <td>${diagStatusBadge(s.status)}</td>
-            <td>${esc(s.detail)}</td>
-            <td>${s.remedy ? esc(s.remedy) : '—'}</td>
-          </tr>`).join('')}</tbody>
-      </table>`;
-  }
-
-  async function showDiagnostic(alias) {
-    $('conn-detailAlias').textContent = `${alias} — connection test`;
-    $('conn-detailBody').innerHTML = '<div class="form-hint">Running DNS → TCP → TLS diagnostic…</div>';
-    $('conn-detailCard').style.display = '';
-    try {
-      const report = await connectionsApi.test(alias);
-      $('conn-detailBody').innerHTML = renderDiagnostic(report);
-    } catch (err) {
-      const msg = err.body?.status === 'disabled'
-        ? 'This connection is disabled — enable it before testing.'
-        : err.message;
-      $('conn-detailBody').innerHTML = `<div class="error-msg show">${esc(msg)}</div>`;
-    }
-  }
-
-  host.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-act]');
-    if (!btn) return;
-    const row = btn.closest('tr');
-    const alias = row?.dataset.alias;
-    if (!alias) return;
-    setError('conn-error', '');
-    try {
-      if (btn.dataset.act === 'detail') {
-        await showDetail(alias);
-      } else if (btn.dataset.act === 'impact') {
-        await showImpact(alias);
-      } else if (btn.dataset.act === 'verify') {
-        try {
-          const result = await connectionsApi.verify(alias);
-          row.querySelector('.conn-row-status').innerHTML =
-            `<span class="badge badge-ok">Verified (${esc(result.secretReferences)} secret ref(s))</span>`;
-        } catch (err) {
-          const status = err.body?.status || (err.status === 404 ? 'missing' : 'error');
-          row.querySelector('.conn-row-status').innerHTML = `<span class="badge badge-error">${esc(status)}</span>`;
+    function input(id) {
+        const result = element(id);
+        if (!(result instanceof HTMLInputElement || result instanceof HTMLTextAreaElement || result instanceof HTMLSelectElement)) {
+            throw new TypeError(`Invalid connection input: ${id}`);
         }
-      } else if (btn.dataset.act === 'test') {
-        await showDiagnostic(alias);
-      } else if (btn.dataset.act === 'disable') {
-        if (!await window.ETLSQLFeedback.confirm(`Disable shared connection '${alias}'?`, { title: 'Disable shared connection', impact: `SHARED:${alias} will fail until it is re-enabled.`, confirmLabel: 'Disable connection', danger: true, auditAction: 'admin.connection.disable' })) return;
-        await connectionsApi.disable(alias);
-        await load();
-      } else if (btn.dataset.act === 'enable') {
-        await connectionsApi.enable(alias);
-        await load();
-      } else if (btn.dataset.act === 'delete') {
-        if (!await window.ETLSQLFeedback.confirm(`Permanently delete shared connection '${alias}'?`, { title: 'Delete shared connection', confirmLabel: 'Delete connection', danger: true, auditAction: 'admin.connection.delete' })) return;
-        await connectionsApi.remove(alias);
-        await load();
-      }
-    } catch (err) {
-      setError('conn-error', err.message);
+        return result;
     }
-  });
-
-  $('conn-detailCloseBtn').addEventListener('click', () => { $('conn-detailCard').style.display = 'none'; });
-  $('conn-refreshBtn').addEventListener('click', load);
-
-  $('conn-saveBtn').addEventListener('click', async () => {
-    setError('conn-error', '');
-    const alias = $('conn-alias').value.trim();
-    const connectorType = $('conn-type').value.trim();
-    if (!alias || !connectorType) { setError('conn-error', 'Both an alias and a connector type are required.'); return; }
-
-    const options = {};
-    for (const line of $('conn-options').value.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      const idx = trimmed.indexOf('=');
-      if (idx <= 0) { setError('conn-error', `Option '${trimmed}' is not in KEY=VALUE form.`); return; }
-      options[trimmed.slice(0, idx).trim()] = trimmed.slice(idx + 1);
+    function status(message) { if (!disposed)
+        element('conn-status').textContent = message; }
+    function error(id, message) {
+        if (disposed)
+            return;
+        const box = element(id);
+        box.textContent = message;
+        box.classList.toggle('show', !!message);
     }
-
-    try {
-      await connectionsApi.set(alias, {
-        connectorType,
-        target: $('conn-target').value.trim() || null,
-        options,
-        environmentScope: $('conn-scope').value.trim() || null,
-        sensitiveFields: parseSensitiveFields($('conn-sensitive').value),
-      });
-      setStatus(`Shared connection '${alias}' saved.`);
-      await load();
-    } catch (err) {
-      setError('conn-error', err.message);
-    }
-  });
-
-  $('conn-exportBtn').addEventListener('click', async () => {
-    try {
-      const entries = await connectionsApi.exportAll();
-      const blob = new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'shared-connections.json';
-      a.click();
-      URL.revokeObjectURL(a.href);
-      setStatus(`Exported ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (metadata only).`);
-    } catch (err) {
-      setStatus(`Export failed: ${err.message}`);
-    }
-  });
-
-  $('conn-wizardBtn')?.addEventListener('click', () => {
-    createConnectionWizard({
-      host: document.body,
-      mode: 'admin',
-      fetchSchemas: async () => {
-        const res = await fetch('/api/connectors/schema');
-        const json = await res.json();
-        return Array.isArray(json) ? json : (json.schemas || []);
-      },
-      fetchGateways: async () => {
-        try {
-          const json = await fetch('/api/connectors/gateways').then(r => r.json());
-          return Array.isArray(json) ? json : (json.gateways || []);
-        } catch {
-          return [];
+    function updateControls() {
+        if (disposed)
+            return;
+        for (const button of root.querySelectorAll('#conn-saveBtn, #conn-importRunBtn, #conn-wizardBtn, button[data-act="verify"], button[data-act="enable"], button[data-act="disable"], button[data-act="delete"]')) {
+            button.disabled = busy || uncertain || !loaded;
         }
-      },
-      fetchGatewayResources: async (gwId) => {
-        const res = await fetch(`/api/connectors/gateways/${encodeURIComponent(gwId)}/resources`);
-        if (!res.ok) throw new Error('Gateway resource discovery failed.');
-        const json = await res.json();
-        return Array.isArray(json) ? json : (json.resources || []);
-      },
-      fetchSecrets: async () => {
+        element('conn-exportBtn').toggleAttribute('disabled', exporting);
+    }
+    function unconfirmed() {
+        uncertain = true;
+        error('conn-error', 'Connection mutation outcome is unconfirmed. Refresh the catalog to inspect it before retrying.');
+        status('Connection outcome unconfirmed.');
+        updateControls();
+    }
+    function canMutate() { return !disposed && loaded && !busy && !uncertain; }
+    function knownRejection(reason) {
+        return isObject(reason) && typeof reason.status === 'number' && [400, 401, 403, 404, 409].includes(reason.status);
+    }
+    function verificationCell(alias) {
+        return [...root.querySelectorAll('tr[data-alias]')].find(row => row.dataset.alias === alias)
+            ?.querySelector('.conn-row-status') ?? null;
+    }
+    function closeDetail() {
+        detailVersion++;
+        detailRequest?.abort();
+        detailRequest = null;
+        element('conn-detailCard').style.display = 'none';
+        element('conn-detailBody').replaceChildren();
+    }
+    async function load(manual = false) {
+        if (disposed)
+            return;
+        const generation = ++listVersion, request = new AbortController();
+        listRequest?.abort();
+        listRequest = request;
+        loaded = false;
+        entries.clear();
+        closeDetail();
+        status('Loading connection catalog…');
+        updateControls();
+        root.setAttribute('aria-busy', 'true');
         try {
-          // `window.secretsApi` was never assigned by anything, so this used to be a permanently
-          // false test whose fallback re-spelt the endpoint by hand. The module's own client is
-          // the one that carries the auth header and the error handling.
-          const list = await secretsApi.list();
-          return Array.isArray(list) ? list.map(s => s.name || s) : [];
-        } catch {
-          return [];
+            const value = await connectionsApi.list(request.signal);
+            if (disposed || generation !== listVersion)
+                return;
+            const rows = readConnectionSummaries(value);
+            entries = new Map(rows.map(entry => [entry.alias, entry]));
+            loaded = true;
+            if (manual && !busy) {
+                uncertain = false;
+                error('conn-error', '');
+            }
+            element('conn-tableWrap').innerHTML = renderConnectionTable(rows);
+            status(uncertain ? 'Connection outcome unconfirmed. Inspect the catalog with Refresh.' : `${rows.length} shared connection(s).`);
         }
-      },
-      onTest: async (req) => {
-        const res = await fetch('/api/connectors/test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(req)
-        });
-        return await res.json();
-      },
-      onParseString: async (rawString, hint) => {
-        const res = await fetch('/api/connectors/parse-string', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ connectionString: rawString, hintProvider: hint })
-        });
-        return await res.json();
-      },
-      onSave: async (entry) => {
-        await connectionsApi.set(entry.alias, {
-          connectorType: entry.connectorType,
-          target: entry.target,
-          options: entry.options,
-          gateway: entry.gateway,
-          environmentScope: entry.environmentScope,
-          sensitiveFields: []
-        });
-        setStatus(`Saved connection '${entry.alias}'.`);
-        await load();
-      }
+        catch (reason) {
+            if (disposed || generation !== listVersion)
+                return;
+            installPortalStateStyles();
+            const denied = isObject(reason) && (reason.status === 401 || reason.status === 403);
+            element('conn-tableWrap').innerHTML = denied
+                ? deniedState({ title: 'You do not have access to the connection catalog.', roles: ['Admin'] })
+                : failedState({ title: 'The connection catalog is unavailable.', body: 'The catalog could not be loaded or validated.', retryId: 'conn-retry' });
+            status(denied ? 'Connection catalog access denied.' : 'Connection catalog unavailable.');
+        }
+        finally {
+            if (!disposed && generation === listVersion) {
+                root.setAttribute('aria-busy', 'false');
+                updateControls();
+            }
+        }
+    }
+    async function loadHelp(type) {
+        const generation = ++helpVersion, request = new AbortController();
+        helpRequest?.abort();
+        helpRequest = request;
+        element('conn-help-modal').style.display = 'none';
+        element('conn-help-box').style.display = type ? '' : 'none';
+        element('conn-help-title-text').textContent = `${type} Connection Options`;
+        element('conn-help-content').textContent = 'Loading help…';
+        if (!type)
+            return;
+        try {
+            const value = await connectionsApi.getHelp(type, request.signal);
+            if (disposed || generation !== helpVersion)
+                return;
+            element('conn-help-content').innerHTML = renderMarkdown(readConnectionHelp(value).content);
+            bindMarkdownActions(element('conn-help-content'));
+        }
+        catch {
+            if (!disposed && generation === helpVersion)
+                element('conn-help-content').textContent = 'Connector documentation is unavailable.';
+        }
+    }
+    async function showDetail(alias, kind) {
+        if (disposed || !entries.has(alias))
+            return;
+        const generation = ++detailVersion, revision = formVersion, request = new AbortController();
+        detailRequest?.abort();
+        detailRequest = request;
+        element('conn-detailAlias').textContent = kind === 'detail' ? alias : `${alias} — ${kind === 'test' ? 'connection test' : 'impact'}`;
+        element('conn-detailBody').textContent = kind === 'test' ? 'Running connection diagnostic…' : 'Loading connection details…';
+        element('conn-detailCard').style.display = '';
+        try {
+            const value = await connectionsApi[kind](alias, request.signal);
+            if (disposed || generation !== detailVersion)
+                return;
+            if (kind === 'impact')
+                element('conn-detailBody').innerHTML = renderConnectionImpact(readConnectionImpact(value, alias));
+            else if (kind === 'test')
+                element('conn-detailBody').innerHTML = renderSharedConnectionDiagnostic(readSharedConnectionDiagnostic(value, alias));
+            else {
+                const detail = readConnectionDetail(value, alias);
+                element('conn-detailBody').innerHTML = renderConnectionDetail(detail);
+                if (revision !== formVersion)
+                    return;
+                editing = { alias, connectorType: detail.summary.connectorType, gateway: detail.gateway ?? null };
+                const selector = input('conn-type');
+                if (selector instanceof HTMLSelectElement && ![...selector.options].some(option => option.value === detail.summary.connectorType)) {
+                    selector.add(new Option(detail.summary.connectorType, detail.summary.connectorType));
+                }
+                input('conn-alias').value = alias;
+                selector.value = detail.summary.connectorType;
+                input('conn-scope').value = detail.summary.environmentScope ?? '';
+                input('conn-target').value = detail.target ?? '';
+                input('conn-options').value = Object.entries(detail.options).map(([key, value]) => `${key}=${value}`).join('\n');
+                input('conn-sensitive').value = detail.sensitiveFields.join('\n');
+                element('conn-bindingHint').textContent = editing.gateway
+                    ? `Gateway binding retained: ${editing.gateway.gatewayId} / ${editing.gateway.resourceId}. Use the wizard to select a different binding.`
+                    : 'Masked display values must be replaced with a valid value or reference before saving.';
+                formVersion++;
+                void loadHelp(detail.summary.connectorType);
+            }
+        }
+        catch (reason) {
+            if (disposed || generation !== detailVersion)
+                return;
+            const disabled = isObject(reason) && isObject(reason.body) && reason.body.status === 'disabled';
+            element('conn-detailBody').textContent = disabled ? 'This connection is disabled — enable it before testing.'
+                : kind === 'test' ? 'Connection diagnostic unavailable.' : `Connection ${kind} unavailable.`;
+        }
+    }
+    /** An exact 204 is enforced by the client; injected clients must preserve its void acknowledgement. */
+    function acknowledge(value) {
+        if (value !== undefined)
+            throw new TypeError('Connection mutation outcome is unconfirmed.');
+    }
+    async function save(alias, body, signal) {
+        if (!canMutate())
+            throw new Error('Refresh the connection catalog before saving.');
+        busy = true;
+        updateControls();
+        error('conn-error', '');
+        status('Saving connection…');
+        try {
+            acknowledge(await connectionsApi.set(alias, body, signal));
+            if (disposed || signal.aborted)
+                throw new Error('Connection administration closed.');
+        }
+        catch (reason) {
+            if (!disposed) {
+                if (knownRejection(reason)) {
+                    error('conn-error', asError(reason).message);
+                    status('Connection save rejected.');
+                }
+                else
+                    unconfirmed();
+            }
+            throw reason;
+        }
+        finally {
+            busy = false;
+            updateControls();
+        }
+    }
+    const wizard = createConnectionWizardLauncher(document.body, message => error('conn-error', message), alias => { void load().then(() => { if (!disposed && loaded)
+        status(`Shared connection '${alias}' saved.`); }); }, { ...(wizardApi ?? connectionWizardApi), save });
+    async function rowAction(alias, action) {
+        if (action === 'detail' || action === 'impact' || action === 'test') {
+            await showDetail(alias, action);
+            return;
+        }
+        if (!canMutate() || !entries.has(alias))
+            return;
+        const generation = listVersion;
+        busy = true;
+        updateControls();
+        error('conn-error', '');
+        let sent = false;
+        try {
+            if (action === 'disable' || action === 'delete') {
+                if (!window.ETLSQLFeedback)
+                    throw new Error('Connection action confirmation is unavailable.');
+                const confirmed = await window.ETLSQLFeedback.confirm(`${action === 'delete' ? 'Permanently delete' : 'Disable'} shared connection '${alias}'?`, {
+                    title: `${action === 'delete' ? 'Delete' : 'Disable'} shared connection`,
+                    confirmLabel: action === 'delete' ? 'Delete connection' : 'Disable connection', danger: true,
+                    ...(action === 'disable' ? { impact: `SHARED:${alias} will fail until it is re-enabled.` } : {}),
+                    auditAction: `admin.connection.${action}`
+                });
+                if (!confirmed || disposed || generation !== listVersion)
+                    return;
+            }
+            if (!['verify', 'disable', 'enable', 'delete'].includes(action) || disposed || generation !== listVersion)
+                return;
+            sent = true;
+            if (action === 'verify') {
+                const previous = verificationCell(alias);
+                if (previous)
+                    previous.textContent = 'Verifying…';
+                const value = readConnectionVerification(await connectionsApi.verify(alias, lifetime.signal), alias);
+                if (disposed || generation !== listVersion)
+                    return;
+                const cell = verificationCell(alias);
+                if (cell)
+                    cell.innerHTML = `<span class="badge badge-ok">Verified (${value.secretReferences} secret ref(s))</span>`;
+            }
+            else {
+                const operation = action === 'delete' ? connectionsApi.remove : connectionsApi[action];
+                acknowledge(await operation.call(connectionsApi, alias, lifetime.signal));
+                if (disposed)
+                    return;
+                if (generation !== listVersion) {
+                    unconfirmed();
+                    return;
+                }
+                await load();
+                if (loaded)
+                    status(`Shared connection '${alias}' ${action === 'delete' ? 'deleted' : action + 'd'}.`);
+            }
+        }
+        catch (reason) {
+            if (disposed)
+                return;
+            if (action === 'verify' && generation === listVersion) {
+                const cell = verificationCell(alias);
+                if (cell)
+                    cell.textContent = 'Verification unavailable';
+            }
+            if (sent && !knownRejection(reason))
+                unconfirmed();
+            else
+                error('conn-error', action === 'verify' ? 'Connection verification failed. Inspect its status and secret references.' : asError(reason).message);
+        }
+        finally {
+            busy = false;
+            updateControls();
+        }
+    }
+    root.addEventListener('click', event => {
+        if (!(event.target instanceof Element))
+            return;
+        const button = event.target.closest('button[data-act]');
+        const alias = button?.closest('tr[data-alias]')?.dataset.alias;
+        if (button && alias)
+            void rowAction(alias, button.dataset.act ?? '');
+        if (event.target.closest('#conn-retry'))
+            void load(true);
+    }, { signal: lifetime.signal });
+    function on(id, handler) { element(id).addEventListener('click', handler, { signal: lifetime.signal }); }
+    on('conn-detailCloseBtn', closeDetail);
+    on('conn-refreshBtn', () => { void load(true); });
+    on('conn-saveBtn', () => {
+        if (!canMutate())
+            return;
+        let body;
+        const alias = input('conn-alias').value.trim(), connectorType = input('conn-type').value.trim();
+        try {
+            if (!alias || !connectorType)
+                throw new TypeError('Both an alias and a connector type are required.');
+            const options = parseConnectionOptions(input('conn-options').value), target = input('conn-target').value.trim() || null;
+            if ((target ?? '').includes('********') || Object.values(options).some(value => value.includes('********'))) {
+                throw new TypeError('Replace masked display values with valid values or references before saving.');
+            }
+            if (editing?.gateway && (editing.alias !== alias || editing.connectorType !== connectorType || target || Object.keys(options).length)) {
+                throw new TypeError('Use the Connection Wizard to change a gateway alias, connector, or resource binding.');
+            }
+            body = { connectorType, target, options, environmentScope: input('conn-scope').value.trim() || null,
+                sensitiveFields: [...new Set(input('conn-sensitive').value.split(/[\n,]/).map(value => value.trim().toUpperCase()).filter(Boolean))], gateway: editing?.gateway ?? null };
+        }
+        catch (reason) {
+            error('conn-error', asError(reason).message);
+            return;
+        }
+        void save(alias, body, lifetime.signal).then(async () => {
+            if (disposed)
+                return;
+            await load();
+            if (loaded)
+                status(`Shared connection '${alias}' saved.`);
+        }).catch(() => { });
     });
-  });
-
-  $('conn-importBtn').addEventListener('click', () => { $('conn-importCard').style.display = ''; });
-  $('conn-importCancelBtn').addEventListener('click', () => {
-    $('conn-importCard').style.display = 'none';
-    setError('conn-importError', '');
-  });
-  $('conn-importRunBtn').addEventListener('click', async () => {
-    setError('conn-importError', '');
-    let entries;
-    try {
-      entries = JSON.parse($('conn-importJson').value);
-      if (!Array.isArray(entries)) throw new Error('Expected a JSON array of entries.');
-    } catch (err) {
-      setError('conn-importError', `Invalid JSON: ${err.message}`);
-      return;
+    on('conn-wizardBtn', () => { if (canMutate())
+        void wizard.launch(); });
+    on('conn-importBtn', () => { importVersion++; element('conn-importCard').style.display = ''; });
+    on('conn-importCancelBtn', () => { importVersion++; element('conn-importCard').style.display = 'none'; input('conn-importJson').value = ''; error('conn-importError', ''); });
+    input('conn-importJson').addEventListener('input', () => { importVersion++; }, { signal: lifetime.signal });
+    on('conn-importRunBtn', () => { void importEntries(); });
+    async function importEntries() {
+        if (!canMutate())
+            return;
+        const generation = importVersion;
+        error('conn-importError', '');
+        let imports;
+        try {
+            imports = readConnectionExports(JSON.parse(input('conn-importJson').value));
+            if (!imports.length)
+                throw new TypeError('Supply at least one connection definition.');
+        }
+        catch {
+            error('conn-importError', 'Invalid import JSON. Supply a nonempty array of complete, unique connection definitions.');
+            return;
+        }
+        busy = true;
+        updateControls();
+        status('Importing connections…');
+        try {
+            const result = readConnectionImport(await connectionsApi.importAll(imports, lifetime.signal), imports.length);
+            if (disposed)
+                return;
+            if (generation !== importVersion) {
+                unconfirmed();
+                return;
+            }
+            input('conn-importJson').value = '';
+            element('conn-importCard').style.display = 'none';
+            await load();
+            if (loaded)
+                status(`Imported: ${result.created} created, ${result.updated} updated.`);
+        }
+        catch (reason) {
+            if (!disposed) {
+                if (knownRejection(reason)) {
+                    error('conn-importError', asError(reason).message);
+                    status('Connection import rejected.');
+                }
+                else
+                    unconfirmed();
+            }
+        }
+        finally {
+            busy = false;
+            updateControls();
+        }
     }
-    try {
-      const result = await connectionsApi.importAll(entries);
-      setStatus(`Imported: ${result.created} created, ${result.updated} updated.`);
-      $('conn-importCard').style.display = 'none';
-      $('conn-importJson').value = '';
-      await load();
-    } catch (err) {
-      setError('conn-importError', err.message);
+    on('conn-exportBtn', () => { void exportEntries(); });
+    async function exportEntries() {
+        if (disposed || exporting)
+            return;
+        exporting = true;
+        updateControls();
+        try {
+            const values = readConnectionExports(await connectionsApi.exportAll(lifetime.signal));
+            if (disposed)
+                return;
+            const url = URL.createObjectURL(new Blob([JSON.stringify(values, null, 2)], { type: 'application/json' }));
+            try {
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = 'shared-connections.json';
+                anchor.click();
+            }
+            finally {
+                URL.revokeObjectURL(url);
+            }
+            status(`Exported ${values.length} ${values.length === 1 ? 'entry' : 'entries'} (metadata only).`);
+        }
+        catch {
+            if (!disposed)
+                status('Connection export unavailable.');
+        }
+        finally {
+            exporting = false;
+            updateControls();
+        }
     }
-  });
-
-  $('conn-type').addEventListener('change', () => {
-    loadConnectorHelp($('conn-type').value);
-  });
-  loadConnectorHelp($('conn-type').value);
-
-  $('conn-help-expand-btn').addEventListener('click', () => {
-    const type = $('conn-type').value;
-    $('conn-help-modal-title').textContent = `${type} Connection Guidelines`;
-    $('conn-help-modal-content').innerHTML = $('conn-help-content').innerHTML;
-    $('conn-help-modal').style.display = 'flex';
-  });
-
-  const closeModal = () => { $('conn-help-modal').style.display = 'none'; };
-  $('conn-help-modal-close').addEventListener('click', closeModal);
-  $('conn-help-modal-close-btn').addEventListener('click', closeModal);
-  $('conn-help-modal').addEventListener('click', (e) => {
-    if (e.target === $('conn-help-modal')) closeModal();
-  });
-
-  return { load };
+    for (const id of ['conn-alias', 'conn-type', 'conn-scope', 'conn-target', 'conn-options', 'conn-sensitive']) {
+        input(id).addEventListener('input', () => { formVersion++; }, { signal: lifetime.signal });
+    }
+    input('conn-type').addEventListener('change', () => { formVersion++; void loadHelp(input('conn-type').value); }, { signal: lifetime.signal });
+    on('conn-help-expand-btn', () => {
+        element('conn-help-modal-title').textContent = `${input('conn-type').value} Connection Guidelines`;
+        element('conn-help-modal-content').innerHTML = element('conn-help-content').innerHTML;
+        bindMarkdownActions(element('conn-help-modal-content'));
+        element('conn-help-modal').style.display = 'flex';
+    });
+    const closeHelp = () => { element('conn-help-modal').style.display = 'none'; };
+    on('conn-help-modal-close', closeHelp);
+    on('conn-help-modal-close-btn', closeHelp);
+    element('conn-help-modal').addEventListener('click', event => { if (event.target === element('conn-help-modal'))
+        closeHelp(); }, { signal: lifetime.signal });
+    void loadHelp(input('conn-type').value);
+    updateControls();
+    const surface = { load: () => load(), dispose() {
+            if (disposed)
+                return;
+            closeDetail();
+            closeHelp();
+            disposed = true;
+            lifetime.abort();
+            listRequest?.abort();
+            helpRequest?.abort();
+            wizard.dispose();
+            releaseDialogs?.();
+            entries.clear();
+            editing = null;
+            input('conn-importJson').value = '';
+            input('conn-target').value = '';
+            input('conn-options').value = '';
+            root.setAttribute('aria-busy', 'false');
+            surfaces.delete(root);
+        } };
+    surfaces.set(root, surface);
+    return surface;
 }

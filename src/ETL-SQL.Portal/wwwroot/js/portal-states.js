@@ -1,3 +1,8 @@
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.Portal/BrowserSources/portal-states.ts
+ * Run: node scripts/sync-assets.js
+ */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 // Shared vocabulary for the states every Portal surface has to render.
 //
 // Four states, kept distinct on purpose, because collapsing them is how a surface misleads:
@@ -14,11 +19,9 @@
 //
 // Each renders a `data-portal-state` marker so tests can assert *which* state a surface reached
 // rather than inferring it from whatever text happens to be present.
-
-const esc = s => String(s ?? '')
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
+const esc = (s) => String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 /**
  * A state's heading is an `<h2>`, not bold text. It is usually the most important sentence on the
  * page, and heading navigation is how a screen-reader user finds it.
@@ -32,13 +35,11 @@ const shell = (state, variant, title, body, extra = '') => `
     ${body ? `<p>${body}</p>` : ''}
     ${extra}
   </div>`;
-
 /** We do not know yet. Claim nothing. */
 export const loadingState = (message = 'Loading…') => `
   <div class="portal-state portal-state-loading" data-portal-state="loading">
     <span class="portal-spinner"></span> ${esc(message)}
   </div>`;
-
 /**
  * Not permitted. Naming the roles that would grant access turns a dead end into a request someone
  * can actually make.
@@ -49,14 +50,10 @@ export const loadingState = (message = 'Loading…') => `
  * @param {string} [options.body]
  * @param {Array<string>} [options.roles] Roles that would grant access.
  */
-export const deniedState = ({ title, body, roles = [] } = {}) => shell(
-  'unauthorized', 'denied',
-  esc(title ?? 'You do not have access to this view.'),
-  roles.length
+export const deniedState = ({ title, body, roles = [] } = {}) => shell('unauthorized', 'denied', esc(title ?? 'You do not have access to this view.'), roles.length
     ? `${esc(body ?? 'Access needs one of these roles:')} ${esc(roles.join(', '))}. `
-      + 'This is not an empty view — it is one you cannot see.'
+        + 'This is not an empty view — it is one you cannot see.'
     : esc(body ?? 'This is not an empty view — it is one you cannot see.'));
-
 /**
  * We asked and could not find out. Nothing is shown in place of the real answer: invented content
  * on screen is indistinguishable from real content.
@@ -67,14 +64,9 @@ export const deniedState = ({ title, body, roles = [] } = {}) => shell(
  * @param {string} [options.body]
  * @param {string} [options.retryId] Element id for the retry button, when the caller wants one.
  */
-export const failedState = ({ title, body, retryId } = {}) => shell(
-  'failed', 'error',
-  esc(title ?? 'This data is unavailable.'),
-  esc(body ?? 'The service could not be reached.'),
-  `<p class="portal-state-note">Nothing is shown in place of the real data. Retry once the service
+export const failedState = ({ title, body, retryId } = {}) => shell('failed', 'error', esc(title ?? 'This data is unavailable.'), esc(body ?? 'The service could not be reached.'), `<p class="portal-state-note">Nothing is shown in place of the real data. Retry once the service
      is reachable.</p>`
-  + (retryId ? `<button class="btn btn-outline btn-xs" id="${esc(retryId)}" type="button">Retry</button>` : ''));
-
+    + (retryId ? `<button class="btn btn-outline btn-xs" id="${esc(retryId)}" type="button">Retry</button>` : ''));
 /** We asked, we know, and the answer is genuinely nothing. */
 /**
  * @param {Object} [options]
@@ -82,17 +74,13 @@ export const failedState = ({ title, body, retryId } = {}) => shell(
  * @param {string} [options.body]
  * @param {string} [options.action] Markup for the call to action, when there is one.
  */
-export const emptyState = ({ title, body, action = '' } = {}) => shell(
-  'empty', 'empty', esc(title ?? 'Nothing here yet.'), body ? esc(body) : body, action);
-
+export const emptyState = ({ title, body, action = '' } = {}) => shell('empty', 'empty', esc(title ?? 'Nothing here yet.'), body ? esc(body) : body, action);
 /**
  * A status chip. The label is always rendered as text rather than conveyed by colour alone —
  * someone with a colour-vision deficiency, or reading in forced-colours mode, gets nothing from a
  * chip whose only content is its background.
  */
-export const statusChip = (label, tone = 'neutral') =>
-  `<span class="portal-chip portal-chip-${esc(tone)}">${esc(label)}</span>`;
-
+export const statusChip = (label, tone = 'neutral') => `<span class="portal-chip portal-chip-${esc(tone)}">${esc(label)}</span>`;
 /** Styles for the vocabulary. Injected once per document by `installPortalStateStyles()`. */
 const STYLES = `
 .portal-state{border-radius:8px;padding:14px 16px;font-size:13px;line-height:1.5;border:1px solid}
@@ -112,12 +100,12 @@ const STYLES = `
 .portal-chip-risk{color:#ef4444;border-color:#ef4444}
 .portal-chip-neutral{color:var(--portal-muted,#9ca3af)}
 `;
-
 /** Idempotent: a page and a module can both call it without duplicating the stylesheet. */
 export function installPortalStateStyles(doc = document) {
-  if (doc.getElementById('portal-state-styles')) return;
-  const style = doc.createElement('style');
-  style.id = 'portal-state-styles';
-  style.textContent = STYLES;
-  doc.head.appendChild(style);
+    if (doc.getElementById('portal-state-styles'))
+        return;
+    const style = doc.createElement('style');
+    style.id = 'portal-state-styles';
+    style.textContent = STYLES;
+    doc.head.appendChild(style);
 }

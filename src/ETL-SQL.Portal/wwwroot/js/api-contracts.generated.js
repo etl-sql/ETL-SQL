@@ -11,10 +11,6 @@ const contracts = {
       "version": "number"
     }
   },
-  "userList": {
-    "kind": "array",
-    "items": "user"
-  },
   "userCatalog": {
     "kind": "object",
     "fields": {

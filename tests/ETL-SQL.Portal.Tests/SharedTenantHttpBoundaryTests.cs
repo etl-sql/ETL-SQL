@@ -281,7 +281,9 @@ public sealed class SharedTenantHttpBoundaryTests
         using var factory = new SharedPortalFactory();
         using var client = factory.CreateClient();
         string alphaToken;
+        int alphaFolderId;
         int betaFolderId;
+        int betaGroupId;
         int alphaReportId;
         int betaReportId;
         int betaSubscriptionId;
@@ -319,7 +321,13 @@ public sealed class SharedTenantHttpBoundaryTests
                 OwnerId = beta.Id
             };
             db.Folders.AddRange(alphaFolder, betaFolder);
+            var alphaGroup = new Group { TenantId = "tenant-alpha", Name = "Alpha ACL group" };
+            var betaGroup = new Group { TenantId = "tenant-beta", Name = "Beta ACL secret" };
+            db.Groups.AddRange(alphaGroup, betaGroup);
             await db.SaveChangesAsync();
+            db.FolderAcls.AddRange(
+                new FolderAcl { FolderId = alphaFolder.Id, GroupId = alphaGroup.Id, Permission = FolderPermission.Manage },
+                new FolderAcl { FolderId = betaFolder.Id, GroupId = betaGroup.Id, Permission = FolderPermission.Author });
             var alphaReport = new Report
             {
                 TenantId = "tenant-alpha",
@@ -374,8 +382,14 @@ public sealed class SharedTenantHttpBoundaryTests
                 UserId = beta.Id,
                 Status = "Running"
             });
+            db.AuditLogs.AddRange(
+                new AuditLog { TenantId = "tenant-alpha", UserId = null, Action = "TENANT_AUDIT", Detail = "Alpha system audit" },
+                new AuditLog { TenantId = "tenant-alpha", UserId = beta.Id, Action = "TENANT_AUDIT", Detail = "Alpha missing actor audit" },
+                new AuditLog { TenantId = "tenant-beta", UserId = beta.Id, Action = "TENANT_AUDIT", Detail = "Beta audit secret" });
             await db.SaveChangesAsync();
+            alphaFolderId = alphaFolder.Id;
             betaFolderId = betaFolder.Id;
+            betaGroupId = betaGroup.Id;
             alphaReportId = alphaReport.Id;
             betaReportId = betaReport.Id;
             betaSubscriptionId = betaSubscription.Id;
@@ -395,6 +409,68 @@ public sealed class SharedTenantHttpBoundaryTests
         var treeBody = await (await client.SendAsync(tree)).Content.ReadAsStringAsync();
         Assert.Contains("Alpha marker", treeBody, StringComparison.Ordinal);
         Assert.DoesNotContain("Beta secret", treeBody, StringComparison.Ordinal);
+
+        foreach (var auditPath in new[] { "/api/admin/audit", "/api/admin/audit/export/csv" })
+        {
+            using var auditRequest = new HttpRequestMessage(HttpMethod.Get, auditPath + "?action=TENANT_AUDIT&tenant=tenant-beta");
+            auditRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+            auditRequest.Headers.Add("X-Tenant-Id", "tenant-beta");
+            using var auditResponse = await client.SendAsync(auditRequest);
+            Assert.Equal(HttpStatusCode.OK, auditResponse.StatusCode);
+            var auditBody = await auditResponse.Content.ReadAsStringAsync();
+            Assert.Contains("Alpha system audit", auditBody, StringComparison.Ordinal);
+            Assert.Contains("Alpha missing actor audit", auditBody, StringComparison.Ordinal);
+            Assert.DoesNotContain("Beta audit secret", auditBody, StringComparison.Ordinal);
+            Assert.DoesNotContain("beta-folder-", auditBody, StringComparison.Ordinal);
+        }
+
+        using var adminReports = new HttpRequestMessage(HttpMethod.Get, "/api/admin/reports?tenant=tenant-beta");
+        adminReports.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        adminReports.Headers.Add("X-Tenant-Id", "tenant-beta");
+        using var adminReportsResponse = await client.SendAsync(adminReports);
+        Assert.Equal(HttpStatusCode.OK, adminReportsResponse.StatusCode);
+        var adminReportCatalog = await adminReportsResponse.Content.ReadFromJsonAsync<List<ETL_SQL.Portal.Models.AdminReportDto>>();
+        Assert.NotNull(adminReportCatalog);
+        var adminReport = Assert.Single(adminReportCatalog);
+        Assert.Equal(alphaReportId, adminReport.Id);
+        Assert.Equal(alphaFolderId, adminReport.FolderId);
+        Assert.Equal("Alpha marker", adminReport.FolderName);
+        Assert.StartsWith("/", adminReport.FolderPath, StringComparison.Ordinal);
+        Assert.False(string.IsNullOrWhiteSpace(adminReport.ScriptPath));
+        Assert.True(adminReport.Version > 0);
+        Assert.NotEqual(default, adminReport.CreatedAt);
+        Assert.DoesNotContain(adminReportCatalog, item => item.Id == betaReportId);
+
+        using var aclCatalog = new HttpRequestMessage(HttpMethod.Get,
+            $"/api/folders/{alphaFolderId}/acl/catalog?tenant=tenant-beta");
+        aclCatalog.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        aclCatalog.Headers.Add("X-Tenant-Id", "tenant-beta");
+        var aclResponse = await client.SendAsync(aclCatalog);
+        Assert.Equal(HttpStatusCode.OK, aclResponse.StatusCode);
+        var acl = await aclResponse.Content.ReadFromJsonAsync<ETL_SQL.Portal.Models.FolderAclCatalogResponse>();
+        Assert.NotNull(acl);
+        Assert.Equal(alphaFolderId, acl.FolderId);
+        Assert.Equal("Alpha marker", acl.FolderName);
+        Assert.Equal("Alpha ACL group", Assert.Single(acl.Items).GroupName);
+        Assert.DoesNotContain(acl.Items, item => item.GroupId == betaGroupId);
+        using var foreignAcl = new HttpRequestMessage(HttpMethod.Get,
+            $"/api/folders/{betaFolderId}/acl/catalog?tenant=tenant-beta");
+        foreignAcl.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        foreignAcl.Headers.Add("X-Tenant-Id", "tenant-beta");
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(foreignAcl)).StatusCode);
+        using var foreignGroupGrant = new HttpRequestMessage(HttpMethod.Post, $"/api/folders/{alphaFolderId}/acl")
+        {
+            Content = JsonContent.Create(new { groupId = betaGroupId, permission = (int)FolderPermission.Manage })
+        };
+        foreignGroupGrant.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);
+        foreignGroupGrant.Headers.IfMatch.Add(new EntityTagHeaderValue($"\"{acl.Version}\""));
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(foreignGroupGrant)).StatusCode);
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            Assert.Equal(acl.Version, await db.Folders.Where(folder => folder.Id == alphaFolderId).Select(folder => folder.Version).SingleAsync());
+            Assert.False(await db.FolderAcls.AnyAsync(item => item.FolderId == alphaFolderId && item.GroupId == betaGroupId));
+        }
 
         using var search = new HttpRequestMessage(HttpMethod.Get, "/api/catalog/search?q=secret");
         search.Headers.Authorization = new AuthenticationHeaderValue("Bearer", alphaToken);

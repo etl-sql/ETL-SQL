@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="Resources\Shared\**\*.*" />
+    <None Include="Resources\Shared\**\*.*" Exclude="Resources\Shared\**\*.__test-*.mjs" />
   </ItemGroup>
 
 </Project>

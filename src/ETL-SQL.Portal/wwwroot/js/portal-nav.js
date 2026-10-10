@@ -1,3 +1,8 @@
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.Portal/BrowserSources/portal-nav.ts
+ * Run: node scripts/sync-assets.js
+ */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 // The Portal's top-level navigation, applied from one server-computed answer.
 //
 // Every page used to work this out for itself, from JWT claims, in five different spellings of the
@@ -19,9 +24,14 @@
 // The server sends `[{ id, visible, reason }]`; this module only applies it. Deliberately no
 // fallback rule here — a client-side guess is what this replaces, and a wrong guess that shows an
 // entry is worse than an entry briefly missing.
-
 import { navigationApi } from './api.js';
-
+function isDestination(value) {
+    if (!value || typeof value !== 'object')
+        return false;
+    const destination = value;
+    return typeof destination.id === 'string' && typeof destination.visible === 'boolean'
+        && (destination.reason == null || typeof destination.reason === 'string');
+}
 /**
  * Reveals or hides each destination the server named.
  *
@@ -37,21 +47,24 @@ import { navigationApi } from './api.js';
  */
 export async function applyNavigation(doc = document) {
     const destinations = await navigationApi.destinations();
+    if (!Array.isArray(destinations) || !destinations.every(isDestination)) {
+        throw new Error('Invalid Portal navigation response.');
+    }
     /** @type {Record<string, boolean>} */
     const applied = {};
-
     for (const { id, visible, reason } of destinations) {
         const element = doc.getElementById(id);
         applied[id] = !!visible;
-        if (!element) continue;
-
+        if (!element)
+            continue;
         element.style.display = visible ? '' : 'none';
         // Kept for diagnosis only. Never rendered: telling a user which capability they lack is a
         // different decision from telling an operator, and this is the operator's answer.
-        if (!visible && reason) element.dataset.navHiddenReason = reason;
-        else delete element.dataset.navHiddenReason;
+        if (!visible && reason)
+            element.dataset.navHiddenReason = reason;
+        else
+            delete element.dataset.navHiddenReason;
     }
-
     // Marks the answer as applied. A test — or anything else waiting to read the navigation — needs
     // to distinguish "hidden because you may not have it" from "not decided yet", and those look
     // identical in the DOM: both are the markup default. Without this an absence check races the
@@ -60,7 +73,6 @@ export async function applyNavigation(doc = document) {
     doc.body?.setAttribute('data-nav-applied', 'true');
     return applied;
 }
-
 /**
  * Applies navigation without letting a failure take the page down with it.
  *
@@ -71,7 +83,8 @@ export async function applyNavigation(doc = document) {
 export async function applyNavigationSafely(doc = document) {
     try {
         return await applyNavigation(doc);
-    } catch {
+    }
+    catch {
         // Still marked applied: the answer is settled — it is "nothing extra" — and a caller
         // waiting on it should stop waiting rather than hang until a timeout.
         doc.body?.setAttribute('data-nav-applied', 'true');

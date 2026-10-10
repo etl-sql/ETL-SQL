@@ -8,7 +8,6 @@ import { importFresh, DESIGNER_JS } from '../util.js';
 const LINEAGE_CATALOG_JS = '/src/ETL-SQL.Portal/wwwroot/js/lineage-catalog.js';
 const LINEAGE_UI_JS = '/src/ETL-SQL.Portal/wwwroot/js/lineage-ui.js';
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // A small but connected slice of cross-run lineage history:
 //   csv -> edw.Sales, edw.Customers, edw.Orders -> mart.SalesSummary -> mart.ExecutiveKpis
@@ -48,11 +47,10 @@ const DB = [
     transformationKind: 'Direct', transformationExpression: 'amount', functionsApplied: [],
     sourceTables: [], sourceColumns: ['amount'], derivedFromDescriptions: 'Raw amount from the daily CSV drop',
     tags: { pii: 'false' }, sourceFile: 'C:/data/staging/sales_2026_05.csv', line: 1 },
-];
+].map((row, index) => ({ id: index + 1, scriptPath: row.sourceFile, ...row }));
 
 // Mock of catalogApi.lineage(kind, args) — same contract as js/api.js.
 async function lineage(kind, args = {}) {
-  await sleep(250);
   const name = (args.name || '').toLowerCase();
   let rows;
   if (kind === 'table') {
@@ -70,11 +68,12 @@ async function lineage(kind, args = {}) {
   } else {
     rows = [];
   }
-  return rows;
+  if (args.from) rows = rows.filter(row => row.runAt >= args.from);
+  if (args.to) rows = rows.filter(row => row.runAt <= args.to);
+  return rows.slice(0, args.limit || 100);
 }
 
 async function impact(args = {}) {
-  await sleep(250);
   const target = args.name || 'edw.Sales';
   return {
     request: {
@@ -86,13 +85,14 @@ async function impact(args = {}) {
       limit: args.limit || 100,
     },
     summary: {
-      tables: 4,
-      columns: 3,
+      tables: 3,
+      columns: 2,
       reports: 2,
       datasets: 1,
       subscriptions: 1,
       jobs: 2,
       stewards: 2,
+      alerts: 1,
     },
     tables: [
       { type: 'Table', name: target, detail: null, lastSeen: '2026-05-31T02:10:00Z', count: 1 },
@@ -121,11 +121,11 @@ async function impact(args = {}) {
       { type: 'Owner', name: 'finance', detail: null, lastSeen: null, count: null },
       { type: 'Steward', name: 'Maria Chen', detail: null, lastSeen: null, count: null },
     ],
+    alerts: [{ type: 'Alert', name: 'Protected data alert', detail: 'Executive Sales', lastSeen: null, count: 0 }],
   };
 }
 
 async function stewardship(args = {}) {
-  await sleep(180);
   const staleAfterMs = (args.staleAfterDays || 30) * 86400000;
   const now = Date.now();
   const items = DB.map(row => {
@@ -185,10 +185,11 @@ async function stewardship(args = {}) {
 }
 
 async function protectedData() {
-  await sleep(160);
   return DB.filter(row => row.tags?.pii === 'true' || row.tags?.classification === 'confidential')
     .map(row => ({
-      ...row,
+      id: row.id, runAt: row.runAt, jobName: row.jobName, scriptPath: row.scriptPath,
+      targetTable: row.targetTable, targetColumn: row.targetColumn, sourceTables: row.sourceTables,
+      operation: row.operation, tags: row.tags, sourceFile: row.sourceFile, line: row.line,
       protectionTags: row.tags?.pii === 'true' ? ['@pii=true', '@classification=confidential'] : ['@classification=confidential'],
       protectionReason: row.tags?.pii === 'true' ? '@pii=true, @classification=confidential' : '@classification=confidential',
       owner: row.tags?.owner || null,
@@ -200,26 +201,67 @@ async function protectedData() {
     }));
 }
 
-async function auditLog() {
-  await sleep(120);
+async function auditLog(page = 1, pageSize = 50) {
   return {
     items: [
-      { id: 10, username: 'publisher', action: 'STEWARD_LINEAGE_IMPACT', resourceType: 'Steward', resourceId: 'Maria Chen', timestamp: '2026-05-31T02:16:00Z', detail: 'Executive Sales touched mart.SalesSummary.customer_email' },
-      { id: 11, username: 'scheduler', action: 'STEWARD_LINEAGE_IMPACT', resourceType: 'Steward', resourceId: 'FinanceOps', timestamp: '2026-05-31T08:00:00Z', detail: 'Daily refresh affected 2 protected targets' },
+      { id: 10, userId: 1, username: 'publisher', action: 'STEWARD_LINEAGE_IMPACT', resourceType: 'Steward', resourceId: 'Maria Chen', timestamp: '2026-05-31T02:16:00Z', detail: 'Executive Sales touched mart.SalesSummary.customer_email', ipAddress: null, userAgent: null },
+      { id: 11, userId: 2, username: 'scheduler', action: 'STEWARD_LINEAGE_IMPACT', resourceType: 'Steward', resourceId: 'FinanceOps', timestamp: '2026-05-31T08:00:00Z', detail: 'Daily refresh affected 2 protected targets', ipAddress: null, userAgent: null },
     ],
     total: 2,
-    page: 1,
-    pageSize: 50,
+    page,
+    pageSize,
   };
 }
 
 async function operationalMetrics() {
-  await sleep(100);
   return {
+    queuedExecutions: 0, activeExecutions: 1, executionCap: 8, windowHours: 24,
+    recentExecutionFailures: 0, recentExecutions: 1, staleDatasets: 0, datasetStorageBytes: 0,
+    securityEventPending: 0, securityEventFailed: 0, nodeId: 'sandbox', schemaUpToDate: true,
     auditOutboxPending: 3,
     auditOutboxFailed: 0,
     auditOutboxOldestPendingAgeSeconds: 42,
   };
+}
+
+async function protectedDataSuggestions() {
+  const row = DB[2];
+  return [{ id: row.id, runAt: row.runAt, jobName: row.jobName, scriptPath: row.scriptPath,
+    targetTable: row.targetTable, targetColumn: row.targetColumn, sourceTables: row.sourceTables,
+    sourceColumns: row.sourceColumns, suggestedTag: 'pii', suggestedValue: 'true', confidence: 0.95,
+    evidenceKind: 'TargetColumn', evidence: 'customer_email', reason: 'email identifier',
+    existingTags: row.tags, sourceFile: row.sourceFile, line: row.line }];
+}
+
+export function createLineageMock() {
+  let mode = 'healthy', pauseKind = null, held = null;
+  let started;
+  const calls = [];
+  const api = { calls, graphs: [], setMode(value) { mode = value; },
+    pause(kind) { pauseKind = kind; started = Promise.withResolvers(); },
+    whenPaused() { return started.promise; },
+    async release() { if (!held) throw new Error('No held lineage response.'); const pending = held; held = null; pending.resolve(); await pending.finished.promise; }
+  };
+  for (const [kind, action] of Object.entries({ lineage, impact, stewardship, protectedData, protectedDataSuggestions, auditLog, operationalMetrics })) {
+    api[kind] = async (...args) => {
+      calls.push({ kind, args });
+      let value = await action(...args);
+      if (mode === 'unavailable' && ['protectedData', 'protectedDataSuggestions', 'operationalMetrics'].includes(kind)) throw new Error(`${kind} temporarily unavailable.`);
+      if (mode === 'malformed') value = kind === 'lineage' ? null : {};
+      if (mode === 'wrong-impact' && kind === 'impact') value.request.name = 'other-target';
+      if (mode === 'graph-names' && kind === 'lineage') value = value.map((row, index) => ({ ...row,
+        targetTable: ['__proto__', 'constructor', 'b->constructor', 'a'][index],
+        sourceTables: [['constructor'], ['a->b'], ['a'], []][index] }));
+      if (pauseKind === kind) {
+        pauseKind = null;
+        const pending = Promise.withResolvers(), finished = Promise.withResolvers();
+        held = { resolve: pending.resolve, finished }; started.resolve();
+        await pending.promise; finished.resolve();
+      }
+      return structuredClone(value);
+    };
+  }
+  return api;
 }
 
 function formatBuiltAt(value) {
@@ -248,6 +290,8 @@ export default {
     { id: 'tag',   label: 'Tag query (pii)' },
     { id: 'impact', label: 'Impact analysis' },
     { id: 'audit', label: 'Steward audit workflow' },
+    { id: 'protected-unavailable', label: 'Unavailable protected sources' },
+    { id: 'reader', label: 'Reader modes without audit' },
     { id: 'blank', label: 'Initial state (before search)' },
   ],
   async mount(stage, fixtureId, ctx) {
@@ -258,23 +302,27 @@ export default {
       importFresh(DESIGNER_JS),
     ]);
 
+    const api = createLineageMock();
     const catalog = catMod.createLineageCatalog({
       host: stage,
-      catalogApi: { lineage, impact, stewardship, protectedData },
-      adminApi: { auditLog, operationalMetrics },
-      renderDag: designer.renderDag,
+      catalogApi: api,
+      adminApi: api,
+      renderDag: (container, graph) => { api.graphs.push(structuredClone(graph)); return designer.renderDag(container, graph); },
       renderLineageRow: lineageUi.renderLineageRow,
       lineageRowsToCsv: lineageUi.lineageRowsToCsv,
       openReport: id => ctx.stat(`openReport(${id}) — would open that report in the portal`),
       timeAgo,
       formatBuiltAt,
       viewKey: 'etlsql_sandbox_lineage_views',  // keep sandbox saved-views separate
+      allowAudit: fixtureId !== 'reader',
       prepare: () => {},
     });
 
     // Pre-seed a query so the explorer shows populated results instead of the
     // blank "pick a query and Search" state. (Edit the form and Search to explore.)
-    if (fixtureId === 'impact') {
+    if (fixtureId === 'protected-unavailable') {
+      api.setMode('unavailable'); catalog.state.mode = 'protected';
+    } else if (fixtureId === 'impact') {
       catalog.state.mode = 'impact';
       catalog.state.impactKind = 'table';
       catalog.state.impactName = 'edw.Sales';
@@ -291,6 +339,7 @@ export default {
     }
     if (fixtureId === 'graph') catalog.state.view = 'graph';
 
+    window.__lineage = { catalog, api, host: stage };
     catalog.render();
     ctx.stat(fixtureId === 'blank'
       ? 'the view as it first appears — choose a query type, type a name, and Search'

@@ -289,14 +289,38 @@ public class FoldersController(
         return Ok(acls);
     }
 
+    [HttpGet("{id:int}/acl/catalog")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAclCatalog(int id)
+    {
+        var cancellationToken = HttpContext.RequestAborted;
+        await using var snapshot = await db.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.Serializable, cancellationToken);
+        var folder = await catalogScope.Folders.AsNoTracking()
+            .SingleOrDefaultAsync(value => value.Id == id, cancellationToken);
+        if (folder is null) return NotFound();
+        var items = await catalogScope.FolderAcls.AsNoTracking()
+            .Where(value => value.FolderId == id)
+            .OrderBy(value => value.Group.Name)
+            .Select(value => new FolderAclDto(value.GroupId, value.Group.Name, value.Permission))
+            .ToListAsync(cancellationToken);
+        var permissions = Enum.GetValues<FolderPermission>().OrderBy(value => value.Rank())
+            .Select(value => new FolderPermissionOptionDto(value, value.ToString(), value.Rank())).ToArray();
+        await snapshot.CommitAsync(cancellationToken);
+        OptimisticConcurrency.SetETag(Response, folder.Version);
+        return Ok(new FolderAclCatalogResponse(id, folder.Name, folder.Version, items, permissions));
+    }
+
     [HttpPost("{id:int}/acl")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Grant(int id, [FromBody] GrantPermissionRequest req)
     {
-        var folder = await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == id);
+        var cancellationToken = HttpContext.RequestAborted;
+        if (!Enum.IsDefined(req.Permission)) return BadRequest(new { error = "Unknown folder permission." });
+        var folder = await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
         if (folder is null) return NotFound("Folder not found");
         if (!await db.Groups.AnyAsync(g =>
-                g.TenantId == catalogScope.TenantId && g.Id == req.GroupId))
+                g.TenantId == catalogScope.TenantId && g.Id == req.GroupId, cancellationToken))
             return NotFound("Group not found");
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
@@ -306,39 +330,40 @@ public class FoldersController(
                 this, new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
 
         var existing = await catalogScope.FolderAcls.FirstOrDefaultAsync(
-            a => a.FolderId == id && a.GroupId == req.GroupId);
+            a => a.FolderId == id && a.GroupId == req.GroupId, cancellationToken);
 
         if (existing is not null)
             existing.Permission = req.Permission;
         else
             db.FolderAcls.Add(new FolderAcl { FolderId = id, GroupId = req.GroupId, Permission = req.Permission });
 
-        // Staged so the grant and its audit row share one commit (P1.6).
+        // The grant and its audit row share one commit.
         audit.Stage(CurrentUserId, "GRANT_PERMISSION", "Folder", id.ToString(),
             $"group={req.GroupId} perm={req.Permission}");
         try
         {
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
             db.ChangeTracker.Clear();
-            var current = await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == id);
+            var current = await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
             return current is null
                 ? NotFound()
                 : OptimisticConcurrency.Conflict(
                     this, new FolderDto(current.Id, current.ParentId, current.Name, current.Path, [], current.Version));
         }
-        await securitySessions.InvalidateGroupMembersAsync(req.GroupId);
+        await securitySessions.InvalidateGroupMembersAsync(req.GroupId, cancellationToken);
         OptimisticConcurrency.SetETag(Response, folder.Version);
-        return Ok(new { folder.Version });
+        return Ok(new FolderAclGrantResponse(id, req.GroupId, req.Permission, folder.Version));
     }
 
     [HttpDelete("{id:int}/acl/{groupId:int}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Revoke(int id, int groupId)
     {
-        var folder = await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == id);
+        var cancellationToken = HttpContext.RequestAborted;
+        var folder = await catalogScope.Folders.SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
         if (folder is null) return NotFound();
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
@@ -348,7 +373,7 @@ public class FoldersController(
                 this, new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
 
         var acl = await catalogScope.FolderAcls.FirstOrDefaultAsync(
-            a => a.FolderId == id && a.GroupId == groupId);
+            a => a.FolderId == id && a.GroupId == groupId, cancellationToken);
         if (acl is null) return NotFound();
 
         db.FolderAcls.Remove(acl);
@@ -356,17 +381,17 @@ public class FoldersController(
             $"group={groupId}");
         try
         {
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
-            await db.Entry(folder).ReloadAsync();
+            await db.Entry(folder).ReloadAsync(cancellationToken);
             return OptimisticConcurrency.Conflict(
                 this, new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, [], folder.Version));
         }
-        await securitySessions.InvalidateGroupMembersAsync(groupId);
+        await securitySessions.InvalidateGroupMembersAsync(groupId, cancellationToken);
         OptimisticConcurrency.SetETag(Response, folder.Version);
-        return Ok(new { folder.Version });
+        return Ok(new FolderAclRevokeResponse(id, groupId, folder.Version));
     }
 
     private IQueryable<Folder> VisibleFoldersQuery()

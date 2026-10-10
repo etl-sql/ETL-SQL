@@ -1,323 +1,339 @@
-// Control Plane Dashboard UI Logic (P2 SaaS Multi-Tenancy)
-// Operates under Platform Identity Isolation; works with live API or mock fixture injection.
-
-(function () {
-  'use strict';
-
-  // Every failure here used to be a native browser dialog, which blocks the page, cannot be
-  // styled, is not read by the live region the rest of the Portal announces through, and gives
-  // an operator no way to keep the receipt on screen while they act on it. control-plane.html
-  // now loads the shared feedback module, so these are toasts like every other admin surface.
-  function notifyFailure(title, detail) {
-    window.ETLSQLFeedback.notify(String(detail || 'The request failed.'), { title, tone: 'error' });
-  }
-
-  function esc(s) {
-    if (s == null) return '';
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  function renderStateBadge(state) {
-    const s = (state || 'Unknown').toLowerCase();
-    let cls = 'cp-state-provisioning';
-    if (s === 'active') cls = 'cp-state-active';
-    else if (s === 'maintenance') cls = 'cp-state-maintenance';
-    else if (s === 'quarantined' || s === 'deleting' || s === 'deleted') cls = 'cp-state-quarantined';
-    return `<span class="cp-state-badge ${cls}">${esc(state)}</span>`;
-  }
-
-  function renderControlPlane(container, data) {
-    if (!data) return;
-
-    const { overview, tenants, audit } = data;
-
-    // Overview KPIs
-    if (overview) {
-      const kpiTenants = container.querySelector('#kpiTenants');
-      const kpiTenantsSub = container.querySelector('#kpiTenantsSub');
-      const kpiExecutions = container.querySelector('#kpiExecutions');
-      const kpiQueueDepth = container.querySelector('#kpiQueueDepth');
-      const kpiGateways = container.querySelector('#kpiGateways');
-      const kpiGatewayTenants = container.querySelector('#kpiGatewayTenants');
-      const kpiAuditOutbox = container.querySelector('#kpiAuditOutbox');
-      const kpiAuditPending = container.querySelector('#kpiAuditPending');
-
-      if (kpiTenants) kpiTenants.textContent = `${overview.activeTenants} / ${overview.totalTenants}`;
-      if (kpiTenantsSub) kpiTenantsSub.textContent = `${overview.provisioningTenants} provisioning, ${overview.maintenanceTenants} maint`;
-      if (kpiExecutions) kpiExecutions.textContent = `${overview.activeExecutions}`;
-      if (kpiQueueDepth) kpiQueueDepth.textContent = `Queue depth: ${overview.queuedExecutions}`;
-      if (kpiGateways) kpiGateways.textContent = `${overview.connectedGateways}`;
-      if (kpiGatewayTenants) kpiGatewayTenants.textContent = `Across ${overview.uniqueGatewayTenants} tenants`;
-      if (kpiAuditOutbox) kpiAuditOutbox.textContent = overview.auditOutboxFailed > 0 ? `${overview.auditOutboxFailed} Failed` : 'Healthy';
-      if (kpiAuditPending) kpiAuditPending.textContent = `${overview.auditOutboxPending} pending msgs`;
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.Portal/BrowserSources/control-plane.ts
+ * Run: node scripts/sync-assets.js
+ */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
+import { asError, isObject } from './http-error.js';
+import { installDialogAccessibility } from './dialog-a11y.js';
+import { readControlPlaneOverview, readControlPlaneTenants, readControlPlaneAudit, readControlPlaneReceipt } from './control-plane-responses.js';
+import { renderControlPlaneOverview, renderControlPlaneTenants, renderControlPlaneAudit } from './control-plane-view.js';
+const controllers = new WeakMap();
+// This endpoint uses platform authority, independent of tenant JWTs. The browser never collects
+// or persists the management key; a trusted platform deployment must supply its authentication.
+export function createControlPlaneController(container, onReload, fetcher = window.fetch.bind(window)) {
+    const existing = controllers.get(container);
+    if (existing)
+        return existing;
+    const listeners = new AbortController();
+    const disposeDialogs = installDialogAccessibility(container);
+    let disposed = false, generation = 0, modalVersion = 0, loading = false, busy = false, uncertain = false;
+    let reads = null;
+    let overview = null;
+    let tenants = null;
+    let audit = null;
+    let tenantError = 'Tenant inventory unavailable.', auditError = 'Platform audit trail unavailable.';
+    const element = (id) => container.querySelector('#' + id);
+    const input = (id) => {
+        const value = element(id);
+        if (!value)
+            throw new Error(`Missing control-plane field ${id}.`);
+        return value;
+    };
+    const status = (message) => { const target = element('controlPlaneStatus'); if (target)
+        target.textContent = message; };
+    const canMutate = () => !disposed && !loading && !busy && !uncertain && overview !== null && tenants !== null && audit !== null;
+    function updateControls() {
+        container.querySelectorAll('#btnOpenProvision, .btn-quota, .btn-state, form button[type="submit"]')
+            .forEach(button => { button.disabled = !canMutate(); });
+        const refresh = element('btnRefreshControlPlane');
+        if (refresh)
+            refresh.disabled = busy || loading || disposed;
     }
-
-    // Tenants Table
-    const tbody = container.querySelector('#tenantTableBody');
-    if (tbody && Array.isArray(tenants)) {
-      if (tenants.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--portal-muted);">No tenants found in shared fleet.</td></tr>';
-      } else {
-        tbody.innerHTML = tenants.map(t => `
-          <tr style="border-bottom:1px solid var(--portal-border-soft);">
-            <td style="padding:10px 16px;font-weight:600;font-family:monospace;">${esc(t.tenantId)}</td>
-            <td style="padding:10px 16px;">${renderStateBadge(t.state)}</td>
-            <td style="padding:10px 16px;font-size:0.85rem;">${esc(t.activeRelease || 'default')}</td>
-            <td style="padding:10px 16px;font-size:0.85rem;">${t.maxConcurrentJobs} max</td>
-            <td style="padding:10px 16px;font-size:0.85rem;">${t.maxStorageMb} MB</td>
-            <td style="padding:10px 16px;font-size:0.85rem;">${t.activeExecutions} active / ${t.queuedExecutions} queued</td>
-            <td style="padding:10px 16px;font-size:0.85rem;">${t.connectedGateways}</td>
-            <td style="padding:10px 16px;">
-              <div style="display:flex;align-items:center;gap:8px;">
-                <div style="flex:1;background:var(--portal-border);height:6px;border-radius:3px;overflow:hidden;min-width:60px;">
-                  <div style="width:${Math.min(100, t.quotaUtilizationPercentage || 0)}%;background:${(t.quotaUtilizationPercentage || 0) >= 90 ? 'var(--portal-danger)' : 'var(--portal-accent)'};height:100%;"></div>
-                </div>
-                <span style="font-size:0.75rem;color:var(--portal-muted);">${t.quotaUtilizationPercentage || 0}%</span>
-              </div>
-            </td>
-            <td style="padding:10px 16px;text-align:right;">
-              <button class="btn-quota" data-tenant="${esc(t.tenantId)}" data-jobs="${t.maxConcurrentJobs}" data-storage="${t.maxStorageMb}" data-reports="${t.maxReportSessions}" style="padding:4px 8px;font-size:0.75rem;border:1px solid var(--portal-border);border-radius:3px;background:var(--portal-surface-subtle);color:var(--portal-text);cursor:pointer;margin-right:4px;">Quotas</button>
-              <button class="btn-state" data-tenant="${esc(t.tenantId)}" data-state="${esc(t.state)}" style="padding:4px 8px;font-size:0.75rem;border:1px solid var(--portal-border);border-radius:3px;background:var(--portal-surface-subtle);color:var(--portal-text);cursor:pointer;">State</button>
-            </td>
-          </tr>
-        `).join('');
-      }
+    function renderSources() {
+        renderControlPlaneOverview(container, overview);
+        renderControlPlaneTenants(container, tenants, element('tenantSearch')?.value || '', tenantError);
+        renderControlPlaneAudit(container, audit, auditError);
+        updateControls();
     }
-
-    // Audit Table
-    const auditTbody = container.querySelector('#auditTableBody');
-    if (auditTbody && Array.isArray(audit)) {
-      if (audit.length === 0) {
-        auditTbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--portal-muted);">No platform audit events recorded.</td></tr>';
-      } else {
-        auditTbody.innerHTML = audit.map(a => `
-          <tr style="border-bottom:1px solid var(--portal-border-soft);">
-            <td style="padding:10px 16px;font-family:monospace;font-size:0.8rem;">${esc(a.operationId)}</td>
-            <td style="padding:10px 16px;font-weight:600;">${esc(a.tenantId)}</td>
-            <td style="padding:10px 16px;font-size:0.85rem;"><span class="badge">${esc(a.kind)}</span></td>
-            <td style="padding:10px 16px;font-size:0.85rem;">${esc(a.status)}</td>
-            <td style="padding:10px 16px;font-size:0.85rem;">${esc(a.platformOperator)}</td>
-            <td style="padding:10px 16px;font-size:0.85rem;font-family:monospace;">${esc(a.authorizationReference)}</td>
-            <td style="padding:10px 16px;font-size:0.85rem;color:var(--portal-muted);">${esc(a.reason)}</td>
-            <td style="padding:10px 16px;font-family:monospace;font-size:0.75rem;color:var(--portal-muted);">${esc(a.receiptHash)}</td>
-          </tr>
-        `).join('');
-      }
-    }
-  }
-
-  function initInteractiveControls(container, onReload) {
-    // Setup tabs
-    const tabs = container.querySelectorAll('.cp-tab');
-    tabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        tabs.forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        const target = tab.dataset.tab;
-        container.querySelectorAll('.cp-panel').forEach(p => p.classList.remove('active'));
-        const panel = container.querySelector(`#panel-${target}`);
-        if (panel) panel.classList.add('active');
-      });
-    });
-
-    // Setup search filter
-    const searchInput = container.querySelector('#tenantSearch');
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        const query = e.target.value.toLowerCase();
-        const rows = container.querySelectorAll('#tenantTableBody tr');
-        rows.forEach(row => {
-          const text = row.textContent.toLowerCase();
-          row.style.display = text.includes(query) ? '' : 'none';
+    function closeModals() {
+        modalVersion++;
+        container.querySelectorAll('#modalProvision, #modalQuotas, #modalState').forEach(modal => {
+            modal.style.display = 'none';
+            modal.querySelector('form')?.reset();
+            const error = modal.querySelector('[role="alert"]');
+            if (error)
+                error.textContent = '';
         });
-      });
     }
-
-    // Modal helpers
-    function showModal(id) {
-      const el = container.querySelector(id);
-      if (el) el.style.display = 'flex';
-    }
-    function hideModals() {
-      container.querySelectorAll('#modalProvision, #modalQuotas, #modalState').forEach(m => m.style.display = 'none');
-    }
-
-    container.querySelectorAll('.btn-cancel').forEach(btn => btn.addEventListener('click', hideModals));
-
-    // Provision button
-    const btnOpenProv = container.querySelector('#btnOpenProvision');
-    if (btnOpenProv) {
-      btnOpenProv.addEventListener('click', () => showModal('#modalProvision'));
-    }
-
-    // Row buttons (delegated)
-    const tbody = container.querySelector('#tenantTableBody');
-    if (tbody) {
-      tbody.addEventListener('click', (e) => {
-        const target = e.target;
-        if (target.classList.contains('btn-quota')) {
-          const tenant = target.dataset.tenant;
-          const jobs = target.dataset.jobs;
-          const storage = target.dataset.storage;
-          const modal = container.querySelector('#modalQuotas');
-          if (modal) {
-            modal.querySelector('#quotaTenantId').value = tenant;
-            modal.querySelector('#quotaMaxJobs').value = jobs || 10;
-            modal.querySelector('#quotaStorageMb').value = storage || 20480;
-            showModal('#modalQuotas');
-          }
-        } else if (target.classList.contains('btn-state')) {
-          const tenant = target.dataset.tenant;
-          const state = target.dataset.state;
-          const modal = container.querySelector('#modalState');
-          if (modal) {
-            modal.querySelector('#stateTenantId').value = tenant;
-            modal.querySelector('#stateSelect').value = state || 'Active';
-            showModal('#modalState');
-          }
+    function openModal(id) {
+        if (!canMutate())
+            return;
+        closeModals();
+        const modal = element(id);
+        if (modal) {
+            modal.removeAttribute('aria-hidden');
+            modal.style.display = 'flex';
         }
-      });
     }
-
     function showReceipt(receipt) {
-      const alert = container.querySelector('#receiptAlert');
-      if (alert) {
+        const alert = element('receiptAlert');
+        if (!alert)
+            return;
         alert.style.display = 'block';
-        alert.innerHTML = `<strong>Receipt ${esc(receipt.operationId)}:</strong> Action <code>${esc(receipt.kind)}</code> executed by <code>${esc(receipt.platformOperator)}</code> (Ref: <code>${esc(receipt.authorizationReference)}</code>). Receipt Hash: <code>${esc(receipt.receiptHash)}</code>`;
-        setTimeout(() => { alert.style.display = 'none'; }, 10000);
-      }
+        alert.textContent = `Receipt ${receipt.operationId}: ${receipt.kind} — ${receipt.status} (${receipt.phase}). `
+            + `Tenant: ${receipt.tenantId}. Operator: ${receipt.platformOperator}. `
+            + `Ref: ${receipt.authorizationReference}. Receipt Hash: ${receipt.receiptHash}`;
     }
-
-    // Forms
-    const formProv = container.querySelector('#formProvision');
-    if (formProv) {
-      formProv.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const payload = {
-          tenantId: formProv.querySelector('#provTenantId').value.trim(),
-          maxConcurrentJobs: parseInt(formProv.querySelector('#provMaxJobs').value, 10),
-          maxStorageMb: parseInt(formProv.querySelector('#provStorageMb').value, 10),
-          platformOperator: formProv.querySelector('#provOperator').value.trim(),
-          authorizationReference: formProv.querySelector('#provAuthRef').value.trim(),
-          reason: formProv.querySelector('#provReason').value.trim()
-        };
-
-        try {
-          const res = await fetch('/api/platform/control-plane/tenants/provision', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          if (res.ok) {
-            const receipt = await res.json();
-            hideModals();
-            showReceipt(receipt);
-            if (onReload) onReload();
-          } else {
-            const err = await res.json();
-            notifyFailure('Provisioning failed', err.error || res.statusText);
-          }
-        } catch (err) {
-          notifyFailure('Network error', err.message);
+    async function request(path, init) {
+        const response = await fetcher(path, init);
+        if (!response.ok) {
+            if (response.status === 401 || response.status === 403)
+                throw new Error('Platform management credentials required.');
+            if (response.status === 404 && init.method !== 'POST')
+                throw new Error('Control plane is unavailable in this deployment.');
+            const body = await response.json().catch(() => null);
+            throw new Error(isObject(body) && typeof body.error === 'string' && body.error.trim()
+                ? body.error : `Control-plane request failed (HTTP ${response.status}).`);
         }
-      });
+        return response.json();
     }
-
-    const formQuotas = container.querySelector('#formQuotas');
-    if (formQuotas) {
-      formQuotas.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const tenantId = formQuotas.querySelector('#quotaTenantId').value;
-        const payload = {
-          maxConcurrentJobs: parseInt(formQuotas.querySelector('#quotaMaxJobs').value, 10),
-          maxStorageMb: parseInt(formQuotas.querySelector('#quotaStorageMb').value, 10),
-          platformOperator: formQuotas.querySelector('#quotaOperator').value.trim(),
-          authorizationReference: formQuotas.querySelector('#quotaAuthRef').value.trim(),
-          reason: formQuotas.querySelector('#quotaReason').value.trim()
-        };
-
-        try {
-          const res = await fetch(`/api/platform/control-plane/tenants/${encodeURIComponent(tenantId)}/quotas`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          if (res.ok) {
-            const receipt = await res.json();
-            hideModals();
-            showReceipt(receipt);
-            if (onReload) onReload();
-          } else {
-            const err = await res.json();
-            notifyFailure('Updating quotas failed', err.error || res.statusText);
-          }
-        } catch (err) {
-          notifyFailure('Network error', err.message);
+    async function reload() {
+        if (disposed || busy)
+            return;
+        const current = ++generation;
+        reads?.abort();
+        reads = new AbortController();
+        const signal = reads.signal;
+        loading = true;
+        overview = null;
+        tenants = null;
+        audit = null;
+        tenantError = 'Loading tenant inventory...';
+        auditError = 'Loading platform audit trail...';
+        closeModals();
+        renderSources();
+        status('Loading control-plane metadata...');
+        const results = await Promise.allSettled([
+            request('/api/platform/control-plane/overview', { signal }).then(readControlPlaneOverview),
+            request('/api/platform/control-plane/tenants', { signal }).then(readControlPlaneTenants),
+            request('/api/platform/control-plane/audit', { signal }).then(readControlPlaneAudit)
+        ]);
+        if (disposed || current !== generation)
+            return;
+        const [fleetResult, tenantsResult, auditResult] = results;
+        overview = fleetResult.status === 'fulfilled' ? fleetResult.value : null;
+        tenants = tenantsResult.status === 'fulfilled' ? tenantsResult.value : null;
+        audit = auditResult.status === 'fulfilled' ? auditResult.value : null;
+        tenantError = tenantsResult.status === 'rejected' ? 'Tenant inventory unavailable. ' + asError(tenantsResult.reason).message : '';
+        auditError = auditResult.status === 'rejected' ? 'Platform audit trail unavailable. ' + asError(auditResult.reason).message : '';
+        const failures = results.filter(result => result.status === 'rejected').map(result => asError(result.reason).message);
+        loading = false;
+        if (!failures.length)
+            uncertain = false;
+        renderSources();
+        status(failures.length ? [...new Set(failures)].join(' ') + ' Refresh to retry.'
+            : `Fleet metadata captured ${overview?.capturedAtUtc}.`);
+    }
+    const field = (id) => {
+        const value = input(id).value.trim();
+        if (!value)
+            throw new Error('Complete all required fields.');
+        return value;
+    };
+    const quota = (id, minimum) => {
+        const value = input(id).valueAsNumber;
+        if (!Number.isSafeInteger(value) || value < minimum || value > 2147483647) {
+            throw new Error(`Enter a whole-number quota between ${minimum} and 2147483647.`);
         }
-      });
-    }
-
-    const formState = container.querySelector('#formState');
-    if (formState) {
-      formState.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const tenantId = formState.querySelector('#stateTenantId').value;
-        const payload = {
-          state: formState.querySelector('#stateSelect').value,
-          platformOperator: formState.querySelector('#stateOperator').value.trim(),
-          authorizationReference: formState.querySelector('#stateAuthRef').value.trim(),
-          reason: formState.querySelector('#stateReason').value.trim()
-        };
-
-        try {
-          const res = await fetch(`/api/platform/control-plane/tenants/${encodeURIComponent(tenantId)}/state`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          if (res.ok) {
-            const receipt = await res.json();
-            hideModals();
-            showReceipt(receipt);
-            if (onReload) onReload();
-          } else {
-            const err = await res.json();
-            notifyFailure('Updating state failed', err.error || res.statusText);
-          }
-        } catch (err) {
-          notifyFailure('Network error', err.message);
+        return value;
+    };
+    const attribution = (prefix) => ({ platformOperator: field(prefix + 'Operator'),
+        authorizationReference: field(prefix + 'AuthRef'), reason: field(prefix + 'Reason') });
+    async function submit(form, path, tenantId, kind, payload) {
+        if (!canMutate())
+            return;
+        busy = true;
+        updateControls();
+        const version = modalVersion;
+        const alert = form.querySelector('[role="alert"]');
+        if (alert)
+            alert.textContent = '';
+        const previousReceipt = element('receiptAlert');
+        if (previousReceipt) {
+            previousReceipt.textContent = '';
+            previousReceipt.style.display = 'none';
         }
-      });
+        let submitted = false;
+        try {
+            submitted = true;
+            const receipt = readControlPlaneReceipt(await request(path, { method: 'POST',
+                headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }));
+            if (receipt.tenantId !== tenantId || receipt.kind !== kind
+                || receipt.platformOperator !== payload.platformOperator || receipt.authorizationReference !== payload.authorizationReference
+                || receipt.reason !== payload.reason)
+                throw new Error('Control-plane receipt does not match the requested action.');
+            if (!('state' in payload) && ((payload.maxConcurrentJobs != null && receipt.targetMaxConcurrentJobs !== payload.maxConcurrentJobs)
+                || (payload.maxStorageMb != null && receipt.targetMaxStorageMb !== payload.maxStorageMb)
+                || (payload.maxReportSessions != null && receipt.targetMaxReportSessions !== payload.maxReportSessions))) {
+                throw new Error('Control-plane receipt quotas do not match the requested action.');
+            }
+            if (receipt.status !== 'Completed')
+                throw new Error(`Action reported ${receipt.status}. Review the audit trail before submitting again.`);
+            if (disposed)
+                return;
+            if (version === modalVersion) {
+                closeModals();
+                showReceipt(receipt);
+            }
+            busy = false;
+            if (onReload)
+                await onReload();
+            else
+                await reload();
+        }
+        catch (error) {
+            if (disposed)
+                return;
+            uncertain = submitted;
+            const message = asError(error).message + (submitted ? ' Refresh inventory and audit before submitting again.' : '');
+            if (version === modalVersion && alert)
+                alert.textContent = message;
+            status(message);
+        }
+        finally {
+            busy = false;
+            if (!disposed)
+                updateControls();
+        }
     }
-  }
-
-  // Export for Sandbox and live page
-  window.ControlPlaneUI = {
-    render: function (container, data, onReload) {
-      renderControlPlane(container, data);
-      initInteractiveControls(container, onReload);
+    function bindForm(id, prepare) {
+        const form = element(id);
+        form?.addEventListener('submit', event => {
+            event.preventDefault();
+            if (!canMutate())
+                return;
+            try {
+                const request = prepare();
+                void submit(form, request.path, request.tenantId, request.kind, request.payload);
+            }
+            catch (error) {
+                const alert = form.querySelector('[role="alert"]');
+                if (alert)
+                    alert.textContent = asError(error).message;
+            }
+        }, { signal: listeners.signal });
+    }
+    bindForm('formProvision', () => {
+        const tenantId = field('provTenantId');
+        const payload = { tenantId, activeRelease: null,
+            maxConcurrentJobs: quota('provMaxJobs', 1), maxStorageMb: quota('provStorageMb', 512),
+            maxReportSessions: null, ...attribution('prov') };
+        return { path: '/api/platform/control-plane/tenants/provision', tenantId, kind: 'Provision', payload };
+    });
+    bindForm('formQuotas', () => {
+        const tenantId = field('quotaTenantId');
+        const payload = { maxConcurrentJobs: quota('quotaMaxJobs', 1),
+            maxStorageMb: quota('quotaStorageMb', 512), maxReportSessions: null, ...attribution('quota') };
+        return { path: `/api/platform/control-plane/tenants/${encodeURIComponent(tenantId)}/quotas`, tenantId, kind: 'UpdateQuotas', payload };
+    });
+    bindForm('formState', () => {
+        const tenantId = field('stateTenantId'), state = element('stateSelect')?.value || '';
+        if (!['Active', 'Maintenance', 'Quarantined'].includes(state))
+            throw new Error('Choose a supported tenant state.');
+        const payload = { state, ...attribution('state') };
+        return { path: `/api/platform/control-plane/tenants/${encodeURIComponent(tenantId)}/state`, tenantId, kind: `SetState:${state}`, payload };
+    });
+    const tabs = [...container.querySelectorAll('.cp-tab')];
+    function selectTab(tab) {
+        for (const candidate of tabs) {
+            const selected = candidate === tab;
+            candidate.classList.toggle('active', selected);
+            candidate.setAttribute('aria-selected', String(selected));
+            candidate.tabIndex = selected ? 0 : -1;
+            const panel = element('panel-' + candidate.dataset.tab);
+            panel?.classList.toggle('active', selected);
+        }
+    }
+    for (const tab of tabs) {
+        tab.addEventListener('click', () => selectTab(tab), { signal: listeners.signal });
+        tab.addEventListener('keydown', event => {
+            if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key))
+                return;
+            event.preventDefault();
+            const index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+                : (tabs.indexOf(tab) + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+            const target = tabs[index];
+            if (target) {
+                selectTab(target);
+                target.focus();
+            }
+        }, { signal: listeners.signal });
+    }
+    element('tenantSearch')?.addEventListener('input', () => { renderSources(); }, { signal: listeners.signal });
+    element('btnRefreshControlPlane')?.addEventListener('click', () => { void reload(); }, { signal: listeners.signal });
+    element('btnOpenProvision')?.addEventListener('click', () => openModal('modalProvision'), { signal: listeners.signal });
+    container.querySelectorAll('.btn-cancel').forEach(button => button.addEventListener('click', closeModals, { signal: listeners.signal }));
+    element('tenantTableBody')?.addEventListener('click', event => {
+        const button = event.target instanceof Element ? event.target.closest('.btn-quota, .btn-state') : null;
+        const tenant = tenants?.find(candidate => candidate.tenantId === button?.dataset.tenant);
+        if (!button || !tenant || !canMutate())
+            return;
+        if (button.classList.contains('btn-quota')) {
+            openModal('modalQuotas');
+            input('quotaTenantId').value = tenant.tenantId;
+            input('quotaMaxJobs').value = String(tenant.maxConcurrentJobs);
+            input('quotaStorageMb').value = String(tenant.maxStorageMb);
+        }
+        else {
+            openModal('modalState');
+            input('stateTenantId').value = tenant.tenantId;
+            const select = element('stateSelect');
+            if (select)
+                select.value = tenant.state;
+        }
+    }, { signal: listeners.signal });
+    const controller = {
+        reload,
+        render(data) {
+            if (disposed)
+                return;
+            if (!isObject(data))
+                throw new TypeError('Invalid control-plane data.');
+            const snapshot = { overview: readControlPlaneOverview(data.overview),
+                tenants: readControlPlaneTenants(data.tenants), audit: readControlPlaneAudit(data.audit) };
+            generation++;
+            reads?.abort();
+            loading = false;
+            overview = snapshot.overview;
+            tenants = snapshot.tenants;
+            audit = snapshot.audit;
+            renderSources();
+        },
+        dispose() {
+            if (disposed)
+                return;
+            disposed = true;
+            generation++;
+            reads?.abort();
+            listeners.abort();
+            closeModals();
+            disposeDialogs?.();
+            const receipt = element('receiptAlert');
+            if (receipt) {
+                receipt.textContent = '';
+                receipt.style.display = 'none';
+            }
+            overview = null;
+            tenants = null;
+            audit = null;
+            controllers.delete(container);
+            updateControls();
+        }
+    };
+    controllers.set(container, controller);
+    updateControls();
+    return controller;
+}
+export const ControlPlaneUI = {
+    render(container, data, onReload) {
+        const controller = createControlPlaneController(container, onReload);
+        controller.render(data);
+        return controller;
     },
-    init: initInteractiveControls
-  };
-
-  if (document.getElementById('kpiStrip')) {
-    async function loadData() {
-      try {
-        const overview = await fetch('/api/platform/control-plane/overview').then(r => r.ok ? r.json() : null);
-        if (!overview) return;
-        const tenants = await fetch('/api/platform/control-plane/tenants').then(r => r.ok ? r.json() : []);
-        const audit = await fetch('/api/platform/control-plane/audit').then(r => r.ok ? r.json() : []);
-        renderControlPlane(document.body, { overview, tenants, audit });
-      } catch (err) {
-        console.warn('Control plane API offline or unauthorized.', err);
-      }
-    }
-
-    initInteractiveControls(document.body, loadData);
-    loadData();
-  }
-})();
+    init: createControlPlaneController,
+    reload: () => controllers.get(document.body)?.reload(),
+    dispose: () => controllers.get(document.body)?.dispose()
+};
+window.ControlPlaneUI = ControlPlaneUI;
+if (document.getElementById('kpiStrip'))
+    void createControlPlaneController(document.body).reload();

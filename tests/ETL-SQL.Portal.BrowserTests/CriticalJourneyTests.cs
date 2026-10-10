@@ -93,6 +93,9 @@ public sealed class CriticalJourneyTests(PortalJourneyFixture fixture)
         await page.FillAsync("#pr-name", reportName);
         await page.FillAsync("#pr-path", scriptFileName);
 
+        // Showing the form precedes the folder catalog response. Wait for the destination itself.
+        await Expect(page.Locator("#pr-folder option").Filter(new() { HasText = folderName })).ToHaveCountAsync(1);
+
         var folderOptionValue = await page.Locator("#pr-folder").EvaluateAsync<string?>(
             "(select, name) => Array.from(select.options).find(o => o.textContent.includes(name))?.value",
             folderName);

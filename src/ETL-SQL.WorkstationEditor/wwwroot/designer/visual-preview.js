@@ -8,6 +8,7 @@
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/visual-preview.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Mapping-aware sample rendering for report visuals.
  *

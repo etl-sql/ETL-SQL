@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Portal.Data;
@@ -50,6 +51,10 @@ public sealed class FolderPermissionEscalationTests
             new { groupId, permission })).IsSuccessStatusCode);
 
         var token = await SignInAsync(client, suffix);
+
+        using var aclRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/folders/{folderId}/acl/catalog");
+        aclRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(aclRequest)).StatusCode);
 
         var response = await AuthPost(client, token, "/api/studio/reports", new
         {

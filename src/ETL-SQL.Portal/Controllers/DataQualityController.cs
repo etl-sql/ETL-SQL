@@ -99,7 +99,7 @@ public sealed class DataQualityController(
     {
         var jobs = await jobHistory.GetAllJobsAsync();
         var result = jobs
-            .Select(j => new { Name = j.Name, DisplayName = j.DisplayName ?? j.Name, Script = j.Script, Description = j.Description })
+            .Select(j => new DataQualityJobDto(j.Name, j.DisplayName ?? j.Name, j.Script, j.Description))
             .OrderBy(j => j.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToList();
         return Ok(result);
@@ -643,6 +643,15 @@ public sealed class DataQualityController(
                 or DataQualityColumns.DiscardedStatus))
             return BadRequest(new { error = "Disposition must be 'released', 'replayed', or 'discarded'." });
 
+        var expectedStatus = request.ExpectedStatus?.Trim().ToLowerInvariant();
+        if (expectedStatus is not (DataQualityColumns.QuarantinedStatus or DataQualityColumns.ReleasedStatus or DataQualityColumns.ReplayingStatus))
+            return BadRequest(new { error = "ExpectedStatus must be 'quarantined', 'released', or 'replaying'." });
+        if ((expectedStatus != DataQualityColumns.ReplayingStatus && disposition == DataQualityColumns.ReplayedStatus)
+            || (expectedStatus == DataQualityColumns.ReplayingStatus && disposition == DataQualityColumns.DiscardedStatus))
+            return BadRequest(new { error = "The requested disposition does not apply to the observed row state." });
+        if (expectedStatus == DataQualityColumns.ReplayingStatus && request.Changes is { Count: > 0 })
+            return BadRequest(new { error = "Recovery of a replay claim cannot edit captured source values." });
+
         var manifest = await FindManifestAsync(request.QuarantineTarget, request.JobName);
         if (manifest is null)
             return NotFound(new { error = "Quarantine replay manifest was not found." });
@@ -657,7 +666,7 @@ public sealed class DataQualityController(
             });
         }
 
-        if (!TryBuildDispositionStatement(manifest.QuarantineTarget, disposition, request.RowIds, request.Changes, out var statement, out var error))
+        if (!TryBuildDispositionStatement(manifest.QuarantineTarget, disposition, expectedStatus, request.RowIds, request.Changes, out var statement, out var error))
             return BadRequest(new { error });
 
         try
@@ -922,6 +931,7 @@ public sealed class DataQualityController(
     private static bool TryBuildDispositionStatement(
         string target,
         string disposition,
+        string expectedStatus,
         IReadOnlyList<string> rowIds,
         IReadOnlyDictionary<string, string?>? changes,
         out string statement,
@@ -971,7 +981,7 @@ public sealed class DataQualityController(
 
         statement = $"UPDATE {target} SET {string.Join(", ", assignments)} "
             + $"WHERE {DataQualityColumns.RowId} IN ({string.Join(", ", ids)}) "
-            + $"AND {DataQualityColumns.Status} = {ToSqlLiteral(DataQualityColumns.QuarantinedStatus)};";
+            + $"AND {DataQualityColumns.Status} = {ToSqlLiteral(expectedStatus)};";
         return true;
     }
 

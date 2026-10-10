@@ -95,6 +95,31 @@ END;");
             Assert.Same(later, ConnectorRegistry.Instance);
         }
 
+        [Fact]
+        public void UseScoped_Captures_The_Registry_Before_Construction_Publishes_Its_Replacement()
+        {
+            var original = ConnectorRegistry.Instance;
+            using (ConnectorRegistry.UseScoped(() => new ConnectorRegistry(new IConnector[]
+                { new ETL_SQL.Connectors.MockDb.MockDbConnector() })))
+            {
+                Assert.NotSame(original, ConnectorRegistry.Instance);
+                Assert.Equal(new[] { "MOCKDB" }, ConnectorRegistry.Instance!.GetRegisteredNames());
+            }
+            Assert.Same(original, ConnectorRegistry.Instance);
+        }
+
+        [Fact]
+        public void UseScoped_Restores_The_Registry_When_Construction_Fails_After_Publishing()
+        {
+            var original = ConnectorRegistry.Instance;
+            Assert.Throws<InvalidOperationException>(() => ConnectorRegistry.UseScoped(() =>
+            {
+                _ = new ConnectorRegistry(Array.Empty<IConnector>());
+                throw new InvalidOperationException("fixture failure");
+            }));
+            Assert.Same(original, ConnectorRegistry.Instance);
+        }
+
 
         [Fact]
         public async Task DialectKeyword_Warns_When_TOP_Used_In_Postgres_Pushdown()

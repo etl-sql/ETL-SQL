@@ -226,7 +226,6 @@ public sealed class PortalAccessibilityTests(PortalJourneyFixture fixture)
         await using var session = await NewSessionAsync(Desktop);
         await fixture.SignInAsync(session.Page);
         await GoToAsync(session.Page, path);
-        await session.Page.WaitForTimeoutAsync(500);
 
         // A console error usually does not stop anything, which is exactly why it survives review.
         // It still means a path on this page is broken and nobody has been forced to look at it.

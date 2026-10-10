@@ -334,10 +334,21 @@ public sealed class GovernanceDashboardTests
 
         await PostJsonAsync(client, token, $"/api/governance/findings/{finding["id"]!.GetValue<int>()}/decide",
             new { decision = "accept-risk", categoryValue = (string?)null, reason = "Known gap.", assetVersion = version });
-        await PostJsonAsync(client, token, "/api/governance/assets/review",
+        var review = await PostJsonAsync(client, token, "/api/governance/assets/review",
             new { assetKey, assetVersion = version, note = "Checked." });
-        await PostJsonAsync(client, token, "/api/governance/assets/badges",
+        Assert.Equal(3, review.Count);
+        Assert.Equal(assetKey, review["assetKey"]!.GetValue<string>());
+        Assert.Equal(version, review["assetVersion"]!.GetValue<string>());
+        Assert.NotNull(review["reviewedAtUtc"]);
+        var assigned = await PostJsonAsync(client, token, "/api/governance/assets/badges",
             new { assetKey, badge = "Reviewed", assetVersion = version, reason = (string?)null });
+        Assert.Equal(2, assigned.Count);
+        Assert.Equal(assetKey, assigned["assetKey"]!.GetValue<string>());
+        Assert.Equal("Reviewed", assigned["badge"]!.GetValue<string>());
+        var existing = await PostJsonAsync(client, token, "/api/governance/assets/badges",
+            new { assetKey, badge = "Reviewed", assetVersion = version, reason = (string?)null });
+        Assert.Equal(3, existing.Count);
+        Assert.NotNull(existing["assignedAtUtc"]);
         await AuthPut(client, token, "/api/governance/settings", DefaultSettings(targetScore: 70));
 
         using var scope = factory.Services.CreateScope();

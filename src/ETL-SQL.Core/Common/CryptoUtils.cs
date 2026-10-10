@@ -178,7 +178,7 @@ public static class CryptoUtils
             throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
 
         var hashAlgo = algo ?? HashAlgorithmName.SHA256;
-        using (var fsIn = new FileStream(inputFile, FileMode.Open))
+        using (var fsIn = new FileStream(inputFile, FileMode.Open, FileAccess.Read, FileShare.Read))
         {
             if (TryReadFileMagicV2(fsIn))
             {

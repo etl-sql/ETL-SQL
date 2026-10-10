@@ -105,7 +105,7 @@ async function init() {
     // needs them for. Its individual views are not all open, and each is revealed only to the roles
     // its API accepts — offering a view that answers 403 reads as the product being broken rather
     // than as a permission the user lacks.
-    const isGovUser = hasRole(identity, 'Admin', 'GovernanceManager', 'DataSteward', 'GovernanceViewer');
+    const isGovUser = hasRole(identity, 'Admin', 'GovernanceManager', 'StewardshipManager', 'DataSteward', 'GovernanceViewer', 'StewardshipViewer');
     if (isGovUser) {
       document.getElementById('govNavOverview').style.display = '';
       document.getElementById('govNavWorkqueue').style.display = '';
@@ -118,8 +118,7 @@ async function init() {
       document.getElementById('govNavQuarantine').style.display = '';
     }
 
-    canGovernanceOverview =
-      hasRole(identity, 'Admin', 'GovernanceManager', 'DataSteward', 'GovernanceViewer');
+    canGovernanceOverview = isGovUser;
     canQuarantine = hasRole(identity, 'Admin', 'DataSteward');
   } catch {
     // Identity is unreadable, so no role-gated entry is revealed. The two flags above keep

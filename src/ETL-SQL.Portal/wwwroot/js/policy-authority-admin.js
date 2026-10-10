@@ -1,425 +1,435 @@
-// Admin -> Policy Authority surface over api/admin/policy-authority.
-//
-// The private signing key is never handled here. This module shows signer status, validates and
-// publishes organization-policy JSON, manages staged/active versions, and registers/revokes
-// enrolled machine identities that are allowed to retrieve signed envelopes.
-
-function esc(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-function escAttr(s) {
-  return esc(s).replace(/'/g, '&#39;');
-}
-function formatDate(value) {
-  return value ? new Date(value).toLocaleString() : '-';
-}
-function defaultExpiry() {
-  const date = new Date();
-  date.setDate(date.getDate() + 30);
-  return date.toISOString().slice(0, 16);
-}
-function toIsoFromLocal(value) {
-  return value ? new Date(value).toISOString() : null;
-}
-
-const SAMPLE_POLICY = JSON.stringify({
-  schemaVersion: "1.0"
-}, null, 2);
-
-const PANEL_HTML = `
-  <div class="card">
-    <div class="card-header">
-      <div>
-        <span class="section-kicker">Enterprise policy authority</span>
-        <h3>Signed Organization Policies</h3>
-      </div>
-      <div class="admin-action-group">
-        <span id="pa-status" class="form-hint"></span>
-        <button class="btn btn-outline btn-sm" id="pa-refreshBtn">Refresh</button>
-      </div>
-    </div>
-    <div id="pa-statusBody"></div>
-  </div>
-
-  <div class="card">
-    <div class="card-header"><h3>Publish policy version</h3></div>
-    <div class="form-row">
-      <div class="form-group">
-        <label for="pa-tenant">Tenant</label>
-        <input id="pa-tenant" type="text" value="default" autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label for="pa-env">Environment</label>
-        <input id="pa-env" type="text" value="prod" autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label for="pa-version">Policy version</label>
-        <input id="pa-version" type="text" placeholder="2026.07.11.1" autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label for="pa-reviewer">Reviewer (optional)</label>
-        <input id="pa-reviewer" type="text" autocomplete="off">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label for="pa-expires">Expires at</label>
-        <input id="pa-expires" type="datetime-local">
-      </div>
-      <div class="form-group">
-        <label for="pa-staged">Rollout state</label>
-        <select id="pa-staged">
-          <option value="false">Publish active</option>
-          <option value="true">Stage only</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-group">
-      <label for="pa-policyJson">Policy JSON</label>
-      <textarea id="pa-policyJson" rows="12" spellcheck="false"></textarea>
-    </div>
-    <div id="pa-error" class="error-msg"></div>
-    <div class="form-actions">
-      <button class="btn btn-outline btn-sm" id="pa-validateBtn">Validate</button>
-      <button class="btn btn-primary btn-sm" id="pa-publishBtn">Publish</button>
-      <span id="pa-validateResult" class="form-hint"></span>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-header">
-      <div>
-        <span class="section-kicker">Progressive rollout</span>
-        <h3>Publish canary</h3>
-      </div>
-    </div>
-    <p class="form-hint">Publishes the <strong>Policy JSON</strong> and <strong>Expires at</strong> above to a
-      cohort only — the fleet stays on the active version until you promote. Halting reverts the cohort.</p>
-    <div class="form-row">
-      <div class="form-group">
-        <label for="pa-canaryVersion">Canary version</label>
-        <input id="pa-canaryVersion" type="text" placeholder="2026.07.11.1-canary" autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label for="pa-cohortType">Cohort</label>
-        <select id="pa-cohortType">
-          <option value="percentage">Percentage of fleet</option>
-          <option value="group">Named machine group</option>
-        </select>
-      </div>
-      <div class="form-group" id="pa-percentageGroup">
-        <label for="pa-canaryPercentage">Percentage (1–100)</label>
-        <input id="pa-canaryPercentage" type="number" min="1" max="100" value="10">
-      </div>
-      <div class="form-group" id="pa-groupGroup" style="display:none">
-        <label for="pa-canaryGroup">Group name</label>
-        <input id="pa-canaryGroup" type="text" placeholder="ring0" autocomplete="off">
-      </div>
-    </div>
-    <div id="pa-canaryError" class="error-msg"></div>
-    <div class="form-actions">
-      <button class="btn btn-primary btn-sm" id="pa-publishCanaryBtn">Publish canary</button>
-      <span id="pa-canaryResult" class="form-hint"></span>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-header">
-      <div>
-        <span class="section-kicker">Version history</span>
-        <h3>Policies for <span id="pa-scopeLabel"></span></h3>
-      </div>
-      <div class="admin-action-group">
-        <button class="btn btn-outline btn-sm" id="pa-loadVersionsBtn">Load versions</button>
-      </div>
-    </div>
-    <div id="pa-versionWrap"><div class="empty-state">Choose tenant/environment and load versions.</div></div>
-  </div>
-
-  <div class="card">
-    <div class="card-header">
-      <div>
-        <span class="section-kicker">Machine enrollment</span>
-        <h3>Registered Machines</h3>
-      </div>
-      <div class="admin-action-group">
-        <button class="btn btn-outline btn-sm" id="pa-loadMachinesBtn">Load machines</button>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label for="pa-machineId">Machine ID</label>
-        <input id="pa-machineId" type="text" placeholder="32-character enrollment machine GUID" autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label for="pa-enrollmentId">Enrollment ID</label>
-        <input id="pa-enrollmentId" type="text" placeholder="32-character enrollment GUID" autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label for="pa-thumbprint">Client cert thumbprint (optional)</label>
-        <input id="pa-thumbprint" type="text" autocomplete="off">
-      </div>
-    </div>
-    <div id="pa-machineError" class="error-msg"></div>
-    <div class="form-actions">
-      <button class="btn btn-primary btn-sm" id="pa-registerMachineBtn">Register machine</button>
-    </div>
-    <div id="pa-machineWrap"><div class="empty-state">No machines loaded.</div></div>
-  </div>`;
-
-export function createPolicyAuthorityAdmin({ host, policyAuthorityApi }) {
-  host.innerHTML = PANEL_HTML;
-  const $ = (id) => host.querySelector(`#${id}`);
-
-  $('pa-expires').value = defaultExpiry();
-  $('pa-policyJson').value = SAMPLE_POLICY;
-
-  function scope() {
-    return {
-      tenant: $('pa-tenant').value.trim(),
-      environment: $('pa-env').value.trim()
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.Portal/BrowserSources/policy-authority-admin.ts
+ * Run: node scripts/sync-assets.js
+ */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
+import { PANEL_HTML, SAMPLE_POLICY, escapePolicy, renderPolicyVersions, renderPolicyMachines, defaultPolicyExpiry, parsePolicyExpiry } from './policy-authority-view.js';
+import { readPolicyAuthorityStatus, readPolicyValidation, readPolicyVersions, readPolicyMachines, readPolicyVersionReceipt, readPolicyMachineReceipt } from './policy-authority-responses.js';
+const controllers = new WeakMap();
+const key = (scope) => JSON.stringify([scope.tenant, scope.environment]);
+const guid = (value) => /^[a-f0-9]{32}$/i.test(value);
+export function createPolicyAuthorityAdmin({ host: suppliedHost, policyAuthorityApi: api }) {
+    if (!suppliedHost)
+        throw new Error('Policy authority host element required.');
+    const host = suppliedHost, existing = controllers.get(host);
+    if (existing)
+        return existing;
+    host.innerHTML = PANEL_HTML;
+    const element = (id) => {
+        const found = host.querySelector('#' + id);
+        if (!found)
+            throw new Error(`Missing policy authority field ${id}.`);
+        return found;
     };
-  }
-  function setError(id, text) {
-    const box = $(id);
-    box.textContent = text || '';
-    box.classList.toggle('show', !!text);
-  }
-  function requireScope() {
-    const s = scope();
-    if (!s.tenant || !s.environment) throw new Error('Tenant and environment are required.');
-    $('pa-scopeLabel').textContent = `${s.tenant}/${s.environment}`;
-    return s;
-  }
-
-  async function loadStatus() {
-    try {
-      const status = await policyAuthorityApi.status();
-      $('pa-status').textContent = status.configured ? 'Configured' : 'Not configured';
-      $('pa-statusBody').innerHTML = status.configured
-        ? `<span class="chip chip-active">Signing key available</span>
-           <p class="form-hint">Public key fingerprint source is the configured signer. Private key material is never exported through this UI.</p>`
-        : `<span class="chip chip-inactive">Signing disabled</span>
-           <p class="form-hint">${esc(status.error || 'Configure Portal:PolicyAuthority:SigningCertThumbprint to publish signed envelopes.')}</p>`;
-    } catch (err) {
-      $('pa-statusBody').innerHTML = `<div class="error-msg show">${esc(err.message)}</div>`;
-    }
-  }
-
-  async function loadVersions() {
-    const { tenant, environment } = requireScope();
-    try {
-      const versions = await policyAuthorityApi.versions(tenant, environment);
-      if (!versions.length) {
-        $('pa-versionWrap').innerHTML = '<div class="empty-state">No policy versions published for this scope.</div>';
-        return;
-      }
-      $('pa-versionWrap').innerHTML = `
-        <table class="data-table">
-          <thead><tr><th>Version</th><th>State</th><th>Cohort</th><th>Hash</th><th>Issued</th><th>Expires</th><th>Author</th><th></th></tr></thead>
-          <tbody>${versions.map((v) => `
-            <tr data-version="${escAttr(v.policyVersion)}">
-              <td><code>${esc(v.policyVersion)}</code></td>
-              <td>${stateChip(v.rolloutState)}</td>
-              <td>${cohortLabel(v)}</td>
-              <td><code>${esc(String(v.policyHash || '').slice(0, 12))}</code></td>
-              <td>${esc(formatDate(v.issuedAtUtc))}</td>
-              <td>${esc(formatDate(v.expiresAtUtc))}</td>
-              <td>${esc(v.author || '-')}</td>
-              <td class="table-actions">
-                ${v.rolloutState === 'Staged' ? '<button class="btn btn-outline btn-sm" data-pa-act="activate">Activate</button>' : ''}
-                ${v.rolloutState === 'Canary' ? '<button class="btn btn-primary btn-sm" data-pa-act="promote">Promote</button>' : ''}
-                ${v.rolloutState === 'Canary' ? '<button class="btn btn-danger-soft btn-sm" data-pa-act="halt">Halt</button>' : ''}
-                <button class="btn btn-outline btn-sm" data-pa-act="rollback">Rollback to</button>
-              </td>
-            </tr>`).join('')}</tbody>
-        </table>`;
-    } catch (err) {
-      $('pa-versionWrap').innerHTML = `<div class="error-msg show">${esc(err.message)}</div>`;
-    }
-  }
-
-  function stateChip(state) {
-    if (state === 'Active') return '<span class="chip chip-active">Active</span>';
-    if (state === 'Staged') return '<span class="badge badge-warn">Staged</span>';
-    if (state === 'Canary') return '<span class="badge badge-warn">Canary</span>';
-    if (state === 'RolledBack') return '<span class="chip chip-inactive">Rolled back</span>';
-    return `<span class="form-hint">${esc(state)}</span>`;
-  }
-
-  // Escaped; group names are operator-supplied. Only Canary versions carry a cohort.
-  function cohortLabel(v) {
-    if (v.canaryGroup) return `<span class="chip">group: ${esc(v.canaryGroup)}</span>`;
-    if (v.canaryPercentage != null) return `<span class="chip">${esc(String(v.canaryPercentage))}%</span>`;
-    return '<span class="form-hint">—</span>';
-  }
-
-  async function loadMachines() {
-    const { tenant, environment } = requireScope();
-    try {
-      const machines = await policyAuthorityApi.machines(tenant, environment);
-      if (!machines.length) {
-        $('pa-machineWrap').innerHTML = '<div class="empty-state">No machines registered for this scope.</div>';
-        return;
-      }
-      $('pa-machineWrap').innerHTML = `
-        <table class="data-table">
-          <thead><tr><th>Machine</th><th>Enrollment</th><th>Cert</th><th>Status</th><th>Registered</th><th>Last seen</th><th></th></tr></thead>
-          <tbody>${machines.map((m) => `
-            <tr data-machine="${escAttr(m.machineId)}">
-              <td><code>${esc(m.machineId)}</code></td>
-              <td><code>${esc(m.enrollmentId)}</code></td>
-              <td>${m.requiresClientCertificate ? '<span class="chip chip-active">Required</span>' : '<span class="form-hint">Not required</span>'}</td>
-              <td>${m.revoked ? `<span class="chip chip-inactive">Revoked</span> ${esc(m.revokedReason || '')}` : '<span class="chip chip-active">Active</span>'}</td>
-              <td>${esc(formatDate(m.registeredAtUtc))}</td>
-              <td>${esc(formatDate(m.lastSeenAtUtc))}</td>
-              <td class="table-actions">
-                ${m.revoked ? '' : '<button class="btn btn-danger-soft btn-sm" data-pa-act="revoke-machine">Revoke</button>'}
-              </td>
-            </tr>`).join('')}</tbody>
-        </table>`;
-    } catch (err) {
-      $('pa-machineWrap').innerHTML = `<div class="error-msg show">${esc(err.message)}</div>`;
-    }
-  }
-
-  async function validatePolicy() {
-    setError('pa-error', '');
-    const result = await policyAuthorityApi.validate($('pa-policyJson').value);
-    $('pa-validateResult').innerHTML = result.isValid
-      ? '<span class="chip chip-active">Valid</span>'
-      : `<span class="badge badge-error">Invalid</span> ${esc((result.errors || []).join('; '))}`;
-    return result.isValid;
-  }
-
-  $('pa-refreshBtn').addEventListener('click', loadStatus);
-  $('pa-loadVersionsBtn').addEventListener('click', () => loadVersions().catch((err) => setError('pa-error', err.message)));
-  $('pa-loadMachinesBtn').addEventListener('click', () => loadMachines().catch((err) => setError('pa-machineError', err.message)));
-  $('pa-validateBtn').addEventListener('click', () => validatePolicy().catch((err) => setError('pa-error', err.message)));
-
-  $('pa-cohortType').addEventListener('change', () => {
-    const byGroup = $('pa-cohortType').value === 'group';
-    $('pa-groupGroup').style.display = byGroup ? '' : 'none';
-    $('pa-percentageGroup').style.display = byGroup ? 'none' : '';
-  });
-
-  $('pa-publishCanaryBtn').addEventListener('click', async () => {
-    setError('pa-canaryError', '');
-    try {
-      const { tenant, environment } = requireScope();
-      const expiresAtUtc = toIsoFromLocal($('pa-expires').value);
-      if (!expiresAtUtc) throw new Error('Set "Expires at" above before publishing a canary.');
-      const byGroup = $('pa-cohortType').value === 'group';
-      const published = await policyAuthorityApi.publishCanary({
-        tenant,
-        environment,
-        policyVersion: $('pa-canaryVersion').value.trim(),
-        policyJson: $('pa-policyJson').value,
-        reviewer: $('pa-reviewer').value.trim() || null,
-        expiresAtUtc,
-        canaryGroup: byGroup ? ($('pa-canaryGroup').value.trim() || null) : null,
-        canaryPercentage: byGroup ? null : Number($('pa-canaryPercentage').value)
-      });
-      $('pa-canaryResult').innerHTML = `<span class="chip chip-active">Canary ${esc(published.policyVersion)} published</span>`;
-      await loadVersions();
-    } catch (err) {
-      setError('pa-canaryError', err.message);
-    }
-  });
-
-  $('pa-publishBtn').addEventListener('click', async () => {
-    setError('pa-error', '');
-    try {
-      const { tenant, environment } = requireScope();
-      const expiresAtUtc = toIsoFromLocal($('pa-expires').value);
-      if (!expiresAtUtc) throw new Error('Expiration is required.');
-      const published = await policyAuthorityApi.publish({
-        tenant,
-        environment,
-        policyVersion: $('pa-version').value.trim(),
-        policyJson: $('pa-policyJson').value,
-        reviewer: $('pa-reviewer').value.trim() || null,
-        expiresAtUtc,
-        staged: $('pa-staged').value === 'true'
-      });
-      $('pa-validateResult').innerHTML = `<span class="chip chip-active">Published ${esc(published.policyVersion)}</span>`;
-      await loadVersions();
-    } catch (err) {
-      setError('pa-error', err.message);
-    }
-  });
-
-  $('pa-registerMachineBtn').addEventListener('click', async () => {
-    setError('pa-machineError', '');
-    try {
-      const { tenant, environment } = requireScope();
-      await policyAuthorityApi.registerMachine({
-        tenant,
-        environment,
-        machineId: $('pa-machineId').value.trim(),
-        enrollmentId: $('pa-enrollmentId').value.trim(),
-        clientCertificateThumbprint: $('pa-thumbprint').value.trim() || null
-      });
-      $('pa-machineId').value = '';
-      $('pa-enrollmentId').value = '';
-      $('pa-thumbprint').value = '';
-      await loadMachines();
-    } catch (err) {
-      setError('pa-machineError', err.message);
-    }
-  });
-
-  host.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-pa-act]');
-    if (!btn) return;
-    try {
-      const { tenant, environment } = requireScope();
-      if (btn.dataset.paAct === 'activate') {
-        const version = btn.closest('tr')?.dataset.version;
-        await policyAuthorityApi.activate(tenant, environment, version);
-        await loadVersions();
-      } else if (btn.dataset.paAct === 'promote') {
-        const version = btn.closest('tr')?.dataset.version;
-        if (!await window.ETLSQLFeedback.confirm(`Promote canary ${version} to the whole fleet?`, { title: 'Promote policy canary', impact: 'All enrolled machines in this scope will receive this policy.', confirmLabel: 'Promote canary', auditAction: 'policy.canary.promote' })) return;
-        await policyAuthorityApi.promoteCanary(tenant, environment, version);
-        await loadVersions();
-      } else if (btn.dataset.paAct === 'halt') {
-        const version = btn.closest('tr')?.dataset.version;
-        if (!await window.ETLSQLFeedback.confirm(`Halt canary ${version}?`, { title: 'Halt policy canary', impact: 'Canary machines will revert to the active policy.', confirmLabel: 'Halt canary', danger: true, auditAction: 'policy.canary.halt' })) return;
-        await policyAuthorityApi.haltCanary(tenant, environment, version, $('pa-reviewer').value.trim() || null);
-        await loadVersions();
-      } else if (btn.dataset.paAct === 'rollback') {
-        const targetPolicyVersion = btn.closest('tr')?.dataset.version;
-        const newPolicyVersion = await window.ETLSQLFeedback.prompt(`Create a rollback policy targeting ${targetPolicyVersion}.`, { title: 'Create rollback policy', label: 'New policy version', required: true, confirmLabel: 'Create rollback', auditAction: 'policy.rollback.create' });
-        if (!newPolicyVersion) return;
-        const expiresAtUtc = toIsoFromLocal($('pa-expires').value);
-        await policyAuthorityApi.rollback({
-          tenant,
-          environment,
-          targetPolicyVersion,
-          newPolicyVersion,
-          reviewer: $('pa-reviewer').value.trim() || null,
-          expiresAtUtc
+    const input = (id) => element(id);
+    const error = (id, message = '') => { element(id).textContent = message; element(id).classList.toggle('show', !!message); };
+    const scope = () => ({ tenant: input('pa-tenant').value.trim(), environment: input('pa-env').value.trim() });
+    const requireScope = () => {
+        const value = scope();
+        if (!value.tenant || !value.environment)
+            throw new Error('Tenant and environment are required.');
+        return value;
+    };
+    input('pa-expires').value = defaultPolicyExpiry();
+    input('pa-policyJson').value = SAMPLE_POLICY;
+    const listeners = new AbortController(), lifetime = new AbortController();
+    let disposed = false, epoch = 0, busy = false, validating = false, validationVersion = 0;
+    let status = null, versions = null, machines = null;
+    let statusVersion = 0, versionsVersion = 0, machinesVersion = 0, refreshVersion = 0;
+    let statusRead = null, versionRead = null, machineRead = null;
+    let validationRead = null, sentScope = null;
+    const uncertain = new Set();
+    const current = (generation, requested) => !disposed && generation === epoch && key(requested) === key(scope());
+    function controls() {
+        const blocked = disposed || busy || uncertain.has(key(scope())) || !scope().tenant || !scope().environment;
+        host.querySelectorAll('#pa-publishBtn, #pa-publishCanaryBtn').forEach(button => { button.disabled = blocked || status?.configured !== true; });
+        element('pa-registerMachineBtn').disabled = blocked || machines === null;
+        element('pa-validateBtn').disabled = disposed || validating;
+        host.querySelectorAll('[data-pa-act]').forEach(button => {
+            button.disabled = blocked || (button.dataset.paAct === 'revoke-machine' ? machines === null : versions === null)
+                || ['halt', 'rollback'].includes(button.dataset.paAct || '') && status?.configured !== true;
         });
-        await loadVersions();
-      } else if (btn.dataset.paAct === 'revoke-machine') {
-        const machineId = btn.closest('tr')?.dataset.machine;
-        const reason = await window.ETLSQLFeedback.prompt(`Explain why machine ${machineId} must be revoked.`, { title: 'Revoke machine', label: 'Revocation reason', multiline: true, required: true, minLength: 8, confirmLabel: 'Revoke machine', danger: true, auditAction: 'policy.machine.revoke' });
-        if (!reason) return;
-        await policyAuthorityApi.revokeMachine(machineId, reason);
-        await loadMachines();
-      }
-    } catch (err) {
-      setError('pa-error', err.message);
-      setError('pa-machineError', err.message);
     }
-  });
-
-  async function load() {
-    requireScope();
-    await loadStatus();
-    await Promise.allSettled([loadVersions(), loadMachines()]);
-  }
-
-  return { load };
+    function invalidateScope() {
+        epoch++;
+        versionsVersion++;
+        machinesVersion++;
+        refreshVersion++;
+        versionRead?.abort();
+        machineRead?.abort();
+        versions = null;
+        machines = null;
+        if (sentScope)
+            uncertain.add(sentScope);
+        host.setAttribute('aria-busy', 'false');
+        element('pa-scopeLabel').textContent = `${scope().tenant}/${scope().environment}`;
+        element('pa-versionWrap').innerHTML = '<div class="empty-state">Scope changed. Load versions for this scope.</div>';
+        element('pa-machineWrap').innerHTML = '<div class="empty-state">Scope changed. Load machines for this scope.</div>';
+        for (const id of ['pa-error', 'pa-canaryError', 'pa-machineError'])
+            error(id);
+        element('pa-actionResult').textContent = uncertain.has(key(scope())) ? 'An earlier outcome is unconfirmed. Refresh this scope before retrying.' : '';
+        element('pa-canaryResult').textContent = '';
+        controls();
+    }
+    async function loadStatus() {
+        const version = ++statusVersion;
+        statusRead?.abort();
+        statusRead = new AbortController();
+        status = null;
+        controls();
+        element('pa-status').textContent = 'Checking signer…';
+        try {
+            const result = readPolicyAuthorityStatus(await api.status(statusRead.signal));
+            if (disposed || version !== statusVersion)
+                return false;
+            status = result;
+            element('pa-status').textContent = result.configured ? 'Configured' : 'Not configured';
+            element('pa-statusBody').innerHTML = result.configured
+                ? '<span class="chip chip-active">Signing key available</span><p class="form-hint">Private key material is never exported through this UI.</p>'
+                : '<span class="chip chip-inactive">Signing disabled</span><p class="form-hint">' + escapePolicy(result.error) + '</p>';
+            return true;
+        }
+        catch {
+            if (disposed || version !== statusVersion)
+                return false;
+            status = null;
+            element('pa-status').textContent = 'Signer status unavailable';
+            element('pa-statusBody').innerHTML = '<div class="error-msg show" role="alert">Policy signer status is unavailable or incomplete. Refresh to retry.</div>';
+            return false;
+        }
+        finally {
+            if (!disposed && version === statusVersion)
+                controls();
+        }
+    }
+    async function loadVersions() {
+        const generation = epoch, requested = scope(), version = ++versionsVersion;
+        versionRead?.abort();
+        versionRead = new AbortController();
+        versions = null;
+        controls();
+        element('pa-scopeLabel').textContent = `${requested.tenant}/${requested.environment}`;
+        element('pa-versionWrap').textContent = 'Loading policy versions…';
+        try {
+            requireScope();
+            const result = readPolicyVersions(await api.versions(requested.tenant, requested.environment, versionRead.signal), requested);
+            if (!current(generation, requested) || version !== versionsVersion)
+                return false;
+            versions = result;
+            element('pa-versionWrap').innerHTML = renderPolicyVersions(result);
+            return true;
+        }
+        catch {
+            if (!current(generation, requested) || version !== versionsVersion)
+                return false;
+            element('pa-versionWrap').innerHTML = '<div class="error-msg show" role="alert">Policy versions are unavailable or incomplete for this scope. Load versions to retry.</div>';
+            return false;
+        }
+        finally {
+            if (current(generation, requested) && version === versionsVersion)
+                controls();
+        }
+    }
+    async function loadMachines() {
+        const generation = epoch, requested = scope(), version = ++machinesVersion;
+        machineRead?.abort();
+        machineRead = new AbortController();
+        machines = null;
+        controls();
+        element('pa-machineWrap').textContent = 'Loading machines…';
+        try {
+            requireScope();
+            const result = readPolicyMachines(await api.machines(requested.tenant, requested.environment, machineRead.signal), requested);
+            if (!current(generation, requested) || version !== machinesVersion)
+                return false;
+            machines = result;
+            element('pa-machineWrap').innerHTML = renderPolicyMachines(result);
+            return true;
+        }
+        catch {
+            if (!current(generation, requested) || version !== machinesVersion)
+                return false;
+            element('pa-machineWrap').innerHTML = '<div class="error-msg show" role="alert">Policy machines are unavailable or incomplete for this scope. Load machines to retry.</div>';
+            return false;
+        }
+        finally {
+            if (current(generation, requested) && version === machinesVersion)
+                controls();
+        }
+    }
+    async function load() {
+        if (disposed)
+            return;
+        const generation = epoch, requested = scope(), version = ++refreshVersion;
+        host.setAttribute('aria-busy', 'true');
+        const results = await Promise.all([loadStatus(), loadVersions(), loadMachines()]);
+        if (!disposed && version === refreshVersion) {
+            host.setAttribute('aria-busy', 'false');
+            if (current(generation, requested) && !busy && results.every(Boolean)) {
+                if (uncertain.delete(key(requested))) {
+                    element('pa-actionResult').textContent = 'Scope refreshed. Inspect the latest versions and machine state before retrying.';
+                    for (const id of ['pa-error', 'pa-canaryError', 'pa-machineError'])
+                        error(id);
+                }
+                controls();
+            }
+        }
+    }
+    async function validate() {
+        if (disposed || validating)
+            return;
+        const json = input('pa-policyJson').value, version = ++validationVersion;
+        validating = true;
+        validationRead = new AbortController();
+        controls();
+        error('pa-error');
+        element('pa-validateResult').textContent = 'Validating…';
+        try {
+            const result = readPolicyValidation(await api.validate(json, validationRead.signal));
+            if (disposed || version !== validationVersion || json !== input('pa-policyJson').value)
+                return;
+            element('pa-validateResult').textContent = result.isValid ? 'Valid' : `Invalid: ${result.errors.join('; ')}`;
+        }
+        catch {
+            if (!disposed && version === validationVersion)
+                element('pa-validateResult').textContent = 'Policy validation unavailable.';
+        }
+        finally {
+            if (!disposed && version === validationVersion) {
+                validating = false;
+                controls();
+            }
+        }
+    }
+    async function mutate(errorId, action) {
+        if (disposed || busy || uncertain.has(key(scope())))
+            return;
+        const requested = scope(), generation = epoch, versionGeneration = versionsVersion, machineGeneration = machinesVersion;
+        busy = true;
+        error(errorId);
+        controls();
+        const stillCurrent = () => current(generation, requested) && versionGeneration === versionsVersion && machineGeneration === machinesVersion;
+        const send = async (operation) => {
+            if (!stillCurrent())
+                throw new Error('Scope changed.');
+            sentScope = key(requested);
+            return await operation();
+        };
+        let message = null;
+        try {
+            requireScope();
+            message = await action(requested, send, stillCurrent);
+        }
+        catch (value) {
+            if (sentScope)
+                uncertain.add(key(requested));
+            if (stillCurrent())
+                error(errorId, sentScope
+                    ? 'Outcome is unconfirmed. Refresh and inspect this scope before retrying.'
+                    : value instanceof Error ? value.message : 'Policy action unavailable.');
+        }
+        finally {
+            if (!stillCurrent() && sentScope)
+                uncertain.add(key(requested));
+            sentScope = null;
+            busy = false;
+            if (!disposed)
+                controls();
+        }
+        if (message && stillCurrent()) {
+            element('pa-actionResult').textContent = message;
+            await Promise.all([loadVersions(), loadMachines()]);
+        }
+    }
+    async function publish(canary) {
+        if (status?.configured !== true)
+            return;
+        await mutate(canary ? 'pa-canaryError' : 'pa-error', async (requested, send, stillCurrent) => {
+            const version = input(canary ? 'pa-canaryVersion' : 'pa-version').value.trim();
+            if (!version)
+                throw new Error('Policy version is required.');
+            const common = { ...requested, policyVersion: version, policyJson: input('pa-policyJson').value,
+                reviewer: input('pa-reviewer').value.trim() || null, expiresAtUtc: parsePolicyExpiry(input('pa-expires').value) };
+            const group = input('pa-cohortType').value === 'group', percentage = Number(input('pa-canaryPercentage').value);
+            const cohort = { canaryGroup: group ? input('pa-canaryGroup').value.trim() : null, canaryPercentage: group ? null : percentage };
+            if (canary && (group ? !cohort.canaryGroup : !Number.isInteger(percentage) || percentage < 1 || percentage > 100))
+                throw new Error('Choose a named group or a whole percentage from 1 to 100.');
+            const staged = input('pa-staged').value === 'true';
+            const result = await send(() => canary ? api.publishCanary({ ...common, ...cohort }, lifetime.signal) : api.publish({ ...common, staged }, lifetime.signal));
+            if (!stillCurrent())
+                return null;
+            const receipt = readPolicyVersionReceipt(result, requested, canary ? 'Canary' : staged ? 'Staged' : 'Active', version);
+            if (Date.parse(receipt.expiresAtUtc) !== Date.parse(common.expiresAtUtc)
+                || canary && (receipt.canaryGroup !== cohort.canaryGroup || receipt.canaryPercentage !== cohort.canaryPercentage))
+                throw new Error('Publication receipt does not match.');
+            return `${canary ? 'Canary' : 'Policy'} '${receipt.policyVersion}' published for ${requested.tenant}/${requested.environment}.`;
+        });
+    }
+    async function register() {
+        if (machines === null)
+            return;
+        await mutate('pa-machineError', async (requested, send, stillCurrent) => {
+            const machineId = input('pa-machineId').value.trim(), enrollmentId = input('pa-enrollmentId').value.trim();
+            if (!guid(machineId) || !guid(enrollmentId))
+                throw new Error('Machine and enrollment IDs must be 32-character GUIDs.');
+            const thumbprint = input('pa-thumbprint').value.replaceAll(' ', '').toUpperCase().trim();
+            if (thumbprint && !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(thumbprint))
+                throw new Error('Certificate thumbprint must be a SHA-1 or SHA-256 hexadecimal value.');
+            const result = await send(() => api.registerMachine({ ...requested, machineId, enrollmentId, clientCertificateThumbprint: thumbprint || null }, lifetime.signal));
+            if (!stillCurrent())
+                return null;
+            const receipt = readPolicyMachineReceipt(result, requested, machineId, false);
+            if (receipt.enrollmentId !== enrollmentId || receipt.requiresClientCertificate !== !!thumbprint)
+                throw new Error('Machine receipt does not match.');
+            if (input('pa-machineId').value.trim() === machineId && input('pa-enrollmentId').value.trim() === enrollmentId
+                && input('pa-thumbprint').value.replaceAll(' ', '').toUpperCase().trim() === thumbprint) {
+                for (const id of ['pa-machineId', 'pa-enrollmentId', 'pa-thumbprint'])
+                    input(id).value = '';
+            }
+            return `Machine '${machineId}' registered.`;
+        });
+    }
+    async function rowAction(action, row) {
+        const version = versions?.find(value => value.policyVersion === row.dataset.version);
+        const machine = machines?.find(value => value.machineId === row.dataset.machine);
+        if (action === 'revoke-machine' ? !machine || machine.revoked : !version)
+            return;
+        if (key(action === 'revoke-machine' && machine ? machine : version || scope()) !== key(scope())) {
+            invalidateScope();
+            return;
+        }
+        await mutate(action === 'revoke-machine' ? 'pa-machineError' : 'pa-error', async (requested, send, stillCurrent) => {
+            const feedback = window.ETLSQLFeedback;
+            if (!feedback)
+                throw new Error('Policy confirmation unavailable.');
+            if (action === 'revoke-machine' && machine) {
+                const reason = await feedback.prompt(`Explain why machine ${machine.machineId} must be revoked.`, { title: 'Revoke machine', label: 'Revocation reason', multiline: true, required: true, minLength: 8, confirmLabel: 'Revoke machine', danger: true, auditAction: 'policy.machine.revoke' });
+                if (!reason || !stillCurrent())
+                    return null;
+                const receipt = await send(() => api.revokeMachine(machine.machineId, reason, lifetime.signal));
+                if (!stillCurrent())
+                    return null;
+                readPolicyMachineReceipt(receipt, requested, machine.machineId, true);
+                return `Machine '${machine.machineId}' revoked.`;
+            }
+            if (!version)
+                return null;
+            if (action === 'activate' || action === 'promote') {
+                if (version.rolloutState !== (action === 'activate' ? 'Staged' : 'Canary'))
+                    return null;
+                if (action === 'promote' && !await feedback.confirm(`Promote canary ${version.policyVersion} to the whole fleet?`, { title: 'Promote policy canary', impact: 'All enrolled machines in this scope will receive this policy.', confirmLabel: 'Promote canary', auditAction: 'policy.canary.promote' }))
+                    return null;
+                if (!stillCurrent())
+                    return null;
+                const result = await send(() => action === 'activate' ? api.activate(requested.tenant, requested.environment, version.policyVersion, lifetime.signal) : api.promoteCanary(requested.tenant, requested.environment, version.policyVersion, lifetime.signal));
+                if (!stillCurrent())
+                    return null;
+                const receipt = readPolicyVersionReceipt(result, requested, 'Active', version.policyVersion);
+                if (receipt.policyHash !== version.policyHash)
+                    throw new Error('Activation receipt does not match.');
+                return `Policy '${version.policyVersion}' activated.`;
+            }
+            if (action === 'halt') {
+                const active = versions?.find(value => value.rolloutState === 'Active');
+                if (!active || version.rolloutState !== 'Canary')
+                    throw new Error('Load an active policy and canary before halting.');
+                if (!await feedback.confirm(`Halt canary ${version.policyVersion}?`, { title: 'Halt policy canary', impact: 'Canary machines will revert to a fresh issuance of the active policy.', confirmLabel: 'Halt canary', danger: true, auditAction: 'policy.canary.halt' }) || !stillCurrent())
+                    return null;
+                const result = await send(() => api.haltCanary(requested.tenant, requested.environment, version.policyVersion, input('pa-reviewer').value.trim() || null, lifetime.signal));
+                if (!stillCurrent())
+                    return null;
+                const receipt = readPolicyVersionReceipt(result, requested, 'Active');
+                if (receipt.supersededVersion !== active.policyVersion || receipt.policyHash !== active.policyHash || receipt.policyVersion === version.policyVersion)
+                    throw new Error('Halt receipt does not match.');
+                return `Canary halted; policy '${receipt.policyVersion}' is active.`;
+            }
+            if (action === 'rollback') {
+                const newVersion = await feedback.prompt(`Create a rollback policy targeting ${version.policyVersion}.`, { title: 'Create rollback policy', label: 'New policy version', required: true, confirmLabel: 'Create rollback', auditAction: 'policy.rollback.create' });
+                if (!newVersion || !stillCurrent())
+                    return null;
+                const body = { ...requested, targetPolicyVersion: version.policyVersion, newPolicyVersion: newVersion.trim(), reviewer: input('pa-reviewer').value.trim() || null, expiresAtUtc: parsePolicyExpiry(input('pa-expires').value) };
+                const result = await send(() => api.rollback(body, lifetime.signal));
+                if (!stillCurrent())
+                    return null;
+                const receipt = readPolicyVersionReceipt(result, requested, 'Active', body.newPolicyVersion);
+                if (receipt.policyHash !== version.policyHash)
+                    throw new Error('Rollback receipt does not match.');
+                return `Rollback policy '${receipt.policyVersion}' published.`;
+            }
+            return null;
+        });
+    }
+    host.addEventListener('input', event => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement) || disposed)
+            return;
+        if (target.id === 'pa-tenant' || target.id === 'pa-env')
+            invalidateScope();
+        if (target.id === 'pa-policyJson') {
+            validationVersion++;
+            validationRead?.abort();
+            validating = false;
+            element('pa-validateResult').textContent = '';
+            controls();
+        }
+    }, { signal: listeners.signal });
+    host.addEventListener('change', event => {
+        if (event.target instanceof HTMLElement && event.target.id === 'pa-cohortType') {
+            const byGroup = input('pa-cohortType').value === 'group';
+            element('pa-groupGroup').style.display = byGroup ? '' : 'none';
+            element('pa-percentageGroup').style.display = byGroup ? 'none' : '';
+        }
+    }, { signal: listeners.signal });
+    host.addEventListener('click', event => {
+        const button = event.target instanceof Element ? event.target.closest('button') : null;
+        if (!button || button.disabled || disposed)
+            return;
+        if (button.id === 'pa-refreshBtn')
+            void load();
+        else if (button.id === 'pa-loadVersionsBtn')
+            void loadVersions();
+        else if (button.id === 'pa-loadMachinesBtn')
+            void loadMachines();
+        else if (button.id === 'pa-validateBtn')
+            void validate();
+        else if (button.id === 'pa-publishBtn')
+            void publish(false);
+        else if (button.id === 'pa-publishCanaryBtn')
+            void publish(true);
+        else if (button.id === 'pa-registerMachineBtn')
+            void register();
+        else if (button.dataset.paAct) {
+            const row = button.closest('tr');
+            if (row)
+                void rowAction(button.dataset.paAct, row);
+        }
+    }, { signal: listeners.signal });
+    const controller = { load,
+        dispose() {
+            if (disposed)
+                return;
+            disposed = true;
+            epoch++;
+            statusVersion++;
+            versionsVersion++;
+            machinesVersion++;
+            refreshVersion++;
+            validationVersion++;
+            listeners.abort();
+            lifetime.abort();
+            statusRead?.abort();
+            versionRead?.abort();
+            machineRead?.abort();
+            validationRead?.abort();
+            versions = null;
+            machines = null;
+            status = null;
+            host.setAttribute('aria-busy', 'false');
+            controls();
+            controllers.delete(host);
+        }
+    };
+    controls();
+    controllers.set(host, controller);
+    return controller;
 }

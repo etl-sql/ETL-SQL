@@ -40,7 +40,6 @@ for (const page of ['index.html', 'admin.html', 'docs.html', 'orchestrator.html'
   assert.match(source, /session-identity\.js/);
   assert.doesNotMatch(source, /payload\.sub\s*\|\|\s*payload\.unique_name/);
 }
-const admin = readPortalPage('admin');
-assert.match(admin, /e\.username/);
-assert.doesNotMatch(admin, /e\.userName/);
-console.log('Portal shared session identity and audit identity rendering passed.');
+// Audit identity rendering is checked through the native page in AdminAuditPageTests;
+// the generated DTO declaration also rejects a misspelled username field during compilation.
+console.log('Portal shared session identity passed.');

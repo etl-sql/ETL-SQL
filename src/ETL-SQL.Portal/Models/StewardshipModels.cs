@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ETL_SQL.Portal.Models;
 
 /// <param name="LastScan">
@@ -147,3 +149,10 @@ public sealed record AssignBadgeRequest(
 
 public sealed record ReviewAssetRequest(
     string AssetKey, string AssetVersion, string? Note);
+
+public sealed record GovernanceAssetReviewDto(
+    string AssetKey, string AssetVersion, DateTime ReviewedAtUtc);
+
+public sealed record GovernanceBadgeAssignmentDto(
+    string AssetKey, string Badge,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTime? AssignedAtUtc = null);

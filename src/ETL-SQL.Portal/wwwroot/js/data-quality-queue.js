@@ -1,683 +1,610 @@
-const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-}[c]));
-
-function formatDate(value) {
-  if (!value) return 'Unknown';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString();
-}
-
-function renderStatus(item) {
-  if (item.isReplayable) return '<span class="dq-status dq-status-ready">Replayable</span>';
-  return '<span class="dq-status dq-status-blocked">Blocked</span>';
-}
-
-// A target whose rows this Portal cannot read. Older manifests predate the flag, so an absent
-// value means "readable" — the endpoint is still the authority and will decline if it is not.
-function rowsReadable(item) {
-  return item.rowsReadable !== false;
-}
-
-function isEvidenceColumn(column) {
-  return String(column || '').toLowerCase().startsWith('__dq_');
-}
-
-function rowId(row) {
-  return row.__dq_row_id || row.__DQ_ROW_ID || '';
-}
-
-function renderManifestRow(item, replayingTarget, selectedTarget) {
-  const columns = (item.inputColumns || []).slice(0, 6).map(esc).join(', ');
-  const extra = (item.inputColumns || []).length > 6 ? ` +${item.inputColumns.length - 6}` : '';
-  const isReplaying = replayingTarget === item.quarantineTarget;
-  const replayDisabled = !item.isReplayable || isReplaying;
-  const selected = selectedTarget === item.quarantineTarget;
-  const readable = rowsReadable(item);
-  return `<article class="dq-row">
-    <div class="dq-row-main">
-      <div class="dq-row-title">
-        <strong>${esc(item.quarantineTarget)}</strong>
-        ${renderStatus(item)}
-      </div>
-      <div class="dq-row-detail">
-        Job ${esc(item.jobName)} · Section ${esc(item.sectionLabel || 'Unlabeled')} · Source ${esc(item.sourceTable)}
-      </div>
-      <div class="dq-row-detail">${columns ? `Columns ${columns}${extra}` : 'No captured columns recorded'}</div>
-      ${item.nonReplayableReason ? `<div class="dq-row-warning">${esc(item.nonReplayableReason)}</div>` : ''}
-      ${readable ? '' : `<div class="dq-row-warning">${esc(item.rowsUnavailableReason
-        || 'Portal cannot read this target’s rows.')} Replay and trend still work; copy the
-        review statement to read the rows where the connection exists.</div>`}
-    </div>
-    <div class="dq-row-side">
-      <time>${esc(formatDate(item.updatedAtUtc))}</time>
-      <code>${esc(item.replayStatement)}</code>
-      <div class="dq-row-actions">
-        <button class="btn btn-primary btn-xs" data-replay-target="${esc(item.quarantineTarget)}" data-job-name="${esc(item.jobName)}" type="button"${replayDisabled ? ' disabled' : ''}>${isReplaying ? 'Submitting' : 'Replay'}</button>
-        ${readable
-          ? `<button class="btn btn-outline btn-xs" data-review-target="${esc(item.quarantineTarget)}" data-job-name="${esc(item.jobName)}" type="button">${selected ? 'Rows Open' : 'Review Rows'}</button>`
-          : `<span class="dq-status dq-status-blocked" title="${esc(item.rowsUnavailableReason || '')}">View only</span>
-             <button class="btn btn-outline btn-xs" data-copy-review="${esc(item.reviewStatement || '')}" type="button">Copy Review SQL</button>`}
-        <button class="btn btn-outline btn-xs" data-trend-job="${esc(item.jobName)}" type="button">Trend</button>
-        <button class="btn btn-outline btn-xs" data-copy-replay="${esc(item.replayStatement)}" type="button">Copy</button>
-      </div>
-    </div>
-  </article>`;
-}
-
-function formatRate(rate) {
-  if (rate === null || rate === undefined) return '—';
-  return `${(Number(rate) * 100).toFixed(2)}%`;
-}
-
-function renderTrendDelta(delta) {
-  if (delta === null || delta === undefined) return '';
-  const pct = Number(delta) * 100;
-  // A rising quarantine rate means quality is degrading, so "up" is the bad direction here.
-  if (Math.abs(pct) < 0.005) return '<span class="dq-trend-flat">no change vs. earlier runs</span>';
-  const cls = pct > 0 ? 'dq-trend-worse' : 'dq-trend-better';
-  const arrow = pct > 0 ? '▲' : '▼';
-  const word = pct > 0 ? 'worse' : 'better';
-  return `<span class="${cls}">${arrow} ${Math.abs(pct).toFixed(2)} pts ${word} than earlier runs</span>`;
-}
-
-function renderSparkline(runs) {
-  // Oldest → newest, so the line reads left to right like every other trend chart.
-  const ordered = runs.slice().reverse().filter(r => r.quarantineRate !== null && r.quarantineRate !== undefined);
-  if (ordered.length < 2) return '';
-  const values = ordered.map(r => Number(r.quarantineRate));
-  const max = Math.max(...values, 0.0001);
-  const bars = ordered.map(run => {
-    const height = Math.max(2, Math.round((Number(run.quarantineRate) / max) * 100));
-    const title = `${formatDate(run.endTime || run.startTime)} — ${formatRate(run.quarantineRate)} quarantined (${run.rowsQuarantined} of ${run.rowsProcessed})`;
-    return `<span class="dq-spark-bar" style="height:${height}%" title="${esc(title)}"></span>`;
-  }).join('');
-  return `<div class="dq-spark" role="img" aria-label="Quarantine rate over the last ${ordered.length} runs">${bars}</div>`;
-}
-
-/**
- * Which rules are firing, with the target table, the action taken and the owner.
- *
- * Those three came back from the API already and were being dropped here, which mattered beyond
- * missing detail: two columns with the same name in different target tables rendered as two
- * identical-looking rows with different counts, and a steward had no way to tell which was which.
- *
- * A `countsOnly` row is from a run that predates structured capture and can never carry the three.
- * It is marked rather than left blank — an empty Owner cell otherwise reads as "nobody owns this",
- * which is a different and more alarming statement than "this run did not record it".
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.Portal/BrowserSources/data-quality-queue.ts
+ * Run: node scripts/sync-assets.js
  */
-export function renderTopFailures(failures) {
-  if (!failures.length)
-    return '<p class="library-subtitle">No per-rule failure counts recorded for these runs.</p>';
-
-  const unavailable = '<td class="dq-unrecorded" title="Not recorded: this run predates structured rule capture.">—</td>';
-  const rows = failures.map(f => `<tr${f.countsOnly ? ' class="dq-counts-only"' : ''}>
-      ${f.countsOnly ? unavailable : `<td>${esc(f.targetTable || '—')}</td>`}
-      <td>${esc(f.column)}</td>
-      <td><code>${esc(f.rule)}</code></td>
-      ${f.countsOnly ? unavailable : `<td>${esc(f.action || '—')}</td>`}
-      ${f.countsOnly ? unavailable : `<td>${esc(f.owner || '—')}</td>`}
-      <td>${Number(f.count).toLocaleString()}</td>
-    </tr>`).join('');
-
-  const legacy = failures.some(f => f.countsOnly)
-    ? `<p class="library-subtitle" data-dq-legacy-note>Rows marked — come from runs recorded before
-       per-rule capture; only the column, rule and count were kept for those.</p>`
-    : '';
-
-  return `<h4 class="dq-trend-subhead">Rules firing most</h4>
-    <table class="dq-rows-table">
-      <thead><tr><th>Target</th><th>Column</th><th>Rule</th><th>Action</th><th>Owner</th><th>Failures</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>${legacy}`;
-}
-
-function renderTrendPanel(state) {
-  if (!state.trendJob) return '';
-  const trend = state.trend;
-  return `<div class="modal-overlay" style="display: flex; z-index: 1000;" role="dialog" aria-modal="true"
-      aria-labelledby="dqTrendModalTitle">
-    <div class="modal-card modal-xl" style="max-height: 90vh; display: flex; flex-direction: column;">
-      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--portal-border-soft,#374151); padding-bottom: 16px;">
-        <div>
-          <span class="library-kicker">Quality trend</span>
-          <h2 class="modal-title" id="dqTrendModalTitle" style="margin: 4px 0 0 0;">${esc(state.trendJob)}</h2>
-          <p class="modal-subtitle" style="margin: 4px 0 0 0;">Quarantine and warn outcomes recorded on each completed run.</p>
-        </div>
-        <button class="btn btn-outline" id="dqTrendClose" type="button">Close</button>
-      </div>
-      <div class="modal-body" style="flex: 1; overflow: auto; padding-top: 16px;">
-        ${state.trendError ? `<div class="error-msg">${esc(state.trendError)}</div>` : ''}
-        ${state.rulesError ? `<div class="error-msg">Rule inventory unavailable: ${esc(state.rulesError)}</div>` : ''}
-        ${state.trendLoading ? '<div class="loading-state"><span class="spinner"></span><span>Loading quality trend...</span></div>' :
-          !trend || trend.runCount === 0 ? `<div class="empty-state empty-state-panel">
-            <h2>No recorded runs</h2>
-            <p>This job has no completed runs with data-quality metrics yet.</p>
-          </div>` : `
-          <div class="dq-trend-stats">
-            <div class="dq-trend-stat">
-              <span class="dq-trend-label">Latest quarantine rate</span>
-              <strong>${formatRate(trend.latestQuarantineRate)}</strong>
-              ${renderTrendDelta(trend.quarantineRateDelta)}
-            </div>
-            <div class="dq-trend-stat">
-              <span class="dq-trend-label">Average over ${trend.runCount} run(s)</span>
-              <strong>${formatRate(trend.averageQuarantineRate)}</strong>
-            </div>
-            <div class="dq-trend-stat">
-              <span class="dq-trend-label">Rows quarantined / warned</span>
-              <strong>${trend.totalRowsQuarantined.toLocaleString()} / ${trend.totalRowsWarned.toLocaleString()}</strong>
-              <span class="dq-trend-flat">of ${trend.totalRowsProcessed.toLocaleString()} processed</span>
-            </div>
-          </div>
-          ${renderSparkline(trend.runs || [])}
-          <h4 class="dq-trend-subhead">Rules protecting columns</h4>
-          ${(state.rules || []).length ? `<table class="dq-rows-table">
-            <thead><tr><th>Target</th><th>Column</th><th>Clause</th><th>Rule</th><th>Action</th><th>Source</th></tr></thead>
-            <tbody>${state.rules.map(rule => `<tr>
-              <td>${esc(rule.targetTable)}</td><td>${esc(rule.targetColumn || '—')}</td>
-              <td><code>${esc(rule.ruleClause)}</code></td><td><code>${esc(rule.rule)}</code></td>
-              <td>${esc(rule.action)}</td><td>${esc(rule.sourceFile || '—')}:${esc(rule.line)}</td>
-            </tr>`).join('')}</tbody>
-          </table>` : '<p class="library-subtitle">No readable rule definitions were found for this job script.</p>'}
-          ${renderTopFailures(trend.topRuleFailures || [])}
-          <h4 class="dq-trend-subhead">Recent runs</h4>
-          <table class="dq-rows-table">
-            <thead><tr><th>Completed</th><th>Status</th><th>Processed</th><th>Quarantined</th><th>Warned</th><th>Rate</th></tr></thead>
-            <tbody>${(trend.runs || []).map(run => `<tr>
-              <td>${esc(formatDate(run.endTime || run.startTime))}</td>
-              <td>${esc(run.status)}</td>
-              <td>${run.rowsProcessed.toLocaleString()}</td>
-              <td>${run.rowsQuarantined.toLocaleString()}</td>
-              <td>${run.rowsWarned.toLocaleString()}</td>
-              <td>${formatRate(run.quarantineRate)}</td>
-            </tr>`).join('')}</tbody>
-          </table>`}
-      </div>
-    </div>
-  </div>`;
-}
-
-function renderRowsPanel(state) {
-  const target = state.selectedItem;
-  if (!target) return '';
-  const response = state.rows;
-  const columns = response?.columns || [];
-  const rows = response?.rows || [];
-  const sourceColumns = columns.filter(column => !isEvidenceColumn(column));
-  const evidenceColumns = columns.filter(column => isEvidenceColumn(column));
-  return `<div class="modal-overlay" style="display: flex; z-index: 1000;" role="dialog" aria-modal="true"
-      aria-labelledby="dqRowsModalTitle">
-    <div class="modal-card modal-xl" style="max-height: 90vh; display: flex; flex-direction: column;">
-      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--portal-border-soft,#374151); padding-bottom: 16px;">
-        <div>
-          <span class="library-kicker">${esc(target.jobName)} · Section ${esc(target.sectionLabel || 'Unlabeled')}</span>
-          <h2 class="modal-title" id="dqRowsModalTitle" style="margin: 4px 0 0 0;">${esc(target.quarantineTarget)}</h2>
-          <p class="modal-subtitle" style="margin: 4px 0 0 0;">${rows.length} row${rows.length === 1 ? '' : 's'} loaded${response?.capped ? ' · capped' : ''}</p>
-        </div>
-        <div class="dq-row-actions" style="display: flex; gap: 8px; align-items: center;">
-          <select id="dqRowsStatus" aria-label="Row status filter">
-            ${['quarantined', 'released', 'replaying', 'discarded', 'replayed', 'all'].map(status =>
-              `<option value="${status}"${state.rowStatus === status ? ' selected' : ''}>${status}</option>`).join('')}
-          </select>
-          <button class="btn btn-outline btn-xs" id="dqReloadRows" type="button">Reload</button>
-          <button class="btn btn-outline btn-xs" id="dqCloseRows" type="button">Close</button>
-        </div>
-      </div>
-      <div class="modal-body" style="flex: 1; overflow: auto; padding-top: 16px;">
-        ${state.rowsError ? `<div class="error-msg">${esc(state.rowsError)}</div>` : ''}
-        ${state.rowsLoading ? '<div class="loading-state"><span class="spinner"></span><span>Loading rows...</span></div>' :
-          rows.length ? `<div class="dq-rows-table-wrap" style="overflow-x: auto;"><table class="dq-rows-table" style="width: 100%; border-collapse: collapse;">
-            <thead><tr>
-              <th style="text-align: left; padding: 8px;">Actions</th>
-              ${sourceColumns.map(column => `<th style="text-align: left; padding: 8px;">${esc(column)}</th>`).join('')}
-              ${evidenceColumns.map(column => `<th style="text-align: left; padding: 8px;">${esc(column)}</th>`).join('')}
-            </tr></thead>
-            <tbody>${rows.map(row => {
-              const id = rowId(row);
-              const edits = state.edits[id] || {};
-              const isReplayClaim = row.__dq_status === 'replaying';
-              return `<tr>
-                <td class="dq-row-action-cell" style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151); white-space: nowrap;">
-                  <button class="btn btn-primary btn-xs" data-release-row="${esc(id)}" type="button"${!target.isReplayable || state.rowAction === id ? ' disabled' : ''}>${state.rowAction === id ? 'Saving' : isReplayClaim ? 'Return to released' : 'Save + Release'}</button>
-                  <button class="btn btn-outline btn-xs" data-discard-row="${esc(id)}" data-disposition="${isReplayClaim ? 'replayed' : 'discarded'}" type="button"${state.rowAction === id ? ' disabled' : ''}>${isReplayClaim ? 'Mark replayed' : 'Discard'}</button>
-                  <input class="dq-cell-input dq-note-input" data-note-row="${esc(id)}" placeholder="Reason (audited)" value="${esc(state.notes[id] ?? '')}" style="margin-left: 4px; padding: 2px 4px; font-size: 11px;">
-                </td>
-                ${sourceColumns.map(column => `<td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);"><input class="dq-cell-input" data-edit-row="${esc(id)}" data-edit-column="${esc(column)}" value="${esc(edits[column] ?? row[column] ?? '')}" style="padding: 4px 6px; font-size: 12px; width: 100%; min-width: 100px;"></td>`).join('')}
-                ${evidenceColumns.map(column => `<td style="padding: 8px; border-bottom: 1px solid var(--portal-border-soft,#374151);"><code>${esc(row[column] ?? '')}</code></td>`).join('')}
-              </tr>`;
-            }).join('')}</tbody>
-          </table></div>` :
-          state.rowsError ? '' :
-          `<div class="empty-state empty-state-panel">
-            <h2>No rows</h2>
-            <p>No quarantine rows match the current status filter.</p>
-          </div>`}
-      </div>
-    </div>
-  </div>`;
-}
-
-// `Unknown` is terminal here even though the job may well have finished. It means the service that
-// was running the job no longer has a record of it — usually a restart — so no amount of further
-// polling will produce an answer, and a spinner that never resolves is a worse report than saying
-// we cannot tell.
-const TERMINAL_JOB_STATUSES = new Set(['Completed', 'Failed', 'Cancelled', 'Unknown']);
+// @ts-nocheck — generated implementation; check the TypeScript owner.
+import { asError, isObject } from './http-error.js';
+import { getSessionIdentity } from './session-identity.js';
+import { installDialogAccessibility } from './dialog-a11y.js';
+import { renderQualityQueue } from './data-quality-view.js';
+import { readQualityQueue, readQualityJobs, readQualityRows, readQualityTrend, readQualityRules, readQualitySubmission, readQualityJobStatus } from './data-quality-responses.js';
+import { ROW_STATUSES, TERMINAL_JOB_STATUSES, targetKey, rowId, rowStatus, pendingTarget } from './data-quality-state.js';
+export { renderTopFailures } from './data-quality-view.js';
+const surfaces = new WeakMap();
+const uncertainByScope = new Map();
+const inFlightByScope = new Map();
 const TRACKED_JOBS_KEY = 'etlsql_dq_tracked_jobs';
-
-function renderTrackedJobs(jobs) {
-  if (!jobs.length) return '';
-  return `<section class="dq-rows-panel dq-job-panel" aria-live="polite">
-    <header class="dq-rows-header"><div><h3>Submitted work</h3><p>Replay and disposition jobs remain here until their durable execution reaches a terminal state.</p></div></header>
-    <div class="dq-job-list">${jobs.map(job => {
-      const terminal = TERMINAL_JOB_STATUSES.has(job.status);
-      const failed = job.status === 'Failed' || job.status === 'Cancelled';
-      // Unknown is not success and not failure. Styling it as either would state an outcome
-      // nobody observed.
-      const unknown = job.status === 'Unknown';
-      const note = job.unknownReason || job.error || job.trackingError;
-      return `<article class="dq-job-row">
-        <span class="dq-status ${unknown ? '' : terminal && !failed ? 'dq-status-ready' : failed ? 'dq-status-blocked' : ''}">${esc(job.status)}</span>
-        <div><strong>${esc(job.kind)}</strong><small>${esc(job.target)} · <code>${esc(job.jobId)}</code></small></div>
-        <div><time>${esc(formatDate(job.statusUpdatedAtUtc || job.completedAt || job.startedAt || job.createdAt))}</time>${note ? `<small class="dq-row-warning">${esc(note)}</small>` : ''}</div>
-      </article>`;
-    }).join('')}</div>
-  </section>`;
+function dictionary() { return Object.create(null); }
+function sessionScope() {
+    try {
+        const identity = getSessionIdentity(sessionStorage.getItem('etlsql_token'));
+        return identity.subject ? JSON.stringify([identity.claims.iss ?? '', identity.claims.tenant_id ?? '', identity.subject]) : null;
+    }
+    catch {
+        return null;
+    }
 }
-
-export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
-  let storage = null;
-  try { storage = typeof sessionStorage !== 'undefined' ? sessionStorage : null; } catch { /* Site data is blocked; the queue works without remembering tracked jobs. */ }
-  const pollTimers = new Map();
-  let disposed = false;
-  const state = {
-    q: '',
-    replayable: '',
-    limit: 100,
-    items: [],
-    loading: false,
-    error: null,
-    replayingTarget: null,
-    message: null,
-    selectedItem: null,
-    rowStatus: 'quarantined',
-    rows: null,
-    rowsLoading: false,
-    rowsError: null,
-    edits: {},
-    notes: {},
-    rowAction: null,
-    trendJob: null,
-    trend: null,
-    rules: [],
-    trendLoading: false,
-    trendError: null,
-    rulesError: null,
-    trackedJobs: [],
-    allJobs: []
-  };
-
-  function persistTrackedJobs() {
-    try { storage?.setItem(TRACKED_JOBS_KEY, JSON.stringify(state.trackedJobs.slice(0, 20))); } catch { /* Site data is blocked; the tracked-job list just does not survive a reload. */ }
-  }
-
-  function restoreTrackedJobs() {
+function restoredJob(value) {
+    if (!isObject(value) || !['jobId', 'jobName', 'target', 'createdAt'].every(key => typeof value[key] === 'string' && value[key].trim())
+        || !['Replay', 'Disposition'].includes(String(value.kind)) || !Number.isFinite(Date.parse(String(value.createdAt)))
+        || (value.rowId != null && typeof value.rowId !== 'string'))
+        return null;
+    return { jobId: String(value.jobId), kind: value.kind, jobName: String(value.jobName), target: String(value.target),
+        rowId: value.rowId ?? null, createdAt: String(value.createdAt), status: 'Submitted', verified: false,
+        statusUpdatedAtUtc: null, error: null, unknownReason: null, trackingError: null };
+}
+export function createDataQualityQueue({ host, dataQualityApi, prepare = undefined, storageScope = undefined }) {
+    if (!host)
+        throw new TypeError('Data quality needs a host.');
+    const root = host;
+    surfaces.get(root)?.dispose();
+    const scope = storageScope === undefined ? sessionScope() : storageScope;
+    const storageKey = scope ? `${TRACKED_JOBS_KEY}:${encodeURIComponent(scope)}` : null;
+    let storage = null;
     try {
-      const parsed = JSON.parse(storage?.getItem(TRACKED_JOBS_KEY) || '[]');
-      state.trackedJobs = Array.isArray(parsed) ? parsed.filter(job => job?.jobId).slice(0, 20) : [];
-    } catch { state.trackedJobs = []; }
-    state.trackedJobs.filter(job => !TERMINAL_JOB_STATUSES.has(job.status)).forEach(job => pollJob(job.jobId));
-  }
-
-  function applyQueryParams() {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const q = params.get('q') || params.get('target');
-    const jobName = params.get('jobName') || params.get('job');
-    if (q) {
-      state.q = q;
-    } else if (jobName) {
-      state.q = jobName;
+        storage = sessionStorage;
+        storage.removeItem(TRACKED_JOBS_KEY);
     }
-  }
-
-  function clearDeepLinkParams() {
-    if (typeof window === 'undefined') return;
-    const url = new URL(window.location.href);
-    let cleaned = false;
-    for (const key of ['q', 'target', 'jobName', 'job']) {
-      if (url.searchParams.has(key)) {
-        url.searchParams.delete(key);
-        cleaned = true;
-      }
-    }
-    if (cleaned) {
-      history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
-    }
-  }
-
-  function schedulePoll(jobId) {
-    if (disposed || pollTimers.has(jobId)) return;
-    pollTimers.set(jobId, setTimeout(() => {
-      pollTimers.delete(jobId);
-      pollJob(jobId);
-    }, 1000));
-  }
-
-  async function pollJob(jobId) {
-    if (disposed) return;
-    const tracked = state.trackedJobs.find(job => job.jobId === jobId);
-    if (!tracked || TERMINAL_JOB_STATUSES.has(tracked.status)) return;
-    try {
-      const result = await dataQualityApi.jobStatus(jobId);
-      if (disposed) return;
-      Object.assign(tracked, result, { trackingError: null });
-      persistTrackedJobs();
-      render();
-      if (TERMINAL_JOB_STATUSES.has(tracked.status)) {
-        state.message = `${tracked.kind} job ${jobId} ${tracked.status.toLowerCase()} for ${tracked.target}.`;
-        if (tracked.kind === 'Disposition' && state.selectedItem) await loadRows(state.selectedItem);
-        else await load();
-      } else {
-        schedulePoll(jobId);
-      }
-    } catch (err) {
-      tracked.trackingError = err.message || 'Status temporarily unavailable.';
-      render();
-      schedulePoll(jobId);
-    }
-  }
-
-  function trackJob(jobId, kind, target) {
-    state.trackedJobs = state.trackedJobs.filter(job => job.jobId !== jobId);
-    state.trackedJobs.unshift({ jobId, kind, target, status: 'Submitted', createdAt: new Date().toISOString() });
-    persistTrackedJobs();
-    render();
-    pollJob(jobId);
-  }
-
-  async function loadTrend(jobName) {
-    state.trendJob = jobName;
-    state.trend = null;
-    state.rules = [];
-    state.trendError = null;
-    state.rulesError = null;
-    state.trendLoading = true;
-    render();
-    try {
-      const [trend, rules] = await Promise.allSettled([
-        dataQualityApi.qualityTrend({ jobName }),
-        dataQualityApi.qualityRules(jobName)
-      ]);
-      if (trend.status === 'rejected') throw trend.reason;
-      state.trend = trend.value;
-      if (rules.status === 'fulfilled') state.rules = rules.value;
-      else state.rulesError = rules.reason?.message || 'Unable to load rule inventory.';
-    } catch (err) {
-      state.trendError = err.message || 'Unable to load quality trend.';
-    } finally {
-      state.trendLoading = false;
-      render();
-    }
-  }
-
-  async function load() {
-    state.loading = true;
-    state.error = null;
-    render();
-    try {
-      const promises = [
-        dataQualityApi.quarantineQueue({
-          q: state.q,
-          replayable: state.replayable,
-          limit: state.limit
-        })
-      ];
-      if (!state.allJobs.length) {
-        promises.push(dataQualityApi.qualityJobs());
-      }
-      const results = await Promise.all(promises);
-      state.items = results[0];
-      if (results[1]) {
-        state.allJobs = results[1] || [];
-      }
-      if (state.q && state.items.length > 0 && !state.selectedItem) {
-        const exact = state.items.find(item => item.quarantineTarget === state.q || item.jobName === state.q) || state.items[0];
-        if (exact && rowsReadable(exact)) {
-          loadRows(exact);
+    catch { /* Tracking remains usable when site storage is blocked. */ }
+    const lifetime = new AbortController();
+    const pollTimers = new Map();
+    const polling = new Set();
+    const copyTimers = new Set();
+    const releaseDialogs = installDialogAccessibility(root);
+    let disposed = false, shown = false, busy = false;
+    let queueVersion = 0, rowsVersion = 0, trendVersion = 0, editVersion = 0;
+    let queueRequest = null, rowsRequest = null, trendRequest = null;
+    let opener = null;
+    const state = {
+        q: '', replayable: '', items: [], queueReady: false, loading: false, error: null, actionError: null,
+        replayingTarget: null, message: null, selectedItem: null, rowStatus: 'quarantined', rows: null,
+        rowsLoading: false, rowsError: null, edits: dictionary(), notes: dictionary(), rowAction: null, trendJob: null,
+        trend: null, rules: [], trendLoading: false, trendError: null, rulesError: null, trackedJobs: [],
+        allJobs: [], jobsError: null, unconfirmed: scope ? uncertainByScope.get(scope) ?? new Set() : new Set()
+    };
+    if (scope)
+        uncertainByScope.set(scope, state.unconfirmed);
+    const inFlight = scope ? inFlightByScope.get(scope) ?? new Set() : new Set();
+    if (scope)
+        inFlightByScope.set(scope, inFlight);
+    function active() {
+        if (disposed)
+            return false;
+        if (storageScope === undefined && sessionScope() !== scope) {
+            dispose();
+            return false;
         }
-      }
-    } catch (err) {
-      state.error = err.message || 'Unable to load quarantine queue.';
-    } finally {
-      state.loading = false;
-      render();
+        return true;
     }
-  }
-
-  async function loadRows(item = state.selectedItem) {
-    if (!item) return;
-    state.selectedItem = item;
-    state.rowsLoading = true;
-    state.rowsError = null;
-    state.edits = {};
-    render();
-    try {
-      state.rows = await dataQualityApi.quarantineRows({
-        quarantineTarget: item.quarantineTarget,
-        jobName: item.jobName,
-        status: state.rowStatus,
-        limit: 50
-      });
-    } catch (err) {
-      state.rows = null;
-      state.rowsError = err.message || 'Unable to load quarantine rows.';
-    } finally {
-      state.rowsLoading = false;
-      render();
+    function persist() {
+        if (!storageKey)
+            return;
+        try {
+            storage?.setItem(storageKey, JSON.stringify(state.trackedJobs.map(job => ({ jobId: job.jobId, kind: job.kind,
+                jobName: job.jobName, target: job.target, rowId: job.rowId, createdAt: job.createdAt }))));
+        }
+        catch { /* A blocked or full store must not change the observed execution outcome. */ }
     }
-  }
-
-  async function replay(item) {
-    state.replayingTarget = item.quarantineTarget;
-    state.error = null;
-    state.message = null;
-    render();
-    try {
-      const result = await dataQualityApi.replayQuarantine(item.quarantineTarget, item.jobName);
-      state.message = `Replay job ${result.jobId} submitted; tracking durable execution status.`;
-      trackJob(result.jobId, 'Replay', item.quarantineTarget);
-    } catch (err) {
-      state.error = err.message || 'Unable to submit quarantine replay.';
-    } finally {
-      state.replayingTarget = null;
-      render();
+    function restore() {
+        if (!storageKey)
+            return;
+        try {
+            const value = JSON.parse(storage?.getItem(storageKey) || '[]');
+            const seen = new Set();
+            state.trackedJobs = (Array.isArray(value) ? value : []).flatMap(item => {
+                const job = restoredJob(item);
+                if (!job || seen.has(job.jobId))
+                    return [];
+                seen.add(job.jobId);
+                return [job];
+            });
+        }
+        catch {
+            state.trackedJobs = [];
+        }
+        state.trackedJobs.forEach(job => { void pollJob(job.jobId); });
     }
-  }
-
-  async function updateDisposition(row, disposition) {
-    const id = rowId(row);
-    if (!id) return;
-    const item = state.selectedItem;
-    state.rowAction = id;
-    state.error = null;
-    state.message = null;
-    render();
-    try {
-      const changes = disposition === 'released' ? (state.edits[id] || {}) : null;
-      const result = await dataQualityApi.updateQuarantineDisposition({
-        quarantineTarget: item.quarantineTarget,
-        jobName: item.jobName,
-        rowIds: [id],
-        disposition,
-        changes,
-        note: state.notes[id] || null
-      });
-      state.message = `Disposition job ${result.jobId} submitted; the row will refresh after terminal status.`;
-      trackJob(result.jobId, 'Disposition', `${item.quarantineTarget} · row ${id}`);
-    } catch (err) {
-      state.error = err.message || 'Unable to submit quarantine disposition.';
-    } finally {
-      state.rowAction = null;
-      render();
+    function selector(element) {
+        if (!element || !root.contains(element))
+            return null;
+        if (element.id)
+            return `#${CSS.escape(element.id)}`;
+        const keys = ['editRow', 'editColumn', 'noteRow', 'reviewTarget', 'replayTarget', 'jobName', 'trendJob', 'releaseRow', 'discardRow'];
+        const attrs = keys.filter(key => element.dataset[key] !== undefined).map(key => `[data-${key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase())}="${CSS.escape(element.dataset[key])}"]`);
+        return attrs.length ? element.tagName.toLowerCase() + attrs.join('') : null;
     }
-  }
-
-  function render() {
-    prepare?.();
-    const replayableCount = state.items.filter(item => item.isReplayable).length;
-    const blockedCount = state.items.length - replayableCount;
-    host.innerHTML = `<section class="dq-page">
-      <div class="library-header">
-        <div>
-          <span class="library-kicker">Data Quality</span>
-          <h2>Quarantine Queue</h2>
-          <p class="library-subtitle">Replay manifests from orchestrator-hosted data-quality quarantines.</p>
-        </div>
-        <button class="btn btn-outline" id="dqRefreshBtn" type="button">Refresh</button>
-      </div>
-      <form class="dq-toolbar" id="dqQueueForm">
-        <input id="dqQueueSearch" type="search" placeholder="Search job, target, source, or column"
-          aria-label="Search the quarantine queue by job, target, source, or column" value="${esc(state.q)}">
-        <select id="dqReplayableFilter" aria-label="Replayability filter">
-          <option value=""${state.replayable === '' ? ' selected' : ''}>All targets</option>
-          <option value="true"${state.replayable === 'true' ? ' selected' : ''}>Replayable</option>
-          <option value="false"${state.replayable === 'false' ? ' selected' : ''}>Blocked</option>
-        </select>
-        <button class="btn btn-primary" type="submit">Apply</button>
-      </form>
-      <div class="dq-toolbar" style="margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-        <span style="font-size: 13px; font-weight: 600;">Job Quality Lookup:</span>
-        <select id="dqJobLookupSelect" style="flex: 1; max-width: 300px; min-width: 200px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--portal-border,#374151); background:var(--portal-surface,#111827); color:inherit;">
-          <option value="">Select a job to view rules & trend…</option>
-          ${state.allJobs.map(j => `<option value="${esc(j.name)}" ${state.trendJob === j.name ? 'selected' : ''}>${esc(j.displayName || j.name)}</option>`).join('')}
-        </select>
-        <button class="btn btn-outline btn-xs" id="dqJobLookupBtn" type="button">View Trend & Rules</button>
-      </div>
-      <div class="dq-summary">
-        <span>${state.items.length} targets</span>
-        <span>${replayableCount} replayable</span>
-        <span>${blockedCount} blocked</span>
-      </div>
-      ${state.message ? `<div class="dq-success">${esc(state.message)}</div>` : ''}
-      ${state.error ? `<div class="error-msg">${esc(state.error)}</div>` : ''}
-      ${state.loading ? '<div class="loading-state"><span class="spinner"></span><span>Loading quarantine queue...</span></div>' :
-        state.items.length ? `<div class="dq-list">${state.items.map(item => renderManifestRow(item, state.replayingTarget, state.selectedItem?.quarantineTarget)).join('')}</div>` :
-        `<div class="empty-state empty-state-panel">
-          <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
-          <h2>No quarantine manifests</h2>
-          <p>No data-quality quarantine replay manifests match the current filters.</p>
-        </div>`}
-      ${renderTrackedJobs(state.trackedJobs)}
-      ${renderTrendPanel(state)}
-      ${renderRowsPanel(state)}
-    </section>`;
-
-    host.querySelectorAll('[data-trend-job]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const jobName = btn.dataset.trendJob;
-        const select = host.querySelector('#dqJobLookupSelect');
-        if (select) select.value = jobName;
-        loadTrend(jobName);
-      });
-    });
-    host.querySelector('#dqJobLookupSelect')?.addEventListener('change', e => {
-      const jobName = e.target.value;
-      if (jobName) {
-        loadTrend(jobName);
-      }
-    });
-    host.querySelector('#dqJobLookupBtn')?.addEventListener('click', () => {
-      const select = host.querySelector('#dqJobLookupSelect');
-      const jobName = select?.value;
-      if (jobName) {
-        loadTrend(jobName);
-      }
-    });
-    host.querySelector('#dqTrendClose')?.addEventListener('click', () => {
-      state.trendJob = null;
-      state.trend = null;
-      state.trendError = null;
-      render();
-    });
-
-    host.querySelector('#dqQueueForm')?.addEventListener('submit', e => {
-      e.preventDefault();
-      state.q = host.querySelector('#dqQueueSearch')?.value?.trim() || '';
-      state.replayable = host.querySelector('#dqReplayableFilter')?.value || '';
-      load();
-    });
-    host.querySelector('#dqRefreshBtn')?.addEventListener('click', () => load());
-    host.querySelectorAll('[data-replay-target]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const item = state.items.find(value =>
-          value.quarantineTarget === btn.dataset.replayTarget
-          && value.jobName === btn.dataset.jobName);
-        if (item) replay(item);
-      });
-    });
-    host.querySelectorAll('[data-review-target]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const item = state.items.find(value =>
-          value.quarantineTarget === btn.dataset.reviewTarget
-          && value.jobName === btn.dataset.jobName);
-        if (item) loadRows(item);
-      });
-    });
-    host.querySelector('#dqRowsStatus')?.addEventListener('change', e => {
-      state.rowStatus = e.target.value;
-      loadRows();
-    });
-    host.querySelector('#dqReloadRows')?.addEventListener('click', () => loadRows());
-    host.querySelector('#dqCloseRows')?.addEventListener('click', () => {
-      state.selectedItem = null;
-      state.rows = null;
-      state.rowsError = null;
-      state.edits = {};
-      render();
-    });
-    host.querySelectorAll('[data-edit-row]').forEach(input => {
-      input.addEventListener('input', () => {
-        const id = input.dataset.editRow;
-        const column = input.dataset.editColumn;
-        state.edits[id] ??= {};
-        state.edits[id][column] = input.value;
-      });
-    });
-    host.querySelectorAll('[data-note-row]').forEach(input => {
-      input.addEventListener('input', () => {
-        state.notes[input.dataset.noteRow] = input.value;
-      });
-    });
-    host.querySelectorAll('[data-release-row]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const row = (state.rows?.rows || []).find(value => rowId(value) === btn.dataset.releaseRow);
-        if (row) updateDisposition(row, 'released');
-      });
-    });
-    host.querySelectorAll('[data-discard-row]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const row = (state.rows?.rows || []).find(value => rowId(value) === btn.dataset.discardRow);
-        if (row) updateDisposition(row, btn.dataset.disposition || 'discarded');
-      });
-    });
-    host.querySelectorAll('[data-copy-replay], [data-copy-review]').forEach(btn => {
-      const label = btn.textContent;
-      btn.addEventListener('click', async () => {
-        await navigator.clipboard?.writeText(btn.dataset.copyReplay ?? btn.dataset.copyReview ?? '');
-        btn.textContent = 'Copied';
-        setTimeout(() => { btn.textContent = label; }, 1200);
-      });
-    });
-  }
-
-  return {
-    show() {
-      disposed = false;
-      applyQueryParams();
-      restoreTrackedJobs();
-      load().then(() => clearDeepLinkParams());
-    },
-    dispose() { disposed = true; pollTimers.forEach(timer => clearTimeout(timer)); pollTimers.clear(); host.innerHTML = ''; }
-  };
+    function render() {
+        if (!active())
+            return;
+        prepare?.();
+        const focus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const focusSelector = selector(focus);
+        const selection = focus instanceof HTMLInputElement && ['text', 'search'].includes(focus.type)
+            ? [focus.selectionStart, focus.selectionEnd] : null;
+        const template = document.createElement('template');
+        template.innerHTML = renderQualityQueue(state);
+        // Keep dialog nodes alive: the page's accessibility observer must not treat a status refresh
+        // as a new modal and move focus away from an edited cell.
+        for (const previous of root.querySelectorAll('[data-dq-dialog]')) {
+            const next = template.content.querySelector(`[data-dq-dialog="${previous.dataset.dqDialog}"]`);
+            if (next) {
+                previous.innerHTML = next.innerHTML;
+                next.replaceWith(previous);
+            }
+        }
+        root.replaceChildren(template.content);
+        if (focusSelector) {
+            const next = root.querySelector(focusSelector);
+            next?.focus();
+            if (selection && next instanceof HTMLInputElement)
+                next.setSelectionRange(...selection);
+        }
+    }
+    function closePanels() {
+        rowsVersion++;
+        trendVersion++;
+        rowsRequest?.abort();
+        trendRequest?.abort();
+        state.selectedItem = null;
+        state.rows = null;
+        state.edits = dictionary();
+        state.notes = dictionary();
+        editVersion++;
+        state.trendJob = null;
+        state.trend = null;
+        state.rules = [];
+        state.rowsError = null;
+        state.trendError = null;
+        state.rulesError = null;
+        state.rowsLoading = false;
+        state.trendLoading = false;
+    }
+    function close() {
+        closePanels();
+        render();
+        if (opener)
+            root.querySelector(opener)?.focus();
+        opener = null;
+    }
+    function reconcileRows() {
+        if (!state.selectedItem)
+            return;
+        const selectedKey = targetKey(state.selectedItem);
+        const current = state.items.find(item => targetKey(item) === selectedKey);
+        if (state.queueReady && current?.rowsReadable) {
+            state.selectedItem = current;
+            return;
+        }
+        rowsVersion++;
+        rowsRequest?.abort();
+        state.selectedItem = current ?? { ...state.selectedItem, rowsReadable: false };
+        state.rows = null;
+        state.rowsLoading = false;
+        state.edits = dictionary();
+        state.notes = dictionary();
+        editVersion++;
+        state.rowsError = current?.rowsUnavailableReason || 'The selected target is unavailable in the current queue. Refresh the queue before reloading rows.';
+    }
+    function schedulePoll(jobId) {
+        if (!active() || pollTimers.has(jobId))
+            return;
+        pollTimers.set(jobId, setTimeout(() => { pollTimers.delete(jobId); void pollJob(jobId); }, 1000));
+    }
+    async function pollJob(jobId) {
+        if (!active() || polling.has(jobId))
+            return;
+        const job = state.trackedJobs.find(item => item.jobId === jobId);
+        if (!job || (job.verified && TERMINAL_JOB_STATUSES.has(job.status)))
+            return;
+        polling.add(jobId);
+        try {
+            const result = readQualityJobStatus(await dataQualityApi.jobStatus(jobId, lifetime.signal), jobId, job.kind, job.target);
+            if (!active() || !state.trackedJobs.includes(job))
+                return;
+            const changed = !job.verified || job.status !== result.status || job.error !== (result.error ?? null)
+                || job.unknownReason !== (result.unknownReason ?? null) || !!job.trackingError;
+            job.status = result.status;
+            job.verified = true;
+            job.statusUpdatedAtUtc = result.statusUpdatedAtUtc;
+            job.error = result.error ?? null;
+            job.unknownReason = result.unknownReason ?? null;
+            job.trackingError = null;
+            if (changed)
+                render();
+            if (result.isTerminal) {
+                if (result.status === 'Unknown')
+                    state.unconfirmed.add(targetKey({ jobName: job.jobName, quarantineTarget: job.target }));
+                state.message = result.status === 'Unknown'
+                    ? `${job.kind} job ${jobId}: execution outcome unknown. Inspect job history before resubmitting.`
+                    : `${job.kind} job ${jobId} ${result.status.toLowerCase()} for ${job.target}.`;
+                // A poll does not discard another row's unsaved changes or refresh a different target.
+                if (job.kind === 'Disposition' && result.status === 'Completed' && state.selectedItem
+                    && state.selectedItem.quarantineTarget === job.target && state.selectedItem.jobName === job.jobName) {
+                    state.message += ' Reload rows to inspect the result; current edits are retained.';
+                }
+                render();
+            }
+            else
+                schedulePoll(jobId);
+        }
+        catch (reason) {
+            if (!active() || !state.trackedJobs.includes(job))
+                return;
+            job.trackingError = asError(reason).message;
+            job.verified = false;
+            render();
+            schedulePoll(jobId);
+        }
+        finally {
+            polling.delete(jobId);
+        }
+    }
+    function trackJob(jobId, kind, item, id) {
+        // Keep all in-flight submissions. Only old confirmed terminal entries can be evicted.
+        const retained = state.trackedJobs.filter(job => job.jobId !== jobId);
+        while (retained.length >= 20) {
+            let terminal = retained.length - 1;
+            while (terminal >= 0 && !(retained[terminal].verified && TERMINAL_JOB_STATUSES.has(retained[terminal].status)))
+                terminal--;
+            if (terminal < 0)
+                break;
+            retained.splice(terminal, 1);
+        }
+        state.trackedJobs = [{ jobId, kind, jobName: item.jobName, target: item.quarantineTarget, rowId: id,
+                status: 'Submitted', createdAt: new Date().toISOString(), verified: false, statusUpdatedAtUtc: null,
+                error: null, unknownReason: null, trackingError: null }, ...retained];
+        persist();
+        render();
+        void pollJob(jobId);
+    }
+    async function load(explicit = false, deepTarget = null, deepJob = null) {
+        if (!active())
+            return;
+        const version = ++queueVersion;
+        queueRequest?.abort();
+        const request = queueRequest = new AbortController();
+        state.loading = true;
+        state.queueReady = false;
+        state.items = [];
+        state.error = null;
+        state.jobsError = null;
+        render();
+        const [queue, jobs] = await Promise.allSettled([
+            dataQualityApi.quarantineQueue({ q: state.q.trim(), replayable: state.replayable, limit: 100 }, request.signal),
+            dataQualityApi.qualityJobs(request.signal)
+        ]);
+        if (!active() || version !== queueVersion)
+            return;
+        try {
+            if (queue.status === 'rejected')
+                throw queue.reason;
+            state.items = readQualityQueue(queue.value);
+            state.queueReady = true;
+            if (explicit) {
+                for (const key of state.unconfirmed)
+                    if (!inFlight.has(key))
+                        state.unconfirmed.delete(key);
+                state.actionError = null;
+            }
+        }
+        catch (reason) {
+            state.items = [];
+            state.error = asError(reason).message;
+        }
+        try {
+            if (jobs.status === 'rejected')
+                throw jobs.reason;
+            state.allJobs = readQualityJobs(jobs.value);
+        }
+        catch (reason) {
+            state.allJobs = [];
+            state.jobsError = asError(reason).message;
+        }
+        reconcileRows();
+        state.loading = false;
+        render();
+        if (state.queueReady && deepTarget) {
+            const exact = state.items.find(item => item.quarantineTarget === deepTarget && (!deepJob || item.jobName === deepJob));
+            if (exact?.rowsReadable)
+                await loadRows(exact);
+        }
+        if (state.queueReady && (deepTarget || deepJob)) {
+            const url = new URL(window.location.href);
+            for (const key of ['q', 'target', 'jobName', 'job'])
+                url.searchParams.delete(key);
+            history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
+        }
+    }
+    async function loadRows(item = state.selectedItem, status = state.rowStatus) {
+        if (!active() || !state.queueReady || !item?.rowsReadable)
+            return;
+        const selectedKey = targetKey(item);
+        const current = state.items.find(value => targetKey(value) === selectedKey);
+        if (!current?.rowsReadable)
+            return;
+        item = current;
+        if (!state.selectedItem || targetKey(item) !== targetKey(state.selectedItem))
+            closePanels();
+        const version = ++rowsVersion;
+        rowsRequest?.abort();
+        const request = rowsRequest = new AbortController();
+        state.selectedItem = item;
+        state.rowStatus = status;
+        state.rows = null;
+        state.edits = dictionary();
+        state.notes = dictionary();
+        editVersion++;
+        state.rowsLoading = true;
+        state.rowsError = null;
+        state.actionError = null;
+        render();
+        try {
+            const result = await dataQualityApi.quarantineRows({ quarantineTarget: item.quarantineTarget, jobName: item.jobName, status, limit: 50 }, request.signal);
+            if (!active() || version !== rowsVersion)
+                return;
+            state.rows = readQualityRows(result, item.quarantineTarget, status);
+        }
+        catch (reason) {
+            if (active() && version === rowsVersion)
+                state.rowsError = asError(reason).message;
+        }
+        finally {
+            if (active() && version === rowsVersion) {
+                state.rowsLoading = false;
+                render();
+            }
+        }
+    }
+    async function loadTrend(jobName) {
+        if (!active() || !jobName)
+            return;
+        closePanels();
+        const version = ++trendVersion;
+        const request = trendRequest = new AbortController();
+        state.trendJob = jobName;
+        state.trendLoading = true;
+        render();
+        const [trend, rules] = await Promise.allSettled([
+            dataQualityApi.qualityTrend({ jobName }, request.signal), dataQualityApi.qualityRules(jobName, request.signal)
+        ]);
+        if (!active() || version !== trendVersion)
+            return;
+        try {
+            if (trend.status === 'rejected')
+                throw trend.reason;
+            state.trend = readQualityTrend(trend.value, jobName);
+        }
+        catch (reason) {
+            state.trendError = asError(reason).message;
+        }
+        try {
+            if (rules.status === 'rejected')
+                throw rules.reason;
+            state.rules = readQualityRules(rules.value, jobName);
+        }
+        catch (reason) {
+            state.rulesError = asError(reason).message;
+        }
+        state.trendLoading = false;
+        render();
+    }
+    function knownRejection(reason) {
+        return isObject(reason) && [400, 401, 403, 404, 409].includes(Number(reason.status));
+    }
+    async function submit(item, kind, row = null, disposition = '') {
+        if (!active() || busy || !state.queueReady || pendingTarget(state, item) || (kind === 'Replay' && !item.isReplayable))
+            return;
+        const current = state.items.find(value => targetKey(value) === targetKey(item));
+        if (!current || (kind === 'Replay' && !current.isReplayable) || (kind === 'Disposition' && !current.rowsReadable))
+            return;
+        item = current;
+        const id = row ? rowId(row) : null;
+        if (kind === 'Disposition' && (!row || !id || !['quarantined', 'released', 'replaying'].includes(rowStatus(row))
+            || !['released', 'discarded', 'replayed'].includes(disposition) || (disposition === 'released' && !item.isReplayable)))
+            return;
+        const panelVersion = rowsVersion, inputVersion = editVersion;
+        const body = { quarantineTarget: item.quarantineTarget, jobName: item.jobName,
+            rowIds: id ? [id] : [], disposition, changes: disposition === 'released' && id && row && rowStatus(row) !== 'replaying' ? { ...state.edits[id] } : null,
+            note: id ? state.notes[id] ?? null : null, expectedStatus: row ? rowStatus(row) : 'quarantined' };
+        busy = true;
+        state.message = null;
+        state.actionError = null;
+        const key = targetKey(item);
+        inFlight.add(key);
+        state.unconfirmed.add(key);
+        if (kind === 'Replay')
+            state.replayingTarget = targetKey(item);
+        else
+            state.rowAction = id;
+        render();
+        try {
+            const value = kind === 'Replay'
+                ? await dataQualityApi.replayQuarantine(item.quarantineTarget, item.jobName, lifetime.signal)
+                : await dataQualityApi.updateQuarantineDisposition(body, lifetime.signal);
+            if (!active())
+                return;
+            const result = readQualitySubmission(value, kind, item.replayStatement);
+            if (state.trackedJobs.some(job => job.jobId === result.jobId))
+                throw new TypeError('Submission acknowledgement reused an existing job id.');
+            state.unconfirmed.delete(key);
+            if (kind === 'Replay' || (panelVersion === rowsVersion && inputVersion === editVersion))
+                state.message = `${kind} job ${result.jobId} submitted; tracking durable execution status.`;
+            trackJob(result.jobId, kind, item, id);
+        }
+        catch (reason) {
+            if (knownRejection(reason))
+                state.unconfirmed.delete(key);
+            if (!active())
+                return;
+            if (knownRejection(reason))
+                state.actionError = asError(reason).message;
+            else {
+                state.unconfirmed.add(targetKey(item));
+                state.actionError = `${kind} outcome is unconfirmed. Inspect job history and refresh the queue before retrying.`;
+            }
+        }
+        finally {
+            inFlight.delete(key);
+            busy = false;
+            state.replayingTarget = null;
+            state.rowAction = null;
+            if (active())
+                render();
+        }
+    }
+    function rememberOpener(button) { opener = selector(button); }
+    function click(event) {
+        if (!active() || !(event.target instanceof Element))
+            return;
+        const button = event.target.closest('button');
+        if (!button || !root.contains(button) || button.disabled)
+            return;
+        const id = button.id;
+        if (id === 'dqRefreshBtn') {
+            void load(true);
+            return;
+        }
+        if (id === 'dqTrendClose' || id === 'dqCloseRows') {
+            close();
+            return;
+        }
+        if (id === 'dqReloadRows') {
+            void loadRows();
+            return;
+        }
+        if (id === 'dqJobLookupBtn') {
+            const jobName = root.querySelector('#dqJobLookupSelect')?.value;
+            if (jobName) {
+                rememberOpener(button);
+                void loadTrend(jobName);
+            }
+            return;
+        }
+        if (button.dataset.trendJob) {
+            rememberOpener(button);
+            void loadTrend(button.dataset.trendJob);
+            return;
+        }
+        const item = state.items.find(value => value.jobName === button.dataset.jobName
+            && value.quarantineTarget === (button.dataset.replayTarget ?? button.dataset.reviewTarget));
+        if (item && button.dataset.replayTarget) {
+            void submit(item, 'Replay');
+            return;
+        }
+        if (item && button.dataset.reviewTarget) {
+            rememberOpener(button);
+            void loadRows(item);
+            return;
+        }
+        const row = state.rows?.rows.find(value => rowId(value) === (button.dataset.releaseRow ?? button.dataset.discardRow));
+        if (row && state.selectedItem) {
+            void submit(state.selectedItem, 'Disposition', row, button.dataset.releaseRow ? 'released' : button.dataset.disposition ?? 'discarded');
+            return;
+        }
+        if (button.dataset.copyReplay || button.dataset.copyReview)
+            void copy(button);
+    }
+    async function copy(button) {
+        const label = button.textContent;
+        try {
+            if (!navigator.clipboard?.writeText)
+                throw new Error('Clipboard is unavailable.');
+            await navigator.clipboard.writeText(button.dataset.copyReplay ?? button.dataset.copyReview ?? '');
+            if (!active() || !button.isConnected)
+                return;
+            button.textContent = 'Copied';
+            const timer = setTimeout(() => { copyTimers.delete(timer); if (active() && button.isConnected)
+                button.textContent = label; }, 1200);
+            copyTimers.add(timer);
+        }
+        catch (reason) {
+            if (active()) {
+                state.actionError = asError(reason).message;
+                render();
+            }
+        }
+    }
+    function input(event) {
+        if (!active() || !(event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement))
+            return;
+        const element = event.target;
+        if (!root.contains(element))
+            return;
+        if (element.id === 'dqQueueSearch')
+            state.q = element.value;
+        if (element.id === 'dqReplayableFilter')
+            state.replayable = element.value;
+        const id = element.dataset.editRow, column = element.dataset.editColumn;
+        const row = id ? state.rows?.rows.find(value => rowId(value) === id) : null;
+        if (id && column && row && ['quarantined', 'released'].includes(rowStatus(row))
+            && !column.toLowerCase().startsWith('__dq_') && state.rows?.columns.includes(column)) {
+            (state.edits[id] ??= dictionary())[column] = element.value;
+            editVersion++;
+        }
+        const noteId = element.dataset.noteRow;
+        if (noteId && state.rows?.rows.some(value => rowId(value) === noteId)) {
+            state.notes[noteId] = element.value;
+            editVersion++;
+        }
+    }
+    function change(event) {
+        input(event);
+        if (!(event.target instanceof HTMLSelectElement))
+            return;
+        if (event.target.id === 'dqRowsStatus' && ROW_STATUSES.includes(event.target.value))
+            void loadRows(undefined, event.target.value);
+        if (event.target.id === 'dqJobLookupSelect' && event.target.value) {
+            rememberOpener(event.target);
+            void loadTrend(event.target.value);
+        }
+    }
+    function apply(event) { if (event.target instanceof HTMLFormElement && event.target.id === 'dqQueueForm') {
+        event.preventDefault();
+        void load();
+    } }
+    root.addEventListener('click', click);
+    root.addEventListener('input', input);
+    root.addEventListener('change', change);
+    root.addEventListener('submit', apply);
+    function dispose() {
+        if (disposed)
+            return;
+        disposed = true;
+        lifetime.abort();
+        queueRequest?.abort();
+        rowsRequest?.abort();
+        trendRequest?.abort();
+        pollTimers.forEach(timer => clearTimeout(timer));
+        pollTimers.clear();
+        copyTimers.forEach(timer => clearTimeout(timer));
+        copyTimers.clear();
+        releaseDialogs?.();
+        root.removeEventListener('click', click);
+        root.removeEventListener('input', input);
+        root.removeEventListener('change', change);
+        root.removeEventListener('submit', apply);
+        state.edits = dictionary();
+        state.notes = dictionary();
+        root.replaceChildren();
+        if (surfaces.get(root) === surface)
+            surfaces.delete(root);
+    }
+    const surface = {
+        async show() {
+            if (!active())
+                return;
+            if (shown) {
+                await load();
+                return;
+            }
+            shown = true;
+            const params = new URLSearchParams(window.location.search);
+            const target = params.get('target') ?? params.get('q'), job = params.get('jobName') ?? params.get('job');
+            state.q = target ?? job ?? '';
+            restore();
+            await load(false, target, job);
+        }, dispose
+    };
+    surfaces.set(root, surface);
+    return surface;
 }

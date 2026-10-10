@@ -1,4 +1,5 @@
 using ETL_SQL.Portal.Data;
+using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -36,23 +37,10 @@ public class AdminServicesController(PortalDbContext db, PortalConfig config) : 
         return Ok(services.Select(s =>
         {
             var last = lastRuns.FirstOrDefault(r => r.ServiceName == s.Name);
-            return new
-            {
-                name = s.Name,
-                enabled = s.Schedule.Enabled,
-                intervalHours = s.Schedule.IntervalHours,
-                smtpAlias = s.Schedule.SmtpAlias,
-                recipients = s.Schedule.Recipients,
-                lastRun = last == null ? null : new
-                {
-                    last.Outcome,
-                    last.StartedAtUtc,
-                    last.CompletedAtUtc,
-                    last.Attempts,
-                    last.NodeName,
-                    last.Detail
-                }
-            };
+            return new AdminServiceStatus(s.Name, s.Schedule.Enabled, s.Schedule.IntervalHours,
+                s.Schedule.SmtpAlias, s.Schedule.Recipients,
+                last == null ? null : new AdminServiceRunSummary(last.Outcome, last.StartedAtUtc,
+                    last.CompletedAtUtc, last.Attempts, last.NodeName, last.Detail));
         }));
     }
 

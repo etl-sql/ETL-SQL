@@ -94,10 +94,11 @@ Studio scope; the browser plan and the evidence behind its ordering are the slic
 
 v0.20.0 shipped browser linting, the designer/runtime module split, and test lane stability.
 v0.21.0 continues this trajectory with the remaining TypeScript source migrations and Studio
-Alpha backlog tasks. Studio, the Portal's reporting and stewardship surfaces, and the multi-tenant
-admin screens are carried by roughly 51,000 lines of JavaScript. The recurring defect is not a wrong
-algorithm; it is a binding, a route name, or a DTO field that does not exist, hidden by a `catch`
-and rendered as something quietly wrong.
+Alpha backlog tasks. The browser plan began with roughly 51,000 lines of JavaScript across Studio,
+reporting, stewardship, and administration. Shared runtime/designer modules now have TypeScript
+owners; remaining Portal conversions and generated-output cleanup are tracked in `TODO.md` §1.
+The plan addresses missing bindings, route names, and DTO fields that can be hidden by a `catch`
+and rendered as incorrect UI state.
 
 **Problem and Intended Outcome:**
 The browser sources are small enough to reason about, linted and type-checked in CI, the client
@@ -127,10 +128,10 @@ profile it is not the one that closes the most bugs.
 
 **Boundaries:** The delivery model is the real cost, not the annotations. One canonical asset is
 copied verbatim to five mount points by `scripts/sync-assets.js`, pinned to LF by `.gitattributes`,
-and gated for drift by `Test-PrePush.ps1`; the ui-sandbox and the browser tests both rely on the file
-served being the file in the repo. A bundler changes that property, so the sync, the drift gate and
-the sandbox must be redesigned together with it rather than after it. Nothing in slices 1 to 4
-requires a bundler.
+and gated for drift by `Test-PrePush.ps1`. TypeScript compilation preserves the served JavaScript
+URLs and the existing offline bundle. Sandbox, tests, builds, and packages consume prepared assets.
+Source-only preparation and packaged-host evidence must pass before those outputs leave Git;
+`TODO.md` §1.1 owns the cleanup checklist. No new bundler is required.
 
 **Dependencies:** None outstanding. The v0.19.0 type gate and generated contracts are in place.
 
@@ -146,15 +147,12 @@ requires a bundler.
    owner; shared state and disposal remain coordinated by the entry points.
    Online hosts load ES modules; offline snapshots embed the drift-gated generated runtime bundle.
    Verification is recorded in [the browser split baseline](docs/releases/v0.20.0-browser-split-baseline.md).
-3. **Repair the browser and Portal test lanes.** A separate problem from typing, and it must not be
-   folded into it — none of these failures live in the browser sources. The lane reports one fixture
-   failure as 231 identical, contentless messages naming none of the real conditions, which has
-   already produced a wrong root cause that was acted on more than once. DAG assertions wait on SVG
-   *visibility*, so an edge that happens to lay out axis-aligned has a zero-area box and times out.
-   The lane runs on one shared Portal, admin account and sign-in gate across every test class,
-   alongside a mutable global connector registry. Nine `scripts/test-*.mjs` checks are red and have
-   been for some time, because none of them runs in pre-push or CI. Stability work that leaves these
-   in place will be measured by a suite nobody trusts.
+3. **Repair the browser and Portal test lanes.** Early failures included repeated fixture diagnostics,
+   SVG visibility waits on zero-area edges, and shared Portal/admin/connector state. Nine consumer
+   checks were failing outside the gates. These failures motivated the wait and shared-state audit.
+   Current progress includes scoped connector-registry restoration, a passing 582-test browser run,
+   and all 80 discovered consumer checks passing in the pre-push/CI workflow. Final verification
+   against the completed change remains required; `TODO.md` records the current evidence.
 
    The v0.19.0 release run sharpened this considerably. Five separate failures were diagnosed, none
    of them in shipped code, and four shared one shape — **a wait that watches for the wrong thing**:
@@ -165,10 +163,8 @@ requires a bundler.
    `PlaywrightException` while action timeouts arrive as `System.TimeoutException`, so it had never
    run. The fixture now names which step of host creation failed, which is the smallest piece of
    this slice and was pulled forward because without it every recurrence was a guess — two wrong
-   root causes were proposed in one evening. What remains is the shared-state half: one Portal, one
-   admin account and one sign-in gate across every test class, plus the mutable global connector
-   registry. Auditing the lane for the wait-shape above is worth more than fixing them as they
-   surface.
+   root causes were proposed in one evening. That history explains why the audit covers both wait
+   conditions and shared state, including connector-registry restoration on constructor failure.
 4. **Move the sources to `.ts`.** A real module graph and a build step, over files that are by then
    linted, split, and type-checked. This is the step the delivery-model boundary applies to, and it
    is scheduled last so the sync, the drift gate and the sandbox are redesigned once, against modules
@@ -181,13 +177,15 @@ filters.
 
 **Acceptance Evidence:**
 - ESLint and the type gate both run in `Test-PrePush.ps1` and in CI, and both are clean.
-- No browser source exceeds a stated line budget; `designer.js` and `report-runtime.js` no longer
-  exist as single files, and the modules replacing them are individually importable by the
-  ui-sandbox.
+- Browser controllers have focused TypeScript owners and shared typed contracts. The stable
+  `designer.js` and `report-runtime.js` delivery entries compose individually importable modules;
+  the UI sandbox exercises those modules.
 - A failing `PortalBrowserFixture` names the port, the process holding it, and the inner exception.
 - Every `scripts/test-*.mjs` check passes, and they run in the pre-push gate.
 - After the TypeScript migration, asset sync, the drift gate and the ui-sandbox all still hold, proven by the
   same checks that guard them today.
+- Generated outputs leave source control only after the preparation, source-only build, packaged
+  runtime, and post-cleanup Git checks in `TODO.md` §1.1 pass.
 
 
 ## Later Reporting and Presentation Work

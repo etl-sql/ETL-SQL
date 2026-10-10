@@ -31,7 +31,6 @@ import globals from './scripts/lint/node_modules/globals/index.js';
  */
 const classicScripts = [
     'src/ETL-SQL.ReportRuntime/Resources/Shared/feedback.js',
-    'src/ETL-SQL.Portal/wwwroot/js/control-plane.js',
     'src/ETL-SQL.Portal/wwwroot/js/native-charts.js',
 ];
 

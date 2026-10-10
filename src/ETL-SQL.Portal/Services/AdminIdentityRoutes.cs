@@ -28,6 +28,7 @@ public static class AdminIdentityRoutes
     private static readonly (string Method, string Template)[] Templates =
     [
         // Users
+        ("GET",    "roles"),
         ("GET",    "users"),
         ("GET",    "users/catalog"),
         ("POST",   "users"),

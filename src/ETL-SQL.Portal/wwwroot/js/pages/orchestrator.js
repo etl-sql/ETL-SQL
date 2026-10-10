@@ -11,13 +11,15 @@ import { applyPortalBranding, initTheme } from '../branding.js';
 import { renderDag, createScriptEditor } from '../../designer/designer.js';
 import { getSessionIdentity, hasRole, renderSessionIdentity } from '../session-identity.js';
 import { applyNavigationSafely } from '../portal-nav.js';
-import { renderTriageBoard, selectedJobNames } from '../triage-ui.js';
+import { createTriageController } from '../triage-controller.js';
 import { renderPortalHeader } from '../portal-header.js';
 import { installDialogAccessibility } from '../dialog-a11y.js';
 import { accessPanelHtml, ownerLabel } from '../orchestrator-acl-ui.js';
+import { activityQuery } from '../orchestrator-activity.js';
+import { createScheduledJobActivityCoordinator } from '../orchestrator-activity-coordinator.js';
+import { renderScheduledJobsTable } from '../orchestrator-job-table.js';
 import {
   escHtml, fmtDt,
-  filterAndPaginateJobs,
   renderSchedulesTable,
   renderNotificationsTable,
   renderWatermarksTable,
@@ -87,9 +89,8 @@ async function apiJson(url, opts = {}) {
 }
 
 const api = {
-  status:       () => apiJson(`${BASE}/status`),
-  metrics:      () => apiJson(`${BASE}/metrics`),
-  jobs:         () => apiJson(`${BASE}/jobs`),
+  status:       (signal) => apiJson(`${BASE}/status`, { signal }),
+  activity:     (request, signal) => apiJson(`${BASE}/jobs/activity?${activityQuery(request)}`, { signal, cache: 'no-store' }),
   history:      (name, limit = 30) => apiJson(`${BASE}/jobs/${encodeURIComponent(name)}/history?limit=${limit}`),
   resume:       (historyId) => apiFetch(`${BASE}/runs/${historyId}/resume`, { method: 'POST' }),
   create:       (body) => apiFetch(`${BASE}/jobs`, { method: 'POST', body }),
@@ -105,9 +106,9 @@ const api = {
   dag:          (name) => apiJson(`${BASE}/jobs/${encodeURIComponent(name)}/dag`),
   dependencies: (name) => apiJson(`${BASE}/jobs/${encodeURIComponent(name)}/dependencies`),
   audit:        (name) => apiJson(`${BASE}/jobs/${encodeURIComponent(name)}/audit`),
-  triage:       (lookbackHours = 24) => apiJson(`${BASE}/triage?lookbackHours=${encodeURIComponent(lookbackHours)}`),
-  triageRun:(runId) => apiJson(`${BASE}/triage/runs/${encodeURIComponent(runId)}`),
-  rerun:        (jobNames) => apiFetch(`${BASE}/jobs/rerun`, { method: 'POST', body: { jobNames } }),
+  triage:       (lookbackHours = 24, signal) => apiJson(`${BASE}/triage?lookbackHours=${encodeURIComponent(lookbackHours)}`, { signal, cache: 'no-store' }),
+  triageRun:(runId, signal) => apiJson(`${BASE}/triage/runs/${encodeURIComponent(runId)}`, { signal, cache: 'no-store' }),
+  rerun:        (jobNames, signal) => apiFetch(`${BASE}/jobs/rerun`, { method: 'POST', body: { jobNames }, signal }),
 
   // Schedules
   schedules:       (limit = 1000) => apiJson(`${BASE}/schedules?limit=${limit}`),
@@ -165,12 +166,6 @@ let sparklineChart = null;
 let depGraphChart = null;
 let timelineMode = 'gantt'; // 'gantt' | 'calendar'
 let sparklineMetric = 'duration'; // 'duration' | 'rows'
-let online = false;
-let jobsFilter = 'all';
-let jobsSearchTerm = '';
-let jobsStatusFilter = 'all';
-let jobsPage = 1;
-let jobsPageSize = 25;
 let dagJobName   = null;
 let scriptEditor = null;
 let scriptOriginalValue = '';
@@ -178,6 +173,34 @@ let lastSparklineEntries = [];
 let editingScheduleName = null;
 let editingNotificationName = null;
 let activeJobStates = [];
+let visibleJobs = [];
+const activityCoordinator = createScheduledJobActivityCoordinator({
+  view: {
+    root: document,
+    fetchPage: api.activity,
+    renderPage: renderCurrentJobsView,
+    clearPage: () => { visibleJobs = []; }
+  },
+  status: api.status,
+  onlineChanged: updateOnlineState,
+  renderCatalog: (jobs) => {
+    allJobs = jobs;
+    document.getElementById('jobsNavCount').textContent = String(jobs.length);
+    if (timelineMode === 'gantt') renderGantt(jobs);
+    else renderCalendarTimelineView();
+  },
+  clearCatalog: () => {
+    allJobs = [];
+    document.getElementById('jobsNavCount').textContent = '—';
+    if (ganttChart) renderGantt([]);
+    document.getElementById('timelineCalendarWrap').replaceChildren();
+  },
+  catalogError: error => showToast(`Failed to load the job timeline: ${error.message}`, true)
+});
+function findJob(name) {
+  return visibleJobs.find(job => jobValue(job, 'Name') === name)
+    ?? allJobs.find(job => jobValue(job, 'Name') === name);
+}
 
 // ── View Switcher ──────────────────────────────────────────────────────────────
 function setActiveView(view) {
@@ -203,82 +226,8 @@ document.getElementById('orchNavNotifications').addEventListener('click', () => 
 // ── Top Action Buttons ─────────────────────────────────────────────────────────
 document.getElementById('logoutBtn')?.addEventListener('click', () => authApi.logout());
 document.getElementById('refreshJobsBtn').addEventListener('click', () => loadJobs());
-// The four metric chips are read-outs, not filters.
-//
-// They were wired to `showMetricJobs` and `clearJobsFilter`, neither of which is defined
-// anywhere, so every click threw a ReferenceError and nothing happened. The feature cannot be
-// finished here: two of the four counts come from the service's runtime metrics (how many jobs
-// are running or queued *right now*) while this table lists job definitions, which carry no run
-// state at all — `LastRun` and `NextRun` are the only temporal fields on them. Telling done-today
-// from failed-today needs the per-job history endpoint, one call per job, which is why
-// `failedToday` in loadJobs() has always been zero. Filtering the table by any of the four needs
-// a server-side filter or a run-state field on the list; approximating it from what is here would
-// put a plausible wrong answer in front of an operator.
-//
-// So they stop claiming to be buttons. A chip that reads its number and says why it does not
-// filter is honest; one that throws on click is not.
-for (const [id, why] of [
-  ['activeFilterBtn', 'Jobs running now. Filtering the table by this needs run state the job list does not carry.'],
-  ['queuedFilterBtn', 'Jobs queued now. Filtering the table by this needs run state the job list does not carry.'],
-  ['completedTodayFilterBtn', 'Runs finished today. Filtering the table by this needs the per-job run history.'],
-  ['failedTodayFilterBtn', 'Runs that failed today. Filtering the table by this needs the per-job run history.'],
-]) {
-  const chip = /** @type {HTMLButtonElement|null} */ (document.getElementById(id));
-  if (!chip) continue;
-  chip.disabled = true;
-  chip.title = why;
-}
-document.getElementById('clearJobsFilterBtn')?.addEventListener('click', () => {
-  jobsFilter = 'all';
-  jobsPage = 1;
-  renderCurrentJobsView();
-});
-
 document.getElementById('refreshSchedulesBtn')?.addEventListener('click', () => loadSchedules());
 document.getElementById('refreshNotificationsBtn')?.addEventListener('click', () => loadNotifications());
-
-// ── Search & Filter Listeners ──────────────────────────────────────────────────
-const searchInput = document.getElementById('jobsSearchInput');
-const searchClearBtn = document.getElementById('jobsSearchClearBtn');
-const statusSelect = document.getElementById('jobsStatusSelect');
-const pageSizeSelect = document.getElementById('jobsPageSizeSelect');
-
-searchInput.addEventListener('input', () => {
-  jobsSearchTerm = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (searchInput).value;
-  searchClearBtn.style.display = jobsSearchTerm ? '' : 'none';
-  jobsPage = 1;
-  renderCurrentJobsView();
-});
-
-searchClearBtn.addEventListener('click', () => {
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (searchInput).value = '';
-  jobsSearchTerm = '';
-  searchClearBtn.style.display = 'none';
-  jobsPage = 1;
-  renderCurrentJobsView();
-  searchInput.focus();
-});
-
-statusSelect.addEventListener('change', () => {
-  jobsStatusFilter = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (statusSelect).value;
-  jobsPage = 1;
-  renderCurrentJobsView();
-});
-
-pageSizeSelect.addEventListener('change', () => {
-  jobsPageSize = Number(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (pageSizeSelect).value) || 25;
-  jobsPage = 1;
-  renderCurrentJobsView();
-});
-
-document.getElementById('jobsPrevPageBtn').addEventListener('click', () => {
-  if (jobsPage > 1) { jobsPage--; renderCurrentJobsView(); }
-});
-
-document.getElementById('jobsNextPageBtn').addEventListener('click', () => {
-  jobsPage++;
-  renderCurrentJobsView();
-});
 
 // ── Timeline Switcher ──────────────────────────────────────────────────────────
 document.getElementById('timelineModeGanttBtn').addEventListener('click', () => {
@@ -317,12 +266,7 @@ function renderCalendarTimelineView() {
 
 // ── Polling & Status ───────────────────────────────────────────────────────────
 async function poll() {
-  try {
-    const [statusData, metricsData] = await Promise.all([api.status(), api.metrics()]);
-    online = statusData?.online === true;
-    updateOnlineState(online);
-    if (online && metricsData?.metrics) updateMetrics(metricsData.metrics);
-  } catch { online = false; updateOnlineState(false); }
+  await activityCoordinator.poll();
 }
 
 function updateOnlineState(isOnline) {
@@ -336,11 +280,6 @@ function updateOnlineState(isOnline) {
   banner.style.display = isOnline ? 'none' : '';
   if (stopBtn) stopBtn.style.display = isOnline ? '' : 'none';
   if (restartBtn) restartBtn.style.display = isOnline ? '' : 'none';
-}
-
-function updateMetrics(m) {
-  document.getElementById('activeCount').textContent = m.activeJobs ?? m.active_jobs ?? 0;
-  document.getElementById('queuedCount').textContent = m.queuedJobs ?? m.queued_jobs ?? 0;
 }
 
 // ── Load Jobs & Render ─────────────────────────────────────────────────────────
@@ -365,154 +304,30 @@ function fmtSchedule(job) {
   return s;
 }
 
-function statusBadge(isEnabled) {
-  return isEnabled
-    ? `<span class="badge badge-success">Active</span>`
-    : `<span class="badge badge-neutral">Disabled</span>`;
-}
-
-function lastRunBadge(job) {
-  return jobValue(job, 'LastRun') ? fmtDt(jobValue(job, 'LastRun')) : '<span style="color:var(--portal-muted)">Never</span>';
-}
-
 async function loadJobs() {
-  try {
-    const jobs = await api.jobs();
-    allJobs = jobs || [];
-    document.getElementById('jobsNavCount').textContent = allJobs.length;
-
-    // Load today's history summary for stat chips
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    let doneToday = 0;
-    let failedToday = 0;
-    allJobs.forEach(j => {
-      const lr = jobValue(j, 'LastRun');
-      if (lr && new Date(lr) >= today) {
-        doneToday++;
-      }
-    });
-    document.getElementById('completedCount').textContent = String(doneToday);
-    document.getElementById('failedCount').textContent = String(failedToday);
-
-    renderCurrentJobsView();
-
-    if (timelineMode === 'gantt') {
-      renderGantt(allJobs);
-    } else {
-      renderCalendarTimelineView();
-    }
-  } catch (err) {
-    document.getElementById('jobsTableWrap').innerHTML =
-      `<div class="empty-state" style="color:var(--portal-danger)">Failed to load jobs: ${err.message}</div>`;
-  }
+  await activityCoordinator.refresh();
 }
 
-function renderCurrentJobsView() {
+/** @param {ScheduledJobActivityPage} page */
+function renderCurrentJobsView(page) {
   const wrap = document.getElementById('jobsTableWrap');
-  const pagBar = document.getElementById('jobsPaginationBar');
-  const info = document.getElementById('jobsPaginationInfo');
-  const pageIndicator = document.getElementById('jobsPageIndicator');
-  const prevBtn = document.getElementById('jobsPrevPageBtn');
-  const nextBtn = document.getElementById('jobsNextPageBtn');
-
-  // Filter and paginate
-  const result = filterAndPaginateJobs(allJobs, {
-    search: jobsSearchTerm,
-    status: jobsStatusFilter,
-    page: jobsPage,
-    pageSize: jobsPageSize
-  });
-
-  renderJobsFilterHeader(result.total);
-
-  if (result.total === 0) {
-    wrap.innerHTML = `<div class="empty-state" style="padding:32px 0;text-align:center;color:var(--portal-muted)">
-      No jobs match the search or filter criteria. Click <strong>+ New Job</strong> to create one.
-    </div>`;
-    pagBar.style.display = 'none';
-    return;
+  const focused = document.activeElement instanceof HTMLElement && wrap.contains(document.activeElement)
+    ? document.activeElement : null;
+  const focusedAction = focused?.dataset.action;
+  const focusedName = focused?.dataset.name;
+  visibleJobs = page.items.map(item => item.job);
+  wrap.innerHTML = renderScheduledJobsTable(visibleJobs, jobValue(selectedJob, 'Id'));
+  if (focusedAction && focusedName) {
+    const replacement = wrap.querySelector(`[data-action="${CSS.escape(focusedAction)}"][data-name="${CSS.escape(focusedName)}"]`);
+    if (replacement instanceof HTMLElement) replacement.focus();
+    else document.getElementById('refreshJobsBtn').focus();
   }
-
-  pagBar.style.display = 'flex';
-  info.textContent = `Showing ${result.startIdx}–${result.endIdx} of ${result.total} jobs`;
-  pageIndicator.textContent = `${result.page} / ${result.totalPages}`;
-  /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (prevBtn).disabled = result.page <= 1;
-  /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (nextBtn).disabled = result.page >= result.totalPages;
-
-  wrap.innerHTML = `
-    <div style="overflow-x:auto;">
-    <table class="data-table">
-      <thead><tr>
-        <th>Job Name</th>
-        <th>Target / Sandbox</th>
-        <th>Owner</th>
-        <th>Schedule</th>
-        <th>Status</th>
-        <th>Last Run</th>
-        <th>Next Run</th>
-        <th>Actions</th>
-      </tr></thead>
-      <tbody>
-      ${result.items.map(j => {
-        const name = jobValue(j, 'Name');
-        const disp = jobValue(j, 'DisplayName') || name;
-        const targetKind = jobValue(j, 'JobType') || 'Script';
-        const targetPath = jobValue(j, 'TargetPath') || '';
-        const isBundle = targetKind === 'Bundle' || (targetPath && targetPath.startsWith('bundle://'));
-        const optionsRaw = jobValue(j, 'Options');
-        let sandbox = 'Default';
-        if (optionsRaw) {
-          try {
-            const parsed = typeof optionsRaw === 'string' ? JSON.parse(optionsRaw) : optionsRaw;
-            if (parsed.SandboxProfile) sandbox = parsed.SandboxProfile;
-          } catch {
-            // Options is free-form JSON; unparseable means no sandbox profile, so the
-            // 'Default' above stands.
-          }
-        }
-
-        return `
-        <tr class="job-row${jobValue(selectedJob, 'Name') === name ? ' selected' : ''}" data-name="${escHtml(name)}">
-          <td>
-            <strong>${escHtml(disp)}</strong>
-            ${disp !== name ? `<div style="font-size:.78em;color:var(--portal-muted);">${escHtml(name)}</div>` : ''}
-          </td>
-          <td>
-            <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
-              <span class="badge" style="font-size:.75em;background:${isBundle ? 'var(--portal-accent-soft)' : 'var(--portal-surface-subtle)'};">
-                ${isBundle ? '📦 Bundle' : '📜 Script'}
-              </span>
-              ${sandbox !== 'Default' ? `<span class="badge badge-accent" style="font-size:.72em;">${escHtml(sandbox)}</span>` : ''}
-            </div>
-            ${targetPath ? `<div style="font-size:.72em;color:var(--portal-muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(targetPath)}">${escHtml(targetPath)}</div>` : ''}
-          </td>
-          <td class="orch-owner-cell" title="${escHtml(ownerLabel(jobValue(j, 'CreatedBy')))}">${escHtml(ownerLabel(jobValue(j, 'CreatedBy')))}</td>
-          <td>${escHtml(fmtSchedule(j))}</td>
-          <td>${statusBadge(jobBool(j, 'IsEnabled'))}</td>
-          <td>${lastRunBadge(j)}</td>
-          <td>${jobValue(j, 'NextRun') ? fmtDt(jobValue(j, 'NextRun')) : '—'}</td>
-          <td>
-            <div class="table-actions">
-              <button class="btn btn-sm btn-outline" data-action="trigger" data-name="${escHtml(name)}" title="Run now">▶ Run</button>
-              <button class="btn btn-sm btn-outline" data-action="toggle" data-name="${escHtml(name)}" data-enabled="${jobBool(j, 'IsEnabled')}">
-                ${jobBool(j, 'IsEnabled') ? 'Disable' : 'Enable'}
-              </button>
-              <button class="btn btn-sm btn-outline" data-action="kill" data-name="${escHtml(name)}" title="Cancel running instance">Kill</button>
-              <button class="btn btn-sm btn-outline btn-danger-outline" data-action="delete" data-name="${escHtml(name)}">Delete</button>
-            </div>
-          </td>
-        </tr>`;
-      }).join('')}
-      </tbody>
-    </table>
-    </div>`;
 
   wrap.querySelectorAll('tr.job-row').forEach(row => {
     row.addEventListener('click', e => {
       if (/** @type {Element} */ (e.target).closest('button')) return;
       const name = /** @type {HTMLElement} */ (row).dataset.name;
-      const job  = allJobs.find(j => jobValue(j, 'Name') === name);
+      const job  = findJob(name);
       if (job) openDetail(job);
     });
   });
@@ -522,34 +337,9 @@ function renderCurrentJobsView() {
   });
 }
 
-function renderJobsFilterHeader(visibleCount) {
-  const actions = document.getElementById('jobsFilterActions');
-  const label = document.getElementById('jobsFilterLabel');
-  const kicker = document.getElementById('jobsSectionKicker');
-  const title = document.getElementById('jobsSectionTitle');
-
-  if (jobsFilter !== 'all') {
-    const labels = {
-      active: 'Active',
-      queued: 'Queued',
-      completedToday: 'Done today',
-      failedToday: 'Failed today'
-    };
-    kicker.textContent = labels[jobsFilter] ?? 'Filtered jobs';
-    title.textContent = `${visibleCount} Scheduled ${visibleCount === 1 ? 'Job' : 'Jobs'}`;
-    label.textContent = `${labels[jobsFilter] ?? 'Metric'} filter`;
-    actions.style.display = '';
-  } else {
-    kicker.textContent = 'All jobs';
-    title.textContent = 'Scheduled Jobs';
-    label.textContent = '';
-    actions.style.display = 'none';
-  }
-}
-
 const jobActions = createJobActionController({
   findTarget(name) {
-    const job = allJobs.find(job => jobValue(job, 'Name') === name);
+    const job = findJob(name);
     return job ? { name, version: jobValue(job, 'Version') } : null;
   },
   setEnabled: (target, enabled, signal) => api.update(target.name, { IsEnabled: enabled }, target.version, signal),
@@ -561,7 +351,7 @@ const jobActions = createJobActionController({
     await loadJobs();
     if (signal.aborted) return;
     if (action === 'toggle' && jobValue(selectedJob, 'Name') === target.name) {
-      const current = allJobs.find(job => jobValue(job, 'Name') === target.name);
+      const current = findJob(target.name);
       if (current) await openDetail(current);
     }
   },
@@ -669,7 +459,7 @@ function renderGantt(jobs) {
     ganttChart.on('click', params => {
       if (params.componentType === 'series') {
         const name = params.data?.[3];
-        const job  = allJobs.find(j => jobValue(j, 'Name') === name);
+        const job  = findJob(name);
         if (job) openDetail(job);
       }
     });
@@ -705,7 +495,7 @@ function renderGantt(jobs) {
     tooltip: {
       formatter: params => {
         const [, , , name] = params.data;
-        const job = allJobs.find(j => jobValue(j, 'Name') === name);
+        const job = findJob(name);
         if (!job) return name;
         return `<strong>${escHtml(name)}</strong><br/>${escHtml(fmtSchedule(job))}<br/>Next: ${fmtDt(jobValue(job, 'NextRun'))}`;
       }
@@ -1805,93 +1595,28 @@ document.getElementById('es-submitBtn').addEventListener('click', async () => {
 });
 
 // ── Triage Setup ───────────────────────────────────────────────────────────────
-const triageState = { expanded: new Set(), selected: new Set(), openRuns: new Set(), details: new Map() };
-let triageBoardData = null;
-
-async function loadTriage() {
-  const host = document.getElementById('triageBoard');
-  const lookback = Number(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('triageLookback')).value) || 24;
-  try {
-    triageBoardData = await api.triage(lookback);
-    if (!triageBoardData) return;
-    host.innerHTML = renderTriageBoard(triageBoardData, triageState);
-  } catch (err) {
-    host.innerHTML = `<div class="orch-offline-banner">
-      <strong>Triage is unavailable.</strong> ${String(err.message || err).slice(0, 300)}
-      <button class="btn btn-sm btn-outline" id="triageRetryBtn" type="button">Retry</button>
-    </div>`;
-    document.getElementById('triageRetryBtn')?.addEventListener('click', () => loadTriage());
-  }
-}
-
-document.getElementById('triageRefreshBtn').addEventListener('click', () => loadTriage());
-document.getElementById('triageLookback').addEventListener('change', () => {
-  triageState.expanded.clear();
-  triageState.selected.clear();
-  triageState.openRuns.clear();
-  triageState.details.clear();
-  loadTriage();
-});
-
-document.getElementById('triageBoard').addEventListener('click', async event => {
-  const toggle = /** @type {Element} */ (event.target).closest('.triage-incident-toggle');
-  if (toggle) {
-    const index = Number(/** @type {HTMLElement} */ (toggle).dataset.incident);
-    triageState.expanded.has(index) ? triageState.expanded.delete(index) : triageState.expanded.add(index);
-    document.getElementById('triageBoard').innerHTML = renderTriageBoard(triageBoardData, triageState);
-    return;
-  }
-  const evidence = /** @type {Element} */ (event.target).closest('.triage-run-evidence');
-  if (evidence) {
-    const runId = Number(/** @type {HTMLElement} */ (evidence).dataset.run);
-    if (triageState.openRuns.has(runId)) {
-      triageState.openRuns.delete(runId);
-      document.getElementById('triageBoard').innerHTML = renderTriageBoard(triageBoardData, triageState);
-      return;
+const triageController = createTriageController({
+  root: document.getElementById('triageBoard'),
+  lookback: /** @type {HTMLSelectElement} */ (document.getElementById('triageLookback')),
+  refreshButton: document.getElementById('triageRefreshBtn'),
+  pollMs: 15000,
+  api: {
+    board: (hours, signal) => api.triage(hours, signal),
+    detail: (id, signal) => api.triageRun(id, signal),
+    async rerun(names, signal) {
+      const response = await api.rerun(names, signal);
+      if (response.status === 401) auth.redirectToLogin();
+      if (!response.ok) throw new Error('Re-run request did not return a successful response.');
+      return response.json();
     }
-    triageState.openRuns.add(runId);
-    if (!triageState.details.has(runId)) {
-      triageState.details.set(runId, { status: 'loading' });
-      document.getElementById('triageBoard').innerHTML = renderTriageBoard(triageBoardData, triageState);
-      try {
-        const detail = await api.triageRun(runId);
-        if (detail) triageState.details.set(runId, detail);
-      } catch (err) {
-        triageState.details.set(runId, { status: 'error', message: String(err.message || err).slice(0, 300) });
-      }
-    }
-    document.getElementById('triageBoard').innerHTML = renderTriageBoard(triageBoardData, triageState);
-    return;
-  }
-  if (/** @type {Element} */ (event.target).closest('.triage-rerun-selected')) {
-    rerunJobs(selectedJobNames(triageBoardData, triageState.selected));
-    return;
-  }
-  const one = /** @type {Element} */ (event.target).closest('.triage-rerun-one');
-  if (one) rerunJobs([/** @type {HTMLElement} */ (one).dataset.job]);
+  },
+  runOne: name => openRunModal(name),
+  confirmRerun: names => ETLSQLFeedback.confirm(`Re-run ${names.length} jobs?`,
+    { title: 'Re-run selected jobs', confirmLabel: 'Re-run jobs', auditAction: 'orchestrator.job.rerun' }),
+  notify: (message, failed) => ETLSQLFeedback.notify(message,
+    { title: 'Re-run selected jobs', tone: failed ? 'error' : 'success' }),
+  onTriggered: () => loadJobs()
 });
-
-document.getElementById('triageBoard').addEventListener('change', event => {
-  const check = /** @type {Element} */ (event.target).closest('.triage-incident-check');
-  if (!check) return;
-  const index = Number(/** @type {HTMLElement} */ (check).dataset.incident);
-  /** @type {HTMLInputElement} */ (check).checked ? triageState.selected.add(index) : triageState.selected.delete(index);
-  document.getElementById('triageBoard').innerHTML = renderTriageBoard(triageBoardData, triageState);
-});
-
-async function rerunJobs(jobNames) {
-  if (!jobNames.length) return;
-  if (jobNames.length === 1) { openRunModal(jobNames[0]); return; }
-  if (!await ETLSQLFeedback.confirm(`Re-run ${jobNames.length} jobs?`, { title: 'Re-run selected jobs', confirmLabel: 'Re-run jobs', auditAction: 'orchestrator.job.rerun' })) return;
-  try {
-    const res = await api.rerun(jobNames);
-    const body = await res.json().catch(() => null);
-    if (!res.ok) { ETLSQLFeedback.notify(body?.error || 'Re-run failed.', { title: 'Re-run failed', tone: 'error' }); return; }
-    triageState.selected.clear();
-    await loadTriage();
-    await loadJobs();
-  } catch (err) { ETLSQLFeedback.notify(`${err.message || err}`, { title: 'Re-run failed', tone: 'error' }); }
-}
 
 // ── One-run overrides ───────────────────────────────────────
 const runDialog = createJobRunDialog({ root: document,
@@ -1913,10 +1638,16 @@ async function openRequestedJob() {
 }
 
 poll();
-loadTriage();
+triageController.reload();
 loadJobs().then(openRequestedJob);
-setInterval(poll, 5000);
-setInterval(loadTriage, 15000);
-
-window.addEventListener('pagehide', () => { jobActions.dispose(); runDialog.dispose(); }, { once: true });
-window.addEventListener('pageshow', event => { if (event.persisted) window.location.reload(); });
+const statusTimer = setInterval(poll, 5000);
+window.addEventListener('pagehide', () => {
+  clearInterval(statusTimer);
+  jobActions.dispose();
+  runDialog.dispose();
+  triageController.dispose();
+  activityCoordinator.dispose();
+}, { once: true });
+window.addEventListener('pageshow', event => {
+  if (event.persisted) window.location.reload();
+});

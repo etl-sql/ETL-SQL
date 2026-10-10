@@ -6,7 +6,6 @@
 import { importFresh, DESIGNER_JS } from '../util.js';
 
 const DATASETS_ADMIN_JS = '/src/ETL-SQL.Portal/wwwroot/js/datasets-admin.js';
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ── Mock "cache" table behind the dataset viewer ─────────────────────────────
 const COLUMNS = [
@@ -101,22 +100,22 @@ const DATASETS = [
     rowCount: 12840, isStale: true, ttl: '6h', lastRefresh: '2026-05-30T18:00:00Z',
     refreshInterval: '6h', owningReportName: 'Campaign Insights', owningReportId: 58 },
   { id: 3, name: 'staging_orders', folderPath: 'Root', accessLevel: 'Private', isEncrypted: false,
-    rowCount: null, isStale: true, ttl: null, lastRefresh: null,
+    rowCount: 0, isStale: true, ttl: null, lastRefresh: null,
     refreshInterval: null, owningReportName: null, owningReportId: null },
-];
+].map(item => ({ ...item, version: 1, createdAt: '2026-05-01T00:00:00Z', updatedAt: '2026-05-31T00:00:00Z' }));
 
 const datasetsApi = {
-  async list() { await sleep(150); return DATASETS.map(d => ({ ...d })); },
-  async get(id) { await sleep(80); return DATASETS.find(d => d.id === id); },
-  async update(id, body) { await sleep(120); const d = DATASETS.find(x => x.id === id); if (d) Object.assign(d, body); return d; },
-  async delete() { await sleep(120); return { ok: true }; },
-  async refresh() { await sleep(150); return { triggered: true, jobId: 4502 }; },
-  async listAcl() { await sleep(100); return [{ groupId: 5, groupName: 'Finance-Analysts', permission: 'Viewer' }, { groupId: 9, groupName: 'Data-Platform', permission: 'Owner' }]; },
-  async grantAcl() { await sleep(100); return { ok: true }; },
-  async revokeAcl() { await sleep(100); return { ok: true }; },
+  async list() { return DATASETS.map(d => ({ ...d })); },
+  async get(id) { return DATASETS.find(d => d.id === id); },
+  async update(id, body) { const d = DATASETS.find(x => x.id === id); if (d) Object.assign(d, body); return d; },
+  async delete() { return { ok: true }; },
+  async refresh() { return { triggered: true, jobId: 'dataset-refresh-4502' }; },
+  async listAcl() { return [{ groupId: 5, groupName: 'Finance-Analysts', permission: 'Viewer', principalKind: 'Group', userId: null, userName: null }, { groupId: 9, groupName: 'Data-Platform', permission: 'Owner', principalKind: 'Group', userId: null, userName: null }]; },
+  async grantAcl() { return { ok: true }; },
+  async revokeAcl() { return { ok: true }; },
 
   async data(id, { page = 1, pageSize = 50, sort = null, dir = 'asc', search = null, filters = null } = {}) {
-    await sleep(180);
+    
     let rows = selectRows({ search, filters });
     const filteredCount = rows.length;
     if (sort) {
@@ -133,11 +132,11 @@ const datasetsApi = {
       if (dir === 'desc') rows.reverse();
     }
     const start = (page - 1) * pageSize;
-    return { columns: COLUMNS, rows: rows.slice(start, start + pageSize), totalCount: TABLE.length, filteredCount };
+    return { columns: COLUMNS, rows: rows.slice(start, start + pageSize), totalCount: TABLE.length, filteredCount, page, pageSize };
   },
 
   async stats(id, filters = null) {
-    await sleep(160);
+    
     const rows = selectRows({ search: null, filters });
     return COLUMNS.map(c => {
       const vals = rows.map(r => r[c.name]);
@@ -149,15 +148,15 @@ const datasetsApi = {
         const avg = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
         return { name: c.name, min, max, avg, nullCount };
       }
-      return { name: c.name, nullCount };
+      return { name: c.name, nullCount, min: null, max: null, avg: null };
     });
   },
 
   async columnValues(id, colName, { search = null, limit = 50 } = {}) {
-    await sleep(120);
+    
     let vals = [...new Set(TABLE.map(r => r[colName]).map(v => (v == null ? '' : String(v))))];
     if (search) vals = vals.filter(v => v.toLowerCase().includes(search.toLowerCase()));
-    return { values: vals.slice(0, limit) };
+    return { values: vals.slice(0, limit), totalDistinct: vals.length };
   },
 
   async exportCsv(id, filename) { console.log('[sandbox] exportCsv', filename); },
@@ -165,18 +164,71 @@ const datasetsApi = {
 };
 
 const adminApi = {
-  async listGroups() { await sleep(80); return [{ id: 5, name: 'Finance-Analysts' }, { id: 9, name: 'Data-Platform' }, { id: 12, name: 'Marketing' }]; },
+  async listGroups() { return [{ id: 5, name: 'Finance-Analysts' }, { id: 9, name: 'Data-Platform' }, { id: 12, name: 'Marketing' }].map(item => ({ ...item, description: null, memberCount: 0, provider: null, adGroup: null, version: 1 })); },
 };
 
 const catalogApi = {
   async lineage(kind, { name } = {}) {
-    await sleep(150);
+    
     return [
       { targetTable: name, sourceTables: ['edw.Sales', 'edw.Customers'], operation: 'SELECT' },
       { targetTable: 'edw.Sales', sourceTables: ['stg.sales_csv'], operation: 'BULK INSERT' },
-    ];
+    ].map((item, index) => ({ ...item, id: index + 1, runAt: '2026-05-31T00:00:00Z', jobName: null, scriptPath: null,
+      targetColumn: null, tags: {}, sourceFile: null, line: 0, sourceColumns: [], transformationKind: null,
+      transformationExpression: null, functionsApplied: null, derivedFromDescriptions: null, reportId: null, reportName: null, folderPath: null }));
   },
 };
+
+function controlledApi(source) {
+  let mode = 'healthy', paused = null;
+  const records = structuredClone(DATASETS);
+  const calls = [], pending = [], waiters = [];
+  return {
+    calls, setMode(value) { mode = value; }, pause(kind) { paused = kind; },
+    whenPaused(kind) { return pending.some(item => item.kind === kind) ? Promise.resolve() : new Promise(resolve => waiters.push({ kind, resolve })); },
+    release() { for (const item of pending.splice(0)) item.resolve(); },
+    ...Object.fromEntries(Object.entries(source).map(([kind, implementation]) => [kind, async (...args) => {
+      calls.push({ kind, args: structuredClone(args.filter(value => !(value instanceof AbortSignal))) });
+      if (mode === 'data-unavailable' && kind === 'data') throw new Error('Dataset cache temporarily unavailable.');
+      let value;
+      if (kind === 'list') value = records;
+      else if (kind === 'update') {
+        const dataset = records.find(item => item.id === args[0]);
+        Object.assign(dataset, args[1], { ttl: args[1].ttl || null, version: dataset.version + 1 }); value = dataset;
+      } else if (kind === 'delete') { const index = records.findIndex(item => item.id === args[0]); if (index >= 0) records.splice(index, 1); }
+      else if (['grantAcl', 'revokeAcl', 'revokeUserAcl'].includes(kind)) {
+        const dataset = records.find(item => item.id === args[0]); value = { version: ++dataset.version };
+      } else value = await implementation(...args);
+      if (mode === 'bad-data' && kind === 'data') value = { columns: COLUMNS, rows: [] };
+      if (mode === 'bad-stats' && kind === 'stats') value = value.slice(1);
+      if (mode === 'stats-unavailable' && kind === 'stats') throw new Error('Dataset statistics temporarily unavailable.');
+      if (mode === 'stats-literal' && kind === 'stats') value = value.map(item => item.name === 'units'
+        ? { ...item, min: '<img src=x onerror="window.__datasetInjected=true">', max: null, avg: null } : item);
+      if (mode === 'invalid-update' && kind === 'update') value = { ...value, id: 999 };
+      if (mode === 'bad-acl' && kind === 'listAcl') value = [{ principalKind: 'User' }];
+      if (mode === 'bad-lineage' && kind === 'lineage') value = null;
+      if (mode === 'target-distinct' && kind === 'data' && args[0] === 2)
+        value = { ...value, rows: value.rows.map(row => ({ ...row, region: 'Customer snapshot' })) };
+      const snapshot = structuredClone(value);
+      if (paused !== kind) return snapshot;
+      paused = null;
+      return new Promise(resolve => {
+        pending.push({ kind, resolve: () => resolve(snapshot) });
+        for (const waiter of waiters.filter(item => item.kind === kind)) waiter.resolve();
+      });
+    }]))
+  };
+}
+
+export function createDatasetMock() { return controlledApi(datasetsApi); }
+
+function rendered(host, selector) {
+  if (host.querySelector(selector)) return Promise.resolve();
+  return new Promise(resolve => {
+    const observer = new MutationObserver(() => { if (host.querySelector(selector)) { observer.disconnect(); resolve(); } });
+    observer.observe(host, { childList: true, subtree: true });
+  });
+}
 
 export default {
   id: 'datasets-admin',
@@ -196,25 +248,29 @@ export default {
     const mod = await importFresh(DATASETS_ADMIN_JS);
     const designer = await importFresh(DESIGNER_JS);
 
+    const mock = createDatasetMock(), adminMock = controlledApi(adminApi), catalogMock = controlledApi(catalogApi);
     const ds = mod.createDatasetsAdmin({
       host: panel,
-      datasetsApi,
-      adminApi,
-      catalogApi,
+      datasetsApi: mock,
+      adminApi: adminMock,
+      catalogApi: catalogMock,
       renderDag: designer.renderDag,
       modalRoot: document.body,
     });
+
+    window.__datasets = { api: mock, admin: adminMock, catalog: catalogMock, surface: ds };
 
     await ds.load();
 
     if (fixtureId === 'viewer') {
       // Open the viewer for the first dataset so the data grid is front-and-centre.
       panel.querySelector('[data-action="view"]')?.click();
+      await rendered(document.body, '#dv-tableWrap tbody tr');
       ctx.stat('dataset viewer · sort, search, per-column filters, value picker, stats, paging, CSV');
     } else {
       ctx.stat('shared datasets table · View Data / Lineage / Refresh / Edit / Permissions per row');
     }
 
-    return { dispose() { ds.dispose(); }, resize() {} };
+    return { dispose() { ds.dispose(); delete window.__datasets; }, resize() {} };
   },
 };

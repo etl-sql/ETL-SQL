@@ -429,7 +429,17 @@ public class DatasetViewerService(
                 {
                     var seq = (System.Collections.IEnumerable)nullableValsProp.GetValue(raw)!;
                     int idx = 0;
-                    foreach (var v in seq) { if (idx >= rowCount) break; columnArrays[c][idx++] = v; }
+                    foreach (var value in seq)
+                    {
+                        if (idx >= rowCount) break;
+                        // COMPAT_BREAK: 0.21.0 — Parquet text must cross the JSON boundary as a scalar string.
+                        columnArrays[c][idx++] = value switch
+                        {
+                            ReadOnlyMemory<char> text => text.ToString(),
+                            Memory<char> text => text.ToString(),
+                            _ => value
+                        };
+                    }
                 }
             }
 
@@ -476,11 +486,12 @@ public class DatasetViewerService(
                 "starts_with" => result.Where(r => r.GetValueOrDefault(col)?.ToString()?.StartsWith(f.Val ?? "", StringComparison.OrdinalIgnoreCase) == true),
                 "eq" => result.Where(r => string.Equals(r.GetValueOrDefault(col)?.ToString(), f.Val, StringComparison.OrdinalIgnoreCase)),
                 "neq" => result.Where(r => !string.Equals(r.GetValueOrDefault(col)?.ToString(), f.Val, StringComparison.OrdinalIgnoreCase)),
-                "gt" => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) > 0),
-                "lt" => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) < 0),
-                "gte" => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) >= 0),
-                "lte" => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) <= 0),
-                "between" => result.Where(r => CompareNum(r.GetValueOrDefault(col), f.Val) >= 0 && CompareNum(r.GetValueOrDefault(col), f.Val2) <= 0),
+                // COMPAT_BREAK: 0.21.0 — Numeric comparisons exclude null cells, including inclusive ranges.
+                "gt" => result.Where(r => r.GetValueOrDefault(col) is { } value && CompareNum(value, f.Val) > 0),
+                "lt" => result.Where(r => r.GetValueOrDefault(col) is { } value && CompareNum(value, f.Val) < 0),
+                "gte" => result.Where(r => r.GetValueOrDefault(col) is { } value && CompareNum(value, f.Val) >= 0),
+                "lte" => result.Where(r => r.GetValueOrDefault(col) is { } value && CompareNum(value, f.Val) <= 0),
+                "between" => result.Where(r => r.GetValueOrDefault(col) is { } value && CompareNum(value, f.Val) >= 0 && CompareNum(value, f.Val2) <= 0),
                 "in" => result.Where(r => ParseJsonArray(f.Val).Contains(r.GetValueOrDefault(col)?.ToString() ?? "", StringComparer.OrdinalIgnoreCase)),
                 "is_null" => result.Where(r => r.GetValueOrDefault(col) is null),
                 "not_null" => result.Where(r => r.GetValueOrDefault(col) is not null),

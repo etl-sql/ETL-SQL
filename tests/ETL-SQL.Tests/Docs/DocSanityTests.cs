@@ -9,8 +9,19 @@ namespace ETL_SQL.Tests.Docs
 {
     public class DocSanityTests
     {
-        private static readonly string RepoRoot =
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        private static readonly string RepoRoot = FindRepositoryRoot();
+
+        private static string FindRepositoryRoot()
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (directory is not null)
+            {
+                if (File.Exists(Path.Combine(directory.FullName, "ETL-SQL.slnx")))
+                    return directory.FullName;
+                directory = directory.Parent;
+            }
+            throw new DirectoryNotFoundException("The documentation test checkout could not be located.");
+        }
 
         private static readonly Dictionary<(string Connector, string Option), string[]> StrictConnectorOptionValues =
             new()
@@ -113,7 +124,7 @@ namespace ETL_SQL.Tests.Docs
             // validation must resolve a complete registry from DI, so a polluted static must not make
             // a real connector look "unknown". This deterministically reproduces the pollution that
             // only surfaced under coverage test ordering, so the fast lane catches any regression.
-            using var _ = ConnectorRegistry.UseScoped(new ConnectorRegistry(new List<IConnector> { new MockDbConnector() }));
+            using var _ = ConnectorRegistry.UseScoped(() => new ConnectorRegistry(new List<IConnector> { new MockDbConnector() }));
 
             const string sql = "CREATE CONNECTION db AS POSTGRES(HOST='h', DATABASE='d');";
             var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
@@ -724,7 +735,7 @@ namespace ETL_SQL.Tests.Docs
             var excludedDirectories = new HashSet<string>(StringComparer.Ordinal)
             {
                 "Docs_Legacy", "node_modules", ".git", "bin", "obj", "Help_Legacy", ".claude",
-                ".worktrees", ".vscode-test", "artifacts"
+                ".worktrees", ".vscode-test", "artifacts", ".task-cache"
             };
             var pending = new Stack<string>();
             pending.Push(RepoRoot);
@@ -805,25 +816,23 @@ namespace ETL_SQL.Tests.Docs
             var tracked = TrackedFiles();
 
             var offenders = new List<string>();
-            foreach (var root in searchRoots)
+            foreach (var relative in tracked)
             {
-                var dir = RepoFile(root);
-                if (!Directory.Exists(dir)) continue;
+                if (!searchRoots.Any(root => relative.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase)))
+                    continue;
+                if (!extensions.Contains(Path.GetExtension(relative))) continue;
+                var file = RepoFile(relative);
+                if (!File.Exists(file)) continue;
 
-                foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+                // Read the Git inventory directly. Walking ignored directories before filtering
+                // can still enter unreadable caches or live IPC endpoints from VS Code tests.
+                var lines = File.ReadAllLines(file);
+                for (int i = 0; i < lines.Length; i++)
                 {
-                    if (!extensions.Contains(Path.GetExtension(file))) continue;
-                    var relative = Path.GetRelativePath(RepoRoot, file).Replace('\\', '/');
-                    if (!tracked.Contains(relative)) continue;
-
-                    var lines = File.ReadAllLines(file);
-                    for (int i = 0; i < lines.Length; i++)
-                    {
-                        var match = pattern.Match(lines[i]);
-                        if (!match.Success) continue;
-                        if (allowed.IsMatch(match.Value)) continue;
-                        offenders.Add($"{Path.GetRelativePath(RepoRoot, file)}:{i + 1}: {match.Value}");
-                    }
+                    var match = pattern.Match(lines[i]);
+                    if (!match.Success) continue;
+                    if (allowed.IsMatch(match.Value)) continue;
+                    offenders.Add($"{Path.GetRelativePath(RepoRoot, file)}:{i + 1}: {match.Value}");
                 }
             }
 

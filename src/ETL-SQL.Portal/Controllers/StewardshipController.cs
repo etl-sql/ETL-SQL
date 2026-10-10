@@ -204,7 +204,7 @@ public sealed class GovernanceController(
         await audit.LogAsync(CurrentUserId, "GOVERNANCE_REVIEW_ASSET", "GovernanceAsset", req.AssetKey,
             $"version={req.AssetVersion}");
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(new { req.AssetKey, req.AssetVersion, review.ReviewedAtUtc });
+        return Ok(new GovernanceAssetReviewDto(req.AssetKey, req.AssetVersion, review.ReviewedAtUtc));
     }
 
     [HttpPost("assets/badges")]
@@ -218,7 +218,7 @@ public sealed class GovernanceController(
         var existing = await Badges
             .FirstOrDefaultAsync(b => b.AssetKey == req.AssetKey && b.Badge == req.Badge, cancellationToken);
         if (existing is not null)
-            return Ok(new { req.AssetKey, req.Badge, existing.AssignedAtUtc });
+            return Ok(new GovernanceBadgeAssignmentDto(req.AssetKey, req.Badge, existing.AssignedAtUtc));
 
         db.StewardshipAssetBadges.Add(new StewardshipAssetBadge
         {
@@ -233,7 +233,7 @@ public sealed class GovernanceController(
         await audit.LogAsync(CurrentUserId, "GOVERNANCE_ASSIGN_BADGE", "GovernanceAsset", req.AssetKey,
             $"badge={req.Badge}; version={req.AssetVersion}");
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(new { req.AssetKey, req.Badge });
+        return Ok(new GovernanceBadgeAssignmentDto(req.AssetKey, req.Badge));
     }
 
     [HttpDelete("assets/badges")]

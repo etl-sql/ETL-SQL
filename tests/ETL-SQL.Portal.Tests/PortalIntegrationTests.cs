@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Quality;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Portal;
@@ -1409,6 +1410,58 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         });
 
         Assert.Equal(HttpStatusCode.Conflict, res.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("quarantined", "released")]
+    [InlineData("quarantined", "discarded")]
+    [InlineData("released", "released")]
+    [InlineData("released", "discarded")]
+    [InlineData("replaying", "released")]
+    [InlineData("replaying", "replayed")]
+    public async Task DataQuality_DispositionRequiresTheObservedRowState(string expectedStatus, string disposition)
+    {
+        var token = await GetAdminTokenAsync();
+        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
+        var job = $"state_guard_{Guid.NewGuid():N}";
+        await store.SetJobStateAsync(job, "dq:quarantine-manifest:q_state_guard",
+            JsonSerializer.Serialize(new QuarantineReplayManifest(job, "loads/x.etlsql", "sec", "#src",
+                "q_state_guard", true, null, ["Id"], "schema-state", DateTimeOffset.UtcNow)));
+        var res = await AuthPost(token, "/api/data-quality/quarantine/disposition", new
+        {
+            quarantineTarget = "q_state_guard",
+            jobName = job,
+            rowIds = new[] { "guarded-row" },
+            disposition,
+            expectedStatus
+        });
+        Assert.Equal(HttpStatusCode.Accepted, res.StatusCode);
+        var submitted = await res.Content.ReadFromJsonAsync<QuarantineDispositionResponse>(_json);
+        Assert.NotNull(submitted);
+        Assert.Contains($"AND __dq_status = '{expectedStatus}'", submitted!.DispositionStatement);
+        Assert.Contains("__dq_row_id IN ('guarded-row')", submitted.DispositionStatement);
+        _ = new Parser(new Lexer(submitted.DispositionStatement).Tokenize(), submitted.DispositionStatement).Parse();
+    }
+
+    [Theory]
+    [InlineData("replayed", "discarded", false)]
+    [InlineData("all", "released", false)]
+    [InlineData("quarantined", "replayed", false)]
+    [InlineData("replaying", "discarded", false)]
+    [InlineData("replaying", "released", true)]
+    public async Task DataQuality_DispositionRejectsInvalidRecoveryTransitions(string expectedStatus, string disposition, bool edited)
+    {
+        var token = await GetAdminTokenAsync();
+        var res = await AuthPost(token, "/api/data-quality/quarantine/disposition", new
+        {
+            quarantineTarget = "q_guard",
+            jobName = "guard",
+            rowIds = new[] { "row" },
+            disposition,
+            expectedStatus,
+            changes = edited ? new Dictionary<string, string> { ["Email"] = "changed@example.com" } : null
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
     }
 
     [Fact]

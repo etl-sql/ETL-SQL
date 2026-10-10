@@ -307,7 +307,7 @@ public class ConnectorRegistry : IConnectorRegistry
     /// do not need to, which is what makes the failure hard to attribute. This exists so the correct
     /// thing is the short thing:</para>
 
-    /// <code>using var _ = ConnectorRegistry.UseScoped(new ConnectorRegistry(myConnectors));</code>
+    /// <code>using var _ = ConnectorRegistry.UseScoped(() => new ConnectorRegistry(myConnectors));</code>
 
     /// <para>It restores rather than clearing, because clearing would be a different bug: the
     /// registry the run started with is the one the untouched tests expect. It is not thread-safe,
@@ -320,6 +320,29 @@ public class ConnectorRegistry : IConnectorRegistry
         var previous = Instance;
         Instance = registry;
         return new RegistryScope(previous);
+    }
+
+    /// <summary>
+    /// Captures the current registry before constructing its replacement. The enumerable
+    /// constructor publishes itself, so constructing it as an argument to the instance overload
+    /// would capture the replacement as the value to restore.
+    /// </summary>
+    public static IDisposable UseScoped(Func<IConnectorRegistry> createRegistry)
+    {
+        ArgumentNullException.ThrowIfNull(createRegistry);
+        var previous = Instance;
+        try
+        {
+            var registry = createRegistry();
+            ArgumentNullException.ThrowIfNull(registry);
+            Instance = registry;
+            return new RegistryScope(previous);
+        }
+        catch
+        {
+            Instance = previous;
+            throw;
+        }
     }
 
     private sealed class RegistryScope(IConnectorRegistry? previous) : IDisposable

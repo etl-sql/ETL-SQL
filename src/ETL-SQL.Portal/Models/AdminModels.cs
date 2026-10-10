@@ -11,6 +11,13 @@ public record CreateUserRequest(
 
 public record ResetPasswordRequest(string NewPassword);
 
+public record AdminRoleOptionDto(string Name);
+
+public record AdminReportDto(
+    int Id, string Name, string? Description, string ScriptPath,
+    int FolderId, string FolderName, string FolderPath,
+    DateTime CreatedAt, DateTime UpdatedAt, long Version);
+
 public record UserDto(
     int Id,
     string Username,
@@ -44,6 +51,13 @@ public record UpdateGroupRequest(string? Name, string? Description, string? Prov
 
 public record GroupDto(int Id, string Name, string? Description, int MemberCount, string? Provider = null, string? AdGroup = null, long Version = 1);
 public record GroupMemberDto(int Id, string Username, string? Email, bool IsActive);
+public record GroupMemberCatalogResponse(
+    int GroupId, long Version, IList<GroupMemberDto> Items, int Total, int Page, int PageSize);
+public record GroupMembershipResponse(int GroupId, int UserId, long Version);
+public record BulkAddGroupMembersResponse(
+    int GroupId, int Added, long Version, IReadOnlyList<int> ChangedUserIds, IReadOnlyList<int> SkippedUserIds);
+public record BulkRemoveGroupMembersResponse(
+    int GroupId, int Removed, long Version, IReadOnlyList<int> ChangedUserIds, IReadOnlyList<int> SkippedUserIds);
 
 public record AddUserToGroupRequest(string? Username, int? UserId);
 public record BulkGroupMembershipRequest(IList<int> UserIds);
@@ -57,6 +71,9 @@ public record BulkMutationResult(
     string Status,
     long? CurrentVersion = null,
     string? Error = null);
+
+public record BulkUserStatusResponse(int Updated, IReadOnlyList<BulkMutationResult> Results);
+public record BulkDeleteGroupsResponse(int Deleted, IReadOnlyList<BulkMutationResult> Results);
 
 public record AuditLogDto(
     int Id,
@@ -72,6 +89,14 @@ public record AuditLogDto(
     string? StudioCapability = null);
 
 public record PagedResult<T>(IList<T> Items, int Total, int Page, int PageSize);
+
+public sealed record AdminServiceRunSummary(
+    string Outcome, DateTime StartedAtUtc, DateTime? CompletedAtUtc,
+    int Attempts, string? NodeName, string? Detail);
+
+public sealed record AdminServiceStatus(
+    string Name, bool Enabled, int IntervalHours, string? SmtpAlias,
+    string Recipients, AdminServiceRunSummary? LastRun);
 
 /// <param name="Available">Every capability name, so an administrator does not have to guess them.</param>
 public record GroupStudioCapabilitiesDto(

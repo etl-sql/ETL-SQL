@@ -1,4 +1,5 @@
 using ETL_SQL.Core.Data;
+using System.Text.Json.Serialization;
 
 namespace ETL_SQL.Portal.Models;
 
@@ -78,3 +79,10 @@ public record DatasetColumnStatsDto(
     double? Avg);
 
 public record DatasetColumnValuesDto(IEnumerable<object?> Values, long TotalDistinct);
+
+public record DatasetRefreshAcceptedDto(
+    bool Triggered,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? JobId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Message = null);
+
+public record DatasetVersionResponse(long Version);

@@ -12,6 +12,7 @@
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-util.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -433,6 +434,7 @@ function renderSafeSvgInto(target, rawSvg) {
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-state.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -483,6 +485,7 @@ function setRefreshTimers(value) { _refreshTimers = value; }
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-theme.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -953,6 +956,7 @@ function updateBodyTheme(manifest, activePageName) {
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-transport.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -1115,6 +1119,7 @@ async function postRefreshVisuals(visuals) {
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-data.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -1305,6 +1310,7 @@ function setPendingLazyRows(value) { _pendingLazyRows = value; }
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-detail.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -1866,6 +1872,7 @@ function setOpenDetail(value) { openDetail = value; }
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-charts.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -2642,6 +2649,7 @@ function setNativeLayoutObservers(value) { _nativeLayoutObservers = value; }
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-table.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -3182,6 +3190,7 @@ function renderTable(container, visual, manifest) {
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-matrix.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -3671,6 +3680,7 @@ function findMicroChart(visual, rowIndex, columnIndex, sourceValue) {
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-controls-date.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -4262,6 +4272,7 @@ function renderRelDatePicker(container, visual, manifest) {
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-controls-input.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -5608,6 +5619,7 @@ function renderButton(container, btn) {
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-visual.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -6617,6 +6629,7 @@ function renderImage(container, visual) {
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-layout.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -7303,6 +7316,7 @@ function renderAccordionContainer(container, containerDef, manifest, pageTheme) 
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-actions.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -8154,6 +8168,7 @@ function setDrillInFlight(value) { _drillInFlight = value; }
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-views.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -8845,6 +8860,7 @@ function buildViewsPicker(manifest) {
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-chrome.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -9562,6 +9578,7 @@ function updateStagedUI() {
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/report-runtime.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.

@@ -417,7 +417,7 @@ public class SubscriptionsController(
 
         await audit.LogAsync(CurrentUserId, "BULK_UPDATE_SUBSCRIPTION_STATUS", "Subscription", null,
             $"{updated} subscriptions set active={req.IsActive}");
-        return Ok(new { Updated = updated, Results = results });
+        return Ok(new BulkSubscriptionStatusResponse(updated, results));
     }
 
     [HttpDelete("api/subscriptions/{id:int}")]
@@ -482,8 +482,16 @@ public class SubscriptionsController(
         if (sub is null) return NotFound();
         if (!IsAdmin && sub.UserId != CurrentUserId) return Forbid();
 
-        var history = await deliveryStatus.SynchronizeAsync(sub, limit);
-        return Ok(history);
+        try
+        {
+            var history = await deliveryStatus.SynchronizeAsync(sub, limit);
+            return Ok(history);
+        }
+        catch (SubscriptionHistoryUnavailableException)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { error = "Scheduler trigger history is temporarily unavailable. Please retry." });
+        }
     }
 
     // ── SMTP alias list (any authenticated user) ───────────────────────────────

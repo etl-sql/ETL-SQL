@@ -3,39 +3,34 @@ import { readFile } from 'node:fs/promises';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
-const [queue, api, story, css] = await Promise.all([
-  read('src/ETL-SQL.Portal/wwwroot/js/data-quality-queue.js'),
-  read('src/ETL-SQL.Portal/wwwroot/js/api.js'),
+const [view, story, css] = await Promise.all([
+  read('src/ETL-SQL.Portal/wwwroot/js/data-quality-view.js'),
   read('tools/ui-sandbox/stories/data-quality-queue.story.js'),
   read('src/ETL-SQL.Portal/wwwroot/css/portal.css'),
 ]);
 
-// This asserted `/api/jobs/{id}` until that turned out to be the defect. Data-quality submissions
-// are IJobChannel jobs and were never in the report-execution namespace, so polling it answered 404
-// forever, which the client read as a transient outage and retried every second for the life of the
-// tab. The endpoint is asserted whole, and the old one by its absence, so the fix cannot be undone
-// by a plausible-looking edit.
-const flatApi = api.split(/\s+/).join(' ');
-assert.ok(
-  flatApi.includes("jobStatus: (jobId) => contracted( 'dataQualitySubmissionStatus', apiJson(`/api/data-quality/jobs/${encodeURIComponent(jobId)}`))"),
-  'dataQualityApi.jobStatus no longer polls the data-quality job namespace.');
-
-// The absence is checked inside dataQualityApi only, because `/api/jobs/` is the right namespace
-// for report executions and pollJob elsewhere in this file uses it correctly.
-const dataQualityBlock = flatApi.slice(flatApi.indexOf('export const dataQualityApi'));
-assert.ok(dataQualityBlock.startsWith('export const dataQualityApi'), 'dataQualityApi is no longer exported from api.js.');
-assert.ok(
-  !dataQualityBlock.slice(0, dataQualityBlock.indexOf('export const', 1)).includes('apiJson(`/api/jobs/'),
-  'dataQualityApi is back on the report-execution namespace, which never holds data-quality job ids.');
-assert.match(api, /qualityRules: \(jobName\).*\/api\/data-quality\/rules/);
-assert.match(queue, /TERMINAL_JOB_STATUSES/);
-assert.match(queue, /sessionStorage/);
-assert.match(queue, /trackJob\(result\.jobId, 'Replay'/);
-assert.match(queue, /trackJob\(result\.jobId, 'Disposition'/);
-assert.match(queue, /dataQualityApi\.jobStatus\(jobId\)/);
-assert.match(queue, /dataQualityApi\.qualityRules\(jobName\)/);
-assert.match(queue, /Rules protecting columns/);
-assert.match(queue, /pollTimers\.forEach\(timer => clearTimeout\(timer\)\)/);
+// Data-quality submissions and report executions have different job namespaces. Exercise the
+// actual client so TypeScript's emitted formatting does not decide whether this check passes.
+const calls = [];
+let payload = { jobId: 'job/fixture', kind: 'Replay', quarantineTarget: 'fixture', status: 'Completed', isTerminal: true };
+let responseStatus = 200;
+globalThis.sessionStorage = { getItem: () => null };
+globalThis.window = { location: { origin: 'https://portal.test', href: 'https://portal.test/index.html' },
+  fetch: async url => { calls.push(String(url)); return Response.json(payload, { status: responseStatus }); } };
+const { dataQualityApi } = await import('../src/ETL-SQL.Portal/wwwroot/js/api.js');
+assert.deepEqual(await dataQualityApi.jobStatus('job/fixture'), payload);
+assert.equal(calls.pop(), '/api/data-quality/jobs/job%2Ffixture');
+payload = { ...payload, isTerminal: 'true' };
+await assert.rejects(dataQualityApi.jobStatus('job/fixture'), /dataQualitySubmissionStatus/);
+await dataQualityApi.qualityRules('job/fixture');
+assert.equal(calls.pop(), '/api/data-quality/rules?jobName=job%2Ffixture');
+// A 200 body does not acknowledge the channel's accepted-submission contract.
+await assert.rejects(dataQualityApi.replayQuarantine('fixture', 'job/fixture'), /accepted acknowledgement/);
+responseStatus = 202;
+payload = { jobId: 'job/fixture', replayStatement: 'REPLAY QUARANTINE fixture;' };
+assert.deepEqual(await dataQualityApi.replayQuarantine('fixture', 'job/fixture'), payload);
+assert.equal(calls.pop(), '/api/data-quality/quarantine/replay');
+assert.match(view, /Rules protecting columns/);
 assert.match(story, /id: 'job-status'/);
 assert.match(story, /status: 'Completed'/);
 assert.match(css, /\.dq-job-row/);

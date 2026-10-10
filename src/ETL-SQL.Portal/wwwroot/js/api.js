@@ -1,268 +1,141 @@
-/* api.js — JWT storage + fetch interceptor + API client */
-
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.Portal/BrowserSources/api.ts
+ * Run: node scripts/sync-assets.js
+ */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 import { assertApiContract } from './api-contracts.generated.js';
-
-// ── Token storage ──────────────────────────────────────────────────────────────
-
-const TOKEN_KEY   = 'etlsql_token';
-const REFRESH_KEY = 'etlsql_refresh';
-
-export const auth = {
-    getToken:        () => sessionStorage.getItem(TOKEN_KEY),
-    getRefreshToken: () => sessionStorage.getItem(REFRESH_KEY),
-    setTokens(token, refreshToken) {
-        sessionStorage.setItem(TOKEN_KEY, token);
-        if (refreshToken) sessionStorage.setItem(REFRESH_KEY, refreshToken);
-    },
-    clear() {
-        sessionStorage.removeItem(TOKEN_KEY);
-        sessionStorage.removeItem(REFRESH_KEY);
-    },
-    isLoggedIn: () => !!sessionStorage.getItem(TOKEN_KEY),
-    redirectToLogin() {
-        auth.clear();
-        window.location.href = '/login.html';
-    }
-};
-
-// ── Fetch interceptor ──────────────────────────────────────────────────────────
-
-let _refreshing = null;
-
-export async function apiFetch(url, opts = {}) {
-    const token = auth.getToken();
-    const headers = { ...(opts.headers || {}) };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
-        headers['Content-Type'] = 'application/json';
-        opts = { ...opts, body: JSON.stringify(opts.body) };
-    }
-
-    let res = await fetch(url, { ...opts, headers });
-
-    if (res.status === 401) {
-        // Try token refresh once
-        const refreshToken = auth.getRefreshToken();
-        if (!refreshToken) { auth.redirectToLogin(); return res; }
-
-        if (!_refreshing) {
-            _refreshing = fetch('/api/auth/refresh', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ refreshToken })
-            }).then(async r => {
-                if (!r.ok) { auth.redirectToLogin(); return null; }
-                const data = await r.json();
-                auth.setTokens(data.token, data.refreshToken);
-                return data.token;
-            }).finally(() => { _refreshing = null; });
-        }
-
-        const newToken = await _refreshing;
-        if (!newToken) return res;
-
-        headers['Authorization'] = `Bearer ${newToken}`;
-        res = await fetch(url, { ...opts, headers });
-        if (res.status === 401) { auth.redirectToLogin(); }
-    }
-
-    return res;
-}
-
-async function apiJson(url, opts = {}) {
-    const res = await apiFetch(url, opts);
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        // MustChangePassword middleware returns 403 with a redirect hint
-        if (res.status === 403 && err.redirect) {
-            window.location.href = err.redirect;
-            return;
-        }
-        throw Object.assign(new Error(err.error || res.statusText), { status: res.status, body: err });
-    }
-    if (res.status === 204) return {};
-    return res.json();
-}
-
+import { collectAdminUsers } from './admin-user-directory.js';
+import { apiFetch, apiJson, responseError } from './portal-http.js';
+export { auth, authApi, apiFetch } from './portal-http.js';
 function versionHeaders(version) {
-    if (version === undefined || version === null) return {};
-    return { 'If-Match': `"${version}"` };
+    return version == null ? {} : { 'If-Match': '"' + version + '"' };
 }
-
 function contracted(name, request) {
-    return request.then(value => assertApiContract(name, value));
+    return request.then(value => { assertApiContract(name, value); return value; });
 }
-
-// ── Auth ───────────────────────────────────────────────────────────────────────
-
-export const authApi = {
-    // Effective identity configuration (anonymous) so the login page can offer SSO when enabled.
-    async providers() {
-        const res = await fetch('/api/auth/providers');
-        if (!res.ok) return { local: true, oidcEnabled: false };
-        return res.json();
-    },
-    async login(username, password) {
-        const res = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-        });
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            throw Object.assign(new Error(err.error || 'Login failed'), { status: res.status });
-        }
-        return res.json();
-    },
-    async changePassword(currentPassword, newPassword) {
-        return apiJson('/api/auth/change-password', {
-            method: 'POST',
-            body: { currentPassword, newPassword }
-        });
-    },
-    async logout() {
-        const refreshToken = auth.getRefreshToken();
-        if (refreshToken) {
-            await apiFetch('/api/auth/logout', {
-                method: 'POST',
-                body: { refreshToken }
-            }).catch(() => {});
-        }
-        auth.redirectToLogin();
-    }
-};
-
 // ── Folders ────────────────────────────────────────────────────────────────────
-
 export const foldersApi = {
-    list: ()                  => contracted('folderList', apiJson('/api/folders')),
-    create: (name, parentId)  => contracted('folder', apiJson('/api/folders', { method: 'POST', body: { name, parentId } })),
+    list: () => contracted('folderList', apiJson('/api/folders')),
+    create: (name, parentId) => contracted('folder', apiJson('/api/folders', { method: 'POST', body: { name, parentId } })),
     update: (id, body, version) => contracted('folder', apiJson(`/api/folders/${id}`, { method: 'PUT', headers: versionHeaders(version), body })),
     delete: (id, cascade, version) => apiJson(`/api/folders/${id}?cascade=${!!cascade}`, { method: 'DELETE', headers: versionHeaders(version) }),
-    listAcl: (id)             => apiJson(`/api/folders/${id}/acl`),
-    grantAcl: (id, groupId, permission, version) =>
-        apiJson(`/api/folders/${id}/acl`, { method: 'POST', headers: versionHeaders(version), body: { groupId, permission } }),
-    revokeAcl: (id, groupId, version) =>
-        apiJson(`/api/folders/${id}/acl/${groupId}`, { method: 'DELETE', headers: versionHeaders(version) })
+    listAcl: (id) => apiJson(`/api/folders/${id}/acl`),
+    grantAcl: (id, groupId, permission, version) => apiJson(`/api/folders/${id}/acl`, { method: 'POST', headers: versionHeaders(version), body: { groupId, permission } }),
+    revokeAcl: (id, groupId, version) => apiJson(`/api/folders/${id}/acl/${groupId}`, { method: 'DELETE', headers: versionHeaders(version) })
 };
-
 // ── Reports ────────────────────────────────────────────────────────────────────
-
 export const reportsApi = {
-    list:   (folderId) => contracted('reportList', apiJson(`/api/folders/${folderId}/reports`)),
-    get:    (id)       => contracted('report', apiJson(`/api/reports/${id}`)),
-    create: (body)     => contracted('report', apiJson('/api/reports', { method: 'POST', body })),
+    list: (folderId) => contracted('reportList', apiJson(`/api/folders/${folderId}/reports`)),
+    get: (id) => contracted('report', apiJson(`/api/reports/${id}`)),
+    create: (body) => contracted('report', apiJson('/api/reports', { method: 'POST', body })),
     update: (id, body, version) => contracted('report', apiJson(`/api/reports/${id}`, { method: 'PUT', headers: versionHeaders(version), body })),
-    delete: (id, version)       => apiJson(`/api/reports/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
-    favorite: (id)    => apiJson(`/api/reports/${id}/favorite`, { method: 'POST' }),
-    unfavorite: (id)  => apiJson(`/api/reports/${id}/favorite`, { method: 'DELETE' }),
+    delete: (id, version) => apiJson(`/api/reports/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
+    favorite: (id) => apiJson(`/api/reports/${id}/favorite`, { method: 'POST' }),
+    unfavorite: (id) => apiJson(`/api/reports/${id}/favorite`, { method: 'DELETE' }),
     dependencies: (id) => apiJson(`/api/reports/${id}/dependencies`),
     history: (id) => apiJson(`/api/reports/${id}/history`),
-
-    getSnapshot: (id, includeManifest = false) =>
-        apiJson(`/api/reports/${id}/snapshot?includeManifest=${includeManifest}`),
-
-    execute: (id, parameters) =>
-        contracted('jobAccepted', apiJson(`/api/reports/${id}/execute`, { method: 'POST', body: { parameters } })),
-
-    refresh: (id) =>
-        apiJson(`/api/reports/${id}/refresh`, { method: 'POST' }),
-
+    getSnapshot: (id, includeManifest = false) => apiJson(`/api/reports/${id}/snapshot?includeManifest=${includeManifest}`),
+    execute: (id, parameters) => contracted('jobAccepted', apiJson(`/api/reports/${id}/execute`, { method: 'POST', body: { parameters } })),
+    refresh: (id) => apiJson(`/api/reports/${id}/refresh`, { method: 'POST' }),
     pollJob: (jobId) => contracted('jobStatus', apiJson(`/api/jobs/${jobId}`)),
-
-    setParameter:  (id, name, value) =>
-        apiJson(`/api/reports/${id}/parameter`,  { method: 'POST', body: { name, value } }),
-    setParameters: (id, params)      =>
-        apiJson(`/api/reports/${id}/parameters`, { method: 'POST', body: { params } }),
-
+    setParameter: (id, name, value) => apiJson(`/api/reports/${id}/parameter`, { method: 'POST', body: { name, value } }),
+    setParameters: (id, params) => apiJson(`/api/reports/${id}/parameters`, { method: 'POST', body: { params } }),
     exportUrl: (id, format) => `/api/reports/${id}/export/${format}`,
-
     // Authenticated download: window.open() can't send the Bearer header (the JWT
     // lives in sessionStorage), so fetch with auth and save the blob instead.
     async exportFile(id, format) {
         const res = await apiFetch(`/api/reports/${id}/export/${format}`);
         if (!res.ok) {
-            const e = await res.json().catch(() => ({}));
-            throw new Error(e.error || `Export failed (${res.status})`);
+            throw await responseError(res, `Export failed (${res.status})`);
         }
         const cd = res.headers.get('Content-Disposition') || '';
-        const m  = /filename\*?=(?:UTF-8'')?["']?([^"';]+)/i.exec(cd);
+        const m = /filename\*?=(?:UTF-8'')?["']?([^"';]+)/i.exec(cd);
         const ext = format === 'pdf' ? 'pdf' : format === 'xlsx' ? 'xlsx' : 'csv';
         const filename = m ? decodeURIComponent(m[1]) : `report.${ext}`;
         const blob = await res.blob();
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href = url; a.download = filename;
-        document.body.appendChild(a); a.click();
-        document.body.removeChild(a); URL.revokeObjectURL(url);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     },
-
     getParameters: (id) => apiJson(`/api/reports/${id}/parameters`),
     validateScript: (scriptPath) => apiJson('/api/reports/validate', { method: 'POST', body: { scriptPath } }),
     listAvailableScripts: () => apiJson('/api/reports/available-scripts')
 };
-
 // ── Subscriptions ──────────────────────────────────────────────────────────────
-
 export const subscriptionsApi = {
-    list:       ()          => apiJson('/api/subscriptions'),
-    get:        (id)        => apiJson(`/api/subscriptions/${id}`),
-    create:     (body)      => apiJson('/api/subscriptions',      { method: 'POST',   body }),
-    update:     (id, body, version) => apiJson(`/api/subscriptions/${id}`, { method: 'PUT', headers: versionHeaders(version), body }),
-    delete:     (id, version) => apiJson(`/api/subscriptions/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
-    history:    (id, n=50)  => apiJson(`/api/subscriptions/${id}/history?limit=${n}`),
-    smtpAliases: ()         => apiJson('/api/smtp-aliases')
+    list: () => apiJson('/api/subscriptions'),
+    get: (id) => apiJson(`/api/subscriptions/${id}`),
+    create: (body) => apiJson('/api/subscriptions', { method: 'POST', body }),
+    update: (id, body, version) => apiJson(`/api/subscriptions/${id}`, { method: 'PUT', headers: versionHeaders(version), body }),
+    delete: (id, version) => apiJson(`/api/subscriptions/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
+    history: (id, n = 50) => apiJson(`/api/subscriptions/${id}/history?limit=${n}`),
+    smtpAliases: () => apiJson('/api/smtp-aliases')
 };
-
 // ── Data Quality ──────────────────────────────────────────────────────────────
-
 // Durable governance workflow. Every call reaches the server: there is no cached or seeded
 // fallback, because a governance figure that survives an unreachable API is a figure nobody can
 // trace back to evidence. Errors keep their `status`, which is how the dashboard tells "you may
 // not see this" (403) apart from "we could not find out" (anything else).
+async function governanceMutation(url, options, expected = 200) {
+    const headers = new Headers(options.headers);
+    if (options.body !== undefined && options.body !== null)
+        headers.set('Content-Type', 'application/json');
+    const response = await apiFetch(url, { ...options, headers });
+    if (!response.ok)
+        throw await responseError(response, 'Governance change failed.');
+    if (response.status !== expected)
+        throw new TypeError('Governance acknowledgement is unconfirmed.');
+    return expected === 204 ? null : response.json();
+}
 export const governanceApi = {
-    dashboard({ scope = 'all' } = {}) {
-        return apiJson(`/api/governance/dashboard?scope=${encodeURIComponent(scope)}`);
+    dashboard({ scope = 'all' } = {}, signal) {
+        return apiJson(`/api/governance/dashboard?scope=${encodeURIComponent(scope)}`, { signal });
     },
-    findings({ status = '', limit = 200 } = {}) {
+    findings({ status = '', limit = 200 } = {}, signal) {
         const params = new URLSearchParams({ limit: String(limit) });
-        if (status) params.set('status', status);
-        return apiJson(`/api/governance/findings?${params.toString()}`);
+        if (status)
+            params.set('status', status);
+        return apiJson(`/api/governance/findings?${params.toString()}`, { signal });
     },
     scans: ({ limit = 20 } = {}) => apiJson(`/api/governance/scans?limit=${limit}`),
-    scan: () => apiJson('/api/governance/scan', { method: 'POST' }),
-    settings: () => apiJson('/api/governance/settings'),
-    saveSettings: (body) => apiJson('/api/governance/settings',
-        { method: 'PUT', body: JSON.stringify(body) }),
-    categories: () => apiJson('/api/governance/categories'),
-    saveCategory: (body) => apiJson('/api/governance/categories',
-        { method: 'POST', body: JSON.stringify(body) }),
-    disableCategory: (value) =>
-        apiJson(`/api/governance/categories/${encodeURIComponent(value)}`, { method: 'DELETE' }),
-    glossary: () => apiJson('/api/governance/glossary'),
-    saveGlossaryTerm: (body) => apiJson('/api/governance/glossary',
-        { method: 'POST', body: JSON.stringify(body) }),
-    deleteGlossaryTerm: (term) =>
-        apiJson(`/api/governance/glossary/${encodeURIComponent(term)}`, { method: 'DELETE' }),
-    decideFinding: (id, body) => apiJson(`/api/governance/findings/${id}/decide`,
-        { method: 'POST', body: JSON.stringify(body) }),
-    reviewAsset: (body) => apiJson('/api/governance/assets/review',
-        { method: 'POST', body: JSON.stringify(body) }),
-    assignBadge: (body) => apiJson('/api/governance/assets/badges',
-        { method: 'POST', body: JSON.stringify(body) }),
-    removeBadge: ({ assetKey, badge }) => apiJson(
-        `/api/governance/assets/badges?assetKey=${encodeURIComponent(assetKey)}&badge=${encodeURIComponent(badge)}`,
-        { method: 'DELETE' }),
+    scan: () => governanceMutation('/api/governance/scan', { method: 'POST' }),
+    settings: (signal) => apiJson('/api/governance/settings', { signal }),
+    saveSettings: (body) => governanceMutation('/api/governance/settings', { method: 'PUT', body: JSON.stringify(body) }),
+    categories: (signal) => apiJson('/api/governance/categories', { signal }),
+    saveCategory: (body) => governanceMutation('/api/governance/categories', { method: 'POST', body: JSON.stringify(body) }),
+    disableCategory: (value) => governanceMutation(`/api/governance/categories/${encodeURIComponent(value)}`, { method: 'DELETE' }, 204),
+    glossary: (signal) => apiJson('/api/governance/glossary', { signal }),
+    saveGlossaryTerm: (body) => governanceMutation('/api/governance/glossary', { method: 'POST', body: JSON.stringify(body) }),
+    deleteGlossaryTerm: (term) => governanceMutation(`/api/governance/glossary/${encodeURIComponent(term)}`, { method: 'DELETE' }, 204),
+    decideFinding: (id, body) => governanceMutation(`/api/governance/findings/${id}/decide`, { method: 'POST', body: JSON.stringify(body) }),
+    reviewAsset: (body) => governanceMutation('/api/governance/assets/review', { method: 'POST', body: JSON.stringify(body) }),
+    assignBadge: (body) => governanceMutation('/api/governance/assets/badges', { method: 'POST', body: JSON.stringify(body) }),
+    removeBadge: ({ assetKey, badge }) => governanceMutation(`/api/governance/assets/badges?assetKey=${encodeURIComponent(assetKey)}&badge=${encodeURIComponent(badge)}`, { method: 'DELETE' }, 204),
 };
-
+async function qualityAccepted(url, body, signal) {
+    const response = await apiFetch(url, { method: 'POST', body, signal });
+    if (!response.ok)
+        throw await responseError(response, 'Data-quality submission failed.');
+    if (response.status !== 202)
+        throw new TypeError('Data-quality submission did not return an accepted acknowledgement.');
+    return response.json();
+}
 export const dataQualityApi = {
-    quarantineQueue({ jobName = '', q = '', replayable = '', limit = 100 } = {}) {
+    quarantineQueue({ jobName = '', q = '', replayable = '', limit = 100 } = {}, signal) {
         const params = new URLSearchParams();
-        if (jobName) params.set('jobName', jobName);
-        if (q) params.set('q', q);
-        if (replayable !== '' && replayable !== null && replayable !== undefined) params.set('replayable', replayable);
+        if (jobName)
+            params.set('jobName', jobName);
+        if (q)
+            params.set('q', q);
+        if (replayable !== '' && replayable !== null && replayable !== undefined)
+            params.set('replayable', replayable);
         params.set('limit', String(limit));
-        return apiJson(`/api/data-quality/quarantine?${params.toString()}`);
+        return apiJson(`/api/data-quality/quarantine?${params.toString()}`, { signal });
     },
     /**
      * @param {Object} [options]
@@ -271,16 +144,16 @@ export const dataQualityApi = {
      * @param {string} [options.status]
      * @param {number} [options.limit]
      */
-    quarantineRows({ quarantineTarget, jobName = '', status = 'quarantined', limit = 50 } = {}) {
-        const params = new URLSearchParams({ quarantineTarget, status, limit: String(limit) });
-        if (jobName) params.set('jobName', jobName);
-        return apiJson(`/api/data-quality/quarantine/rows?${params.toString()}`);
+    quarantineRows({ quarantineTarget, jobName = '', status = 'quarantined', limit = 50 } = {}, signal) {
+        const params = new URLSearchParams({ status, limit: String(limit) });
+        if (quarantineTarget)
+            params.set('quarantineTarget', quarantineTarget);
+        if (jobName)
+            params.set('jobName', jobName);
+        return apiJson(`/api/data-quality/quarantine/rows?${params.toString()}`, { signal });
     },
-    replayQuarantine(quarantineTarget, jobName = null) {
-        return apiJson('/api/data-quality/quarantine/replay', {
-            method: 'POST',
-            body: { quarantineTarget, jobName }
-        });
+    replayQuarantine(quarantineTarget, jobName = null, signal) {
+        return qualityAccepted('/api/data-quality/quarantine/replay', { quarantineTarget, jobName }, signal);
     },
     /**
      * @param {Object} [options]
@@ -291,133 +164,160 @@ export const dataQualityApi = {
      * @param {*} [options.changes]
      * @param {string|null} [options.note]
      */
-    updateQuarantineDisposition({ quarantineTarget, jobName = null, rowIds = [], disposition, changes = null, note = null } = {}) {
-        return apiJson('/api/data-quality/quarantine/disposition', {
-            method: 'POST',
-            body: { quarantineTarget, jobName, rowIds, disposition, changes, note }
-        });
+    updateQuarantineDisposition({ quarantineTarget, jobName = null, rowIds = [], disposition, changes = null, note = null, expectedStatus = 'quarantined' }, signal) {
+        return qualityAccepted('/api/data-quality/quarantine/disposition', { quarantineTarget, jobName, rowIds, disposition, changes, note, expectedStatus }, signal);
     },
     /**
      * @param {Object} [options]
      * @param {string} [options.jobName]
      * @param {number} [options.limit]
      */
-    qualityTrend({ jobName, limit = 30 } = {}) {
-        const params = new URLSearchParams({ jobName, limit: String(limit) });
-        return apiJson(`/api/data-quality/trend?${params.toString()}`);
+    qualityTrend({ jobName, limit = 30 } = {}, signal) {
+        const params = new URLSearchParams({ limit: String(limit) });
+        if (jobName)
+            params.set('jobName', jobName);
+        return apiJson(`/api/data-quality/trend?${params.toString()}`, { signal });
     },
-    qualityJobs: () => apiJson('/api/data-quality/jobs'),
-    qualityRules: (jobName) => apiJson(`/api/data-quality/rules?jobName=${encodeURIComponent(jobName)}`),
-    qualityRulesAll: () => apiJson('/api/data-quality/rules/all'),
+    qualityJobs: (signal) => apiJson('/api/data-quality/jobs', { signal }),
+    qualityRules: (jobName, signal) => apiJson(`/api/data-quality/rules?jobName=${encodeURIComponent(jobName)}`, { signal }),
+    qualityRulesAll: (signal) => apiJson('/api/data-quality/rules/all', { signal }),
     // Data-quality submissions are IJobChannel jobs, not report executions. `/api/jobs/{id}` is the
     // report-execution namespace and never held these ids, so polling it answered 404 forever —
     // which the client read as a transient outage and retried every second for the life of the tab.
-    jobStatus: (jobId) => contracted(
-        'dataQualitySubmissionStatus',
-        apiJson(`/api/data-quality/jobs/${encodeURIComponent(jobId)}`))
+    jobStatus: (jobId, signal) => contracted('dataQualitySubmissionStatus', apiJson(`/api/data-quality/jobs/${encodeURIComponent(jobId)}`, { signal }))
 };
-
 // ── Datasets ───────────────────────────────────────────────────────────────────
-
+async function datasetMutation(url, method, expectedStatus, body = undefined, version, signal) {
+    const response = await apiFetch(url, { method, body, headers: versionHeaders(version), signal });
+    if (!response.ok)
+        throw await responseError(response, 'Dataset mutation failed.');
+    if (response.status !== expectedStatus)
+        throw new TypeError('Dataset mutation acknowledgement has an unexpected HTTP status.');
+    return expectedStatus === 204 ? undefined : response.json();
+}
 export const datasetsApi = {
-    list:          ()                       => apiJson('/api/datasets'),
-    get:           (id)                     => apiJson(`/api/datasets/${id}`),
-    update:        (id, body, version)       => apiJson(`/api/datasets/${id}`, { method: 'PATCH', headers: versionHeaders(version), body }),
-    delete:        (id, version)             => apiJson(`/api/datasets/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
-    refresh:       (id)                     => apiJson(`/api/datasets/${id}/refresh`, { method: 'POST' }),
-    refreshStatus: (id)                     => apiJson(`/api/datasets/${id}/refresh-status`),
-    listAcl:       (id)                     => apiJson(`/api/datasets/${id}/acl`),
-    grantAcl:      (id, groupId, permission, version) =>
-        apiJson(`/api/datasets/${id}/acl`, { method: 'POST', headers: versionHeaders(version), body: { groupId, permission } }),
-    revokeAcl:     (id, groupId, version) =>
-        apiJson(`/api/datasets/${id}/acl/${groupId}`, { method: 'DELETE', headers: versionHeaders(version) }),
-    revokeUserAcl: (id, userId, version) =>
-        apiJson(`/api/datasets/${id}/acl/user/${userId}`, { method: 'DELETE', headers: versionHeaders(version) }),
-
-    data(id, { page = 1, pageSize = 50, sort = null, dir = null, search = null, filters = null } = {}) {
+    list: (signal) => apiJson('/api/datasets', { signal }),
+    get: (id) => apiJson(`/api/datasets/${id}`),
+    update: (id, body, version, signal) => datasetMutation(`/api/datasets/${id}`, 'PATCH', 200, body, version, signal),
+    delete: (id, version, signal) => datasetMutation(`/api/datasets/${id}`, 'DELETE', 204, undefined, version, signal),
+    refresh: (id, signal) => datasetMutation(`/api/datasets/${id}/refresh`, 'POST', 202, undefined, undefined, signal),
+    refreshStatus: (id) => apiJson(`/api/datasets/${id}/refresh-status`),
+    listAcl: (id, signal) => apiJson(`/api/datasets/${id}/acl`, { signal }),
+    grantAcl: (id, groupId, permission, version, signal) => datasetMutation(`/api/datasets/${id}/acl`, 'POST', 200, { groupId, permission }, version, signal),
+    revokeAcl: (id, groupId, version, signal) => datasetMutation(`/api/datasets/${id}/acl/${groupId}`, 'DELETE', 200, undefined, version, signal),
+    revokeUserAcl: (id, userId, version, signal) => datasetMutation(`/api/datasets/${id}/acl/user/${userId}`, 'DELETE', 200, undefined, version, signal),
+    data(id, { page = 1, pageSize = 50, sort = null, dir = null, search = null, filters = null } = {}, signal) {
         const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-        if (sort)    p.set('sort', sort);
-        if (dir)     p.set('dir', dir);
-        if (search)  p.set('search', search);
-        if (filters && filters.length) p.set('filters', JSON.stringify(filters));
-        return apiJson(`/api/datasets/${id}/data?${p}`);
+        if (sort)
+            p.set('sort', sort);
+        if (dir)
+            p.set('dir', dir);
+        if (search)
+            p.set('search', search);
+        if (filters && filters.length)
+            p.set('filters', JSON.stringify(filters));
+        return apiJson(`/api/datasets/${id}/data?${p}`, { signal });
     },
-    async exportCsv(id, filename, { sort = null, dir = null, search = null, filters = null } = {}) {
+    async exportCsv(id, filename, { sort = null, dir = null, search = null, filters = null } = {}, signal) {
         const p = new URLSearchParams();
-        if (sort)    p.set('sort', sort);
-        if (dir)     p.set('dir', dir);
-        if (search)  p.set('search', search);
-        if (filters && filters.length) p.set('filters', JSON.stringify(filters));
-        const res = await apiFetch(`/api/datasets/${id}/data/export?${p}`);
-        if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+        if (sort)
+            p.set('sort', sort);
+        if (dir)
+            p.set('dir', dir);
+        if (search)
+            p.set('search', search);
+        if (filters && filters.length)
+            p.set('filters', JSON.stringify(filters));
+        const res = await apiFetch(`/api/datasets/${id}/data/export?${p}`, { signal });
+        if (!res.ok)
+            throw new Error(`Export failed: ${res.status}`);
         const blob = await res.blob();
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href = url; a.download = filename || 'dataset.csv';
-        document.body.appendChild(a); a.click();
-        document.body.removeChild(a); URL.revokeObjectURL(url);
+        signal?.throwIfAborted();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'dataset.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     },
-    async exportXlsx(id, filename, { sort = null, dir = null, search = null, filters = null } = {}) {
+    async exportXlsx(id, filename, { sort = null, dir = null, search = null, filters = null } = {}, signal) {
         const p = new URLSearchParams({ format: 'xlsx' });
-        if (sort)    p.set('sort', sort);
-        if (dir)     p.set('dir', dir);
-        if (search)  p.set('search', search);
-        if (filters && filters.length) p.set('filters', JSON.stringify(filters));
-        const res = await apiFetch(`/api/datasets/${id}/data/export?${p}`);
-        if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+        if (sort)
+            p.set('sort', sort);
+        if (dir)
+            p.set('dir', dir);
+        if (search)
+            p.set('search', search);
+        if (filters && filters.length)
+            p.set('filters', JSON.stringify(filters));
+        const res = await apiFetch(`/api/datasets/${id}/data/export?${p}`, { signal });
+        if (!res.ok)
+            throw new Error(`Export failed: ${res.status}`);
         const blob = await res.blob();
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href = url; a.download = filename || 'dataset.xlsx';
-        document.body.appendChild(a); a.click();
-        document.body.removeChild(a); URL.revokeObjectURL(url);
+        signal?.throwIfAborted();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'dataset.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     },
-    stats(id, filters = null) {
+    stats(id, filters = null, signal) {
         const p = new URLSearchParams();
-        if (filters && filters.length) p.set('filters', JSON.stringify(filters));
-        return apiJson(`/api/datasets/${id}/data/stats?${p}`);
+        if (filters && filters.length)
+            p.set('filters', JSON.stringify(filters));
+        return apiJson(`/api/datasets/${id}/data/stats?${p}`, { signal });
     },
-    columnValues(id, colName, { search = null, limit = 50 } = {}) {
+    columnValues(id, colName, { search = null, limit = 50 } = {}, signal) {
         const p = new URLSearchParams({ limit: String(limit) });
-        if (search) p.set('search', search);
-        return apiJson(`/api/datasets/${id}/column/${encodeURIComponent(colName)}/values?${p}`);
+        if (search)
+            p.set('search', search);
+        return apiJson(`/api/datasets/${id}/column/${encodeURIComponent(colName)}/values?${p}`, { signal });
     }
 };
-
 // ── Catalog ───────────────────────────────────────────────────────────────────
-
 export const catalogApi = {
-    consumerHome: (limit = 8) =>
-        apiJson(`/api/catalog/consumer-home?limit=${limit}`),
-    search: (q, limit = 50) =>
-        apiJson(`/api/catalog/search?q=${encodeURIComponent(q)}&limit=${limit}`),
-    recent: (limit = 20) =>
-        apiJson(`/api/catalog/recent?limit=${limit}`),
-    favorites: (limit = 50) =>
-        apiJson(`/api/catalog/favorites?limit=${limit}`),
-    lineage(kind, { name = null, key = null, value = null, path = null, column = null, from = null, to = null, limit = 100 } = {}) {
+    consumerHome: (limit = 8) => apiJson(`/api/catalog/consumer-home?limit=${limit}`),
+    search: (q, limit = 50) => apiJson(`/api/catalog/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+    recent: (limit = 20) => apiJson(`/api/catalog/recent?limit=${limit}`),
+    favorites: (limit = 50) => apiJson(`/api/catalog/favorites?limit=${limit}`),
+    lineage(kind, { name = null, key = null, value = null, path = null, column = null, from = null, to = null, limit = 100 } = {}, signal) {
         const p = new URLSearchParams({ limit: String(limit) });
-        if (name)  p.set('name', name);
-        if (key)   p.set('key', key);
-        if (value) p.set('value', value);
-        if (path)  p.set('path', path);
-        if (column) p.set('column', column);
-        if (from)  p.set('from', from);
-        if (to)    p.set('to', to);
-        return apiJson(`/api/catalog/lineage/${kind}?${p}`);
+        if (name)
+            p.set('name', name);
+        if (key)
+            p.set('key', key);
+        if (value)
+            p.set('value', value);
+        if (path)
+            p.set('path', path);
+        if (column)
+            p.set('column', column);
+        if (from)
+            p.set('from', from);
+        if (to)
+            p.set('to', to);
+        return apiJson(`/api/catalog/lineage/${kind}?${p}`, { signal });
     },
-    stewardship({ view = 'all', q = null, steward = null, domain = null, staleAfterDays = 30, limit = 100 } = {}) {
+    stewardship({ view = 'all', q = null, steward = null, domain = null, staleAfterDays = 30, limit = 100 } = {}, signal) {
         const p = new URLSearchParams({ view, staleAfterDays: String(staleAfterDays), limit: String(limit) });
-        if (q) p.set('q', q);
-        if (steward) p.set('steward', steward);
-        if (domain) p.set('domain', domain);
-        return apiJson(`/api/catalog/stewardship?${p}`);
+        if (q)
+            p.set('q', q);
+        if (steward)
+            p.set('steward', steward);
+        if (domain)
+            p.set('domain', domain);
+        return apiJson(`/api/catalog/stewardship?${p}`, { signal });
     },
-    protectedData({ limit = 100 } = {}) {
-        return apiJson(`/api/catalog/protected-data?limit=${limit}`);
+    protectedData({ limit = 100 } = {}, signal) {
+        return apiJson(`/api/catalog/protected-data?limit=${limit}`, { signal });
     },
-    protectedDataSuggestions({ limit = 100 } = {}) {
-        return apiJson(`/api/catalog/protected-data/suggestions?limit=${limit}`);
+    protectedDataSuggestions({ limit = 100 } = {}, signal) {
+        return apiJson(`/api/catalog/protected-data/suggestions?limit=${limit}`, { signal });
     },
     /**
      * @param {Object} [options]
@@ -428,149 +328,141 @@ export const catalogApi = {
      * @param {number} [options.depth]
      * @param {number} [options.limit]
      */
-    impact({ kind = 'table', name, column = null, direction = 'downstream', depth = 4, limit = 100 } = {}) {
+    impact({ kind = 'table', name, column = null, direction = 'downstream', depth = 4, limit = 100 }, signal) {
         const p = new URLSearchParams({ kind, name, direction, depth: String(depth), limit: String(limit) });
-        if (column) p.set('column', column);
-        return apiJson(`/api/catalog/impact?${p}`);
+        if (column)
+            p.set('column', column);
+        return apiJson(`/api/catalog/impact?${p}`, { signal });
     }
 };
-
 // ── Studio ───────────────────────────────────────────────────────────────────
-
 // Which top-level destinations to offer this caller. Computed on the server because two of them
 // (Docs, Studio) depend on module and capability state no token claim carries.
 export const navigationApi = {
     destinations: () => apiJson('/api/portal/navigation')
 };
-
 export const studioApi = {
     session: () => apiJson('/api/studio/session'),
     reports: () => apiJson('/api/studio/reports'),
     folders: () => apiJson('/api/studio/folders'),
     createReport: (body) => apiJson('/api/studio/reports', { method: 'POST', body })
 };
-
 // ── Admin — Portal secret store (values are write-only) ───────────────────────
-
 export const secretsApi = {
-    list:      ()            => apiJson('/api/admin/secrets'),
-    set:       (name, value) => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}`, { method: 'PUT', body: { value } }),
-    verify:    (name)        => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}/verify`, { method: 'POST' }),
-    verifyAll: ()            => apiJson('/api/admin/secrets/verify-all', { method: 'POST' }),
-    disable:   (name)        => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}/disable`, { method: 'POST' }),
-    enable:    (name)        => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}/enable`, { method: 'POST' }),
-    impact:    (name)        => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}/impact`),
-    remove:    (name)        => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+    list: () => apiJson('/api/admin/secrets'),
+    set: (name, value) => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}`, { method: 'PUT', body: { value } }),
+    verify: (name) => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}/verify`, { method: 'POST' }),
+    verifyAll: () => apiJson('/api/admin/secrets/verify-all', { method: 'POST' }),
+    disable: (name) => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}/disable`, { method: 'POST' }),
+    enable: (name) => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}/enable`, { method: 'POST' }),
+    impact: (name) => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}/impact`),
+    remove: (name) => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}`, { method: 'DELETE' }),
 };
-
 // ── Admin — shared connection catalog (SHARED:alias) ──────────────────────────
-
 export const connectionsApi = {
-    list:      ()             => apiJson('/api/admin/connections'),
-    detail:    (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}`),
-    set:       (alias, entry) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}`, { method: 'PUT', body: entry }),
-    verify:    (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/verify`, { method: 'POST' }),
-    test:      (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/test`, { method: 'POST' }),
-    disable:   (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/disable`, { method: 'POST' }),
-    enable:    (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/enable`, { method: 'POST' }),
-    remove:    (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}`, { method: 'DELETE' }),
-    exportAll: ()             => apiJson('/api/admin/connections/export'),
-    importAll: (entries)      => apiJson('/api/admin/connections/import', { method: 'POST', body: entries }),
-    impact:    (alias)          => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/impact`),
-    getHelp:   (type)         => apiJson(`/api/admin/connections/help/${encodeURIComponent(type)}`),
-    listAcl:   (alias)          => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl`),
-    grantAcl:  (alias, groupId) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl`, { method: 'POST', body: { groupId } }),
+    list: (signal) => apiJson('/api/admin/connections', { signal }),
+    detail: (alias, signal) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}`, { signal }),
+    set: (alias, entry, signal) => connectionAcknowledgement(`/api/admin/connections/${encodeURIComponent(alias)}`, 'PUT', signal, entry),
+    verify: (alias, signal) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/verify`, { method: 'POST', signal }),
+    test: (alias, signal) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/test`, { method: 'POST', signal }),
+    disable: (alias, signal) => connectionAcknowledgement(`/api/admin/connections/${encodeURIComponent(alias)}/disable`, 'POST', signal),
+    enable: (alias, signal) => connectionAcknowledgement(`/api/admin/connections/${encodeURIComponent(alias)}/enable`, 'POST', signal),
+    remove: (alias, signal) => connectionAcknowledgement(`/api/admin/connections/${encodeURIComponent(alias)}`, 'DELETE', signal),
+    exportAll: (signal) => apiJson('/api/admin/connections/export', { signal }),
+    importAll: (entries, signal) => apiJson('/api/admin/connections/import', { method: 'POST', body: entries, signal }),
+    impact: (alias, signal) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/impact`, { signal }),
+    getHelp: (type, signal) => apiJson(`/api/admin/connections/help/${encodeURIComponent(type)}`, { signal }),
+    listAcl: (alias) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl`),
+    grantAcl: (alias, groupId) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl`, { method: 'POST', body: { groupId } }),
     revokeAcl: (alias, groupId) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl/${groupId}`, { method: 'DELETE' }),
 };
-
+async function connectionAcknowledgement(url, method, signal, body) {
+    const response = await apiFetch(url, { method, body, signal });
+    if (response.status !== 204)
+        throw new Error('Connection mutation outcome is unconfirmed. Refresh the catalog before retrying.');
+}
 // ── Admin — on-premises data gateways ────────────────────────────────────────
-
 export const gatewaysApi = {
-    list:   () => apiJson('/api/admin/gateways'),
-    get:    (gatewayId) => apiJson(`/api/admin/gateways/${encodeURIComponent(gatewayId)}`),
+    list: (signal) => apiJson('/api/admin/gateways', { signal }),
+    get: (gatewayId) => apiJson(`/api/admin/gateways/${encodeURIComponent(gatewayId)}`),
     getResources: (gatewayId) => apiJson(`/api/admin/gateways/${encodeURIComponent(gatewayId)}/resources`),
-    enroll: (gatewayId, expirationMinutes = 60) =>
-        apiJson('/api/admin/gateways/enroll', { method: 'POST', body: { gatewayId, expirationMinutes } }),
-    revoke: (gatewayId) =>
-        apiJson(`/api/admin/gateways/${encodeURIComponent(gatewayId)}/revoke`, { method: 'POST' }),
-};
-
-// ── Admin — enterprise policy authority ───────────────────────────────────────
-
-export const policyAuthorityApi = {
-    status:   () => apiJson('/api/admin/policy-authority/status'),
-    validate: (policyJson) => apiJson('/api/admin/policy-authority/validate', { method: 'POST', body: { policyJson } }),
-    versions: (tenant, environment) =>
-        apiJson(`/api/admin/policy-authority/versions?tenant=${encodeURIComponent(tenant)}&environment=${encodeURIComponent(environment)}`),
-    active: (tenant, environment) =>
-        apiJson(`/api/admin/policy-authority/active?tenant=${encodeURIComponent(tenant)}&environment=${encodeURIComponent(environment)}`),
-    publish: (body) => apiJson('/api/admin/policy-authority/publish', { method: 'POST', body }),
-    activate: (tenant, environment, policyVersion) =>
-        apiJson('/api/admin/policy-authority/activate', { method: 'POST', body: { tenant, environment, policyVersion } }),
-    rollback: (body) => apiJson('/api/admin/policy-authority/rollback', { method: 'POST', body }),
-    canary: (tenant, environment) =>
-        apiJson(`/api/admin/policy-authority/canary?tenant=${encodeURIComponent(tenant)}&environment=${encodeURIComponent(environment)}`),
-    publishCanary: (body) => apiJson('/api/admin/policy-authority/publish-canary', { method: 'POST', body }),
-    promoteCanary: (tenant, environment, policyVersion) =>
-        apiJson('/api/admin/policy-authority/promote-canary', { method: 'POST', body: { tenant, environment, policyVersion } }),
-    haltCanary: (tenant, environment, policyVersion, reviewer) =>
-        apiJson('/api/admin/policy-authority/halt-canary', { method: 'POST', body: { tenant, environment, policyVersion, reviewer } }),
-    machines: (tenant = '', environment = '') => {
-        const p = new URLSearchParams();
-        if (tenant) p.set('tenant', tenant);
-        if (environment) p.set('environment', environment);
-        return apiJson(`/api/admin/policy-authority/machines${p.toString() ? `?${p}` : ''}`);
+    enroll: (gatewayId, expirationMinutes = 60, signal) => {
+        const body = { gatewayId, expirationMinutes };
+        return apiJson('/api/admin/gateways/enroll', { method: 'POST', body, signal });
     },
-    registerMachine: (body) => apiJson('/api/admin/policy-authority/machines', { method: 'POST', body }),
-    revokeMachine: (machineId, reason) =>
-        apiJson(`/api/admin/policy-authority/machines/${encodeURIComponent(machineId)}/revoke`, { method: 'POST', body: { reason } }),
+    revoke: (gatewayId, signal) => apiJson(`/api/admin/gateways/${encodeURIComponent(gatewayId)}/revoke`, { method: 'POST', signal }),
 };
-
+// ── Admin — enterprise policy authority ───────────────────────────────────────
+export const policyAuthorityApi = {
+    status: (signal) => apiJson('/api/admin/policy-authority/status', { signal }),
+    validate: (policyJson, signal) => {
+        const body = { policyJson };
+        return apiJson('/api/admin/policy-authority/validate', { method: 'POST', body, signal });
+    },
+    versions: (tenant, environment, signal) => apiJson(`/api/admin/policy-authority/versions?tenant=${encodeURIComponent(tenant)}&environment=${encodeURIComponent(environment)}`, { signal }),
+    active: (tenant, environment) => apiJson(`/api/admin/policy-authority/active?tenant=${encodeURIComponent(tenant)}&environment=${encodeURIComponent(environment)}`),
+    publish: (body, signal) => apiJson('/api/admin/policy-authority/publish', { method: 'POST', body, signal }),
+    activate: (tenant, environment, policyVersion, signal) => {
+        const body = { tenant, environment, policyVersion };
+        return apiJson('/api/admin/policy-authority/activate', { method: 'POST', body, signal });
+    },
+    rollback: (body, signal) => apiJson('/api/admin/policy-authority/rollback', { method: 'POST', body, signal }),
+    canary: (tenant, environment) => apiJson(`/api/admin/policy-authority/canary?tenant=${encodeURIComponent(tenant)}&environment=${encodeURIComponent(environment)}`),
+    publishCanary: (body, signal) => apiJson('/api/admin/policy-authority/publish-canary', { method: 'POST', body, signal }),
+    promoteCanary: (tenant, environment, policyVersion, signal) => {
+        const body = { tenant, environment, policyVersion };
+        return apiJson('/api/admin/policy-authority/promote-canary', { method: 'POST', body, signal });
+    },
+    haltCanary: (tenant, environment, policyVersion, reviewer, signal) => {
+        const body = { tenant, environment, policyVersion, reviewer };
+        return apiJson('/api/admin/policy-authority/halt-canary', { method: 'POST', body, signal });
+    },
+    machines: (tenant = '', environment = '', signal) => {
+        const p = new URLSearchParams();
+        if (tenant)
+            p.set('tenant', tenant);
+        if (environment)
+            p.set('environment', environment);
+        return apiJson(`/api/admin/policy-authority/machines${p.toString() ? `?${p}` : ''}`, { signal });
+    },
+    registerMachine: (body, signal) => apiJson('/api/admin/policy-authority/machines', { method: 'POST', body, signal }),
+    revokeMachine: (machineId, reason, signal) => {
+        const body = { reason };
+        return apiJson(`/api/admin/policy-authority/machines/${encodeURIComponent(machineId)}/revoke`, { method: 'POST', body, signal });
+    },
+};
 // ── Admin — users ──────────────────────────────────────────────────────────────
-
 export const adminApi = {
     // users
-    listUsers:       ()           => contracted('userList', apiJson('/api/admin/users')),
-    userCatalog:     (query = '') => contracted('userCatalog', apiJson(`/api/admin/users/catalog${query ? `?${query}` : ''}`)),
-    createUser:      (body)       => contracted('user', apiJson('/api/admin/users',     { method: 'POST',   body })),
-    updateUser:      (id, body, version) => contracted('user', apiJson(`/api/admin/users/${id}`, { method: 'PUT', headers: versionHeaders(version), body })),
-    deleteUser:      (id, version) => apiJson(`/api/admin/users/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
-    bulkUserStatus:  (users, isActive) => apiJson('/api/admin/users/bulk-status',
-                                        { method: 'POST', body: { users, isActive } }),
-    resetPassword:   (id, pwd, version) => apiJson(`/api/admin/users/${id}/reset-password`,
-                                        { method: 'POST', headers: versionHeaders(version), body: { newPassword: pwd } }),
-    revokeTokens:    (id, version) => apiJson(`/api/admin/users/${id}/revoke-tokens`,
-                                        { method: 'POST', headers: versionHeaders(version) }),
-
+    listUsers: () => collectAdminUsers((page, pageSize) => contracted('userCatalog', apiJson(`/api/admin/users?page=${page}&pageSize=${pageSize}`))),
+    userCatalog: (query = '') => contracted('userCatalog', apiJson(`/api/admin/users/catalog${query ? `?${query}` : ''}`)),
+    createUser: (body) => contracted('user', apiJson('/api/admin/users', { method: 'POST', body })),
+    updateUser: (id, body, version) => contracted('user', apiJson(`/api/admin/users/${id}`, { method: 'PUT', headers: versionHeaders(version), body })),
+    deleteUser: (id, version) => apiJson(`/api/admin/users/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
+    bulkUserStatus: (users, isActive) => apiJson('/api/admin/users/bulk-status', { method: 'POST', body: { users, isActive } }),
+    resetPassword: (id, pwd, version) => apiJson(`/api/admin/users/${id}/reset-password`, { method: 'POST', headers: versionHeaders(version), body: { newPassword: pwd } }),
+    revokeTokens: (id, version) => apiJson(`/api/admin/users/${id}/revoke-tokens`, { method: 'POST', headers: versionHeaders(version) }),
     // groups
-    listGroups:      ()           => apiJson('/api/admin/groups'),
-    groupCatalog:    (query = '') => apiJson(`/api/admin/groups/catalog${query ? `?${query}` : ''}`),
-    createGroup:     (body)       => apiJson('/api/admin/groups',    { method: 'POST',   body }),
-    updateGroup:     (id, body, version) => apiJson(`/api/admin/groups/${id}`, { method: 'PUT', headers: versionHeaders(version), body }),
-    deleteGroup:     (id, version) => apiJson(`/api/admin/groups/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
-    bulkDeleteGroups:(groups, cascade = false) => apiJson('/api/admin/groups/bulk-delete',
-                                        { method: 'POST', body: { groups, cascade } }),
-    listMembers:     (id)         => apiJson(`/api/admin/groups/${id}/members`),
-    memberCatalog:   (id, query = '') => apiJson(`/api/admin/groups/${id}/members/catalog${query ? `?${query}` : ''}`),
-    addMember:       (id, userId, version) => apiJson(`/api/admin/groups/${id}/members`,
-                                        { method: 'POST', headers: versionHeaders(version), body: { userId } }),
-    bulkAddMembers:  (id, userIds, version) => apiJson(`/api/admin/groups/${id}/members/bulk-add`,
-                                        { method: 'POST', headers: versionHeaders(version), body: { userIds } }),
-    bulkRemoveMembers: (id, userIds, version) => apiJson(`/api/admin/groups/${id}/members/bulk-remove`,
-                                        { method: 'POST', headers: versionHeaders(version), body: { userIds } }),
-    removeMember:    (id, userId, version) => apiJson(`/api/admin/groups/${id}/members/${userId}`,
-                                        { method: 'DELETE', headers: versionHeaders(version) }),
-
+    listGroups: (signal) => apiJson('/api/admin/groups', { signal }),
+    groupCatalog: (query = '') => apiJson(`/api/admin/groups/catalog${query ? `?${query}` : ''}`),
+    createGroup: (body) => apiJson('/api/admin/groups', { method: 'POST', body }),
+    updateGroup: (id, body, version) => apiJson(`/api/admin/groups/${id}`, { method: 'PUT', headers: versionHeaders(version), body }),
+    deleteGroup: (id, version) => apiJson(`/api/admin/groups/${id}`, { method: 'DELETE', headers: versionHeaders(version) }),
+    bulkDeleteGroups: (groups, cascade = false) => apiJson('/api/admin/groups/bulk-delete', { method: 'POST', body: { groups, cascade } }),
+    listMembers: (id) => apiJson(`/api/admin/groups/${id}/members`),
+    memberCatalog: (id, query = '') => apiJson(`/api/admin/groups/${id}/members/catalog${query ? `?${query}` : ''}`),
+    addMember: (id, userId, version) => apiJson(`/api/admin/groups/${id}/members`, { method: 'POST', headers: versionHeaders(version), body: { userId } }),
+    bulkAddMembers: (id, userIds, version) => apiJson(`/api/admin/groups/${id}/members/bulk-add`, { method: 'POST', headers: versionHeaders(version), body: { userIds } }),
+    bulkRemoveMembers: (id, userIds, version) => apiJson(`/api/admin/groups/${id}/members/bulk-remove`, { method: 'POST', headers: versionHeaders(version), body: { userIds } }),
+    removeMember: (id, userId, version) => apiJson(`/api/admin/groups/${id}/members/${userId}`, { method: 'DELETE', headers: versionHeaders(version) }),
     // audit
-    auditLog: (page = 1, pageSize = 50, action = '', userId = '', resourceType = '', resourceId = '') =>
-        apiJson(`/api/admin/audit?page=${page}&pageSize=${pageSize}&action=${encodeURIComponent(action)}&userId=${userId}&resourceType=${encodeURIComponent(resourceType)}&resourceId=${encodeURIComponent(resourceId)}`),
-    operationalMetrics: () => apiJson('/api/admin/metrics/operational'),
+    auditLog: (page = 1, pageSize = 50, action = '', userId = '', resourceType = '', resourceId = '', signal) => apiJson(`/api/admin/audit?page=${page}&pageSize=${pageSize}&action=${encodeURIComponent(action)}&userId=${userId}&resourceType=${encodeURIComponent(resourceType)}&resourceId=${encodeURIComponent(resourceId)}`, { signal }),
+    operationalMetrics: (signal) => apiJson('/api/admin/metrics/operational', { signal }),
     gatewayAmbiguousWrites: (includeResolved = true) => apiJson(`/api/admin/gateway-operations/ambiguous-writes?includeResolved=${includeResolved}`),
     acknowledgeGatewayAmbiguousWrite: (id, body) => apiJson(`/api/admin/gateway-operations/ambiguous-writes/${id}/acknowledge`, { method: 'POST', body }),
     assignGatewayAmbiguousWrite: (id, body) => apiJson(`/api/admin/gateway-operations/ambiguous-writes/${id}/assign`, { method: 'POST', body }),
     addGatewayAmbiguousWriteEvidence: (id, body) => apiJson(`/api/admin/gateway-operations/ambiguous-writes/${id}/evidence`, { method: 'POST', body }),
     resolveGatewayAmbiguousWrite: (id, body) => apiJson(`/api/admin/gateway-operations/ambiguous-writes/${id}/resolve`, { method: 'POST', body }),
-
     // operations hub
     fleetStatus: () => apiJson('/api/fleet/status'),
     listAdminServices: () => apiJson('/api/admin/services'),
@@ -585,40 +477,16 @@ export const adminApi = {
     denyAccessRequest: (id, body) => apiJson(`/api/reports/access-requests/${id}/deny`, { method: 'POST', body }),
     anonymousReportAccess: () => apiJson('/api/admin/anonymous-report-access'),
     revokeAnonymousReportAccess: (type, id) => apiJson(`/api/admin/anonymous-report-access/${encodeURIComponent(type)}/${id}`, { method: 'DELETE' }),
-
     // subscriptions (admin sees all)
     listAllSubscriptions: () => apiJson('/api/subscriptions'),
     subscriptionCatalog: (query = '') => apiJson(`/api/admin/subscriptions/catalog${query ? `?${query}` : ''}`),
-    bulkSubscriptionStatus: (subscriptions, isActive) => apiJson('/api/admin/subscriptions/bulk-status',
-                                        { method: 'POST', body: { subscriptions, isActive } }),
-
+    bulkSubscriptionStatus: (subscriptions, isActive) => apiJson('/api/admin/subscriptions/bulk-status', { method: 'POST', body: { subscriptions, isActive } }),
     // reports (admin sees all)
     listAllReports: () => apiJson('/api/admin/reports'),
-
     // orchestrator connection settings
-    getOrchestratorSettings:    ()     => apiJson('/api/admin/settings/orchestrator'),
+    getOrchestratorSettings: () => apiJson('/api/admin/settings/orchestrator'),
     updateOrchestratorSettings: (body) => apiJson('/api/admin/settings/orchestrator', { method: 'PUT', body }),
-
     // portal branding settings
-    getBrandingSettings:    ()     => apiJson('/api/admin/settings/branding'),
+    getBrandingSettings: () => apiJson('/api/admin/settings/branding'),
     updateBrandingSettings: (body) => apiJson('/api/admin/settings/branding', { method: 'PUT', body })
-};
-
-// ── Install global fetch intercept for report-runtime.js ──────────────────────
-// report-runtime.js calls fetch() without auth headers; this patch adds them.
-
-const _origFetch = window.fetch.bind(window);
-window.fetch = async (input, init = {}) => {
-    const url = typeof input === 'string' ? input : (input instanceof URL ? input.href : input.url);
-    // Only intercept same-origin /api/ calls that have no auth header yet
-    if (url.startsWith('/api/') || url.startsWith(window.location.origin + '/api/')) {
-        const token = auth.getToken();
-        if (token) {
-            const headers = new Headers(init.headers || {});
-            if (!headers.has('Authorization'))
-                headers.set('Authorization', `Bearer ${token}`);
-            return _origFetch(input, { ...init, headers });
-        }
-    }
-    return _origFetch(input, init);
 };

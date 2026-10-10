@@ -25,7 +25,12 @@ public sealed class GovernanceNoDemoDataTests
     {
         var path = Path.Combine(RepoRoot(), "src", "ETL-SQL.Portal", "wwwroot", "js", "governance-portal.js");
         Assert.True(File.Exists(path), $"Governance module not found at {path}");
-        return File.ReadAllText(path);
+        // Rendering and response validation now have separate owners. Guard their shipped code too;
+        // checking the controller alone would miss a prototype pasted into the rendering module.
+        return string.Join("\n", new[] { path }
+            .Concat(Directory.EnumerateFiles(Path.GetDirectoryName(path)!, "governance-*.js")
+                .Where(module => module != path).OrderBy(module => module, StringComparer.Ordinal))
+            .Select(File.ReadAllText));
     }
 
     [Fact]
@@ -35,7 +40,7 @@ public sealed class GovernanceNoDemoDataTests
 
         // The original defect verbatim: `catch { state.items = [ …hard-coded assets… ] }`. Any catch
         // block that assigns a non-empty array literal is the same shape whatever it is named.
-        foreach (Match c in Regex.Matches(source, @"catch\s*\([^)]*\)\s*\{", RegexOptions.None))
+        foreach (Match c in Regex.Matches(source, @"\bcatch(?:\s*\([^)]*\))?\s*\{", RegexOptions.None))
         {
             var block = BalancedBlock(source, source.IndexOf('{', c.Index));
             Assert.False(
@@ -109,7 +114,8 @@ public sealed class GovernanceNoDemoDataTests
         // Fixture data in a story is correct and expected. A story that re-implements the UI is not:
         // it can look right while the shipped module is broken, and its fixtures sit in the repo as
         // a ready-made source of fake governance records.
-        Assert.Contains("import { createGovernancePortal }", story);
+        Assert.Contains("createGovernancePortal", story);
+        Assert.Contains("importFresh('/src/ETL-SQL.Portal/wwwroot/js/governance-portal.js')", story);
         Assert.Contains("governance-portal.js", story);
     }
 

@@ -1,5 +1,6 @@
 // Story registry. Add a surface by writing a *.story.js module and listing it here.
 import scriptEditor from './script-editor.story.js';
+import orchestratorActivity from './orchestrator-activity.story.js';
 import orchestratorPage from './orchestrator-page.story.js';
 import scriptEditorUnified from './script-editor-unified.story.js';
 import designer from './designer.story.js';
@@ -10,6 +11,7 @@ import lineageCatalog from './lineage-catalog.story.js';
 import datasetsAdmin from './datasets-admin.story.js';
 import subscriptionHistory from './subscription-history.story.js';
 import adminCatalog from './admin-catalog.story.js';
+import adminPage from './admin-page.story.js';
 import vscodeWebviews from './vscode-webviews.story.js';
 import secretsAdmin from './secrets-admin.story.js';
 import connectionsAdmin from './connections-admin.story.js';
@@ -21,6 +23,7 @@ import portalGovernance from './governance.story.js';
 import dataQualityQueue from './data-quality-queue.story.js';
 import portalResponsiveShell from './portal-responsive-shell.story.js';
 import portalStudio from './portal-studio.story.js';
+import portalAuthoring from './portal-authoring.story.js';
 import portalOperations from './portal-operations.story.js';
 import feedback from './feedback.story.js';
 import triageBoard from './triage-board.story.js';
@@ -28,6 +31,7 @@ import orchestratorRunOverrides from './orchestrator-run-overrides.story.js';
 import orchestratorCheckpointResume from './orchestrator-checkpoint-resume.story.js';
 import orchestratorAcl from './orchestrator-acl.story.js';
 import orchestratorAdmin from './orchestrator-admin.story.js';
+import portalOperationalCharts from './portal-operational-charts.story.js';
 import controlPlaneDashboard from './control-plane-dashboard.story.js';
 import nativeChartLayout from './native-chart-layout.story.js';
 import filterControls from './filter-controls.story.js';
@@ -54,6 +58,7 @@ const categoryDefaults = {
   'policy-authority-admin': 'Admin & Fleet',
   'portal-operations': 'Admin & Fleet',
   'admin-catalog': 'Admin & Fleet',
+  'admin-page': 'Admin & Fleet',
   'subscription-history': 'Admin & Fleet',
 
   // Control Plane & SaaS
@@ -61,12 +66,13 @@ const categoryDefaults = {
   'triage-board': 'Control Plane & SaaS',
 
   // Orchestrator & Jobs
-  'orchestrator-page': 'Orchestrator & Jobs',
   'orchestrator-admin-ui': 'Orchestrator & Jobs',
   'orchestrator-admin': 'Orchestrator & Jobs',
   'orchestrator-run-overrides': 'Orchestrator & Jobs',
   'orchestrator-checkpoint-resume': 'Orchestrator & Jobs',
   'orchestrator-acl': 'Orchestrator & Jobs',
+  'orchestrator-activity': 'Orchestrator & Jobs',
+  'orchestrator-page': 'Orchestrator & Jobs',
 
   // Governance & Security
   'portal-governance': 'Governance & Security',
@@ -95,6 +101,7 @@ const categoryDefaults = {
   // Portal Shell & Views
   'portal-responsive-shell': 'Portal Shell & Views',
   'portal-studio': 'Portal Shell & Views',
+  'portal-authoring': 'Portal Shell & Views',
   'feedback': 'Portal Shell & Views'
 };
 
@@ -107,6 +114,7 @@ export const rawStories = [
   policyAuthorityAdmin,
   portalOperations,
   adminCatalog,
+  adminPage,
   subscriptionHistory,
 
   // Control Plane & SaaS
@@ -114,8 +122,10 @@ export const rawStories = [
   triageBoard,
 
   // Orchestrator & Jobs
-  orchestratorPage,
   orchestratorAdmin,
+  orchestratorActivity,
+  orchestratorPage,
+  portalOperationalCharts,
   orchestratorRunOverrides,
   orchestratorCheckpointResume,
   orchestratorAcl,
@@ -147,6 +157,7 @@ export const rawStories = [
   // Portal Shell & Views
   portalResponsiveShell,
   portalStudio,
+  portalAuthoring,
   feedback
 ];
 

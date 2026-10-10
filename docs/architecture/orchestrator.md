@@ -281,6 +281,50 @@ JobThrottleMetrics metrics = schedulerService.GetMetrics();
 // metrics.AvailableSlots — remaining semaphore count
 ```
 
+### 3.7 Scheduled-job activity projection
+
+`GET /api/scheduled-jobs/activity` reads current jobs and their outcome history from the shared
+relational store in one query. The Portal relays it at `GET /api/orchestrator/jobs/activity` with
+the signed caller assertion. The Portal's four metric chips use this projection for both counts
+and filtered table membership.
+
+- `RunState` is stored on the job row. The scheduler records `Queued` before waiting for a throttle
+  slot and `Running` after acquiring it. It records `Idle` between attempts and on lease release.
+  Lease claim resets the state to `Idle`; retry backoff does not count as queued or active.
+- State writes require the current owner, fence token, and unexpired lease. A refused or failed
+  state write before execution cancels that cycle. A cleanup write failure preserves completed
+  execution outcomes and cannot replay external writes. Expired leases project as `Idle`.
+- Completed-today membership requires a `SUCCESS` history outcome. Failed-today membership
+  requires `FAILURE` or `BLOCKED`. Both use the history end instant in the inclusive range from
+  UTC midnight through `AsOfUtc`. Stored offsets are converted to UTC; timestamps without an
+  offset are interpreted as UTC. Future outcomes are excluded.
+- Counts identify distinct current jobs. Retries do not multiply counts, and a job with both
+  outcomes can belong to both chips. Matching by immutable `JobId` prevents a recreated name
+  from inheriting the old job's outcomes. Ad-hoc jobs are outside this scheduled-job projection.
+- The store applies the tenant predicate. Object-read authorization then runs before counts,
+  filtering, or pagination. An administrator still reads only the request tenant. An unreadable
+  job contributes neither a row nor a count.
+- Counts cover all readable jobs, independent of search, enabled status, or selected chip.
+  `Total` covers the filtered result before pagination. Ordering is case-insensitive job name,
+  then immutable ID. `Limit` is 1–1000 and `Offset` is nonnegative; a page beyond the result is empty.
+- Invalid queries return 400. Unavailable or invalid stored evidence returns 503, never invented
+  zero counts. Cancellation propagates through the store and proxy.
+
+The response contract is `ScheduledJobActivityPage` in `IScheduledJobActivityStore.cs`. Its
+browser declaration is generated from that C# type, including the string-valued run-state enum.
+
+Portal's strict TypeScript activity loader validates the response and pagination metadata. The view
+controller preserves the selected chip across refresh, resets pagination when criteria change, and
+keeps search and enabled-status criteria when clearing a chip. Counts remain independent of those
+criteria. Superseded requests are cancelled and cannot overwrite the latest page.
+
+The activity coordinator loads the complete readable catalog in pages of 1,000 for timeline and
+deep-link use. Table pages retain server pagination. Activity refresh continues after a failed health
+request. Unavailable activity clears stale rows and counts; successful polling restores the table
+and catalog. Background refresh keeps the current table visible while loading and restores keyboard
+focus to the same job action after
+rendering. Page disposal aborts pending loads and removes controller listeners.
+
 ---
 
 ## 4. Concurrency — `JobThrottle`

@@ -8,6 +8,7 @@
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/designer-canvas-render.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.

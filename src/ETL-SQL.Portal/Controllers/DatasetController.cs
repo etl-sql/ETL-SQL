@@ -208,10 +208,10 @@ public class DatasetController(
         if (result.Kind == DatasetRefreshResultKind.Queued)
         {
             Response.Headers.Append("Location", $"/api/jobs/{result.JobId}");
-            return Accepted(new { triggered = true, jobId = result.JobId });
+            return Accepted(new DatasetRefreshAcceptedDto(true, JobId: result.JobId));
         }
 
-        return Accepted(new { triggered = false, message = result.Message });
+        return Accepted(new DatasetRefreshAcceptedDto(false, Message: result.Message));
     }
 
     // ── GET /api/datasets/{id}/refresh-status ────────────────────────────────
@@ -345,7 +345,7 @@ public class DatasetController(
             return OptimisticConcurrency.Conflict(this, queries.ToDto(dataset));
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
-        return Ok(new { dataset.Version });
+        return Ok(new DatasetVersionResponse(dataset.Version));
     }
 
     // ── DELETE /api/datasets/{id}/acl/{groupId} ───────────────────────────────
@@ -369,7 +369,7 @@ public class DatasetController(
             return OptimisticConcurrency.Conflict(this, queries.ToDto(dataset));
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
-        return Ok(new { dataset.Version });
+        return Ok(new DatasetVersionResponse(dataset.Version));
     }
 
     // ── DELETE /api/datasets/{id}/acl/user/{userId} ───────────────────────────
@@ -398,7 +398,7 @@ public class DatasetController(
             return OptimisticConcurrency.Conflict(this, queries.ToDto(dataset));
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
-        return Ok(new { dataset.Version });
+        return Ok(new DatasetVersionResponse(dataset.Version));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -23,12 +23,16 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// so the journey runs a report for real without two hosts racing over the same node leases,
 /// instance locks and Orchestrator poller.
 /// </summary>
-public sealed class PortalBrowserFactory : PortalWebFactory
+public class PortalBrowserFactory : PortalWebFactory
 {
     private IHost? kestrelHost;
 
     /// <summary>Absolute base URL the browser should navigate to, e.g. <c>http://127.0.0.1:53124</c>.</summary>
     public string ServerAddress { get; private set; } = string.Empty;
+
+    /// <summary>Services for the real browser host, including its in-memory singleton state.</summary>
+    public IServiceProvider BrowserServices => kestrelHost?.Services
+        ?? throw new InvalidOperationException("The browser host has not been created.");
 
     protected override void CustomizeConfiguration(Dictionary<string, string?> settings)
     {
