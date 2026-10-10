@@ -636,12 +636,21 @@ not a completed GitHub run or container/package certification. See
 The PowerShell sync wrapper delegates to canonical preparation and propagates missing-tool and
 verification failures. Both debug scripts prepare before invoking .NET, stop on preparation failure,
 and preserve checkout/package path arguments from an unrelated working directory. The local-entry-point
-task remains open for the remaining test, publish, IDE, run/watch, and incremental-build acceptance.
+task remains open for release/publish entry points, direct .NET/IDE workflows, and run/watch/incremental
+build acceptance.
 Focused generator/wrapper checks pass using isolated Windows and Ubuntu source fixtures with spaces,
 non-ASCII characters, and a literal `$`. Downstream build spies verify argument boundaries, preparation
 ordering, and failure propagation. The tracked checkpoint produces 380 byte-identical outputs on both
 platforms; complete build/package certification remains open. Evidence is under
 `artifacts/section1/entrypoints-index-windows.log` and `entrypoints-linux-evidence/`.
+
+Smoke and test-lane scripts now prepare before normal runs and verify read-only in no-build mode.
+Isolated Windows/Ubuntu wrapper checks cover missing Node/compiler, stale added owners, missing host
+outputs, recovery before .NET, checkout paths, and test exit codes. Before-fix probes reached .NET
+without a restored compiler and accepted an added owner in no-build mode. Build/test spies verify
+the invocation contract; final native lanes remain open. Evidence is under
+`artifacts/section1/test-entrypoints-before.log`, `test-entrypoints-no-build-before.log`, and
+`test-entrypoints-linux-evidence/`.
 
 1. Finish the ownership audit, preparation entry point, generator bootstrap, freshness verification,
    safe obsolete-output cleanup, and build/gate integration.

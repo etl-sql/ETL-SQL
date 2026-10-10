@@ -9,6 +9,7 @@ import { watchBrowser } from './compile-browser.mjs';
 import assetInputs from './lib/browser-asset-inputs.cjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const entrypointsOnly = process.argv.includes('--entrypoints-only');
 const tempBase = fs.existsSync(path.join(repo, 'scratch')) ? path.join(repo, 'scratch') : os.tmpdir();
 const root = fs.mkdtempSync(path.join(tempBase, 'etlsql-asset-generation espaces-é-$literal-'));
 const sharedRel = 'src/ETL-SQL.ReportRuntime/Resources/Shared';
@@ -41,51 +42,7 @@ const generatedHosts = [
     'src/etl-sql-vscode/media',
 ].map(rel => path.join(root, rel));
 
-try {
-    for (const rel of [sourceRel, 'src/ETL-SQL.Portal/BrowserSources', 'types']) {
-        if (!fs.existsSync(path.join(repo, rel))) continue;
-        // Node's native directory-copy fast path skipped this Windows fixture's destination.
-        // A filter uses the checked JS copy path; verify the fixture before testing generation.
-        fs.cpSync(path.join(repo, rel), path.join(root, rel), { recursive: true, filter: () => true });
-        assert.equal(files(path.join(root, rel)).length, files(path.join(repo, rel)).length,
-            `Source-only fixture did not copy all owners/declarations: ${rel}`);
-    }
-    fs.copyFileSync(path.join(repo, 'tsconfig.browser-build.json'), path.join(root, 'tsconfig.browser-build.json'));
-    fs.copyFileSync(path.join(repo, 'Directory.Build.targets'), path.join(root, 'Directory.Build.targets'));
-    for (const input of ['scripts/compile-browser.mjs', 'scripts/sync-assets.js', 'scripts/lib/browser-asset-inputs.cjs',
-        'scripts/lib/browser-toolchain.cjs', 'scripts/typecheck/.npmrc',
-        'scripts/typecheck/package.json', 'scripts/typecheck/package-lock.json']) {
-        write(path.join(root, input), fs.readFileSync(path.join(repo, input)));
-    }
-    // Keep this fixture inventory independent of the collector: omitting a selector or contract
-    // generator from production must fail the regression instead of silently shrinking coverage.
-    const configurationInputs = ['Directory.Build.props', 'scripts/generate-portal-browser-contract.mjs',
-        'src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj', 'src/ETL-SQL.ReportRuntime/ETL-SQL.ReportRuntime.csproj',
-        'src/ETL-SQL.ReportPlayer/ETL-SQL.ReportPlayer.csproj', 'src/ETL-SQL.WorkstationEditor/ETL-SQL.WorkstationEditor.csproj',
-        'src/ETL-SQL.Portal/ETL-SQL.Portal.csproj', 'src/etl-sql-vscode/.vscodeignore',
-        'src/etl-sql-vscode/package.json', 'src/etl-sql-vscode/ui/package.json', 'src/etl-sql-vscode/ui/vite.config.ts',
-        'src/ETL-SQL.Portal/BrowserContracts/critical-api-contracts.json',
-        ...['BrowserContractsGenerator', 'BrowserContractsGeneratorTests', 'StudioBrowserContractsGenerator',
-            'StudioBrowserContractsGeneratorTests'].map(name => `tests/ETL-SQL.Portal.Tests/${name}.cs`)];
-    for (const input of [...configurationInputs, 'src/ETL-SQL.Portal/wwwroot/css/portal.css',
-        'src/ETL-SQL.Portal/wwwroot/index.html']) write(path.join(root, input), fs.readFileSync(path.join(repo, input)));
-    write(path.join(root, 'ETL-SQL.ReportRuntime.proj'), '<Project><Import Project="Directory.Build.targets" /></Project>');
-    verifyBuild(/Browser assets are not prepared/);
-    // Copy only authored assets. This models a checkout with no compiler, bundle, or host output.
-    for (const file of files(path.join(repo, sharedRel))) {
-        const content = fs.readFileSync(file);
-        if (file.endsWith('report-runtime.bundle.js') || content.toString('utf8').startsWith('/* GENERATED TYPESCRIPT OUTPUT')) continue;
-        write(path.join(shared, path.relative(path.join(repo, sharedRel), file)), content);
-    }
-    // Authored Portal modules remain tracked during migration, including the separately generated
-    // API validator. Shared host copies and TypeScript implementations must be absent.
-    for (const file of files(path.join(repo, portalJsRel))) {
-        const content = fs.readFileSync(file);
-        const text = content.toString('utf8');
-        if (text.startsWith('/* GENERATED TYPESCRIPT OUTPUT') || text.includes('Source: src/ETL-SQL.ReportRuntime/Resources/Shared/')) continue;
-        write(path.join(root, portalJsRel, path.relative(path.join(repo, portalJsRel), file)), content);
-    }
-    for (const host of generatedHosts) assert.equal(fs.existsSync(path.join(host, 'report-runtime.js')), false);
+async function verifyGeneration(configurationInputs) {
     const first = await generate();
     assert.ok(first.files > 100, 'Every production host must receive its required assets.');
     const inventoryPath = path.join(root, 'artifacts/browser-assets.json');
@@ -462,9 +419,59 @@ try {
         for (const host of generatedHosts) assert.match(fs.readFileSync(path.join(host, 'watched-probe.js'), 'utf8'), /watched = 13/);
         verifyBuild();
     } finally { await watcher.dispose(); }
+}
+
+try {
+    for (const rel of [sourceRel, 'src/ETL-SQL.Portal/BrowserSources', 'types']) {
+        if (!fs.existsSync(path.join(repo, rel))) continue;
+        // Node's native directory-copy fast path skipped this Windows fixture's destination.
+        // A filter uses the checked JS copy path; verify the fixture before testing generation.
+        fs.cpSync(path.join(repo, rel), path.join(root, rel), { recursive: true, filter: () => true });
+        assert.equal(files(path.join(root, rel)).length, files(path.join(repo, rel)).length,
+            `Source-only fixture did not copy all owners/declarations: ${rel}`);
+    }
+    fs.copyFileSync(path.join(repo, 'tsconfig.browser-build.json'), path.join(root, 'tsconfig.browser-build.json'));
+    fs.copyFileSync(path.join(repo, 'Directory.Build.targets'), path.join(root, 'Directory.Build.targets'));
+    for (const input of ['scripts/compile-browser.mjs', 'scripts/sync-assets.js', 'scripts/lib/browser-asset-inputs.cjs',
+        'scripts/lib/browser-toolchain.cjs', 'scripts/typecheck/.npmrc',
+        'scripts/typecheck/package.json', 'scripts/typecheck/package-lock.json']) {
+        write(path.join(root, input), fs.readFileSync(path.join(repo, input)));
+    }
+    // Keep this fixture inventory independent of the collector: omitting a selector or contract
+    // generator from production must fail the regression instead of silently shrinking coverage.
+    const configurationInputs = ['Directory.Build.props', 'scripts/generate-portal-browser-contract.mjs',
+        'src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj', 'src/ETL-SQL.ReportRuntime/ETL-SQL.ReportRuntime.csproj',
+        'src/ETL-SQL.ReportPlayer/ETL-SQL.ReportPlayer.csproj', 'src/ETL-SQL.WorkstationEditor/ETL-SQL.WorkstationEditor.csproj',
+        'src/ETL-SQL.Portal/ETL-SQL.Portal.csproj', 'src/etl-sql-vscode/.vscodeignore',
+        'src/etl-sql-vscode/package.json', 'src/etl-sql-vscode/ui/package.json', 'src/etl-sql-vscode/ui/vite.config.ts',
+        'src/ETL-SQL.Portal/BrowserContracts/critical-api-contracts.json',
+        ...['BrowserContractsGenerator', 'BrowserContractsGeneratorTests', 'StudioBrowserContractsGenerator',
+            'StudioBrowserContractsGeneratorTests'].map(name => `tests/ETL-SQL.Portal.Tests/${name}.cs`)];
+    for (const input of [...configurationInputs, 'src/ETL-SQL.Portal/wwwroot/css/portal.css',
+        'src/ETL-SQL.Portal/wwwroot/index.html']) write(path.join(root, input), fs.readFileSync(path.join(repo, input)));
+    write(path.join(root, 'ETL-SQL.ReportRuntime.proj'), '<Project><Import Project="Directory.Build.targets" /></Project>');
+    verifyBuild(/Browser assets are not prepared/);
+    // Copy only authored assets. This models a checkout with no compiler, bundle, or host output.
+    for (const file of files(path.join(repo, sharedRel))) {
+        const content = fs.readFileSync(file);
+        if (file.endsWith('report-runtime.bundle.js') || content.toString('utf8').startsWith('/* GENERATED TYPESCRIPT OUTPUT')) continue;
+        write(path.join(shared, path.relative(path.join(repo, sharedRel), file)), content);
+    }
+    // Authored Portal modules remain tracked during migration, including the separately generated
+    // API validator. Shared host copies and TypeScript implementations must be absent.
+    for (const file of files(path.join(repo, portalJsRel))) {
+        const content = fs.readFileSync(file);
+        const text = content.toString('utf8');
+        if (text.startsWith('/* GENERATED TYPESCRIPT OUTPUT') || text.includes('Source: src/ETL-SQL.ReportRuntime/Resources/Shared/')) continue;
+        write(path.join(root, portalJsRel, path.relative(path.join(repo, portalJsRel), file)), content);
+    }
+    for (const host of generatedHosts) assert.equal(fs.existsSync(path.join(host, 'report-runtime.js')), false);
+    // The focused mode retains the source-only fixture and real preparation used by public wrappers.
+    if (!entrypointsOnly) await verifyGeneration(configurationInputs);
     // Exercise the public wrappers with real preparation. Build spies prove that failed preparation
     // cannot reach downstream tools; they also record argument boundaries from an unrelated cwd.
-    for (const script of ['build-debug.ps1', 'build-debug.sh', 'sync-assets.ps1'])
+    for (const script of ['build-debug.ps1', 'build-debug.sh', 'sync-assets.ps1',
+        'test-smoke.ps1', 'test-smoke.sh', 'test-lane.ps1', 'test-lane.sh', 'Release.Helpers.ps1'])
         fs.copyFileSync(path.join(repo, 'scripts', script), path.join(root, 'scripts', script));
     const callsFile = path.join(root, 'entrypoint-calls.jsonl');
     const driver = path.join(root, 'entrypoint-driver.ps1');
@@ -477,15 +484,18 @@ try {
         const lookup = spawnSync('pwsh', ['-NoProfile', '-Command', '(Get-Process -Id $PID).Path'], { encoding: 'utf8' });
         assert.equal(lookup.status, 0, lookup.stdout + lookup.stderr);
         shell = lookup.stdout.trim();
-        write(driver, `function global:dotnet {
+        write(driver, `$ErrorActionPreference = 'Stop'
+function global:dotnet {
   @{ command = 'dotnet'; args = @($args) } | ConvertTo-Json -Compress | Add-Content -LiteralPath $env:ETLSQL_ENTRYPOINT_CALLS
   $global:LASTEXITCODE = [int]$env:ETLSQL_ENTRYPOINT_BUILD_EXIT
+  if ($global:LASTEXITCODE -eq 0) { Write-Output 'Passed: 1' }
 }
 function global:npm {
   @{ command = 'npm'; args = @($args) } | ConvertTo-Json -Compress | Add-Content -LiteralPath $env:ETLSQL_ENTRYPOINT_CALLS
   $global:LASTEXITCODE = 0
 }
-& $env:ETLSQL_ENTRYPOINT_SCRIPT
+$commandParameters = $env:ETLSQL_ENTRYPOINT_PARAMETERS | ConvertFrom-Json -AsHashtable
+& $env:ETLSQL_ENTRYPOINT_SCRIPT @commandParameters
 exit $LASTEXITCODE
 `);
     } else {
@@ -497,6 +507,7 @@ exit $LASTEXITCODE
         const logger = path.join(shim, 'log.mjs');
         write(logger, `import fs from 'node:fs';
 fs.appendFileSync(process.env.ETLSQL_ENTRYPOINT_CALLS, JSON.stringify({command:process.argv[2],args:process.argv.slice(3)})+'\\n');
+if (process.argv[2] === 'dotnet' && Number(process.env.ETLSQL_ENTRYPOINT_BUILD_EXIT) === 0) console.log('Passed: 1');
 process.exit(process.argv[2] === 'dotnet' ? Number(process.env.ETLSQL_ENTRYPOINT_BUILD_EXIT) : 0);
 `);
         for (const command of ['dotnet', 'npm']) {
@@ -506,27 +517,44 @@ process.exit(process.argv[2] === 'dotnet' ? Number(process.env.ETLSQL_ENTRYPOINT
         }
     }
     const calls = () => fs.readFileSync(callsFile, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
-    const runDebug = ({ missingNode = false, buildExit = 0 } = {}) => {
+    const runEntrypoint = ({ missingNode = false, buildExit = 0, script = debug, argv = [], parameters = {} } = {}) => {
         write(callsFile, '');
         const env = { ...process.env, ETLSQL_ENTRYPOINT_CALLS: callsFile,
-            ETLSQL_ENTRYPOINT_SCRIPT: debug, ETLSQL_ENTRYPOINT_BUILD_EXIT: String(buildExit),
+            ETLSQL_ENTRYPOINT_SCRIPT: script, ETLSQL_ENTRYPOINT_PARAMETERS: JSON.stringify(parameters),
+            ETLSQL_ENTRYPOINT_BUILD_EXIT: String(buildExit),
             ETLSQL_ENTRYPOINT_NODE: process.execPath, ETLSQL_ENTRYPOINT_LOGGER: path.join(shim, 'log.mjs'),
             PATH: missingNode ? shim : [shim, path.dirname(process.execPath), process.env.PATH].join(path.delimiter) };
-        const args = process.platform === 'win32' ? ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', driver] : [debug];
+        const args = process.platform === 'win32' ? ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', driver] : [script, ...argv];
         const result = spawnSync(shell, args, { cwd: outside, env, encoding: 'utf8' });
         assert.ifError(result.error); return result;
     };
-    const missingCompiler = runDebug();
+    const testEntries = process.platform === 'win32' ? [
+        { script: path.join(root, 'scripts/test-smoke.ps1'), parameters: { Lane: 'core', NoRestore: true } },
+        { script: path.join(root, 'scripts/test-lane.ps1'), parameters: { Lane: 'engine', EngineShardCount: 1, NoRestore: true } }
+    ] : [
+        { script: path.join(root, 'scripts/test-smoke.sh'), argv: ['--lane', 'core', '--no-restore'] },
+        { script: path.join(root, 'scripts/test-lane.sh'), argv: ['--lane', 'engine', '--no-restore'] }
+    ];
+    const noBuildArgument = process.platform === 'win32' ? '-NoBuild' : '--no-build';
+    const missingCompiler = runEntrypoint();
     assert.notEqual(missingCompiler.status, 0, missingCompiler.stdout + missingCompiler.stderr);
     assert.match(missingCompiler.stdout + missingCompiler.stderr, /npm ci --prefix scripts\/typecheck/);
     assert.deepEqual(calls(), [], 'Missing compiler must stop before .NET/npm builds.');
-    const missingNode = runDebug({ missingNode: true });
+    const missingNode = runEntrypoint({ missingNode: true });
     assert.notEqual(missingNode.status, 0, missingNode.stdout + missingNode.stderr);
     assert.match(missingNode.stdout + missingNode.stderr, /node.*(not recognized|not found)/s);
     assert.deepEqual(calls(), [], 'Missing Node must stop before .NET/npm builds.');
+    for (const entry of testEntries) {
+        for (const absent of [false, true]) {
+            const failed = runEntrypoint({ ...entry, missingNode: absent });
+            assert.notEqual(failed.status, 0, failed.stdout + failed.stderr);
+            assert.match(failed.stdout + failed.stderr, absent ? /node.*(not recognized|not found)/s : /npm ci --prefix scripts\/typecheck/);
+            assert.deepEqual(calls(), [], 'Test lanes must stop before .NET when preparation cannot run.');
+        }
+    }
     fs.cpSync(path.join(repo, 'scripts/typecheck/node_modules'), path.join(root, 'scripts/typecheck/node_modules'),
         { recursive: true, filter: () => true });
-    const prepared = runDebug();
+    const prepared = runEntrypoint();
     assert.equal(prepared.status, 0, prepared.stdout + prepared.stderr);
     assert.deepEqual(calls(), [
         { command: 'dotnet', args: ['build', path.join(root, 'ETL-SQL.slnx'), '--nologo', '-v', 'minimal'] },
@@ -534,9 +562,54 @@ process.exit(process.argv[2] === 'dotnet' ? Number(process.env.ETLSQL_ENTRYPOINT
         { command: 'npm', args: ['--prefix', path.join(root, 'src/etl-sql-vscode'), 'run', 'compile', '--silent'] },
         { command: 'npm', args: ['--prefix', path.join(root, 'src/etl-sql-vscode'), 'run', 'test:unit'] }
     ], 'Checkout paths remain single arguments and package steps do not depend on cwd.');
-    const buildFailed = runDebug({ buildExit: 7 });
+    const buildFailed = runEntrypoint({ buildExit: 7 });
     assert.notEqual(buildFailed.status, 0, 'A downstream build failure must reach the caller.');
     assert.equal(calls().length, 4, 'A build failure must retain the debug script\'s remaining checks.');
+    const preparedMetadata = ['artifacts/browser-assets.json', 'artifacts/browser-assets.props'];
+    const metadataSnapshot = () => new Map(preparedMetadata.map(relative =>
+        [relative, fs.readFileSync(path.join(root, relative))]));
+    const metadataPreserved = before => {
+        for (const [relative, bytes] of before)
+            assert.deepEqual(fs.readFileSync(path.join(root, relative)), bytes, 'No-build checks must not repair prepared state.');
+    };
+    for (const [index, entry] of testEntries.entries()) {
+        const noBuild = process.platform === 'win32' ? { ...entry, parameters: { ...entry.parameters, NoBuild: true } } :
+            { ...entry, argv: [...entry.argv, noBuildArgument] };
+        const verifyTestCall = () => {
+            assert.equal(calls().length, 1);
+            assert.equal(calls()[0].command, 'dotnet');
+            assert.equal(calls()[0].args[0], 'test');
+            assert.equal(calls()[0].args[1], path.join(root, 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'));
+            assert.ok(calls()[0].args.includes('--no-restore'));
+        };
+        const before = metadataSnapshot();
+        const current = runEntrypoint(noBuild);
+        assert.equal(current.status, 0, current.stdout + current.stderr);
+        verifyTestCall();
+        assert.ok(calls()[0].args.includes('--no-build'));
+        metadataPreserved(before);
+        write(path.join(source, `entrypoint-lane-${index}.ts`), 'export const lane = 1;\n');
+        const stale = runEntrypoint(noBuild);
+        assert.notEqual(stale.status, 0, 'No-build test lanes must reject added browser owners.');
+        assert.deepEqual(calls(), []);
+        metadataPreserved(before);
+        const repaired = runEntrypoint(entry);
+        assert.equal(repaired.status, 0, repaired.stdout + repaired.stderr);
+        verifyTestCall();
+        assert.equal(calls()[0].args.includes('--no-build'), false);
+        const missingOutput = path.join(generatedHosts[0], `entrypoint-lane-${index}.js`);
+        assert.ok(missingOutput.startsWith(root + path.sep));
+        fs.unlinkSync(missingOutput);
+        const missingBefore = metadataSnapshot();
+        const missingAsset = runEntrypoint(noBuild);
+        assert.notEqual(missingAsset.status, 0, 'No-build test lanes must reject missing host assets.');
+        assert.deepEqual(calls(), []);
+        metadataPreserved(missingBefore);
+        const testFailed = runEntrypoint({ ...entry, buildExit: 7 });
+        assert.notEqual(testFailed.status, 0, 'Test failures must reach the caller.');
+        verifyTestCall();
+        assert.ok(fs.existsSync(missingOutput), 'Ordinary test entry points must prepare missing outputs before .NET.');
+    }
     if (process.platform === 'win32') {
         const inventoryFile = path.join(root, 'artifacts/browser-assets.json');
         const manifestFile = path.join(root, 'artifacts/browser-assets.props');
@@ -552,12 +625,13 @@ process.exit(process.argv[2] === 'dotnet' ? Number(process.env.ETLSQL_ENTRYPOINT
         const missing = runCheck(true);
         assert.notEqual(missing.status, 0, 'Missing Node must not report a successful asset check.');
         assert.match(missing.stdout + missing.stderr, /node.*not recognized/s);
-        write(watchedSource, 'export const watched: number = 14;\n');
+        write(path.join(source, 'entrypoint-stale-probe.ts'), 'export const stale = 1;\n');
         const stale = runCheck();
         assert.notEqual(stale.status, 0, 'The wrapper must propagate canonical verification failure.');
         for (const [file, content] of before) assert.deepEqual(fs.readFileSync(file), content, 'Failed checks must stay read-only.');
     }
-    console.log('Asset generation and public entry points: ownership, absent outputs, closures, freshness, recovery, argument boundaries, and fail-fast builds passed.');
+    console.log(entrypointsOnly ? 'Public entry points: source-only preparation, read-only no-build checks, argument boundaries, and failure propagation passed.' :
+        'Asset generation and public entry points: ownership, absent outputs, closures, freshness, recovery, argument boundaries, and fail-fast builds passed.');
 } finally {
     assert.equal(path.dirname(root), path.resolve(tempBase));
     fs.rmSync(root, { recursive: true, force: true });

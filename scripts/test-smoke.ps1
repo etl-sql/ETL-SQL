@@ -13,6 +13,12 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+if ($NoBuild) {
+    & node (Join-Path $PSScriptRoot 'sync-assets.js') -Check
+} else {
+    & node (Join-Path $PSScriptRoot 'sync-assets.js')
+}
+if ($LASTEXITCODE -ne 0) { throw "Browser asset preparation failed. Run npm ci --prefix scripts/typecheck, then node scripts/sync-assets.js." }
 
 $lanes = [ordered]@{
     core = @{

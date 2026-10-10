@@ -34,6 +34,11 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+if [ "$NO_BUILD" = true ]; then
+    node "$SCRIPT_DIR/sync-assets.js" -Check
+else
+    node "$SCRIPT_DIR/sync-assets.js"
+fi
 
 # Define lanes and their associated test project and category filters
 declare -A lane_labels

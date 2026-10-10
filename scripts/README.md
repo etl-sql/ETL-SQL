@@ -359,6 +359,11 @@ browser assets before invoking .NET. A preparation failure stops the build befor
 extension compiler runs. These scripts resolve their checkout and package paths independently of
 the caller's working directory.
 
+The smoke and test-lane scripts prepare assets before normal test runs. Their `-NoBuild` / `--no-build`
+mode verifies preparation without repairing it and stops before .NET when sources or outputs are stale.
+These checkout workflows need the restored browser compiler in either mode. Run
+`node scripts/test-asset-generation.mjs --entrypoints-only` for focused build/test wrapper checks.
+
 The preparation manifest fingerprints retained Portal markup, styles, and images, declarations and
 contract schemas, generator code and helpers, compiler configuration/locks, and host asset-selection
 files. Put generator helpers under `scripts/lib`; new or removed helpers enter freshness checks

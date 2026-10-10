@@ -51,6 +51,12 @@ $script:LaneExitCode = 0
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'Release.Helpers.ps1')
+if ($NoBuild) {
+    & node (Join-Path $PSScriptRoot 'sync-assets.js') -Check
+} else {
+    & node (Join-Path $PSScriptRoot 'sync-assets.js')
+}
+if ($LASTEXITCODE -ne 0) { throw "Browser asset preparation failed. Run npm ci --prefix scripts/typecheck, then node scripts/sync-assets.js." }
 $engineFilter = "(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(Category!=ScaleAssessment)&(Category!=BillionRowCertification)&(Category!=DeploymentProfile)&(Category!=EbnfConformance)"
 # Portal lanes run the whole Portal project (its WebApplicationFactory tests have
 # "Integration" in their names but need no Docker). Exclude only Docker-backed and
