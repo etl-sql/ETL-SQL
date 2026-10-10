@@ -113,16 +113,6 @@ public class OrchestratorProxyService(
         catch (Exception ex) { logger.LogWarning(ex, "Failed to delete job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
     }
 
-    public async Task<List<JobHistoryEntryDto>> GetHistoryAsync(string jobName, int limit = 50)
-    {
-        try
-        {
-            return await GetJsonAsync<List<JobHistoryEntryDto>>(
-                $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/history?limit={limit}") ?? [];
-        }
-        catch (Exception ex) { logger.LogDebug(ex, "Failed to get history for {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return []; }
-    }
-
     public async Task<HttpResponseMessage?> TriggerJobAsync(
         string name,
         IReadOnlyDictionary<string, string>? variables = null)
@@ -314,12 +304,6 @@ public class OrchestratorProxyService(
         catch (Exception ex) { logger.LogWarning(ex, "Failed to delete schedule {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
     }
 
-    public async Task<List<JobScheduleLinkDto>> GetJobSchedulesAsync(string jobName)
-    {
-        try { return await GetJsonAsync<List<JobScheduleLinkDto>>($"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/schedules") ?? []; }
-        catch (Exception ex) { logger.LogDebug(ex, "Failed to get schedules for job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return []; }
-    }
-
     public async Task<HttpResponseMessage?> AttachJobScheduleAsync(string jobName, string scheduleName)
     {
         try { return await SendAsync(HttpMethod.Post, $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/schedules/{Uri.EscapeDataString(scheduleName)}"); }
@@ -358,12 +342,6 @@ public class OrchestratorProxyService(
         catch (Exception ex) { logger.LogWarning(ex, "Failed to delete notification {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
     }
 
-    public async Task<List<JobNotificationLinkDto>> GetJobNotificationsAsync(string jobName)
-    {
-        try { return await GetJsonAsync<List<JobNotificationLinkDto>>($"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/notifications") ?? []; }
-        catch (Exception ex) { logger.LogDebug(ex, "Failed to get notifications for job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return []; }
-    }
-
     public async Task<HttpResponseMessage?> AttachJobNotificationAsync(string jobName, string notificationName, string trigger = "Completion")
     {
         try { return await SendAsync(HttpMethod.Post, $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/notifications/{Uri.EscapeDataString(notificationName)}", new { Trigger = trigger }); }
@@ -382,12 +360,6 @@ public class OrchestratorProxyService(
     }
 
     // ── Watermarks & Job State ──────────────────────────────────────────────────
-
-    public async Task<List<JobStateEntryDto>> GetJobStatesAsync(string jobName)
-    {
-        try { return await GetJsonAsync<List<JobStateEntryDto>>($"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/state") ?? []; }
-        catch (Exception ex) { logger.LogDebug(ex, "Failed to get states for job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return []; }
-    }
 
     public async Task<HttpResponseMessage?> SetJobStateAsync(string jobName, string key, string? value)
     {
@@ -485,6 +457,29 @@ public class OrchestratorProxyService(
         ReadJsonAsync<List<NotificationDefinitionDto>>(
             $"api/notifications?limit={Math.Clamp(limit, 1, 1000)}&offset={Math.Max(0, offset)}", "notifications", ct);
 
+    /// <summary>Reads a job's run history; a failed read is not an empty history.</summary>
+    public Task<OrchestratorRead<List<JobHistoryEntryDto>>> ReadHistoryAsync(
+        string jobName, int limit = 50, CancellationToken ct = default) =>
+        ReadJsonAsync<List<JobHistoryEntryDto>>(
+            $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/history?limit={limit}", "job history", ct);
+
+    /// <summary>Reads the shared schedules attached to a job.</summary>
+    public Task<OrchestratorRead<List<JobScheduleLinkDto>>> ReadJobSchedulesAsync(
+        string jobName, CancellationToken ct = default) =>
+        ReadJsonAsync<List<JobScheduleLinkDto>>(
+            $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/schedules", "job schedules", ct);
+
+    /// <summary>Reads the notification endpoints attached to a job.</summary>
+    public Task<OrchestratorRead<List<JobNotificationLinkDto>>> ReadJobNotificationsAsync(
+        string jobName, CancellationToken ct = default) =>
+        ReadJsonAsync<List<JobNotificationLinkDto>>(
+            $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/notifications", "job notifications", ct);
+
+    /// <summary>Reads a job's watermark and incremental state keys.</summary>
+    public Task<OrchestratorRead<List<JobStateEntryDto>>> ReadJobStatesAsync(
+        string jobName, CancellationToken ct = default) =>
+        ReadJsonAsync<List<JobStateEntryDto>>(
+            $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/state", "job state", ct);
     private async Task<OrchestratorRead<T>> ReadJsonAsync<T>(string path, string subject, CancellationToken ct)
         where T : class
     {

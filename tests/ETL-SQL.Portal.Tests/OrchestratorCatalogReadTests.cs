@@ -83,6 +83,38 @@ public sealed class OrchestratorCatalogReadTests(OrchestratorGrantAdministration
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }
 
+    [Fact]
+    public async Task JobDetailReadsAnswerForAJobWithNothingAttached()
+    {
+        const string name = "catalog_read_detail";
+        await fixture.CreateJobAsync(name, fixture.AdminToken);
+        foreach (var detail in new[] { "history", "schedules", "notifications", "state" })
+        {
+            using var response = await fixture.SendAsync(
+                HttpMethod.Get, $"/api/orchestrator/jobs/{name}/{detail}", fixture.AdminToken);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.True(response.Headers.CacheControl?.NoStore);
+            Assert.Empty((await response.Content.ReadFromJsonAsync<JsonArray>())!);
+        }
+    }
+
+    [Theory]
+    [InlineData("history", HttpStatusCode.InternalServerError, HttpStatusCode.ServiceUnavailable, "Run history entries are temporarily unavailable. Please retry.")]
+    [InlineData("schedules", HttpStatusCode.BadGateway, HttpStatusCode.ServiceUnavailable, "Attached schedules are temporarily unavailable. Please retry.")]
+    [InlineData("notifications", HttpStatusCode.Forbidden, HttpStatusCode.Forbidden, "Attached notifications are not available to this account.")]
+    [InlineData("state", HttpStatusCode.NotFound, HttpStatusCode.NotFound, "Watermarks could not be read because the job no longer exists.")]
+    [InlineData("state", HttpStatusCode.Unauthorized, HttpStatusCode.ServiceUnavailable, "Watermarks are temporarily unavailable. Please retry.")]
+    public async Task AFailedJobDetailReadIsNotAnEmptyList(
+        string detail, HttpStatusCode service, HttpStatusCode expected, string message)
+    {
+        using var portal = new FailingOrchestratorFactory(service);
+        using var client = portal.CreateClient();
+        using var response = await GetAsync(client, await AdminTokenAsync(client), $"jobs/nightly/{detail}");
+
+        Assert.Equal(expected, response.StatusCode);
+        Assert.Equal(message, (await response.Content.ReadFromJsonAsync<JsonObject>())!["error"]!.GetValue<string>());
+    }
+
     private static async Task<HttpResponseMessage> GetAsync(HttpClient client, string token, string catalog)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/orchestrator/{catalog}");

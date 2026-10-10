@@ -107,11 +107,8 @@ public class OrchestratorController(
     }
 
     [HttpGet("jobs/{name}/history")]
-    public async Task<IActionResult> GetHistory(string name, [FromQuery] int limit = 50)
-    {
-        var history = await proxy.GetHistoryAsync(name, limit);
-        return Ok(history);
-    }
+    public async Task<IActionResult> GetHistory(string name, [FromQuery] int limit = 50, CancellationToken ct = default) =>
+        CatalogRead(await proxy.ReadHistoryAsync(name, limit, ct), "Run history entries");
 
     /// <summary>The signed-in principal, for audit attribution.</summary>
     private int? CurrentUserId =>
@@ -342,11 +339,8 @@ public class OrchestratorController(
     }
 
     [HttpGet("jobs/{name}/schedules")]
-    public async Task<IActionResult> GetJobSchedules(string name)
-    {
-        var links = await proxy.GetJobSchedulesAsync(name);
-        return Ok(links);
-    }
+    public async Task<IActionResult> GetJobSchedules(string name, CancellationToken ct = default) =>
+        CatalogRead(await proxy.ReadJobSchedulesAsync(name, ct), "Attached schedules");
 
     [HttpPost("jobs/{name}/schedules/{scheduleName}")]
     public async Task<IActionResult> AttachJobSchedule(string name, string scheduleName)
@@ -433,11 +427,8 @@ public class OrchestratorController(
     }
 
     [HttpGet("jobs/{name}/notifications")]
-    public async Task<IActionResult> GetJobNotifications(string name)
-    {
-        var links = await proxy.GetJobNotificationsAsync(name);
-        return Ok(links);
-    }
+    public async Task<IActionResult> GetJobNotifications(string name, CancellationToken ct = default) =>
+        CatalogRead(await proxy.ReadJobNotificationsAsync(name, ct), "Attached notifications");
 
     [HttpPost("jobs/{name}/notifications/{notificationName}")]
     public async Task<IActionResult> AttachJobNotification(string name, string notificationName, [FromBody] LinkJobNotificationRequest? req)
@@ -476,11 +467,8 @@ public class OrchestratorController(
     // ── Watermarks & Job State ──────────────────────────────────────────────────
 
     [HttpGet("jobs/{name}/state")]
-    public async Task<IActionResult> GetJobStates(string name)
-    {
-        var states = await proxy.GetJobStatesAsync(name);
-        return Ok(states);
-    }
+    public async Task<IActionResult> GetJobStates(string name, CancellationToken ct = default) =>
+        CatalogRead(await proxy.ReadJobStatesAsync(name, ct), "Watermarks");
 
     [HttpPut("jobs/{name}/state/{key}")]
     public async Task<IActionResult> SetJobState(string name, string key, [FromBody] SetJobStateRequest req)
@@ -799,9 +787,14 @@ public class OrchestratorController(
     {
         Response.Headers.CacheControl = "no-store";
         if (read.Value is not null) return Ok(read.Value);
-        return read.StatusCode == StatusCodes.Status403Forbidden
-            ? StatusCode(StatusCodes.Status403Forbidden, new { Error = $"{subject} are not available to this account." })
-            : StatusCode(StatusCodes.Status503ServiceUnavailable, new { Error = $"{subject} are temporarily unavailable. Please retry." });
+        return read.StatusCode switch
+        {
+            StatusCodes.Status403Forbidden =>
+                StatusCode(StatusCodes.Status403Forbidden, new { Error = $"{subject} are not available to this account." }),
+            StatusCodes.Status404NotFound =>
+                NotFound(new { Error = $"{subject} could not be read because the job no longer exists." }),
+            _ => StatusCode(StatusCodes.Status503ServiceUnavailable, new { Error = $"{subject} are temporarily unavailable. Please retry." })
+        };
     }
     private async Task<IActionResult> RelayAsync(
         Func<Task<HttpResponseMessage?>> send, Func<Task>? auditSuccess = null)

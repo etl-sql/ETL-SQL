@@ -83,6 +83,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Report unavailable Orchestrator schedule and notification catalogs as unavailable. A failed or
   refused read returned an empty list, so the page showed "No shared schedules defined yet" and a
   count of zero. The Portal now answers 503 or 403, and the page clears stale rows and counts.
+- Report a failed Orchestrator job detail read as unavailable, refused, or missing. Run history,
+  attached schedules and notifications, and watermarks answered an empty list when the service
+  did not answer, so a job appeared to have no runs and nothing attached.
 - Confirm Orchestrator schedule and notification writes by their documented status before
   announcing them. Keep a row locked while its write is pending, and keep a late response from
   closing a dialog reopened for another definition. Show the service's reason for a refused write.
