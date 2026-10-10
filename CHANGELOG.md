@@ -14,6 +14,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Add a BCL inspector for bundled tool versions, native architectures, runtime targets, and
+  file hashes before VSIX assembly. Verify real SDK fixtures, including compressed metadata.
 - Add a locked unsigned VSIX toolchain and archive verification. Preserve dependency licenses and
   reject signing requests, inconsistent installs, stale payloads, and mismatched package targets.
 - Compile Orchestrator job table actions and run overrides from strict TypeScript. Job updates and

@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ETL_SQL.PackageInspector</RootNamespace>
+    <AssemblyName>ETL-SQL-PackageInspector</AssemblyName>
+  </PropertyGroup>
+</Project>

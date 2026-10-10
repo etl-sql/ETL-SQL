@@ -691,6 +691,18 @@ tool versions/architectures, complete payload/runtime closure, and final candida
 Evidence is under `artifacts/section1/vsix-toolchain-index-*.log`, `vsix-toolchain-linux-evidence/`, and
 `nuget-inventory-reproducer/`.
 
+The BCL package inspector now reads actual PE/ELF/Mach-O architecture, single-file bundle entries,
+managed assembly versions, self-contained configuration, and dependency targets. It handles compressed
+metadata and checks that the input hash remains stable. The retained release tools are identified as
+0.20.0 and rejected for the current 0.20.1 request. Windows and Ubuntu exact-index checks pass real SDK
+fixtures for all four RIDs, including wrong versions/names/architectures, renamed executables, changed
+runtime targets, truncation, missing files, and framework-dependent input. Native fixture execution
+passes on Windows and Ubuntu. Native macOS and complete product/VSIX runtime acceptance remain open.
+The consumer gate discovers the focused inspector test. Public packaging integration still needs to
+bind these inspections and required native bindings to the exact assembled files before promotion.
+Evidence is under `artifacts/section1/package-inspector-index-windows*`,
+`package-inspector-linux-evidence/`, and `package-inspector-release0200-*.json`.
+
 1. Finish the ownership audit, preparation entry point, generator bootstrap, freshness verification,
    safe obsolete-output cleanup, and build/gate integration.
 2. Verify every supported delivery path from source-only inputs, including final packages and runtime checks.
