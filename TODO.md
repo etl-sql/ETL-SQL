@@ -686,8 +686,8 @@ for all four target values. Stale/missing payloads, wrong versions/targets, dama
 output replacement, and inconsistent installs are rejected. Dependency license exclusions have been
 removed from the extension file list. NuGet inventory lookup now honors `NUGET_PACKAGES`, keeps the
 declared version when its metadata is absent, and rejects mismatched metadata; a reproduced cached
-9.0.0 entry can no longer certify a project requesting 1.0.0. Public wrapper integration, actual bundled
-tool versions/architectures, complete payload/runtime closure, and final candidate checks remain open.
+9.0.0 entry can no longer certify a project requesting 1.0.0. Complete payload/runtime closure and final
+candidate checks remain open; the public wrapper integration is recorded below.
 Evidence is under `artifacts/section1/vsix-toolchain-index-*.log`, `vsix-toolchain-linux-evidence/`, and
 `nuget-inventory-reproducer/`.
 
@@ -698,10 +698,29 @@ metadata and checks that the input hash remains stable. The retained release too
 fixtures for all four RIDs, including wrong versions/names/architectures, renamed executables, changed
 runtime targets, truncation, missing files, and framework-dependent input. Native fixture execution
 passes on Windows and Ubuntu. Native macOS and complete product/VSIX runtime acceptance remain open.
-The consumer gate discovers the focused inspector test. Public packaging integration still needs to
-bind these inspections and required native bindings to the exact assembled files before promotion.
+The consumer gate discovers the focused inspector test. Public packaging now binds these inspections
+and required native bindings to the exact assembled files before promotion.
 Evidence is under `artifacts/section1/package-inspector-index-windows*`,
 `package-inspector-linux-evidence/`, and `package-inspector-release0200-*.json`.
+
+The four public VSIX wrappers now use one locked coordinator. Pre-release packaging uses it too, and
+both pre-release audit variants include the unsigned toolchain. The coordinator restores all four
+lockfiles, prepares assets, rebuilds UI/extension output in temporary folders, publishes the four tools
+separately in build mode, and checks actual versions, architectures, self-contained configuration,
+SQLite bindings, Player asset bytes, and executable ZIP modes. It checks archive payload hashes and
+source/published-input stability before atomically replacing the accepted package. Failed stages keep
+that package and developer `bin`, `out`, and `ui/dist` contents. A workspace lock serializes packaging;
+abandoned-lock/cancellation recovery still needs final acceptance. Version setters and release checks
+no longer maintain a duplicate VSIX-script version. Windows working-tree build and publish both produce
+the complete 320-file product package. Its version is the repository's current 0.20.1 metadata.
+The focused workflow uses real SDK/SQLite bundles, the BCL inspector, and locked VSCE; controlled build
+boundaries exercise restore/preparation/compile/publish failures, stale Player assets, concurrent input
+changes, and final promotion failures. Complete product execution in an actual VS Code webview,
+native Linux/macOS product delivery, and final source-only/index acceptance remain open. Generated
+outputs remain tracked. Windows and Ubuntu exact-index source archives pass fresh locked restore,
+actual SDK/SQLite workflow fixtures, all four archive targets, ZIP64/executable-mode checks, and public
+wrapper failure checks. The working-tree consumer gate passes 104 checks; browser type/lint gates
+remain clean. Evidence is under `artifacts/section1/vsix-coordinator-*`.
 
 1. Finish the ownership audit, preparation entry point, generator bootstrap, freshness verification,
    safe obsolete-output cleanup, and build/gate integration.
@@ -875,6 +894,9 @@ does not close build, package, runtime, or Git-index acceptance.
   Each variant must return a nonzero exit status, preserve the last accepted package, and leave no new
   artifact that appears complete. Use temporary assembly directories and guaranteed cleanup; restore
   the caller's working directory and environment, and never stop unrelated application processes.
+  Exercise cancellation during each long stage and recovery after a terminated packager. Check owned
+  child shutdown, staging/lock cleanup, and preservation of the last accepted package; confirm manual
+  abandoned-lock recovery cannot remove another active run's lock or files.
   Integrate the pinned unsigned toolchain in `scripts/vsix/` with every public packaging entry point;
   keep proprietary signing dependencies excluded, signing requests rejected, and redistributed
   dependency license files present. Refresh the toolchain/archive checks against the final candidate.

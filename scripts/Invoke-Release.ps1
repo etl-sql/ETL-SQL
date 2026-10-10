@@ -178,7 +178,6 @@ $versionSources = @(
     @{ File = "Directory.Build.props";                 Needle = "<VersionPrefix>$Version</VersionPrefix>" }
     @{ File = "src/etl-sql-vscode/package.json";       Needle = "`"version`": `"$Version`"" }
     @{ File = "scripts/build-msi.ps1";                 Needle = "} else { `"$Version`" }" }
-    @{ File = "scripts/build-vsix.ps1";                Needle = "`$Version = `"$Version`"" }
     @{ File = "scripts/publish-release.ps1";           Needle = "} else { `"$Version`" }" }
     @{ File = "scripts/Master-Release.ps1";            Needle = "`$Version = `"$Version`"" }
 )

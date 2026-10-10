@@ -139,10 +139,6 @@ update_file "scripts/build-msi.ps1" \
     "(\} else \{ \")[0-9]+\.[0-9]+\.[0-9]+(\" \})" \
     "\1${VERSION}\2"
 
-update_file "scripts/build-vsix.ps1" \
-    "(\\\$Version = \")[0-9]+\.[0-9]+\.[0-9]+(\")" \
-    "\1${VERSION}\2"
-
 update_file "scripts/build-mac-dmg.sh" \
     "(VERSION=\\\$\{1:-\")[0-9]+\.[0-9]+\.[0-9]+(\"\\})" \
     "\1${VERSION}\2"

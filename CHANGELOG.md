@@ -14,6 +14,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Route VSIX build/publish and pre-release validation through the locked unsigned coordinator.
+  Build fresh UI/extension output, inspect bundled tools and assets, and validate archive hashes and
+  executable modes before replacing accepted packages. Preserve developer output and reject changed inputs.
 - Add a BCL inspector for bundled tool versions, native architectures, runtime targets, and
   file hashes before VSIX assembly. Verify real SDK fixtures, including compressed metadata.
 - Add a locked unsigned VSIX toolchain and archive verification. Preserve dependency licenses and

@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { loadVsixToolchain } from './vsix-toolchain.cjs';
+import { setVsixExecutableModes } from './vsix-executable-modes.mjs';
+import { nodeCommandEnvironment } from './node-command-environment.mjs';
 
 export const vsixTargets = Object.freeze({
     'win-x64': 'win32-x64', 'linux-x64': 'linux-x64',
@@ -16,7 +18,7 @@ export function resolveVsixPlatform(requested, host = process.platform, architec
     return { platform, target: vsixTargets[platform] };
 }
 
-export async function createUnsignedVsix(root, assembly, output, target) {
+export async function createUnsignedVsix(root, assembly, output, target, { executables = [] } = {}) {
     const tools = loadVsixToolchain(root);
     if (!Object.values(vsixTargets).includes(target)) throw new Error(`Unsupported VSIX target: ${target}.`);
     for (const value of [assembly, output]) if (!path.isAbsolute(value)) throw new Error('VSIX assembly and output paths must be absolute.');
@@ -27,21 +29,23 @@ export async function createUnsignedVsix(root, assembly, output, target) {
     // The staging directory has only runtime dependencies, so normal VSCE closure checks still run.
     await new Promise((resolve, reject) => {
         const child = spawn(process.execPath, [tools.cli, 'package', '--target', target, '--out', output,
-            '--no-git-tag-version', '--no-update-package-json'], { cwd: assembly, stdio: ['ignore', 'pipe', 'pipe'] });
+            '--no-git-tag-version', '--no-update-package-json'], { cwd: assembly, env: nodeCommandEnvironment(), stdio: ['ignore', 'pipe', 'pipe'] });
         child.stdout.pipe(process.stderr);
         child.stderr.pipe(process.stderr);
         child.on('error', reject);
         child.on('close', (code, signal) => code === 0 ? resolve() : reject(new Error(`VSIX assembly failed (${signal ?? code}).`)));
     });
     if (!fs.statSync(output).isFile()) throw new Error('The packager did not produce a VSIX.');
+    await setVsixExecutableModes(output, executables);
 }
 
 // Read the actual archive, including binary entry hashes, without buffering a whole VSIX.
-export async function inspectVsix(root, file, { identity, target, expectedFiles }) {
+export async function inspectVsix(root, file, { identity, target, expectedFiles, executables = [] }) {
     const tools = loadVsixToolchain(root);
     const hashes = new Map();
     const metadata = new Map();
     const seen = new Set();
+    const executableEntries = new Set(executables.map(name => `extension/${name}`));
     await new Promise((resolve, reject) => {
         tools.yauzl.open(file, { lazyEntries: true, strictFileNames: true, validateEntrySizes: true }, (error, zip) => {
             if (error) return reject(error);
@@ -57,6 +61,9 @@ export async function inspectVsix(root, file, { identity, target, expectedFiles 
                 seen.add(key);
                 const unixType = (entry.externalFileAttributes >>> 16) & 0xf000;
                 if (unixType === 0xa000) return fail(new Error(`VSIX contains a symbolic link: ${name}.`));
+                if (executableEntries.has(name) && ((entry.versionMadeBy >>> 8) !== 3 || unixType !== 0x8000 ||
+                    ((entry.externalFileAttributes >>> 16) & 0o111) !== 0o111))
+                    return fail(new Error(`VSIX executable permissions are missing: ${name}.`));
                 if (name.endsWith('/')) return zip.readEntry();
                 if (name !== '[Content_Types].xml' && name !== 'extension.vsixmanifest' && !name.startsWith('extension/'))
                     return fail(new Error(`Unexpected VSIX entry: ${name}.`));
@@ -98,5 +105,6 @@ export async function inspectVsix(root, file, { identity, target, expectedFiles 
     for (const [name, hash] of Object.entries(expectedFiles)) {
         if (hashes.get(`extension/${name}`) !== hash) throw new Error(`Missing or stale VSIX payload: ${name}.`);
     }
+    for (const name of executableEntries) if (!hashes.has(name)) throw new Error(`Missing VSIX executable: ${name}.`);
     return { manifest, target: actual.TargetPlatform, hashes: Object.fromEntries(hashes) };
 }

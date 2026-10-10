@@ -4,8 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { pipeline } from 'node:stream/promises';
 import { loadVsixToolchain } from './lib/vsix-toolchain.cjs';
 import { createUnsignedVsix, inspectVsix, resolveVsixPlatform, vsixTargets } from './lib/vsix-package.mjs';
+import { setVsixExecutableModes } from './lib/vsix-executable-modes.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 fs.mkdirSync(path.join(root, 'artifacts'), { recursive: true });
@@ -42,6 +44,7 @@ try {
         'media/report-runtime.js': 'export const fresh = true;\n',
         'LICENSE.md': '# Apache-2.0\n',
         'THIRD-PARTY-NOTICES.md': 'Fixture build dependencies use MIT.\n',
+        'bin/ETL-SQL': 'executable mode fixture\n',
     };
     const expectedFiles = {};
     for (const [name, bytes] of Object.entries(files)) {
@@ -53,8 +56,9 @@ try {
     const cwdBefore = process.cwd();
     for (const target of Object.values(vsixTargets)) {
         const output = path.join(temporary, `${identity.name}-${identity.version}-${target}.vsix`);
-        await createUnsignedVsix(root, assembly, output, target);
-        const inspected = await inspectVsix(root, output, { identity, target, expectedFiles });
+        const executables = ['bin/ETL-SQL'];
+        await createUnsignedVsix(root, assembly, output, target, { executables });
+        const inspected = await inspectVsix(root, output, { identity, target, expectedFiles, executables });
         assert.equal(inspected.target, target);
         assert.equal(inspected.manifest.version, identity.version);
         await assert.rejects(inspectVsix(root, output, { identity: { ...identity, version: '0.21.0' }, target, expectedFiles }), /version/);
@@ -64,9 +68,46 @@ try {
         const accepted = fs.readFileSync(output);
         await assert.rejects(createUnsignedVsix(root, assembly, output, target), /existing packages must be preserved/);
         assert.deepEqual(fs.readFileSync(output), accepted);
+        await assert.rejects(setVsixExecutableModes(output, ['bin/missing']), /Unexpected/);
+        await assert.rejects(setVsixExecutableModes(output, ['bin/ETL-SQL-LSP']), /Missing executable/);
+        assert.deepEqual(fs.readFileSync(output), accepted, 'Invalid mode requests must not change the archive.');
         const truncated = write(`broken-${target}.vsix`, accepted.subarray(0, accepted.length - 64));
         await assert.rejects(inspectVsix(root, truncated, { identity, target, expectedFiles }));
+        await assert.rejects(setVsixExecutableModes(truncated, executables), /ZIP/);
     }
+    const executable = path.join(assembly, 'bin/ETL-SQL');
+    fs.chmodSync(executable, 0o644);
+    const nonExecutable = path.join(temporary, 'non-executable.vsix');
+    await createUnsignedVsix(root, assembly, nonExecutable, 'linux-x64');
+    await assert.rejects(inspectVsix(root, nonExecutable, { identity, target: 'linux-x64', expectedFiles,
+        executables: ['bin/ETL-SQL'] }), /executable permissions/);
+    const yazl = createRequire(path.join(root, 'scripts/vsix/node_modules/@vscode/vsce/package.json'))('yazl');
+    const zip64 = new yazl.ZipFile();
+    const zip64File = path.join(temporary, 'forced-zip64.zip');
+    zip64.addBuffer(Buffer.from('ZIP64 payload'), 'extension/bin/ETL-SQL', { mode: 0o100644 });
+    const zip64Written = pipeline(zip64.outputStream, fs.createWriteStream(zip64File));
+    zip64.end({ forceZip64Format: true });
+    await zip64Written;
+    await setVsixExecutableModes(zip64File, ['bin/ETL-SQL']);
+    await new Promise((resolve, reject) => {
+        loadVsixToolchain(root).yauzl.open(zip64File, { lazyEntries: true }, (error, zip) => {
+            if (error) return reject(error);
+            zip.on('error', reject);
+            zip.on('entry', entry => {
+                assert.equal(entry.versionMadeBy >>> 8, 3);
+                assert.equal((entry.externalFileAttributes >>> 16) & 0o177777, 0o100755);
+                zip.openReadStream(entry, (streamError, stream) => {
+                    if (streamError) return reject(streamError);
+                    const chunks = [];
+                    stream.on('data', bytes => chunks.push(bytes));
+                    stream.on('error', reject);
+                    stream.on('end', () => { assert.equal(Buffer.concat(chunks).toString(), 'ZIP64 payload'); zip.readEntry(); });
+                });
+            });
+            zip.on('end', resolve);
+            zip.readEntry();
+        });
+    });
     assert.equal(process.cwd(), cwdBefore);
     const prepublish = { ...manifest, scripts: { 'vscode:prepublish': 'node should-never-run.cjs' } };
     fs.writeFileSync(manifestPath, JSON.stringify(prepublish));

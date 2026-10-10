@@ -110,10 +110,6 @@ Update-File "scripts/build-msi.ps1" `
     '(\} else \{ ")\d+\.\d+\.\d+(" \})' `
     "`${1}$Version`${2}"
 
-Update-File "scripts/build-vsix.ps1" `
-    '(\$Version = ")\d+\.\d+\.\d+(")' `
-    "`${1}$Version`${2}"
-
 Update-File "scripts/build-mac-dmg.sh" `
     '(VERSION=\$\{1:-")\d+\.\d+\.\d+("\})' `
     "`${1}$Version`${2}"

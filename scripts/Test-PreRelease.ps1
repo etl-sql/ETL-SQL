@@ -157,13 +157,13 @@ function Get-PlannedPreReleasePhases {
     if (-not $EffectiveSkipNode) {
         $phases.Add([ordered]@{ Phase = "VS Code npm ci"; Command = "npm ci"; Reason = "Extension dependencies install from lockfile." })
         $phases.Add([ordered]@{ Phase = "VS Code UI npm ci"; Command = "npm ci"; Reason = "UI package dependencies install from lockfile." })
-        $phases.Add([ordered]@{ Phase = "VS Code npm audit"; Command = "npm outdated / npm audit (all five npm roots)"; Reason = "Extension, UI and browser-toolchain dependency risk is visible before release." })
+        $phases.Add([ordered]@{ Phase = "VS Code npm audit"; Command = "npm outdated / npm audit (all six npm roots)"; Reason = "Extension, UI, browser and unsigned packaging dependency risk is visible before release." })
         $phases.Add([ordered]@{ Phase = "VS Code compile"; Command = "npm run compile"; Reason = "TypeScript extension compiles." })
         $phases.Add([ordered]@{ Phase = "VS Code lint"; Command = "npm run lint"; Reason = "Production extension lint warnings fail the release gate." })
         $phases.Add([ordered]@{ Phase = "VS Code UI lint"; Command = "npm run lint"; Reason = "UI package lint warnings fail the release gate." })
         $phases.Add([ordered]@{ Phase = "VS Code UI build"; Command = "npm run build"; Reason = "UI TypeScript and Vite bundle compile." })
         $phases.Add([ordered]@{ Phase = "VS Code UI unit tests"; Command = "npm run test:unit"; Reason = "UI package unit tests pass before release." })
-        $phases.Add([ordered]@{ Phase = "VS Code VSIX package"; Command = "npx @vscode/vsce package --target win32-x64"; Reason = "VSIX packages cleanly." })
+        $phases.Add([ordered]@{ Phase = "VS Code VSIX package"; Command = "scripts/build-vsix.ps1 -OutputDir <run>/vsix"; Reason = "Complete native VSIX payload passes the locked packager and binary/archive inspection." })
         $phases.Add([ordered]@{ Phase = "VS Code unit tests"; Command = "npm run test:unit"; Reason = "Extension unit tests pass." })
     }
 
@@ -1155,14 +1155,15 @@ try {
             $previousPhaseMap $fingerprint $results
 
         Invoke-LoggedPhase "VS Code npm audit" `
-            "npm outdated / npm audit (extension, UI, typecheck, lint, CodeMirror)" `
+            "npm outdated / npm audit (extension, UI, typecheck, lint, CodeMirror, VSIX)" `
             {
                 $npmRoots = @(
                     [ordered]@{ label = "src\etl-sql-vscode"; path = "src\etl-sql-vscode" },
                     [ordered]@{ label = "src\etl-sql-vscode\ui"; path = "src\etl-sql-vscode\ui" },
                     [ordered]@{ label = "scripts\typecheck"; path = "scripts\typecheck" },
                     [ordered]@{ label = "scripts\lint"; path = "scripts\lint" },
-                    [ordered]@{ label = "scripts\codemirror"; path = "scripts\codemirror" }
+                    [ordered]@{ label = "scripts\codemirror"; path = "scripts\codemirror" },
+                    [ordered]@{ label = "scripts\vsix"; path = "scripts\vsix" }
                 )
 
                 $totalOutdated = 0
@@ -1224,21 +1225,11 @@ try {
             { Push-Location "src\etl-sql-vscode\ui"; try { & npm run test:unit } finally { Pop-Location } } `
             $previousPhaseMap $fingerprint $results
 
-        # Exercise the same 'vsce package' the tag-triggered release.yml runs (via publish-vsix.ps1),
-        # so packaging/manifest errors (e.g. @types/vscode > engines.vscode, missing icon/README) are
-        # caught locally and cheaply instead of failing the expensive cross-platform release build.
+        # Exercise complete native packaging through the same coordinator used by release builds.
         Invoke-LoggedPhase "VS Code VSIX package" `
-            "npx @vscode/vsce package --target win32-x64 (manifest/packaging validation)" `
+            "scripts/build-vsix.ps1 -OutputDir <run>/vsix" `
             {
-                Push-Location "src\etl-sql-vscode"
-                try {
-                    $vsixOut = Join-Path ([System.IO.Path]::GetTempPath()) "etl-sql-vsce-validate.vsix"
-                    & npx "@vscode/vsce" package "--target" "win32-x64" "--out" $vsixOut
-                    $code = $LASTEXITCODE
-                    Remove-Item $vsixOut -Force -ErrorAction SilentlyContinue
-                    if ($code -ne 0) { throw "vsce package validation failed with exit code $code" }
-                }
-                finally { Pop-Location }
+                & (Join-Path $PSScriptRoot 'build-vsix.ps1') -OutputDir (Join-Path $RunDir 'vsix')
             } `
             $previousPhaseMap $fingerprint $results
 
