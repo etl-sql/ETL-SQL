@@ -290,12 +290,6 @@ public class OrchestratorProxyService(
 
     // ── Schedules ─────────────────────────────────────────────────────────────
 
-    public async Task<List<ScheduleDefinitionDto>> GetSchedulesAsync(int limit = 1000, int offset = 0)
-    {
-        try { return await GetJsonAsync<List<ScheduleDefinitionDto>>($"api/schedules?limit={Math.Clamp(limit, 1, 1000)}&offset={Math.Max(0, offset)}") ?? []; }
-        catch (Exception ex) { logger.LogDebug(ex, "Failed to list schedules."); return []; }
-    }
-
     public async Task<ScheduleDefinitionDto?> GetScheduleAsync(string name)
     {
         try { return await GetJsonAsync<ScheduleDefinitionDto>($"api/schedules/{Uri.EscapeDataString(name)}"); }
@@ -339,12 +333,6 @@ public class OrchestratorProxyService(
     }
 
     // ── Notifications ─────────────────────────────────────────────────────────
-
-    public async Task<List<NotificationDefinitionDto>> GetNotificationsAsync(int limit = 1000, int offset = 0)
-    {
-        try { return await GetJsonAsync<List<NotificationDefinitionDto>>($"api/notifications?limit={Math.Clamp(limit, 1, 1000)}&offset={Math.Max(0, offset)}") ?? []; }
-        catch (Exception ex) { logger.LogDebug(ex, "Failed to list notifications."); return []; }
-    }
 
     public async Task<NotificationDefinitionDto?> GetNotificationAsync(string name)
     {
@@ -481,6 +469,38 @@ public class OrchestratorProxyService(
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Lists shared schedules, keeping a failed or refused read apart from an empty catalog.
+    /// </summary>
+    public Task<OrchestratorRead<List<ScheduleDefinitionDto>>> ReadSchedulesAsync(
+        int limit = 1000, int offset = 0, CancellationToken ct = default) =>
+        ReadJsonAsync<List<ScheduleDefinitionDto>>(
+            $"api/schedules?limit={Math.Clamp(limit, 1, 1000)}&offset={Math.Max(0, offset)}", "schedules", ct);
+
+    /// <summary>
+    /// Lists notification endpoints, keeping a failed or refused read apart from an empty catalog.
+    /// </summary>
+    public Task<OrchestratorRead<List<NotificationDefinitionDto>>> ReadNotificationsAsync(
+        int limit = 1000, int offset = 0, CancellationToken ct = default) =>
+        ReadJsonAsync<List<NotificationDefinitionDto>>(
+            $"api/notifications?limit={Math.Clamp(limit, 1, 1000)}&offset={Math.Max(0, offset)}", "notifications", ct);
+
+    private async Task<OrchestratorRead<T>> ReadJsonAsync<T>(string path, string subject, CancellationToken ct)
+        where T : class
+    {
+        try
+        {
+            using var resp = await SendAsync(HttpMethod.Get, path, cancellationToken: ct);
+            if (resp is null) return new(StatusCodes.Status503ServiceUnavailable, null);
+            if (!resp.IsSuccessStatusCode) return new((int)resp.StatusCode, null);
+            return new(StatusCodes.Status200OK, await resp.Content.ReadFromJsonAsync<T>(ct));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Orchestrator {Subject} read failed.", subject);
+            return new(StatusCodes.Status503ServiceUnavailable, null);
+        }
+    }
     private async Task<T?> GetJsonAsync<T>(string path)
     {
         using var resp = await SendAsync(HttpMethod.Get, path);
@@ -581,6 +601,11 @@ public class OrchestratorProxyService(
     }
 }
 
+/// <summary>
+/// The outcome of a catalog read. <see cref="Value"/> is null unless the service answered with a
+/// success status, so an unavailable or refused read cannot be mistaken for an empty catalog.
+/// </summary>
+public sealed record OrchestratorRead<T>(int StatusCode, T? Value) where T : class;
 public sealed record OrchestratorNotificationDispatchRequest(
     string SourceKind,
     string Title,

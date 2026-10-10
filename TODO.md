@@ -142,10 +142,30 @@ alongside §1.1; they do not authorize untracking handwritten JavaScript.
   statuses gate success messages. Pending actions survive table repaint without duplicate writes,
   and closed/replaced dialogs and disposed pages ignore late responses. Focused production-page
   sandbox checks cover versions, rejection, conflict, overrides, duplicates, and disposal.
-  Finish the page owner, validated read contracts, authorization exits, schedule/notification/state/ACL
-  writes, service controls, script-save version refresh, stale detail/tab/catalog reads, and complete
-  editor/chart/listener disposal. Verify back/forward restoration and native Portal/service journeys.
+  The schedule and notification catalogs now have strict owners and response validators
+  (2026-10-10). The Portal reports a failed or refused catalog read as 503/403 instead of an empty
+  list; writes are confirmed by status, rows stay locked while pending, late responses cannot close
+  a reused dialog, and a skipped test dispatch is no longer announced as sent. Eighteen sandbox
+  checks (mutation-tested), nine server checks, and the catalog response consumer check pass.
+  Schedule and notification writes still carry no version; the service does not accept one.
+  Finish the page owner, validated detail read contracts (linked schedules/notifications, state,
+  history, dependencies, quality, audit, access), authorization exits, attach/detach/state/ACL
+  writes, the create-job dialog, service controls (Stop/Restart have no handlers), script-save
+  version refresh, stale detail/tab reads, and complete editor/chart/listener disposal. Verify
+  back/forward restoration and native Portal/service journeys.
 - [ ] Catalog/home page composition (`pages/index.js`).
+
+**Whole-tree lane check (2026-10-10):** The first full runs against the complete change found the
+lanes red. Portal.Tests failed 21 of 1,535: the snake_case migration could not be applied on
+PostgreSQL (13 tests; the Portal did not start there), five tests still matched PascalCase table or
+column names, the control-plane module hid its routes from the reachability gate, and one test
+expected an empty history where the Portal now answers 503. All 21 pass after the fixes. The browser
+lane passed 823 of 826: one route glob predated the versioned folder ACL read (fixed), one sandbox
+reload check needs Node.js 22 on PATH (passes with it), and
+`AdminSubscriptionsPageTests.Subscriptions_ParametersPagingStatusAndDeletePersistThroughTheNativePage`
+timed out returning to page one under the full lane but passes alone; it is unresolved and tracked
+in [flaky-test-stability.md](docs/releases/flaky-test-stability.md). Rerun both lanes in full after
+the remaining page conversions.
 
 **Portal startup compatibility (2026-10-09):** PII maintenance now resolves tables, keys, and columns
 from the live EF model. It no longer queries the removed PascalCase table names after the schema

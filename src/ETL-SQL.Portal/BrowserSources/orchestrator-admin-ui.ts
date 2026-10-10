@@ -103,7 +103,11 @@ export function filterAndPaginateJobs<T extends LegacyProjection<JobDefinitionDt
 
 // ── Schedules Catalog Table ───────────────────────────────────────────────────
 
-export function renderSchedulesTable(schedules: LegacyProjection<ScheduleDefinitionDto>[] | null | undefined, linkedCounts: Record<string, number> = {}) {
+/**
+ * `linkedCounts` is null when the caller has not counted attachments. The column is then left out:
+ * a default of zero would state that nothing uses a schedule nobody counted.
+ */
+export function renderSchedulesTable(schedules: LegacyProjection<ScheduleDefinitionDto>[] | null | undefined, linkedCounts: Record<string, number> | null = null) {
   if (!schedules || !schedules.length) {
     return `<div class="empty-state" style="padding:32px 0;text-align:center;color:var(--portal-muted)">
       No shared schedules defined yet. Click <strong>+ New Schedule</strong> to create one.
@@ -118,7 +122,7 @@ export function renderSchedulesTable(schedules: LegacyProjection<ScheduleDefinit
         <th>Cron Expression</th>
         <th>Timezone</th>
         <th>Status</th>
-        <th>Linked Jobs</th>
+        ${linkedCounts ? '<th>Linked Jobs</th>' : ''}
         <th>Owner / Attribution</th>
         <th>Actions</th>
       </tr></thead>
@@ -129,7 +133,7 @@ export function renderSchedulesTable(schedules: LegacyProjection<ScheduleDefinit
         const cron = s.Cron ?? s.cron;
         const tz = s.TimeZone ?? s.timeZone ?? 'UTC';
         const isEnabled = s.IsEnabled ?? s.isEnabled ?? true;
-        const linkedCount = linkedCounts[name] || 0;
+        const linkedCount = linkedCounts?.[name] || 0;
         const owner = s.CreatedBy ?? s.createdBy ?? '—';
         const version = s.Version ?? s.version ?? 1;
 
@@ -146,11 +150,11 @@ export function renderSchedulesTable(schedules: LegacyProjection<ScheduleDefinit
                 ${isEnabled ? 'Active' : 'Disabled'}
               </span>
             </td>
-            <td>
+            ${linkedCounts ? `<td>
               <span class="badge" style="font-size:.82em;background:var(--portal-surface-subtle);">
                 ${linkedCount} job${linkedCount === 1 ? '' : 's'}
               </span>
-            </td>
+            </td>` : ''}
             <td style="font-size:.82em;color:var(--portal-muted)">
               <div>${escHtml(owner)}</div>
               <div style="font-size:.75em;">v${version}</div>
@@ -173,7 +177,7 @@ export function renderSchedulesTable(schedules: LegacyProjection<ScheduleDefinit
 
 // ── Notifications Catalog Table ───────────────────────────────────────────────
 
-export function renderNotificationsTable(notifications: LegacyProjection<NotificationDefinitionDto>[] | null | undefined, linkedCounts: Record<string, number> = {}) {
+export function renderNotificationsTable(notifications: LegacyProjection<NotificationDefinitionDto>[] | null | undefined, linkedCounts: Record<string, number> | null = null) {
   if (!notifications || !notifications.length) {
     return `<div class="empty-state" style="padding:32px 0;text-align:center;color:var(--portal-muted)">
       No notifications configured yet. Click <strong>+ New Notification</strong> to configure delivery channels.
@@ -188,7 +192,7 @@ export function renderNotificationsTable(notifications: LegacyProjection<Notific
         <th>Connection Alias</th>
         <th>Recipient</th>
         <th>Status</th>
-        <th>Linked Jobs</th>
+        ${linkedCounts ? '<th>Linked Jobs</th>' : ''}
         <th>Attribution</th>
         <th>Actions</th>
       </tr></thead>
@@ -199,7 +203,7 @@ export function renderNotificationsTable(notifications: LegacyProjection<Notific
         const conn = n.ConnectionName ?? n.connectionName;
         const recipient = n.Recipient ?? n.recipient ?? '—';
         const isEnabled = n.IsEnabled ?? n.isEnabled ?? true;
-        const linkedCount = linkedCounts[name] || 0;
+        const linkedCount = linkedCounts?.[name] || 0;
         const owner = n.CreatedBy ?? n.createdBy ?? '—';
 
         return `
@@ -215,11 +219,11 @@ export function renderNotificationsTable(notifications: LegacyProjection<Notific
                 ${isEnabled ? 'Active' : 'Disabled'}
               </span>
             </td>
-            <td>
+            ${linkedCounts ? `<td>
               <span class="badge" style="font-size:.82em;background:var(--portal-surface-subtle);">
                 ${linkedCount} job${linkedCount === 1 ? '' : 's'}
               </span>
-            </td>
+            </td>` : ''}
             <td style="font-size:.82em;color:var(--portal-muted)">${escHtml(owner)}</td>
             <td>
               <div class="table-actions">

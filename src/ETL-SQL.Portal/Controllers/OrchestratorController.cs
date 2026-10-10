@@ -288,11 +288,9 @@ public class OrchestratorController(
     // ── Schedules ─────────────────────────────────────────────────────────────
 
     [HttpGet("schedules")]
-    public async Task<IActionResult> GetSchedules([FromQuery] int limit = 1000, [FromQuery] int offset = 0)
-    {
-        var schedules = await proxy.GetSchedulesAsync(limit, offset);
-        return Ok(schedules);
-    }
+    public async Task<IActionResult> GetSchedules(
+        [FromQuery] int limit = 1000, [FromQuery] int offset = 0, CancellationToken ct = default) =>
+        CatalogRead(await proxy.ReadSchedulesAsync(limit, offset, ct), "Schedules");
 
     [HttpGet("schedules/{name}")]
     public async Task<IActionResult> GetSchedule(string name)
@@ -381,11 +379,9 @@ public class OrchestratorController(
     // ── Notifications ─────────────────────────────────────────────────────────
 
     [HttpGet("notifications")]
-    public async Task<IActionResult> GetNotifications([FromQuery] int limit = 1000, [FromQuery] int offset = 0)
-    {
-        var notifications = await proxy.GetNotificationsAsync(limit, offset);
-        return Ok(notifications);
-    }
+    public async Task<IActionResult> GetNotifications(
+        [FromQuery] int limit = 1000, [FromQuery] int offset = 0, CancellationToken ct = default) =>
+        CatalogRead(await proxy.ReadNotificationsAsync(limit, offset, ct), "Notifications");
 
     [HttpGet("notifications/{name}")]
     public async Task<IActionResult> GetNotification(string name)
@@ -795,6 +791,18 @@ public class OrchestratorController(
     /// Recording only accepted changes follows the trigger and kill paths: a refused grant must not
     /// leave a trail that reads as though access had been widened.</para>
     /// </summary>
+    /// <summary>
+    /// Answers a catalog read. A refused read stays a refusal and an unanswered one is reported as
+    /// unavailable; neither is returned as an empty list, which the page would render as "none yet".
+    /// </summary>
+    private IActionResult CatalogRead<T>(OrchestratorRead<T> read, string subject) where T : class
+    {
+        Response.Headers.CacheControl = "no-store";
+        if (read.Value is not null) return Ok(read.Value);
+        return read.StatusCode == StatusCodes.Status403Forbidden
+            ? StatusCode(StatusCodes.Status403Forbidden, new { Error = $"{subject} are not available to this account." })
+            : StatusCode(StatusCodes.Status503ServiceUnavailable, new { Error = $"{subject} are temporarily unavailable. Please retry." });
+    }
     private async Task<IActionResult> RelayAsync(
         Func<Task<HttpResponseMessage?>> send, Func<Task>? auditSuccess = null)
     {

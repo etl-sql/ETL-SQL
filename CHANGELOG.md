@@ -80,6 +80,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Report unavailable Orchestrator schedule and notification catalogs as unavailable. A failed or
+  refused read returned an empty list, so the page showed "No shared schedules defined yet" and a
+  count of zero. The Portal now answers 503 or 403, and the page clears stale rows and counts.
+- Confirm Orchestrator schedule and notification writes by their documented status before
+  announcing them. Keep a row locked while its write is pending, and keep a late response from
+  closing a dialog reopened for another definition. Show the service's reason for a refused write.
+- Report a test notification as sent only when it was delivered. A skipped dispatch (HTTP 202)
+  was announced as sent; skipped and failed dispatches now show the endpoint's reason.
+- Stop showing "0 jobs" for every schedule and notification. Attachments were never counted, so
+  the column is omitted until they are.
 - Let the Portal start on PostgreSQL after the snake_case schema migration. The migration renamed
   two indexes under names no PostgreSQL catalog had: the refresh-token index, whose original
   PostgreSQL migration never ran, and the alert-notification index, which PostgreSQL stored under

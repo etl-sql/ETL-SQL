@@ -18,10 +18,10 @@ import { accessPanelHtml, ownerLabel } from '../orchestrator-acl-ui.js';
 import { activityQuery } from '../orchestrator-activity.js';
 import { createScheduledJobActivityCoordinator } from '../orchestrator-activity-coordinator.js';
 import { renderScheduledJobsTable } from '../orchestrator-job-table.js';
+import { createNotificationCatalog, createScheduleCatalog } from '../orchestrator-catalogs.js';
+import { readCatalogJson } from '../orchestrator-catalog-responses.js';
 import {
   escHtml, fmtDt,
-  renderSchedulesTable,
-  renderNotificationsTable,
   renderWatermarksTable,
   renderJobAuditTrail,
   renderCalendarTimeline
@@ -88,6 +88,13 @@ async function apiJson(url, opts = {}) {
   return res.json();
 }
 
+/** A catalog read: a refused or unanswered request is an error, never an empty list. */
+async function catalogJson(url, signal) {
+  const response = await portalApiFetch(url, { signal, cache: 'no-store' });
+  if (response.status === 401) { auth.redirectToLogin(); throw new Error('Your session has expired.'); }
+  return readCatalogJson(response);
+}
+
 const api = {
   status:       (signal) => apiJson(`${BASE}/status`, { signal }),
   activity:     (request, signal) => apiJson(`${BASE}/jobs/activity?${activityQuery(request)}`, { signal, cache: 'no-store' }),
@@ -112,19 +119,12 @@ const api = {
 
   // Schedules
   schedules:       (limit = 1000) => apiJson(`${BASE}/schedules?limit=${limit}`),
-  scheduleCreate:  (body) => apiFetch(`${BASE}/schedules`, { method: 'POST', body }),
-  scheduleUpdate:  (name, body) => apiFetch(`${BASE}/schedules/${encodeURIComponent(name)}`, { method: 'PUT', body }),
-  scheduleDelete:  (name) => apiFetch(`${BASE}/schedules/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   jobSchedules:    (jobName) => apiJson(`${BASE}/jobs/${encodeURIComponent(jobName)}/schedules`),
   jobScheduleAttach:(jobName, scheduleName) => apiFetch(`${BASE}/jobs/${encodeURIComponent(jobName)}/schedules/${encodeURIComponent(scheduleName)}`, { method: 'POST' }),
   jobScheduleDetach:(jobName, scheduleName) => apiFetch(`${BASE}/jobs/${encodeURIComponent(jobName)}/schedules/${encodeURIComponent(scheduleName)}`, { method: 'DELETE' }),
 
   // Notifications
   notifications:      (limit = 1000) => apiJson(`${BASE}/notifications?limit=${limit}`),
-  notificationCreate: (body) => apiFetch(`${BASE}/notifications`, { method: 'POST', body }),
-  notificationUpdate: (name, body) => apiFetch(`${BASE}/notifications/${encodeURIComponent(name)}`, { method: 'PUT', body }),
-  notificationDelete: (name) => apiFetch(`${BASE}/notifications/${encodeURIComponent(name)}`, { method: 'DELETE' }),
-  notificationDispatch:(name, body) => apiFetch(`${BASE}/notifications/${encodeURIComponent(name)}/dispatch`, { method: 'POST', body }),
   jobNotifications:   (jobName) => apiJson(`${BASE}/jobs/${encodeURIComponent(jobName)}/notifications`),
   jobNotificationAttach:(jobName, notificationName, trigger = 'Completion') => apiFetch(`${BASE}/jobs/${encodeURIComponent(jobName)}/notifications/${encodeURIComponent(notificationName)}`, { method: 'POST', body: { trigger } }),
   jobNotificationDetach:(jobName, notificationName, trigger) => apiFetch(`${BASE}/jobs/${encodeURIComponent(jobName)}/notifications/${encodeURIComponent(notificationName)}${trigger ? `?trigger=${encodeURIComponent(trigger)}` : ''}`, { method: 'DELETE' }),
@@ -158,8 +158,6 @@ const api = {
 
 // ── State ──────────────────────────────────────────────────────────────────────
 let allJobs = [];
-let allSchedules = [];
-let allNotifications = [];
 let selectedJob = null;
 let ganttChart = null;
 let sparklineChart = null;
@@ -170,8 +168,6 @@ let dagJobName   = null;
 let scriptEditor = null;
 let scriptOriginalValue = '';
 let lastSparklineEntries = [];
-let editingScheduleName = null;
-let editingNotificationName = null;
 let activeJobStates = [];
 let visibleJobs = [];
 const activityCoordinator = createScheduledJobActivityCoordinator({
@@ -226,8 +222,6 @@ document.getElementById('orchNavNotifications').addEventListener('click', () => 
 // ── Top Action Buttons ─────────────────────────────────────────────────────────
 document.getElementById('logoutBtn')?.addEventListener('click', () => authApi.logout());
 document.getElementById('refreshJobsBtn').addEventListener('click', () => loadJobs());
-document.getElementById('refreshSchedulesBtn')?.addEventListener('click', () => loadSchedules());
-document.getElementById('refreshNotificationsBtn')?.addEventListener('click', () => loadNotifications());
 
 // ── Timeline Switcher ──────────────────────────────────────────────────────────
 document.getElementById('timelineModeGanttBtn').addEventListener('click', () => {
@@ -362,93 +356,27 @@ function handleAction(btn) {
   else void jobActions.run(/** @type {HTMLButtonElement} */ (btn));
 }
 
-// ── Schedules Catalog View ────────────────────────────────────────────────────
-async function loadSchedules() {
-  const wrap = document.getElementById('schedulesTableWrap');
-  try {
-    const schedules = await api.schedules();
-    allSchedules = schedules || [];
-    document.getElementById('schedulesNavCount').textContent = allSchedules.length;
-
-    // Count linked jobs
-    const linkedMap = {};
-    wrap.innerHTML = renderSchedulesTable(allSchedules, linkedMap);
-
-    wrap.querySelectorAll('[data-action="edit-schedule"]').forEach(btn => {
-      btn.addEventListener('click', () => openEditScheduleModal(/** @type {HTMLElement} */ (btn).dataset.name));
-    });
-    wrap.querySelectorAll('[data-action="toggle-schedule"]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const name = /** @type {HTMLElement} */ (btn).dataset.name;
-        const enable = /** @type {HTMLElement} */ (btn).dataset.enabled !== 'true';
-        /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = true;
-        try {
-          await api.scheduleUpdate(name, { IsEnabled: enable });
-          showToast(`Schedule '${name}' ${enable ? 'enabled' : 'disabled'}.`);
-          await loadSchedules();
-        } catch (err) { showToast(`Error: ${err.message}`, true); }
-        finally { /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = false; }
-      });
-    });
-    wrap.querySelectorAll('[data-action="delete-schedule"]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const name = /** @type {HTMLElement} */ (btn).dataset.name;
-        if (!await ETLSQLFeedback.confirm(`Delete schedule '${name}'?`, { title: 'Delete schedule', impact: 'This schedule will be permanently deleted.', confirmLabel: 'Delete schedule', danger: true })) return;
-        /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = true;
-        try {
-          const res = await api.scheduleDelete(name);
-          if (!res.ok) {
-            const body = await res.json().catch(() => null);
-            throw new Error(body?.error || 'Failed to delete schedule.');
-          }
-          showToast(`Schedule '${name}' deleted.`);
-          await loadSchedules();
-        } catch (err) { showToast(`Error: ${err.message}`, true); }
-        finally { /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = false; }
-      });
-    });
-  } catch (err) {
-    wrap.innerHTML = `<div class="empty-state" style="color:var(--portal-danger)">Failed to load schedules: ${err.message}</div>`;
-  }
-}
-
-// ── Notifications Catalog View ────────────────────────────────────────────────
-async function loadNotifications() {
-  const wrap = document.getElementById('notificationsTableWrap');
-  try {
-    const notifications = await api.notifications();
-    allNotifications = notifications || [];
-    document.getElementById('notificationsNavCount').textContent = allNotifications.length;
-
-    wrap.innerHTML = renderNotificationsTable(allNotifications, {});
-
-    wrap.querySelectorAll('[data-action="dispatch-notification"]').forEach(btn => {
-      btn.addEventListener('click', () => openDispatchModal(/** @type {HTMLElement} */ (btn).dataset.name));
-    });
-    wrap.querySelectorAll('[data-action="edit-notification"]').forEach(btn => {
-      btn.addEventListener('click', () => openEditNotificationModal(/** @type {HTMLElement} */ (btn).dataset.name));
-    });
-    wrap.querySelectorAll('[data-action="delete-notification"]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const name = /** @type {HTMLElement} */ (btn).dataset.name;
-        if (!await ETLSQLFeedback.confirm(`Delete notification endpoint '${name}'?`, { title: 'Delete notification', impact: 'This notification config will be permanently deleted.', confirmLabel: 'Delete notification', danger: true })) return;
-        /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = true;
-        try {
-          const res = await api.notificationDelete(name);
-          if (!res.ok) {
-            const body = await res.json().catch(() => null);
-            throw new Error(body?.error || 'Failed to delete notification.');
-          }
-          showToast(`Notification '${name}' deleted.`);
-          await loadNotifications();
-        } catch (err) { showToast(`Error: ${err.message}`, true); }
-        finally { /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = false; }
-      });
-    });
-  } catch (err) {
-    wrap.innerHTML = `<div class="empty-state" style="color:var(--portal-danger)">Failed to load notifications: ${err.message}</div>`;
-  }
-}
+// ── Schedule and Notification Catalogs ────────────────────────────────────────
+const catalogHost = {
+  root: document,
+  notify: showToast,
+  confirm: (message, options) => ETLSQLFeedback.confirm(message, options)
+};
+const scheduleCatalog = createScheduleCatalog(catalogHost, {
+  list: signal => catalogJson(`${BASE}/schedules?limit=1000`, signal),
+  create: (body, signal) => portalApiFetch(`${BASE}/schedules`, { method: 'POST', body, signal }),
+  update: (name, body, signal) => portalApiFetch(`${BASE}/schedules/${encodeURIComponent(name)}`, { method: 'PUT', body, signal }),
+  remove: (name, signal) => portalApiFetch(`${BASE}/schedules/${encodeURIComponent(name)}`, { method: 'DELETE', signal })
+});
+const notificationCatalog = createNotificationCatalog(catalogHost, {
+  list: signal => catalogJson(`${BASE}/notifications?limit=1000`, signal),
+  create: (body, signal) => portalApiFetch(`${BASE}/notifications`, { method: 'POST', body, signal }),
+  update: (name, body, signal) => portalApiFetch(`${BASE}/notifications/${encodeURIComponent(name)}`, { method: 'PUT', body, signal }),
+  remove: (name, signal) => portalApiFetch(`${BASE}/notifications/${encodeURIComponent(name)}`, { method: 'DELETE', signal }),
+  dispatch: (name, body, signal) => portalApiFetch(`${BASE}/notifications/${encodeURIComponent(name)}/dispatch`, { method: 'POST', body, signal })
+});
+function loadSchedules() { void scheduleCatalog.load(); }
+function loadNotifications() { void notificationCatalog.load(); }
 
 // ── Gantt Chart ───────────────────────────────────────────────────────────────
 function renderGantt(jobs) {
@@ -1271,230 +1199,6 @@ document.getElementById('cj-saveBtn').addEventListener('click', async () => {
   }
 });
 
-// Schedule Modal
-document.getElementById('newScheduleBtn').addEventListener('click', () => {
-  editingScheduleName = null;
-  document.getElementById('scheduleModalTitle').textContent = 'Create Schedule';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-name')).value = '';
-  /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-name')).disabled = false;
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-display-name')).value = '';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-description')).value = '';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-cron')).value = '0 0 * * *';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-timezone')).value = 'UTC';
-  /** @type {HTMLInputElement} */ (document.getElementById('cs-enabled')).checked = true;
-  document.getElementById('cs-error').textContent = '';
-  document.getElementById('scheduleModal').style.display = 'flex';
-});
-
-function openEditScheduleModal(name) {
-  const sched = allSchedules.find(s => (s.Name || s.name) === name);
-  if (!sched) return;
-  editingScheduleName = name;
-  document.getElementById('scheduleModalTitle').textContent = `Edit Schedule '${name}'`;
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-name')).value = name;
-  /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-name')).disabled = true;
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-display-name')).value = sched.DisplayName || sched.displayName || name;
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-description')).value = sched.Description || sched.description || '';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-cron')).value = sched.Cron || sched.cron || '0 0 * * *';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-timezone')).value = sched.TimeZone || sched.timeZone || 'UTC';
-  /** @type {HTMLInputElement} */ (document.getElementById('cs-enabled')).checked = sched.IsEnabled ?? sched.isEnabled ?? true;
-  document.getElementById('cs-error').textContent = '';
-  document.getElementById('scheduleModal').style.display = 'flex';
-}
-
-document.getElementById('closeScheduleModalBtn').addEventListener('click', () => {
-  document.getElementById('scheduleModal').style.display = 'none';
-});
-document.getElementById('cs-cancelBtn').addEventListener('click', () => {
-  document.getElementById('scheduleModal').style.display = 'none';
-});
-
-document.getElementById('cs-saveBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('cs-saveBtn');
-  const err = document.getElementById('cs-error');
-  const name = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-name')).value.trim();
-  const disp = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-display-name')).value.trim();
-  const desc = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-description')).value.trim();
-  const cron = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-cron')).value.trim();
-  const tz = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cs-timezone')).value;
-  const enabled = /** @type {HTMLInputElement} */ (document.getElementById('cs-enabled')).checked;
-
-  if (!name) { err.textContent = 'Name is required.'; return; }
-  if (!cron) { err.textContent = 'Cron expression is required.'; return; }
-
-  /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = true;
-  err.textContent = '';
-  try {
-    if (editingScheduleName) {
-      await api.scheduleUpdate(editingScheduleName, {
-        DisplayName: disp || name,
-        Description: desc || null,
-        Cron: cron,
-        TimeZone: tz,
-        IsEnabled: enabled
-      });
-      showToast(`Schedule '${editingScheduleName}' updated.`);
-    } else {
-      const res = await api.scheduleCreate({
-        Name: name,
-        DisplayName: disp || name,
-        Description: desc || null,
-        Cron: cron,
-        TimeZone: tz,
-        IsEnabled: enabled
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error || 'Failed to create schedule.');
-      }
-      showToast(`Schedule '${name}' created.`);
-    }
-    document.getElementById('scheduleModal').style.display = 'none';
-    loadSchedules();
-  } catch (ex) {
-    err.textContent = ex.message;
-  } finally {
-    /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = false;
-  }
-});
-
-// Notification Modal
-document.getElementById('newNotificationBtn').addEventListener('click', () => {
-  editingNotificationName = null;
-  document.getElementById('notificationModalTitle').textContent = 'Create Notification Endpoint';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-name')).value = '';
-  /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-name')).disabled = false;
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-display-name')).value = '';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-description')).value = '';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-connection')).value = '';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-recipient')).value = '';
-  /** @type {HTMLInputElement} */ (document.getElementById('cn-enabled')).checked = true;
-  document.getElementById('cn-error').textContent = '';
-  document.getElementById('notificationModal').style.display = 'flex';
-});
-
-function openEditNotificationModal(name) {
-  const notif = allNotifications.find(n => (n.Name || n.name) === name);
-  if (!notif) return;
-  editingNotificationName = name;
-  document.getElementById('notificationModalTitle').textContent = `Edit Notification '${name}'`;
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-name')).value = name;
-  /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-name')).disabled = true;
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-display-name')).value = notif.DisplayName || notif.displayName || name;
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-description')).value = notif.Description || notif.description || '';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-connection')).value = notif.ConnectionName || notif.connectionName || '';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-recipient')).value = notif.Recipient || notif.recipient || '';
-  /** @type {HTMLInputElement} */ (document.getElementById('cn-enabled')).checked = notif.IsEnabled ?? notif.isEnabled ?? true;
-  document.getElementById('cn-error').textContent = '';
-  document.getElementById('notificationModal').style.display = 'flex';
-}
-
-document.getElementById('closeNotificationModalBtn').addEventListener('click', () => {
-  document.getElementById('notificationModal').style.display = 'none';
-});
-document.getElementById('cn-cancelBtn').addEventListener('click', () => {
-  document.getElementById('notificationModal').style.display = 'none';
-});
-
-document.getElementById('cn-saveBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('cn-saveBtn');
-  const err = document.getElementById('cn-error');
-  const name = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-name')).value.trim();
-  const disp = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-display-name')).value.trim();
-  const desc = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-description')).value.trim();
-  const conn = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-connection')).value.trim();
-  const recip = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('cn-recipient')).value.trim();
-  const enabled = /** @type {HTMLInputElement} */ (document.getElementById('cn-enabled')).checked;
-
-  if (!name) { err.textContent = 'Name is required.'; return; }
-  if (!conn) { err.textContent = 'Connection name is required.'; return; }
-
-  /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = true;
-  err.textContent = '';
-  try {
-    if (editingNotificationName) {
-      await api.notificationUpdate(editingNotificationName, {
-        DisplayName: disp || name,
-        Description: desc || null,
-        ConnectionName: conn,
-        Recipient: recip || null,
-        IsEnabled: enabled
-      });
-      showToast(`Notification '${editingNotificationName}' updated.`);
-    } else {
-      const res = await api.notificationCreate({
-        Name: name,
-        DisplayName: disp || name,
-        Description: desc || null,
-        ConnectionName: conn,
-        Recipient: recip || null,
-        IsEnabled: enabled
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error || 'Failed to create notification.');
-      }
-      showToast(`Notification '${name}' created.`);
-    }
-    document.getElementById('notificationModal').style.display = 'none';
-    loadNotifications();
-  } catch (ex) {
-    err.textContent = ex.message;
-  } finally {
-    /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = false;
-  }
-});
-
-// Test Dispatch Modal
-let dispatchTargetName = null;
-function openDispatchModal(name) {
-  dispatchTargetName = name;
-  document.getElementById('dispatchModalTitle').textContent = `Test Dispatch to '${name}'`;
-  document.getElementById('disp-error').textContent = '';
-  document.getElementById('dispatchModal').style.display = 'flex';
-}
-
-document.getElementById('closeDispatchModalBtn').addEventListener('click', () => {
-  document.getElementById('dispatchModal').style.display = 'none';
-});
-document.getElementById('disp-cancelBtn').addEventListener('click', () => {
-  document.getElementById('dispatchModal').style.display = 'none';
-});
-
-document.getElementById('disp-sendBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('disp-sendBtn');
-  const err = document.getElementById('disp-error');
-  const title = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('disp-title')).value.trim();
-  const text = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('disp-text')).value.trim();
-  const sourceKind = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('disp-source-kind')).value;
-  const trigger = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('disp-trigger')).value;
-  const override = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('disp-recipient-override')).value.trim() || null;
-
-  if (!title || !text) { err.textContent = 'Title and text are required.'; return; }
-
-  /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = true;
-  err.textContent = '';
-  try {
-    const res = await api.notificationDispatch(dispatchTargetName, {
-      SourceKind: sourceKind,
-      Title: title,
-      Text: text,
-      Trigger: trigger,
-      RecipientOverride: override
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      throw new Error(body?.error || 'Dispatch refused.');
-    }
-    showToast(`Test notification sent to '${dispatchTargetName}'.`);
-    document.getElementById('dispatchModal').style.display = 'none';
-  } catch (ex) {
-    err.textContent = ex.message;
-  } finally {
-    /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = false;
-  }
-});
-
 // Attach Schedule Modal
 document.getElementById('attachScheduleBtn').addEventListener('click', async () => {
   if (!selectedJob) return;
@@ -1639,6 +1343,9 @@ async function openRequestedJob() {
 
 poll();
 triageController.reload();
+// Both catalogs load with the page so their navigation counts are read, not assumed to be zero.
+loadSchedules();
+loadNotifications();
 loadJobs().then(openRequestedJob);
 const statusTimer = setInterval(poll, 5000);
 window.addEventListener('pagehide', () => {
@@ -1646,6 +1353,8 @@ window.addEventListener('pagehide', () => {
   jobActions.dispose();
   runDialog.dispose();
   triageController.dispose();
+  scheduleCatalog.dispose();
+  notificationCatalog.dispose();
   activityCoordinator.dispose();
 }, { once: true });
 window.addEventListener('pageshow', event => {

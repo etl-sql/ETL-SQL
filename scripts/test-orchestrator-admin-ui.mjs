@@ -79,6 +79,8 @@ assert(schedulesHtml.includes('Nightly at Midnight'), 'renders schedule display 
 assert(schedulesHtml.includes('0 0 * * *'), 'renders cron expression');
 assert(schedulesHtml.includes('America/New_York'), 'renders timezone');
 assert(schedulesHtml.includes('3 jobs'), 'renders linked jobs count');
+const uncountedSchedulesHtml = renderSchedulesTable(schedules);
+assert(!uncountedSchedulesHtml.includes('Linked Jobs') && !/\d+ jobs?/.test(uncountedSchedulesHtml), 'uncounted schedule links are not shown as zero');
 assert(schedulesHtml.includes('data-action="edit-schedule"'), 'renders edit action');
 assert(schedulesHtml.includes('data-action="delete-schedule"'), 'renders delete action');
 
@@ -94,6 +96,8 @@ assert(notifsHtml.includes('Ops Slack Channel'), 'renders notification display n
 assert(notifsHtml.includes('slack_webhook'), 'renders connection name');
 assert(notifsHtml.includes('#ops-data'), 'renders recipient');
 assert(notifsHtml.includes('data-action="dispatch-notification"'), 'renders test dispatch action button');
+assert(notifsHtml.includes('2 jobs'), 'renders counted notification links');
+assert(!/\d+ jobs?/.test(renderNotificationsTable(notifications)), 'uncounted notification links are not shown as zero');
 
 // ── 6. Watermarks Table Rendering tests ───────────────────────────────────────
 const emptyWatermarksHtml = renderWatermarksTable([], 'daily_sales');

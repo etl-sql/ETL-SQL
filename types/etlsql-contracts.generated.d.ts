@@ -324,6 +324,26 @@ interface CreateGroupRequest {
     adGroup?: string | null;
 }
 
+interface CreateNotificationRequest {
+    name: string;
+    connectionName: string;
+    recipient?: string | null;
+    isEnabled: boolean;
+    displayName?: string | null;
+    description?: string | null;
+    options?: Record<string, string> | null;
+}
+
+interface CreateScheduleRequest {
+    name: string;
+    cron: string;
+    timeZone?: string | null;
+    isEnabled: boolean;
+    displayName?: string | null;
+    description?: string | null;
+    options?: Record<string, string> | null;
+}
+
 interface CreateServiceAccountRequest {
     name: string;
     description?: string | null;
@@ -1257,6 +1277,13 @@ interface NotificationDefinitionDto {
     id: string | null;
 }
 
+interface NotificationDispatchResult {
+    notificationName: string;
+    delivered: boolean;
+    skipped: boolean;
+    message?: string | null;
+}
+
 interface ObjectGrantResponse {
     objectId: string;
     objectKind: string;
@@ -1320,6 +1347,22 @@ interface OperationalMetrics {
 interface OrchestratorConnectionStatusDto {
     online: boolean;
     status?: unknown;
+}
+
+interface OrchestratorNotificationDispatchRequest {
+    sourceKind: string;
+    title: string;
+    text: string;
+    trigger?: string | null;
+    status?: string | null;
+    jobName?: string | null;
+    alertName?: string | null;
+    reportId?: string | null;
+    historyId?: number | null;
+    rowsProcessed?: number | null;
+    recipientOverride?: string | null;
+    errorMessage?: string | null;
+    attachmentPaths?: string[] | null;
 }
 
 interface OrchestratorSettingsDto {
@@ -2353,6 +2396,15 @@ interface UpdateGroupRequest {
     adGroup?: string | null;
 }
 
+interface UpdateNotificationRequest {
+    connectionName?: string | null;
+    recipient?: string | null;
+    isEnabled?: boolean | null;
+    displayName?: string | null;
+    description?: string | null;
+    options?: Record<string, string> | null;
+}
+
 interface UpdateOrchestratorSettingsRequest {
     apiUrl?: string | null;
     apiKey?: string | null;
@@ -2376,6 +2428,15 @@ interface UpdateReportRequest {
     domain?: string | null;
     steward?: string | null;
     certification?: string | null;
+}
+
+interface UpdateScheduleRequest {
+    cron?: string | null;
+    timeZone?: string | null;
+    isEnabled?: boolean | null;
+    displayName?: string | null;
+    description?: string | null;
+    options?: Record<string, string> | null;
 }
 
 interface UpdateServiceAccountRequest {
