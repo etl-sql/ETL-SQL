@@ -5,7 +5,8 @@
  * the linters and the parse check can all see. Behaviour is unchanged.
  */
 
-import { auth, authApi } from '../api.js';
+import { auth, authApi, apiFetch as portalApiFetch } from '../api.js';
+import { createJobActionController, createJobRunDialog, jobVersion, requireMutationStatus } from '../orchestrator-job-actions.js';
 import { applyPortalBranding, initTheme } from '../branding.js';
 import { renderDag, createScriptEditor } from '../../designer/designer.js';
 import { getSessionIdentity, hasRole, renderSessionIdentity } from '../session-identity.js';
@@ -72,14 +73,9 @@ applyNavigationSafely();
 const BASE = '/api/orchestrator';
 
 async function apiFetch(url, opts = {}) {
-  const token = auth.getToken();
-  const headers = { ...(opts.headers || {}) };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  if (opts.body && typeof opts.body === 'object') {
-    headers['Content-Type'] = 'application/json';
-    opts = { ...opts, body: JSON.stringify(opts.body) };
-  }
-  return fetch(url, { ...opts, headers });
+  const response = await portalApiFetch(url, opts);
+  if (!response.ok && opts.method && opts.method !== 'GET') await requireMutationStatus(response, 200);
+  return response;
 }
 
 async function apiJson(url, opts = {}) {
@@ -97,10 +93,10 @@ const api = {
   history:      (name, limit = 30) => apiJson(`${BASE}/jobs/${encodeURIComponent(name)}/history?limit=${limit}`),
   resume:       (historyId) => apiFetch(`${BASE}/runs/${historyId}/resume`, { method: 'POST' }),
   create:       (body) => apiFetch(`${BASE}/jobs`, { method: 'POST', body }),
-  update:       (name, body) => apiFetch(`${BASE}/jobs/${encodeURIComponent(name)}`, { method: 'PUT', body }),
-  delete:       (name) => apiFetch(`${BASE}/jobs/${encodeURIComponent(name)}`, { method: 'DELETE' }),
-  trigger:      (name, variables = {}) => apiFetch(`${BASE}/jobs/${encodeURIComponent(name)}/trigger`, { method: 'POST', body: { variables } }),
-  kill:         (name) => apiFetch(`${BASE}/jobs/${encodeURIComponent(name)}/kill`, { method: 'POST' }),
+  update:       (name, body, version, signal) => apiFetch(`${BASE}/jobs/${encodeURIComponent(name)}`, { method: 'PUT', body, signal, headers: { 'If-Match': `"${jobVersion(version)}"` } }),
+  delete:       (name, version, signal) => apiFetch(`${BASE}/jobs/${encodeURIComponent(name)}`, { method: 'DELETE', signal, headers: { 'If-Match': `"${jobVersion(version)}"` } }),
+  trigger:      (name, variables = {}, signal) => apiFetch(`${BASE}/jobs/${encodeURIComponent(name)}/trigger`, { method: 'POST', body: { variables }, signal }),
+  kill:         (name, signal) => apiFetch(`${BASE}/jobs/${encodeURIComponent(name)}/kill`, { method: 'POST', signal }),
   scripts:      () => apiJson(`${BASE}/scripts`),
   scriptContent:(path) => apiJson(`${BASE}/scripts/content?path=${encodeURIComponent(path)}`),
   bundles:      () => apiJson(`${BASE}/bundles`),
@@ -551,35 +547,29 @@ function renderJobsFilterHeader(visibleCount) {
   }
 }
 
-async function handleAction(btn) {
-  const name   = btn.dataset.name;
-  const action = btn.dataset.action;
-  btn.disabled = true;
-  try {
-    if (action === 'trigger') {
-      openRunModal(name);
-    } else if (action === 'toggle') {
-      const enable = btn.dataset.enabled === 'true' ? false : true;
-      const job = allJobs.find(j => jobValue(j, 'Name') === name);
-      await api.update(name, { IsEnabled: enable });
-      showToast(`Job '${name}' ${enable ? 'enabled' : 'disabled'}.`);
-      await loadJobs();
-      if (selectedJob && jobValue(selectedJob, 'Name') === name) openDetail(job);
-    } else if (action === 'kill') {
-      await api.kill(name);
-      showToast(`Kill signal sent to '${name}'.`);
-    } else if (action === 'delete') {
-      if (!await ETLSQLFeedback.confirm(`Delete job '${name}'?`, { title: 'Delete job and history', impact: 'All execution history for this job will be removed. This cannot be undone.', confirmLabel: 'Delete job', danger: true, auditAction: 'orchestrator.job.delete' })) return;
-      await api.delete(name);
-      showToast(`Job '${name}' deleted.`);
-      if (selectedJob && jobValue(selectedJob, 'Name') === name) closeDetail();
-      await loadJobs();
+const jobActions = createJobActionController({
+  findTarget(name) {
+    const job = allJobs.find(job => jobValue(job, 'Name') === name);
+    return job ? { name, version: jobValue(job, 'Version') } : null;
+  },
+  setEnabled: (target, enabled, signal) => api.update(target.name, { IsEnabled: enabled }, target.version, signal),
+  deleteJob: (target, signal) => api.delete(target.name, target.version, signal),
+  kill: (target, signal) => api.kill(target.name, signal),
+  confirmDelete: name => ETLSQLFeedback.confirm(`Delete job '${name}'?`, { title: 'Delete job and history', impact: 'All execution history for this job will be removed. This cannot be undone.', confirmLabel: 'Delete job', danger: true, auditAction: 'orchestrator.job.delete' }),
+  async changed(action, target, signal) {
+    if (action === 'delete' && jobValue(selectedJob, 'Name') === target.name) closeDetail();
+    await loadJobs();
+    if (signal.aborted) return;
+    if (action === 'toggle' && jobValue(selectedJob, 'Name') === target.name) {
+      const current = allJobs.find(job => jobValue(job, 'Name') === target.name);
+      if (current) await openDetail(current);
     }
-  } catch (err) {
-    showToast(`Error: ${err.message}`, true);
-  } finally {
-    btn.disabled = false;
-  }
+  },
+  notify: showToast
+});
+function handleAction(btn) {
+  if (btn.dataset.action === 'trigger') openRunModal(btn.dataset.name);
+  else void jobActions.run(/** @type {HTMLButtonElement} */ (btn));
 }
 
 // ── Schedules Catalog View ────────────────────────────────────────────────────
@@ -1196,7 +1186,7 @@ function loadScriptEditor(job) {
     /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (saveBtn).disabled = true;
     try {
       const val = scriptEditor.getValue();
-      await api.update(jobValue(job, 'Name'), { ScriptText: val });
+      await requireMutationStatus(await api.update(jobValue(job, 'Name'), { ScriptText: val }, jobValue(job, 'Version')), 204);
       scriptOriginalValue = val;
       saveBtn.style.display = 'none';
       showToast('Script saved.');
@@ -1903,69 +1893,10 @@ async function rerunJobs(jobNames) {
   } catch (err) { ETLSQLFeedback.notify(`${err.message || err}`, { title: 'Re-run failed', tone: 'error' }); }
 }
 
-// ── One-run overrides ─────────────────────────────────────────────────────────
-
-// The same shape the engine accepts for a script variable. Without this an override typed as
-// `@start date` or `@1st` was sent verbatim, the run failed somewhere inside the engine, and the
-// operator was left reading a parse error about a script they had not edited. Rejecting it here
-// names the actual mistake while the modal is still open and the value is still on screen.
-const RUN_OVERRIDE_NAME = /^@[A-Za-z_][A-Za-z0-9_]*$/;
-
-let runJobName = null;
-function openRunModal(name) {
-  runJobName = name;
-  document.getElementById('runJobTitle').textContent = `Run ${name}`;
-  document.getElementById('runOverrideRows').innerHTML = '';
-  document.getElementById('runJobError').textContent = '';
-  document.getElementById('runJobModal').style.display = 'flex';
-}
-function closeRunModal() {
-  document.getElementById('runJobModal').style.display = 'none';
-  runJobName = null;
-}
-document.getElementById('runJobCloseBtn').addEventListener('click', closeRunModal);
-document.getElementById('runJobCancelBtn').addEventListener('click', closeRunModal);
-
-document.getElementById('runAddOverrideBtn').addEventListener('click', () => {
-  const row = document.createElement('div');
-  row.className = 'run-override-row';
-  row.innerHTML = `
-    <div class="form-group"><label>Variable<input class="run-override-name" type="text" placeholder="@start_date" autocomplete="off"></label></div>
-    <div class="form-group"><label>Value<input class="run-override-value" type="text" placeholder="2026-08-01" autocomplete="off"></label></div>
-    <button class="btn-icon run-override-remove" type="button" title="Remove">✕</button>`;
-  row.querySelector('.run-override-remove').addEventListener('click', () => row.remove());
-  document.getElementById('runOverrideRows').appendChild(row);
-});
-
-document.getElementById('runJobSubmitBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('runJobSubmitBtn');
-  const err = document.getElementById('runJobError');
-  const variables = {};
-  for (const row of document.querySelectorAll('.run-override-row')) {
-    let n = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (row.querySelector('.run-override-name')).value.trim();
-    const v = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (row.querySelector('.run-override-value')).value;
-    if (!n && !v) continue;
-    if (!n.startsWith('@')) n = '@' + n;
-    if (!RUN_OVERRIDE_NAME.test(n)) {
-      err.textContent = `'${n}' is not a variable name. Use @ followed by a letter or underscore, then letters, numbers or underscores.`;
-      return;
-    }
-    variables[n] = v;
-  }
-  /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = true;
-  err.textContent = '';
-  try {
-    const res = await api.trigger(runJobName, variables);
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      throw new Error(body?.error || 'Trigger failed.');
-    }
-    closeRunModal();
-    showToast(`Job '${runJobName}' triggered.`);
-    loadJobs();
-  } catch (ex) { err.textContent = ex.message; }
-  finally { /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = false; }
-});
+// ── One-run overrides ───────────────────────────────────────
+const runDialog = createJobRunDialog({ root: document,
+  trigger: api.trigger, notify: showToast, refresh: loadJobs });
+function openRunModal(name) { runDialog.open(name); }
 
 // ── Initial Start ─────────────────────────────────────────────────────────────
 //
@@ -1986,3 +1917,6 @@ loadTriage();
 loadJobs().then(openRequestedJob);
 setInterval(poll, 5000);
 setInterval(loadTriage, 15000);
+
+window.addEventListener('pagehide', () => { jobActions.dispose(); runDialog.dispose(); }, { once: true });
+window.addEventListener('pageshow', event => { if (event.persisted) window.location.reload(); });

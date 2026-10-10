@@ -128,4 +128,51 @@ const calendarHtml = renderCalendarTimeline(sampleJobs, 7);
 assert(calendarHtml.includes('orch-calendar-grid'), 'renders calendar grid container');
 assert(calendarHtml.includes('Today'), 'renders Today badge on current day');
 
-console.log('ALL orchestrator-admin-ui unit tests passed successfully.');
+// Job mutations must have explicit server confirmation, including when the HTTP status is 2xx.
+const { createJobActionController, jobVersion, requireMutationStatus } = await import(
+    pathToFileURL(path.resolve('src/ETL-SQL.Portal/wwwroot/js/orchestrator-job-actions.js')).href);
+async function rejects(promise, message) {
+    try { await promise; } catch (error) {
+        assert(error.message.includes(message), `expected error containing ${message}`); return;
+    }
+    throw new Error(`FAIL: expected rejection containing ${message}`);
+}
+for (const value of [null, undefined, 0, -1, 1.5, '3', Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    await rejects(Promise.resolve().then(() => jobVersion(value)), 'current job version');
+}
+assert(jobVersion(3) === 3, 'positive loaded version is retained');
+await requireMutationStatus(new Response(null, { status: 204 }), 204);
+await rejects(requireMutationStatus(new Response(null, { status: 202 }), 204), 'not confirmed');
+await rejects(requireMutationStatus(new Response(JSON.stringify({ error: 'Denied.' }), { status: 403 }), 204), 'Denied.');
+await rejects(requireMutationStatus(new Response(JSON.stringify(JSON.stringify({ error: 'Conflict.' })), { status: 409 }), 204), 'Conflict.');
+await rejects(requireMutationStatus(new Response('untrusted HTML', { status: 503 }), 204), 'Unexpected response (503)');
+await rejects(requireMutationStatus(new Response(JSON.stringify({ error: { password: 'never display' } }), { status: 500 }), 204), 'Unexpected response (500)');
+
+const actionNotifications = [], writes = [], changes = [];
+let complete;
+const controller = createJobActionController({
+    findTarget: name => ({ name, version: 3 }),
+    setEnabled: (target, enabled, signal) => {
+        writes.push({ target, enabled, signal }); return new Promise(resolve => { complete = resolve; });
+    },
+    deleteJob: async () => new Response(null, { status: 200 }),
+    kill: async () => new Response(null, { status: 200 }),
+    confirmDelete: async () => true,
+    changed: async (action, target) => { changes.push({ action, target }); },
+    notify: (message, failed) => actionNotifications.push({ message, failed })
+});
+const button = () => ({ dataset: { name: 'daily_sales', action: 'toggle', enabled: 'true' }, disabled: false, isConnected: true });
+const first = controller.run(button());
+await controller.run(button());
+assert(writes.length === 1, 'replacement button cannot duplicate a pending job write');
+complete(new Response(null, { status: 204 })); await first;
+assert(changes.length === 1 && actionNotifications.length === 1 && !actionNotifications[0].failed, 'confirmed write refreshes once');
+const disposed = controller.run(button());
+controller.dispose();
+assert(writes[1].signal.aborted, 'disposal cancels pending job requests');
+complete(new Response(null, { status: 204 })); await disposed;
+assert(changes.length === 1 && actionNotifications.length === 1, 'ignored cancellation cannot produce late feedback or refresh');
+await controller.run(button());
+assert(writes.length === 2, 'disposed controller cannot issue a new request');
+
+console.log('ALL orchestrator-admin-ui and job-action unit tests passed successfully.');

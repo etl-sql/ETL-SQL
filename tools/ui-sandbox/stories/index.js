@@ -1,5 +1,6 @@
 // Story registry. Add a surface by writing a *.story.js module and listing it here.
 import scriptEditor from './script-editor.story.js';
+import orchestratorPage from './orchestrator-page.story.js';
 import scriptEditorUnified from './script-editor-unified.story.js';
 import designer from './designer.story.js';
 import constrainedHtmlRuntime from './constrained-html-runtime.story.js';
@@ -60,6 +61,7 @@ const categoryDefaults = {
   'triage-board': 'Control Plane & SaaS',
 
   // Orchestrator & Jobs
+  'orchestrator-page': 'Orchestrator & Jobs',
   'orchestrator-admin-ui': 'Orchestrator & Jobs',
   'orchestrator-admin': 'Orchestrator & Jobs',
   'orchestrator-run-overrides': 'Orchestrator & Jobs',
@@ -112,6 +114,7 @@ export const rawStories = [
   triageBoard,
 
   // Orchestrator & Jobs
+  orchestratorPage,
   orchestratorAdmin,
   orchestratorRunOverrides,
   orchestratorCheckpointResume,

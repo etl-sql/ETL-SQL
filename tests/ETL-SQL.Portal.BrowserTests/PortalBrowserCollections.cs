@@ -37,8 +37,7 @@ public sealed class PortalJourneyFixture : PortalBrowserFixture;
 /// <summary>Portal for the administrative and dashboard surfaces.</summary>
 public sealed class PortalAdminFixture : PortalBrowserFixture;
 
-/// <summary>Portal for the sandbox stories, which are numerous enough to be worth their own.</summary>
-public sealed class SandboxStoryFixture : PortalBrowserFixture;
+// Sandbox stories use fixture APIs and their own static-file host; they own a browser-only fixture.
 
 [CollectionDefinition(StudioAuthoringCollection.Name)]
 public sealed class StudioAuthoringCollection : ICollectionFixture<StudioAuthoringFixture>

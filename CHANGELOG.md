@@ -14,6 +14,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Compile Orchestrator job table actions and run overrides from strict TypeScript. Job updates and
+  deletion send the loaded version; rejected writes do not produce success notices, and pending
+  actions and replaced dialogs ignore duplicate or late work.
 - Update CodeQL security analysis workflow action dependencies to v4.37.9.
 
 ### Fixed

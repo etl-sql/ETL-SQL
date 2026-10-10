@@ -83,6 +83,8 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
   assertions before host answers health probe). Address shared state across test classes (single Portal,
   single admin account, sign-in gate, mutable global connector registry). Wire all passing `scripts/test-*.mjs`
   checks into the pre-push gate and CI.
+  The sandbox collection now owns Chromium without booting a Portal/catalog database; native
+  journeys keep their separate host fixtures. Verify the full sandbox and native lanes independently.
 - [ ] **Move remaining browser sources to `.ts`.** Build a real module graph with strict compilation over
   linted, split, and type-checked modules. Inventory remaining handwritten Portal modules and page scripts,
   migrate them with focused behavior tests, and preserve strict type/lint gates. Coordinate output ownership
@@ -135,7 +137,14 @@ alongside §1.1; they do not authorize untracking handwritten JavaScript.
   Settings and page composition now have strict owners, draft/lifetime guards, and focused native/sandbox
   acceptance. Every mounted panel is disposed when leaving the page; tab changes retain loaded drafts.
   The page-wide regression and corrected dataset selector have passing evidence below.
-- [ ] Orchestrator page composition (`pages/orchestrator.js`).
+- [ ] Orchestrator page composition (`pages/orchestrator.js`). Job table actions and the run-override
+  dialog now have strict TypeScript owners. Update/delete send the loaded version; expected HTTP
+  statuses gate success messages. Pending actions survive table repaint without duplicate writes,
+  and closed/replaced dialogs and disposed pages ignore late responses. Focused production-page
+  sandbox checks cover versions, rejection, conflict, overrides, duplicates, and disposal.
+  Finish the page owner, validated read contracts, authorization exits, schedule/notification/state/ACL
+  writes, service controls, script-save version refresh, stale detail/tab/catalog reads, and complete
+  editor/chart/listener disposal. Verify back/forward restoration and native Portal/service journeys.
 - [ ] Catalog/home page composition (`pages/index.js`).
 
 **Orchestrator activity storage:** The Core contract and relational-store implementation provide
