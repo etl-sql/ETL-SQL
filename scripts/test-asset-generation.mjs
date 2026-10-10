@@ -10,7 +10,7 @@ import assetInputs from './lib/browser-asset-inputs.cjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tempBase = fs.existsSync(path.join(repo, 'scratch')) ? path.join(repo, 'scratch') : os.tmpdir();
-const root = fs.mkdtempSync(path.join(tempBase, 'etlsql-asset-generation espaces-é-'));
+const root = fs.mkdtempSync(path.join(tempBase, 'etlsql-asset-generation espaces-é-$literal-'));
 const sharedRel = 'src/ETL-SQL.ReportRuntime/Resources/Shared';
 const portalJsRel = 'src/ETL-SQL.Portal/wwwroot/js';
 const sourceRel = 'src/ETL-SQL.ReportRuntime/Resources/TypeScript';
@@ -462,7 +462,102 @@ try {
         for (const host of generatedHosts) assert.match(fs.readFileSync(path.join(host, 'watched-probe.js'), 'utf8'), /watched = 13/);
         verifyBuild();
     } finally { await watcher.dispose(); }
-    console.log('Asset generation: ownership, absent outputs, host closures, idempotence, build preconditions, concurrency, rename/delete cleanup, watcher recovery, and failure isolation passed.');
+    // Exercise the public wrappers with real preparation. Build spies prove that failed preparation
+    // cannot reach downstream tools; they also record argument boundaries from an unrelated cwd.
+    for (const script of ['build-debug.ps1', 'build-debug.sh', 'sync-assets.ps1'])
+        fs.copyFileSync(path.join(repo, 'scripts', script), path.join(root, 'scripts', script));
+    const callsFile = path.join(root, 'entrypoint-calls.jsonl');
+    const driver = path.join(root, 'entrypoint-driver.ps1');
+    const shim = path.join(root, 'entrypoint-tools');
+    const outside = path.join(root, 'outside espaces-é');
+    fs.mkdirSync(shim); fs.mkdirSync(outside);
+    const debug = path.join(root, 'scripts', process.platform === 'win32' ? 'build-debug.ps1' : 'build-debug.sh');
+    let shell;
+    if (process.platform === 'win32') {
+        const lookup = spawnSync('pwsh', ['-NoProfile', '-Command', '(Get-Process -Id $PID).Path'], { encoding: 'utf8' });
+        assert.equal(lookup.status, 0, lookup.stdout + lookup.stderr);
+        shell = lookup.stdout.trim();
+        write(driver, `function global:dotnet {
+  @{ command = 'dotnet'; args = @($args) } | ConvertTo-Json -Compress | Add-Content -LiteralPath $env:ETLSQL_ENTRYPOINT_CALLS
+  $global:LASTEXITCODE = [int]$env:ETLSQL_ENTRYPOINT_BUILD_EXIT
+}
+function global:npm {
+  @{ command = 'npm'; args = @($args) } | ConvertTo-Json -Compress | Add-Content -LiteralPath $env:ETLSQL_ENTRYPOINT_CALLS
+  $global:LASTEXITCODE = 0
+}
+& $env:ETLSQL_ENTRYPOINT_SCRIPT
+exit $LASTEXITCODE
+`);
+    } else {
+        shell = '/bin/bash';
+        // Path discovery must still work when the fixture intentionally removes Node from PATH.
+        const dirname = spawnSync('/bin/sh', ['-c', 'command -v dirname'], { encoding: 'utf8' });
+        assert.equal(dirname.status, 0, dirname.stderr);
+        fs.symlinkSync(dirname.stdout.trim(), path.join(shim, 'dirname'));
+        const logger = path.join(shim, 'log.mjs');
+        write(logger, `import fs from 'node:fs';
+fs.appendFileSync(process.env.ETLSQL_ENTRYPOINT_CALLS, JSON.stringify({command:process.argv[2],args:process.argv.slice(3)})+'\\n');
+process.exit(process.argv[2] === 'dotnet' ? Number(process.env.ETLSQL_ENTRYPOINT_BUILD_EXIT) : 0);
+`);
+        for (const command of ['dotnet', 'npm']) {
+            const executable = path.join(shim, command);
+            write(executable, `#!/bin/sh\n"$ETLSQL_ENTRYPOINT_NODE" "$ETLSQL_ENTRYPOINT_LOGGER" ${command} "$@"\n`);
+            fs.chmodSync(executable, 0o755);
+        }
+    }
+    const calls = () => fs.readFileSync(callsFile, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+    const runDebug = ({ missingNode = false, buildExit = 0 } = {}) => {
+        write(callsFile, '');
+        const env = { ...process.env, ETLSQL_ENTRYPOINT_CALLS: callsFile,
+            ETLSQL_ENTRYPOINT_SCRIPT: debug, ETLSQL_ENTRYPOINT_BUILD_EXIT: String(buildExit),
+            ETLSQL_ENTRYPOINT_NODE: process.execPath, ETLSQL_ENTRYPOINT_LOGGER: path.join(shim, 'log.mjs'),
+            PATH: missingNode ? shim : [shim, path.dirname(process.execPath), process.env.PATH].join(path.delimiter) };
+        const args = process.platform === 'win32' ? ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', driver] : [debug];
+        const result = spawnSync(shell, args, { cwd: outside, env, encoding: 'utf8' });
+        assert.ifError(result.error); return result;
+    };
+    const missingCompiler = runDebug();
+    assert.notEqual(missingCompiler.status, 0, missingCompiler.stdout + missingCompiler.stderr);
+    assert.match(missingCompiler.stdout + missingCompiler.stderr, /npm ci --prefix scripts\/typecheck/);
+    assert.deepEqual(calls(), [], 'Missing compiler must stop before .NET/npm builds.');
+    const missingNode = runDebug({ missingNode: true });
+    assert.notEqual(missingNode.status, 0, missingNode.stdout + missingNode.stderr);
+    assert.match(missingNode.stdout + missingNode.stderr, /node.*(not recognized|not found)/s);
+    assert.deepEqual(calls(), [], 'Missing Node must stop before .NET/npm builds.');
+    fs.cpSync(path.join(repo, 'scripts/typecheck/node_modules'), path.join(root, 'scripts/typecheck/node_modules'),
+        { recursive: true, filter: () => true });
+    const prepared = runDebug();
+    assert.equal(prepared.status, 0, prepared.stdout + prepared.stderr);
+    assert.deepEqual(calls(), [
+        { command: 'dotnet', args: ['build', path.join(root, 'ETL-SQL.slnx'), '--nologo', '-v', 'minimal'] },
+        { command: 'npm', args: ['--prefix', path.join(root, 'src/etl-sql-vscode/ui'), 'run', 'build', '--silent'] },
+        { command: 'npm', args: ['--prefix', path.join(root, 'src/etl-sql-vscode'), 'run', 'compile', '--silent'] },
+        { command: 'npm', args: ['--prefix', path.join(root, 'src/etl-sql-vscode'), 'run', 'test:unit'] }
+    ], 'Checkout paths remain single arguments and package steps do not depend on cwd.');
+    const buildFailed = runDebug({ buildExit: 7 });
+    assert.notEqual(buildFailed.status, 0, 'A downstream build failure must reach the caller.');
+    assert.equal(calls().length, 4, 'A build failure must retain the debug script\'s remaining checks.');
+    if (process.platform === 'win32') {
+        const inventoryFile = path.join(root, 'artifacts/browser-assets.json');
+        const manifestFile = path.join(root, 'artifacts/browser-assets.props');
+        const before = new Map([inventoryFile, manifestFile].map(file => [file, fs.readFileSync(file)]));
+        const runCheck = (missing = false) => spawnSync(shell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-File',
+            path.join(root, 'scripts/sync-assets.ps1'), '-Check'], {
+            cwd: outside, env: { ...process.env, PATH: missing ? shim :
+                [path.dirname(process.execPath), process.env.PATH].join(path.delimiter) }, encoding: 'utf8'
+        });
+        const check = runCheck();
+        assert.equal(check.status, 0, check.stdout + check.stderr);
+        for (const [file, content] of before) assert.deepEqual(fs.readFileSync(file), content, 'Wrapper -Check must stay read-only.');
+        const missing = runCheck(true);
+        assert.notEqual(missing.status, 0, 'Missing Node must not report a successful asset check.');
+        assert.match(missing.stdout + missing.stderr, /node.*not recognized/s);
+        write(watchedSource, 'export const watched: number = 14;\n');
+        const stale = runCheck();
+        assert.notEqual(stale.status, 0, 'The wrapper must propagate canonical verification failure.');
+        for (const [file, content] of before) assert.deepEqual(fs.readFileSync(file), content, 'Failed checks must stay read-only.');
+    }
+    console.log('Asset generation and public entry points: ownership, absent outputs, closures, freshness, recovery, argument boundaries, and fail-fast builds passed.');
 } finally {
     assert.equal(path.dirname(root), path.resolve(tempBase));
     fs.rmSync(root, { recursive: true, force: true });

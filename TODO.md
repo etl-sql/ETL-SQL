@@ -582,7 +582,7 @@ cutover is ready only when the required checks below pass against the same candi
 TypeScript conversion does not by itself close that output's build, package, or runtime acceptance.
 
 **Readiness (2026-10-09):** Preparation and preliminary source-only checks are implemented. The current
-prepared inventory contains 472 outputs from 88 shared and 93 Portal TypeScript owners, including
+prepared inventory contains 473 outputs from 88 shared and 94 Portal TypeScript owners, including
 the offline bundle and host copies. Governance read, mutation, dialog, and native-host acceptance
 have passed. This inventory does not complete source-control acceptance: the earlier
 source-only build and packaged-host evidence covered 403 outputs and must be refreshed against
@@ -632,6 +632,16 @@ across CI, release, native-package, CodeQL, and manual-release workflows. Releas
 precedes dependency restore. Parsed workflow/order checks pass; this is configuration evidence,
 not a completed GitHub run or container/package certification. See
 `artifacts/section1/workflow-preparation-before.log` and `workflow-preparation-after.log`.
+
+The PowerShell sync wrapper delegates to canonical preparation and propagates missing-tool and
+verification failures. Both debug scripts prepare before invoking .NET, stop on preparation failure,
+and preserve checkout/package path arguments from an unrelated working directory. The local-entry-point
+task remains open for the remaining test, publish, IDE, run/watch, and incremental-build acceptance.
+Focused generator/wrapper checks pass using isolated Windows and Ubuntu source fixtures with spaces,
+non-ASCII characters, and a literal `$`. Downstream build spies verify argument boundaries, preparation
+ordering, and failure propagation. The tracked checkpoint produces 380 byte-identical outputs on both
+platforms; complete build/package certification remains open. Evidence is under
+`artifacts/section1/entrypoints-index-windows.log` and `entrypoints-linux-evidence/`.
 
 1. Finish the ownership audit, preparation entry point, generator bootstrap, freshness verification,
    safe obsolete-output cleanup, and build/gate integration.

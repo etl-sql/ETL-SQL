@@ -21,6 +21,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Prepare browser assets before either debug build script invokes .NET. Preserve checkout
+  path arguments and propagate failed preparation and asset checks to the caller.
 - Resolve startup PII maintenance table and column names from the live EF mappings so encryption
   maintenance continues after the snake_case schema migration.
 - Restore the locked browser compiler and prepare assets before CI/release/certification build

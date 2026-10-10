@@ -354,6 +354,11 @@ Direct .NET builds verify preparation and show the command above for missing or 
 They do not invoke Node. Published products include their assets and need no Node installation.
 `sync-assets.ps1` delegates to the same Node entry point.
 
+After restoring the compiler and development package dependencies, both `build-debug` scripts prepare
+browser assets before invoking .NET. A preparation failure stops the build before .NET, Vite, or the
+extension compiler runs. These scripts resolve their checkout and package paths independently of
+the caller's working directory.
+
 The preparation manifest fingerprints retained Portal markup, styles, and images, declarations and
 contract schemas, generator code and helpers, compiler configuration/locks, and host asset-selection
 files. Put generator helpers under `scripts/lib`; new or removed helpers enter freshness checks

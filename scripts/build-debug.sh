@@ -17,9 +17,9 @@ errors=()
 
 step() {
     local label="$1"
-    local action="$2"
+    shift
     echo -e "\n==> $label"
-    if eval "$action"; then
+    if "$@"; then
         echo -e "OK: $label"
     else
         echo -e "FAILED: $label"
@@ -27,12 +27,13 @@ step() {
     fi
 }
 
-step ".NET build" "dotnet build \"$ROOT_DIR/ETL-SQL.slnx\" --nologo -v minimal"
-step "UI build  (vite)" "cd \"$UI_DIR\" && npm run build --silent"
-step "Extension compile  (tsc)" "cd \"$EXT_DIR\" && npm run compile --silent"
+node "$ROOT_DIR/scripts/sync-assets.js"
+step ".NET build" dotnet build "$ROOT_DIR/ETL-SQL.slnx" --nologo -v minimal
+step "UI build  (vite)" npm --prefix "$UI_DIR" run build --silent
+step "Extension compile  (tsc)" npm --prefix "$EXT_DIR" run compile --silent
 
 if [ "$SKIP_TESTS" = false ]; then
-    step "Extension unit tests  (vitest)" "cd \"$EXT_DIR\" && npm run test:unit"
+    step "Extension unit tests  (vitest)" npm --prefix "$EXT_DIR" run test:unit
 fi
 
 echo ""
