@@ -80,6 +80,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Let the Portal start on PostgreSQL after the snake_case schema migration. The migration renamed
+  two indexes under names no PostgreSQL catalog had: the refresh-token index, whose original
+  PostgreSQL migration never ran, and the alert-notification index, which PostgreSQL stored under
+  a 63-character name. The migration now renames what exists and creates the missing unique index.
 - Keep third-party inventory entries on their declared NuGet versions and honor the configured
   package cache. Reject metadata that describes a different version.
 - Generate browser DTO, route, and API contracts as a staged set. Reject stopped generator hosts,

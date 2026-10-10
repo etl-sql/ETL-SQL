@@ -3068,10 +3068,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 table: "refresh_tokens",
                 newName: "ix_refresh_tokens_user_id");
 
-            migrationBuilder.RenameIndex(
-                name: "IX_RefreshTokens_Token",
-                table: "refresh_tokens",
-                newName: "ix_refresh_tokens_token");
+            // The PostgreSQL AddRefreshTokenHashIndex migration was scaffolded without its designer
+            // file, so it carries no [Migration] attribute and never ran: no PostgreSQL catalog has
+            // this index, although the model snapshot says it does. Rename it where it exists and
+            // create it where it does not.
+            migrationBuilder.Sql(
+                """
+                ALTER INDEX IF EXISTS "IX_RefreshTokens_Token" RENAME TO ix_refresh_tokens_token;
+                CREATE UNIQUE INDEX IF NOT EXISTS ix_refresh_tokens_token ON refresh_tokens (token);
+                """);
 
             migrationBuilder.RenameIndex(
                 name: "IX_RefreshTokens_TenantId_UserId",
@@ -4308,10 +4313,16 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 table: "alert_notifications",
                 newName: "alert_id");
 
-            migrationBuilder.RenameIndex(
-                name: "IX_AlertNotifications_AlertId_OrchestratorAlias_NotificationNa~",
-                table: "alert_notifications",
-                newName: "ix_alert_notifications_alert_id_orchestrator_alias_notificatio~");
+            // AddAlertNotifications created this index under a 64-character name, which PostgreSQL
+            // stored truncated to 63 characters ("...NotificationNam"). The model snapshot records
+            // the EF-shortened name ("...NotificationNa~") instead, which no catalog ever had.
+            migrationBuilder.Sql(
+                """
+                ALTER INDEX IF EXISTS "IX_AlertNotifications_AlertId_OrchestratorAlias_NotificationNam"
+                    RENAME TO "ix_alert_notifications_alert_id_orchestrator_alias_notificatio~";
+                ALTER INDEX IF EXISTS "IX_AlertNotifications_AlertId_OrchestratorAlias_NotificationNa~"
+                    RENAME TO "ix_alert_notifications_alert_id_orchestrator_alias_notificatio~";
+                """);
 
             migrationBuilder.RenameColumn(
                 name: "Outcome",

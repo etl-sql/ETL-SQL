@@ -974,7 +974,7 @@ public class ExecutionJobServiceTests : IDisposable
             DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
             CancellationToken cancellationToken = default)
         {
-            if (command.CommandText.StartsWith("INSERT INTO \"PortalExecutionJobs\"", StringComparison.Ordinal)
+            if (command.CommandText.StartsWith("INSERT INTO \"portal_execution_jobs\"", StringComparison.Ordinal)
                 && Interlocked.Exchange(ref _blocked, 1) == 0)
             {
                 Started.TrySetResult();

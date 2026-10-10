@@ -65,11 +65,11 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.InRange(metrics.AuditOutboxOldestPendingAgeSeconds, 7199, 7300);
         Assert.True(allocated < 5000L * payload.Length,
             $"Metrics allocated {allocated} bytes while the tenant backlog contains {5000L * payload.Length} payload bytes.");
-        var aggregate = Assert.Single(capture.Commands, sql => sql.Contains("SUM", StringComparison.OrdinalIgnoreCase) && sql.Contains("PayloadJson"));
+        var aggregate = Assert.Single(capture.Commands, sql => sql.Contains("SUM", StringComparison.OrdinalIgnoreCase) && sql.Contains("payload_json"));
         Assert.Contains("length(", aggregate, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("MIN(", aggregate, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("COUNT(", aggregate, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("TenantId", aggregate);
+        Assert.Contains("tenant_id", aggregate);
         Assert.Equal(0, metrics.AverageExecutionDurationMs);
         Assert.Equal(0, metrics.AverageQueuedExecutionAgeSeconds);
     }

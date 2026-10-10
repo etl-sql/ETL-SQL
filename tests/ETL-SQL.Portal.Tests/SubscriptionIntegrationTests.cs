@@ -944,11 +944,12 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
             await db.SaveChangesAsync();
             Assert.False(File.Exists(orchDbPath));
 
+            // An unreadable scheduler store is reported as unavailable. An empty success here would
+            // tell the administrator that this subscription has never been triggered.
             var historyRes = await AuthGet(portalClient, token, $"/api/subscriptions/{subscription.Id}/history");
-            Assert.Equal(HttpStatusCode.OK, historyRes.StatusCode);
-            var history = await historyRes.Content.ReadFromJsonAsync<List<JobHistoryEntry>>(_json);
-            Assert.NotNull(history);
-            Assert.Empty(history);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, historyRes.StatusCode);
+            var unavailable = await historyRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            Assert.Contains("temporarily unavailable", unavailable!["error"]!.GetValue<string>());
             Assert.False(File.Exists(orchDbPath));
 
             var metricsRes = await AuthGet(portalClient, token, "/api/admin/metrics/usage");

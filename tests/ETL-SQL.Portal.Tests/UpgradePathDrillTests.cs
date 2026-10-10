@@ -120,7 +120,7 @@ public sealed class UpgradePathDrillTests : IDisposable
             // and the new delivery-ledger table exists and is queryable (empty).
             var audit = await db.AuditLogs.SingleAsync(a => a.Detail == "pre-upgrade");
             Assert.Null(audit.CorrelationId);
-            Assert.True(await TableExistsAsync(db, "SubscriptionDeliveries"));
+            Assert.True(await TableExistsAsync(db, "subscription_deliveries"));
             Assert.Equal(0, await db.SubscriptionDeliveries.CountAsync());
 
             // A new audit row written on the upgraded schema can carry the new column.
