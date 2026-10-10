@@ -83,6 +83,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Report unavailable Orchestrator schedule and notification catalogs as unavailable. A failed or
   refused read returned an empty list, so the page showed "No shared schedules defined yet" and a
   count of zero. The Portal now answers 503 or 403, and the page clears stale rows and counts.
+- Stop a finished report run from pulling the reader back to a page they left. The wait kept
+  polling for up to three minutes after the reader opened another view, then replaced that view
+  with the report. Leaving the viewer now ends the wait; the run still completes on the server.
+- Report a run that the Portal loses contact with. Every failed status check was swallowed, so an
+  outage showed "Waiting for results" for three minutes and then "Timed out". Five consecutive
+  failures now end the wait with the reason.
+- Say when a report's downstream list is incomplete. A failed lineage lookup was treated as "no
+  downstream reports". Structure, dependency, and history dialogs show the server's reason for a
+  failure, and a response that arrives after the dialog was closed or another report was opened is
+  discarded. Back from a report opened by link returns to the library instead of doing nothing.
 - Require a report's parameters before a reader can subscribe to it. When the parameter definitions
   could not be read, the Subscribe dialog hid the section and created the subscription without
   them, and the parameter editor fell back to free-text fields. Both now say the definitions are

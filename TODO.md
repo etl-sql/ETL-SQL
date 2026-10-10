@@ -171,10 +171,13 @@ alongside §1.1; they do not authorize untracking handwritten JavaScript.
   field rows moved to `subscription-parameter-fields.ts`. The production page now runs in the sandbox
   (`reader-page` story) against a subscription service fixture. Nineteen sandbox checks
   (mutation-tested) and the reader subscription consumer check pass.
-  Remaining in `pages/index.js` (1,520 lines): the report viewer with run/poll and its structure,
-  export, dependency, and history dialogs; the library (folder tree, lists, search, favorites,
-  recently viewed); and the page owner with hash routing and governance mounting. The run dialog
-  still uses the page's own parameter-field helpers.
+  The report viewer now has strict owners (2026-10-11): `report-viewer.ts`, its view module, and
+  `report-format.ts` cover open, first run, run/poll, the report frame, and the structure, export,
+  dependency, and history dialogs. The first-run form uses the shared parameter fields, so the
+  page's own parameter helpers are gone. Sixteen sandbox checks (mutation-tested) and the report
+  viewer consumer check pass.
+  Remaining in `pages/index.js` (about 950 lines): the library (folder tree, lists, search,
+  favorites, recently viewed) and the page owner with hash routing and governance mounting.
 
 **Whole-tree lane check (2026-10-10):** The first full runs against the complete change found the
 lanes red. Portal.Tests failed 21 of 1,535: the snake_case migration could not be applied on

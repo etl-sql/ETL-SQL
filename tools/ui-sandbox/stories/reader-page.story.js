@@ -13,13 +13,19 @@ export function makeReaderPageSandbox(fixtureId = 'healthy') {
   const parameters = {
     7: [{ name: 'Region', type: 'TEXT', default: null, required: true, description: 'Sales region to include' },
       { name: 'AsOf', type: 'RELDATE', default: 'D-1', required: false, description: null }],
+    8: [{ name: 'Product', type: 'TEXT', default: null, required: true, description: null }],
     9: []
   };
+  // Report 7 has a snapshot; report 8 has none until a run completes. Report 9 has no parameters.
+  const snapshots = new Set([7, 9]);
+  let runState = 'Completed', runs = 0, polls = 0;
   const calls = [], pendingWrites = [], pendingReads = [];
   let failure = fixtureId, writesPaused = false, readsPaused = null, nextId = 20;
   const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
   const mock = {
     calls, setFailure(value) { failure = value; },
+    /** What the next polls of a run report: Running, Completed, Failed, Cancelled, or unreachable. */
+    setRun(value) { runState = value; }, get polls() { return polls; },
     pauseWrites() { writesPaused = true; }, releaseWrites() { writesPaused = false; pendingWrites.splice(0).forEach(resolve => resolve()); },
     get pendingWrites() { return pendingWrites.length; },
     /** Holds GET requests whose path contains `fragment` until released. */
@@ -29,22 +35,50 @@ export function makeReaderPageSandbox(fixtureId = 'healthy') {
       const url = new URL(input instanceof Request ? input.url : String(input), location.href);
       const path = url.pathname, method = init.method || 'GET', headers = new Headers(init.headers);
       const body = typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
-      calls.push({ path, method, ifMatch: headers.get('If-Match'), body });
+      calls.push({ path, method, query: url.searchParams, ifMatch: headers.get('If-Match'), body });
       if (method === 'GET' && readsPaused && path.includes(readsPaused)) await new Promise(resolve => pendingReads.push(resolve));
       if (path === '/api/portal/branding') return json({ displayName: 'ETL-SQL Portal', footerText: 'Sandbox', logoUrl: null });
       if (path === '/api/portal/navigation') return json([]);
       if (path === '/api/folders') return json([]);
       if (path === '/api/catalog/favorites' || path === '/api/catalog/recent') return json([]);
+      if (path === '/api/catalog/lineage/downstream') {
+        if (url.searchParams.get('table') === 'customers' && failure === 'downstream-partial') return json({ error: 'Lineage catalog is rebuilding.' }, 503);
+        return json(url.searchParams.get('table') === 'orders' ? [{ reportId: 9, reportName: 'Inventory aging', lastSeen: '2026-10-09T05:00:00Z' }] : []);
+      }
       if (path === '/api/smtp-aliases') return failure === 'smtp-unavailable' ? json({ error: 'Connection catalog is offline.' }, 503)
         : json(failure === 'no-smtp' ? [] : ['smtp_ops', 'smtp_backup']);
-      const report = /^\/api\/reports\/(\d+)(\/(snapshot|parameters))?$/.exec(path);
+      const job = /^\/api\/jobs\/(.+)$/.exec(path);
+      if (job) {
+        polls++;
+        if (runState === 'unreachable') return json({ error: 'The job service is restarting.' }, 503);
+        const reportId = Number(job[1].split('-')[1]);
+        if (runState === 'Completed') snapshots.add(reportId);
+        return json({ jobId: job[1], status: runState, createdAt: '2026-10-10T09:00:00Z', rowsProcessed: 0, peakMemoryBytes: 0, cpuTimeSeconds: 0,
+          error: runState === 'Failed' ? 'Division by zero in visual Sales.' : null });
+      }
+      const report = /^\/api\/reports\/(\d+)(\/(snapshot|parameters|execute|structure|dependencies|history|export\/\w+))?$/.exec(path);
       if (report) {
         const id = Number(report[1]);
+        if (report[3] === 'execute') return failure === 'run-rejected' ? json({ error: 'Report execution capacity is exhausted.' }, 429)
+          : json({ jobId: `run-${id}-${++runs}` }, 202);
+        if (report[3] === 'structure') return failure === 'dialogs-unavailable' ? json({ error: 'The script could not be parsed.' }, 503)
+          : json({ nodes: [], edges: [] });
+        if (report[3] === 'history') return failure === 'dialogs-unavailable' ? json({ error: 'History store is offline.' }, 503)
+          : json({ report: { name: 'Regional sales', folderPath: '/reports' }, scriptChanged: true, publishedScriptHash: 'abc123', currentScriptHash: 'def456',
+            snapshots: [{ builtAt: '2026-10-09T05:00:00Z', builtBy: 'reader', hashMatched: false, scriptHashAtRunTime: 'abc123' }],
+            changes: [{ timestamp: '2026-10-08T05:00:00Z', action: 'PUBLISH_REPORT', userId: 1, detail: '<script>document.title = 1</script>' }] });
+        if (report[3] === 'dependencies') return json({ report: { name: 'Regional sales', folderPath: '/reports' }, snapshot: { builtAt: '2026-10-09T05:00:00Z' },
+          manifestDatasets: [], registeredDatasets: [], refreshJobs: [], lineageEntries: [],
+          sources: [{ connection: 'warehouse', name: 'orders', kind: 'Table' }, { connection: 'warehouse', objectName: 'customers', kind: 'Table' }] });
+        if (report[3]?.startsWith('export/')) return failure === 'export-failed' ? json({ error: 'The export renderer is unavailable.' }, 503)
+          : new Response('a,b\n1,2\n', { status: 200, headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="regional.csv"' } });
+        if (report[3] === 'snapshot' && !snapshots.has(id)) return json({ error: 'No snapshot' }, 404);
+        if (!report[3] && failure === 'report-unavailable') return json({ error: 'The catalog is offline.' }, 503);
         if (report[3] === 'parameters') return failure === 'parameters-unavailable' ? json({ error: 'The report script could not be inspected.' }, 503)
           : json(parameters[id] ?? []);
         if (report[3] === 'snapshot') return json({ reportId: id, builtAt: '2026-10-09T05:00:00Z', isStale: false, pages: [] });
-        return json({ id, name: id === 9 ? 'Inventory aging' : 'Regional sales', description: 'Sandbox report', folderId: 1,
-          folderPath: '/reports', scriptPath: 'reports/sandbox.rptsql', hasSnapshot: true, version: 1 });
+        return json({ id, name: id === 9 ? 'Inventory aging' : id === 8 ? 'Margin by product' : 'Regional sales', description: 'Sandbox report', folderId: 1,
+          folderPath: '/reports', scriptPath: 'reports/sandbox.rptsql', hasSnapshot: snapshots.has(id), version: 1 });
       }
       if (path === '/api/subscriptions' && method === 'GET') {
         if (failure === 'list-unavailable') return json({ error: 'The subscription store is offline.' }, 503);
