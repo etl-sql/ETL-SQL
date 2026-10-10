@@ -655,7 +655,6 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.OidcUserProvisioningService>(
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SharedIdentityAuthorityService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SharedIdentityAuthorityResolver>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SharedOidcFlowStateService>();
-builder.Services.AddScoped<ETL_SQL.Portal.Services.SharedIdentityPartitionStore>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SharedIdentityPartitionStoreFactory>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ISharedOidcAuthenticationService,
     ETL_SQL.Portal.Services.SharedOidcAuthenticationService>();

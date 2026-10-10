@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Prepare and verify browser assets before .NET builds in the Portal, Orchestrator service, and
+  sandbox-worker images; preserve prepared bytes during Portal publish. Keep the alert evaluator's
+  Orchestrator client inside its per-run scope
+  so Portal startup succeeds with dependency scope validation enabled.
 - Cancel VSIX packaging commands and their descendants on Ctrl+C or SIGTERM. Wait for shutdown,
   release archive readers, and remove owned staging and locks before returning; preserve accepted packages.
 - Route VSIX build/publish and pre-release validation through the locked unsigned coordinator.

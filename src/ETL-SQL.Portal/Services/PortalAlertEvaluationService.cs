@@ -13,7 +13,6 @@ public sealed class PortalAlertEvaluationService(
     IServiceScopeFactory scopes,
     PortalConfig config,
     SnapshotPackageService snapshots,
-    OrchestratorProxyService orchestrator,
     ILogger<PortalAlertEvaluationService> logger)
 {
     public async Task EvaluateScheduledRefreshAsync(
@@ -63,6 +62,7 @@ public sealed class PortalAlertEvaluationService(
         alerts = await AuthorizedAlertsAsync(db, alerts, ct);
         if (alerts.Count == 0) return;
 
+        var orchestrator = scope.ServiceProvider.GetRequiredService<OrchestratorProxyService>();
         foreach (var alert in alerts)
         {
             var previousState = alert.LastState;
@@ -78,7 +78,7 @@ public sealed class PortalAlertEvaluationService(
 
             if (isTriggered && !string.Equals(previousState, "TRIGGERED", StringComparison.OrdinalIgnoreCase))
             {
-                var delivered = await DispatchAlertNotificationsAsync(alert, value, portalJobId, completedAt, ct);
+                var delivered = await DispatchAlertNotificationsAsync(orchestrator, alert, value, portalJobId, completedAt, ct);
                 if (delivered)
                     alert.LastNotifiedAt = completedAt;
             }
@@ -160,6 +160,7 @@ public sealed class PortalAlertEvaluationService(
     }
 
     private async Task<bool> DispatchAlertNotificationsAsync(
+        OrchestratorProxyService orchestrator,
         ReportAlert alert,
         decimal? value,
         string portalJobId,

@@ -73,6 +73,16 @@ current source assets; assembled packages need their separate build and runtime 
 
 ### Runtime module and offline bundle ownership
 
+The Portal, Orchestrator service, and sandbox-worker Dockerfiles prepare assets in a Node.js 22
+build stage. That stage restores the pinned compiler, includes the complete browser source and
+generator inputs, and runs preparation followed by read-only verification. The .NET stage receives
+those inputs and outputs together so its freshness checks use the same prepared tree. Final images
+contain published .NET output and browser assets; Node is required only during image construction.
+The repository `.dockerignore` excludes local compiler restores, build outputs, and installer packages
+from the context while retaining authored browser sources and canonical vendor assets.
+Portal publish copies the prepared `wwwroot` tree. It must not overwrite those verified host copies
+with raw canonical files from `Resources/Shared/`.
+
 `report-runtime.js` and the sibling `rt-*.js` files are ES modules generated from their matching
 `Resources/TypeScript/` sources. Keep part imports
 as single-line named imports with no aliases, and export declarations directly. The entry's

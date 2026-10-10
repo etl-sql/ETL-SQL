@@ -557,6 +557,25 @@ source-only inputs; fresh Git checkouts after the index cleanup remain required.
 
 ### 1.1 Generated browser assets — Build preparation and source-control cleanup
 
+Container preparation checkpoint (2026-10-10): the Portal, Orchestrator service, and sandbox-worker
+images prepare and verify browser assets in a Node.js 22 build stage, then pass the prepared tree to
+.NET. All three image builds pass from an isolated Git-index archive with 380 inventoried generated
+outputs removed before the Docker builds. Portal startup now passes with its full hosted-service
+pipeline and dependency scope validation: the unused direct tenant-store registration is removed,
+and the singleton alert evaluator resolves its Orchestrator client within the existing per-run scope.
+Portal publish preserves prepared host-copy bytes instead of overwriting them with raw canonical
+assets. The isolated Windows lane passes 14 startup, tenant-partition, alert-delivery, and hosted-service
+tests without skips. The Linux Portal serves all 102 inventoried assets with matching hashes; all nine
+embedded runtime resources match their source inputs. Node is absent from all three runtime images,
+and both bundled CLI version checks pass. Source-control cutover and final package/platform acceptance
+remain open. Evidence is under `artifacts/section1/container-source-only-*`,
+`container-startup-before-fix.log`, and `container-publish-before-fix.*`.
+
+- [x] Fix the Portal hosted-service dependency lifetime and prove full startup with scope validation.
+- [x] Pass the isolated candidate startup, tenant-partition, alert-delivery, and hosted-service tests.
+- [x] Pass source-only container runtime checks: served-asset hashes, embedded runtime resources,
+  and the absence of Node in all three runtime images.
+
 **Horizon:** v0.21.0
 
 **Completion rule:** A fresh checkout generates every required browser asset before build, test, or

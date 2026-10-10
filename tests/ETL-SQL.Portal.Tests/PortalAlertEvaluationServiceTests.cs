@@ -100,12 +100,12 @@ public sealed class PortalAlertEvaluationServiceTests : IDisposable
             settings,
             NullLogger<OrchestratorProxyService>.Instance);
 
-        var serviceProvider = services.BuildServiceProvider();
+        services.AddScoped(_ => proxy);
+        await using var serviceProvider = services.BuildServiceProvider();
         var evaluator = new PortalAlertEvaluationService(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             config,
             packages,
-            proxy,
             NullLogger<PortalAlertEvaluationService>.Instance);
 
         await evaluator.EvaluateScheduledRefreshAsync(1, "refresh-1", manifestKey, DateTime.UtcNow);
@@ -208,12 +208,12 @@ public sealed class PortalAlertEvaluationServiceTests : IDisposable
             new OrchestratorSettingsService(config, protector),
             NullLogger<OrchestratorProxyService>.Instance);
 
-        var serviceProvider = services.BuildServiceProvider();
+        services.AddScoped(_ => proxy);
+        await using var serviceProvider = services.BuildServiceProvider();
         var evaluator = new PortalAlertEvaluationService(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             config,
             packages,
-            proxy,
             NullLogger<PortalAlertEvaluationService>.Instance);
 
         await evaluator.EvaluateScheduledRefreshAsync(1, "refresh-1", manifestKey, DateTime.UtcNow);
