@@ -58,10 +58,14 @@ jobs:
       - name: Install browser lint-gate toolchain
         run: npm ci --prefix scripts/lint
 
+      - name: Install unsigned VSIX verification toolchain
+        working-directory: scripts/vsix
+        run: npm ci
+
       - name: Audit browser toolchain packages for known vulnerabilities
         shell: pwsh
         run: |
-          foreach ($root in @('scripts/typecheck', 'scripts/lint', 'scripts/codemirror')) {
+          foreach ($root in @('scripts/typecheck', 'scripts/lint', 'scripts/codemirror', 'scripts/vsix')) {
             npm audit --prefix $root
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }

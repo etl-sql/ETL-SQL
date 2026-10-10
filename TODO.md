@@ -677,6 +677,20 @@ report zero findings. Final candidate bootstrap, delivery, and source-control ac
 Evidence is under `artifacts/section1/contracts-bootstrap-index-*.log` and
 `contracts-bootstrap-linux-evidence/`.
 
+The unsigned VSIX toolchain now has exact dependency pins, restored-lock/license checks, and a
+repository-owned module that rejects signing and signature verification. The proprietary Microsoft
+signer and its platform binaries are absent. The archive reader checks actual identity/target metadata,
+the extension entry point, required payload hashes, unsafe/duplicate paths, and development output.
+Windows and Ubuntu exact-index archives pass fresh offline restore and real fixture-package checks
+for all four target values. Stale/missing payloads, wrong versions/targets, damaged archives, existing
+output replacement, and inconsistent installs are rejected. Dependency license exclusions have been
+removed from the extension file list. NuGet inventory lookup now honors `NUGET_PACKAGES`, keeps the
+declared version when its metadata is absent, and rejects mismatched metadata; a reproduced cached
+9.0.0 entry can no longer certify a project requesting 1.0.0. Public wrapper integration, actual bundled
+tool versions/architectures, complete payload/runtime closure, and final candidate checks remain open.
+Evidence is under `artifacts/section1/vsix-toolchain-index-*.log`, `vsix-toolchain-linux-evidence/`, and
+`nuget-inventory-reproducer/`.
+
 1. Finish the ownership audit, preparation entry point, generator bootstrap, freshness verification,
    safe obsolete-output cleanup, and build/gate integration.
 2. Verify every supported delivery path from source-only inputs, including final packages and runtime checks.
@@ -849,12 +863,17 @@ does not close build, package, runtime, or Git-index acceptance.
   Each variant must return a nonzero exit status, preserve the last accepted package, and leave no new
   artifact that appears complete. Use temporary assembly directories and guaranteed cleanup; restore
   the caller's working directory and environment, and never stop unrelated application processes.
+  Integrate the pinned unsigned toolchain in `scripts/vsix/` with every public packaging entry point;
+  keep proprietary signing dependencies excluded, signing requests rejected, and redistributed
+  dependency license files present. Refresh the toolchain/archive checks against the final candidate.
 - [ ] **Verify package version and architecture consistency.** Derive the release version and target
   architecture from the supported release inputs, and reject missing or inconsistent values. Remove
   the hard-coded version in `scripts/build-vsix.ps1` and the `0.0.0` fallback in
   `scripts/build-vsix.sh`. Verify macOS x64 and arm64 selection instead of treating every Darwin host
   as arm64. Check the extension manifest, bundled tools, VSIX target metadata, and package filename
   against the requested version and platform in every shipped variant.
+  Read the bundled tools' actual assembly versions and PE/ELF/Mach-O architecture metadata;
+  names and requested parameters alone cannot certify their contents.
 - [ ] **Integrate VS Code and UI sandbox workflows.** Ensure extension compile/package and sandbox
   startup/watch paths work without tracked generated files. Verify the VSIX includes the runtime/designer
   import closure and development reloads use the latest successful compilation. Exercise added, renamed,

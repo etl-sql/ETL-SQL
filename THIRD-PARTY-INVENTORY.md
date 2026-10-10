@@ -125,6 +125,7 @@ About screens. It is not legal advice.
 | @vitejs/plugin-react | ^6.0.3 | development | MIT | https://www.npmjs.com/package/@vitejs/plugin-react | src/etl-sql-vscode/ui/package.json |
 | @vitest/coverage-v8 | ^4.1.11 | development | MIT | https://www.npmjs.com/package/@vitest/coverage-v8 | src/etl-sql-vscode/package.json |
 | @vscode/test-electron | ^2.5.2 | development | MIT | https://www.npmjs.com/package/@vscode/test-electron | src/etl-sql-vscode/package.json |
+| @vscode/vsce | 4.0.0 | development | MIT | https://www.npmjs.com/package/@vscode/vsce | scripts/vsix/package.json |
 | @vscode/webview-ui-toolkit | ^1.4.0 | runtime | MIT | https://www.npmjs.com/package/@vscode/webview-ui-toolkit | src/etl-sql-vscode/ui/package.json |
 | clsx | ^2.1.1 | runtime | MIT | https://www.npmjs.com/package/clsx | src/etl-sql-vscode/ui/package.json |
 | eslint | ^10.6.0; 10.10.0 | development | MIT | https://www.npmjs.com/package/eslint | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json; scripts/lint/package.json |
@@ -145,6 +146,8 @@ About screens. It is not legal advice.
 | vite | ^8.1.5 | development | MIT | https://www.npmjs.com/package/vite | src/etl-sql-vscode/ui/package.json |
 | vitest | ^4.1.11 | development | MIT | https://www.npmjs.com/package/vitest | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json |
 | vscode-languageclient | ^10.0.1 | runtime | MIT | https://www.npmjs.com/package/vscode-languageclient | src/etl-sql-vscode/package.json |
+| xml2js | 0.6.2 | development | MIT | https://www.npmjs.com/package/xml2js | scripts/vsix/package.json |
+| yauzl | 3.4.0 | development | MIT | https://www.npmjs.com/package/yauzl | scripts/vsix/package.json |
 
 ## Review Notes
 

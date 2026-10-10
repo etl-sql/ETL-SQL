@@ -14,6 +14,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Add a locked unsigned VSIX toolchain and archive verification. Preserve dependency licenses and
+  reject signing requests, inconsistent installs, stale payloads, and mismatched package targets.
 - Compile Orchestrator job table actions and run overrides from strict TypeScript. Job updates and
   deletion send the loaded version; rejected writes do not produce success notices, and pending
   actions and replaced dialogs ignore duplicate or late work.
@@ -21,6 +23,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Keep third-party inventory entries on their declared NuGet versions and honor the configured
+  package cache. Reject metadata that describes a different version.
 - Generate browser DTO, route, and API contracts as a staged set. Reject stopped generator hosts,
   preserve contracts on failure, and recover interrupted promotion before asset consumers proceed.
 - Prepare browser assets before pre-push formatting and on every pre-release resume. Block

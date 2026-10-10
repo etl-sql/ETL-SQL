@@ -172,30 +172,23 @@ function parsePackageReferences() {
 }
 
 function readNuGetMetadata(packageName, desiredVersion) {
-  const packageDir = path.join(os.homedir(), '.nuget', 'packages', packageName.toLowerCase());
+  const cache = process.env.NUGET_PACKAGES || path.join(os.homedir(), '.nuget', 'packages');
+  if (!path.isAbsolute(cache)) throw new Error('NUGET_PACKAGES must be an absolute path for inventory generation.');
+  const packageDir = path.join(cache, packageName.toLowerCase());
   if (!fs.existsSync(packageDir)) return {};
-
-  let versionDir = '';
-  if (desiredVersion && !desiredVersion.includes('$(')) {
-    const candidate = path.join(packageDir, desiredVersion.toLowerCase());
-    if (fs.existsSync(candidate)) versionDir = candidate;
-  }
-
-  if (!versionDir) {
-    const dirs = fs.readdirSync(packageDir, { withFileTypes: true })
-      .filter(entry => entry.isDirectory())
-      .map(entry => path.join(packageDir, entry.name))
-      .sort();
-    versionDir = dirs[dirs.length - 1] || '';
-  }
-
-  if (!versionDir) return {};
+  if (!desiredVersion || desiredVersion.includes('$(')) return {};
+  // Another restored version cannot certify the version selected by these projects.
+  const versionDir = path.join(packageDir, desiredVersion.toLowerCase());
+  if (!fs.existsSync(versionDir)) return {};
   const nuspec = fs.readdirSync(versionDir).find(name => name.endsWith('.nuspec'));
   if (!nuspec) return {};
 
   const text = readText(path.join(versionDir, nuspec));
+  const actualVersion = extractXmlText(text, 'version');
+  if (actualVersion.toLowerCase() !== desiredVersion.toLowerCase())
+    throw new Error(`NuGet metadata version mismatch for ${packageName}: expected ${desiredVersion}, found ${actualVersion}.`);
   return {
-    version: extractXmlText(text, 'version') || desiredVersion,
+    version: desiredVersion,
     license: extractLicense(text),
     licenseType: extractXmlAttrFromElement(text, 'license', 'type'),
     projectUrl: extractXmlText(text, 'projectUrl'),
@@ -237,7 +230,8 @@ function parseNpmPackages() {
     // The browser type gate's pinned toolchain. Same TypeScript the extension uses, declared
     // separately because it is installed at a different place and could drift from it.
     'scripts/typecheck/package.json',
-    'scripts/lint/package.json'
+    'scripts/lint/package.json',
+    'scripts/vsix/package.json'
   ].map(file => path.join(repoRoot, file)).filter(fs.existsSync);
 
   const packages = new Map();
@@ -261,6 +255,15 @@ function parseNpmPackages() {
 function addNpmDeps(packages, deps, usage, source, lock) {
   for (const [name, version] of Object.entries(deps)) {
     const locked = lock.packages?.[`node_modules/${name}`];
+    // This is ETL-SQL code, not Microsoft's proprietary package with the same import name.
+    // Keep the exclusion exact so a new local dependency cannot hide from the license inventory.
+    if (source === 'scripts/vsix/package.json' && name === '@vscode/vsce-sign' &&
+        version === 'file:./unsigned-signing' && locked?.link === true && locked.resolved === 'unsigned-signing') {
+      const replacement = lock.packages?.['unsigned-signing'];
+      if (replacement?.name !== name || replacement.license !== 'Apache-2.0')
+        throw new Error('Invalid repository-owned VSIX signing replacement in the lockfile.');
+      continue;
+    }
     if (typeof locked?.license !== 'string' || !locked.license) {
       throw new Error(`Missing locked license for ${name} in ${source.replace('package.json', 'package-lock.json')}.`);
     }

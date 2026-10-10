@@ -130,6 +130,13 @@ exact pins alongside the extension and UI version ranges.
 Its transitive `brace-expansion` dependency is locked to 5.0.12 (MIT), which includes
 the nested-brace recursion and quadratic rewrite security fixes.
 
+The unsigned VSIX toolchain in `scripts/vsix/package.json` pins `@vscode/vsce` 4.0.0,
+`yauzl` 3.4.0, and `xml2js` 0.6.2, each under MIT. The packager's proprietary
+`@vscode/vsce-sign` dependency and its platform binaries are excluded. An Apache-2.0
+module authored in this repository supplies that import and rejects all signing and
+signature-verification requests. It contains no Microsoft signing implementation.
+These tools run during builds and archive checks; they do not ship inside the extension.
+
 The extension and UI use Vitest 4.1.11 (MIT). The extension's security overrides also use patched
 brace-expansion, Undici and js-yaml releases, all under MIT. The webview's single-file build uses
 the existing Vite plugin API in repository code; vite-plugin-singlefile and its micromatch/braces
