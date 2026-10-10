@@ -165,7 +165,7 @@ alongside §1.1; they do not authorize untracking handwritten JavaScript.
   the unowned-objects dialog in `orchestrator.html` has no opener and is not wired; the Orchestrator
   service's own `/management/stop` checks only the API key; a job created in shared-schedule mode
   still also sends its inline interval; and the panel has not been reviewed visually.
-- [ ] Catalog/home page composition (`pages/index.js`).
+- [x] Catalog/home page composition (`pages/index.js`).
   Reader subscriptions now have strict owners (2026-10-11): `reader-subscriptions.ts` and its view
   module reuse the administrator page's subscription client, validators, and parameter editor, whose
   field rows moved to `subscription-parameter-fields.ts`. The production page now runs in the sandbox
@@ -176,8 +176,12 @@ alongside §1.1; they do not authorize untracking handwritten JavaScript.
   dependency, and history dialogs. The first-run form uses the shared parameter fields, so the
   page's own parameter helpers are gone. Sixteen sandbox checks (mutation-tested) and the report
   viewer consumer check pass.
-  Remaining in `pages/index.js` (about 950 lines): the library (folder tree, lists, search,
-  favorites, recently viewed) and the page owner with hash routing and governance mounting.
+  The library and the page owner are now strict TypeScript (2026-10-11): `report-library.ts`, its
+  view module, `governance-access.ts`, and `BrowserSources/pages/index.ts`. No handwritten catalog
+  page JavaScript remains. One view owns the main area at a time, role gating for governance is a
+  pure module that the boundary check executes for every role and route, and the folder tree renders
+  the nested tree the server sends. Twelve sandbox checks (mutation-tested) and the report library
+  consumer check pass. Governance views are now disposed when another view takes over the page.
 
 **Whole-tree lane check (2026-10-10):** The first full runs against the complete change found the
 lanes red. Portal.Tests failed 21 of 1,535: the snake_case migration could not be applied on

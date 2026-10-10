@@ -83,6 +83,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Report unavailable Orchestrator schedule and notification catalogs as unavailable. A failed or
   refused read returned an empty list, so the page showed "No shared schedules defined yet" and a
   count of zero. The Portal now answers 503 or 403, and the page clears stale rows and counts.
+- Show subfolders in the reader's folder tree. The server returns folders nested under their
+  parents, but the catalog page read the list as flat and discarded each folder's children, so a
+  subfolder could be reached only through search.
+- Stop the catalog page from loading for someone who is not signed in. The page redirected to the
+  login page and then kept running and calling the API.
+- Keep one view in charge of the catalog page. The library, report viewer, subscriptions, and
+  governance views shared the main area with no owner, so a slow read from a view the reader had
+  left could replace the one they were looking at. A library view that cannot be read now shows the
+  server's reason with a retry, and the folder tree reports a failure and reloads.
+- Keep the folder search box in place while typing. Each keystroke redrew the whole list, including
+  the box being typed in. A favorite is now set once per click and shown after the service accepts it.
 - Stop a finished report run from pulling the reader back to a page they left. The wait kept
   polling for up to three minutes after the reader opened another view, then replaced that view
   with the report. Leaving the viewer now ends the wait; the run still completes on the server.

@@ -287,7 +287,7 @@ try {
   // <script type="module"> block into wwwroot/js/pages/index.js, so reading the .html alone
   // would assert over the half of the page that no longer carries it.
   const portalIndex = readPortalPage('index');
-  for (const expectedText of ['#governance/overview', '#governance/lineage', 'createGovernancePortal', 'showGovernanceCatalog']) {
+  for (const expectedText of ['#governance/overview', '#governance/lineage', 'createGovernancePortal', 'resolveGovernanceRoute']) {
     if (!portalIndex.includes(expectedText)) {
       throw new Error(`Portal governance routing missing: ${expectedText}`);
     }

@@ -16,6 +16,17 @@ export function makeReaderPageSandbox(fixtureId = 'healthy') {
     8: [{ name: 'Product', type: 'TEXT', default: null, required: true, description: null }],
     9: []
   };
+  // The folder tree is nested, as the server sends it: Finance contains Quarterly.
+  const folders = [{ id: 1, parentId: null, name: 'Finance', path: '/Finance', version: 1, children: [
+    { id: 2, parentId: 1, name: 'Quarterly', path: '/Finance/Quarterly', version: 1, children: [] }] },
+  { id: 3, parentId: null, name: 'Operations', path: '/Operations', version: 1, children: [] }];
+  const favorites = new Set([9]);
+  const listed = (id, folderId, name, extra = {}) => ({ id, folderId, name, description: `${name} report`, path: `/Finance/${name}`,
+    isFavorite: favorites.has(id), isStale: false, scriptChanged: false, snapshotBuiltAt: '2026-10-09T05:00:00Z', lastViewedAt: null,
+    lastRefreshStatus: null, lastRefreshError: null, lastRefreshCompletedAt: null, ...extra });
+  const library = () => [listed(7, 1, 'Regional sales', { isStale: true, snapshotBuiltAt: '2026-10-01T05:00:00Z' }),
+    listed(8, 1, 'Margin by product', { snapshotBuiltAt: null, lastRefreshStatus: 'Failed', lastRefreshError: 'Timeout', lastRefreshCompletedAt: '2026-10-09T06:00:00Z' }),
+    listed(10, 1, 'Accounts <i>aging</i>', { description: 'Open receivables by age' }), listed(9, 2, 'Inventory aging')];
   // Report 7 has a snapshot; report 8 has none until a run completes. Report 9 has no parameters.
   const snapshots = new Set([7, 9]);
   let runState = 'Completed', runs = 0, polls = 0;
@@ -39,8 +50,28 @@ export function makeReaderPageSandbox(fixtureId = 'healthy') {
       if (method === 'GET' && readsPaused && path.includes(readsPaused)) await new Promise(resolve => pendingReads.push(resolve));
       if (path === '/api/portal/branding') return json({ displayName: 'ETL-SQL Portal', footerText: 'Sandbox', logoUrl: null });
       if (path === '/api/portal/navigation') return json([]);
-      if (path === '/api/folders') return json([]);
-      if (path === '/api/catalog/favorites' || path === '/api/catalog/recent') return json([]);
+      if (path === '/api/folders') return failure === 'folders-unavailable' ? json({ error: 'The folder index is rebuilding.' }, 503) : json(folders);
+      const folderReports = /^\/api\/folders\/(\d+)\/reports$/.exec(path);
+      if (folderReports) return failure === 'folder-unavailable' ? json({ error: 'Folder permissions are being rebuilt.' }, 503)
+        : json(library().filter(item => item.folderId === Number(folderReports[1])));
+      if (path === '/api/catalog/consumer-home') return failure === 'home-unavailable' ? json({ error: 'The catalog index is offline.' }, 503)
+        : json({ favorites: library().filter(item => item.isFavorite), recent: library().filter(item => item.id === 7), featured: [], popular: [] });
+      if (path === '/api/catalog/favorites') return json(library().filter(item => item.isFavorite));
+      if (path === '/api/catalog/recent') return json(library().filter(item => item.id === 7 || item.id === 9));
+      if (path === '/api/catalog/search') {
+        if (failure === 'search-unavailable') return json({ error: 'The search index is offline.' }, 503);
+        const wanted = (url.searchParams.get('q') || '').toLowerCase();
+        return json([...folders.flatMap(folder => [folder, ...folder.children]).filter(folder => folder.name.toLowerCase().includes(wanted))
+          .map(folder => ({ type: 'Folder', id: folder.id, name: folder.name, path: folder.path })),
+        ...library().filter(item => item.name.toLowerCase().includes(wanted)).map(item => ({ type: 'Report', ...item }))]);
+      }
+      const favorite = /^\/api\/reports\/(\d+)\/favorite$/.exec(path);
+      if (favorite) {
+        if (writesPaused) await new Promise(resolve => pendingWrites.push(resolve));
+        if (failure === 'favorite-failed') return json({ error: 'Favorites are read-only during maintenance.' }, 503);
+        if (method === 'POST') favorites.add(Number(favorite[1])); else favorites.delete(Number(favorite[1]));
+        return new Response(null, { status: 204 });
+      }
       if (path === '/api/catalog/lineage/downstream') {
         if (url.searchParams.get('table') === 'customers' && failure === 'downstream-partial') return json({ error: 'Lineage catalog is rebuilding.' }, 503);
         return json(url.searchParams.get('table') === 'orders' ? [{ reportId: 9, reportName: 'Inventory aging', lastSeen: '2026-10-09T05:00:00Z' }] : []);
