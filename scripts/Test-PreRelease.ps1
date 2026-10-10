@@ -116,6 +116,7 @@ $PowerShellExe = Get-PowerShellExecutable
 function Get-PlannedPreReleasePhases {
     $phases = New-Object System.Collections.Generic.List[object]
 
+    $phases.Add([ordered]@{ Phase = "Asset preparation"; Command = "node .\scripts\sync-assets.js"; Reason = "Generate browser assets before checks and builds consume them." })
     $phases.Add([ordered]@{ Phase = "Asset drift check"; Command = "node .\scripts\sync-assets.js -Check"; Reason = "Shared report runtime files must match generated host copies." })
     $phases.Add([ordered]@{ Phase = "Changelog compilation"; Command = ".\scripts\Compile-Changelog.ps1"; Reason = "Any feature-branch changelog fragments are compiled into CHANGELOG.md." })
     $phases.Add([ordered]@{ Phase = "Secret scan"; Command = "node scripts/scan-secrets.js"; Reason = "No real credentials (keys/provider tokens) reach the public repo — early local tripwire ahead of GitGuardian." })
@@ -432,9 +433,10 @@ function Get-PreReleasePhaseDependencies {
     param([string]$Name)
 
     switch ($Name) {
-        "Dotnet build" { return @("Dotnet restore") }
+        "Asset drift check" { return @("Asset preparation") }
+        "Dotnet build" { return @("Dotnet restore", "Asset preparation", "Asset drift check") }
         "Test structure audit" { return @("Dotnet build") }
-        "Format verify" { return @("Dotnet restore") }
+        "Format verify" { return @("Dotnet restore", "Asset preparation", "Asset drift check") }
         "Smoke lane" { return @("Dotnet build") }
         "Fast lane" { return @("Dotnet build") }
         "Engine lane" { return @("Dotnet build") }
@@ -449,9 +451,9 @@ function Get-PreReleasePhaseDependencies {
         "Release publish artifacts" { return @("Dotnet build") }
         "Windows MSI" { return @("Release publish artifacts") }
         "VS Code npm audit" { return @("VS Code npm ci", "VS Code UI npm ci") }
-        "VS Code compile" { return @("VS Code npm ci") }
+        "VS Code compile" { return @("VS Code npm ci", "Asset preparation", "Asset drift check") }
         "VS Code lint" { return @("VS Code npm ci") }
-        "VS Code VSIX package" { return @("VS Code npm ci", "VS Code compile") }
+        "VS Code VSIX package" { return @("VS Code npm ci", "VS Code compile", "VS Code UI build", "Asset drift check") }
         "VS Code unit tests" { return @("VS Code npm ci", "VS Code compile") }
         "VS Code UI lint" { return @("VS Code UI npm ci") }
         "VS Code UI build" { return @("VS Code UI npm ci") }
@@ -577,27 +579,9 @@ function Invoke-LoggedPhase {
         [hashtable]$PreviousPhaseMap,
         [string]$Fingerprint,
         [System.Collections.Generic.List[object]]$Results,
-        [string[]]$Artifacts = @()
+        [string[]]$Artifacts = @(),
+        [switch]$AlwaysRun
     )
-
-    if ($Resume -and $PreviousPhaseMap.ContainsKey($Name)) {
-        $previous = $PreviousPhaseMap[$Name]
-        if (Test-PreReleasePhaseReusable -PreviousPhase $previous -Command $Command) {
-            $Results.Add([ordered]@{
-                name = $Name
-                command = $Command
-                status = "Passed"
-                elapsedSeconds = 0
-                log = $previous.log
-                artifacts = @($previous.artifacts)
-                note = "Reused by -Resume; matching command passed for this source fingerprint and its log exists."
-            })
-            $hasAnyFailure = $Results | Where-Object { $_.status -eq "Failed" }
-            Save-State -Results $Results.ToArray() -Status $(if ($hasAnyFailure) { "Failed" } else { "Running" }) -Fingerprint $Fingerprint
-            Write-Host "SKIP $Name" -ForegroundColor DarkGray
-            return
-        }
-    }
 
     $failedDependencies = @(Get-FailedPreReleasePrerequisites -Name $Name -Results $Results)
     if ($failedDependencies.Count -gt 0) {
@@ -619,6 +603,25 @@ function Invoke-LoggedPhase {
         Save-State -Results $Results.ToArray() -Status $(if ($hasAnyFailure) { "Failed" } else { "Running" }) -Fingerprint $Fingerprint
         Write-Host "SKIP $Name - $note" -ForegroundColor DarkGray
         return
+    }
+
+    if ($Resume -and -not $AlwaysRun -and $PreviousPhaseMap.ContainsKey($Name)) {
+        $previous = $PreviousPhaseMap[$Name]
+        if (Test-PreReleasePhaseReusable -PreviousPhase $previous -Command $Command) {
+            $Results.Add([ordered]@{
+                name = $Name
+                command = $Command
+                status = "Passed"
+                elapsedSeconds = 0
+                log = $previous.log
+                artifacts = @($previous.artifacts)
+                note = "Reused by -Resume; matching command passed for this source fingerprint and its log exists."
+            })
+            $hasAnyFailure = $Results | Where-Object { $_.status -eq "Failed" }
+            Save-State -Results $Results.ToArray() -Status $(if ($hasAnyFailure) { "Failed" } else { "Running" }) -Fingerprint $Fingerprint
+            Write-Host "SKIP $Name" -ForegroundColor DarkGray
+            return
+        }
     }
 
     Write-Host ""
@@ -928,10 +931,15 @@ $spillAllocationOutput = Join-Path (Split-Path -Parent $standardBaselineReport) 
 $spillAllocationJson = Join-Path $spillAllocationOutput ("profile-10000000rows-{0}.json" -f ((& git -C $RepoRoot rev-parse --short HEAD).Trim()))
 
 try {
+    Invoke-LoggedPhase "Asset preparation" `
+        "node .\scripts\sync-assets.js" `
+        { & node ".\scripts\sync-assets.js" } `
+        $previousPhaseMap $fingerprint $results -AlwaysRun
+
     Invoke-LoggedPhase "Asset drift check" `
         "node .\scripts\sync-assets.js -Check" `
         { & node ".\scripts\sync-assets.js" "-Check" } `
-        $previousPhaseMap $fingerprint $results
+        $previousPhaseMap $fingerprint $results -AlwaysRun
 
     Invoke-LoggedPhase "Changelog compilation" `
         ".\scripts\Compile-Changelog.ps1" `

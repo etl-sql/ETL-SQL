@@ -104,6 +104,7 @@ show_pre_release_plan() {
     echo
 
     local i=1
+    print_plan_phase "$i" "Asset preparation" "node ./scripts/sync-assets.js" "Generate browser assets before verification and build."; i=$((i + 1))
     print_plan_phase "$i" "Asset drift check" "node ./scripts/sync-assets.js -Check" "Shared report runtime files must match generated host copies."; i=$((i + 1))
     print_plan_phase "$i" "Shell script line endings check" "node scripts/check-shell-line-endings.js" "Shell scripts (.sh) must use LF line endings to avoid bash syntax errors."; i=$((i + 1))
     print_plan_phase "$i" "Secret scan" "node scripts/scan-secrets.js" "No real credentials (keys/provider tokens) reach the public repo — early local tripwire ahead of GitGuardian."; i=$((i + 1))
@@ -389,20 +390,10 @@ sbom_generation_phase() {
 }
 
 # ---------------------------------------------------------------------------
-# Source fingerprint — SHA-256 of HEAD + working-tree status
+# Source fingerprint — candidate commit, tracked diff, and untracked file contents
 # ---------------------------------------------------------------------------
 get_fingerprint() {
-    local head status text
-    head="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
-    status="$(git -C "$REPO_ROOT" status --short 2>/dev/null || true)"
-    text="$head"$'\n'"$status"
-    if command -v sha256sum &>/dev/null; then
-        printf '%s' "$text" | sha256sum | cut -d' ' -f1
-    elif command -v shasum &>/dev/null; then
-        printf '%s' "$text" | shasum -a 256 | cut -d' ' -f1
-    else
-        echo "ERROR: sha256sum or shasum is required." >&2; exit 1
-    fi
+    node "$SCRIPT_DIR/source-fingerprint.mjs" "$REPO_ROOT"
 }
 
 FINGERPRINT="$(get_fingerprint)"
@@ -480,8 +471,9 @@ run_phase() {
     shift 2
     # Remaining args: command + arguments to execute
 
-    # Resume: skip if this phase passed in the previous run with the same fingerprint
-    if [[ "$RESUME" == true ]] && is_phase_passed "$name"; then
+    # Generated outputs can be missing or edited without changing the source fingerprint.
+    # Preparation and verification therefore run on every resume.
+    if [[ "$RESUME" == true && "$name" != "Asset preparation" && "$name" != "Asset drift check" ]] && is_phase_passed "$name"; then
         echo "${GRAY}SKIP $name${RESET}"
         RESULT_OBJECTS+=("{\"name\":$(json_str "$name"),\"command\":$(json_str "$command_label"),\"status\":\"Skipped\",\"elapsedSeconds\":0,\"log\":\"\",\"note\":\"Skipped by --resume; previous phase passed for this source fingerprint.\"}")
         save_state "Running"
@@ -620,6 +612,10 @@ fi
 # ---------------------------------------------------------------------------
 # Phases
 # ---------------------------------------------------------------------------
+run_phase "Asset preparation" \
+    "node ./scripts/sync-assets.js" \
+    node "./scripts/sync-assets.js"
+
 run_phase "Asset drift check" \
     "node ./scripts/sync-assets.js -Check" \
     node "./scripts/sync-assets.js" "-Check"

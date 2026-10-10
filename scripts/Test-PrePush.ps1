@@ -21,6 +21,10 @@ Write-Host " ETL-SQL FAST PRE-PUSH VALIDATION" -ForegroundColor Cyan
 Write-Host " Validates current sources before pushing" -ForegroundColor Cyan
 Write-Host "=======================================================" -ForegroundColor Cyan
 
+Write-Host "Preparing browser assets..." -ForegroundColor White
+& node (Join-Path $ScriptRoot "sync-assets.js")
+if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed. Run npm ci --prefix scripts/typecheck first.' }
+
 # 1. Code Formatting
 if (-not $SkipFormat) {
     Write-Host "[1/13] Verifying code formatting..." -ForegroundColor White

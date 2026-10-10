@@ -21,6 +21,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Prepare browser assets before pre-push formatting and on every pre-release resume. Block
+  cached consumers after failed prerequisites and fingerprint dirty source contents with UTF-8 paths.
 - Prepare browser assets before smoke and test-lane runs. In no-build mode, reject stale
   sources and missing host outputs without repairing prepared assets.
 - Prepare browser assets before either debug build script invokes .NET. Preserve checkout

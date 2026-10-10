@@ -97,6 +97,109 @@ public sealed class ReleasePolicyHelperTests
         Assert.Equal("False", result.Output.Trim());
     }
 
+    private const string PhaseRunnerFixture = """
+        $source = Join-Path (Split-Path -Parent (Get-Command Test-PreReleasePhaseReusable).ScriptBlock.File) 'Test-PreRelease.ps1'
+        $tokens = $null; $parseErrors = $null
+        $ast = [Management.Automation.Language.Parser]::ParseFile($source, [ref]$tokens, [ref]$parseErrors)
+        if ($parseErrors.Count) { throw ($parseErrors -join '; ') }
+        foreach ($name in @('Get-PreReleasePhaseDependencies', 'Get-FailedPreReleasePrerequisites', 'Invoke-LoggedPhase')) {
+            $definition = $ast.FindAll({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
+            if ($definition.Count -ne 1) { throw "Missing phase function: $name" }
+            . ([scriptblock]::Create($definition[0].Extent.Text))
+        }
+        function Save-State { }
+        function Start-PhaseWatchdog { return $null }
+        function Stop-PhaseWatchdog { return $null }
+        $temporaryBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar)
+        $RunDir = [IO.Path]::GetFullPath((Join-Path $temporaryBase ('etlsql-release-phase-' + [guid]::NewGuid().ToString('N'))))
+        function Remove-PhaseFixture {
+            if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($RunDir)) -ne $temporaryBase) { throw 'Fixture cleanup escaped the temporary directory' }
+            Remove-Item -LiteralPath $RunDir -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $RunDir | Out-Null
+        $RepoRoot = $RunDir
+        $Resume = $true
+        $fingerprint = 'fixture-source'
+        $results = [Collections.Generic.List[object]]::new()
+        $previousLog = Join-Path $RunDir 'previous.log'
+        Set-Content -LiteralPath $previousLog -Value 'Earlier successful execution'
+        $marker = Join-Path $RunDir 'executed.txt'
+        """;
+
+    [Theory]
+    [InlineData("Asset preparation")]
+    [InlineData("Asset drift check")]
+    public async Task Resume_ExecutesAssetPhasesDespitePreviousSuccess(string phase)
+    {
+        var result = await RunHelper(PhaseRunnerFixture + $$"""
+
+            try {
+                function node { Set-Content -LiteralPath $marker -Value 'Executed'; $global:LASTEXITCODE = 0 }
+                $command = $ast.FindAll({ param($node)
+                    $node -is [Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Invoke-LoggedPhase' -and
+                    $node.CommandElements[1].Value -eq '{{phase}}'
+                }, $true)
+                if ($command.Count -ne 1) { throw 'Missing asset phase invocation' }
+                $previousPhaseMap = @{ '{{phase}}' = @{status='Passed'; command=$command[0].CommandElements[2].Value; log=$previousLog; artifacts=@()} }
+                . ([scriptblock]::Create($command[0].Extent.Text))
+                'RESULT|' + (Test-Path -LiteralPath $marker) + '|' + $results[0].status
+            } finally { Remove-PhaseFixture }
+            """);
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains("RESULT|True|Passed", result.Output);
+    }
+
+    [Theory]
+    [InlineData("Dotnet build", "Asset preparation")]
+    [InlineData("Format verify", "Asset drift check")]
+    [InlineData("VS Code compile", "Asset drift check")]
+    [InlineData("VS Code VSIX package", "VS Code UI build")]
+    public async Task Resume_FailedPrerequisiteBlocksPreviouslyPassedConsumer(string phase, string prerequisite)
+    {
+        var result = await RunHelper(PhaseRunnerFixture + $$"""
+
+            try {
+                $results.Add(@{name='{{prerequisite}}'; status='Failed'; note='Fixture failure'})
+                $previousPhaseMap = @{ '{{phase}}' = @{status='Passed'; command='consumer'; log=$previousLog; artifacts=@()} }
+                Invoke-LoggedPhase -Name '{{phase}}' -Command 'consumer' -Action { Set-Content -LiteralPath $marker -Value 'Unexpected' } `
+                    -PreviousPhaseMap $previousPhaseMap -Fingerprint $fingerprint -Results $results
+                'RESULT|' + (Test-Path -LiteralPath $marker) + '|' + $results[1].status + '|' + $results[1].note
+            } finally { Remove-PhaseFixture }
+            """);
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains("RESULT|False|Skipped|Skipped because prerequisite", result.Output);
+        Assert.Contains(prerequisite, result.Output);
+    }
+
+    [Fact]
+    public async Task PrePush_PreparesBeforeInvokingDotnetFormat()
+    {
+        var result = await RunHelper("""
+            function node { Write-Output 'TRACE|prepare'; $global:LASTEXITCODE = 0 }
+            function dotnet { Write-Output 'TRACE|format'; throw 'Stop at the formatting boundary' }
+            $script = Join-Path (Split-Path -Parent (Get-Command Test-PreReleasePhaseReusable).ScriptBlock.File) 'Test-PrePush.ps1'
+            & $script
+            """);
+        Assert.NotEqual(0, result.ExitCode);
+        var prepare = result.Output.IndexOf("TRACE|prepare", StringComparison.Ordinal);
+        var format = result.Output.IndexOf("TRACE|format", StringComparison.Ordinal);
+        Assert.True(prepare >= 0 && format > prepare, result.Output);
+    }
+
+    [Fact]
+    public async Task PrePush_StopsBeforeFormatWhenPreparationFails()
+    {
+        var result = await RunHelper("""
+            function node { Write-Output 'TRACE|prepare'; $global:LASTEXITCODE = 7 }
+            function dotnet { Write-Output 'TRACE|unexpected-format' }
+            $script = Join-Path (Split-Path -Parent (Get-Command Test-PreReleasePhaseReusable).ScriptBlock.File) 'Test-PrePush.ps1'
+            & $script
+            """);
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("Browser asset preparation failed", result.Output);
+        Assert.DoesNotContain("TRACE|unexpected-format", result.Output);
+    }
+
     [Theory]
     [InlineData("Passed! - Failed: 0, Passed: 12, Skipped: 0, Total: 12", true)]
     [InlineData("Total tests: 12\n     Passed: 12", true)]
@@ -129,28 +232,33 @@ public sealed class ReleasePolicyHelperTests
         Assert.Equal(expected.ToString(), result.Output.Trim());
     }
 
-    [Fact]
-    public async Task Fingerprint_ChangesWhenAlreadyDirtyFilesChangeAgain()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Fingerprint_ChangesWhenAlreadyDirtyFilesChangeAgain(bool bashFingerprint)
     {
         var repository = Path.Combine(Path.GetTempPath(), $"etlsql_fingerprint_{Guid.NewGuid():N}");
         Directory.CreateDirectory(repository);
         try
         {
-            var result = await RunHelper("""
+            var fingerprint = bashFingerprint
+                ? "& node (Join-Path (Split-Path -Parent (Get-Command Test-PreReleasePhaseReusable).ScriptBlock.File) 'source-fingerprint.mjs') $PWD.Path"
+                : "Get-ReleaseSourceFingerprint -RepoRoot $PWD.Path";
+            var result = await RunHelper($$"""
                 git init --quiet
                 Set-Content -LiteralPath tracked.txt -Value original
                 git add tracked.txt
                 git -c user.name=ReleasePolicyTests -c user.email=release-policy@example.invalid commit --quiet -m foundation
                 if ($LASTEXITCODE -ne 0) { throw 'fixture commit failed' }
                 Set-Content -LiteralPath tracked.txt -Value first
-                $first = Get-ReleaseSourceFingerprint -RepoRoot $PWD.Path
+                $first = {{fingerprint}}
                 Set-Content -LiteralPath tracked.txt -Value second
-                $second = Get-ReleaseSourceFingerprint -RepoRoot $PWD.Path
+                $second = {{fingerprint}}
                 if ($first -eq $second) { throw 'Tracked edits did not change the fingerprint' }
-                Set-Content -LiteralPath untracked.txt -Value first
-                $third = Get-ReleaseSourceFingerprint -RepoRoot $PWD.Path
-                Set-Content -LiteralPath untracked.txt -Value second
-                $fourth = Get-ReleaseSourceFingerprint -RepoRoot $PWD.Path
+                Set-Content -LiteralPath 'untracked espace-é-$value.txt' -Value first
+                $third = {{fingerprint}}
+                Set-Content -LiteralPath 'untracked espace-é-$value.txt' -Value second
+                $fourth = {{fingerprint}}
                 if ($third -eq $fourth) { throw 'Untracked edits did not change the fingerprint' }
                 Write-Output verified
                 """, repository);
@@ -159,6 +267,7 @@ public sealed class ReleasePolicyHelperTests
         }
         finally
         {
+            Assert.Equal(Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar), Path.GetDirectoryName(Path.GetFullPath(repository)));
             foreach (var file in Directory.EnumerateFiles(repository, "*", SearchOption.AllDirectories))
                 File.SetAttributes(file, FileAttributes.Normal);
             Directory.Delete(repository, recursive: true);

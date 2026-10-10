@@ -652,6 +652,16 @@ the invocation contract; final native lanes remain open. Evidence is under
 `artifacts/section1/test-entrypoints-before.log`, `test-entrypoints-no-build-before.log`, and
 `test-entrypoints-linux-evidence/`.
 
+Pre-push preparation now precedes formatting. Pre-release asset preparation and verification always
+execute on resume; failed prerequisites block reuse of earlier successful consumers. Bash source
+fingerprints include tracked diffs and untracked contents, and PowerShell preserves UTF-8 Git paths.
+Focused policy tests cover repeated dirty-source edits, Unicode paths, phase execution, failure
+propagation, and pre-push ordering. Full pre-release and package certification remain open.
+The isolated staged archive passes 40 release-policy checks; the eight new ordering/resume checks
+fail against the old scripts. Ubuntu resume/content-hash probes pass. Evidence is under
+`artifacts/section1/release-entrypoints-index-tests.log`, `release-entrypoints-before.log`, and
+`release-entrypoints-linux-proof.log`.
+
 1. Finish the ownership audit, preparation entry point, generator bootstrap, freshness verification,
    safe obsolete-output cleanup, and build/gate integration.
 2. Verify every supported delivery path from source-only inputs, including final packages and runtime checks.

@@ -364,6 +364,11 @@ mode verifies preparation without repairing it and stops before .NET when source
 These checkout workflows need the restored browser compiler in either mode. Run
 `node scripts/test-asset-generation.mjs --entrypoints-only` for focused build/test wrapper checks.
 
+Pre-push prepares before formatting. Both pre-release scripts prepare and verify assets on every resume,
+including quick runs. Node/compiler restoration is still required when VS Code checks are skipped.
+Failed preparation blocks consuming phases even when a prior run passed them. Resume fingerprints include
+tracked changes and untracked file contents, so editing an already dirty source invalidates old evidence.
+
 The preparation manifest fingerprints retained Portal markup, styles, and images, declarations and
 contract schemas, generator code and helpers, compiler configuration/locks, and host asset-selection
 files. Put generator helpers under `scripts/lib`; new or removed helpers enter freshness checks

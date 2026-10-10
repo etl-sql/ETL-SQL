@@ -35,18 +35,28 @@ function Test-PreReleasePhaseReusable {
 function Get-ReleaseSourceFingerprint {
     param([Parameter(Mandatory)][string]$RepoRoot)
 
-    $head = & git -C $RepoRoot rev-parse HEAD 2>$null
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot fingerprint the candidate commit.' }
-    $diff = & git -C $RepoRoot diff --binary HEAD -- 2>$null
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot fingerprint tracked candidate changes.' }
-    $untracked = @(& git -C $RepoRoot -c core.quotePath=false ls-files --others --exclude-standard 2>$null)
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot fingerprint untracked candidate files.' }
-    $entries = @($head; $diff; foreach ($path in $untracked) {
-        $hash = (Get-FileHash -LiteralPath (Join-Path $RepoRoot $path) -Algorithm SHA256).Hash
-        "$path $hash"
-    })
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes($entries -join "`n")
-    return [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+    $previousConsoleEncoding = [Console]::OutputEncoding
+    $previousPipeEncoding = $OutputEncoding
+    try {
+        # Git emits UTF-8 paths; the Windows console's OEM encoding must not change their names.
+        [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+        $OutputEncoding = [Console]::OutputEncoding
+        $head = & git -C $RepoRoot rev-parse HEAD 2>$null
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot fingerprint the candidate commit.' }
+        $diff = & git -C $RepoRoot diff --binary HEAD -- 2>$null
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot fingerprint tracked candidate changes.' }
+        $untracked = @(& git -C $RepoRoot -c core.quotePath=false ls-files --others --exclude-standard 2>$null)
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot fingerprint untracked candidate files.' }
+        $entries = @($head; $diff; foreach ($path in $untracked) {
+            $hash = (Get-FileHash -LiteralPath (Join-Path $RepoRoot $path) -Algorithm SHA256).Hash
+            "$path $hash"
+        })
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($entries -join "`n")
+        return [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+    } finally {
+        [Console]::OutputEncoding = $previousConsoleEncoding
+        $OutputEncoding = $previousPipeEncoding
+    }
 }
 
 function ConvertTo-StableReleaseVersion {
