@@ -1,10 +1,9 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { loadVsixToolchain } from './vsix-toolchain.cjs';
 import { setVsixExecutableModes } from './vsix-executable-modes.mjs';
-import { nodeCommandEnvironment } from './node-command-environment.mjs';
+import { runOwnedCommand } from './run-owned-command.mjs';
 
 export const vsixTargets = Object.freeze({
     'win-x64': 'win32-x64', 'linux-x64': 'linux-x64',
@@ -18,7 +17,8 @@ export function resolveVsixPlatform(requested, host = process.platform, architec
     return { platform, target: vsixTargets[platform] };
 }
 
-export async function createUnsignedVsix(root, assembly, output, target, { executables = [] } = {}) {
+export async function createUnsignedVsix(root, assembly, output, target, { executables = [], signal } = {}) {
+    signal?.throwIfAborted();
     const tools = loadVsixToolchain(root);
     if (!Object.values(vsixTargets).includes(target)) throw new Error(`Unsupported VSIX target: ${target}.`);
     for (const value of [assembly, output]) if (!path.isAbsolute(value)) throw new Error('VSIX assembly and output paths must be absolute.');
@@ -27,32 +27,45 @@ export async function createUnsignedVsix(root, assembly, output, target, { execu
     if (manifest.scripts?.['vscode:prepublish']) throw new Error('Build the extension before assembly; the staged manifest must not have a prepublish script.');
     // Call the locked CLI with an argument array, never a shell/npx download fallback.
     // The staging directory has only runtime dependencies, so normal VSCE closure checks still run.
-    await new Promise((resolve, reject) => {
-        const child = spawn(process.execPath, [tools.cli, 'package', '--target', target, '--out', output,
-            '--no-git-tag-version', '--no-update-package-json'], { cwd: assembly, env: nodeCommandEnvironment(), stdio: ['ignore', 'pipe', 'pipe'] });
-        child.stdout.pipe(process.stderr);
-        child.stderr.pipe(process.stderr);
-        child.on('error', reject);
-        child.on('close', (code, signal) => code === 0 ? resolve() : reject(new Error(`VSIX assembly failed (${signal ?? code}).`)));
-    });
+    await runOwnedCommand(process.execPath, [tools.cli, 'package', '--target', target, '--out', output,
+        '--no-git-tag-version', '--no-update-package-json'], { cwd: assembly, label: 'VSIX assembly', signal });
+    signal?.throwIfAborted();
     if (!fs.statSync(output).isFile()) throw new Error('The packager did not produce a VSIX.');
-    await setVsixExecutableModes(output, executables);
+    await setVsixExecutableModes(output, executables, { signal });
 }
 
 // Read the actual archive, including binary entry hashes, without buffering a whole VSIX.
-export async function inspectVsix(root, file, { identity, target, expectedFiles, executables = [] }) {
+export async function inspectVsix(root, file, { identity, target, expectedFiles, executables = [], signal }) {
+    signal?.throwIfAborted();
     const tools = loadVsixToolchain(root);
     const hashes = new Map();
     const metadata = new Map();
     const seen = new Set();
     const executableEntries = new Set(executables.map(name => `extension/${name}`));
     await new Promise((resolve, reject) => {
-        tools.yauzl.open(file, { lazyEntries: true, strictFileNames: true, validateEntrySizes: true }, (error, zip) => {
+        tools.yauzl.open(file, { lazyEntries: true, strictFileNames: true, validateEntrySizes: true, autoClose: false }, (error, zip) => {
             if (error) return reject(error);
-            const fail = problem => { zip.close(); reject(problem); };
-            zip.on('error', fail);
-            zip.on('end', resolve);
+            let settled = false;
+            let activeStream;
+            let problem;
+            const cleanup = () => signal?.removeEventListener('abort', abort);
+            const complete = error => {
+                if (settled) return;
+                settled = true;
+                problem = error;
+                cleanup();
+                activeStream?.destroy();
+                zip.close();
+            };
+            const fail = error => complete(error);
+            const abort = () => fail(signal.reason ?? new Error('VSIX inspection cancelled.'));
+            signal?.addEventListener('abort', abort, { once: true });
+            zip.on('error', error => { if (settled) reject(error); else fail(error); });
+            // Finish after yauzl has released its file descriptor, including on cancellation.
+            zip.once('close', () => problem ? reject(problem) : resolve());
+            zip.on('end', () => complete());
             zip.on('entry', entry => {
+                if (settled) return;
                 const name = entry.fileName;
                 const segments = name.replace(/\/$/, '').split('/');
                 const key = name.replace(/\/$/, '').toLowerCase();
@@ -74,20 +87,26 @@ export async function inspectVsix(root, file, { identity, target, expectedFiles,
                 if (isMetadata && entry.uncompressedSize > 1024 * 1024) return fail(new Error(`Oversized VSIX metadata: ${name}.`));
                 zip.openReadStream(entry, (streamError, stream) => {
                     if (streamError) return fail(streamError);
+                    if (settled) { stream.destroy(); return; }
+                    activeStream = stream;
                     const hash = createHash('sha256');
                     const chunks = [];
                     stream.on('data', chunk => { hash.update(chunk); if (isMetadata) chunks.push(chunk); });
                     stream.on('error', fail);
                     stream.on('end', () => {
+                        if (settled) return;
+                        activeStream = undefined;
                         hashes.set(name, hash.digest('hex'));
                         if (isMetadata) metadata.set(name, Buffer.concat(chunks).toString('utf8'));
                         zip.readEntry();
                     });
                 });
             });
+            if (signal?.aborted) { abort(); return; }
             zip.readEntry();
         });
     });
+    signal?.throwIfAborted();
     for (const name of ['extension/package.json', 'extension.vsixmanifest', '[Content_Types].xml'])
         if (!metadata.has(name)) throw new Error(`Missing VSIX metadata: ${name}.`);
     const manifest = JSON.parse(metadata.get('extension/package.json'));
@@ -96,6 +115,7 @@ export async function inspectVsix(root, file, { identity, target, expectedFiles,
     const xmlText = metadata.get('extension.vsixmanifest');
     if (/<!DOCTYPE|<!ENTITY/i.test(xmlText)) throw new Error('VSIX metadata must not declare XML entities.');
     const xml = await tools.parseXml(xmlText);
+    signal?.throwIfAborted();
     const actual = xml.PackageManifest?.Metadata?.[0]?.Identity?.[0]?.$;
     if (actual?.Id !== identity.name || actual.Publisher !== identity.publisher ||
         actual.Version !== identity.version || actual.TargetPlatform !== target)

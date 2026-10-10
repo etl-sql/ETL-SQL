@@ -1,12 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { browserInputSignature, readOwnership, safeAssetPath } from './lib/browser-asset-inputs.cjs';
 import { loadVsixToolchain } from './lib/vsix-toolchain.cjs';
 import { createUnsignedVsix, inspectVsix, resolveVsixPlatform } from './lib/vsix-package.mjs';
-import { nodeCommandEnvironment } from './lib/node-command-environment.mjs';
+import { runOwnedCommand as runPackagingCommand } from './lib/run-owned-command.mjs';
+export { runPackagingCommand };
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tools = Object.freeze([
@@ -14,7 +14,6 @@ const tools = Object.freeze([
     ['ETL-SQL-Report', 'ETL-SQL.ReportBuilder.CLI'], ['ETL-SQL-Player', 'ETL-SQL.ReportPlayer'],
 ]);
 const excluded = new Set(['node_modules', 'obj', 'bin', 'out', 'dist', '.git', '.vscode-test', 'coverage', 'logs']);
-const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const posix = value => value.replaceAll('\\', '/');
 
 function files(directory, skip = new Set()) {
@@ -27,27 +26,6 @@ function files(directory, skip = new Set()) {
         if (entry.isDirectory()) return files(file, skip);
         if (!entry.isFile()) throw new Error(`Unsupported packaging input: ${file}.`);
         return [file];
-    });
-}
-
-export async function runPackagingCommand(command, args, { cwd, label, capture = false }) {
-    process.stderr.write(`[VSIX] ${label}\n`);
-    return await new Promise((resolve, reject) => {
-        const child = spawn(command, args, { cwd, env: nodeCommandEnvironment(), stdio: ['ignore', 'pipe', 'pipe'] });
-        const chunks = [];
-        let size = 0;
-        child.stdout.on('data', chunk => {
-            if (!capture) process.stderr.write(chunk);
-            else {
-                size += chunk.length;
-                if (size > 32 * 1024 * 1024) { child.kill(); reject(new Error(`${label}: excessive command output.`)); }
-                else chunks.push(chunk);
-            }
-        });
-        child.stderr.pipe(process.stderr);
-        child.on('error', reject);
-        child.on('close', (code, signal) => code === 0 ? resolve({ stdout: Buffer.concat(chunks).toString('utf8') }) :
-            reject(new Error(`${label} failed (${signal ?? code}).`)));
     });
 }
 
@@ -129,15 +107,24 @@ function copyTree(source, destination, accept = () => true) {
     }
 }
 
-async function hashFile(file) {
+async function hashFile(file, signal) {
     const hash = createHash('sha256');
-    for await (const bytes of fs.createReadStream(file)) hash.update(bytes);
+    for await (const bytes of fs.createReadStream(file, { signal })) hash.update(bytes);
     return hash.digest('hex');
 }
 
 // Injectable command/assembly functions let regression fixtures fail real workflow boundaries.
 // Public wrappers expose no switch that skips restoration, inspection, or archive validation.
-export async function packageVsix(options, { run = runPackagingCommand, assemble = createUnsignedVsix } = {}) {
+export async function packageVsix(options, { run: invoke = runPackagingCommand, assemble = createUnsignedVsix } = {}) {
+    const signal = options.signal;
+    signal?.throwIfAborted();
+    const run = async (command, args, detail) => {
+        signal?.throwIfAborted();
+        const result = await invoke(command, args, { ...detail, signal });
+        signal?.throwIfAborted();
+        return result;
+    };
+    const hash = file => hashFile(file, signal);
     const root = path.resolve(options.root ?? repository);
     assertNoLinks(root);
     const { platform, target } = resolveVsixPlatform(options.platform);
@@ -186,7 +173,7 @@ export async function packageVsix(options, { run = runPackagingCommand, assemble
         const deliveredInputs = new Map();
         const inspectorArtifacts = path.join(temporary, 'inspector-dotnet');
         await run('dotnet', ['build', path.join(root, 'tools/package-inspector/ETL-SQL.PackageInspector.csproj'), '-c', 'Release',
-            '--artifacts-path', inspectorArtifacts, '--nologo'], { cwd: root, label: 'build package inspector' });
+            '--artifacts-path', inspectorArtifacts, '--disable-build-servers', '--nologo'], { cwd: root, label: 'build package inspector' });
         const inspector = path.join(inspectorArtifacts, 'bin/ETL-SQL.PackageInspector/release/ETL-SQL-PackageInspector.dll');
         const published = new Map();
         for (const [name, project] of tools) {
@@ -194,7 +181,7 @@ export async function packageVsix(options, { run = runPackagingCommand, assemble
             if (options.mode === 'build') await run('dotnet', ['publish', path.join(root, `src/${project}/${project}.csproj`),
                 '-c', 'Release', '-r', platform, '--self-contained', 'true', '-p:PublishSingleFile=true',
                 '-p:IncludeNativeLibrariesForSelfExtract=true', '-p:PublishReadyToRun=true', '--artifacts-path',
-                path.join(temporary, 'publish-dotnet'), '-o', directory, '--nologo'], { cwd: root, label: `publish ${name}` });
+                path.join(temporary, 'publish-dotnet'), '-o', directory, '--disable-build-servers', '--nologo'], { cwd: root, label: `publish ${name}` });
             published.set(name, directory);
         }
         const assembly = path.join(temporary, 'extension');
@@ -209,7 +196,7 @@ export async function packageVsix(options, { run = runPackagingCommand, assemble
         for (const relative of ['resources', 'syntaxes', 'snippets', 'media']) copyTree(path.join(extension, relative), path.join(assembly, relative));
         for (const [relative, expected] of preparedOutputs) if (relative.startsWith('src/etl-sql-vscode/media/')) {
             const packaged = path.join(assembly, relative.slice('src/etl-sql-vscode/'.length));
-            if (await hashFile(packaged) !== expected) throw new Error(`Prepared extension asset changed before assembly: ${relative}.`);
+            if (await hash(packaged) !== expected) throw new Error(`Prepared extension asset changed before assembly: ${relative}.`);
         }
         copyTree(compiled, path.join(assembly, 'out'), name => !name.startsWith('test/') && !name.endsWith('.map'));
         copyTree(ui, path.join(assembly, 'ui/dist'));
@@ -227,13 +214,13 @@ export async function packageVsix(options, { run = runPackagingCommand, assemble
             const basename = name + (platform === 'win-x64' ? '.exe' : '');
             const source = path.join(published.get(name), basename);
             if (fs.lstatSync(source).isSymbolicLink()) throw new Error(`Bundled binaries must not be links: ${source}.`);
-            const sourceHash = await hashFile(source);
+            const sourceHash = await hash(source);
             const binary = path.join(assembly, 'bin', basename);
             fs.copyFileSync(source, binary);
             const result = await run('dotnet', [inspector, binary, name, identity.version, platform], { cwd: root, label: `inspect ${name}`, capture: true });
             const inspection = JSON.parse(result.stdout);
             const sqlite = ({ 'win-x64': 'e_sqlite3.dll', 'linux-x64': 'libe_sqlite3.so', 'osx-x64': 'libe_sqlite3.dylib', 'osx-arm64': 'libe_sqlite3.dylib' })[platform];
-            if (!inspection.nativeLibraries.includes(sqlite) || inspection.sha256 !== sourceHash || inspection.sha256 !== await hashFile(binary))
+            if (!inspection.nativeLibraries.includes(sqlite) || inspection.sha256 !== sourceHash || inspection.sha256 !== await hash(binary))
                 throw new Error(`Required SQLite binding or inspected binary hash is missing: ${name}.`);
             deliveredInputs.set(source, sourceHash);
             binaries.push(`bin/${basename}`);
@@ -246,13 +233,13 @@ export async function packageVsix(options, { run = runPackagingCommand, assemble
         for (const source of files(playerAssets)) {
             const relative = posix(path.relative(playerAssets, source));
             const delivered = path.join(publishedAssets, relative);
-            const expected = await hashFile(source);
-            if (fs.lstatSync(delivered).isSymbolicLink() || expected !== await hashFile(delivered))
+            const expected = await hash(source);
+            if (fs.lstatSync(delivered).isSymbolicLink() || expected !== await hash(delivered))
                 throw new Error(`Missing or stale published Player asset: ${relative}.`);
             const destination = path.join(assembly, 'bin/wwwroot', relative);
             fs.mkdirSync(path.dirname(destination), { recursive: true });
             fs.copyFileSync(delivered, destination);
-            if (await hashFile(destination) !== expected) throw new Error(`Player asset changed while copying: ${relative}.`);
+            if (await hash(destination) !== expected) throw new Error(`Player asset changed while copying: ${relative}.`);
             deliveredInputs.set(delivered, expected);
         }
         fs.copyFileSync(path.join(root, 'src/appsettings.json'), path.join(assembly, 'bin/appsettings.json'));
@@ -267,27 +254,32 @@ export async function packageVsix(options, { run = runPackagingCommand, assemble
             const relative = posix(path.relative(assembly, file));
             const required = !relative.startsWith('node_modules/') && !['README.md', '.vscodeignore'].includes(relative);
             if (required && !selectedSet.has(relative)) throw new Error(`Required payload excluded from VSIX: ${relative}.`);
-            if (selectedSet.has(relative) && relative !== 'README.md') expectedFiles[relative] = await hashFile(file);
+            if (selectedSet.has(relative) && relative !== 'README.md') expectedFiles[relative] = await hash(file);
         }
         assertInputs();
         const filename = `${identity.name}-${identity.version}-${target}.vsix`;
         const temporaryVsix = path.join(temporary, filename);
-        await assemble(root, assembly, temporaryVsix, target, { executables: binaries });
-        await inspectVsix(root, temporaryVsix, { identity, target, expectedFiles, executables: binaries });
+        await assemble(root, assembly, temporaryVsix, target, { executables: binaries, signal });
+        await inspectVsix(root, temporaryVsix, { identity, target, expectedFiles, executables: binaries, signal });
         await run(process.execPath, [path.join(root, 'scripts/sync-assets.js'), '-Check'],
             { cwd: root, label: 'verify browser assets before promotion' });
         assertInputs();
-        for (const [file, expected] of deliveredInputs) if (await hashFile(file) !== expected)
+        for (const [file, expected] of deliveredInputs) if (await hash(file) !== expected)
             throw new Error(`Published input changed during packaging: ${path.basename(file)}.`);
         const destination = workspacePath(root, path.join(outputDirectory, filename));
         if (fs.existsSync(destination) && !fs.lstatSync(destination).isFile()) throw new Error('Accepted VSIX path must be a regular file.');
         // Both files are on the same filesystem. A failed stage never deletes/replaces the accepted package.
+        signal?.throwIfAborted();
         fs.renameSync(temporaryVsix, destination);
         return destination;
     } finally {
-        if (temporary) fs.rmSync(workspacePath(root, temporary), { recursive: true, force: true });
-        fs.closeSync(lock);
-        if (fs.readFileSync(lockFile, 'utf8') === token) fs.unlinkSync(lockFile);
+        try {
+            if (temporary) fs.rmSync(workspacePath(root, temporary), { recursive: true, force: true });
+        } finally {
+            fs.closeSync(lock);
+            if (fs.existsSync(lockFile) && fs.lstatSync(lockFile).isFile() && fs.readFileSync(lockFile, 'utf8') === token)
+                fs.unlinkSync(lockFile);
+        }
     }
 }
 
@@ -306,6 +298,17 @@ export function parsePackagingArguments(args) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-    try { process.stdout.write(await packageVsix(parsePackagingArguments(process.argv.slice(2))) + '\n'); }
-    catch (error) { process.stderr.write(`[VSIX] ${error.message}\n`); process.exitCode = 1; }
+    const controller = new AbortController();
+    let cancellationCode = 0;
+    const interrupt = signal => {
+        cancellationCode = signal === 'SIGTERM' ? 143 : 130;
+        controller.abort(new Error(`VSIX packaging cancelled (${signal}).`));
+    };
+    const onInterrupt = () => interrupt('SIGINT');
+    const onTerminate = () => interrupt('SIGTERM');
+    process.on('SIGINT', onInterrupt);
+    process.on('SIGTERM', onTerminate);
+    try { process.stdout.write(await packageVsix({ ...parsePackagingArguments(process.argv.slice(2)), signal: controller.signal }) + '\n'); }
+    catch (error) { process.stderr.write(`[VSIX] ${error.message}\n`); process.exitCode = cancellationCode || 1; }
+    finally { process.removeListener('SIGINT', onInterrupt); process.removeListener('SIGTERM', onTerminate); }
 }

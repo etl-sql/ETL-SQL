@@ -3,7 +3,8 @@ import fs from 'node:fs/promises';
 // ZIP central-directory fields: https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
 // VSCE inherits host file modes. Cross-packaging on Windows needs explicit Unix executable bits.
 // Change only the metadata of our new, unsigned temporary archive; payload bytes stay untouched.
-export async function setVsixExecutableModes(file, executables) {
+export async function setVsixExecutableModes(file, executables, { signal } = {}) {
+    signal?.throwIfAborted();
     if (!executables.length) return;
     const requested = new Set(executables.map(name => `extension/${name}`));
     if (requested.size !== executables.length || executables.some(name => !/^bin\/ETL-SQL(?:-LSP|-Report|-Player)?(?:\.exe)?$/.test(name)))
@@ -12,6 +13,7 @@ export async function setVsixExecutableModes(file, executables) {
     try {
         const { size } = await archive.stat();
         const read = async (offset, length) => {
+            signal?.throwIfAborted();
             if (!Number.isSafeInteger(offset) || offset < 0 || offset + length > size) throw new Error('Invalid ZIP directory range.');
             const bytes = Buffer.alloc(length);
             let count = 0;
@@ -70,6 +72,7 @@ export async function setVsixExecutableModes(file, executables) {
         }
         if (offset !== stop || seen.size !== requested.size) throw new Error('Missing executable or invalid ZIP directory size.');
         for (const change of changes) {
+            signal?.throwIfAborted();
             const { bytesWritten } = await archive.write(change.header, 0, change.header.length, change.offset);
             if (bytesWritten !== change.header.length) throw new Error('Could not set VSIX executable modes.');
         }

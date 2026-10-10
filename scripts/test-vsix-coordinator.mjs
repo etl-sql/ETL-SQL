@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { packageVsix, packagingIdentity, packagingInputSignature, packagingNpmCli, parsePackagingArguments } from './package-vsix.mjs';
+import { packageVsix, packagingIdentity, packagingInputSignature, packagingNpmCli, parsePackagingArguments, runPackagingCommand } from './package-vsix.mjs';
+import { setTimeout as delay } from 'node:timers/promises';
 import { createUnsignedVsix, inspectVsix, resolveVsixPlatform } from './lib/vsix-package.mjs';
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -99,12 +100,24 @@ try {
     const destination = path.join(outputDirectory, `${identity.name}-${identity.version}-${host.target}.vsix`);
     const labels = [];
     let failAt;
+    let cancelAt;
+    let announceCancellation;
     let changeInputs = false;
+    const cancellationPid = path.join(temporary, 'cancellation-pid.txt');
+    const cancellableScript = write('cancellation-fixture.mjs', `import fs from 'node:fs';
+fs.writeFileSync(process.argv[2], String(process.pid));
+setInterval(() => {}, 1000);
+`);
     // Controlled build boundaries keep the failure matrix fast. Actual SDK binaries, the BCL
     // inspector, locked VSCE, streamed archive hashes, and atomic promotion run without substitution.
     const run = async (command, args, options) => {
         process.stderr.write(`[workflow boundary] ${options.label}\n`);
         labels.push(options.label);
+        if (options.label === cancelAt) {
+            announceCancellation();
+            return await runPackagingCommand(process.execPath,
+                [cancellableScript, cancellationPid], { ...options, cwd: root, capture: true });
+        }
         if (options.label === failAt) throw new Error(`Injected failure: ${failAt}.`);
         if (options.label === 'npm version') return { stdout: '10.9.9\n' };
         if (options.label.startsWith('restore ') || options.label.includes('browser assets')) return { stdout: '' };
@@ -150,6 +163,44 @@ try {
     }
     failAt = undefined;
     const accepted = fs.readFileSync(destination);
+    const cancellableStages = ['restore scripts/typecheck', 'restore scripts/vsix', 'restore src/etl-sql-vscode',
+        'restore src/etl-sql-vscode/ui', 'prepare browser assets', 'verify browser assets', 'build UI',
+        'compile extension', 'build package inspector', ...names.map(name => `publish ${name}`),
+        'runtime dependency closure', ...names.map(name => `inspect ${name}`), 'VSIX file selection'];
+    cancellableStages.push('VSIX assembly', 'verify browser assets before promotion');
+    for (const label of cancellableStages) {
+        cancelAt = label;
+        const controller = new AbortController();
+        const entered = new Promise(resolve => { announceCancellation = resolve; });
+        const assemble = label === 'VSIX assembly' ? async (_root, _assembly, output, _target, detail) => {
+            fs.writeFileSync(output, 'incomplete archive');
+            announceCancellation();
+            await runPackagingCommand(process.execPath, [cancellableScript, cancellationPid],
+                { cwd: root, label, signal: detail.signal, capture: true });
+        } : createUnsignedVsix;
+        const task = packageVsix({ ...options, signal: controller.signal }, { run, assemble });
+        try {
+            // Archive assembly and inspection finish before the final command boundary. Their
+            // duration does not belong to the startup budget for the cancellation child.
+            await Promise.race([entered, task.then(() => { throw new Error(`Stage was not reached: ${label}.`); })]);
+            const deadline = Date.now() + 15000;
+            while (!fs.existsSync(cancellationPid)) {
+                assert.ok(Date.now() < deadline, `Cancellation child did not start: ${label}.`);
+                await delay(25);
+            }
+            controller.abort(new Error('Fixture stage cancellation.'));
+            await assert.rejects(task, /Fixture stage cancellation/);
+        } finally {
+            controller.abort(new Error('Fixture stage cancellation.'));
+            await task.catch(() => {});
+            announceCancellation = undefined;
+        }
+        const pid = Number(fs.readFileSync(cancellationPid, 'utf8'));
+        assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
+        fs.unlinkSync(cancellationPid);
+        assertPreserved(accepted);
+    }
+    cancelAt = undefined;
     await assert.rejects(packageVsix(options, { run, assemble: async () => { throw new Error('Injected assembly failure.'); } }), /Injected assembly failure/);
     assertPreserved(accepted);
     changeInputs = true;
@@ -173,6 +224,12 @@ try {
         assert.ok(inspected.hashes['extension/ui/dist/index.html']);
     }
     const acceptedBeforeFinalChecks = fs.readFileSync(destination);
+    const archiveCancellation = new AbortController();
+    const archiveRejected = assert.rejects(inspectVsix(root, destination,
+        { identity, target: host.target, expectedFiles: {}, signal: archiveCancellation.signal }), /Fixture archive cancellation/);
+    const archiveTimer = setTimeout(() => archiveCancellation.abort(new Error('Fixture archive cancellation.')), 50);
+    try { await archiveRejected; } finally { clearTimeout(archiveTimer); }
+    assertPreserved(acceptedBeforeFinalChecks);
     failAt = 'verify browser assets before promotion';
     await assert.rejects(packageVsix({ ...options, mode: 'publish', binDirectory: binaries }, { run }), /Injected failure/);
     assertPreserved(acceptedBeforeFinalChecks);

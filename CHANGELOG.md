@@ -14,6 +14,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Cancel VSIX packaging commands and their descendants on Ctrl+C or SIGTERM. Wait for shutdown,
+  release archive readers, and remove owned staging and locks before returning; preserve accepted packages.
 - Route VSIX build/publish and pre-release validation through the locked unsigned coordinator.
   Build fresh UI/extension output, inspect bundled tools and assets, and validate archive hashes and
   executable modes before replacing accepted packages. Preserve developer output and reject changed inputs.

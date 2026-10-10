@@ -54,11 +54,18 @@ try {
     write('extension/README.md', '# ETL-SQL packaging fixture\n');
     const assembly = path.dirname(manifestPath);
     const cwdBefore = process.cwd();
+    const cancellation = new AbortController();
+    cancellation.abort(new Error('Cancelled archive operation.'));
+    const cancelledOutput = path.join(temporary, 'cancelled.vsix');
+    await assert.rejects(createUnsignedVsix(root, assembly, cancelledOutput, 'linux-x64', { signal: cancellation.signal }), /Cancelled archive operation/);
+    assert.equal(fs.existsSync(cancelledOutput), false);
     for (const target of Object.values(vsixTargets)) {
         const output = path.join(temporary, `${identity.name}-${identity.version}-${target}.vsix`);
         const executables = ['bin/ETL-SQL'];
         await createUnsignedVsix(root, assembly, output, target, { executables });
         const inspected = await inspectVsix(root, output, { identity, target, expectedFiles, executables });
+        await assert.rejects(inspectVsix(root, output, { identity, target, expectedFiles, signal: cancellation.signal }), /Cancelled archive operation/);
+        await assert.rejects(setVsixExecutableModes(output, executables, { signal: cancellation.signal }), /Cancelled archive operation/);
         assert.equal(inspected.target, target);
         assert.equal(inspected.manifest.version, identity.version);
         await assert.rejects(inspectVsix(root, output, { identity: { ...identity, version: '0.21.0' }, target, expectedFiles }), /version/);

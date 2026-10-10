@@ -37,5 +37,17 @@ before an atomic rename replaces the accepted VSIX. Failed stages preserve that 
 Development `bin`, `out`, and `ui/dist` folders remain untouched. A workspace lock
 serializes packaging; an abandoned lock requires manual inspection before retrying.
 
+Ctrl+C and SIGTERM cancel the active command and its descendants, wait for shutdown,
+then remove the owned staging directory and lock. Archive hashing and inspection also
+observe cancellation before promotion. The coordinator exits with 130 for Ctrl+C and
+143 for SIGTERM. Commands use separate process groups/consoles, and .NET publishes
+disable shared build servers so shutdown targets this invocation's processes.
+
+`node scripts/test-owned-command.mjs` checks descendant shutdown and an unrelated peer.
+`node scripts/test-vsix-coordinator.mjs` checks cancellation at workflow boundaries.
+`node scripts/test-vsix-cli-cancellation.mjs` checks real Unix signal delivery through
+an npm lifecycle. On Windows, run that last check with `--console` in a terminal and
+press Ctrl+C when the fixture reports ready.
+
 Complete product/webview runtime acceptance and final source-control cutover checks
 remain open in `TODO.md` §1.1. Archive metadata alone does not close those checks.

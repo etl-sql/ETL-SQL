@@ -722,6 +722,21 @@ actual SDK/SQLite workflow fixtures, all four archive targets, ZIP64/executable-
 wrapper failure checks. The working-tree consumer gate passes 104 checks; browser type/lint gates
 remain clean. Evidence is under `artifacts/section1/vsix-coordinator-*`.
 
+Cancellation checks pass. Commands now run in owned process groups/consoles, and CLI
+signals reach command shutdown, hashing, archive inspection, and the final promotion boundary.
+Packaging disables shared .NET build servers. Windows and Ubuntu workflow fixtures cancel 21 stages,
+including partial archive assembly and final asset verification. They preserve the accepted package
+and developer output, and verify lock/staging cleanup. Windows and Ubuntu
+process-tree fixtures verify descendant shutdown and preservation of an unrelated peer. Public CLI
+fixtures pass Unix SIGINT/SIGTERM and native Windows console Ctrl+C: exit 130/143, npm descendants
+stopped, accepted package preserved, and stage/lock removed. Streaming inspection cancellation also
+passes. Fresh exact-index source archives pass locked restore, the workflow matrix, descendant
+shutdown, and all four archive targets on Windows and Ubuntu. The final-stage fixture waits for
+the actual command boundary before starting its child-startup timeout. The working-tree consumer
+gate passes 106 checks; type/lint gates report zero findings. Manual abandoned-lock recovery and
+final product/source-control acceptance remain open below. Evidence is under
+`artifacts/section1/vsix-cancellation-*`.
+
 1. Finish the ownership audit, preparation entry point, generator bootstrap, freshness verification,
    safe obsolete-output cleanup, and build/gate integration.
 2. Verify every supported delivery path from source-only inputs, including final packages and runtime checks.
