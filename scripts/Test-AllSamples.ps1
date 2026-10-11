@@ -31,7 +31,8 @@ param(
     [ValidateRange(1, 10)]
     [int]$Passes = 1,
     [ValidateSet('Debug', 'Release')]
-    [string]$Configuration = 'Debug'
+    [string]$Configuration = 'Debug',
+    [switch]$ReleaseMode
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,9 +50,53 @@ $sessionRoot = Join-Path $validatorStateRoot "sessions"
 $orchestratorDatabasePath = Join-Path $validatorStateRoot "orchestrator.db"
 New-Item -ItemType Directory -Path $validatorStateRoot -Force | Out-Null
 
+$pgContainerName = "etlsql-sample-pg-$PID"
+$startedPgContainer = $false
+
+if ($ReleaseMode) {
+    Write-Host " [ReleaseMode] Checking Docker availability for release services..." -ForegroundColor Yellow
+    $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+    if ($null -ne $dockerCmd) {
+        $osType = & $dockerCmd.Source info --format '{{.OSType}}' 2>$null
+        if ($LASTEXITCODE -eq 0 -and $osType -eq 'linux') {
+            Write-Host " [ReleaseMode] Starting ephemeral PostgreSQL container on port 5432..." -ForegroundColor Yellow
+            & docker rm -f $pgContainerName 2>$null | Out-Null
+            & docker run -d --rm --name $pgContainerName -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:15-alpine | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                $startedPgContainer = $true
+                Write-Host " [ReleaseMode] Waiting for PostgreSQL readiness on port 5432..." -ForegroundColor Yellow
+                $ready = $false
+                for ($attempt = 1; $attempt -le 30; $attempt++) {
+                    if (Test-NetConnection -ComputerName localhost -Port 5432 -WarningAction SilentlyContinue -InformationLevel Quiet) {
+                        $ready = $true
+                        break
+                    }
+                    Start-Sleep -Seconds 1
+                }
+                if ($ready) {
+                    Write-Host " [ReleaseMode] PostgreSQL container is ready on port 5432." -ForegroundColor Green
+                }
+                else {
+                    Write-Warning " [ReleaseMode] PostgreSQL container started but did not respond on port 5432 within 30s."
+                }
+            }
+            else {
+                Write-Warning " [ReleaseMode] Failed to start PostgreSQL container."
+            }
+        }
+        else {
+            Write-Warning " [ReleaseMode] Docker daemon or Linux containers unavailable; skipping container startup."
+        }
+    }
+    else {
+        Write-Warning " [ReleaseMode] Docker command not found on PATH; skipping container startup."
+    }
+}
+
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host " ETL-SQL SAMPLE VALIDATOR STARTING..." -ForegroundColor Cyan
 Write-Host " Configuration: $Configuration" -ForegroundColor Cyan
+Write-Host " Mode         : $(if ($ReleaseMode) { 'Release (Docker services + Performance enabled)' } else { 'Standard (Fast / Unit)' })" -ForegroundColor Cyan
 Write-Host " Found $($etlScripts.Count) scripts to validate in '$samplesDir'." -ForegroundColor Cyan
 if ($Passes -gt 1) {
     Write-Host " Running $Passes passes to prove the samples are re-runnable." -ForegroundColor Cyan
@@ -65,6 +110,7 @@ $failedScripts = @()
 $skipped = 0
 $skippedScripts = @()
 
+try {
 foreach ($pass in 1..$Passes) {
 if ($Passes -gt 1) {
     Write-Host "`n--- Pass $pass of $Passes ---`n" -ForegroundColor Cyan
@@ -85,7 +131,7 @@ foreach ($script in $etlScripts) {
             $available = (Test-NetConnection -ComputerName localhost -Port 1433 -WarningAction SilentlyContinue -InformationLevel Quiet)
         }
         elseif ($service -eq 'performance') {
-            $available = $false  # performance tests are excluded from the quick run by default
+            $available = $ReleaseMode.IsPresent  # Enabled when running in -ReleaseMode
         }
         elseif ($service -eq 'portal') {
             $available = $false  # portal management scripts require a running portal instance
@@ -195,12 +241,20 @@ foreach ($script in $etlScripts) {
 
 }
 }
+}
+finally {
+    if ($startedPgContainer) {
+        Write-Host "`n [ReleaseMode] Stopping and removing ephemeral PostgreSQL container '$pgContainerName'..." -ForegroundColor Gray
+        & docker stop $pgContainerName 2>$null | Out-Null
+        & docker rm -f $pgContainerName 2>$null | Out-Null
+    }
 
-# Do not mix certification events or sessions with the interactive user's machine state.
-$resolvedValidatorRoot = [IO.Path]::GetFullPath($validatorStateRoot)
-$expectedValidatorPrefix = [IO.Path]::GetFullPath((Join-Path $solutionRoot "release-validation\sample-validator-"))
-if ($resolvedValidatorRoot.StartsWith($expectedValidatorPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-    Remove-Item -LiteralPath $resolvedValidatorRoot -Recurse -Force -ErrorAction SilentlyContinue
+    # Do not mix certification events or sessions with the interactive user's machine state.
+    $resolvedValidatorRoot = [IO.Path]::GetFullPath($validatorStateRoot)
+    $expectedValidatorPrefix = [IO.Path]::GetFullPath((Join-Path $solutionRoot "release-validation\sample-validator-"))
+    if ($resolvedValidatorRoot.StartsWith($expectedValidatorPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        Remove-Item -LiteralPath $resolvedValidatorRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 Write-Host "`n=======================================================" -ForegroundColor Cyan

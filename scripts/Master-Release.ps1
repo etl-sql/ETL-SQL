@@ -49,8 +49,8 @@ if (!$SkipTests) {
     }
 
     if ($IncludeSampleValidation) {
-        Write-Host "  Running optional full sample validation suite..." -ForegroundColor Yellow
-        & (Join-Path $PSScriptRoot "Test-AllSamples.ps1")
+        Write-Host "  Running full sample validation suite in ReleaseMode..." -ForegroundColor Yellow
+        & (Join-Path $PSScriptRoot "Test-AllSamples.ps1") -ReleaseMode
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Sample validation failed. Aborting release."
             exit 1
