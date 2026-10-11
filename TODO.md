@@ -858,9 +858,13 @@ does not close build, package, runtime, or Git-index acceptance.
   before producing the clean clones or source archives used for final acceptance.
   Before removing an output from the index, check for intentional local edits to that file. Move any
   required change into its canonical owner and regenerate; do not discard work during the cleanup.
-  Progress (2026-10-11): the ownership check now gates owner tracking, staged output edits, and
-  references from tracked pages and the five asset-consuming project files. Still open: the extension's
-  `out/` and React UI build outputs, C# string references to asset URLs, and VSIX file lists.
+  Done (2026-10-11). `artifacts/browser-assets.json` lists all 491 outputs with owner and hash, built from
+  discovered sources, so a new migration enters it without a list to update. The ownership check gates
+  owner tracking, staged output edits, and every consumer that names an asset outside a module import:
+  10 tracked pages, the five asset-consuming project files, and script or style tags written from C#
+  in the three hosts, using each host's URL mounts. The extension's `out/` and `ui/dist` were already
+  ignored and untracked. The VSIX coordinator verifies its payload against the expected file list, and
+  both VSIX packages built from source-only archives carry all 59 media outputs with matching bytes.
 - [x] **Reject ownership conflicts before writing assets.** Preflight the complete compiler, bundle,
   and host-copy output set before preparation overwrites or removes files. Reject duplicate owners,
   case-only collisions, and a generated target that is also a retained handwritten or vendor input.
