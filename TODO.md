@@ -1084,11 +1084,18 @@ does not close build, package, runtime, or Git-index acceptance.
   Construct acceptance checkouts from the proposed retained tracked inputs. Do not copy additional
   owners, declarations, tools, or lockfiles from the developer's working tree to make them pass;
   untracked local inputs must not hide an incomplete source-control removal plan.
+  Progress (2026-10-11): passed on Windows and Ubuntu (WSL2) from a `git archive` of `e97278ac5` with all
+  491 outputs deleted and a fresh npm cache. An unprepared build and check fail; preparation, repeat
+  preparation, type/lint, the compiler, bundle, and generation checks, the three scoped builds, and a
+  Portal publish pass. All 491 outputs are byte-identical across both platforms and the Git index.
+  Still open: the NuGet cache was warm on both hosts. Evidence: `artifacts/section1/s11-candidate/`.
 - [ ] **Verify source-archive builds.** Extract the supported release source archives outside the
   checkout, with no `.git` directory or generated outputs. Verify they contain every required owner,
   contract, generator, configuration file, and lockfile. Run the documented preparation and affected
   build/package commands from the extracted archive; these paths must not depend on Git metadata,
   cached outputs, or files available only in the original checkout.
+  Progress (2026-10-11): the run above used an extracted archive with no `.git` directory, so preparation,
+  the scoped builds, and Portal publish are covered. No package command has run from an archive.
 - [ ] **Verify packaged runtime behavior.** Publish/package from the clean checkout and smoke-test Portal,
   ReportPlayer, WorkstationEditor, and the VS Code extension outside the source tree. Verify module requests,
   designer/report rendering, and an offline snapshot opened without network access. Confirm installers and
