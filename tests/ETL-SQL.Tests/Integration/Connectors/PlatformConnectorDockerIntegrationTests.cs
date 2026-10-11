@@ -91,9 +91,17 @@ namespace ETL_SQL.Tests.Integration.Connectors
             Assert.True(entry.TryGetProperty("rowsProcessed", out _));
             Assert.True(entry.TryGetProperty("cpuTimeSeconds", out _));
 
-            var jobs = await http.GetFromJsonAsync<JsonElement>("/api/scheduled-jobs");
-            var job = jobs.EnumerateArray().Single(j =>
-                string.Equals(j.GetProperty("name").GetString(), jobName, StringComparison.OrdinalIgnoreCase));
+            // The run's history row is completed before the job's own last and next run are
+            // written, so reading the job the moment history completes can see the old values.
+            var job = await LoadAwareWait.UntilAsync(
+                $"job '{jobName}' to record its last and next run",
+                async _ => (await http.GetFromJsonAsync<JsonElement>("/api/scheduled-jobs")).EnumerateArray().Single(j =>
+                    string.Equals(j.GetProperty("name").GetString(), jobName, StringComparison.OrdinalIgnoreCase)),
+                j => j.GetProperty("lastRun").ValueKind != JsonValueKind.Null &&
+                     j.GetProperty("nextRun").ValueKind != JsonValueKind.Null,
+                TimeSpan.FromSeconds(15),
+                TimeSpan.FromMilliseconds(200),
+                j => $"lastRun={j.GetProperty("lastRun")}, nextRun={j.GetProperty("nextRun")}");
             Assert.True(job.GetProperty("lastRun").ValueKind != JsonValueKind.Null);
             Assert.True(job.GetProperty("nextRun").ValueKind != JsonValueKind.Null);
         }

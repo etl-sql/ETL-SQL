@@ -317,6 +317,13 @@ class load and shared background-service state from its startup/shutdown observa
   the log, not a reproduction: the Docker lane was not run locally, and why it began failing on
   that day is not known. The image is pulled as `latest`.
 
+  The run after that fix passed the FTP test and failed a different one in the same lane:
+  `Service_ExecutesScheduledJob_AgainstDockerService` read the job the moment its history row
+  showed completion and found `lastRun` still empty. The scheduler writes the completion row, then
+  the run's metrics, and only then the job's last and next run, so the read was racing those
+  writes. The test now waits for the job to carry both values, as
+  `JobSchedulingIntegrationTests` already did for the same reason.
+
 
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
 diagnostics belong in generated evidence, not a new release-specific tracking file.
