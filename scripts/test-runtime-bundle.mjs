@@ -66,6 +66,15 @@ try {
     fails(/not listed in RUNTIME_PARTS/);
     rmSync(probe);
 
+    // A listed part that disappears must stop the bundle, not shrink it.
+    const removed = path.join(shared, 'rt-theme.js');
+    const removedSource = readFileSync(removed);
+    rmSync(removed);
+    fails(/Shared asset import missing: .*rt-theme\.js/);
+    assert.equal(readFileSync(bundle, 'utf8'), expected);
+    writeFileSync(removed, removedSource);
+    succeeds('--check');
+
     const part = path.join(shared, 'rt-util.js');
     const source = readFileSync(part, 'utf8');
     for (const [extra, error] of [

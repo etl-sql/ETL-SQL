@@ -861,14 +861,18 @@ does not close build, package, runtime, or Git-index acceptance.
   Progress (2026-10-11): the ownership check now gates owner tracking, staged output edits, and
   references from tracked pages and the five asset-consuming project files. Still open: the extension's
   `out/` and React UI build outputs, C# string references to asset URLs, and VSIX file lists.
-- [ ] **Reject ownership conflicts before writing assets.** Preflight the complete compiler, bundle,
+- [x] **Reject ownership conflicts before writing assets.** Preflight the complete compiler, bundle,
   and host-copy output set before preparation overwrites or removes files. Reject duplicate owners,
   case-only collisions, and a generated target that is also a retained handwritten or vendor input.
   Exercise a new TypeScript owner whose output path already contains an authored file, and a shared
   host copy colliding with a Portal-owned module. Report the conflicting owners and preserve both
   inputs and the last prepared assets on failure. Reconcile intentional local output edits with their
   owners before cutover preparation; a generated banner alone is not permission to overwrite them.
-- [ ] **Define and implement one asset preparation entry point.** Use the pinned, locked toolchain to
+  Done (2026-10-11). The checks cover a case-only duplicate owner, a TypeScript owner whose output path
+  holds an authored file, a Portal owner colliding with a shared host copy, and a competing bundle owner.
+  Each names the conflict and leaves every prepared file unchanged. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
+  source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
+- [x] **Define and implement one asset preparation entry point.** Use the pinned, locked toolchain to
   compile TypeScript, create the offline bundle, and sync host assets in dependency order. Document the
   Node.js/npm prerequisites and dependency-install command. Make missing tools and compilation failures
   stop preparation with actionable errors; preserve license banners and deterministic LF output.
@@ -877,6 +881,11 @@ does not close build, package, runtime, or Git-index acceptance.
   Validate the running toolchain against the supported versions and locked dependencies before writing
   outputs. Exercise an unsupported Node.js version and a missing or mismatched local compiler; fail
   with the restore command instead of using a globally installed compiler or downloading a fallback.
+  Done (2026-10-11). `node scripts/sync-assets.js` is the entry point; the standards document records the
+  Node.js, npm, and TypeScript versions. The checks cover an unsupported Node.js version and a missing,
+  mismatched, or unloadable compiler. Preparation from four checkout locations on two platforms gives
+  byte-identical outputs with LF endings and no machine path. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
+  source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
 - [ ] **Verify checkout paths and working directories.** Exercise the documented preparation, verification,
   build, and package entry points from checkout paths containing spaces and non-ASCII characters on
   Windows and Linux. Check each entry point's working-directory contract; resolve repository paths from
@@ -894,7 +903,7 @@ does not close build, package, runtime, or Git-index acceptance.
   and both manifests deleted, and the process in a network namespace with only loopback, preparation
   and its check pass and the outputs match the networked run byte for byte. The delivery matrix lists
   which steps need the network.
-- [ ] **Verify preparation freshness covers every required input.** Audit the preparation manifest and
+- [x] **Verify preparation freshness covers every required input.** Audit the preparation manifest and
   .NET verifier together. Fingerprint TypeScript owners, retained JavaScript/vendor/CSS inputs, declarations,
   generated route/schema contracts, compiler configuration, generator code, and dependency lockfiles.
   Include transitive generator helpers and the build/package configuration that selects assets, such as
@@ -908,6 +917,10 @@ does not close build, package, runtime, or Git-index acceptance.
   Keep `scripts/lib/browser-asset-inputs.cjs` exclusions tied to generator paths and validated ownership;
   retained inputs must remain in watch and concurrent-edit detection. Cover an authored input containing a
   generated-looking banner and verify that changing it still invalidates preparation.
+  Done (2026-10-11) for preparation freshness: each input category, an added and a removed input, and an
+  authored file carrying a generated-looking banner invalidate preparation without repair. Package
+  freshness is tracked under the published asset boundary task. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
+  source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
 - [ ] **Verify route, DTO, and schema generator bootstrap.** Exercise the C# browser-contract and Studio
   route generators, plus the Portal API-schema validator generator, with browser outputs absent. Resolve
   any cycle where building a generator consumes assets that require its new contracts to compile.
@@ -918,7 +931,7 @@ does not close build, package, runtime, or Git-index acceptance.
   A failed generator must return failure and must not certify partially updated declarations or routes.
   Validate the complete generated contract set against both registered hosts before preparing assets;
   passing individual generator tests does not close a failed bootstrap run.
-- [ ] **Verify source-only module resolution.** With every inventoried browser output absent, compile
+- [x] **Verify source-only module resolution.** With every inventoried browser output absent, compile
   the retained TypeScript owners and their mixed JavaScript dependencies using the supported compiler
   configuration. Preserve relative `.js` import specifiers and public exports. Cover Portal imports of
   shared modules before host copies exist, dynamic and side-effect imports, and exact import casing.
@@ -926,7 +939,11 @@ does not close build, package, runtime, or Git-index acceptance.
   compilation, and the old JavaScript must never shadow its owner. Reject missing imports before writing
   outputs. After preparation, run the existing type/lint and consumer gates without relaxing strictness
   or adding baseline entries.
-- [ ] **Make generation work with no existing outputs.** Create missing host directories, validate import
+  Done (2026-10-11). The compiler checks cover stale outputs that must not shadow their owner, a deleted
+  owner, import casing, Portal imports of shared owners before host copies exist, and missing imports.
+  Type and lint gates pass in the source-only tree; the consumer gate passes on the same output bytes. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
+  source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
+- [x] **Make generation work with no existing outputs.** Create missing host directories, validate import
   closures, and remove obsolete generated files after source renames/deletions without touching handwritten
   or vendor inputs. Cover clean generation, repeat-run stability, collisions, missing imports, stale outputs,
   and failed compilation with focused generator tests. Retain the last successful asset set after a
@@ -934,13 +951,22 @@ does not close build, package, runtime, or Git-index acceptance.
   test modules and scratch files from synchronization, ownership inventories, build discovery, and packaging.
   Cover failures during bundling and host copying as well as compilation; a retry must restore a complete,
   consistent asset set before builds can consume it.
-- [ ] **Verify the offline bundle's complete module closure.** Reconcile `RUNTIME_PARTS` in
+  Done (2026-10-11). Covered: missing host directories, repeat stability, rename and delete cleanup,
+  collisions, missing imports, failed compilation, a bundling failure, a blocked host write, edits made
+  during preparation, and temporary test modules. A failed run leaves the last asset set and no valid
+  manifest; the next run restores a complete set. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
+  source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
+- [x] **Verify the offline bundle's complete module closure.** Reconcile `RUNTIME_PARTS` in
   `scripts/sync-assets.js` with the runtime entry's transitive imports and discovered TypeScript owners.
   Exercise a newly added runtime dependency omitted from the bundle list, a removed part, and emitted
   syntax unsupported by the existing concatenator. Preparation must reject each case before certifying
   assets. Preserve public exports and module-initialization behavior, and run the resulting offline
   snapshot with networking disabled. Keep the existing bundle path and browser URLs.
-- [ ] **Verify obsolete-output cleanup preserves retained inputs.** Audit deletion in
+  Done (2026-10-11). Preparation rejects an unlisted part, a listed part that is missing, an import of an
+  unlisted module, aliased, external and dynamic imports, an unsupported export form, and a duplicate
+  declaration, each without changing the last bundle. `OfflineSnapshotViewerTests` opens the snapshot
+  from disk with every network request aborted; it passed in the full browser lane on these output bytes.
+- [x] **Verify obsolete-output cleanup preserves retained inputs.** Audit deletion in
   `scripts/compile-browser.mjs` and `scripts/sync-assets.js`. Require validated paths, owners, and prior
   output hashes before deleting an output. A handwritten or
   vendor file containing a generated-looking banner must survive preparation. Resolve cleanup paths
@@ -948,6 +974,11 @@ does not close build, package, runtime, or Git-index acceptance.
   separators and casing consistently on Windows and Linux. Exercise a stale or malformed ownership
   inventory, an output path becoming authored input, and source rename/delete recovery. Preview any
   unresolved files for review instead of guessing that they are safe to remove.
+  Done (2026-10-11). Cleanup deletes only an inventoried output whose bytes still match its recorded hash.
+  The checks cover a forged banner, a locally edited obsolete output, path traversal, a junction or
+  symlink, a case-only collision, a malformed inventory, and a version-1 inventory, which lists the
+  unverified files instead of deleting them. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
+  source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
 - [ ] **Integrate local build and publish entry points.** Establish the supported fresh-checkout workflow
   for CLI and IDE builds, debug scripts, direct project/solution builds, and publish commands. Ensure assets
   exist before MSBuild discovers static files or embeds resources, including the offline snapshot bundle.
