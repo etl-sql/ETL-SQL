@@ -1,10 +1,22 @@
--- Comprehensive Verification Suite for Phase 11
--- Tests CTEs, Scalar Functions, and complex queries
+-- Sample: Complex Query Pipeline & Common Table Expressions (CTEs)
+-- Demonstrates single and chained CTEs, CTE joins, scalar functions, and date functions.
 
-CREATE CONNECTION csv AS FLATFILE('testdata/comprehensive_test.csv', TEXT_QUALIFIER=DOUBLEQUOTES);
+-- 1. Seed sample dataset into temporary table
+CREATE TABLE #employees (
+    Id INT,
+    Name VARCHAR(100),
+    Salary DECIMAL(10, 2),
+    JoinDate DATE
+);
 
--- 1. Test Scalar Functions (String & Math)
-PRINT('--- 1. Testing Scalar Functions ---');
+INSERT INTO #employees VALUES
+    (1, 'Doe, John',    65000.00, '2022-01-15'),
+    (2, 'Smith, Alice',  85000.00, '2023-05-20'),
+    (3, 'Jones, Bob',    48000.00, '2021-11-10'),
+    (4, 'Clark, Dana',   72000.00, '2023-01-08');
+
+-- 2. Test Scalar Functions (String & Math)
+PRINT '--- 1. Testing Scalar Functions ---';
 SELECT 
     Name,
     UPPER(Name) as UpperName,
@@ -17,47 +29,47 @@ SELECT
     ROUND(Salary, 0) as RoundedSalary,
     CEILING(Salary) as CeilingSalary,
     FLOOR(Salary) as FloorSalary
-FROM csv;
+FROM #employees;
 
--- 2. Test Date Functions
-PRINT('--- 2. Testing Date Functions ---');
+-- 3. Test Date Functions
+PRINT '--- 2. Testing Date Functions ---';
 SELECT 
     Id,
     JoinDate,
     DATEPART('YEAR', JoinDate) as JoinYear,
     DATEPART('MONTH', JoinDate) as JoinMonth,
     DATEDIFF('DAY', JoinDate, GETDATE()) as DaysSinceJoin
-FROM csv;
+FROM #employees;
 
--- 3. Test Basic CTE
-PRINT('--- 3. Testing Basic CTE ---');
+-- 4. Test Basic CTE
+PRINT '--- 3. Testing Basic CTE ---';
 WITH HighSalary AS (
-    SELECT * FROM csv WHERE Salary > 55000
+    SELECT Id, Name, Salary, JoinDate FROM #employees WHERE Salary > 55000
 )
 SELECT Name, Salary FROM HighSalary;
 
--- 4. Test Multiple CTEs
-PRINT('--- 4. Testing Multiple CTEs ---');
+-- 5. Test Chained Multiple CTEs
+PRINT '--- 4. Testing Chained Multiple CTEs ---';
 WITH 
 EarlyJoiners AS (
-    SELECT * FROM csv WHERE JoinDate < '2023-03-01'
+    SELECT Id, Name, Salary, JoinDate FROM #employees WHERE JoinDate < '2023-03-01'
 ),
 HighPaidEarly AS (
-    SELECT * FROM EarlyJoiners WHERE Salary > 50000
+    SELECT Name, JoinDate, Salary FROM EarlyJoiners WHERE Salary > 50000
 )
 SELECT Name, JoinDate, Salary FROM HighPaidEarly;
 
--- 5. Test CTE with Join
-PRINT('--- 5. Testing CTE with Join ---');
+-- 6. Test CTE with Join
+PRINT '--- 5. Testing CTE with Join ---';
 WITH Names AS (
-    SELECT Id, Name FROM csv
+    SELECT Id, Name FROM #employees
 ),
 Salaries AS (
-    SELECT Id, Salary FROM csv
+    SELECT Id, Salary FROM #employees
 )
 SELECT n.Name, s.Salary 
 FROM Names n 
 JOIN Salaries s ON n.Id = s.Id
 WHERE s.Salary > 60000;
 
-PRINT('--- Verification Suite Complete ---');
+PRINT '--- Verification Suite Complete ---';

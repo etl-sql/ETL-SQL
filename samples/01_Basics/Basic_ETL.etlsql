@@ -1,11 +1,30 @@
-﻿-- Sample ETL-SQL script showing advanced functions
-CREATE CONNECTION source_data AS FLATFILE('source.csv');
-CREATE CONNECTION report_data AS FLATFILE('samples/output/report.csv');
+-- Sample ETL-SQL Script: Basic ETL Pipeline
+-- Demonstrates extracting, transforming, filtering, and staging data in-memory.
 
-INSERT INTO report_data
+-- 1. Stage raw source data into a temporary in-memory table
+CREATE TABLE #source_data (
+    item_type VARCHAR(50),
+    item_code VARCHAR(50),
+    base_cost DECIMAL(10, 2)
+);
+
+INSERT INTO #source_data VALUES
+    ('Test',  'ITEM_100', 45.00),
+    ('Test',  'ITEM_101', 85.50),
+    ('Other', 'ITEM_200', 120.00),
+    ('Demo',  'ITEM_300', 95.00),
+    ('Other', 'ITEM_201', 25.00);
+
+-- 2. Transform and filter into a processed staging table
 SELECT 
-    UPPER(column1) AS type_uppercase, 
-    CONCAT(column2, '_processed') AS val_formatted,
-    column3 * 2 + 50 AS calculated_metric
-FROM source_data 
-WHERE (column1 = 'Test' OR column1 = 'Other') AND column3 >= 50;
+    UPPER(item_type) AS type_uppercase, 
+    CONCAT(item_code, '_processed') AS val_formatted,
+    base_cost * 2 + 50 AS calculated_metric
+INTO #report_data
+FROM #source_data 
+WHERE (item_type = 'Test' OR item_type = 'Other') AND base_cost >= 50;
+
+-- 3. Display the transformed report
+PRINT 'Transformed Report Data:';
+SELECT type_uppercase, val_formatted, calculated_metric
+FROM #report_data;

@@ -1,9 +1,44 @@
-CREATE CONNECTION source_data AS FLATFILE('data.csv', HEADER = ON);
-CREATE CONNECTION smallDict AS FLATFILE('testdata/categories.csv');
+-- Sample: Grouping, Aggregations, and HAVING Filter
+-- Demonstrates multi-row aggregations (COUNT, SUM, AVG) with INNER JOIN and HAVING threshold.
 
-SELECT s.category_name, COUNT(*) AS TotalCount, SUM(l.value) AS TotalValue
+CREATE TABLE #categories (
+    id INT,
+    category_name VARCHAR(50)
+);
+
+INSERT INTO #categories VALUES
+    (1, 'Electronics'),
+    (2, 'Hardware'),
+    (3, 'Apparel');
+
+CREATE TABLE #sales_transactions (
+    txn_id INT,
+    category_id INT,
+    sale_amount DECIMAL(10, 2)
+);
+
+INSERT INTO #sales_transactions VALUES
+    (101, 1, 150.00),
+    (102, 1, 320.00),
+    (103, 1, 210.00),
+    (104, 2,  45.00),
+    (105, 2,  85.00),
+    (106, 3,  12.50),
+    (107, 1, 400.00),
+    (108, 2, 110.00);
+
+PRINT 'Aggregating sales by category with HAVING threshold:';
+SELECT 
+    c.category_name, 
+    COUNT(*) AS total_txns, 
+    SUM(s.sale_amount) AS total_revenue,
+    AVG(s.sale_amount) AS avg_ticket
 INTO #havingResults
-FROM source_data l
-INNER JOIN smallDict s ON l.category = s.id
-GROUP BY s.category_name
-HAVING TotalCount > 9000 AND TotalCount < 11000;
+FROM #sales_transactions s
+INNER JOIN #categories c ON s.category_id = c.id
+GROUP BY c.category_name
+HAVING total_revenue > 200.00;
+
+SELECT category_name, total_txns, total_revenue, avg_ticket
+FROM #havingResults
+ORDER BY total_revenue DESC;

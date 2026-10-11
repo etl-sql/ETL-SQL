@@ -1,15 +1,33 @@
-CREATE CONNECTION wide_data AS FLATFILE('testdata/wide_test.csv');
+-- Sample: Lists and Parameterized Filtering
+-- Demonstrates LIST variable declarations and IN / NOT IN collection filtering.
+
+CREATE TABLE #inventory (
+    item_id INT,
+    item_name VARCHAR(50),
+    category VARCHAR(20),
+    priority VARCHAR(10),
+    status VARCHAR(20)
+);
+
+INSERT INTO #inventory VALUES
+    (50, 'Server Blade',     'Prod', 'Critical', 'Active'),
+    (51, 'Staging Switch',   'Test', 'Medium',   'Active'),
+    (52, 'Dev Workstation',  'Dev',  'Low',      'Active'),
+    (53, 'Backup Battery',   'Prod', 'High',     'Maintenance'),
+    (54, 'Edge Router',      'Prod', 'High',     'Active'),
+    (55, 'Test Rig Alpha',   'Test', 'High',     'Active');
 
 DECLARE @valid_cats LIST(varchar) = ['Test', 'Prod'];
 DECLARE @excluded_ids LIST(int) = [51, 52, 53];
 
+PRINT 'Filtering inventory using @valid_cats and @excluded_ids lists:';
 SELECT
-    col1,
-    col2,
-    col3,
-    col4,
-    col5
-FROM wide_data
-WHERE col3 IN @valid_cats
-  AND col1 NOT IN (@excluded_ids)
-  AND col4 NOT IN ['Low'];
+    item_id,
+    item_name,
+    category,
+    priority,
+    status
+FROM #inventory
+WHERE category IN @valid_cats
+  AND item_id NOT IN (@excluded_ids)
+  AND priority NOT IN ['Low'];

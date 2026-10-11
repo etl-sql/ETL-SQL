@@ -179,6 +179,7 @@ etlsql.db
 # were absent on a fresh checkout. The lane fails when a hash matches but its artifact is missing,
 # which is how that was caught.
 !tests/fixtures/reporting/goldens/**/terminal.txt
+!samples/02_Data_Movement/TestData/*.txt
 *.cs.scratch
 *.etlsql.scratch
 

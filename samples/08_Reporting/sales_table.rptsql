@@ -16,7 +16,7 @@ CREATE BUTTON run_btn AS (
     STYLE (BACKGROUND = '#28a745', COLOR = 'white', PADDING = '10px 20px')
 );
 
-CREATE CONNECTION c AS FLATFILE('testdata/test_sales.csv');
+CREATE CONNECTION c AS FLATFILE('../../testdata/test_sales.csv');
 
 SELECT
      c.FILE.region
@@ -25,12 +25,6 @@ SELECT
     ,c.FILE.revenue
     ,c.FILE.month
     ,c.FILE.date
-    ,#sales_table.region
-    ,#sales_table.product
-    ,#sales_table.units
-    ,#sales_table.revenue
-    ,#sales_table.month
-    ,#sales_table.date
 INTO #sales_table
 FROM c.FILE;
 

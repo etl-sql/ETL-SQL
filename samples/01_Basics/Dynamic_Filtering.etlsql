@@ -1,8 +1,23 @@
-DROP CONNECTION IF EXISTS wide_data;
-CREATE CONNECTION wide_data AS FLATFILE('testdata/test_wide.csv');
+-- Sample: Dynamic Filtering & Conditional Expressions
+-- Demonstrates CASE expressions, IN clauses, LIKE wildcards, and numeric range filtering.
 
---SELECT * FROM wide_data.FILE;
+CREATE TABLE #wide_data (
+    col1 INT,
+    col2 VARCHAR(20),
+    col3 VARCHAR(20),
+    col4 VARCHAR(20),
+    col5 VARCHAR(50)
+);
 
+INSERT INTO #wide_data VALUES
+    (10, 'Val1', 'Prod', 'High', 'Data10_5'),
+    (55, 'Val1', 'Prod', 'High', 'Data55_5'),
+    (62, 'Val2', 'Test', 'High', 'Data62_5'),
+    (75, 'Val1', 'Dev',  'High', 'Data75_5'),
+    (80, 'Val3', 'Prod', 'Low',  'Data80_5'),
+    (95, 'Val2', 'Prod', 'High', 'Data95_5');
+
+PRINT 'Filtering with CASE expression and compound conditions:';
 SELECT
     col1,
     col2,
@@ -14,7 +29,7 @@ SELECT
         WHEN col2 = 'Val2' THEN 'Secondary' 
         ELSE 'Unknown' 
     END AS ComputedCategory
-FROM wide_data
+FROM #wide_data
 WHERE col3 IN ('Test', 'Prod')
   AND col4 = 'High'
   AND col5 LIKE 'Data%_5'

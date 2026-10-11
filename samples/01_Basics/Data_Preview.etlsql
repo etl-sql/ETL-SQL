@@ -1,4 +1,18 @@
-CREATE CONNECTION dict AS FLATFILE('testdata/categories.csv');
+-- Sample: Data Preview & Inspection
+-- Demonstrates staging a reference dataset and inspecting specific columns.
 
-SELECT id, category_name
-FROM dict;
+CREATE TABLE #categories (
+    id INT,
+    category_name VARCHAR(50),
+    department VARCHAR(50)
+);
+
+INSERT INTO #categories VALUES
+    (1, 'Electronics', 'Technology'),
+    (2, 'Books',       'Media'),
+    (3, 'Apparel',     'Fashion'),
+    (4, 'Home Goods',  'Living');
+
+PRINT 'Previewing category catalog:';
+SELECT id, category_name, department
+FROM #categories;

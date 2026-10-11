@@ -1,4 +1,15 @@
-CREATE CONNECTION dict AS FLATFILE('testdata/categories.csv');
+-- Sample: Variables, Types, and Session State
+-- Demonstrates declaring typed session variables, SET mutations, and projecting variables into queries.
+
+CREATE TABLE #dict (
+    id INT,
+    category_name VARCHAR(50)
+);
+
+INSERT INTO #dict VALUES
+    (1, 'Electronics'),
+    (2, 'Books'),
+    (3, 'Apparel');
 
 DECLARE @myVar VARCHAR(100) = 'Electronics';
 DECLARE @dt1 DATETIME = '20261231';
@@ -9,6 +20,8 @@ SET @myVar = 'Clothing';
 
 SELECT id, category_name, @myVar AS CurrentVar, @dt1 AS EndOfYear, @dt2 AS EoyTimestamp, @dt3 AS OtherDate
 INTO #results
-FROM dict;
+FROM #dict;
 
-SELECT * FROM #results;
+PRINT 'Projected results with mutated variables:';
+SELECT id, category_name, CurrentVar, EndOfYear, EoyTimestamp, OtherDate
+FROM #results;

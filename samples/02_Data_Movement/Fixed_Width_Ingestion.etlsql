@@ -12,19 +12,14 @@ CREATE TABLE #Layout (
 
 -- 2. Define the fixed-width connection
 -- FORMAT='FIXED' instructs the engine to use the TEMPLATE for offsets.
-CREATE CONNECTION fw_source AS FLATFILE('testdata/fixed_employees.txt',
+CREATE CONNECTION fw_source AS FLATFILE('TestData/fixed_employees.txt',
     FORMAT = 'FIXED',
     TEMPLATE = #Layout,
+    HEADER = OFF,
     TRIM = 'ON'
 );
 
 -- 3. Ingestion Logic
 -- The engine will slice each line at offsets (0, 5, 25, 35) based on #Layout.
-PRINT 'Loading fixed-width data using template-based offsets...';
-SELECT * FROM fw_source;
-
-/*
-Expected Input Format example:
-00101Alice Smith         Eng       00095000
-00102Bob Jones           Sales     00080000
-*/
+PRINT 'Loading fixed-width data using template-based offsets:';
+SELECT EmpId, EmpName, Department, Salary FROM fw_source;

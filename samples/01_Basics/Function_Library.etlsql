@@ -57,4 +57,4 @@ INSERT INTO #func_test VALUES ('GENERAL', 'ISNULL', ISNULL(NULL, 'fallback'));
 INSERT INTO #func_test VALUES ('GENERAL', 'NULLIF (equal)', COALESCE(NULLIF('a', 'a'), 'NULL'));
 INSERT INTO #func_test VALUES ('GENERAL', 'NULLIF (unequal)', NULLIF('a', 'b'));
 
-SELECT * FROM #func_test ORDER BY category, test_case;
+SELECT category, test_case, result FROM #func_test ORDER BY category, test_case;

@@ -1,0 +1,3 @@
+00101Alice Smith         Eng       00095000
+00102Bob Jones           Sales     00080000
+00103Charlie Brown       HR        00075000

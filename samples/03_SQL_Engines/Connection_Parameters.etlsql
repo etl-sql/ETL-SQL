@@ -1,15 +1,20 @@
--- Generate a test CSV file using default comma delim
-CREATE CONNECTION dummy AS FLATFILE('testdata/dummy.csv');
+-- Sample: Connection Parameters & Delimiters
+-- Demonstrates custom connection parameters (HEADER=OFF, DELIMITER=PIPE) for file exports and imports.
+
 DROP TABLE IF EXISTS #temp_out;
 CREATE TABLE #temp_out (Col1 VARCHAR(50), Col2 VARCHAR(50));
-INSERT INTO #temp_out (Col1, Col2) VALUES ('value1', 'value2');
-INSERT INTO #temp_out (Col1, Col2) VALUES ('value3', 'value4');
+INSERT INTO #temp_out VALUES ('value1', 'value2');
+INSERT INTO #temp_out VALUES ('value3', 'value4');
 
--- Write out pipe delimited no headers
+-- 1. Write out pipe-delimited data with no headers
 CREATE CONNECTION pipe_out AS FLATFILE('samples/output/pipe.csv', HEADER=OFF, DELIMITER=PIPE);
-INSERT INTO pipe_out SELECT * FROM #temp_out;
+INSERT INTO pipe_out SELECT Col1, Col2 FROM #temp_out;
 
--- Read from pipe delimited no headers and ensure columns auto generated to Col1, Col2 and values are right
+-- 2. Read back from pipe-delimited file (auto-generating column names Col1, Col2)
 CREATE CONNECTION pipe_in AS FLATFILE('samples/output/pipe.csv', HEADER=OFF, DELIMITER=PIPE);
 
-SELECT * FROM pipe_in;
+PRINT 'Read pipe-delimited records from file:';
+SELECT Col1, Col2 FROM pipe_in;
+
+-- 3. Cleanup temporary file
+DELETE FILE 'samples/output/pipe.csv';
