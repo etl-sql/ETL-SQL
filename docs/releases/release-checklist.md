@@ -32,7 +32,7 @@ Replace `x.y.z` with the target version (current target: **0.20.1**) throughout.
       npm ci --prefix scripts/typecheck
       node scripts\sync-assets.js
       node scripts\sync-assets.js -Check
-      node scriptsrowser-asset-ownership.mjs --check
+      node scripts\browser-asset-ownership.mjs --check
       ```
       The packaging scripts prepare assets themselves, but they need the compiler restore first.
       If the ownership check reports stale ignore rules, a browser module was added, renamed, or
