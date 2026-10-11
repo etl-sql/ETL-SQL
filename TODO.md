@@ -843,7 +843,7 @@ does not close build, package, runtime, or Git-index acceptance.
   or unavailable platform check remains open unless that artifact is explicitly removed from the release scope.
   Progress (2026-10-11): the matrix exists and names every path and platform. It records no owner
   per path, and no package row has been run on the current candidate.
-- [ ] **Inventory generated outputs and their owners.** Identify TypeScript emits, the offline runtime
+- [x] **Inventory generated outputs and their owners.** Identify TypeScript emits, the offline runtime
   bundle, and generated host copies for Portal, ReportPlayer, WorkstationEditor, and VS Code. Distinguish
   handwritten JavaScript, build/test scripts, vendor libraries, and C#-generated browser contracts; retain
   these tracked inputs unless a separate reproducible generation path is explicitly covered. Record exact

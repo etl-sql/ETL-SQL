@@ -42,6 +42,18 @@ const assetRoots = ['src/ETL-SQL.ReportRuntime/Resources/Shared/', ...webRoots];
 const assetProjects = ['Reporting', 'ReportRuntime', 'ReportPlayer', 'WorkstationEditor', 'Portal']
     .map(name => `src/ETL-SQL.${name}/ETL-SQL.${name}.csproj`);
 const assetReference = /\.(?:js|mjs|css|geojson)$/i;
+// Where each host serves a root-relative URL from. The desktop editor mounts the shared runtime
+// under /runtime and takes its stylesheet from Portal (see WorkstationEditorApp and its project file).
+const codeHosts = [
+    { project: 'src/ETL-SQL.Portal/', mounts: [['/', 'src/ETL-SQL.Portal/wwwroot/']] },
+    { project: 'src/ETL-SQL.ReportPlayer/', mounts: [['/', 'src/ETL-SQL.ReportPlayer/wwwroot/']] },
+    { project: 'src/ETL-SQL.WorkstationEditor/', mounts: [
+        ['/runtime/', 'src/ETL-SQL.WorkstationEditor/wwwroot/'],
+        ['/css/', 'src/ETL-SQL.Portal/wwwroot/css/'],
+        ['/', 'src/ETL-SQL.WorkstationEditor/wwwroot/']] },
+];
+// In C# the attribute's quotes are escaped: src=\"/report-runtime.js\".
+const markupInCode = /\b(?:src|href)=\\?["'](\/[^"'\\?#{}$]+\.(?:js|mjs|css))/g;
 
 function git(root, args, input) {
     const result = spawnSync('git', args, { cwd: root, input, maxBuffer: 1 << 28 });
@@ -125,6 +137,17 @@ function unresolvedConsumers(root, tracked, outputs) {
                 : path.posix.normalize(path.posix.join(path.posix.dirname(page), target));
             if (!known.has(resolved))
                 problems.push(`Consumer names an asset with no tracked input or generated owner: ${page} -> ${reference}`);
+        }
+    }
+    // Hosts also write script and style tags from C#. A root-relative URL there is served from
+    // that project's own wwwroot, so it needs an owner like any other reference.
+    for (const source of tracked) {
+        const host = codeHosts.find(candidate => source.startsWith(candidate.project));
+        if (!host || !source.endsWith('.cs') || !fs.existsSync(path.join(root, source))) continue;
+        for (const match of fs.readFileSync(path.join(root, source), 'utf8').matchAll(markupInCode)) {
+            const [mount, files] = host.mounts.find(([prefix]) => match[1].startsWith(prefix));
+            if (!known.has(files + match[1].slice(mount.length)))
+                problems.push(`Code names an asset with no tracked input or generated owner: ${source} -> ${match[1]}`);
         }
     }
     for (const project of assetProjects) {

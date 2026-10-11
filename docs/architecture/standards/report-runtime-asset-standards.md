@@ -275,8 +275,8 @@ unstaged file cannot stand in for a missing one. It fails when:
 
 - an owner or another freshness input is untracked or ignored;
 - a staged output differs from its prepared bytes, which means someone edited generated code;
-- a tracked page or one of the five asset-consuming project files names a script, stylesheet, or
-  map that is neither a tracked input nor an inventoried output;
+- a tracked page, one of the five asset-consuming project files, or a script or style tag written
+  from a host's C# code names a file that is neither a tracked input nor an inventoried output;
 - an output sits on the wrong side of the index for the declared layout.
 
 The layout is declared by a managed block in `.gitignore`. Without the block, every output must be

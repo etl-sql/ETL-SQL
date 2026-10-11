@@ -119,6 +119,16 @@ try {
     expectProblem(/Project includes an asset.*Reporting\.csproj -> .*rt-gone\.js/, 'A project embedding a missing asset must be rejected.');
     write(project, validProject);
     git('add', project);
+    // A host that writes its script tags from C# names assets the same way a page does.
+    const hostCode = 'src/ETL-SQL.ReportPlayer/Program.cs';
+    write(hostCode, 'var html = "<script type=\\"module\\" src=\\"/rt-util.js\\"></script>";\n');
+    git('add', hostCode);
+    assert.deepEqual(problems(), [], 'A code reference to a generated host copy resolves.');
+    write(hostCode, 'var html = "<script type=\\"module\\" src=\\"/rt-renamed.js\\"></script>";\n');
+    git('add', hostCode);
+    expectProblem(/Code names an asset.*Program\.cs -> \/rt-renamed\.js/, 'A code reference to a missing module must be rejected.');
+    write(hostCode, 'var html = "<script type=\\"module\\" src=\\"/rt-util.js\\"></script>";\n');
+    git('add', hostCode);
     assert.deepEqual(problems(), [], 'Restoring each input returns the layout to a clean state.');
 
     // Cutover: the block alone is not enough while outputs are still tracked.
