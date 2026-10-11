@@ -281,9 +281,20 @@ class load and shared background-service state from its startup/shutdown observa
   Two further runs the same day: one passed all 929, and one failed a single test in teardown.
   `OrchestratorWebFactory.DisposeAsync` deleted its temporary directory while `etlsql.db` was still
   open (`ScheduledJobActivityBrowserTests.TriageUsesRealDurableEvidenceAndReportsPartialProxyReruns`).
-  It clears the connection pool for one connection string and then deletes; `PortalWebFactory`
-  clears every factory pool and reports what is left. Whether a second pool or a run still
-  executing held the file is not known. Five runs, four different outcomes, none reproduced locally.
+  Five runs, four different outcomes, none reproduced locally.
+
+  The teardown failure has a cause. That journey is the only one in its class that triggers a real
+  run through the Orchestrator, and a triggered run is a detached task. In the service,
+  `OrchestratorHostedService` waits for such tasks at shutdown. The fixture removes every hosted
+  service to keep the scheduling loop quiet, which removed the wait as well, so the run could
+  still be writing its history when the directory was deleted. The pool was not the problem: every
+  connection to that file uses the same connection string, and it was being cleared. The lock only
+  exists while the run is inside a store call, so it cannot be staged; the regression test asserts
+  the property that prevents it instead
+  (`Dispose_WaitsForATriggeredRunBeforeDeletingItsDirectory` fails without the wait, with a run
+  still active after disposal). `OrchestratorWebFactory.DisposeAsync` now stops the scheduler
+  first, and a failed delete reports how many runs were still active and which files remained.
+  The lesson: removing hosted services from a test host also removes their shutdown work.
 
   **Open: `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds` in the Docker lane.** It failed in
   2 ms with "Failed to connect to host" in two runs on 2026-10-11 and passed in the two before

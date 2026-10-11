@@ -12,6 +12,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace ETL_SQL.Portal.Tests;
@@ -23,6 +24,7 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
     public string TempDir { get; }
     private readonly bool requireFederatedIdentity;
     private readonly bool ownsTempDir;
+    private SchedulerService? scheduler;
 
     public OrchestratorWebFactory(string? tempDir = null, bool requireFederatedIdentity = false)
     {
@@ -93,13 +95,37 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
         });
     }
 
+    protected override IHost CreateHost(IHostBuilder builder)
+    {
+        var host = base.CreateHost(builder);
+        scheduler = host.Services.GetService<SchedulerService>();
+        return host;
+    }
+
     public override async ValueTask DisposeAsync()
     {
+        // A triggered run is a detached task. The hosted service waits for it at shutdown, but a
+        // fixture that removes hosted services removes that wait, and the run would still be
+        // writing to etlsql.db while the directory below is deleted.
+        if (scheduler is not null) await scheduler.StopAsync();
         await base.DisposeAsync();
         using var connection = new SqliteConnection($"Data Source={Path.Combine(TempDir, "etlsql.db")}");
         SqliteConnection.ClearPool(connection);
         // A supplied directory belongs to the paired Portal factory, which is still running.
-        if (ownsTempDir && Directory.Exists(TempDir))
+        if (!ownsTempDir || !Directory.Exists(TempDir)) return;
+        try
+        {
             Directory.Delete(TempDir, recursive: true);
+        }
+        catch (IOException ex)
+        {
+            // A remaining handle is a fixture failure; say which run or file kept it.
+            var active = scheduler?.GetMetrics().ActiveJobs ?? 0;
+            var remaining = Directory.Exists(TempDir)
+                ? string.Join(", ", Directory.EnumerateFileSystemEntries(TempDir, "*", SearchOption.AllDirectories))
+                : string.Empty;
+            throw new IOException(
+                $"Failed to clean up test directory '{TempDir}'. Runs still active: {active}. Remaining entries: [{remaining}].", ex);
+        }
     }
 }
