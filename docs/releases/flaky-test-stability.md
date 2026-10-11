@@ -308,6 +308,16 @@ class load and shared background-service state from its startup/shutdown observa
   first, and a failed delete reports how many runs were still active and which files remained.
   The lesson: removing hosted services from a test host also removes their shutdown work.
 
+  The run after that fix failed the same journey inside the test, and the page said why: the
+  notice read "0 of 2 jobs triggered. Not triggered: triage-missing, triage-quality." The
+  Orchestrator had refused the trigger. That is the overloaded-node refusal described above for
+  `SubscriptionIntegrationTests`, arriving the way that passage said it would: as a refusal at
+  the trigger, not a history timeout. `OrchestratorWebFactory` used the real capacity monitor,
+  which reads the machine's memory and the test process's CPU, on a runner also driving a
+  browser. It now has the same fixed reading as `PortalWebFactory`; tests about overload replace
+  it. This is the first observation that supports the memory-or-CPU explanation for the October
+  failures, and it is one observation: the notice names the refused jobs, not the reason.
+
   **Open: `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds` in the Docker lane.** It failed in
   2 ms with "Failed to connect to host" in three runs on 2026-10-11 and passed in the two before
   them, while the other FTP tests in the same class passed each time. A 2 ms refusal means nothing

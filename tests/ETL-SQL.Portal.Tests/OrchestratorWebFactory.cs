@@ -90,6 +90,13 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
             services.AddSingleton<IBundleStore>(testStore);
             services.AddSingleton<ILineageCatalogStore>(testStore);
             services.AddSingleton<ITenantLineageCatalogStore>(testStore);
+            // The real monitor reads this machine's memory and this process's CPU. On a busy CI
+            // runner it judged the node overloaded and the service, correctly, refused a manual
+            // trigger with 503; a journey then reported "0 of 2 jobs triggered". A test host's
+            // capacity must not depend on what else the machine is doing. Tests about overload
+            // replace this registration with their own monitor.
+            services.RemoveAll<INodeCapacityMonitor>();
+            services.AddSingleton<INodeCapacityMonitor>(new PortalTestCapacityMonitor());
             services.AddSingleton<IConnectionCatalogProvider>(
                 new LocalConnectionCatalogProvider(Path.Combine(TempDir, "connections")));
         });
