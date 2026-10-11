@@ -56,11 +56,14 @@ public class SecurityHeadersTests(PortalWebFactory factory) : IClassFixture<Port
         // because that tag sat inside a JavaScript template literal in an inline block and the
         // middleware's blind `<script` rewrite edited it there. It builds the `srcdoc` for the
         // report viewer iframe, which inherits this page's CSP, so it still needs the nonce — but
-        // now that the template lives in js/pages/index.js the nonce is read and written on
+        // now that the template lives in the report viewer module the nonce is read and written on
         // purpose rather than arriving by accident. Assert that, since the HTML no longer shows it.
-        var pageModule = await client.GetStringAsync("/js/pages/index.js");
-        Assert.Contains("document.querySelector('script[nonce]')", pageModule, StringComparison.Ordinal);
-        Assert.Contains("<script nonce=\"${CSP_NONCE}\" type=\"module\" src=\"/js/report-runtime.js", pageModule, StringComparison.Ordinal);
+        // The frame builder serves the viewer and the library's previews, so one module carries it.
+        var viewerModule = await client.GetStringAsync("/js/report-viewer.js");
+        Assert.Contains("querySelector('script[nonce]')?.nonce", viewerModule, StringComparison.Ordinal);
+        Assert.Contains("<script nonce=\"${nonce}\" type=\"module\" src=\"/js/report-runtime.js", viewerModule, StringComparison.Ordinal);
+        Assert.Contains("<script nonce=\"${nonce}\">", viewerModule, StringComparison.Ordinal);
+        Assert.DoesNotContain("<script>", viewerModule, StringComparison.Ordinal);
     }
 
     [Fact]
