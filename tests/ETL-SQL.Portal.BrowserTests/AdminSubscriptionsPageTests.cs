@@ -62,6 +62,10 @@ public sealed class AdminSubscriptionsPageTests(AdminUsersFixture fixture)
         await Expect(page.Locator("#subsTableWrap tbody tr")).ToHaveCountAsync(1);
         await Expect(page.Locator("#subsPager")).ToContainTextAsync("26-26 of 26");
         await page.Locator("#subsPager").GetByRole(AriaRole.Button, new() { Name = "Previous", Exact = true }).ClickAsync();
+        await Expect(page.Locator("#subsPager")).ToContainTextAsync("1-25 of 26");
+        // Page one is the first 25 by name. The catalog once sorted on the encrypted recipients
+        // column, which put an arbitrary subscription on page two.
+        await Expect(page.Locator("#subsTableWrap tbody tr td:nth-child(4)").First).ToHaveTextAsync("Native delivery 01");
         await page.Locator($"[data-action='edit-params'][data-id='{ids[0]}']").ClickAsync();
         await Expect(page.Locator("#editParamsFields input")).ToHaveValueAsync("North");
         await page.Locator("#editParamsFields input").FillAsync("East");

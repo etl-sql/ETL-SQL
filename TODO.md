@@ -78,17 +78,26 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 **Horizon:** v0.21.0  
 **Authoritative design:** [ETL-SQL Studio](docs/architecture/decisions/etl-sql-studio.md)
 
-- [ ] **Repair the browser and Portal test lanes.** Audit and address test wait-shapes watching for the
+- [x] **Repair the browser and Portal test lanes.** Audit and address test wait-shapes watching for the
   wrong conditions (connector `TIMEOUT_MS` vs action timeouts, `PlaywrightException` vs `System.TimeoutException`,
   assertions before host answers health probe). Address shared state across test classes (single Portal,
   single admin account, sign-in gate, mutable global connector registry). Wire all passing `scripts/test-*.mjs`
   checks into the pre-push gate and CI.
   The sandbox collection now owns Chromium without booting a Portal/catalog database; native
   journeys keep their separate host fixtures. Verify the full sandbox and native lanes independently.
-- [ ] **Move remaining browser sources to `.ts`.** Build a real module graph with strict compilation over
+  Closed 2026-10-10. The wait-shape and shared-state work is recorded in
+  [flaky-test-stability.md](docs/releases/flaky-test-stability.md). All 112 `scripts/test-*.mjs`
+  checks run through `check-consumer-contracts.mjs`, which `Test-PrePush.ps1` and `ci.yml` call. The
+  sandbox lane (368) and the native lane (561) each pass alone, and together (929). The two
+  journeys that had timed out "under load" were product defects, now fixed: a governance tab left
+  on its loading banner, and the subscription catalog sorting on an encrypted column.
+- [x] **Move remaining browser sources to `.ts`.** Build a real module graph with strict compilation over
   linted, split, and type-checked modules. Inventory remaining handwritten Portal modules and page scripts,
   migrate them with focused behavior tests, and preserve strict type/lint gates. Coordinate output ownership
   with §1.1; removing already-generated JavaScript from source control does not require completing every migration.
+  Closed 2026-10-10. Every tracked `.js` under `src` now has a `.ts` source except vendored and
+  bundled libraries (`arrow.min.js`, `tabulator.min.js`, the CodeMirror and report-runtime bundles),
+  the generated API contracts, and two ESLint configuration files.
 - [x] **Orchestrator metric chips filtering.** Enable filtering on the Orchestrator service's four metric
   chips by providing a run-state field on the job list or a filtered jobs API endpoint. Derive active,
   queued, completed-today, and failed-today membership and counts from authoritative runtime/history

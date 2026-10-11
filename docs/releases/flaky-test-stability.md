@@ -197,19 +197,35 @@ class load and shared background-service state from its startup/shutdown observa
   search the tests for raw SQL, interceptor string matches, and route globs before reading a
   timeout as load.
 
-  One browser failure remains open:
+  Two browser journeys each timed out once in a full lane and passed alone. Both were recorded as
+  probable load. Both were product defects.
   `AdminSubscriptionsPageTests.Subscriptions_ParametersPagingStatusAndDeletePersistThroughTheNativePage`
-  timed out waiting for a page-one row after clicking Previous in the full lane (once in one run)
-  and passes alone. The cause is not established; do not add a retry before it is.
+  timed out waiting for a page-one row after clicking Previous. Run alone in a loop it failed about
+  one time in ten, and a dump of the page showed page one loaded but in an arbitrary order: the
+  administrator catalog sorted and searched on `Subscription.Recipients`, which is encrypted at
+  rest. The database was ordering ciphertext, so the journey's subscription landed on page two
+  whenever its ciphertext sorted last, and a search by recipient could never match. The catalog now
+  sorts by report, name, and id and matches recipients after decryption
+  (`AdminSubscriptionCatalogTests`).
   `StudioStewardshipJourneyTests.Certifies_TheStewardshipFixLoop` timed out the same way and is now
   explained (2026-10-10): it was a product defect, not load. A governance tab opened while the
   reload after a scan was in flight was drawn as "Loading governance data…" and never redrawn. The
   journey's wait for the scan was satisfied by the previous scan's line, so its click landed in
   that window whenever the scan was quick. The page now redraws when that reload finishes
   (`Governance_ATabOpenedWhileAScanReloadsIsDrawnWhenTheReloadFinishes` holds the read to prove it)
-  and the journey waits on its own scan response. The subscriptions failure above is still
-  unexplained; the same shape — a click landing inside an in-flight read — is the first thing to
-  check there.
+  and the journey waits on its own scan response.
+
+  **The reusable lesson: "once, under load, passes alone" is not a diagnosis.** Neither failure
+  was reproduced by rerunning once. Each was found by looping the single test until it failed and
+  making the failing wait print what the page held. A failure rate near 1/N for a fixture of N
+  rows points at ordering; a wait stuck on a loading banner points at a click inside a read.
+  One failure is still open. `SubscriptionIntegrationTests` failed in two filtered Portal runs on
+  2026-10-10: two tests in one, ten of sixteen in the other, each after about 17 seconds, which is
+  the 15-second wait for a triggered job's history. Both runs were slow as a whole (4m34s and 5m14s
+  against 2m39s to 3m20s). The class passed in seven other runs, including straight after a forced
+  rebuild and straight after a browser loop, so neither of those is the trigger. The failure text
+  was filtered out of both failing runs; the wait already names its last observed state, so the
+  next occurrence must be read from an unfiltered log before anything is concluded.
 
 
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run

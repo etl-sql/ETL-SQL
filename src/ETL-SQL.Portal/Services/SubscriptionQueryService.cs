@@ -47,16 +47,23 @@ public sealed class SubscriptionQueryService(
 
         if (!string.IsNullOrWhiteSpace(queryText))
         {
-            var pattern = LikePattern(queryText.Trim());
+            var text = queryText.Trim();
+            var pattern = LikePattern(text);
+            // Recipients are encrypted at rest: the database holds ciphertext it can neither match
+            // nor sort. They are matched here, decrypted, among the rows the other filters left.
+            var byRecipient = (await query.Select(s => new { s.Id, s.Recipients }).ToListAsync())
+                .Where(s => s.Recipients?.Contains(text, StringComparison.OrdinalIgnoreCase) == true)
+                .Select(s => s.Id)
+                .ToList();
             query = query.Where(s =>
                 (s.Name != null && EF.Functions.Like(s.Name, pattern)) ||
-                (s.Recipients != null && EF.Functions.Like(s.Recipients, pattern)) ||
-                EF.Functions.Like(s.Report.Name, pattern));
+                EF.Functions.Like(s.Report.Name, pattern) ||
+                byRecipient.Contains(s.Id));
         }
 
         var total = await query.CountAsync();
         var items = await query
-            .OrderBy(s => s.Report.Name).ThenBy(s => s.Recipients)
+            .OrderBy(s => s.Report.Name).ThenBy(s => s.Name).ThenBy(s => s.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();

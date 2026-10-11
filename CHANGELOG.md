@@ -98,6 +98,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Style the owner and grant fields on the Orchestrator page; they rendered as bare browser controls.
 - Redraw a governance tab opened while a scan's reload is still in flight. It stayed on "Loading
   governance data…" until the page was refreshed.
+- Sort the administrator's subscription list by report and name, and find subscriptions by
+  recipient. The list sorted and searched the encrypted recipients column, so pages came back in
+  an arbitrary order and a search for a recipient's address found nothing.
 - Show subfolders in the reader's folder tree. The server returns folders nested under their
   parents, but the catalog page read the list as flat and discarded each folder's children, so a
   subfolder could be reached only through search.
