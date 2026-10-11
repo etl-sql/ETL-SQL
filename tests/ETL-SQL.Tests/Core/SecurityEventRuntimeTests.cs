@@ -182,6 +182,32 @@ public sealed class SecurityEventRuntimeTests
     }
 
     [Fact]
+    public void StandaloneOutboxPath_ResolvesBeforeTheDataDirectoryExists()
+    {
+        // Windows always has the folder; the lookup only comes back empty on Unix.
+        if (OperatingSystem.IsWindows()) return;
+
+        var variable = SecurityEventOutboxPaths.StandaloneOverrideEnvironmentVariable;
+        var previousOverride = Environment.GetEnvironmentVariable(variable);
+        var previousData = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+        var missing = Path.Combine(Path.GetTempPath(), "etlsql-no-data-home-" + Guid.NewGuid().ToString("N"));
+        Environment.SetEnvironmentVariable(variable, null);
+        Environment.SetEnvironmentVariable("XDG_DATA_HOME", missing);
+        try
+        {
+            Assert.False(Directory.Exists(missing));
+            Assert.Equal(
+                Path.Combine(missing, "ETL-SQL", "Security", "security-events.db"),
+                SecurityEventOutboxPaths.Standalone());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("XDG_DATA_HOME", previousData);
+            Environment.SetEnvironmentVariable(variable, previousOverride);
+        }
+    }
+
+    [Fact]
     public void Emit_RedactsAdversarialPayloadBeforeSinkBoundary()
     {
         const string environmentKey = "ETLSQL_SECURITY_TEST_SECRET";

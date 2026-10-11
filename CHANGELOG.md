@@ -84,6 +84,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Start the Linux CLI and hosts for an account that has no `~/.local/share` yet. Start-up failed with
+  "Local application data directory could not be resolved" before any command ran, including
+  `--version`. A new user or service account is in exactly that state.
 - Report unavailable Orchestrator schedule and notification catalogs as unavailable. A failed or
   refused read returned an empty list, so the page showed "No shared schedules defined yet" and a
   count of zero. The Portal now answers 503 or 403, and the page clears stale rows and counts.

@@ -582,7 +582,11 @@ public static class SecurityEventOutboxPaths
             return Path.GetFullPath(configured);
         }
 
-        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        // A new Linux account has no ~/.local/share until something creates it, and the default
+        // lookup returns an empty string for a folder that does not exist yet. The outbox creates
+        // its own directories, so only an unresolvable home is fatal.
+        var local = Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify);
         if (string.IsNullOrWhiteSpace(local))
             throw new InvalidOperationException("Local application data directory could not be resolved for the security event outbox.");
         return Path.Combine(local, "ETL-SQL", "Security", "security-events.db");
