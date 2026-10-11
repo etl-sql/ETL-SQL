@@ -1023,7 +1023,10 @@ does not close build, package, runtime, or Git-index acceptance.
   Progress (2026-10-11): builds now record the preparation they consumed. `dotnet publish --no-build`,
   `dotnet run --no-build`, and the `-NoBuild` test and smoke lanes reject a missing or older record with
   a rebuild instruction; the wrapper fixture covers both cases on Windows and Linux, and a real build,
-  owner edit, and re-preparation showed the rejection end to end. Still open: a direct
+  owner edit, and re-preparation showed the rejection end to end. The first version of the run guard
+  did nothing, because `dotnet run --no-build` does not set `NoBuild`; a real `dotnet run` exposed it, and
+  the guard now runs on every launch. Verified with the real Player: an older record and a missing
+  record are refused, and a run after a build starts. Still open: a direct
   `dotnet test --no-build` is not guarded, the certification and measurement scripts that accept
   `-NoBuild` do not call the check, and `--no-restore` paths were not exercised.
 - [ ] **Integrate CI, release, and container preparation.** Audit every affected workflow/job, manual

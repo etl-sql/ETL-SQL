@@ -298,8 +298,10 @@ it embedded, and an output folder keeps the files it copied, until the project i
 asset-consuming project therefore writes the manifest hash it built against to
 `artifacts/browser-assets-built/<Project>.<Configuration>.<Runtime>.sha256`. Two things read it:
 
-- `VerifyBuiltBrowserAssets` in `Directory.Build.targets` runs before `Publish` and before
-  `dotnet run` when `NoBuild` is set, and fails if the record is missing or older.
+- `VerifyBuiltBrowserAssets` in `Directory.Build.targets` runs before every `Publish` and every
+  `dotnet run` or `dotnet watch` launch, and fails if the record is missing or older. It does not
+  depend on `NoBuild`, which `dotnet run --no-build` never sets; after a real build the record is
+  current and the check passes.
 - `scripts/check-built-browser-assets.mjs` runs in the `-NoBuild` branch of the test and smoke lanes,
   because a test project is not itself an asset consumer.
 

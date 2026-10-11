@@ -65,10 +65,12 @@
            Text="Prepared browser asset is stale: %(_VerifiedBrowserAsset.Identity). Run node scripts/sync-assets.js before building." />
   </Target>
 
-  <!-- Publishing or running with NoBuild skips PrepareForBuild, and with it every check above.
-       Reused binaries must have been built from the preparation that is on disk now. -->
+  <!-- Publishing or running without a build skips PrepareForBuild, and with it every check above.
+       Reused binaries must have been built from the preparation that is on disk now. This runs
+       whether or not a build came first: dotnet run does not set NoBuild when it is given
+       no-build, and after a real build the record is current, so the check costs nothing. -->
   <Target Name="VerifyBuiltBrowserAssets" BeforeTargets="Publish;ComputeRunArguments"
-          Condition="'$(RequiresBrowserAssets)' == 'true' And '$(NoBuild)' == 'true' And '$(DesignTimeBuild)' != 'true'">
+          Condition="'$(RequiresBrowserAssets)' == 'true' And '$(DesignTimeBuild)' != 'true'">
     <PropertyGroup>
       <_BrowserBuiltRuntime Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_BrowserBuiltRuntime>
       <_BrowserBuiltRuntime Condition="'$(RuntimeIdentifier)' == ''">any</_BrowserBuiltRuntime>
