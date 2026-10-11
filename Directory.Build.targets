@@ -103,4 +103,13 @@
     </GetFileHash>
     <WriteLinesToFile File="$(_BrowserBuiltStamp)" Lines="@(_BrowserBuiltManifest->'%(FileHash)')" Overwrite="true" WriteOnlyWhenDifferent="true" />
   </Target>
+
+  <!-- A cleaned project has no binaries for the record to describe. -->
+  <Target Name="RemoveBuiltBrowserAssetStamp" AfterTargets="Clean" Condition="'$(RequiresBrowserAssets)' == 'true'">
+    <PropertyGroup>
+      <_BrowserBuiltRuntime Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_BrowserBuiltRuntime>
+      <_BrowserBuiltRuntime Condition="'$(RuntimeIdentifier)' == ''">any</_BrowserBuiltRuntime>
+    </PropertyGroup>
+    <Delete Files="$(BrowserAssetRoot)artifacts/browser-assets-built/$(MSBuildProjectName).$(Configuration).$(_BrowserBuiltRuntime).sha256" />
+  </Target>
 </Project>

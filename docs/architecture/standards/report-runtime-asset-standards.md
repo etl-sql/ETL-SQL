@@ -314,6 +314,26 @@ preparation and uploads the inventory and hashes. Run it locally before proposin
 missing directories and outputs, repeat-run stability, rename/delete cleanup, import closure,
 failed compilation, and the MSBuild verifier's missing/stale/new-source failures.
 
+#### Recovering missing or stale assets
+
+| Situation | What to run |
+| :--- | :--- |
+| A build says assets are missing, stale, or not prepared | `node scripts/sync-assets.js` |
+| The compiler restore is missing or does not match | `npm ci --prefix scripts/typecheck`, then prepare |
+| A build says binaries came from an older preparation | Build again without `--no-build` |
+| Preparation says an output was locally edited | Move the change into its owner, delete the edited output, prepare |
+| Preparation was interrupted and left `.browser-assets.lock` | Confirm no preparation is running, delete the lock, prepare |
+| You want to prove everything regenerates | `node scripts/verify-source-only-preparation.mjs` |
+
+`dotnet clean` removes build output and the build record under `artifacts/browser-assets-built/`. It
+does not touch prepared assets, which live in source folders, so no preparation is needed afterwards.
+
+Once generated outputs are ignored by Git, `git clean -X` deletes them together with the manifests and
+the restored compiler. Preview first with `git clean -ndX`. Afterwards run the restore and preparation
+commands above; nothing authored is ignored, so nothing authored is lost. To remove only generated
+outputs, use the proof script instead of `git clean`: it deletes exactly the inventoried files and
+puts them back.
+
 #### Pilot acceptance
 
 Start with `rt-util`: it is a stateless runtime leaf and exercises both online modules and offline

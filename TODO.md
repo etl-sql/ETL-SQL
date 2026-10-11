@@ -1056,7 +1056,7 @@ does not close build, package, runtime, or Git-index acceptance.
   Integrate the pinned unsigned toolchain in `scripts/vsix/` with every public packaging entry point;
   keep proprietary signing dependencies excluded, signing requests rejected, and redistributed
   dependency license files present. Refresh the toolchain/archive checks against the final candidate.
-- [ ] **Verify package version and architecture consistency.** Derive the release version and target
+- [x] **Verify package version and architecture consistency.** Derive the release version and target
   architecture from the supported release inputs, and reject missing or inconsistent values. Remove
   the hard-coded version in `scripts/build-vsix.ps1` and the `0.0.0` fallback in
   `scripts/build-vsix.sh`. Verify macOS x64 and arm64 selection instead of treating every Darwin host
@@ -1064,6 +1064,12 @@ does not close build, package, runtime, or Git-index acceptance.
   against the requested version and platform in every shipped variant.
   Read the bundled tools' actual assembly versions and PE/ELF/Mach-O architecture metadata;
   names and requested parameters alone cannot certify their contents.
+  Done (2026-10-11). The four VSIX wrappers are five-line calls into one coordinator with no version of
+  their own. It requires the extension manifest, lockfile, requested version, and `Directory.Build.props`
+  to agree, resolves macOS x64 and arm64 separately, and inspects each bundled tool's assembly version
+  and binary architecture before assembly. `test-vsix-toolchain.mjs`, `test-vsix-coordinator.mjs`, and
+  `test-package-inspector.mjs` cover all four targets in the consumer gate. Real win32-x64 and linux-x64
+  packages were built through it on this candidate; macOS packages are tracked in the delivery matrix.
 - [ ] **Integrate VS Code and UI sandbox workflows.** Ensure extension compile/package and sandbox
   startup/watch paths work without tracked generated files. Verify the VSIX includes the runtime/designer
   import closure and development reloads use the latest successful compilation. Exercise added, renamed,
@@ -1088,6 +1094,12 @@ does not close build, package, runtime, or Git-index acceptance.
   repeat preparation restores the complete asset set without changing tracked inputs. Document how Git
   cleanup affects ignored assets, dependencies, and manifests, with a preview and targeted cleanup
   commands; preserve authored files and local source edits. Cover IDE and sandbox startup after cleanup.
+  Progress (2026-10-11): `dotnet clean` leaves all 491 prepared outputs unchanged and now removes the
+  project's build record; deleting every output and both manifests is restored by preparation
+  (`verify-source-only-preparation.mjs`, and the source-only runs on both platforms). The standards
+  document has a recovery table and the `git clean` guidance. Still open: IDE and sandbox start-up
+  after cleanup have not been exercised, and the `git clean` behaviour can only be observed after the
+  cutover.
 - [x] **Maintain precise generated-output ignore rules.** Derive the ignored paths from the verified
   ownership inventory, or provide a checked update command that keeps the rules in sync with it. Cover
   new TypeScript modules and host copies, source renames/deletions, and an output path becoming an authored
