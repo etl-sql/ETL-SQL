@@ -1,0 +1,47 @@
+-- =============================================================================
+-- QuickStart: Your First Interactive Report
+-- Zero external files or databases needed!
+-- Demonstrates: In-memory dataset, KPI Summary Card, Regional Bar Chart, and Dashboard layout.
+-- =============================================================================
+
+SET REPORT TITLE = 'QuickStart: Sales Performance Overview';
+SET REPORT DESCRIPTION = 'Zero-dependency starter dashboard showing KPI card, bar chart, and tab navigation.';
+
+-- 1. Extract sample dataset into a temp table
+SELECT 'North' AS Region, 14200 AS Revenue, 12000 AS Target INTO #sales
+UNION ALL SELECT 'South', 9800, 11000
+UNION ALL SELECT 'East', 18500, 15000
+UNION ALL SELECT 'West', 12300, 13000;
+
+-- 2. Visual 1: Summary KPI Card
+CREATE VISUAL TotalRevenueCard AS CARD (
+    SOURCE = (SELECT SUM(Revenue) AS TotalRev FROM #sales),
+    TITLE = 'Total Company Revenue',
+    MAPPINGS (VALUE = TotalRev),
+    OPTIONS (FORMAT = 'C0')
+);
+
+-- 3. Visual 2: Revenue by Region Bar Chart
+CREATE VISUAL RegionalBarChart AS BAR (
+    SOURCE = #sales,
+    TITLE = 'Revenue by Sales Region',
+    MAPPINGS (X = Region, Y = Revenue),
+    OPTIONS (
+        DATA_LABELS = ON WITH (POSITION = 'OUTSIDE', FORMAT = 'C0')
+    )
+);
+
+-- 4. Page Layout: Combine card and chart on a single dashboard page
+CREATE PAGE OverviewPage AS DASHBOARD (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = TotalRevenueCard,
+        'B' = RegionalBarChart
+    )
+);
+
+-- 5. Navigation: Register the page as default view
+CREATE NAVIGATION MainNav AS TAB (
+    DEFAULT = OverviewPage,
+    PAGES (OverviewPage)
+);

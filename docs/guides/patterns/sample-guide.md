@@ -105,7 +105,7 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 
 ## Visual Analytics & Dashboards
 
-End-to-end analytical query-to-visual dashboards located in [`samples/visual_analytics/`](../../../samples/visual_analytics/). These demonstrate real-world business analytics patterns pairing complex SQL windowing, aggregation, and case logic with dedicated report visuals.
+End-to-end analytical query-to-visual dashboards located in [`samples/visual_analytics/`](../../../samples/visual_analytics/README.md). These demonstrate real-world business analytics patterns pairing complex SQL windowing, aggregation, and case logic with dedicated report visuals.
 
 ### [visual_analytics/sales_funnel_conversion.rptsql](../../../samples/visual_analytics/sales_funnel_conversion.rptsql)
 **Purpose**: Sales funnel stage-to-stage conversion rates and customer progression drop-off.
@@ -144,7 +144,7 @@ End-to-end analytical query-to-visual dashboards located in [`samples/visual_ana
 
 ## Declarative Data Prep & Transforms
 
-Reusable data preparation and transformation pipelines located in [`samples/transforms/`](../../../samples/transforms/).
+Reusable data preparation and transformation pipelines located in [`samples/transforms/`](../../../samples/transforms/README.md).
 
 ### [transforms/generate_calendar.etlsql](../../../samples/transforms/generate_calendar.etlsql)
 **Purpose**: Declarative date dimension generation.
@@ -176,7 +176,7 @@ Reusable data preparation and transformation pipelines located in [`samples/tran
 
 ## Visual Gallery Reference
 
-A comprehensive catalog of 39 standalone visual chart, grid, and control references located in [`samples/visual_gallery/`](../../../samples/visual_gallery/). Every sample is self-contained with synthetic data and clean semantic naming (no arbitrary numerical prefixes):
+A comprehensive catalog of 39 standalone visual chart, grid, and control references located in [`samples/visual_gallery/`](../../../samples/visual_gallery/README.md). Every sample is self-contained with synthetic data and clean semantic naming (no arbitrary numerical prefixes):
 
 - **Standard & Advanced Charts**: `bar_chart.rptsql`, `horizontal_bar_chart.rptsql`, `line_chart.rptsql`, `scatter_chart.rptsql`, `bubble_chart.rptsql`, `pie_chart.rptsql`, `donut_chart.rptsql`, `combo_chart.rptsql`, `gauge_chart.rptsql`, `boxplot_chart.rptsql`, `treemap_chart.rptsql`, `heatmap_chart.rptsql`, `funnel_chart.rptsql`, `waterfall_chart.rptsql`, `radar_chart.rptsql`, `candlestick_chart.rptsql`, `gantt_chart.rptsql`, `sunburst_radial.rptsql`, `network_graph.rptsql`, `sankey_diagram.rptsql`, `trellis_multiples.rptsql`, `grammar_of_graphics_custom.rptsql`.
 - **Grids & Presentation Displays**: `table_visual.rptsql`, `matrix_grid.rptsql`, `kpi_card.rptsql`, `map_visual.rptsql`, `text_visual.rptsql`, `image_visual.rptsql`.

@@ -1,0 +1,36 @@
+-- =============================================================================
+-- QuickStart: Your First ETL-SQL Pipeline
+-- Extract -> Stage -> Transform -> Load
+-- Zero external files or databases needed! Runs entirely in-memory in < 1 second.
+-- =============================================================================
+
+-- 1. EXTRACT: Generate sample operational orders directly into an in-memory temp table
+GENERATE 50 ROWS INTO #raw_orders AS (
+    order_id     = 'SEQUENCE(1001, 1)',
+    customer_id  = 'SEQUENCE(1, 1)',
+    order_date   = 'SEQUENCE(2026-01-01, 1, DAY)',
+    region       = 'RANDOM(North, South, East, West)',
+    units        = 'RANDOM_INT(1, 20)',
+    unit_price   = 'RANDOM_DECIMAL(15.00, 150.00)'
+);
+
+PRINT 'Generated 50 sample orders in #raw_orders.';
+
+-- 2. TRANSFORM: Calculate order values, filter out small orders, and aggregate by region
+SELECT 
+    region,
+    COUNT(*) AS total_orders,
+    SUM(units) AS total_units,
+    ROUND(SUM(units * unit_price), 2) AS total_revenue,
+    ROUND(AVG(units * unit_price), 2) AS avg_order_value
+INTO #regional_summary
+FROM #raw_orders
+WHERE units >= 3
+GROUP BY region
+ORDER BY total_revenue DESC;
+
+PRINT 'Aggregated metrics into #regional_summary:';
+
+-- 3. LOAD / PREVIEW: Display the final transformed table
+SELECT region, total_orders, total_units, total_revenue, avg_order_value 
+FROM #regional_summary;
