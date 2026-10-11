@@ -1121,7 +1121,8 @@ does not close build, package, runtime, or Git-index acceptance.
   outputs with matching bytes and JavaScript content types, and answers 404 for a missing module, a
   wrong-case URL, and `.ts`/`.map`. That run exposed a start-up failure for accounts with no
   `~/.local/share`, now fixed. Still open: ReportPlayer, WorkstationEditor, the VSIX in a real webview,
-  the report CLI's offline export, and every non-Linux package.
+  the report CLI's offline export, and macOS. Portal also passes this check from the extracted Windows
+  ZIP and from the MSI's administrative extract.
 - [ ] **Verify installed upgrades deliver the current assets.** Extend the release checklist's existing
   upgrade lanes with browser-asset checks: install v0.20.0, upgrade through each supported delivery path,
   and verify the installed JavaScript, CSS, and embedded bundle match the candidate package. Cover removed
@@ -1142,8 +1143,9 @@ does not close build, package, runtime, or Git-index acceptance.
   Progress (2026-10-11): the Linux ZIP, DEB, and linux-x64 VSIX built from a source-only archive of
   `e97278ac5` carry every inventoried output for their hosts with matching bytes (213 Portal, 29
   ReportPlayer, 101 WorkstationEditor, 59 VS Code media) and no `.ts` or `.map` file. The three
-  container images pass the same comparison over HTTP. Windows and macOS packages, the MSI, and the
-  DMG have not been inspected.
+  container images pass the same comparison over HTTP. The Windows ZIP, win32-x64 VSIX, and an
+  administrative extract of the MSI, built from an archive of `d226e13aa`, pass it too. macOS packages
+  and the DMG have not been inspected.
 - [ ] **Verify release metadata after asset generation.** Check checksums, SBOM, provenance, and
   third-party notices against the final assembled packages containing the generated assets. Audit
   file-discovery rules so ignored outputs and bundled vendor components remain represented. Generate
