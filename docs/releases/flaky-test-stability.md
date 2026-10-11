@@ -249,6 +249,21 @@ class load and shared background-service state from its startup/shutdown observa
   `PortalWebFactory` already has. If a history timeout appears with a `202`, this explanation is
   wrong and the search starts again from that log.
 
+  **A fixed wait around a full preparation is outgrown, not flaky.** The first CI run after 56
+  commits (2026-10-11) failed three checks that had passed locally. Two had a known cause. The
+  extension's unit test for the offline bundle runs `test-runtime-bundle.mjs`, more than a dozen
+  full preparations in child processes, under the default five-second test timeout; it already takes six
+  seconds on a fast machine. The watcher check in `test-asset-generation.mjs` allowed fifteen
+  seconds for two preparations on a runner where the whole consumer gate took twice as long as it
+  does locally. Both waits had been right when there were fewer TypeScript owners to compile. The
+  first now has a timeout sized for what it runs; the second measures one preparation and waits ten
+  of them.
+
+  The third has no known cause. `test-service-capacity-smoke.mjs` reported that a 0.2-second
+  workload against a local stub breached its criteria, and its message did not say which one. It
+  now prints the breaches. Nothing else about it was changed; read the breach before touching the
+  thresholds.
+
 
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
 diagnostics belong in generated evidence, not a new release-specific tracking file.

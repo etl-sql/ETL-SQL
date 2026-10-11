@@ -140,6 +140,15 @@ jobs:
             throw "Expected exactly one x64 MSI for $env:PREVIOUS_TAG."
           }
 
+      # build-msi.ps1 prepares browser assets, which needs the pinned compiler.
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+
       - name: Install WiX Toolset
         shell: pwsh
         run: choco install wixtoolset -y --no-progress --skip-if-installed

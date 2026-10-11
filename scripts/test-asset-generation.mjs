@@ -386,6 +386,11 @@ async function verifyGeneration(configurationInputs) {
     const watchEvents = [];
     const watchedSource = path.join(source, 'watched-probe.ts');
     let changeAfterPreparation = false;
+    // Every watcher result is a full preparation, so the wait is sized from one measured here
+    // rather than from a fixed number that a slower runner outgrows as owners are added.
+    const measured = Date.now();
+    await generate(true);
+    const cycleMs = Date.now() - measured;
     const watcher = await watchBrowser({ root, toolchain: repo, intervalMs: 50,
         onResult: event => {
             watchEvents.push(event);
@@ -395,7 +400,7 @@ async function verifyGeneration(configurationInputs) {
             }
         } });
     const until = async predicate => {
-        const deadline = Date.now() + 15000;
+        const deadline = Date.now() + Math.max(15000, cycleMs * 10);
         while (!predicate()) {
             assert.ok(Date.now() < deadline, 'The browser watcher did not report the expected outcome: ' +
                 watchEvents.map(event => event.error?.message ?? 'prepared').join('\n'));

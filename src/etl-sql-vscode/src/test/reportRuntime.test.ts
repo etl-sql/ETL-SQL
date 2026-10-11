@@ -763,7 +763,8 @@ describe('offline snapshot bundle', () => {
         const output = execFileSync(process.execPath,
             [resolve(__dirname, '../../../../scripts/test-runtime-bundle.mjs')], { encoding: 'utf8' });
         expect(output).toContain('rejected-input checks passed');
-    });
+        // Each case is a full preparation in a child process; the default five seconds is not enough.
+    }, 180_000);
 
     it('carries no leftover module syntax', () => {
         const offenders = RUNTIME_SRC.split('\n')

@@ -89,7 +89,9 @@ try {
   await runNode(['scripts/test-service-capacity.mjs', '--config', configPath, '--out-dir', outDir]);
   const report = JSON.parse(await fs.readFile(path.join(outDir, 'capacity-report.json'), 'utf8'));
   if (report.portal.length !== 1 || report.orchestrator.length !== 1) throw new Error('Expected one result step for each service.');
-  if (!report.portal[0].passed || !report.orchestrator[0].passed) throw new Error('Expected smoke workload steps to pass.');
+  if (!report.portal[0].passed || !report.orchestrator[0].passed)
+    throw new Error('Expected smoke workload steps to pass. Breaches: ' +
+      JSON.stringify({ portal: report.portal[0].breaches, orchestrator: report.orchestrator[0].breaches }));
   if (report.portal[0].requestCount > 10) throw new Error('Expected Portal think time to pace request volume.');
   if (report.orchestrator[0].serviceMetricMaxima.queued_jobs !== 0) throw new Error('Expected queued_jobs metric sample.');
   if (report.orchestrator[0].processMetricMaxima.processId !== process.pid) throw new Error('Expected OS process metric sample.');
