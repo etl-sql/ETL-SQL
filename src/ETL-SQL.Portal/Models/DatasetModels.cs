@@ -1,5 +1,5 @@
-using ETL_SQL.Core.Data;
 using System.Text.Json.Serialization;
+using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.Portal.Models;
 
