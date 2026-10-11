@@ -186,7 +186,9 @@ export function createGovernancePortal(opts: {
         state.mutationMessage = null;
         notifyFn(success, { title: 'Governance', tone: 'success', auditAction });
         await load();
-        if (current()) await render();
+        // Drawn even when the reader changed tab meanwhile: that tab was drawn as "loading" from
+        // this read and nothing else would replace it.
+        if (active()) await render();
       } else state.mutationMessage = 'The change was recorded. Refresh to inspect its current state.';
       if (active()) updateMutationControls();
       return result;

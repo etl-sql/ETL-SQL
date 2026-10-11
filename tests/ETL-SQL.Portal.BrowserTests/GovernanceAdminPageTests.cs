@@ -231,6 +231,38 @@ public sealed class GovernanceAdminPageTests(GovernanceAdminFixture fixture)
     }
 
     [Fact]
+    public async Task Governance_ATabOpenedWhileAScanReloadsIsDrawnWhenTheReloadFinishes()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await fixture.SignInAsync(page);
+        await page.GotoAsync("/index.html#governance/overview");
+        await Expect(page.Locator("#btnRunScan")).ToBeEnabledAsync();
+
+        // Hold the read that follows the scan, so the tab change lands while it is in flight.
+        var reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        const string routePattern = "**/api/governance/dashboard**";
+        await page.RouteAsync(routePattern, async route =>
+        {
+            reached.TrySetResult();
+            await release.Task;
+            await route.ContinueAsync();
+        });
+        await page.Locator("#btnRunScan").ClickAsync();
+        await reached.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        await page.Locator("#govNavWorkqueue").ClickAsync();
+        await Expect(page.Locator("[data-gov-state='loading']")).ToBeVisibleAsync();
+        release.TrySetResult();
+
+        await Expect(page.Locator("[data-gov-state='loading']")).ToHaveCountAsync(0);
+        await Expect(page.Locator("#govNavWorkqueue")).ToHaveClassAsync(new System.Text.RegularExpressions.Regex("active"));
+        await Expect(page.Locator("#btnRunScan")).ToBeEnabledAsync();
+        await page.UnrouteAsync(routePattern);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
     public async Task Governance_PendingAndUnconfirmedWritesSurviveLeavingAndRemountingTheView()
     {
         await using var session = await fixture.NewSessionAsync();

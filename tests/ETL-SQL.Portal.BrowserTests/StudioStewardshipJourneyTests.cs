@@ -220,7 +220,12 @@ public sealed class StudioStewardshipJourneyTests(StudioAuthoringFixture fixture
     private static async Task<string> ScanAndReadDeductionsAsync(IPage page, string assetKeyFragment)
     {
         await OpenGovernanceOverviewAsync(page);
-        await page.ClickAsync("#btnRunScan");
+        // Wait on this scan's own response. The "scanned" line is already on the page from any
+        // earlier scan, so waiting for it let the journey read the queue before this scan had run.
+        var scan = await page.RunAndWaitForResponseAsync(() => page.ClickAsync("#btnRunScan"),
+            response => response.Request.Method == "POST" && response.Url.EndsWith("/api/governance/scan", StringComparison.Ordinal),
+            new PageRunAndWaitForResponseOptions { Timeout = 30_000 });
+        Assert.True(scan.Ok, $"The governance scan answered {scan.Status}.");
         await Expect(page.Locator("[data-gov-state='scanned']")).ToBeVisibleAsync(
             new LocatorAssertionsToBeVisibleOptions { Timeout = 30_000 });
 

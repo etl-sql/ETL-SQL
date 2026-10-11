@@ -201,10 +201,15 @@ class load and shared background-service state from its startup/shutdown observa
   `AdminSubscriptionsPageTests.Subscriptions_ParametersPagingStatusAndDeletePersistThroughTheNativePage`
   timed out waiting for a page-one row after clicking Previous in the full lane (once in one run)
   and passes alone. The cause is not established; do not add a retry before it is.
-  `StudioStewardshipJourneyTests.Certifies_TheStewardshipFixLoop` did the same once in a later
-  full run: a 30-second wait for the tagged table's row, passing alone and in the two runs before it.
-  Two different journeys timing out once each across three full runs points at lane load, not at
-  either page, but neither has been reproduced.
+  `StudioStewardshipJourneyTests.Certifies_TheStewardshipFixLoop` timed out the same way and is now
+  explained (2026-10-10): it was a product defect, not load. A governance tab opened while the
+  reload after a scan was in flight was drawn as "Loading governance data…" and never redrawn. The
+  journey's wait for the scan was satisfied by the previous scan's line, so its click landed in
+  that window whenever the scan was quick. The page now redraws when that reload finishes
+  (`Governance_ATabOpenedWhileAScanReloadsIsDrawnWhenTheReloadFinishes` holds the read to prove it)
+  and the journey waits on its own scan response. The subscriptions failure above is still
+  unexplained; the same shape — a click landing inside an in-flight read — is the first thing to
+  check there.
 
 
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
