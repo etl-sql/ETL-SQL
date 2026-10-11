@@ -106,6 +106,7 @@ show_pre_release_plan() {
     local i=1
     print_plan_phase "$i" "Asset preparation" "node ./scripts/sync-assets.js" "Generate browser assets before verification and build."; i=$((i + 1))
     print_plan_phase "$i" "Asset drift check" "node ./scripts/sync-assets.js -Check" "Shared report runtime files must match generated host copies."; i=$((i + 1))
+    print_plan_phase "$i" "Asset ownership check" "node ./scripts/browser-asset-ownership.mjs --check" "Every browser owner and input is tracked, and generated outputs match the layout .gitignore declares."; i=$((i + 1))
     print_plan_phase "$i" "Shell script line endings check" "node scripts/check-shell-line-endings.js" "Shell scripts (.sh) must use LF line endings to avoid bash syntax errors."; i=$((i + 1))
     print_plan_phase "$i" "Secret scan" "node scripts/scan-secrets.js" "No real credentials (keys/provider tokens) reach the public repo — early local tripwire ahead of GitGuardian."; i=$((i + 1))
     print_plan_phase "$i" "Dotnet restore" "dotnet restore ETL-SQL.slnx; dotnet tool restore" "Package graph and repository-local release tools resolve before build, tests, and coverage reporting."; i=$((i + 1))
@@ -468,7 +469,7 @@ run_phase() {
 
     # Generated outputs can be missing or edited without changing the source fingerprint.
     # Preparation and verification therefore run on every resume.
-    if [[ "$RESUME" == true && "$name" != "Asset preparation" && "$name" != "Asset drift check" ]] && is_phase_passed "$name"; then
+    if [[ "$RESUME" == true && "$name" != "Asset preparation" && "$name" != "Asset drift check" && "$name" != "Asset ownership check" ]] && is_phase_passed "$name"; then
         echo "${GRAY}SKIP $name${RESET}"
         RESULT_OBJECTS+=("{\"name\":$(json_str "$name"),\"command\":$(json_str "$command_label"),\"status\":\"Skipped\",\"elapsedSeconds\":0,\"log\":\"\",\"note\":\"Skipped by --resume; previous phase passed for this source fingerprint.\"}")
         save_state "Running"
@@ -614,6 +615,8 @@ run_phase "Asset preparation" \
 run_phase "Asset drift check" \
     "node ./scripts/sync-assets.js -Check" \
     node "./scripts/sync-assets.js" "-Check"
+
+run_phase "Asset ownership check"     "node ./scripts/browser-asset-ownership.mjs --check"     node "./scripts/browser-asset-ownership.mjs" "--check"
 
 run_phase "Shell script line endings check" \
     "node scripts/check-shell-line-endings.js" \

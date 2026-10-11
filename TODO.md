@@ -1058,9 +1058,9 @@ does not close build, package, runtime, or Git-index acceptance.
   file so precise ignore rules cannot silently fall behind the ownership inventory. Keep type/lint baselines empty.
   Commit checks must inspect staged ownership/configuration so unrelated unstaged changes cannot mask
   a missing input or generated file in the proposed change. CI must enforce the resulting tracked tree.
-  Progress (2026-10-11): the Git-index ownership check runs in pre-push and CI and reads staged content.
-  Still open: the pre-release gates do not run it, and tests that read JavaScript from disk have not
-  been audited for running after preparation.
+  Progress (2026-10-11): the Git-index ownership check runs in pre-push, CI, and both pre-release gates
+  (on every resume) and reads staged content.
+  Still open: tests that read JavaScript from disk have not been audited for running after preparation.
 - [ ] **Verify source-analysis coverage after untracking outputs.** Audit CodeQL exclusions and tools
   that discover files through Git or JavaScript-only patterns. Ensure they still inspect retained
   Portal and shared-runtime TypeScript, remaining handwritten JavaScript, and relevant generator inputs.

@@ -118,6 +118,7 @@ function Get-PlannedPreReleasePhases {
 
     $phases.Add([ordered]@{ Phase = "Asset preparation"; Command = "node .\scripts\sync-assets.js"; Reason = "Generate browser assets before checks and builds consume them." })
     $phases.Add([ordered]@{ Phase = "Asset drift check"; Command = "node .\scripts\sync-assets.js -Check"; Reason = "Shared report runtime files must match generated host copies." })
+    $phases.Add([ordered]@{ Phase = "Asset ownership check"; Command = "node .\scripts\browser-asset-ownership.mjs --check"; Reason = "Every browser owner and input is tracked, and generated outputs match the layout .gitignore declares." })
     $phases.Add([ordered]@{ Phase = "Changelog compilation"; Command = ".\scripts\Compile-Changelog.ps1"; Reason = "Any feature-branch changelog fragments are compiled into CHANGELOG.md." })
     $phases.Add([ordered]@{ Phase = "Secret scan"; Command = "node scripts/scan-secrets.js"; Reason = "No real credentials (keys/provider tokens) reach the public repo — early local tripwire ahead of GitGuardian." })
     $phases.Add([ordered]@{ Phase = "Dotnet restore"; Command = "dotnet restore ETL-SQL.slnx; dotnet tool restore"; Reason = "Package graph and repository-local release tools resolve before build, tests, and coverage reporting." })
@@ -434,6 +435,7 @@ function Get-PreReleasePhaseDependencies {
 
     switch ($Name) {
         "Asset drift check" { return @("Asset preparation") }
+        "Asset ownership check" { return @("Asset preparation", "Asset drift check") }
         "Dotnet build" { return @("Dotnet restore", "Asset preparation", "Asset drift check") }
         "Test structure audit" { return @("Dotnet build") }
         "Format verify" { return @("Dotnet restore", "Asset preparation", "Asset drift check") }
@@ -939,6 +941,12 @@ try {
     Invoke-LoggedPhase "Asset drift check" `
         "node .\scripts\sync-assets.js -Check" `
         { & node ".\scripts\sync-assets.js" "-Check" } `
+        $previousPhaseMap $fingerprint $results -AlwaysRun
+
+    # The index can change without the source fingerprint changing, so this runs on every resume.
+    Invoke-LoggedPhase "Asset ownership check" `
+        "node .\scripts\browser-asset-ownership.mjs --check" `
+        { & node ".\scripts\browser-asset-ownership.mjs" "--check" } `
         $previousPhaseMap $fingerprint $results -AlwaysRun
 
     Invoke-LoggedPhase "Changelog compilation" `

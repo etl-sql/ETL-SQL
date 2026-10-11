@@ -129,6 +129,7 @@ public sealed class ReleasePolicyHelperTests
     [Theory]
     [InlineData("Asset preparation")]
     [InlineData("Asset drift check")]
+    [InlineData("Asset ownership check")]
     public async Task Resume_ExecutesAssetPhasesDespitePreviousSuccess(string phase)
     {
         var result = await RunHelper(PhaseRunnerFixture + $$"""
@@ -152,6 +153,7 @@ public sealed class ReleasePolicyHelperTests
     [Theory]
     [InlineData("Dotnet build", "Asset preparation")]
     [InlineData("Format verify", "Asset drift check")]
+    [InlineData("Asset ownership check", "Asset drift check")]
     [InlineData("VS Code compile", "Asset drift check")]
     [InlineData("VS Code VSIX package", "VS Code UI build")]
     public async Task Resume_FailedPrerequisiteBlocksPreviouslyPassedConsumer(string phase, string prerequisite)
