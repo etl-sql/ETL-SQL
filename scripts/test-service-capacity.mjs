@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -202,7 +202,7 @@ async function sampleLoop(service, context, deadline, samples) {
       const response = await sendRequest({ method: 'GET', path: service.metricsPath, baseUrl: service.baseUrl }, context);
       sample.serviceMetrics = response.json ?? null;
     }
-    if (service.processId) sample.process = readProcessSample(service.processId);
+    if (service.processId) sample.process = await readProcessSample(service.processId);
     samples.push(sample);
     await sleep(intervalMs);
   }
@@ -354,12 +354,12 @@ function collectEnvironment(value) {
   };
 }
 
-function readProcessSample(processId) {
+async function readProcessSample(processId) {
   const pid = Number(processId);
   if (!Number.isInteger(pid) || pid <= 0) return { processId, error: 'invalid processId' };
 
   try {
-    if (os.platform() === 'win32') return readWindowsProcessSample(pid);
+    if (os.platform() === 'win32') return await readWindowsProcessSample(pid);
     return readProcfsProcessSample(pid);
   } catch (error) {
     return { processId: pid, error: String(error) };
@@ -381,8 +381,16 @@ function readWindowsProcessSample(pid) {
     '} | ConvertTo-Json -Compress',
     '}'
   ].join('\n');
-  const output = execFileSync('powershell.exe', ['-NoProfile', '-Command', script], { encoding: 'utf8', timeout: 5000 });
-  return JSON.parse(output);
+  // Never synchronously: PowerShell takes hundreds of milliseconds to start, and seconds on a busy
+  // host. Blocking here froze the event loop that sends and times the workload's requests, so every
+  // sample added its own start-up time to a request's measured latency.
+  return new Promise((resolve, reject) => {
+    execFile('powershell.exe', ['-NoProfile', '-Command', script], { encoding: 'utf8', timeout: 30000 },
+      (error, stdout) => {
+        if (error) return reject(error);
+        try { resolve(JSON.parse(stdout)); } catch (parseError) { reject(parseError); }
+      });
+  });
 }
 
 function readProcfsProcessSample(pid) {

@@ -94,6 +94,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Stop the capacity driver's process sampling from inflating the latencies it reports on Windows. It
+  ran PowerShell synchronously, which froze the event loop that sends and times requests; a request
+  to a local stub measured about 300 ms and now measures under 1 ms.
 - Install the Desktop Player's report runtime with the Workstation feature. The Windows installer
   shipped `ETL-SQL-Player.exe` there but its scripts and styles only with the Portal features, so a
   workstation-only install opened reports with no runtime. The MSI certification now checks this in

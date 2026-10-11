@@ -63,9 +63,7 @@ const outDir = path.join(tempDir, 'results');
 
 const workload = {
   environment: { deploymentMode: 'smoke' },
-  // This run checks the harness, not a service: the target is a stub in this process. A latency
-  // ceiling here measures the machine, and one 3.3-second request on a busy CI runner failed it.
-  breachCriteria: { maxErrorRatePct: 1, maxP95LatencyMs: 60000, maxSqliteContentionCount: 0, maxQueuedWork: 10 },
+  breachCriteria: { maxErrorRatePct: 1, maxP95LatencyMs: 2000, maxSqliteContentionCount: 0, maxQueuedWork: 10 },
   portal: {
     baseUrl: `http://127.0.0.1:${port}`,
     thinkTimeMs: 50,
@@ -95,6 +93,10 @@ try {
     throw new Error('Expected smoke workload steps to pass. Breaches: ' +
       JSON.stringify({ portal: report.portal[0].breaches, orchestrator: report.orchestrator[0].breaches }));
   if (report.portal[0].requestCount > 10) throw new Error('Expected Portal think time to pace request volume.');
+  // Sampling the process must not hold up the requests being timed. When it ran synchronously, the
+  // one Orchestrator request here took as long as the sampler's child process took to start.
+  if (report.orchestrator[0].latencyMs.p95 > 100)
+    throw new Error(`Process sampling delayed the workload: Orchestrator p95 ${report.orchestrator[0].latencyMs.p95} ms against a local stub.`);
   if (report.orchestrator[0].serviceMetricMaxima.queued_jobs !== 0) throw new Error('Expected queued_jobs metric sample.');
   if (report.orchestrator[0].processMetricMaxima.processId !== process.pid) throw new Error('Expected OS process metric sample.');
   if (!report.orchestrator[0].processMetricMaxima.workingSetBytes) throw new Error('Expected OS working-set metric sample.');

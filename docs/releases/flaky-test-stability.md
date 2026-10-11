@@ -262,10 +262,22 @@ class load and shared background-service state from its startup/shutdown observa
   The third needed its own message first. `test-service-capacity-smoke.mjs` reported that a
   0.2-second workload against a local stub breached its criteria without saying which. Once it
   printed the breach, the next failure read `p95 3325.01ms > 2000ms` for the Orchestrator step, in
-  a run where the consumer gate took 22 minutes against 8 locally. The smoke run checks the
-  harness against a stub in its own process, so a latency ceiling there measures the runner. It
-  now uses a ceiling that only a hang would reach; error rate, contention, and queue criteria are
-  unchanged.
+  a run where the consumer gate took 22 minutes against 8 locally. I took that for the runner being
+  slow and raised the ceiling. That was wrong, and the next run said so: with latency out of the
+  way the same check failed on a missing process-memory sample.
+
+  Both came from one defect in the driver. On Windows it sampled process metrics by running
+  `powershell.exe` synchronously. That froze the event loop that sends and times the workload's
+  requests for as long as PowerShell took to start, so each sample added its start-up time to a
+  request's latency; and when start-up passed the call's five-second limit, the sample was lost.
+  Measured locally against the stub, the Orchestrator step reported a p95 of about 300 ms before
+  the fix and under 1 ms after it, with the same request to the same stub. Any Windows capacity
+  run with process sampling was reporting latencies that included its own instrument. The sampler
+  is now asynchronous, the ceiling is back at 2,000 ms, and the smoke run fails if the sampled
+  step's p95 against the stub exceeds 100 ms.
+
+  The lesson: a slow runner was the comfortable explanation and it fitted the first symptom. The
+  second symptom did not fit it, and a measurement on a fast machine showed the same inflation.
 
   **Open: the browser lane on the Windows CI runner.** Three CI runs on `release/v0.21.0` gave three
   different results: one sandbox journey timed out after 20 seconds (2026-10-08), all tests passed
