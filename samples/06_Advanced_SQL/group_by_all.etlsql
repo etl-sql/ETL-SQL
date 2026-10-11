@@ -1,0 +1,37 @@
+-- Advanced SQL: GROUP BY ALL & Positional References
+-- Demonstrates: Ergonomic aggregation without re-typing non-aggregate columns,
+-- and positional integer references in GROUP BY and ORDER BY clauses.
+
+-- 1. Mock regional transaction log
+SELECT 'North' AS Region, 'Laptops' AS Category, 'Retail' AS Channel, 1200 AS Amount INTO #sales
+UNION ALL SELECT 'North', 'Laptops', 'Retail', 1500
+UNION ALL SELECT 'North', 'Monitors', 'Wholesale', 800
+UNION ALL SELECT 'South', 'Laptops', 'Retail', 1100
+UNION ALL SELECT 'South', 'Monitors', 'Retail', 950
+UNION ALL SELECT 'South', 'Monitors', 'Wholesale', 1400;
+
+-- 2. Aggregate with GROUP BY ALL
+-- Automatically groups by Region, Category, and Channel without repeating them in the GROUP BY clause:
+SELECT
+    Region,
+    Category,
+    Channel,
+    SUM(Amount) AS TotalRevenue,
+    COUNT(*)    AS TransactionCount
+INTO #summary_all
+FROM #sales
+GROUP BY ALL
+ORDER BY Region ASC, TotalRevenue DESC;
+
+PRINT '=== Aggregation with GROUP BY ALL ===';
+SELECT Region, Category, Channel, TotalRevenue, TransactionCount
+FROM #summary_all;
+
+-- 3. Positional Grouping and Ordering (1-based column indexes)
+-- Groups by column 1 (Region) and orders by column 2 (Revenue DESC):
+SELECT
+    Region,
+    SUM(Amount) AS RegionalTotal
+FROM #sales
+GROUP BY 1
+ORDER BY 2 DESC;

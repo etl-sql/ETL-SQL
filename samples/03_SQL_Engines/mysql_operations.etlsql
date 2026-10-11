@@ -1,0 +1,51 @@
+-- SQL Engines: MySQL / MariaDB Database Operations
+-- Demonstrates: Defining a native MySQL connection, connection options,
+-- staging data into engine #temp tables, and transformation workflows.
+--
+-- Note: Replace connection options with your live MySQL server or test container.
+
+-- 1. Inspect MySQL connection configuration and supported options
+HELP CONNECTION MYSQL;
+
+-- 2. Structured MySQL connection definition
+-- Supported options: HOST, PORT (default 3306), DATABASE, USER, PASSWORD,
+-- SSL_MODE ('PREFERRED', 'REQUIRED', 'NONE'), POOLING, MIN_POOL_SIZE, MAX_POOL_SIZE.
+CREATE CONNECTION mysql_source AS MYSQL(
+    HOST             = '127.0.0.1',
+    PORT             = 3306,
+    DATABASE         = 'inventory_db',
+    USER             = 'app_user',
+    PASSWORD         = 'demo_password',
+    TIMEOUT_SECONDS  = 30,
+    POOLING          = TRUE,
+    SSL_MODE         = 'PREFERRED'
+);
+
+-- 3. Staging and transforming inventory data inside the engine
+SELECT
+    101 AS ProductId,
+    'SKU-1001' AS SkuCode,
+    45 AS Quantity,
+    19.99 AS UnitPrice
+INTO #staged_inventory
+UNION ALL SELECT 102, 'SKU-1002', 8, 89.50
+UNION ALL SELECT 103, 'SKU-1003', 120, 4.25;
+
+SELECT
+    ProductId,
+    SkuCode,
+    Quantity,
+    UnitPrice,
+    ROUND(Quantity * UnitPrice, 2) AS InventoryValue,
+    CASE
+        WHEN Quantity < 10 THEN 'Reorder Required'
+        WHEN Quantity < 50 THEN 'Low Stock'
+        ELSE 'Sufficient'
+    END AS StockStatus
+INTO #inventory_report
+FROM #staged_inventory;
+
+PRINT '=== Transformed Inventory Valuation Summary ===';
+SELECT ProductId, SkuCode, Quantity, InventoryValue, StockStatus
+FROM #inventory_report
+ORDER BY InventoryValue DESC;

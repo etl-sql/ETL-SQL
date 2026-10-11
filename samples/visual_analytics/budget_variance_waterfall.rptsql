@@ -1,0 +1,71 @@
+-- Visual Analytics: Budget Variance & Profit Bridge
+-- Demonstrates: Stepped financial variance reconciliation, subtotal flags,
+-- and mapping onto a WATERFALL chart, Profit Margin KPI Card, and Breakdown Table.
+
+SET REPORT TITLE = 'Financial Profit & Loss Bridge';
+SET REPORT DESCRIPTION = 'Reconciles Gross Revenue down to Net Operating Profit across cost categories using a Waterfall bridge.';
+SET REPORT THEME = 'light';
+
+-- 1. Mock P&L Financial Line Items Dataset
+SELECT '1. Gross Revenue' AS LineItem, 1250000 AS Amount, 1 AS IsTotal INTO #pnl_bridge
+UNION ALL SELECT '2. Cost of Goods Sold', -420000, 0
+UNION ALL SELECT '3. Sales & Marketing',   -280000, 0
+UNION ALL SELECT '4. Research & Dev',      -190000, 0
+UNION ALL SELECT '5. Gen & Administrative', -110000, 0
+UNION ALL SELECT '6. Partner Rebates',      -45000,  0
+UNION ALL SELECT '7. Interest & Other',      25000,  0
+UNION ALL SELECT '8. Net Operating Profit', 230000,  1;
+
+-- 2. Visual: Stepped Waterfall Financial Bridge
+CREATE VISUAL PnlWaterfall AS WATERFALL (
+    SOURCE = #pnl_bridge,
+    TITLE = 'P&L Waterfall: Gross Revenue to Net Profit',
+    MAPPINGS (
+        NAME  = LineItem,
+        VALUE = Amount,
+        TOTAL = IsTotal
+    ),
+    OPTIONS (
+        DATA_LABELS = ON,
+        BAR_MIN_HEIGHT = 4
+    )
+);
+
+-- 3. Visual: Executive Profit Margin KPI Cards
+CREATE VISUAL GrossRevenueCard AS CARD (
+    SOURCE = (SELECT Amount FROM #pnl_bridge WHERE LineItem = '1. Gross Revenue'),
+    TITLE = 'Starting Gross Revenue',
+    MAPPINGS (VALUE = Amount),
+    OPTIONS (FORMAT = 'C0')
+);
+
+CREATE VISUAL NetProfitCard AS CARD (
+    SOURCE = (SELECT Amount FROM #pnl_bridge WHERE LineItem = '8. Net Operating Profit'),
+    TITLE = 'Net Operating Profit',
+    MAPPINGS (VALUE = Amount),
+    OPTIONS (FORMAT = 'C0')
+);
+
+-- 4. Visual: Statement Line Items Detail Table
+CREATE VISUAL StatementTable AS TABLE (
+    SOURCE = #pnl_bridge,
+    TITLE = 'Financial Bridge Ledger',
+    MAPPINGS (
+        LineItem AS 'Accounting Line',
+        Amount FORMAT 'C0' ALIGN 'right' AS 'Variance / Subtotal',
+        IsTotal ALIGN 'center' AS 'Summary Anchor'
+    )
+);
+
+-- 5. Dashboard Page Composition
+CREATE PAGE PnlDashboard AS DASHBOARD (
+    STRUCTURE = 'A B / C C / D D',
+    MAP (
+        'A' = GrossRevenueCard,
+        'B' = NetProfitCard,
+        'C' = PnlWaterfall,
+        'D' = StatementTable
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = PnlDashboard, PAGES (PnlDashboard));

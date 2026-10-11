@@ -1,0 +1,25 @@
+-- Transform: TRANSFORM USING DEDUPLICATE
+-- Demonstrates: Deduplicating dataset records by business key,
+-- with deterministic tie-breaking via ORDER_BY and retention policy (KEEP = 'FIRST').
+
+-- 1. Mock inbound customer event feed with duplicates and updates
+SELECT 101 AS CustomerId, 'Alice Corp' AS Company, '2026-01-10' AS UpdatedAt, 1 AS Version INTO #inbound_customers
+UNION ALL SELECT 101, 'Alice Corp (Renamed)', '2026-01-15', 2
+UNION ALL SELECT 102, 'Beta LLC', '2026-01-08', 1
+UNION ALL SELECT 103, 'Charlie Inc', '2026-01-05', 1
+UNION ALL SELECT 102, 'Beta LLC Global', '2026-01-20', 3
+UNION ALL SELECT 103, 'Charlie Inc', '2026-01-12', 2;
+
+-- 2. Execute declarative DEDUPLICATE transform (keep highest Version per CustomerId)
+TRANSFORM #deduped_customers
+FROM #inbound_customers
+USING DEDUPLICATE (
+    KEY_COLS = 'CustomerId',
+    ORDER_BY = 'Version DESC',
+    KEEP     = 'FIRST'
+);
+
+PRINT '=== Deduplicated Gold Records (Latest Version Kept) ===';
+SELECT CustomerId, Company, UpdatedAt, Version
+FROM #deduped_customers
+ORDER BY CustomerId ASC;

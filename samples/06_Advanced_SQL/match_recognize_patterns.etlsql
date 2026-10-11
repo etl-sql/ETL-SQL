@@ -1,0 +1,66 @@
+-- Advanced SQL: Complex Event Processing (CEP) with MATCH_RECOGNIZE
+-- Demonstrates: Sequential pattern matching over ordered time series,
+-- pattern variables, regular expression pattern syntax, ONE ROW PER MATCH,
+-- and ALL ROWS PER MATCH with classifier labeling.
+
+-- 1. Stage Server Telemetry Stream Data
+SELECT 'srv-01' AS ServerId, 1 AS StepSeq, 45 AS CpuPct, 120 AS MemoryMB
+INTO #server_telemetry
+UNION ALL SELECT 'srv-01', 2, 82, 180   -- Warning threshold breached
+UNION ALL SELECT 'srv-01', 3, 91, 240   -- Critical threshold
+UNION ALL SELECT 'srv-01', 4, 35, 110   -- Cooled down
+UNION ALL SELECT 'srv-02', 1, 30, 95
+UNION ALL SELECT 'srv-02', 2, 42, 100
+UNION ALL SELECT 'srv-02', 3, 38, 98;
+
+-- 2. Detect Spike Incidents (ONE ROW PER MATCH)
+-- Pattern: Normal condition followed by one or more spikes, followed by recovery.
+PRINT '=== MATCH_RECOGNIZE: Spike Sequence Summary (ONE ROW PER MATCH) ===';
+SELECT
+    ServerId,
+    StartStep,
+    PeakStep,
+    EndStep,
+    MaxCpu,
+    InitialCpu,
+    FinalCpu
+FROM #server_telemetry
+MATCH_RECOGNIZE (
+    PARTITION BY ServerId
+    ORDER BY StepSeq
+    MEASURES
+        FIRST(A.StepSeq) AS StartStep,
+        LAST(B.StepSeq)  AS PeakStep,
+        LAST(C.StepSeq)  AS EndStep,
+        MAX(B.CpuPct)    AS MaxCpu,
+        FIRST(A.CpuPct)  AS InitialCpu,
+        LAST(C.CpuPct)   AS FinalCpu
+    ONE ROW PER MATCH
+    PATTERN (A B+ C)
+    DEFINE
+        A AS A.CpuPct < 60,
+        B AS B.CpuPct >= 80,
+        C AS C.CpuPct < 60
+) AS incidents;
+
+-- 3. Detail Classification per Row (ALL ROWS PER MATCH)
+-- Annotates every row in the matching stream with MATCH_NUMBER and CLASSIFIER variable.
+PRINT '=== MATCH_RECOGNIZE: Labeled Stream Rows (ALL ROWS PER MATCH) ===';
+SELECT
+    ServerId,
+    StepSeq,
+    CpuPct,
+    MATCH_NUMBER,
+    CLASSIFIER
+FROM #server_telemetry
+MATCH_RECOGNIZE (
+    PARTITION BY ServerId
+    ORDER BY StepSeq
+    ALL ROWS PER MATCH
+    PATTERN (A B+ C)
+    DEFINE
+        A AS A.CpuPct < 60,
+        B AS B.CpuPct >= 80,
+        C AS C.CpuPct < 60
+) AS stream_detail
+ORDER BY ServerId, StepSeq;

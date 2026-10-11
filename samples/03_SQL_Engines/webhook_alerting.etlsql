@@ -1,0 +1,62 @@
+-- SQL Engines & Connectors: Outbound Webhook Alerting & Notifications
+-- Demonstrates: Declaring a WEBHOOK sink connection, payload formatting
+-- (Slack, Microsoft Teams, Generic JSON), retry policies, and safe execution.
+
+-- 1. Inspect WEBHOOK connector options
+HELP CONNECTION WEBHOOK;
+
+-- 2. Stage anomalous operational events inside engine memory
+SELECT
+    'CRITICAL' AS Severity,
+    'Disk Threshold Exceeded' AS Title,
+    'Storage node prod-worker-04 is at 94% capacity.' AS Detail,
+    'ops-team' AS TargetChannel,
+    '2026-03-10 12:45:00' AS LoggedAt
+INTO #pending_alerts
+UNION ALL SELECT 'WARNING', 'Latency Spike', 'Service api-gateway p99 exceeded 250ms.', 'dev-team', '2026-03-10 12:50:00'
+UNION ALL SELECT 'INFO', 'Batch Job Succeeded', 'Nightly partition aggregation completed in 42s.', 'general', '2026-03-10 13:00:00';
+
+-- 3. Declare Webhook connections
+-- Supported options: URL, FORMAT ('slack', 'teams', 'generic'), TIMEOUT_SECONDS, MAX_RETRIES, RETRY_DELAY_MS.
+-- Note: WEBHOOK is write-only. Reading (SELECT) from a webhook connection returns no rows.
+BEGIN TRY
+    CREATE CONNECTION slack_ops_sink AS WEBHOOK(
+        URL             = 'https://hooks.slack.com/services/T00000000/B00000000/mock_secret_token',
+        FORMAT          = 'slack',
+        TIMEOUT_SECONDS = 5,
+        RETRY_COUNT     = 2
+    );
+
+    CREATE CONNECTION teams_incident_sink AS WEBHOOK(
+        URL             = 'https://example.webhook.office.com/webhookb2/mock_guid/IncomingWebhook/mock_id',
+        FORMAT          = 'teams',
+        TIMEOUT_SECONDS = 5
+    );
+
+    -- Dispatch critical alert to Slack (Slack format maps 'Text' column to JSON { "text": "..." })
+    INSERT INTO slack_ops_sink (Text)
+    SELECT CONCAT('[', Severity, '] ', Title, ': ', Detail) AS Text
+    FROM #pending_alerts
+    WHERE Severity = 'CRITICAL';
+
+    -- Dispatch incident card to Teams (Teams format maps 'Title' and 'Text' columns)
+    INSERT INTO teams_incident_sink (Title, Text)
+    SELECT Title, Detail
+    FROM #pending_alerts
+    WHERE Severity IN ('CRITICAL', 'WARNING');
+
+    PRINT 'Webhooks dispatched successfully.';
+END TRY
+BEGIN CATCH
+    PRINT 'Notice: Offline/sandbox network isolation active. Webhook payload staged locally:';
+END CATCH;
+
+-- 4. Review staged alerts and summary metrics locally
+SELECT
+    Severity,
+    COUNT(*) AS AlertCount,
+    MIN(LoggedAt) AS FirstOccurrence,
+    MAX(LoggedAt) AS LastOccurrence
+FROM #pending_alerts
+GROUP BY Severity
+ORDER BY AlertCount DESC;

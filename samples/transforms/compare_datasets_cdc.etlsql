@@ -1,0 +1,46 @@
+-- Data Prep: COMPARE DATASETS Declarative Change Data Capture (CDC)
+-- Demonstrates: Native diffing between snapshots, identifying INSERT, UPDATE, and DELETE changes,
+-- and isolating changed columns without writing custom join logic.
+
+-- 1. Baseline dataset (Yesterday's customer snapshot)
+SELECT 101 AS CustomerId, 'Alice Corp' AS Company, 'Active' AS Status, 'Gold' AS Tier INTO #yesterday_customers
+UNION ALL SELECT 102, 'Beta LLC', 'Active', 'Silver'
+UNION ALL SELECT 103, 'Charlie Inc', 'Pending', 'Bronze'
+UNION ALL SELECT 104, 'Delta Co', 'Active', 'Bronze';
+
+-- 2. Current dataset (Today's customer snapshot)
+-- Changes:
+-- - 101: Tier upgraded from Gold to Platinum (UPDATE)
+-- - 102: Status changed from Active to Churned (UPDATE)
+-- - 103: Deleted (DELETE)
+-- - 104: Unchanged
+-- - 105: Newly created customer (INSERT)
+SELECT 101 AS CustomerId, 'Alice Corp' AS Company, 'Active' AS Status, 'Platinum' AS Tier INTO #today_customers
+UNION ALL SELECT 102, 'Beta LLC', 'Churned', 'Silver'
+UNION ALL SELECT 104, 'Delta Co', 'Active', 'Bronze'
+UNION ALL SELECT 105, 'Echo Global', 'Active', 'Gold';
+
+-- 3. Execute declarative CDC comparison
+COMPARE DATASETS #today_customers WITH #yesterday_customers
+KEY (CustomerId)
+INTO #customer_diff;
+
+PRINT '=== Full CDC Delta Ledger ===';
+SELECT CustomerId, _change_type, _changed_columns
+FROM #customer_diff
+ORDER BY CustomerId ASC;
+
+PRINT '=== Newly Added Accounts (INSERT) ===';
+SELECT CustomerId, Company_new, Status_new, Tier_new
+FROM #customer_diff
+WHERE _change_type = 'INSERT';
+
+PRINT '=== Modified Accounts (UPDATE) ===';
+SELECT CustomerId, Company_new, _changed_columns, Status_old, Status_new, Tier_old, Tier_new
+FROM #customer_diff
+WHERE _change_type = 'UPDATE';
+
+PRINT '=== Removed / Dropped Accounts (DELETE) ===';
+SELECT CustomerId, Company_old, Status_old, Tier_old
+FROM #customer_diff
+WHERE _change_type = 'DELETE';

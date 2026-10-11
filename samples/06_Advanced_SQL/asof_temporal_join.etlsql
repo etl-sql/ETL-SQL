@@ -1,0 +1,39 @@
+-- Advanced SQL: ASOF JOIN (Temporal Nearest-Match Join)
+-- Demonstrates: Point-in-time timestamp matching between asynchronous event streams.
+-- Matches each trade execution with the single most recent quote at or before the trade time.
+
+-- 1. Mock Quotes stream (changing bid/ask prices over time)
+SELECT 'AAPL' AS Symbol, CAST('2026-03-01 09:30:00' AS DATETIME) AS QuoteTime, 150.10 AS Bid, 150.15 AS Ask INTO #quotes
+UNION ALL SELECT 'AAPL', CAST('2026-03-01 09:30:05' AS DATETIME), 150.12, 150.18
+UNION ALL SELECT 'AAPL', CAST('2026-03-01 09:30:15' AS DATETIME), 150.20, 150.25
+UNION ALL SELECT 'AAPL', CAST('2026-03-01 09:30:30' AS DATETIME), 150.18, 150.22
+UNION ALL SELECT 'MSFT', CAST('2026-03-01 09:30:00' AS DATETIME), 410.50, 410.60
+UNION ALL SELECT 'MSFT', CAST('2026-03-01 09:30:20' AS DATETIME), 410.75, 410.85;
+
+-- 2. Mock Trades stream (executions occurring between quote updates)
+SELECT 1 AS TradeId, 'AAPL' AS Symbol, CAST('2026-03-01 09:30:08' AS DATETIME) AS TradeTime, 150.15 AS Price, 100 AS Quantity INTO #trades
+UNION ALL SELECT 2, 'AAPL', CAST('2026-03-01 09:30:16' AS DATETIME), 150.22, 250
+UNION ALL SELECT 3, 'AAPL', CAST('2026-03-01 09:30:45' AS DATETIME), 150.20, 500
+UNION ALL SELECT 4, 'MSFT', CAST('2026-03-01 09:30:10' AS DATETIME), 410.55, 150
+UNION ALL SELECT 5, 'MSFT', CAST('2026-03-01 09:30:25' AS DATETIME), 410.80, 200;
+
+-- 3. Execute ASOF JOIN: matches closest quote where TradeTime >= QuoteTime per Symbol
+SELECT
+    t.TradeId,
+    t.Symbol,
+    t.TradeTime,
+    t.Price AS ExecutedPrice,
+    q.QuoteTime AS EffectiveQuoteTime,
+    q.Bid,
+    q.Ask,
+    ROUND(t.Price - q.Bid, 2) AS SpreadDiff
+INTO #matched_executions
+FROM #trades AS t
+ASOF JOIN #quotes AS q
+    ON t.Symbol = q.Symbol
+    AND t.TradeTime >= q.QuoteTime;
+
+PRINT '=== ASOF JOIN Matched Execution Record ===';
+SELECT TradeId, Symbol, TradeTime, ExecutedPrice, EffectiveQuoteTime, Bid, Ask, SpreadDiff
+FROM #matched_executions
+ORDER BY TradeId ASC;

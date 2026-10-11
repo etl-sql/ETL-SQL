@@ -1,0 +1,80 @@
+-- Visual Analytics: Sales Conversion Funnel
+-- Demonstrates: Multi-stage pipeline aggregation, conversion rate calculations,
+-- and mapping query results directly into FUNNEL, CARD, and TABLE visuals.
+
+SET REPORT TITLE = 'Sales Conversion Funnel Analytics';
+SET REPORT DESCRIPTION = 'Tracks user drop-off across marketing and purchase stages, calculating stage-over-stage conversion rates.';
+SET REPORT THEME = 'light';
+
+-- 1. Mock Stage Activity Dataset
+SELECT 1 AS StageOrder, 'Site Visit' AS StageName, 10000 AS Users INTO #funnel_raw
+UNION ALL SELECT 2, 'Product Viewed', 6200
+UNION ALL SELECT 3, 'Added to Cart', 2800
+UNION ALL SELECT 4, 'Checkout Started', 1400
+UNION ALL SELECT 5, 'Purchase Completed', 950;
+
+-- 2. Analytical Query: Calculate stage-over-stage conversion and cumulative drop-off
+SELECT
+    StageOrder,
+    StageName,
+    Users,
+    ROUND((Users * 100.0) / 10000, 1) AS OverallConversionPct
+INTO #funnel_metrics
+FROM #funnel_raw;
+
+-- 3. Visual: Pipeline Funnel Chart
+CREATE VISUAL FunnelChart AS FUNNEL (
+    SOURCE = (SELECT StageName, Users FROM #funnel_metrics ORDER BY StageOrder ASC),
+    TITLE = 'Marketing & Sales Funnel Attrition',
+    MAPPINGS (
+        LABEL = StageName,
+        VALUE = Users
+    ),
+    OPTIONS (
+        DATA_LABELS = ON,
+        SHOW_PERCENT = ON,
+        PERCENT_MODE = STEP
+    )
+);
+
+-- 4. Visual: Executive KPI Cards
+CREATE VISUAL TotalVisitsCard AS CARD (
+    SOURCE = (SELECT Users FROM #funnel_metrics WHERE StageOrder = 1),
+    TITLE = 'Total Inbound Visits',
+    MAPPINGS (VALUE = Users),
+    OPTIONS (FORMAT = 'N0')
+);
+
+CREATE VISUAL FinalConversionCard AS CARD (
+    SOURCE = (SELECT OverallConversionPct FROM #funnel_metrics WHERE StageOrder = 5),
+    TITLE = 'End-to-End Conversion Rate',
+    MAPPINGS (VALUE = OverallConversionPct),
+    OPTIONS (FORMAT = '0.0', SUFFIX = '%')
+);
+
+-- 5. Visual: Detailed Conversion Table
+CREATE VISUAL FunnelTable AS TABLE (
+    SOURCE = #funnel_metrics,
+    TITLE = 'Funnel Stage Breakdown',
+    MAPPINGS (
+        StageOrder AS 'Step',
+        StageName  AS 'Stage',
+        Users FORMAT 'N0' ALIGN 'right' AS 'Active Users',
+        OverallConversionPct FORMAT '0.0' ALIGN 'right' AS 'Retention %'
+    )
+);
+
+
+-- 6. Dashboard Page Composition
+CREATE PAGE FunnelDashboard AS DASHBOARD (
+    STRUCTURE = 'A B / C C / D D',
+    MAP (
+        'A' = TotalVisitsCard,
+        'B' = FinalConversionCard,
+        'C' = FunnelChart,
+        'D' = FunnelTable
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = FunnelDashboard, PAGES (FunnelDashboard));
+

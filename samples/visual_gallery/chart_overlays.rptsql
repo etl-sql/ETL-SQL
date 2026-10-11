@@ -1,0 +1,101 @@
+-- Kitchen Sink: ADVANCED OVERLAYS
+-- This script demonstrates all regression and reference line types.
+
+SET REPORT TITLE = 'Kitchen Sink: Overlays';
+
+-- 1. Mock Data (Exponential/Power growth)
+SELECT 1 AS X, 2 AS Y INTO #data
+UNION ALL SELECT 2, 4
+UNION ALL SELECT 3, 9
+UNION ALL SELECT 4, 16
+UNION ALL SELECT 5, 32
+UNION ALL SELECT 6, 64;
+
+-- 2. Basic Overlays (Goal, Average, Moving Average)
+CREATE VISUAL BasicOverlays AS LINE (
+    SOURCE = #data,
+    MAPPINGS (X = X, Y = Y),
+    OVERLAYS (
+        GOAL(50) AS DASHED WITH (COLOR = 'Red', LABEL = 'Goal Line'),
+        AVERAGE AS DOTTED WITH (COLOR = 'Blue', LABEL = 'Mean'),
+        MOVING_AVG(2) AS SOLID WITH (COLOR = 'Green', LABEL = '2-Period MA')
+    )
+);
+
+-- 3. Regression Overlays
+CREATE VISUAL RegressionOverlays AS SCATTER (
+    SOURCE = #data,
+    MAPPINGS (X = X, Y = Y),
+    OVERLAYS (
+        LINEAR AS SOLID WITH (COLOR = 'Black', LABEL = 'Linear'),
+        EXPONENTIAL AS DASHED WITH (COLOR = 'Orange', LABEL = 'Exp'),
+        LOGARITHMIC AS DOTTED WITH (COLOR = 'Purple', LABEL = 'Log'),
+        POWER AS DASHED WITH (COLOR = 'Cyan', LABEL = 'Power'),
+        POLYNOMIAL(2) AS SOLID WITH (COLOR = 'Magenta', LABEL = 'Poly(2)')
+    )
+);
+
+-- 4. Analytical Overlays (Running Total & Percent of Total)
+CREATE VISUAL AnalyticalOverlays AS LINE (
+    SOURCE = #data,
+    TITLE = 'Running Total & Percent of Total Overlays',
+    MAPPINGS (X = X, Y = Y),
+    OVERLAYS (
+        RUNNING_TOTAL(Y) AS SOLID WITH (COLOR = '#059669', LABEL = 'Cumulative Growth'),
+        PERCENT_OF_TOTAL(Y) AS DASHED WITH (COLOR = '#d97706', LABEL = '% of Total')
+    )
+);
+
+-- 5. Reference Line & Reference Band Overlays
+CREATE VISUAL ReferenceOverlays AS LINE (
+    SOURCE = #data,
+    TITLE = 'Reference Line & Shaded Reference Band',
+    MAPPINGS (X = X, Y = Y),
+    OVERLAYS (
+        REFERENCE_LINE (VALUE = 30, LABEL = 'Target Threshold', STYLE = DASHED, COLOR = '#dc2626'),
+        REFERENCE_BAND (LOW = 10, HIGH = 25, COLOR = '#e0e7ff', LABEL = 'Normal Operating Range')
+    )
+);
+
+-- 6. FORECAST overlay with confidence ribbon and anomaly markers
+SELECT 'Jan' AS Period, 100 AS Actual, CAST(NULL AS INT) AS Projected,
+       CAST(NULL AS INT) AS ConfLow, CAST(NULL AS INT) AS ConfHigh, CAST(NULL AS INT) AS Anomaly
+INTO #outlook
+UNION ALL SELECT 'Feb', 115, NULL, NULL, NULL, NULL
+UNION ALL SELECT 'Mar', 108, NULL, NULL, NULL, 108
+UNION ALL SELECT 'Apr', 125, NULL, NULL, NULL, NULL
+UNION ALL SELECT 'May', 140, 140, 130, 150, NULL
+UNION ALL SELECT 'Jun', NULL, 155, 142, 168, NULL
+UNION ALL SELECT 'Jul', NULL, 162, 148, 176, NULL
+UNION ALL SELECT 'Aug', NULL, 180, 160, 200, 180;
+
+CREATE VISUAL ForecastOverlay AS LINE (
+    SOURCE = #outlook,
+    TITLE = 'FORECAST Overlay with Confidence Ribbon and Anomalies',
+    MAPPINGS (X = Period, Y = Actual),
+    OPTIONS (AXIS_SORT = SOURCE),
+    OVERLAYS (
+        FORECAST(Projected) AS DASHED WITH (
+            CONFIDENCE_LOW  = ConfLow,
+            CONFIDENCE_HIGH = ConfHigh,
+            ANOMALY         = Anomaly,
+            COLOR           = '#2563eb',
+            LABEL           = 'Projected'
+        )
+    )
+);
+
+-- Page Layout
+CREATE PAGE OverlaySink AS DASHBOARD (
+    STRUCTURE = 'A B / C D / E E',
+    MAP (
+        'A' = BasicOverlays,
+        'B' = RegressionOverlays,
+        'C' = AnalyticalOverlays,
+        'D' = ReferenceOverlays,
+        'E' = ForecastOverlay
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = OverlaySink, PAGES (OverlaySink));
+

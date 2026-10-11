@@ -1,0 +1,87 @@
+-- Visual Analytics: Executive KPI Scorecard & Gauge Attainment
+-- Demonstrates: Multi-metric executive health reporting, target attainment calculations,
+-- and mapping onto GAUGE, CARD, and HBAR visuals.
+
+SET REPORT TITLE = 'Executive Performance Scorecard';
+SET REPORT DESCRIPTION = 'Tracks quarterly business KPIs against executive targets using Gauges, Cards, and Horizontal Bars.';
+SET REPORT THEME = 'light';
+
+-- 1. Mock Department Performance Dataset
+SELECT 'Cloud SaaS' AS BusinessUnit, 850000 AS ActualRev, 800000 AS TargetRev INTO #dept_performance
+UNION ALL SELECT 'Professional Services', 320000, 400000
+UNION ALL SELECT 'Enterprise Support', 250000, 200000
+UNION ALL SELECT 'Hardware Add-ons', 95000, 100000;
+
+-- 2. Mock Overall Scorecard KPI Dataset
+SELECT
+    1515000 AS TotalRevenue,
+    1500000 AS TargetRevenue,
+    ROUND((1515000 * 100.0) / 1500000, 1) AS AttainmentPct,
+    64.5    AS GrossMarginPct,
+    112     AS NetRetentionRate
+INTO #kpi_summary;
+
+-- 3. Visual: Quota Attainment Radial Gauge
+CREATE VISUAL QuotaGauge AS GAUGE (
+    SOURCE = #kpi_summary,
+    TITLE = 'Quarterly Revenue Target Attainment',
+    MAPPINGS (
+        VALUE  = TotalRevenue,
+        TARGET = TargetRevenue
+    ),
+    OPTIONS (
+        MIN_VALUE = 0,
+        MAX_VALUE = 2000000,
+        FORMAT = 'C0'
+    )
+);
+
+-- 4. Visual: Executive Indicator Cards
+CREATE VISUAL RevenueCard AS CARD (
+    SOURCE = #kpi_summary,
+    TITLE = 'Total Booked Revenue',
+    MAPPINGS (VALUE = TotalRevenue),
+    OPTIONS (FORMAT = 'C0')
+);
+
+CREATE VISUAL MarginCard AS CARD (
+    SOURCE = #kpi_summary,
+    TITLE = 'Gross Profit Margin',
+    MAPPINGS (VALUE = GrossMarginPct),
+    OPTIONS (FORMAT = '0.0', SUFFIX = '%')
+);
+
+CREATE VISUAL RetentionCard AS CARD (
+    SOURCE = #kpi_summary,
+    TITLE = 'Net Dollar Retention',
+    MAPPINGS (VALUE = NetRetentionRate),
+    OPTIONS (FORMAT = '0', SUFFIX = '%')
+);
+
+-- 5. Visual: Department Contribution Ranked Bar Chart
+CREATE VISUAL DeptBar AS HBAR (
+    SOURCE = #dept_performance,
+    TITLE = 'Revenue by Business Unit',
+    MAPPINGS (
+        X = ActualRev,
+        Y = BusinessUnit
+    ),
+    OPTIONS (
+        DATA_LABELS = ON,
+        SORT_ORDER = DESC
+    )
+);
+
+-- 6. Dashboard Page Composition
+CREATE PAGE ScorecardDashboard AS DASHBOARD (
+    STRUCTURE = 'A B C / D D D / E E E',
+    MAP (
+        'A' = RevenueCard,
+        'B' = MarginCard,
+        'C' = RetentionCard,
+        'D' = QuotaGauge,
+        'E' = DeptBar
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = ScorecardDashboard, PAGES (ScorecardDashboard));

@@ -1,0 +1,133 @@
+-- Kitchen Sink: SCATTER Visual
+-- This script demonstrates all features of the SCATTER visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: SCATTER Visual';
+SET REPORT DESCRIPTION = 'Demonstration of SCATTER plot capabilities, including regression fits and multiple series.';
+
+-- 1. Mock Data Generation
+SELECT 10 AS Score, 20 AS Rank, 17 AS ErrLow, 23 AS ErrHigh, 'Group A' AS Grp INTO #stats
+UNION ALL SELECT 15, 25, 22, 28, 'Group A'
+UNION ALL SELECT 20, 30, 27, 33, 'Group A'
+UNION ALL SELECT 25, 35, 31, 39, 'Group A'
+UNION ALL SELECT 30, 45, 40, 50, 'Group A'
+UNION ALL SELECT 12, 18, 15, 21, 'Group B'
+UNION ALL SELECT 18, 22, 19, 25, 'Group B'
+UNION ALL SELECT 22, 28, 24, 32, 'Group B'
+UNION ALL SELECT 28, 32, 29, 35, 'Group B'
+UNION ALL SELECT 35, 40, 36, 44, 'Group B';
+
+-- 2. Basic Scatter Plot
+CREATE VISUAL BasicScatter AS SCATTER (
+    SOURCE = #stats,
+    TITLE = 'Basic Scatter Plot',
+    MAPPINGS (X = Score, Y = Rank)
+);
+
+-- 3. Multi-Series Scatter with Symbols & Stroke
+CREATE VISUAL MultiScatter AS SCATTER (
+    SOURCE = #stats,
+    TITLE = 'Multi-Series Scatter (Diamond/Square & Outline)',
+    MAPPINGS (X = Score, Y = Rank, SERIES = Grp),
+    OPTIONS (
+        SYMBOL_SHAPE        = DIAMOND,
+        SYMBOL_STROKE_COLOR = '#1e293b',
+        SYMBOL_STROKE_WIDTH = 1.5,
+        LEGEND              = ON,
+        LEGEND_TITLE        = 'Cohort',
+        LEGEND_POSITION     = RIGHT,
+        GRID_LINES          = ON,
+        ZERO_LINE           = ON
+    )
+);
+
+-- 4. Jitter Scatter
+CREATE VISUAL JitterScatter AS SCATTER (
+    SOURCE = #stats,
+    TITLE = 'Jitter Enabled (JITTER_WIDTH & HEIGHT)',
+    MAPPINGS (X = Score, Y = Rank, SERIES = Grp),
+    OPTIONS (
+        JITTER        = ON,
+        JITTER_WIDTH  = 0.5,
+        JITTER_HEIGHT = 0.5,
+        SYMBOL_SHAPE  = CIRCLE
+    )
+);
+
+-- 5. Error Bars Scatter
+CREATE VISUAL ErrorBarScatter AS SCATTER (
+    SOURCE = #stats,
+    TITLE = 'Error Bars (ERROR_LOW & ERROR_HIGH)',
+    MAPPINGS (
+        X          = Score,
+        Y          = Rank,
+        ERROR_LOW  = ErrLow,
+        ERROR_HIGH = ErrHigh,
+        SERIES     = Grp
+    ),
+    OPTIONS (
+        ERROR_BAR_STYLE = 'CAP',
+        GRID_LINES      = ON
+    )
+);
+
+-- 6. Scatter with Regression & Exponential Overlays
+CREATE VISUAL RegressionScatter AS SCATTER (
+    SOURCE = (SELECT Score, Rank FROM #stats WHERE Grp = 'Group A'),
+    TITLE = 'Scatter with Linear & Polynomial Overlays',
+    MAPPINGS (X = Score, Y = Rank),
+    OVERLAYS (
+        LINEAR AS DASHED WITH (COLOR = 'Blue', LABEL = 'Linear Fit'),
+        POLYNOMIAL(2) AS DOTTED WITH (COLOR = 'Red', LABEL = 'Poly Fit (Deg 2)')
+    )
+);
+
+-- 7. Scatter with Log Scale & Overlays
+CREATE VISUAL LogScaleScatter AS SCATTER (
+    SOURCE = #stats,
+    TITLE = 'Logarithmic Scale (Y_AXIS SCALE=LOG) & Thresholds',
+    MAPPINGS (X = Score, Y = Rank),
+    OPTIONS (
+        Y_AXIS (
+            SCALE = LOG,
+            LABEL = 'Rank (Log Scale)'
+        ),
+        GRID_LINES = ON
+    ),
+    OVERLAYS (
+        GOAL(30) AS DASHED WITH (COLOR = 'Green', LABEL = 'Rank Threshold'),
+        AVERAGE AS DOTTED WITH (COLOR = 'Orange', LABEL = 'Mean Rank')
+    )
+);
+
+-- 8. Explicit marker size and value-driven conditional colour
+CREATE VISUAL SizedScatter AS SCATTER (
+    SOURCE = #stats,
+    TITLE = 'SYMBOL_SIZE with FORMATTING (conditional point colour)',
+    MAPPINGS (X = Score, Y = Rank),
+    OPTIONS (
+        SYMBOL_SIZE  = 11,
+        SYMBOL_SHAPE = DIAMOND,
+        GRID_LINES   = ON
+    ),
+    FORMATTING (
+        WHEN Rank >= 40 THEN '#dc2626',
+        WHEN Rank <= 22 THEN '#16a34a'
+    )
+);
+
+-- Page Layout
+CREATE PAGE ScatterKitchenSink AS DASHBOARD (
+    STRUCTURE = 'A B / C D / E F / G .',
+    MAP (
+        'A' = BasicScatter,
+        'B' = MultiScatter,
+        'C' = JitterScatter,
+        'D' = ErrorBarScatter,
+        'E' = RegressionScatter,
+        'F' = LogScaleScatter,
+        'G' = SizedScatter
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = ScatterKitchenSink, PAGES (ScatterKitchenSink));
+

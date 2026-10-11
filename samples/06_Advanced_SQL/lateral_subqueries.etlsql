@@ -1,0 +1,71 @@
+-- Advanced SQL: Lateral Subqueries & Lateral Column Aliases
+-- Demonstrates: ANSI LATERAL joins (CROSS JOIN LATERAL, LEFT JOIN LATERAL ON true, comma LATERAL)
+-- and inline left-to-right lateral column alias reuse in SELECT projections.
+
+-- 1. Demonstrate Left-to-Right Lateral Column Alias Reuse
+-- SELECT items can reference aliases defined earlier in the same SELECT projection.
+SELECT
+    'SKU-1001' AS ProductCode,
+    150.00 AS UnitPrice,
+    3 AS Quantity,
+    UnitPrice * Quantity AS Subtotal,
+    Subtotal * 0.08 AS TaxAmount,
+    Subtotal + TaxAmount AS TotalDue,
+    CASE WHEN TotalDue >= 400.00 THEN 'VIP' ELSE 'Standard' END AS TierCategory
+INTO #order_calculations;
+
+PRINT '=== Lateral Column Aliases Evaluated ===';
+SELECT ProductCode, Subtotal, TaxAmount, TotalDue, TierCategory
+FROM #order_calculations;
+
+-- 2. Stage Customer Master and Event Log Data
+SELECT 101 AS CustomerId, 'Alice Vance' AS CustomerName
+INTO #customers
+UNION ALL SELECT 102, 'Bob Chen'
+UNION ALL SELECT 103, 'Carol Danvers';
+
+SELECT 1 AS OrderId, 101 AS CustomerId, 120.00 AS Amount, '2026-03-01' AS OrderDate
+INTO #customer_orders
+UNION ALL SELECT 2, 101, 350.00, '2026-03-05'
+UNION ALL SELECT 3, 102,  85.00, '2026-03-02';
+-- Note: Customer 103 has no orders yet.
+
+-- 3. CROSS JOIN LATERAL (ANSI Correlated Join / CROSS APPLY equivalent)
+-- Evaluates the right subquery once per left row; drops rows where subquery returns zero rows.
+PRINT '=== CROSS JOIN LATERAL: Dynamic Row Calculation ===';
+SELECT
+    c.CustomerId,
+    c.CustomerName,
+    calc.OrderCount,
+    calc.LifetimeSpend,
+    calc.AverageOrderValue
+FROM #customers AS c
+CROSS JOIN LATERAL (
+    SELECT
+        COUNT(*) AS OrderCount,
+        SUM(o.Amount) AS LifetimeSpend,
+        AVG(o.Amount) AS AverageOrderValue
+    FROM #customer_orders AS o
+    WHERE o.CustomerId = c.CustomerId
+    HAVING COUNT(*) > 0
+) AS calc
+ORDER BY c.CustomerId;
+
+-- 4. LEFT JOIN LATERAL ... ON TRUE (Outer Apply equivalent)
+-- Preserves all left customers, returning NULL for subquery columns when no rows match.
+PRINT '=== LEFT JOIN LATERAL ON TRUE: Preserves Non-Matching Left Rows ===';
+SELECT
+    c.CustomerId,
+    c.CustomerName,
+    recent.OrderId AS LatestOrderId,
+    recent.Amount AS LatestOrderAmount,
+    recent.OrderDate AS LatestOrderDate
+FROM #customers AS c
+LEFT JOIN LATERAL (
+    SELECT o.OrderId, o.Amount, o.OrderDate
+    FROM #customer_orders AS o
+    WHERE o.CustomerId = c.CustomerId
+    ORDER BY o.OrderDate DESC
+    LIMIT 1
+) AS recent ON true
+ORDER BY c.CustomerId;

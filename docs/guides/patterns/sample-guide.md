@@ -17,11 +17,14 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 | `03_SQL_Engines` | SQL connectors, pushdown examples, Docker-backed SQL engines, and dialect-specific examples. |
 | `04_Orchestration` | Modular scripts, batches, jobs, lineage, and multi-system orchestration. |
 | `05_Security_Diagnostics` | `WHAT_IF`, linter diagnostics, audit settings, verbose logging, and engine statistics. |
-| `06_Advanced_SQL` | Grouping, windows, joins, subqueries, set logic, and join hints. |
+| `06_Advanced_SQL` | `ASOF JOIN`, `QUALIFY`, `GROUP BY ALL`, `LATERAL` joins, `MATCH_RECOGNIZE` CEP, windowing, and hints. |
 | `07_Real_World` | Scenario-style scripts that combine multiple features. |
 | `08_Reporting` | Report-SQL interaction, inputs, dashboards, and targeted report behavior checks. |
 | `09_Conversions` | Multi-script conversion/check workflows. |
 | `10_Kitchen_Sinks` | Broad release-readiness coverage for report visuals and language features. |
+| `transforms` | Declarative data prep and transformations (`GENERATE CALENDAR`, `COMPARE DATASETS`, `TRANSFORM ... USING`). |
+| `visual_analytics` | End-to-end analytical dashboards (Pareto, Sales Funnel, Cohort Heatmap, Waterfall, Trends). |
+| `visual_gallery` | 39 standalone visual chart, grid, and control references with clean semantic names. |
 | `golden_workflow` | End-to-end Report-SQL workflow used for demos and regression checks. |
 | `paginated` | Multi-report/paginated hosting examples. |
 | `portal_deployment` | Script-first portal promotion and deployment pattern. |
@@ -100,6 +103,85 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 - Uses CSS grid-template-area `STRUCTURE` strings and quoted `MAP` slots throughout.
 - Pairs with `report_kitchen_sink.snapshot.json` so runtime and snapshot behavior can be inspected without external services.
 
+## Visual Analytics & Dashboards
+
+End-to-end analytical query-to-visual dashboards located in [`samples/visual_analytics/`](../../../samples/visual_analytics/). These demonstrate real-world business analytics patterns pairing complex SQL windowing, aggregation, and case logic with dedicated report visuals.
+
+### [visual_analytics/sales_funnel_conversion.rptsql](../../../samples/visual_analytics/sales_funnel_conversion.rptsql)
+**Purpose**: Sales funnel stage-to-stage conversion rates and customer progression drop-off.
+- Uses `LAG()` window function over ordered stages to calculate conversion percentages.
+- Pairs a `FUNNEL` visual with KPI summary `CARD` and structured `TABLE` grid.
+
+### [visual_analytics/cohort_retention_heatmap.rptsql](../../../samples/visual_analytics/cohort_retention_heatmap.rptsql)
+**Purpose**: Customer retention tracking across acquisition cohorts.
+- Cross-tabulates signup periods against subsequent activity months.
+- Visualizes percentage retention via a color-scaled `HEATMAP` chart, active subscriber trends on a `LINE` chart, and top-line `CARD` metrics.
+
+### [visual_analytics/pareto_distribution_80_20.rptsql](../../../samples/visual_analytics/pareto_distribution_80_20.rptsql)
+**Purpose**: Pareto (80/20) rule revenue contribution analysis.
+- Calculates cumulative percentage of total sales using cumulative window sums: `100.0 * SUM(revenue) OVER(...) / SUM(revenue) OVER()`.
+- Dual-axis `COMBO` chart with bar revenue, line cumulative curve, and an 80% goal reference overlay.
+
+### [visual_analytics/moving_average_trend.rptsql](../../../samples/visual_analytics/moving_average_trend.rptsql)
+**Purpose**: Daily telemetry and financial smoothing via rolling moving averages.
+- Evaluates `AVG(metric) OVER(ORDER BY date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)` for a 7-day smoothing trend.
+- Overlays actual volatility bars against smoothed trend line and target threshold bands.
+
+### [visual_analytics/executive_kpi_scorecard.rptsql](../../../samples/visual_analytics/executive_kpi_scorecard.rptsql)
+**Purpose**: High-level leadership performance scorecard against strategic targets.
+- Evaluates achievement percentages against targets across key operational pillars.
+- Visualizes performance with circular `GAUGE` dials, formatted summary `CARD` metrics, and ranked horizontal bars (`HBAR`).
+
+### [visual_analytics/inventory_aging_buckets.rptsql](../../../samples/visual_analytics/inventory_aging_buckets.rptsql)
+**Purpose**: Supply chain inventory risk and working capital distribution.
+- Classifies holding days into aging buckets (`0-30`, `31-60`, `61-90`, `90+` days) using `CASE` categorization.
+- Stacked `BAR` visual shows aging distribution across warehouse facilities with a detailed `TABLE` visual.
+
+### [visual_analytics/budget_variance_waterfall.rptsql](../../../samples/visual_analytics/budget_variance_waterfall.rptsql)
+**Purpose**: Financial variance bridge from budgeted revenue to actual net earnings.
+- Calculates step delta adjustments for volume variances, pricing shifts, and operating expenses.
+- Bridges the variance using a `WATERFALL` visual paired with variance metrics and an audit grid.
+
+## Declarative Data Prep & Transforms
+
+Reusable data preparation and transformation pipelines located in [`samples/transforms/`](../../../samples/transforms/).
+
+### [transforms/generate_calendar.etlsql](../../../samples/transforms/generate_calendar.etlsql)
+**Purpose**: Declarative date dimension generation.
+- Uses `GENERATE CALENDAR FROM ... TO ...` to create complete calendar dimensions with day of week, quarter, month, year, and ISO attributes.
+
+### [transforms/compare_datasets_cdc.etlsql](../../../samples/transforms/compare_datasets_cdc.etlsql)
+**Purpose**: Change Data Capture (CDC) and automated row-level diffing.
+- Uses `COMPARE DATASETS left_table WITH right_table KEY (id)` to classify rows into `IDENTICAL`, `INSERTED`, `UPDATED`, and `DELETED` change streams.
+
+### [transforms/transform_rolling_aggregate.etlsql](../../../samples/transforms/transform_rolling_aggregate.etlsql)
+**Purpose**: Built-in rolling aggregation transform.
+- Uses `TRANSFORM source USING ROLLING_AGGREGATE(...)` to calculate moving window averages and sums without manual window syntax.
+
+### [transforms/transform_pivot.etlsql](../../../samples/transforms/transform_pivot.etlsql)
+**Purpose**: Reshaping normalized long records into wide columnar summaries.
+- Uses `TRANSFORM source USING PIVOT(...)` with declarative row dimensions, column pivots, and aggregation functions.
+
+### [transforms/transform_fill_dates.etlsql](../../../samples/transforms/transform_fill_dates.etlsql)
+**Purpose**: Time-series gap filling.
+- Uses `TRANSFORM source USING FILL_DATES(...)` to fill missing calendar intervals and backfill or zero-fill null values.
+
+### [transforms/transform_deduplicate.etlsql](../../../samples/transforms/transform_deduplicate.etlsql)
+**Purpose**: Declarative row deduplication.
+- Uses `TRANSFORM source USING DEDUPLICATE(KEYS = (...), ORDER_BY = (...), STRATEGY = 'LATEST')` for deterministic record deduplication.
+
+### [transforms/transform_normalize.etlsql](../../../samples/transforms/transform_normalize.etlsql)
+**Purpose**: Feature scaling and statistical normalization.
+- Uses `TRANSFORM source USING NORMALIZE(COLUMNS = (...), METHOD = 'MINMAX')` (and `'ZSCORE'`) for machine learning and modeling pipelines.
+
+## Visual Gallery Reference
+
+A comprehensive catalog of 39 standalone visual chart, grid, and control references located in [`samples/visual_gallery/`](../../../samples/visual_gallery/). Every sample is self-contained with synthetic data and clean semantic naming (no arbitrary numerical prefixes):
+
+- **Standard & Advanced Charts**: `bar_chart.rptsql`, `horizontal_bar_chart.rptsql`, `line_chart.rptsql`, `scatter_chart.rptsql`, `bubble_chart.rptsql`, `pie_chart.rptsql`, `donut_chart.rptsql`, `combo_chart.rptsql`, `gauge_chart.rptsql`, `boxplot_chart.rptsql`, `treemap_chart.rptsql`, `heatmap_chart.rptsql`, `funnel_chart.rptsql`, `waterfall_chart.rptsql`, `radar_chart.rptsql`, `candlestick_chart.rptsql`, `gantt_chart.rptsql`, `sunburst_radial.rptsql`, `network_graph.rptsql`, `sankey_diagram.rptsql`, `trellis_multiples.rptsql`, `grammar_of_graphics_custom.rptsql`.
+- **Grids & Presentation Displays**: `table_visual.rptsql`, `matrix_grid.rptsql`, `kpi_card.rptsql`, `map_visual.rptsql`, `text_visual.rptsql`, `image_visual.rptsql`.
+- **Interactive Controls & Layout**: `slicer_control.rptsql`, `multiselect_control.rptsql`, `datepicker_control.rptsql`, `reldatepicker_control.rptsql`, `slider_control.rptsql`, `search_control.rptsql`, `checkbox_control.rptsql`, `textbox_control.rptsql`, `numberbox_control.rptsql`, `chart_overlays.rptsql`, `interactive_actions.rptsql`.
+
 ## Core Samples
 
 Core samples introduce language features and small workflows. Some read or write files under `testdata/` or `samples/output/`; inspect the paths before running them from a different working directory.
@@ -137,6 +219,36 @@ Core samples introduce language features and small workflows. Some read or write
 - Demonstrates scalar subqueries in `SELECT` and `SET` statements.
 - Shows correlated subqueries and `EXISTS` logic.
 - Covers Semi-Joins and Anti-Joins.
+
+### [asof_temporal_join.etlsql](../../../samples/06_Advanced_SQL/asof_temporal_join.etlsql)
+**Purpose**: Non-exact temporal and nearest-match joins.
+- Demonstrates `ASOF JOIN` matching trade executions with prevailing quotes where `execution_time >= quote_time`.
+- Handles high-frequency time-series event alignment without expensive range cartesian products.
+
+### [qualify_filtering.etlsql](../../../samples/06_Advanced_SQL/qualify_filtering.etlsql)
+**Purpose**: Direct window function filtering.
+- Uses `QUALIFY` to filter on `ROW_NUMBER()`, `RANK()`, or `DENSE_RANK()` without nesting into subqueries or CTEs.
+- Demonstrates top-N per group extraction and deduplication ergonomics.
+
+### [group_by_all.etlsql](../../../samples/06_Advanced_SQL/group_by_all.etlsql)
+**Purpose**: Automated grouping column inference.
+- Uses `GROUP BY ALL` to automatically group by all non-aggregate columns in the `SELECT` list.
+- Eliminates repetitive column maintenance when adding or refactoring dimensions.
+
+### [lateral_subqueries.etlsql](../../../samples/06_Advanced_SQL/lateral_subqueries.etlsql)
+**Purpose**: Correlated subquery joins and inline lateral column aliases.
+- Demonstrates `CROSS JOIN LATERAL` and `LEFT JOIN LATERAL ... ON TRUE` for per-row correlated evaluations.
+- Shows left-to-right lateral column alias reuse in `SELECT` expressions.
+
+### [match_recognize_patterns.etlsql](../../../samples/06_Advanced_SQL/match_recognize_patterns.etlsql)
+**Purpose**: Complex Event Processing (CEP) row pattern recognition.
+- Uses `MATCH_RECOGNIZE` to detect ordered sequences (e.g., metric spikes and cooldowns) over time-series streams.
+- Contrasts `ONE ROW PER MATCH` aggregated measures against `ALL ROWS PER MATCH` classifier labeling.
+
+### [declarative_watermark.etlsql](../../../samples/06_Advanced_SQL/declarative_watermark.etlsql)
+**Purpose**: Incremental high-watermark state tracking.
+- Uses declarative watermark persistence (`.etlstate`) to manage incremental ETL ingestion windows across scheduled runs.
+
 
 ## Procedural & Automation
 
@@ -225,6 +337,27 @@ Core samples introduce language features and small workflows. Some read or write
 ### [Avro_Read_Write.etlsql](../../../samples/02_Data_Movement/Avro_Read_Write.etlsql) / [Parquet_Read_Write.etlsql](../../../samples/02_Data_Movement/Parquet_Read_Write.etlsql)
 **Purpose**: Modern columnar data formats.
 - Demonstrates reading and writing Avro and Parquet files.
+
+### [mysql_operations.etlsql](../../../samples/03_SQL_Engines/mysql_operations.etlsql)
+**Purpose**: MySQL engine connector integration.
+- Demonstrates declaring a `MYSQL` connection, cross-system reads, staging, and remote pushdown.
+
+### [snowflake_warehouse.etlsql](../../../samples/03_SQL_Engines/snowflake_warehouse.etlsql)
+**Purpose**: Cloud data warehouse connectivity.
+- Demonstrates declaring a `SNOWFLAKE` warehouse connection, native pushdown queries, warehouse scaling options, and query tagging.
+
+### [rest_api_ingestion.etlsql](../../../samples/03_SQL_Engines/rest_api_ingestion.etlsql)
+**Purpose**: Universal REST API connector ingestion.
+- Demonstrates declaring an `API` connection with Bearer authentication, JSONPath extraction, and automatic pagination.
+
+### [excel_workbook_ingest.etlsql](../../../samples/03_SQL_Engines/excel_workbook_ingest.etlsql)
+**Purpose**: Excel workbook ingestion.
+- Demonstrates declaring an `EXCEL` connection, multi-sheet inspection, header offsets, and engine staging.
+
+### [webhook_alerting.etlsql](../../../samples/03_SQL_Engines/webhook_alerting.etlsql)
+**Purpose**: Outbound webhook alerts and notifications.
+- Demonstrates declaring a `WEBHOOK` sink with Slack and Teams formatting, retry policies, and safe execution.
+
 
 ## Performance & Optimization Sandbox
 

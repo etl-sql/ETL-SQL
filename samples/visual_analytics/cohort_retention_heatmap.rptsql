@@ -1,0 +1,73 @@
+-- Visual Analytics: Cohort Retention Matrix & Heatmap
+-- Demonstrates: Customer retention tracking across monthly cohorts,
+-- calculating percentage retention over time, and rendering MATRIX and LINE visuals.
+
+SET REPORT TITLE = 'Customer Cohort Retention Analysis';
+SET REPORT DESCRIPTION = 'Evaluates customer retention over a 6-month lifecycle across acquisition cohorts.';
+SET REPORT THEME = 'light';
+
+-- 1. Mock Customer Activity Dataset (Cohort by Month Offset)
+SELECT '2026-01' AS Cohort, 'Month 0' AS Period, 1200 AS ActiveUsers, 100.0 AS RetentionPct INTO #cohort_raw
+UNION ALL SELECT '2026-01', 'Month 1', 840, 70.0
+UNION ALL SELECT '2026-01', 'Month 2', 660, 55.0
+UNION ALL SELECT '2026-01', 'Month 3', 540, 45.0
+UNION ALL SELECT '2026-01', 'Month 4', 480, 40.0
+UNION ALL SELECT '2026-02', 'Month 0', 1450, 100.0
+UNION ALL SELECT '2026-02', 'Month 1', 1044, 72.0
+UNION ALL SELECT '2026-02', 'Month 2', 841, 58.0
+UNION ALL SELECT '2026-02', 'Month 3', 696, 48.0
+UNION ALL SELECT '2026-03', 'Month 0', 1600, 100.0
+UNION ALL SELECT '2026-03', 'Month 1', 1184, 74.0
+UNION ALL SELECT '2026-03', 'Month 2', 960, 60.0
+UNION ALL SELECT '2026-04', 'Month 0', 1800, 100.0
+UNION ALL SELECT '2026-04', 'Month 1', 1350, 75.0;
+
+-- 2. Visual: Retention Heatmap Grid
+CREATE VISUAL RetentionHeatmap AS HEATMAP (
+    SOURCE = #cohort_raw,
+    TITLE = 'Retention Heatmap (% Retained by Offset)',
+    MAPPINGS (
+        X = Period,
+        Y = Cohort,
+        VALUE = RetentionPct
+    ),
+    OPTIONS (
+        DATA_LABELS = ON,
+        COLOR_SCHEME = 'Blues'
+    )
+);
+
+-- 3. Visual: Retention Decay Curves
+CREATE VISUAL DecayCurve AS LINE (
+    SOURCE = #cohort_raw,
+    TITLE = 'Cohort Retention Decay Curves',
+    MAPPINGS (
+        X = Period,
+        Y = RetentionPct,
+        SERIES = Cohort
+    ),
+    OPTIONS (
+        LEGEND_POSITION = RIGHT,
+        Y_AXIS_FORMAT = '0"%"'
+    )
+);
+
+-- 4. Visual: Average 30-Day Retention KPI
+CREATE VISUAL M1AverageCard AS CARD (
+    SOURCE = (SELECT ROUND(AVG(RetentionPct), 1) AS AvgM1 FROM #cohort_raw WHERE Period = 'Month 1'),
+    TITLE = 'Average 30-Day Retention',
+    MAPPINGS (VALUE = AvgM1),
+    OPTIONS (FORMAT = '0.0', SUFFIX = '%')
+);
+
+-- 5. Dashboard Page
+CREATE PAGE RetentionDashboard AS DASHBOARD (
+    STRUCTURE = 'A B / C C',
+    MAP (
+        'A' = M1AverageCard,
+        'B' = DecayCurve,
+        'C' = RetentionHeatmap
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = RetentionDashboard, PAGES (RetentionDashboard));

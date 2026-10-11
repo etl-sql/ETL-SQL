@@ -1,0 +1,39 @@
+-- Transform: TRANSFORM USING ROLLING_AGGREGATE
+-- Demonstrates: Native declarative moving average smoothing across partitioned time-series,
+-- eliminating noisy daily spikes and tracking trailing 7-day velocity.
+
+-- 1. Mock daily regional sales dataset
+SELECT 'North' AS Region, CAST('2026-02-01' AS DATE) AS TxDate, 1200 AS Amount INTO #daily_sales
+UNION ALL SELECT 'North', CAST('2026-02-02' AS DATE), 1450
+UNION ALL SELECT 'North', CAST('2026-02-03' AS DATE), 1100
+UNION ALL SELECT 'North', CAST('2026-02-04' AS DATE), 1900
+UNION ALL SELECT 'North', CAST('2026-02-05' AS DATE), 1850
+UNION ALL SELECT 'North', CAST('2026-02-06' AS DATE), 2200
+UNION ALL SELECT 'North', CAST('2026-02-07' AS DATE), 2100
+UNION ALL SELECT 'North', CAST('2026-02-08' AS DATE), 2400
+UNION ALL SELECT 'South', CAST('2026-02-01' AS DATE), 900
+UNION ALL SELECT 'South', CAST('2026-02-02' AS DATE), 950
+UNION ALL SELECT 'South', CAST('2026-02-03' AS DATE), 1150
+UNION ALL SELECT 'South', CAST('2026-02-04' AS DATE), 1050
+UNION ALL SELECT 'South', CAST('2026-02-05' AS DATE), 1300
+UNION ALL SELECT 'South', CAST('2026-02-06' AS DATE), 1250
+UNION ALL SELECT 'South', CAST('2026-02-07' AS DATE), 1400
+UNION ALL SELECT 'South', CAST('2026-02-08' AS DATE), 1500;
+
+
+-- 2. Execute declarative ROLLING_AGGREGATE transform (trailing 3-day moving average per region)
+TRANSFORM #sales_smoothed
+FROM #daily_sales
+USING ROLLING_AGGREGATE (
+    VALUE_COL   = 'Amount',
+    ORDER_COL   = 'TxDate',
+    WINDOW_SIZE = 3,
+    AGGREGATE   = 'AVG',
+    BY_GROUP    = 'Region',
+    ROLLING_COL = 'TrailingAvg3Day'
+);
+
+PRINT '=== Original vs Rolling Aggregate Smoothed Results ===';
+SELECT Region, TxDate, Amount, TrailingAvg3Day
+FROM #sales_smoothed
+ORDER BY Region, TxDate;

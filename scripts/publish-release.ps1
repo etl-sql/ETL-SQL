@@ -192,7 +192,7 @@ foreach ($Platform in $Platforms) {
         ,@("03_SQL_Engines", "ANSI_SQL_Extensions.etlsql")
         ,@("02_Data_Movement", "Avro_Read_Write.etlsql")
         ,@("02_Data_Movement", "Parquet_Read_Write.etlsql")
-        ,@("08_Reporting", "sales report.rptsql")
+        ,@("08_Reporting", "sales_report.rptsql")
         ,@("08_Reporting", "slicer_test.rptsql")
         ,@("99_Experimental", "verify_env.etlsql")
     )

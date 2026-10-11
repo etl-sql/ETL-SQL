@@ -1,0 +1,26 @@
+-- Transform: TRANSFORM USING FILL_DATES
+-- Demonstrates: Automatic time-series gap filling across partitioned groups,
+-- ensuring every missing date in a span exists with default metric values (e.g. 0).
+
+-- 1. Mock sparse daily sales dataset (gaps on Feb 2, 4, 6)
+SELECT 'North' AS Region, CAST('2026-02-01' AS DATE) AS OrderDate, 1200 AS Amount INTO #sparse_sales
+UNION ALL SELECT 'North', CAST('2026-02-03' AS DATE), 1500
+UNION ALL SELECT 'North', CAST('2026-02-05' AS DATE), 1800
+UNION ALL SELECT 'North', CAST('2026-02-07' AS DATE), 2100
+UNION ALL SELECT 'South', CAST('2026-02-01' AS DATE), 900
+UNION ALL SELECT 'South', CAST('2026-02-04' AS DATE), 1100
+UNION ALL SELECT 'South', CAST('2026-02-07' AS DATE), 1300;
+
+-- 2. Execute declarative FILL_DATES transform
+TRANSFORM #dense_sales
+FROM #sparse_sales
+USING FILL_DATES (
+    DATE_COL  = 'OrderDate',
+    GAPS_FILL = 0,
+    BY_GROUP  = 'Region'
+);
+
+PRINT '=== Continuous Time-Series With Filled Gaps ===';
+SELECT Region, OrderDate, Amount
+FROM #dense_sales
+ORDER BY Region, OrderDate;

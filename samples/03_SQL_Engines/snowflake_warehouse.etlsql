@@ -1,0 +1,53 @@
+-- SQL Engines: Snowflake Cloud Data Platform Operations
+-- Demonstrates: Defining Snowflake connections (Username/Password and RSA Key-Pair JWT),
+-- warehouse configuration, query pushdown, and engine-context transformations.
+--
+-- Note: Replace connection options with your organization's Snowflake account credentials.
+
+-- 1. Inspect Snowflake connection configuration and supported options
+HELP CONNECTION SNOWFLAKE;
+
+-- 2. Structured Snowflake connection declaration (Username/Password mode)
+-- Required: HOST (account identifier), USERNAME, PASSWORD (or PRIVATE_KEY_FILE)
+-- Optional: WAREHOUSE, DATABASE, SCHEMA (defaults to PUBLIC), TIMEOUT_SECONDS (default 1800)
+CREATE CONNECTION sf_warehouse AS SNOWFLAKE(
+    HOST            = 'xy12345.us-east-1',
+    USERNAME        = 'etl_loader_svc',
+    PASSWORD        = 'demo_password',
+    WAREHOUSE       = 'COMPUTE_WH',
+    DATABASE        = 'ENTERPRISE_DW',
+    SCHEMA          = 'ANALYTICS',
+    TIMEOUT_SECONDS = 1800
+);
+
+-- Alternative Key-Pair Authentication pattern (recommended for production CI/CD pipelines):
+-- CREATE CONNECTION sf_jwt AS SNOWFLAKE(
+--     HOST             = 'xy12345.us-east-1',
+--     USERNAME         = 'etl_loader_svc',
+--     PRIVATE_KEY_FILE = 'certs/snowflake_rsa.p8',
+--     WAREHOUSE        = 'LOAD_WH',
+--     DATABASE         = 'ANALYTICS'
+-- );
+
+-- 3. Staging and cross-system aggregation in the engine
+SELECT
+    'Enterprise Cloud' AS PlanName,
+    1450 AS ActiveSubscribers,
+    290.00 AS MonthlyFee
+INTO #staged_subscriptions
+UNION ALL SELECT 'Team Pro', 4800, 49.00
+UNION ALL SELECT 'Starter', 12500, 15.00;
+
+SELECT
+    PlanName,
+    ActiveSubscribers,
+    MonthlyFee,
+    ROUND(ActiveSubscribers * MonthlyFee, 2) AS MonthlyRecurringRevenue,
+    ROUND((ActiveSubscribers * MonthlyFee * 12), 2) AS AnnualRunRate
+INTO #mrr_summary
+FROM #staged_subscriptions;
+
+PRINT '=== Cloud Warehouse Subscription Metrics ===';
+SELECT PlanName, ActiveSubscribers, MonthlyRecurringRevenue, AnnualRunRate
+FROM #mrr_summary
+ORDER BY MonthlyRecurringRevenue DESC;

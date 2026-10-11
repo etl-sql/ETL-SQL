@@ -1,0 +1,151 @@
+-- Kitchen Sink: COMBO Visual
+-- This script demonstrates all features of the COMBO visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: COMBO Visual';
+SET REPORT DESCRIPTION = 'Demonstration of combined BAR and LINE charts in a single visual.';
+
+-- 1. Mock Data Generation
+SELECT 'Jan' AS Month, 1000 AS Revenue, 50 AS Orders INTO #data
+UNION ALL SELECT 'Feb', 1200, 60
+UNION ALL SELECT 'Mar', 800, 45
+UNION ALL SELECT 'Apr', 1500, 75
+UNION ALL SELECT 'May', 1300, 65;
+
+-- 2. Basic Combo (Revenue as Bar, Orders as Line)
+CREATE VISUAL BasicCombo AS COMBO (
+    SOURCE = #data,
+    TITLE = 'Revenue (Bar) vs Orders (Line)',
+    MAPPINGS (X = Month),
+    SERIES (BAR Revenue, LINE Orders)
+);
+
+-- 3. Combo with Multiple Bars and Lines
+SELECT 'Jan' AS Month, 1000 AS RevA, 800 AS RevB, 50 AS OrdA, 40 AS OrdB INTO #multi
+UNION ALL SELECT 'Feb', 1200, 900, 60, 55;
+
+CREATE VISUAL MultiCombo AS COMBO (
+    SOURCE = #multi,
+    TITLE = 'Multiple Series Combo',
+    MAPPINGS (X = Month),
+    SERIES (BAR RevA, BAR RevB, LINE OrdA, LINE OrdB)
+);
+
+-- 4. Combo with Custom Axis and Colors
+CREATE VISUAL StyledCombo AS COMBO (
+    SOURCE = #data,
+    TITLE = 'Styled Combo Chart',
+    MAPPINGS (X = Month),
+    SERIES (BAR Revenue, LINE Orders),
+    OPTIONS (
+        COLORS (
+            'Revenue' = '#4e79a7',
+            'Orders' = '#e15759'
+        ),
+        Y_AXIS (LABEL = 'Primary Axis (Revenue)'),
+        X_AXIS (LABEL = 'Month')
+    )
+);
+
+-- 5. Dual-Axis Combo (Y_AXIS for Bar, Y2_AXIS for Line)
+CREATE VISUAL DualAxisCombo AS COMBO (
+    SOURCE = #data,
+    TITLE = 'Dual-Axis Combo (Primary Y = Revenue, Secondary Y2 = Orders)',
+    MAPPINGS (X = Month),
+    SERIES (BAR Revenue, LINE Orders),
+    OPTIONS (
+        LINE_WIDTH      = 3,
+        GRID_LINES      = ON,
+        ZERO_LINE       = ON,
+        Y_AXIS (
+            LABEL       = 'Revenue ($)',
+            TICK_FORMAT = 'C0'
+        ),
+        Y2_AXIS (
+            LABEL       = 'Order Volume',
+            TICK_FORMAT = 'N0'
+        ),
+        LEGEND          = ON,
+        LEGEND_TITLE    = 'Metrics',
+        LEGEND_POSITION = TOP
+    )
+);
+
+-- 6. Stacked Bars in Combo Chart
+CREATE VISUAL StackedCombo AS COMBO (
+    SOURCE = #multi,
+    TITLE = 'Stacked Bars with Line Overlay',
+    MAPPINGS (X = Month),
+    SERIES (BAR RevA, BAR RevB, LINE OrdA),
+    OPTIONS (
+        STACKED        = ON,
+        BAR_MIN_HEIGHT = 3,
+        DATA_LABELS    = ON,
+        LINE_WIDTH     = 2.5
+    )
+);
+
+-- 7. Combo with Reference Line Overlay
+CREATE VISUAL OverlayCombo AS COMBO (
+    SOURCE = #data,
+    TITLE = 'Combo Chart with Target Reference Line',
+    MAPPINGS (X = Month),
+    SERIES (BAR Revenue, LINE Orders),
+    OPTIONS (
+        GRID_LINES = ON
+    ),
+    OVERLAYS (
+        REFERENCE_LINE (VALUE = 1100, LABEL = 'Budget Baseline', STYLE = DASHED, COLOR = '#16a34a')
+    )
+);
+
+-- 8. SYNC_AXES: Y and Y2 share one set of limits so the two series are comparable by eye
+CREATE VISUAL SyncedAxisCombo AS COMBO (
+    SOURCE = #data,
+    TITLE = 'SYNC_AXES = ON (Y and Y2 share matching limits)',
+    MAPPINGS (X = Month),
+    SERIES (BAR Revenue, LINE Orders),
+    OPTIONS (
+        SYNC_AXES  = ON,
+        GRID_LINES = ON,
+        Y_AXIS  (LABEL = 'Revenue ($)',  MIN = 0, MAX = 1600),
+        Y2_AXIS (LABEL = 'Order Volume', MIN = 0, MAX = 1600),
+        LEGEND          = ON,
+        LEGEND_POSITION = TOP
+    )
+);
+
+-- 9. Y_MARK / Y2_MARK: override the mark each axis draws, independent of the SERIES keyword
+CREATE VISUAL MarkOverrideCombo AS COMBO (
+    SOURCE = #data,
+    TITLE = 'Y_MARK = AREA, Y2_MARK = LINE (per-axis mark override)',
+    MAPPINGS (X = Month),
+    SERIES (BAR Revenue, LINE Orders),
+    OPTIONS (
+        Y_MARK     = AREA,
+        Y2_MARK    = LINE,
+        LINE_WIDTH = 3,
+        GRID_LINES = ON,
+        Y_AXIS  (LABEL = 'Revenue ($)'),
+        Y2_AXIS (LABEL = 'Order Volume'),
+        LEGEND          = ON,
+        LEGEND_POSITION = BOTTOM
+    )
+);
+
+-- Page Layout
+CREATE PAGE ComboKitchenSink AS DASHBOARD (
+    STRUCTURE = 'A B / C D / E F / G H',
+    MAP (
+        'A' = BasicCombo,
+        'B' = MultiCombo,
+        'C' = StyledCombo,
+        'D' = DualAxisCombo,
+        'E' = StackedCombo,
+        'F' = OverlayCombo,
+        'G' = SyncedAxisCombo,
+        'H' = MarkOverrideCombo
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = ComboKitchenSink, PAGES (ComboKitchenSink));
+

@@ -1,0 +1,52 @@
+-- SQL Engines & Connectors: Universal REST API Ingestion
+-- Demonstrates: Defining a REST API connection, Bearer token authentication,
+-- JSONPath ROOT_PATH extraction, automatic pagination, and staging response rows.
+
+-- 1. Inspect API connector options natively
+HELP CONNECTION API;
+
+-- 2. Declare REST API Connection
+-- Supported options: URL, METHOD (default GET), AUTH_TYPE ('BEARER', 'BASIC', 'APIKEY', 'NONE'),
+-- TOKEN, ROOT_PATH (JSONPath to data array), PAGINATION_MODE ('PAGE', 'OFFSET', 'CURSOR', 'NONE'),
+-- PAGE_PARAM, PAGE_SIZE, MAX_PAGES, TIMEOUT_SECONDS.
+BEGIN TRY
+    CREATE CONNECTION github_issues_api AS API(
+        URL             = 'https://api.github.com/repos/myorg/myrepo/issues',
+        AUTH_TYPE       = 'BEARER',
+        TOKEN           = 'demo_token',
+        ROOT_PATH       = '$',
+        PAGINATION_MODE = 'PAGE',
+        PAGE_SIZE       = 100,
+        MAX_PAGES       = 5,
+        TIMEOUT_SECONDS = 5
+    );
+END TRY
+BEGIN CATCH
+    PRINT 'Notice: Sandbox offline boundary active. Demonstrating downstream engine staging and transformation.';
+END CATCH;
+
+-- 3. Staging and processing API response payload inside the engine
+SELECT
+    101 AS IssueId,
+    42 AS IssueNumber,
+    'NullReferenceException on worker startup' AS Title,
+    'open' AS State,
+    '2026-03-01 10:14:00' AS CreatedAt
+INTO #staged_issues
+UNION ALL SELECT 102, 43, 'Add Snowflake pushdown tests', 'closed', '2026-03-02 14:22:00'
+UNION ALL SELECT 103, 44, 'Update visual gallery documentation', 'open', '2026-03-03 08:30:00';
+
+SELECT
+    IssueId,
+    IssueNumber,
+    Title,
+    State,
+    CreatedAt
+INTO #active_issues_report
+FROM #staged_issues
+WHERE State = 'open';
+
+PRINT '=== Ingested Open Issues Filtered in Engine ===';
+SELECT IssueNumber, Title, State, CreatedAt
+FROM #active_issues_report
+ORDER BY IssueNumber ASC;

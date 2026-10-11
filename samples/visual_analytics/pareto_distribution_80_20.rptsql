@@ -1,0 +1,84 @@
+-- Visual Analytics: Pareto Principle (80/20 Rule) Distribution
+-- Demonstrates: Running cumulative window aggregates, cumulative percentage calculation,
+-- and mapping onto a COMBO (Bar + Line) visual with an 80% goal overlay.
+
+SET REPORT TITLE = 'Pareto Revenue Distribution (80/20 Rule)';
+SET REPORT DESCRIPTION = 'Identifies the high-impact products contributing to the top 80% of total revenue.';
+SET REPORT THEME = 'light';
+
+-- 1. Mock Product Sales Data
+SELECT 'Cloud Enterprise' AS Product, 120000 AS Revenue INTO #products_raw
+UNION ALL SELECT 'Database Pro', 85000
+UNION ALL SELECT 'Security Shield', 55000
+UNION ALL SELECT 'API Gateway', 35000
+UNION ALL SELECT 'Monitoring Hub', 18000
+UNION ALL SELECT 'Backup Agent', 12000
+UNION ALL SELECT 'Storage Basic', 8000
+UNION ALL SELECT 'DNS Router', 5000;
+
+-- 2. Analytical Query: Running Total and Cumulative Share %
+SELECT
+    Product,
+    Revenue,
+    SUM(Revenue) OVER (ORDER BY Revenue DESC) AS RunningTotal,
+    ROUND((SUM(Revenue) OVER (ORDER BY Revenue DESC) * 100.0) / (SELECT SUM(Revenue) FROM #products_raw), 1) AS CumPct
+INTO #pareto_metrics
+FROM #products_raw;
+
+-- 3. Visual: Pareto Combo Chart (Revenue Bars + Cumulative % Line)
+CREATE VISUAL ParetoChart AS COMBO (
+    SOURCE = #pareto_metrics,
+    TITLE = 'Pareto Chart: Revenue & Cumulative Share',
+    MAPPINGS (
+        X = Product,
+        BAR = Revenue,
+        LINE = CumPct
+    ),
+    OPTIONS (
+        SECONDARY_Y_AXIS = ON,
+        SECONDARY_Y_FORMAT = '0"%"'
+    ),
+    OVERLAYS (
+        GOAL(80) AS DASHED WITH (COLOR = '#ef4444', LABEL = '80% Threshold')
+    )
+);
+
+-- 4. Visual: Core Products KPI Card
+CREATE VISUAL CoreProductsCard AS CARD (
+    SOURCE = (SELECT COUNT(*) AS CoreCount FROM #pareto_metrics WHERE CumPct <= 80.0),
+    TITLE = 'Top 80% Contributor SKUs',
+    MAPPINGS (VALUE = CoreCount),
+    OPTIONS (FORMAT = 'N0')
+);
+
+CREATE VISUAL TotalRevenueCard AS CARD (
+    SOURCE = (SELECT SUM(Revenue) AS TotalRev FROM #products_raw),
+    TITLE = 'Total Catalog Revenue',
+    MAPPINGS (VALUE = TotalRev),
+    OPTIONS (FORMAT = 'C0')
+);
+
+-- 5. Visual: Pareto Detail Table
+CREATE VISUAL ParetoTable AS TABLE (
+    SOURCE = #pareto_metrics,
+    TITLE = 'Product Contribution Details',
+    MAPPINGS (
+        Product,
+        Revenue FORMAT 'C0' ALIGN 'right' AS 'Revenue',
+        RunningTotal FORMAT 'C0' ALIGN 'right' AS 'Cumulative Revenue',
+        CumPct FORMAT '0.0' ALIGN 'right' AS 'Cumulative %'
+    )
+);
+
+-- 6. Dashboard Page Composition
+CREATE PAGE ParetoDashboard AS DASHBOARD (
+    STRUCTURE = 'A B / C C / D D',
+    MAP (
+        'A' = TotalRevenueCard,
+        'B' = CoreProductsCard,
+        'C' = ParetoChart,
+        'D' = ParetoTable
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = ParetoDashboard, PAGES (ParetoDashboard));

@@ -1,0 +1,99 @@
+-- Kitchen Sink: TREEMAP Visual
+-- Demonstrates the TREEMAP visual type for flat and multi-level hierarchical layouts,
+-- independent color encoding, breadcrumb navigation, and label truncation/wrapping controls.
+
+SET REPORT TITLE = 'Kitchen Sink: TREEMAP Visual';
+SET REPORT DESCRIPTION = 'Demonstration of TREEMAP area charts with flat categories, parent-child hierarchies, independent color encoding, breadcrumbs, and label overflow controls.';
+
+-- 1. Mock Data: Flat Categories with Independent Status Color
+SELECT 'Enterprise Software' AS Cat, 4500 AS Val, '#2563eb' AS StatusColor INTO #flat_tree
+UNION ALL SELECT 'Cloud Infrastructure Services', 3800, '#0284c7'
+UNION ALL SELECT 'Hardware Devices & Peripherals', 2200, '#10b981'
+UNION ALL SELECT 'Professional Consulting Support', 1400, '#f59e0b'
+UNION ALL SELECT 'Consumer Mobile Subscriptions', 900, '#8b5cf6'
+UNION ALL SELECT 'Legacy Maintenance Contracts', 350, '#ef4444';
+
+-- 2. Mock Data: Nested Parent-Child Hierarchy with Metric Colors
+SELECT 'Global Operations' AS Item, '' AS Parent, 12000 AS Revenue, '#1e293b' AS NodeColor INTO #nested_tree
+UNION ALL SELECT 'North America', 'Global Operations', 6500, '#2563eb'
+UNION ALL SELECT 'Europe', 'Global Operations', 4000, '#0284c7'
+UNION ALL SELECT 'Asia Pacific', 'Global Operations', 1500, '#0d9488'
+UNION ALL SELECT 'US East Coast Enterprise', 'North America', 3800, '#3b82f6'
+UNION ALL SELECT 'US West Coast Enterprise', 'North America', 2700, '#60a5fa'
+UNION ALL SELECT 'Western Europe Central', 'Europe', 2500, '#38bdf8'
+UNION ALL SELECT 'Nordic & Baltic Region', 'Europe', 1500, '#7dd3fc'
+UNION ALL SELECT 'Japan & Korea', 'Asia Pacific', 900, '#14b8a6'
+UNION ALL SELECT 'Australia & NZ', 'Asia Pacific', 600, '#2dd4bf';
+
+-- 3. Visual 1: Basic Flat Treemap with Default Ellipsis Clipping
+CREATE VISUAL BasicTreemap AS TREEMAP (
+    SOURCE = #flat_tree,
+    TITLE = '1. Flat Treemap (Default Clipping)',
+    MAPPINGS (
+        NAME  = Cat,
+        VALUE = Val
+    ),
+    OPTIONS (
+        LABEL_MIN_SIZE = 30,
+        LABEL_OVERFLOW = CLIP
+    )
+);
+
+-- 4. Visual 2: Flat Treemap with Multi-line Label Wrapping & Independent Color
+CREATE VISUAL WrappedTreemap AS TREEMAP (
+    SOURCE = #flat_tree,
+    TITLE = '2. Independent Color & Label Wrapping (LABEL_OVERFLOW = WRAP)',
+    MAPPINGS (
+        NAME  = Cat,
+        VALUE = Val,
+        COLOR = StatusColor
+    ),
+    OPTIONS (
+        LABEL_MIN_SIZE = 25,
+        LABEL_OVERFLOW = WRAP
+    )
+);
+
+-- 5. Visual 3: Flat Treemap with Label Suppression (LABEL_OVERFLOW = HIDDEN)
+CREATE VISUAL HiddenOverflowTreemap AS TREEMAP (
+    SOURCE = #flat_tree,
+    TITLE = '3. Label Suppression on Narrow Tiles (LABEL_OVERFLOW = HIDDEN)',
+    MAPPINGS (
+        NAME  = Cat,
+        VALUE = Val
+    ),
+    OPTIONS (
+        LABEL_MIN_SIZE = 60,
+        LABEL_OVERFLOW = HIDDEN
+    )
+);
+
+-- 6. Visual 4: Nested Hierarchical Treemap with Breadcrumb Path
+CREATE VISUAL HierarchicalTreemap AS TREEMAP (
+    SOURCE = #nested_tree,
+    TITLE = '4. Hierarchical Treemap with Breadcrumb Path (SHOW_BREADCRUMB = ON)',
+    MAPPINGS (
+        NAME   = Item,
+        PARENT = Parent,
+        VALUE  = Revenue,
+        COLOR  = NodeColor
+    ),
+    OPTIONS (
+        SHOW_BREADCRUMB = ON,
+        LABEL_MIN_SIZE  = 20,
+        LABEL_OVERFLOW  = WRAP
+    )
+);
+
+-- Page Layout
+CREATE PAGE TreemapKitchenSink AS DASHBOARD (
+    STRUCTURE = 'A B / C D',
+    MAP (
+        'A' = BasicTreemap,
+        'B' = WrappedTreemap,
+        'C' = HiddenOverflowTreemap,
+        'D' = HierarchicalTreemap
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = TreemapKitchenSink, PAGES (TreemapKitchenSink));

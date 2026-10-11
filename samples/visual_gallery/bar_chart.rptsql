@@ -1,0 +1,249 @@
+-- Kitchen Sink: BAR Visual
+-- This script demonstrates all features of the BAR visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: BAR Visual';
+SET REPORT DESCRIPTION = 'Comprehensive demonstration of BAR chart capabilities, including stacking, overlays, and styling.';
+
+-- 1. Mock Data Generation
+SELECT 'Jan' AS Month, 'North' AS Region, 100 AS Revenue, 80 AS Target INTO #sales
+UNION ALL SELECT 'Jan', 'South', 120, 90
+UNION ALL SELECT 'Feb', 'North', 150, 100
+UNION ALL SELECT 'Feb', 'South', 130, 95
+UNION ALL SELECT 'Mar', 'North', 180, 110
+UNION ALL SELECT 'Mar', 'South', 160, 105
+UNION ALL SELECT 'Apr', 'North', 200, 120
+UNION ALL SELECT 'Apr', 'South', 190, 115;
+
+-- 2. Basic Bar Chart
+CREATE VISUAL BasicBar AS BAR (
+    SOURCE = (SELECT Month, SUM(Revenue) AS Revenue FROM #sales GROUP BY Month),
+    TITLE = 'Basic Bar Chart (Revenue by Month)',
+    MAPPINGS (X = Month, Y = Revenue)
+);
+
+-- 3. Grouped Bar Chart
+CREATE VISUAL GroupedBar AS BAR (
+    SOURCE = #sales,
+    TITLE = 'Grouped Bar Chart (By Region)',
+    MAPPINGS (X = Month, Y = Revenue, SERIES = Region),
+    OPTIONS (
+        LEGEND_POSITION = TOP
+    )
+);
+
+-- 4. Stacked Bar Chart
+CREATE VISUAL StackedBar AS BAR (
+    SOURCE = #sales,
+    TITLE = 'Stacked Bar Chart',
+    MAPPINGS (X = Month, Y = Revenue, SERIES = Region),
+    OPTIONS (
+        STACKED = ON,
+        DATA_LABELS = ON WITH (POSITION = 'INSIDE', COLOR = '#FFFFFF', FORMAT = 'N0')
+    )
+);
+
+-- 5. Bar Chart with Overlays
+CREATE VISUAL OverlayBar AS BAR (
+    SOURCE = (SELECT Month, SUM(Revenue) AS Revenue FROM #sales GROUP BY Month),
+    TITLE = 'Bar Chart with Overlays',
+    MAPPINGS (X = Month, Y = Revenue),
+    OVERLAYS (
+        GOAL(150) AS DASHED WITH (COLOR = 'Red', LABEL = 'Monthly Goal'),
+        AVERAGE AS DOTTED WITH (COLOR = 'Blue', LABEL = 'Average Revenue'),
+        MOVING_AVG(2) AS SOLID WITH (COLOR = 'Green', LABEL = '2-Month Moving Avg')
+    )
+);
+
+-- 6. Styled Bar Chart (Custom Colors & Axis)
+CREATE VISUAL StyledBar AS BAR (
+    SOURCE = #sales,
+    TITLE = 'Styled Bar Chart',
+    MAPPINGS (X = Month, Y = Revenue, SERIES = Region),
+    OPTIONS (
+        COLORS (
+            'North' = '#4e79a7',
+            'South' = '#f28e2b'
+        ),
+        X_AXIS (LABEL = 'Fiscal Month'),
+        Y_AXIS (LABEL = 'USD Revenue', MIN = 0, MAX = 300)
+    ),
+    STYLE (
+        BORDER = '2px solid #ddd',
+        BORDER-RADIUS = '8px',
+        SHADOW = ON
+    )
+);
+
+-- 7. 100% Normalized Stacked Bar (Native STACKED = 100PCT)
+CREATE VISUAL PercentBar AS BAR (
+    SOURCE = #sales,
+    TITLE = '100% Normalized Stacked Bar (STACKED = 100PCT)',
+    MAPPINGS (X = Month, Y = Revenue, SERIES = Region),
+    OPTIONS (
+        STACKED        = 100PCT,
+        BAR_MIN_HEIGHT = 3,
+        DATA_LABELS    = ON WITH (POSITION = 'INSIDE', COLOR = '#FFFFFF', FORMAT = 'P0')
+    )
+);
+
+-- 7b. Advanced Gridlines, Zero Line & Formatting
+CREATE VISUAL AdvancedGridBar AS BAR (
+    SOURCE = (SELECT Month, SUM(Revenue) AS Revenue FROM #sales GROUP BY Month),
+    TITLE = 'Gridlines, Zero Line & Conditional Formatting',
+    MAPPINGS (X = Month, Y = Revenue),
+    OPTIONS (
+        GRID_LINES        = ON,
+        GRID_LINE_COLOR   = '#cbd5e1',
+        GRID_LINE_DASH    = DASHED,
+        GRID_LINE_WIDTH   = 1.5,
+        ZERO_LINE         = ON,
+        ZERO_LINE_COLOR   = '#64748b',
+        MINOR_GRID_LINES  = ON,
+        BAND_SIZE         = 0.65,
+        DATA_LABELS       = ON WITH (
+            POSITION         = 'OUTSIDE',
+            LABEL_BACKGROUND = '#f8fafc',
+            LABEL_BORDER     = '1px solid #94a3b8'
+        )
+    ),
+    FORMATTING (
+        WHEN Revenue >= 350 THEN '#16a34a',
+        WHEN Revenue < 250  THEN '#dc2626'
+    )
+);
+
+-- 7c. Full Legend Suite & Analytical Overlays
+CREATE VISUAL FullLegendBar AS BAR (
+    SOURCE = #sales,
+    TITLE = 'Full Legend Suite & Running Total Overlay',
+    MAPPINGS (X = Month, Y = Revenue, SERIES = Region),
+    OPTIONS (
+        LEGEND             = ON,
+        LEGEND_TITLE       = 'Sales Territory',
+        LEGEND_POSITION    = INSIDE,
+        LEGEND_ANCHOR      = TOP_RIGHT,
+        LEGEND_ORIENTATION = HORIZONTAL,
+        SERIES_GAP         = 0.25
+    ),
+    OVERLAYS (
+        RUNNING_TOTAL(Revenue) AS DASHED WITH (COLOR = '#0284c7', LABEL = 'Cumulative')
+    )
+);
+
+-- 8. Visual with Tooltip Container
+CREATE VISUAL MonthDetail AS BAR (
+    SOURCE = (SELECT Region, Revenue FROM #sales WHERE Month = @hover_value),
+    TITLE = 'Regional Detail for ' + ISNULL(@hover_value, 'Selected Month'),
+    MAPPINGS (X = Region, Y = Revenue)
+);
+
+CREATE CONTAINER TooltipBox AS BOX (
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = MonthDetail)
+    )
+);
+
+CREATE VISUAL BarWithTooltip AS BAR (
+    SOURCE = (SELECT Month, SUM(Revenue) AS Revenue FROM #sales GROUP BY Month),
+    TITLE = 'Bar with Hover Tooltip',
+    MAPPINGS (X = Month, Y = Revenue),
+    TOOLTIP = TooltipBox
+);
+
+-- AXIS_SORT demos
+SELECT 1 AS MonthNum, 'January'  AS Month, 320 AS Revenue INTO #months UNION ALL
+SELECT 2,             'February',           290              UNION ALL
+SELECT 3,             'March',              410              UNION ALL
+SELECT 4,             'April',              380              UNION ALL
+SELECT 5,             'May',                450              UNION ALL
+SELECT 6,             'June',               500;
+
+CREATE VISUAL MonthOrderBar AS BAR (
+    SOURCE = (SELECT Month, Revenue FROM #months ORDER BY MonthNum),
+    TITLE = 'Revenue by Month (Source Order)',
+    MAPPINGS (X = Month, Y = Revenue),
+    OPTIONS (AXIS_SORT = SOURCE)
+);
+
+CREATE VISUAL DescBar AS BAR (
+    SOURCE = (SELECT Month, Revenue FROM #months),
+    TITLE = 'Revenue by Month (Z to A)',
+    MAPPINGS (X = Month, Y = Revenue),
+    OPTIONS (AXIS_SORT = DESC)
+);
+
+CREATE VISUAL RankedBar AS BAR (
+    SOURCE = (SELECT Region, SUM(Revenue) AS Revenue FROM #sales GROUP BY Region),
+    TITLE = 'Revenue by Region (Ranked, Highest First)',
+    MAPPINGS (X = Region, Y = Revenue),
+    OPTIONS (AXIS_SORT = VALUE_DESC)
+);
+
+-- REFERENCE_LINE and REFERENCE_BAND overlays on a bar chart
+CREATE VISUAL ReferenceBar AS BAR (
+    SOURCE = (SELECT Month, SUM(Revenue) AS Revenue FROM #sales GROUP BY Month),
+    TITLE = 'Reference Line and Shaded Reference Band',
+    MAPPINGS (X = Month, Y = Revenue),
+    OVERLAYS (
+        REFERENCE_LINE (VALUE = 300, LABEL = 'Board Target', STYLE = DASHED, COLOR = '#dc2626'),
+        REFERENCE_BAND (LOW = 220, HIGH = 340, COLOR = '#e0e7ff', LABEL = 'Planning Range')
+    )
+);
+
+-- Plot-area panel styling and axis typography, independent of the visual card
+CREATE VISUAL PanelStyledBar AS BAR (
+    SOURCE = (SELECT Month, SUM(Revenue) AS Revenue FROM #sales GROUP BY Month),
+    TITLE = 'PLOT_BACKGROUND / PLOT_BORDER with Axis Typography',
+    MAPPINGS (X = Month, Y = Revenue),
+    OPTIONS (
+        X_AXIS (LABEL = 'Month'),
+        Y_AXIS (LABEL = 'Revenue'),
+        PLOT_BACKGROUND     = '#f8fafc',
+        PLOT_BORDER         = '1px dashed #94a3b8',
+        AXIS_FONT_SIZE      = 11,
+        AXIS_FONT_COLOR     = '#334155',
+        AXIS_TITLE_FONT_SIZE = 13,
+        GRID_LINES          = ON
+    )
+);
+
+-- Interaction surface: a declarative field-list tooltip, a templated URL action, and
+-- EMIT_FILTER so a selection here only reaches the two visuals named below.
+CREATE VISUAL InteractiveBar AS BAR (
+    SOURCE = #sales,
+    TITLE = 'TOOLTIP FIELDS, OPEN_URL TEMPLATE, and targeted EMIT_FILTER',
+    MAPPINGS (X = Month, Y = Revenue, SERIES = Region),
+    TOOLTIP (FIELDS = (Month, Region, Revenue FORMAT 'C0', Target FORMAT 'N0')),
+    OPTIONS (LEGEND_POSITION = TOP),
+    ACTIONS (
+        ON_CLICK = OPEN_URL(
+            TEMPLATE = 'https://example.com/regions/{Region}?month={Month}',
+            PARAMS   = (Region, Month))
+    ),
+    EMIT_FILTER (TARGETS = (BasicBar, GroupedBar))
+);
+
+-- Page Layout
+CREATE PAGE BarKitchenSink AS DASHBOARD (
+    STRUCTURE = 'A B / C D / E F / G G / H I J / K L / M N / O O',
+    MAP (
+        'A' = BasicBar,
+        'B' = GroupedBar,
+        'C' = StackedBar,
+        'D' = OverlayBar,
+        'E' = StyledBar,
+        'F' = PercentBar,
+        'G' = BarWithTooltip,
+        'H' = MonthOrderBar,
+        'I' = DescBar,
+        'J' = RankedBar,
+        'K' = AdvancedGridBar,
+        'L' = FullLegendBar,
+        'M' = ReferenceBar,
+        'N' = PanelStyledBar,
+        'O' = InteractiveBar
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = BarKitchenSink, PAGES (BarKitchenSink));

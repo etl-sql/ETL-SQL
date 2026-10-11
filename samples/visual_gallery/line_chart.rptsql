@@ -1,0 +1,271 @@
+-- Kitchen Sink: LINE Visual
+-- This script demonstrates all features of the LINE visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: LINE Visual';
+SET REPORT DESCRIPTION = 'Demonstration of LINE chart capabilities, including smoothing, stacking, and regression overlays.';
+
+-- 1. Mock Data Generation
+SELECT '2026-01-01' AS Date, 'Product A' AS Category, 100 AS Val INTO #trends
+UNION ALL SELECT '2026-01-01', 'Product B', 120
+UNION ALL SELECT '2026-02-01', 'Product A', 150
+UNION ALL SELECT '2026-02-01', 'Product B', 130
+UNION ALL SELECT '2026-03-01', 'Product A', 180
+UNION ALL SELECT '2026-03-01', 'Product B', 160
+UNION ALL SELECT '2026-04-01', 'Product A', 220
+UNION ALL SELECT '2026-04-01', 'Product B', 210
+UNION ALL SELECT '2026-05-01', 'Product A', 200
+UNION ALL SELECT '2026-05-01', 'Product B', 230;
+
+-- 2. Basic Line Chart
+CREATE VISUAL BasicLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Basic Line Chart',
+    MAPPINGS (X = Date, Y = Total)
+);
+
+-- 3. Smooth Line Chart
+CREATE VISUAL SmoothLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Smooth Line Chart',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (SMOOTH = ON)
+);
+
+-- 4. Multi-Series Line Chart
+CREATE VISUAL MultiLine AS LINE (
+    SOURCE = #trends,
+    TITLE = 'Multi-Series Line Chart',
+    MAPPINGS (X = Date, Y = Val, SERIES = Category),
+    OPTIONS (LEGEND_POSITION = RIGHT)
+);
+
+-- 5. Stacked Line Chart
+CREATE VISUAL StackedLine AS LINE (
+    SOURCE = #trends,
+    TITLE = 'Stacked Line Chart',
+    MAPPINGS (X = Date, Y = Val, SERIES = Category),
+    OPTIONS (STACKED = ON)
+);
+
+-- 6. Line Chart with Regression Overlays
+CREATE VISUAL RegressionLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Line Chart with Regression Overlays',
+    MAPPINGS (X = Date, Y = Total),
+    OVERLAYS (
+        LINEAR AS DASHED WITH (COLOR = 'Purple', LABEL = 'Linear Trend'),
+        POLYNOMIAL(2) AS DOTTED WITH (COLOR = 'Orange', LABEL = 'Poly Trend (Deg 2)')
+    )
+);
+
+-- 7. Line Chart with Moving Average, Running Total & Percent of Total
+CREATE VISUAL AnalyticsLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Moving Average, Running Total & Percent of Total Overlays',
+    MAPPINGS (X = Date, Y = Total),
+    OVERLAYS (
+        MOVING_AVG(3) AS SOLID WITH (COLOR = 'Cyan', LABEL = '3-Period MA'),
+        RUNNING_TOTAL(Total) AS DASHED WITH (COLOR = '#10b981', LABEL = 'Running Total'),
+        PERCENT_OF_TOTAL(Total) AS DOTTED WITH (COLOR = '#f59e0b', LABEL = '% Total')
+    )
+);
+
+-- 8. Styled Symbols, Line Width & Gridlines
+CREATE VISUAL StyledGeometryLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Custom Line Width, Markers & Gridlines',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (
+        LINE_WIDTH          = 3,
+        SYMBOLS             = ON,
+        SYMBOL_SHAPE        = DIAMOND,
+        SYMBOL_STROKE_COLOR = '#0f172a',
+        SYMBOL_STROKE_WIDTH = 2,
+        GRID_LINES          = ON,
+        GRID_LINE_COLOR     = '#e2e8f0',
+        ZERO_LINE           = ON,
+        MINOR_GRID_LINES    = ON
+    )
+);
+
+-- 9. Area Fill with Baseline & Series Labels
+CREATE VISUAL AreaBaselineLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Area Fill (AREA_BASELINE = ZERO) & SERIES_LABELS',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (
+        AREA            = ON,
+        AREA_BASELINE   = ZERO,
+        DATA_LABELS     = ON,
+        SERIES_LABELS   = ON WITH (POSITION = END)
+    )
+);
+
+-- 10. Per-Segment Conditional Line Styling (SEGMENT_STYLE)
+CREATE VISUAL SegmentStyledLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Conditional Segment Styling (Forecast Dashed)',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (
+        SEGMENT_STYLE (
+            WHEN Date >= '2026-04-01' THEN LINE_DASH = DASHED, COLOR = '#64748b'
+        ),
+        DATA_LABELS = ON
+    )
+);
+
+-- 11. Explicit Time Axis Unit & Tick Format
+CREATE VISUAL TimeAxisLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Explicit TIME_UNIT (MONTH) & TICK_FORMAT (MMM yyyy)',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (
+        X_AXIS (
+            TIME_UNIT   = MONTH,
+            TICK_FORMAT = 'MMM yyyy'
+        ),
+        Y_AXIS (
+            TICK_FORMAT = 'C0'
+        ),
+        GRID_LINES = ON
+    )
+);
+
+-- 12. Step interpolation: the vertical jump lands before, or after, the point it belongs to
+CREATE VISUAL StepBeforeLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'INTERPOLATION = STEP_BEFORE',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (INTERPOLATION = STEP_BEFORE)
+);
+
+CREATE VISUAL StepAfterLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'INTERPOLATION = STEP_AFTER with LINE_DASH = DASHED',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (
+        INTERPOLATION = STEP_AFTER,
+        LINE_DASH     = DASHED,
+        LINE_WIDTH    = 3
+    )
+);
+
+CREATE VISUAL DottedSeriesLine AS LINE (
+    SOURCE = #trends,
+    TITLE = 'LINE_DASH = DOTTED on a multi-series line',
+    MAPPINGS (X = Date, Y = Val, SERIES = Category),
+    OPTIONS (LINE_DASH = DOTTED, LEGEND_POSITION = BOTTOM)
+);
+
+-- 13. NULL_HANDLING: the same gapped series read three ways
+SELECT '2026-01-01' AS Date, 100 AS Val INTO #gapped
+UNION ALL SELECT '2026-02-01', 150
+UNION ALL SELECT '2026-03-01', NULL
+UNION ALL SELECT '2026-04-01', 220
+UNION ALL SELECT '2026-05-01', 200;
+
+CREATE VISUAL NullConnectLine AS LINE (
+    SOURCE = #gapped,
+    TITLE = 'NULL_HANDLING = CONNECT (bridge the gap)',
+    MAPPINGS (X = Date, Y = Val),
+    OPTIONS (NULL_HANDLING = CONNECT, AXIS_SORT = SOURCE)
+);
+
+CREATE VISUAL NullGapLine AS LINE (
+    SOURCE = #gapped,
+    TITLE = 'NULL_HANDLING = GAP (break the line)',
+    MAPPINGS (X = Date, Y = Val),
+    OPTIONS (NULL_HANDLING = GAP, AXIS_SORT = SOURCE)
+);
+
+CREATE VISUAL NullZeroLine AS LINE (
+    SOURCE = #gapped,
+    TITLE = 'NULL_HANDLING = ZERO (treat the gap as zero)',
+    MAPPINGS (X = Date, Y = Val),
+    OPTIONS (NULL_HANDLING = ZERO, AXIS_SORT = SOURCE)
+);
+
+-- 14. Large-series rendering and the per-chart toolbox
+--     GENERATE_SERIES builds a dense series so SAMPLING and PROGRESSIVE have something to reduce.
+SELECT value AS Tick,
+       500 + (value % 97) * 4 - (value % 13) * 9 AS Reading
+INTO #dense
+FROM GENERATE_SERIES(1, 4000);
+
+CREATE VISUAL SampledLine AS LINE (
+    SOURCE = #dense,
+    TITLE = 'SAMPLING = LTTB over 4,000 readings',
+    MAPPINGS (X = Tick, Y = Reading),
+    OPTIONS (
+        SAMPLING   = LTTB,
+        GRID_LINES = ON,
+        X_AXIS (LABEL = 'Tick'),
+        Y_AXIS (LABEL = 'Reading')
+    )
+);
+
+CREATE VISUAL ProgressiveLine AS LINE (
+    SOURCE = #dense,
+    TITLE = 'PROGRESSIVE rendering with SAMPLING = AVERAGE',
+    MAPPINGS (X = Tick, Y = Reading),
+    OPTIONS (
+        SAMPLING          = AVERAGE,
+        PROGRESSIVE       = ON,
+        PROGRESSIVE_CHUNK = 250,
+        GRID_LINES        = ON
+    )
+);
+
+CREATE VISUAL ToolboxLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'SHOW_EXPORT / SHOW_DATA_VIEW toolbox with a linked ZOOM_GROUP',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (
+        SHOW_EXPORT    = ON,
+        SHOW_DATA_VIEW = ON,
+        ZOOM_GROUP     = 'trend-timeline',
+        GRID_LINES     = ON
+    ),
+    TOOLTIP (FIELDS = (Date, Total FORMAT 'N0'))
+);
+
+CREATE VISUAL ZoomPeerLine AS LINE (
+    SOURCE = #trends,
+    TITLE = 'Second chart in the same ZOOM_GROUP (zoom one, both scroll)',
+    MAPPINGS (X = Date, Y = Val, SERIES = Category),
+    OPTIONS (
+        ZOOM_GROUP      = 'trend-timeline',
+        LEGEND_POSITION = BOTTOM,
+        GRID_LINES      = ON
+    )
+);
+
+-- Page Layout
+CREATE PAGE LineKitchenSink AS DASHBOARD (
+    STRUCTURE = 'A B C / D E F / G H I / J K L / M N O / P Q R / S T .',
+    MAP (
+        'A' = BasicLine,
+        'B' = SmoothLine,
+        'C' = MultiLine,
+        'D' = StackedLine,
+        'E' = RegressionLine,
+        'F' = AnalyticsLine,
+        'G' = StyledGeometryLine,
+        'H' = AreaBaselineLine,
+        'I' = SegmentStyledLine,
+        'J' = TimeAxisLine,
+        'K' = StepBeforeLine,
+        'L' = StepAfterLine,
+        'M' = DottedSeriesLine,
+        'N' = NullConnectLine,
+        'O' = NullGapLine,
+        'P' = NullZeroLine,
+        'Q' = SampledLine,
+        'R' = ProgressiveLine,
+        'S' = ToolboxLine,
+        'T' = ZoomPeerLine
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = LineKitchenSink, PAGES (LineKitchenSink));
+

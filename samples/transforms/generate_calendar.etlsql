@@ -1,0 +1,32 @@
+-- Data Prep: GENERATE CALENDAR Date Dimension
+-- Demonstrates: Declarative date dimension generation, calendar attributes,
+-- and outer joining with sparse transaction data to eliminate reporting date gaps.
+
+-- 1. Generate full January 2026 calendar dimension
+GENERATE CALENDAR FROM '2026-01-01' TO '2026-01-15' INTO #calendar;
+
+PRINT 'Generated calendar date dimension:';
+SELECT Date, DateKey, DayName, IsWeekend, IsMonthStart, FiscalQuarter
+FROM #calendar
+ORDER BY Date ASC;
+
+-- 2. Mock sparse sales data (only 4 active transaction days)
+SELECT '2026-01-02' AS SaleDate, 1250.00 AS Amount INTO #sales
+UNION ALL SELECT '2026-01-05', 2100.00
+UNION ALL SELECT '2026-01-08', 1850.00
+UNION ALL SELECT '2026-01-12', 3400.00;
+
+-- 3. Outer join calendar with sparse sales: guarantees all calendar dates appear
+SELECT
+    c.Date,
+    c.DayName,
+    c.IsWeekend,
+    COALESCE(s.Amount, 0.0) AS Revenue,
+    CASE WHEN s.Amount IS NULL THEN 'Gap Filled' ELSE 'Actual Sale' END AS Status
+INTO #uninterrupted_sales
+FROM #calendar AS c
+LEFT JOIN #sales AS s ON c.Date = s.SaleDate
+ORDER BY c.Date ASC;
+
+PRINT 'Uninterrupted daily time series (no skipped dates):';
+SELECT * FROM #uninterrupted_sales;

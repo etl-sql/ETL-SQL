@@ -1,0 +1,31 @@
+-- Advanced SQL: QUALIFY Clause for Window Function Filtering
+-- Demonstrates: Filtering directly on analytical window functions (e.g. ROW_NUMBER, RANK)
+-- without wrapping the query inside a CTE or subquery.
+
+-- 1. Mock employee salary dataset across departments
+SELECT 'Alice' AS Employee, 'Engineering' AS Department, 145000 AS Salary INTO #employees
+UNION ALL SELECT 'Bob', 'Engineering', 152000
+UNION ALL SELECT 'Charlie', 'Engineering', 138000
+UNION ALL SELECT 'David', 'Marketing', 95000
+UNION ALL SELECT 'Eve', 'Marketing', 115000
+UNION ALL SELECT 'Frank', 'Marketing', 92000
+UNION ALL SELECT 'Grace', 'Finance', 128000
+UNION ALL SELECT 'Heidi', 'Finance', 135000;
+
+-- 2. Traditional way required a subquery or CTE:
+--    WITH ranked AS (SELECT *, ROW_NUMBER() OVER (...) as rn FROM ...) SELECT * FROM ranked WHERE rn <= 2;
+--
+-- With QUALIFY, filter window calculations directly in a single pass:
+SELECT
+    Employee,
+    Department,
+    Salary,
+    DENSE_RANK() OVER (PARTITION BY Department ORDER BY Salary DESC) AS SalaryRank
+INTO #top_earners
+FROM #employees
+QUALIFY SalaryRank <= 2
+ORDER BY Department ASC, SalaryRank ASC;
+
+PRINT '=== Top 2 Earners per Department using QUALIFY ===';
+SELECT Employee, Department, Salary, SalaryRank
+FROM #top_earners;

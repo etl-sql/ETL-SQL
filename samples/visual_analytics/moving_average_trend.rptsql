@@ -1,0 +1,92 @@
+-- Visual Analytics: Moving Average Trend & Volatility Smoothing
+-- Demonstrates: Rolling window aggregates, smoothing daily fluctuations,
+-- and mapping onto a LINE chart with overlays and variance indicators.
+
+SET REPORT TITLE = 'Daily Sales Moving Average & Smoothing';
+SET REPORT DESCRIPTION = 'Demonstrates trend smoothing against volatile daily revenue using rolling window aggregates.';
+SET REPORT THEME = 'light';
+
+-- 1. Mock Daily Transaction Data (3 Weeks with Weekend Dips)
+SELECT '2026-03-01' AS SaleDate, 4200 AS Revenue INTO #daily_sales
+UNION ALL SELECT '2026-03-02', 5100
+UNION ALL SELECT '2026-03-03', 4800
+UNION ALL SELECT '2026-03-04', 6200
+UNION ALL SELECT '2026-03-05', 5900
+UNION ALL SELECT '2026-03-06', 2300
+UNION ALL SELECT '2026-03-07', 1800
+UNION ALL SELECT '2026-03-08', 4900
+UNION ALL SELECT '2026-03-09', 5400
+UNION ALL SELECT '2026-03-10', 5200
+UNION ALL SELECT '2026-03-11', 6800
+UNION ALL SELECT '2026-03-12', 6100
+UNION ALL SELECT '2026-03-13', 2500
+UNION ALL SELECT '2026-03-14', 2100
+UNION ALL SELECT '2026-03-15', 5300
+UNION ALL SELECT '2026-03-16', 5800;
+
+-- 2. Analytical Query: 7-Day Rolling Moving Average
+SELECT
+    SaleDate,
+    Revenue,
+    ROUND(AVG(Revenue) OVER (
+        ORDER BY SaleDate
+        ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+    ), 0) AS MovingAvg7Day
+INTO #sales_smoothed
+FROM #daily_sales;
+
+-- 3. Visual: Trend Line with Overlays
+CREATE VISUAL TrendLine AS LINE (
+    SOURCE = #sales_smoothed,
+    TITLE = 'Daily Revenue vs 7-Day Moving Average',
+    MAPPINGS (
+        X = SaleDate,
+        Y = Revenue
+    ),
+    OPTIONS (
+        DATA_LABELS = OFF
+    ),
+    OVERLAYS (
+        GOAL(5000) AS DASHED WITH (COLOR = '#10b981', LABEL = 'Daily Target ($5,000)'),
+        AVERAGE AS DOTTED WITH (COLOR = '#6b7280', LABEL = 'Period Mean')
+    )
+);
+
+-- 4. Visual: Summary KPI Cards
+CREATE VISUAL LatestMovingAvgCard AS CARD (
+    SOURCE = (SELECT MovingAvg7Day FROM #sales_smoothed ORDER BY SaleDate DESC LIMIT 1),
+    TITLE = 'Current 7-Day Trailing Avg',
+    MAPPINGS (VALUE = MovingAvg7Day),
+    OPTIONS (FORMAT = 'C0')
+);
+
+CREATE VISUAL PeakDayCard AS CARD (
+    SOURCE = (SELECT MAX(Revenue) AS PeakRev FROM #sales_smoothed),
+    TITLE = 'Period Peak Day',
+    MAPPINGS (VALUE = PeakRev),
+    OPTIONS (FORMAT = 'C0')
+);
+
+-- 5. Visual: Smoothed Breakdown Table
+CREATE VISUAL TrendTable AS TABLE (
+    SOURCE = #sales_smoothed,
+    TITLE = 'Daily Observation Log',
+    MAPPINGS (
+        SaleDate AS 'Date',
+        Revenue FORMAT 'C0' ALIGN 'right' AS 'Actual Revenue',
+        MovingAvg7Day FORMAT 'C0' ALIGN 'right' AS '7-Day Trailing Avg'
+    )
+);
+
+-- 6. Dashboard Page Composition
+CREATE PAGE TrendDashboard AS DASHBOARD (
+    STRUCTURE = 'A B / C C / D D',
+    MAP (
+        'A' = LatestMovingAvgCard,
+        'B' = PeakDayCard,
+        'C' = TrendLine,
+        'D' = TrendTable
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = TrendDashboard, PAGES (TrendDashboard));

@@ -1,0 +1,30 @@
+-- Transform: TRANSFORM USING PIVOT
+-- Demonstrates: Rotating transactional rows into cross-tabulated columns,
+-- pivoting quarterly revenue by product line without manually writing CASE expressions.
+
+-- 1. Mock quarterly regional transaction log
+SELECT 'North America' AS Region, 'Q1' AS Quarter, 45000 AS Revenue INTO #sales_log
+UNION ALL SELECT 'North America', 'Q2', 52000
+UNION ALL SELECT 'North America', 'Q3', 61000
+UNION ALL SELECT 'North America', 'Q4', 70000
+UNION ALL SELECT 'Europe', 'Q1', 38000
+UNION ALL SELECT 'Europe', 'Q2', 41000
+UNION ALL SELECT 'Europe', 'Q3', 49000
+UNION ALL SELECT 'Europe', 'Q4', 55000
+UNION ALL SELECT 'Asia Pacific', 'Q1', 29000
+UNION ALL SELECT 'Asia Pacific', 'Q2', 34000
+UNION ALL SELECT 'Asia Pacific', 'Q3', 42000
+UNION ALL SELECT 'Asia Pacific', 'Q4', 48000;
+
+-- 2. Execute declarative PIVOT transform
+TRANSFORM #pivoted_summary
+FROM #sales_log
+USING PIVOT (
+    ROW_FIELDS  = 'Region',
+    PIVOT_FIELD = 'Quarter',
+    VALUE_FIELD = 'Revenue',
+    AGGREGATE   = 'SUM'
+);
+
+PRINT '=== Cross-Tabulated Pivoted Matrix ===';
+SELECT Region, Q1, Q2, Q3, Q4 FROM #pivoted_summary ORDER BY Region;

@@ -1,0 +1,115 @@
+-- Kitchen Sink: DONUT Visual
+-- This script demonstrates all features of the DONUT visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: DONUT Visual';
+SET REPORT DESCRIPTION = 'Demonstration of DONUT chart capabilities, including inner radius sizing, labels, percentages, and custom palettes.';
+
+-- 1. Mock Data Generation (Market Share by Operating System)
+SELECT 'Windows' AS OS, 55 AS Share INTO #usage
+UNION ALL SELECT 'macOS', 25
+UNION ALL SELECT 'Linux', 10
+UNION ALL SELECT 'iOS', 5
+UNION ALL SELECT 'Android', 5
+UNION ALL SELECT 'FreeBSD', 2
+UNION ALL SELECT 'ChromeOS', 2
+UNION ALL SELECT 'Solaris', 1;
+
+-- 2. Basic Donut
+CREATE VISUAL BasicDonut AS DONUT (
+    SOURCE = #usage,
+    TITLE = 'Basic Donut Chart (OS Market Share)',
+    MAPPINGS (LABEL = OS, VALUE = Share)
+);
+
+-- 3. Donut with Percentage Labels and Right Legend
+CREATE VISUAL PercentDonut AS DONUT (
+    SOURCE = #usage,
+    TITLE = 'Donut with Data Labels & Percentage Formatting',
+    MAPPINGS (LABEL = OS, VALUE = Share),
+    OPTIONS (
+        LEGEND_POSITION = RIGHT,
+        DATA_LABELS = ON,
+        FORMAT = 'P0',
+        CENTER_VALUE = '{total}%',
+        CENTER_LABEL = 'Total Share'
+    )
+);
+
+-- 4. Styled Donut with Custom Palette and Large Center
+CREATE VISUAL StyledDonut AS DONUT (
+    SOURCE = #usage,
+    TITLE = 'Styled Donut (Custom Colors & Large Center)',
+    MAPPINGS (LABEL = OS, VALUE = Share),
+    OPTIONS (
+        INNER_RADIUS = 0.70,
+        COLORS (
+            'Windows' = '#0078D7',
+            'macOS'   = '#555555',
+            'Linux'   = '#E95420',
+            'iOS'     = '#5FC9F8',
+            'Android' = '#3DDC84'
+        ),
+        LEGEND_POSITION = BOTTOM
+    )
+);
+
+-- 5. Sorted Donut with Slice Borders & START_ANGLE
+CREATE VISUAL SortedBorderedDonut AS DONUT (
+    SOURCE = #usage,
+    TITLE = 'Sorted (VALUE_DESC), START_ANGLE=90 & Slice Borders',
+    MAPPINGS (LABEL = OS, VALUE = Share),
+    OPTIONS (
+        SORT               = VALUE_DESC,
+        START_ANGLE        = 90,
+        SLICE_BORDER_COLOR = '#ffffff',
+        SLICE_BORDER_WIDTH = 2,
+        INNER_RADIUS       = 0.55,
+        DATA_LABELS        = ON
+    )
+);
+
+-- 6. Exploded Slice & MIN_SLICE_PCT Threshold
+CREATE VISUAL ExplodedThresholdDonut AS DONUT (
+    SOURCE = #usage,
+    TITLE = 'EXPLODE Single Slice & MIN_SLICE_PCT Threshold',
+    MAPPINGS (LABEL = OS, VALUE = Share),
+    OPTIONS (
+        EXPLODE       = 'Windows',
+        MIN_SLICE_PCT = 4,
+        OTHER_LABEL   = 'Other OS',
+        INNER_RADIUS  = 0.60,
+        DATA_LABELS   = ON
+    )
+);
+
+-- 7. EXPLODE_ALL with Distance & INSIDE Legend Anchor
+CREATE VISUAL ExplodeAllInsideLegendDonut AS DONUT (
+    SOURCE = #usage,
+    TITLE = 'EXPLODE_ALL & INSIDE Legend Anchor',
+    MAPPINGS (LABEL = OS, VALUE = Share),
+    OPTIONS (
+        EXPLODE_ALL      = ON,
+        EXPLODE_DISTANCE = 0.06,
+        INNER_RADIUS     = 0.50,
+        LEGEND           = ON,
+        LEGEND_TITLE     = 'Platforms',
+        LEGEND_POSITION  = INSIDE,
+        LEGEND_ANCHOR    = TOP_RIGHT
+    )
+);
+
+-- Page Layout
+CREATE PAGE DonutKitchenSink AS DASHBOARD (
+    STRUCTURE = 'A B C / D E F',
+    MAP (
+        'A' = BasicDonut,
+        'B' = PercentDonut,
+        'C' = StyledDonut,
+        'D' = SortedBorderedDonut,
+        'E' = ExplodedThresholdDonut,
+        'F' = ExplodeAllInsideLegendDonut
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = DonutKitchenSink, PAGES (DonutKitchenSink));
+

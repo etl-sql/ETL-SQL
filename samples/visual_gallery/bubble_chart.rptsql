@@ -1,0 +1,131 @@
+-- Kitchen Sink: BUBBLE Visual (3D/4D Scatter Plot)
+-- This script demonstrates the BUBBLE visual type for multi-dimensional data analysis.
+
+SET REPORT TITLE = 'Kitchen Sink: BUBBLE Visual';
+SET REPORT DESCRIPTION = 'Demonstration of BUBBLE charts showing X/Y positions, bubble magnitude sizing, and series categorical grouping.';
+
+-- 1. Mock Data Generation (Market Segments: Growth vs Profit vs Revenue)
+SELECT 'Cloud' AS Segment, 'Tech' AS Sector, 28 AS GrowthRate, 22 AS MarginPct, 4500 AS Revenue INTO #bubbles
+UNION ALL SELECT 'Hardware', 'Tech', 8, 12, 3200
+UNION ALL SELECT 'Biotech', 'Healthcare', 35, 18, 2100
+UNION ALL SELECT 'Pharma', 'Healthcare', 12, 28, 6000
+UNION ALL SELECT 'Retail Banking', 'Finance', 6, 15, 5200
+UNION ALL SELECT 'Fintech', 'Finance', 42, 10, 1800
+UNION ALL SELECT 'Renewables', 'Energy', 24, 14, 2900
+UNION ALL SELECT 'Oil & Gas', 'Energy', 4, 30, 7500;
+
+-- 2. Basic Bubble Chart (Single Series)
+CREATE VISUAL BasicBubble AS BUBBLE (
+    SOURCE = #bubbles,
+    TITLE = 'Market Growth vs Profit Margin (Bubble Size = Revenue)',
+    MAPPINGS (
+        X     = GrowthRate,
+        Y     = MarginPct,
+        SIZE  = Revenue,
+        LABEL = Segment
+    ),
+    OPTIONS (
+        X_AXIS (LABEL = 'Growth Rate (%)'),
+        Y_AXIS (LABEL = 'Profit Margin (%)')
+    )
+);
+
+-- 3. Multi-Series Bubble (Grouped by Sector)
+CREATE VISUAL MultiBubble AS BUBBLE (
+    SOURCE = #bubbles,
+    TITLE = 'Sector Distribution (Color = Sector, Size = Revenue)',
+    MAPPINGS (
+        X      = GrowthRate,
+        Y      = MarginPct,
+        SIZE   = Revenue,
+        SERIES = Sector,
+        LABEL  = Segment
+    ),
+    OPTIONS (
+        COLORS (
+            'Tech'       = '#4e79a7',
+            'Healthcare' = '#59a14f',
+            'Finance'    = '#f28e2b',
+            'Energy'     = '#e15759'
+        ),
+        LEGEND_POSITION = RIGHT,
+        X_AXIS (LABEL = 'YoY Growth (%)'),
+        Y_AXIS (LABEL = 'EBITDA Margin (%)')
+    )
+);
+
+-- 4. Size Range & Min/Max Bubble Size Controls
+CREATE VISUAL SizedBubble AS BUBBLE (
+    SOURCE = #bubbles,
+    TITLE = 'Custom Size Range (SIZE_RANGE = (6, 30)) & Gridlines',
+    MAPPINGS (
+        X      = GrowthRate,
+        Y      = MarginPct,
+        SIZE   = Revenue,
+        SERIES = Sector,
+        LABEL  = Segment
+    ),
+    OPTIONS (
+        SIZE_RANGE = (6, 30),
+        GRID_LINES = ON,
+        ZERO_LINE  = ON
+    )
+);
+
+-- 5. Logarithmic Bubble Chart with Bottom Legend
+CREATE VISUAL LogBubble AS BUBBLE (
+    SOURCE = #bubbles,
+    TITLE = 'Logarithmic Scales & Centered Legend',
+    MAPPINGS (
+        X      = GrowthRate,
+        Y      = MarginPct,
+        SIZE   = Revenue,
+        SERIES = Sector,
+        LABEL  = Segment
+    ),
+    OPTIONS (
+        MIN_BUBBLE_SIZE = 5,
+        MAX_BUBBLE_SIZE = 25,
+        X_AXIS (SCALE = LOG, LABEL = 'Growth Rate (Log)'),
+        Y_AXIS (SCALE = LOG, LABEL = 'Margin (Log)'),
+        LEGEND          = ON,
+        LEGEND_TITLE    = 'Sectors',
+        LEGEND_POSITION = BOTTOM,
+        GRID_LINES      = ON
+    )
+);
+
+-- 6. SYMBOL_SIZE floor: bubbles keep their SIZE ranking but never fall below a legible marker
+CREATE VISUAL SymbolSizeBubble AS BUBBLE (
+    SOURCE = #bubbles,
+    TITLE = 'SYMBOL_SIZE = 9 baseline marker with SIZE_RANGE',
+    MAPPINGS (
+        X      = GrowthRate,
+        Y      = MarginPct,
+        SIZE   = Revenue,
+        SERIES = Sector,
+        LABEL  = Segment
+    ),
+    OPTIONS (
+        SYMBOL_SIZE     = 9,
+        SIZE_RANGE      = (8, 30),
+        LEGEND          = ON,
+        LEGEND_POSITION = BOTTOM,
+        GRID_LINES      = ON
+    )
+);
+
+-- Page Layout
+CREATE PAGE BubbleKitchenSink AS DASHBOARD (
+    STRUCTURE = 'A B / C D / E .',
+    MAP (
+        'A' = BasicBubble,
+        'B' = MultiBubble,
+        'C' = SizedBubble,
+        'D' = LogBubble,
+        'E' = SymbolSizeBubble
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = BubbleKitchenSink, PAGES (BubbleKitchenSink));
+

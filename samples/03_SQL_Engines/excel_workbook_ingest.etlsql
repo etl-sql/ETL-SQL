@@ -1,0 +1,51 @@
+-- SQL Engines & File Connectors: Excel Workbook Ingestion
+-- Demonstrates: Defining an EXCEL connection, targeting specific sheets and ranges,
+-- schema resilience flags (STRICT_SCHEMA, NULL_MISSING_COLUMNS), and engine staging.
+--
+-- Note: Replace the PATH option with the absolute path to your local .xlsx workbook.
+
+-- 1. Inspect EXCEL connector options natively
+HELP CONNECTION EXCEL;
+
+-- 2. Structured Excel Connection Definition
+-- Supported options: PATH, SHEET (default: first sheet), HEADER (ON/OFF), RANGE ('A1:F500'),
+-- STRICT_SCHEMA (ON/OFF), NULL_MISSING_COLUMNS (ON/OFF), IGNORE_EXTRA_COLUMNS (ON/OFF),
+-- MAP_BY_HEADER_NAME (ON/OFF), ENCRYPT, PASSWORD.
+CREATE CONNECTION quarterly_budget_sheet AS EXCEL(
+    PATH                 = 'samples/data/financial_plan_2026.xlsx',
+    SHEET                = 'Budget_Actuals',
+    HEADER               = ON,
+    RANGE                = 'A1:E100',
+    NULL_MISSING_COLUMNS = ON,
+    IGNORE_EXTRA_COLUMNS = ON
+);
+
+-- 3. Staging and processing workbook rows in the engine
+SELECT
+    'Dept-100' AS CostCenter,
+    'Engineering' AS Department,
+    450000.00 AS BudgetedAmount,
+    428500.00 AS ActualSpent
+INTO #staged_budget
+UNION ALL SELECT 'Dept-200', 'Marketing', 280000.00, 312000.00
+UNION ALL SELECT 'Dept-300', 'Human Resources', 120000.00, 115000.00
+UNION ALL SELECT 'Dept-400', 'Operations', 350000.00, 348000.00;
+
+SELECT
+    CostCenter,
+    Department,
+    BudgetedAmount,
+    ActualSpent,
+    ROUND(BudgetedAmount - ActualSpent, 2) AS Variance,
+    CASE
+        WHEN ActualSpent > BudgetedAmount THEN 'Over Budget'
+        WHEN ActualSpent >= BudgetedAmount * 0.95 THEN 'On Target'
+        ELSE 'Under Budget'
+    END AS BudgetStatus
+INTO #budget_variance_report
+FROM #staged_budget;
+
+PRINT '=== Ingested Workbook Budget Variance Report ===';
+SELECT CostCenter, Department, BudgetedAmount, ActualSpent, Variance, BudgetStatus
+FROM #budget_variance_report
+ORDER BY Variance ASC;

@@ -1,0 +1,93 @@
+-- Visual Analytics: Inventory Aging Buckets & Obsolescence Risk
+-- Demonstrates: Conditional CASE bucket categorization, aging distribution aggregations,
+-- and mapping onto a Stacked BAR chart, Risk KPI Card, and Audit Table.
+
+SET REPORT TITLE = 'Warehouse Inventory Aging Analysis';
+SET REPORT DESCRIPTION = 'Categorizes stock holdings into aging intervals (<30d, 31-60d, 61-90d, 90d+) to identify capital tie-up.';
+SET REPORT THEME = 'light';
+
+-- 1. Mock Warehouse Inventory Lots
+SELECT 'Dallas' AS Hub, 'SKU-1001' AS Sku, 18 AS DaysHeld, 45000 AS LotValue INTO #inventory_raw
+UNION ALL SELECT 'Dallas', 'SKU-1002', 42, 28000
+UNION ALL SELECT 'Dallas', 'SKU-1003', 75, 15000
+UNION ALL SELECT 'Dallas', 'SKU-1004', 110, 8500
+UNION ALL SELECT 'Chicago', 'SKU-2001', 12, 62000
+UNION ALL SELECT 'Chicago', 'SKU-2002', 35, 31000
+UNION ALL SELECT 'Chicago', 'SKU-2003', 88, 19000
+UNION ALL SELECT 'Chicago', 'SKU-2004', 125, 14000
+UNION ALL SELECT 'Seattle', 'SKU-3001', 25, 38000
+UNION ALL SELECT 'Seattle', 'SKU-3002', 55, 22000
+UNION ALL SELECT 'Seattle', 'SKU-3003', 68, 11000
+UNION ALL SELECT 'Seattle', 'SKU-3004', 140, 9200;
+
+-- 2. Analytical Query: Aging Bucket Categorization
+SELECT
+    Hub,
+    Sku,
+    DaysHeld,
+    LotValue,
+    CASE
+        WHEN DaysHeld <= 30 THEN '1. Under 30 Days'
+        WHEN DaysHeld <= 60 THEN '2. 31 to 60 Days'
+        WHEN DaysHeld <= 90 THEN '3. 61 to 90 Days'
+        ELSE '4. Over 90 Days (Obsolete)'
+    END AS AgingBucket
+INTO #inventory_aged
+FROM #inventory_raw;
+
+-- 3. Visual: Stacked Bar Chart by Aging Bucket
+CREATE VISUAL AgingBar AS BAR (
+    SOURCE = #inventory_aged,
+    TITLE = 'Inventory Holding Value by Aging Tier',
+    MAPPINGS (
+        X = Hub,
+        Y = LotValue,
+        SERIES = AgingBucket
+    ),
+    OPTIONS (
+        STACKED = ON,
+        LEGEND_POSITION = TOP,
+        Y_AXIS_FORMAT = 'C0'
+    )
+);
+
+-- 4. Visual: Obsolete Value Risk Card
+CREATE VISUAL ObsoleteRiskCard AS CARD (
+    SOURCE = (SELECT SUM(LotValue) AS ObsoleteVal FROM #inventory_aged WHERE DaysHeld > 90),
+    TITLE = 'Total At-Risk Obsolete Stock (>90d)',
+    MAPPINGS (VALUE = ObsoleteVal),
+    OPTIONS (FORMAT = 'C0')
+);
+
+CREATE VISUAL TotalInventoryCard AS CARD (
+    SOURCE = (SELECT SUM(LotValue) AS TotalVal FROM #inventory_aged),
+    TITLE = 'Total Working Inventory Value',
+    MAPPINGS (VALUE = TotalVal),
+    OPTIONS (FORMAT = 'C0')
+);
+
+-- 5. Visual: High-Risk Aging Detail Table
+CREATE VISUAL AgingDetailTable AS TABLE (
+    SOURCE = (SELECT Hub, Sku, DaysHeld, LotValue, AgingBucket FROM #inventory_aged ORDER BY DaysHeld DESC),
+    TITLE = 'Aged Lots Priority Review List',
+    MAPPINGS (
+        Hub AS 'Warehouse',
+        Sku AS 'SKU Identifier',
+        DaysHeld FORMAT 'N0' ALIGN 'right' AS 'Days in Storage',
+        LotValue FORMAT 'C0' ALIGN 'right' AS 'Lot Valuation',
+        AgingBucket AS 'Status Tier'
+    )
+);
+
+-- 6. Dashboard Page Composition
+CREATE PAGE InventoryDashboard AS DASHBOARD (
+    STRUCTURE = 'A B / C C / D D',
+    MAP (
+        'A' = TotalInventoryCard,
+        'B' = ObsoleteRiskCard,
+        'C' = AgingBar,
+        'D' = AgingDetailTable
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = InventoryDashboard, PAGES (InventoryDashboard));
