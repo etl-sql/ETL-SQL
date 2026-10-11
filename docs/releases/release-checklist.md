@@ -25,6 +25,18 @@ Replace `x.y.z` with the target version (current target: **0.20.1**) throughout.
 
 ## Phase 0 — Pre-flight
 
+- [ ] **Prepare browser assets in every checkout used for the release.** Generated browser
+      JavaScript is not in Git. A fresh clone, a source archive, and a checkout that has just
+      switched from a release that tracked those files all start without them.
+      ```powershell
+      npm ci --prefix scripts/typecheck
+      node scripts\sync-assets.js
+      node scripts\sync-assets.js -Check
+      node scriptsrowser-asset-ownership.mjs --check
+      ```
+      The packaging scripts prepare assets themselves, but they need the compiler restore first.
+      If the ownership check reports stale ignore rules, a browser module was added, renamed, or
+      removed without `--write-ignore`; fix that on the release branch, not in the package.
 - [ ] **Account for every unmerged branch before anything else.** A branch that never merged is
       silent: the release ships without it and nothing reports a gap. v0.19.0 shipped the `EXPECT`
       clause as a breaking change while `feat/dq-expect-clause` sat unmerged with the editor

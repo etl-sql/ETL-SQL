@@ -184,8 +184,9 @@ filters.
 - Every `scripts/test-*.mjs` check passes, and they run in the pre-push gate.
 - After the TypeScript migration, asset sync, the drift gate and the ui-sandbox all still hold, proven by the
   same checks that guard them today.
-- Generated outputs leave source control only after the preparation, source-only build, packaged
-  runtime, and post-cleanup Git checks in `TODO.md` §1.1 pass.
+- Generated outputs left source control in v0.21.0, after preparation, source-only builds, and
+  packaged-runtime checks on Windows and Linux passed. The delivery paths still to verify are listed in
+  `TODO.md` §1.1 and the v0.21.0 delivery matrix.
 
 
 ## Later Reporting and Presentation Work

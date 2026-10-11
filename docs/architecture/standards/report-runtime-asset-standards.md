@@ -337,6 +337,24 @@ commands above; nothing authored is ignored, so nothing authored is lost. To rem
 outputs, use the proof script instead of `git clean`: it deletes exactly the inventoried files and
 puts them back.
 
+#### Switching between revisions
+
+Releases up to v0.20.1 track their generated files; later revisions ignore them. Git handles the
+files it tracks on either side, and the build gate catches what is left over.
+
+| Switch | What Git does | What to run |
+| :--- | :--- | :--- |
+| Old revision to a source-only one (for example updating a v0.20.0 clone) | Deletes the outputs the old revision tracked | `npm ci --prefix scripts/typecheck`, then `node scripts/sync-assets.js`. Until then a build fails with "Prepared browser asset is missing" |
+| Source-only revision back to an old one | Restores the old revision's tracked outputs. Outputs for modules that did not exist then stay behind as untracked files | Preview with `git clean -nd` on the five asset roots, then `git clean -fd` on them. The old revision's own drift check fails until they are gone |
+| Between two source-only revisions | Nothing: the outputs are ignored | `node scripts/sync-assets.js` if browser sources changed; the build says so if they did |
+
+The five asset roots are `src/ETL-SQL.Portal/wwwroot`, `src/ETL-SQL.ReportRuntime/Resources/Shared`,
+`src/ETL-SQL.ReportPlayer/wwwroot`, `src/ETL-SQL.WorkstationEditor/wwwroot`, and
+`src/etl-sql-vscode/media`. `git clean -fd` removes every untracked file under them, so commit or move
+new work there first. Exercised on a throwaway clone between v0.20.0 and the source-only layout in
+both directions: the old revision had 76 leftover files and its drift check failed until they were
+cleaned, and after returning, preparation restored all 491 outputs with Git clean.
+
 #### Pilot acceptance
 
 Start with `rt-util`: it is a stateless runtime leaf and exercises both online modules and offline

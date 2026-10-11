@@ -1101,7 +1101,7 @@ does not close build, package, runtime, or Git-index acceptance.
   action listener. All five focused/reload/story-inventory checks pass without skips. Before/after
   screenshots and compile logs are under `artifacts/section1/sandbox-reload/`; browser results are in
   `sandbox-reload-*.log` and matching TRX files under `artifacts/section1/admin/`.
-- [ ] **Verify recovery after cleaning generated files.** In an isolated checkout, exercise `dotnet clean`
+- [x] **Verify recovery after cleaning generated files.** In an isolated checkout, exercise `dotnet clean`
   and removal of inventoried outputs or preparation manifests, then restore dependencies and prepare again
   through the documented workflow. Confirm missing files cannot be masked by cached build output and
   repeat preparation restores the complete asset set without changing tracked inputs. Document how Git
@@ -1113,6 +1113,11 @@ does not close build, package, runtime, or Git-index acceptance.
   document has a recovery table and the `git clean` guidance. Still open: IDE and sandbox start-up
   after cleanup have not been exercised, and the `git clean` behaviour can only be observed after the
   cutover.
+  Done (2026-10-11). In a clone of the source-only layout, `git clean -ndX` previews the ignored outputs
+  and `git clean -fdX` removes all 491 while keeping an untracked authored file; the build gate then
+  fails and preparation restores every output with Git clean. The UI sandbox, started in a fresh clone
+  with no outputs, prepares them and serves them, and leaves no lock on stop. An IDE launch was not
+  exercised separately; it goes through the same MSBuild gate as `dotnet build`.
 - [x] **Maintain precise generated-output ignore rules.** Derive the ignored paths from the verified
   ownership inventory, or provide a checked update command that keeps the rules in sync with it. Cover
   new TypeScript modules and host copies, source renames/deletions, and an output path becoming an authored
@@ -1168,7 +1173,7 @@ does not close build, package, runtime, or Git-index acceptance.
   inventory and output hashes. `test-asset-generation.mjs`, in the consumer gate, covers the isolated
   tree: a missing output, an added owner, and read-only verification that repairs nothing. The new step
   has run locally (491 outputs, identical bytes) but not yet in GitHub Actions.
-- [ ] **Prove source-only clean-checkout builds on Windows and Linux.** Use isolated checkouts with no generated
+- [x] **Prove source-only clean-checkout builds on Windows and Linux.** Use isolated checkouts with no generated
   outputs or pre-existing dependency/build caches. Run the documented preparation, scoped builds for
   Portal, ReportPlayer, and WorkstationEditor on both platforms, focused tests,
   type/lint gates, and sync check; generate again and verify stable output. Include source rename/delete,
@@ -1182,13 +1187,20 @@ does not close build, package, runtime, or Git-index acceptance.
   preparation, type/lint, the compiler, bundle, and generation checks, the three scoped builds, and a
   Portal publish pass. All 491 outputs are byte-identical across both platforms and the Git index.
   Still open: the NuGet cache was warm on both hosts. Evidence: `artifacts/section1/s11-candidate/`.
-- [ ] **Verify source-archive builds.** Extract the supported release source archives outside the
+  Done (2026-10-11). After the cutover every CI job starts from a checkout with no generated file on a
+  fresh runner: CI run 38180570032 on `20c029f42` passed Build & Test and the browser lane on Windows, Docker integration and
+  enterprise certification on Linux, and the Studio performance job on Windows, Linux and macOS. A
+  fresh local clone passed pre-push, the Portal lane (1,574) and the browser lane (930).
+- [x] **Verify source-archive builds.** Extract the supported release source archives outside the
   checkout, with no `.git` directory or generated outputs. Verify they contain every required owner,
   contract, generator, configuration file, and lockfile. Run the documented preparation and affected
   build/package commands from the extracted archive; these paths must not depend on Git metadata,
   cached outputs, or files available only in the original checkout.
   Progress (2026-10-11): the run above used an extracted archive with no `.git` directory, so preparation,
   the scoped builds, and Portal publish are covered. No package command has run from an archive.
+  Done (2026-10-11). `git archive` of the source-only layout contains none of the 491 outputs and all 213
+  owners. Preparation, the three host builds, Portal publish, the Linux ZIP, DEB and VSIX, and the Windows
+  ZIP, MSI and VSIX were all built from extracted archives with no `.git` directory.
 - [ ] **Verify packaged runtime behavior.** Publish/package from the clean checkout and smoke-test Portal,
   ReportPlayer, WorkstationEditor, and the VS Code extension outside the source tree. Verify module requests,
   designer/report rendering, and an offline snapshot opened without network access. Confirm installers and
@@ -1247,12 +1259,17 @@ does not close build, package, runtime, or Git-index acceptance.
   Audit signing, installer assembly, and upload steps for implicit rebuilds or asset regeneration. Compare
   the assets in the final distributed artifact with the accepted candidate; regenerate checksums and
   attestations after any step that changes the artifact bytes.
-- [ ] **Run behavior checks against the final cutover candidate.** Run the affected Portal and browser
+- [x] **Run behavior checks against the final cutover candidate.** Run the affected Portal and browser
   lanes, UI sandbox stories, report runtime/offline checks, VS Code extension and React UI checks, and
   discovered consumer checks against the same source state used for package acceptance. Include strict
   type/lint gates and asset verification. Preserve public module URLs, exports, and report behavior;
   investigate any changed outcome before untracking outputs. Refresh results after source, generator,
   or package changes instead of relying on earlier migration snapshots.
+  Done (2026-10-11) from a fresh clone of the cutover: pre-push validation (asset verification, type and
+  lint gates with empty baselines, 115 consumer checks), the Portal lane (1,574 of 1,574), and the
+  browser lane (930 of 930), which includes the sandbox stories and the offline snapshot with networking
+  blocked. CI run 38180570032 on `20c029f42` passed the extension's unit tests and UI build. All 491 prepared outputs are
+  byte-identical to the last tracked ones, so public URLs and exports are unchanged.
 - [x] **Keep acceptance tests from contaminating candidate assets.** Audit the discovered consumer
   checks and generator failure fixtures for writes to browser sources, outputs, and manifests. Prefer
   isolated fixture trees. Serialize any check that temporarily changes the acceptance checkout with
@@ -1290,7 +1307,7 @@ does not close build, package, runtime, or Git-index acceptance.
   Git clean, and a force-added output is rejected by the ownership check. The decision to cut over
   before every delivery-matrix row was accepted was taken with the open rows listed there: installs
   other than the workstation MSI, the VSIX in a webview, and macOS.
-- [ ] **Verify existing-clone and branch-switch behavior.** Exercise updating a v0.20.0 clone to the
+- [x] **Verify existing-clone and branch-switch behavior.** Exercise updating a v0.20.0 clone to the
   source-only layout and switching between revisions with tracked and ignored outputs. Document when
   preparation must run, verify stale outputs/manifests cannot pass the build gate, and preserve local
   source edits. Cleanup must use the ownership inventory and must not delete handwritten or vendor inputs.
@@ -1299,7 +1316,13 @@ does not close build, package, runtime, or Git-index acceptance.
   Exercise rollback to the previous release's tracked-asset layout and a return to the source-only
   layout. Each revision must build with its own supported preparation workflow; newer ignored files
   and manifests must not override or certify the older revision's assets.
-- [ ] **Update contributor and release documentation.** Align `AGENTS.md`, asset/build standards, onboarding,
+  Done (2026-10-11) on a throwaway clone. Switching to v0.20.0 succeeds with no tracked file modified and
+  leaves 76 untracked outputs from the newer revision; v0.20.0's own drift check fails until
+  `git clean -fd` on the asset roots removes them, then passes. Switching back, Git deletes the outputs
+  v0.20.0 tracked, the build gate reports "Prepared browser asset is missing", and preparation restores
+  all 491 with Git clean. The standards document has the table of switches and commands.
+  Evidence: `artifacts/section1/s11-candidate/branch-switch/`.
+- [x] **Update contributor and release documentation.** Align `AGENTS.md`, asset/build standards, onboarding,
   sandbox/extension instructions, architecture docs, and release guidance with source/output ownership and
   preparation commands. Reconcile `ROADMAP.md` and remaining migration status; record verified completion
   in `CHANGELOG.md` without claiming all handwritten JavaScript has been migrated prematurely. Document
@@ -1311,6 +1334,11 @@ does not close build, package, runtime, or Git-index acceptance.
   Show the edit-owner → prepare → verify workflow explicitly. Remove instructions that ask contributors
   to maintain generated JavaScript or fix drift in host copies; retain instructions for authored tooling
   and vendor inputs. Explain that ignored delivery files still belong in published packages.
+  Done (2026-10-11). `AGENTS.md`, `CONTRIBUTING.md`, `README.md`, the asset standards, the release
+  checklist, `ROADMAP.md`, and `CHANGELOG.md` describe the source-only layout: prepare after cloning or
+  pulling browser changes, edit owners and never outputs, run `--write-ignore` when owners change, and
+  Node.js as a build prerequisite only. The standards document has the recovery table, the `git clean`
+  guidance, and the revision-switch table.
 - [ ] **Confirm cleanup completion from the resulting tracked tree.** Reconcile the delivery matrix
   with every preceding task and link its passing evidence. Record the exact source revision and final
   ownership inventory, confirm required inputs are tracked and verified outputs are absent from the
