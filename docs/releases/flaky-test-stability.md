@@ -318,6 +318,11 @@ class load and shared background-service state from its startup/shutdown observa
   it. This is the first observation that supports the memory-or-CPU explanation for the October
   failures, and it is one observation: the notice names the refused jobs, not the reason.
 
+  With that pinned, the next run failed a third way: `SignInAsync` waited 20 seconds for
+  `index.html` and timed out, one minute into the lane, as a role journey had on 2026-10-08. A bare
+  timeout cannot tell a refused sign-in from a library page still loading on a starved runner, so
+  the helper now reports the URL and the page text when it gives up. Its wait is unchanged.
+
   **Open: `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds` in the Docker lane.** It failed in
   2 ms with "Failed to connect to host" in three runs on 2026-10-11 and passed in the two before
   them, while the other FTP tests in the same class passed each time. A 2 ms refusal means nothing

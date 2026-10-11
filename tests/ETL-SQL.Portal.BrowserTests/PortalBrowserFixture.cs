@@ -98,7 +98,18 @@ public class PortalBrowserFixture : IAsyncLifetime
                 passwordChanged = true;
             }
 
-            await page.WaitForURLAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
+            try
+            {
+                await page.WaitForURLAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
+            }
+            catch (TimeoutException ex)
+            {
+                // A bare timeout cannot tell a refused sign-in from a library page that is still
+                // loading. Say where the browser was and what it showed.
+                var text = await page.Locator("body").InnerTextAsync(new LocatorInnerTextOptions { Timeout = 2_000 });
+                throw new TimeoutException(
+                    $"Sign-in did not reach index.html within 20 seconds. URL: {page.Url}. Page text: {text[..Math.Min(text.Length, 600)]}", ex);
+            }
         }
         finally
         {
