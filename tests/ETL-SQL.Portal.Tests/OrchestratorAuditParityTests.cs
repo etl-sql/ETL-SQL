@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Orchestrator.Scheduling;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace ETL_SQL.Portal.Tests;
 
@@ -129,6 +132,54 @@ public sealed class OrchestratorAuditParityTests
             e.Type == SecurityEventType.OverrideAttempt
             && e.SanitizedTarget == $"JOB:{JobName}"
             && e.Reason.Contains("scope", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// An overloaded node starts no work. A trigger it will not run is refused, not answered
+    /// "queued" and then dropped with no run, no history row, and an audit record of a run that
+    /// never happened.
+    /// </summary>
+    [Fact]
+    public async Task TriggerOnAnOverloadedNodeIsRefusedAndRecordsNoRun()
+    {
+        using var baseFactory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var factory = baseFactory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<INodeCapacityMonitor>();
+            services.AddSingleton<INodeCapacityMonitor>(new OverloadedCapacityMonitor());
+        }));
+        using var client = factory.CreateClient();
+        var sink = new RecordingSecurityEventSink();
+        using var sinkScope = new SecurityEventSinkScope(sink);
+        var admin = new OrchestratorCaller("user", "1", "Ada Lovelace", ["Admin", "OrchestratorManager"], []);
+
+        using (var create = Request(HttpMethod.Post, "/api/scheduled-jobs", admin, new
+        {
+            name = JobName,
+            scriptText = "SELECT 1 AS Value;",
+            interval = 100,
+            unit = "DAY"
+        }))
+            Assert.Equal(HttpStatusCode.Created, (await client.SendAsync(create)).StatusCode);
+
+        using var trigger = Request(HttpMethod.Post, $"/api/scheduled-jobs/{JobName}/trigger", admin);
+        using var response = await client.SendAsync(trigger);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.NotNull(response.Headers.RetryAfter);
+        Assert.Contains("overloaded", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(sink.Events, e =>
+            e.SanitizedTarget == $"JOB:{JobName}" && e.Reason.StartsWith("TRIGGER_JOB:", StringComparison.Ordinal));
+        var store = factory.Services.GetRequiredService<IJobHistoryStore>();
+        Assert.Empty(await store.GetHistoryAsync((await store.GetJobAsync(JobName))!.Id, 10));
+    }
+
+    private sealed class OverloadedCapacityMonitor : INodeCapacityMonitor
+    {
+        public NodeCapacitySnapshot Capture() => new(
+            WorkingSetBytes: 0, GcHeapBytes: 0, TotalAvailableMemoryBytes: 0,
+            MemoryLoadPercent: 99, ProcessCpuPercent: 99, ProcessorCount: Environment.ProcessorCount,
+            IsOverloaded: true, CapturedAtUtc: DateTime.UtcNow);
     }
 
     [Fact]

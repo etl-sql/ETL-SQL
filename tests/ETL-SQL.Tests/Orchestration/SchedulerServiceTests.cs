@@ -783,6 +783,41 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task OverloadedNode_RefusesAManualTriggerInsteadOfDroppingIt()
+        {
+            var job = new JobDefinition("HotNodeManualJob", "SELECT 1;", 1, "HOUR", null, null, null);
+            var (service, store, executor) = Build(
+                [job], new ScriptExecutionResult(true, 0), new FixedCapacityMonitor(isOverloaded: true));
+            store.Setup(s => s.GetJobByIdAsync(job.Id)).ReturnsAsync(job);
+
+            Assert.Equal(ManualTriggerResult.NodeOverloaded,
+                await service.TriggerJobWithOverridesAsync(job.Id, null));
+            Assert.False(await service.TriggerJobAsync(job.Id));
+            await service.StopAsync();
+
+            store.Verify(s => s.AcquireJobLeaseAsync(
+                It.IsAny<JobId>(), It.IsAny<string>(), It.IsAny<TimeSpan>()), Times.Never());
+            Assert.False(Invoked(executor, nameof(IScriptExecutor.ExecuteTextAsync)));
+        }
+
+        [Fact]
+        public async Task ManualTriggerAcceptedBeforeTheNodeOverloads_StillRuns()
+        {
+            var job = new JobDefinition("AdmittedManualJob", "SELECT 1;", 1, "HOUR", null, null, null);
+            // Healthy when the trigger is accepted, overloaded by the time the queued run starts.
+            var (service, store, executor) = Build(
+                [job], new ScriptExecutionResult(true, 0), new ScriptedCapacityMonitor(false, true));
+            store.Setup(s => s.GetJobByIdAsync(job.Id)).ReturnsAsync(job);
+
+            Assert.Equal(ManualTriggerResult.Accepted,
+                await service.TriggerJobWithOverridesAsync(job.Id, null));
+            await WaitUntilAsync(() => Invoked(executor, nameof(IScriptExecutor.ExecuteTextAsync)));
+            await service.StopAsync();
+
+            store.Verify(s => s.LogJobStartAsync(job.Id), Times.Once());
+        }
+
+        [Fact]
         public async Task RepeatedFailures_DisablesJobAsQuarantined()
         {
             var job = new JobDefinition("FlakyJob", "BAD SQL;", 1, "HOUR", null, null, null);
@@ -812,8 +847,10 @@ namespace ETL_SQL.Tests.Orchestration
                 Times.AtLeastOnce());
         }
 
-        [Fact]
-        public async Task ResumeJob_UsesRecordedSessionAndNamedCheckpoint()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task ResumeJob_UsesRecordedSessionAndNamedCheckpoint_UnlessTheNodeIsOverloaded(bool overloaded)
         {
             const string script = "SET PERSIST ON; resume_here: SELECT 1;";
             // A real identity, and the history row carries it: resume reads the run and then reaches
@@ -852,8 +889,18 @@ namespace ETL_SQL.Tests.Orchestration
                     script, "session-42", It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>(), null))
                 .ReturnsAsync(new ScriptExecutionResult(true, 1, SessionId: "session-42"));
 
-            var service = BuildService(store, executor, sessionManager: sessions);
+            var service = BuildService(store, executor, new FixedCapacityMonitor(overloaded), sessionManager: sessions);
             var result = await service.ResumeJobAsync(42);
+            if (overloaded)
+            {
+                // Refused with a reason, not accepted and then dropped without a run.
+                Assert.Equal(ResumeTriggerStatus.NodeOverloaded, result.Status);
+                Assert.Contains("overloaded", result.Reason);
+                await service.StopAsync();
+                Assert.False(Invoked(executor, nameof(IScriptExecutor.ResumeTextAsync)));
+                return;
+            }
+
             await WaitUntilAsync(() => Invoked(executor, nameof(IScriptExecutor.ResumeTextAsync)));
 
             Assert.Equal(ResumeTriggerStatus.Accepted, result.Status);
@@ -873,6 +920,18 @@ namespace ETL_SQL.Tests.Orchestration
                 ProcessorCount: Environment.ProcessorCount,
                 IsOverloaded: isOverloaded,
                 CapturedAtUtc: DateTime.UtcNow);
+        }
+
+        /// <summary>Answers each capture from the next scripted sample; the last one repeats.</summary>
+        private sealed class ScriptedCapacityMonitor(params bool[] overloadedSamples) : INodeCapacityMonitor
+        {
+            private int _next;
+
+            public NodeCapacitySnapshot Capture()
+            {
+                var index = Math.Min(Interlocked.Increment(ref _next) - 1, overloadedSamples.Length - 1);
+                return new FixedCapacityMonitor(overloadedSamples[index]).Capture();
+            }
         }
     }
 }

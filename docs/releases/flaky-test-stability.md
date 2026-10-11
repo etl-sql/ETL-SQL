@@ -219,13 +219,35 @@ class load and shared background-service state from its startup/shutdown observa
   was reproduced by rerunning once. Each was found by looping the single test until it failed and
   making the failing wait print what the page held. A failure rate near 1/N for a fixture of N
   rows points at ordering; a wait stuck on a loading banner points at a click inside a read.
-  One failure is still open. `SubscriptionIntegrationTests` failed in two filtered Portal runs on
-  2026-10-10: two tests in one, ten of sixteen in the other, each after about 17 seconds, which is
-  the 15-second wait for a triggered job's history. Both runs were slow as a whole (4m34s and 5m14s
-  against 2m39s to 3m20s). The class passed in seven other runs, including straight after a forced
-  rebuild and straight after a browser loop, so neither of those is the trigger. The failure text
-  was filtered out of both failing runs; the wait already names its last observed state, so the
-  next occurrence must be read from an unfiltered log before anything is concluded.
+  One failure is explained in mechanism but not confirmed. `SubscriptionIntegrationTests` failed in
+  two filtered Portal runs on 2026-10-10: two tests in one, ten of sixteen in the other, each after
+  about 17 seconds, which is the 15-second wait for a triggered job's history. The failure text was
+  filtered out of both runs and the failure did not recur in eight later runs, so there is no
+  message to read. The runs were slow (4m34s and 5m14s against 2m39s to 3m20s), but ten 17-second
+  timeouts account for that by themselves; slowness is not evidence of load.
+
+  Reading the trigger path found the one way a trigger can answer `202` and leave no history row:
+  an Orchestrator node that judged itself overloaded accepted a manual trigger and then dropped
+  the run without a word. That is a product defect whatever caused these failures. The node now
+  refuses the trigger with `503` (`OverloadedNode_RefusesAManualTriggerInsteadOfDroppingIt`,
+  `TriggerOnAnOverloadedNodeIsRefusedAndRecordsNoRun`).
+
+  Two things can make a test host's node judge itself overloaded. The first was a second defect:
+  the first CPU sample after start-up spans under a millisecond, where one clock tick of processor
+  time on two threads reads as 100% of every core. A probe measured it at 1 to 5 fresh monitors in
+  100 with one to four busy threads on 24 cores; it is fixed
+  (`Capture_FirstSampleAfterStartUp_DoesNotReadAFewBusyThreadsAsAnOverloadedNode`). It lasts one
+  second, and these tests trigger roughly two seconds after their host starts, so it probably did
+  not cause these failures. The second is host memory at or above 95%, which the real monitor
+  reads from the machine. It would persist across consecutive tests, which fits ten failures in one
+  run, and a consumer gate and a second session were using the machine that day. Nothing measured
+  it at the time.
+
+  **What a recurrence will now show.** The trigger helper prints the response body, so an
+  overloaded node fails the test at the trigger with its reason instead of at a history timeout.
+  If that message appears, give `OrchestratorWebFactory` the fixed capacity reading that
+  `PortalWebFactory` already has. If a history timeout appears with a `202`, this explanation is
+  wrong and the search starts again from that log.
 
 
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run

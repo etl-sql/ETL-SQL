@@ -24,7 +24,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
     {
         Accepted,
         JobNotFound,
-        AlreadyRunning
+        AlreadyRunning,
+        NodeOverloaded
     }
 
     public enum ResumeTriggerStatus
@@ -33,7 +34,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
         RunNotFound,
         JobNotFound,
         NotResumable,
-        AlreadyRunning
+        AlreadyRunning,
+        NodeOverloaded
     }
 
     public sealed record ResumeTriggerResult(
@@ -406,7 +408,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
         /// <summary>Enqueues an immediate out-of-schedule execution for an existing job.</summary>
         public async Task<bool> TriggerJobAsync(JobId jobId) =>
-            await TriggerJobWithOverridesAsync(jobId, null) != ManualTriggerResult.JobNotFound;
+            await TriggerJobWithOverridesAsync(jobId, null)
+                is ManualTriggerResult.Accepted or ManualTriggerResult.AlreadyRunning;
 
         /// <summary>
         /// Enqueues a one-run manual execution with optional input-variable overrides. Addressed by
@@ -419,6 +422,16 @@ namespace ETL_SQL.Orchestrator.Scheduling
         {
             var job = await _store.GetJobByIdAsync(jobId);
             if (job == null) return ManualTriggerResult.JobNotFound;
+
+            // An overloaded node does not start work. A scheduled occurrence stays due and is
+            // claimed on a later tick or by a peer; a manual trigger lives only in this request, so
+            // it is refused here rather than accepted and then dropped without a history row.
+            if (_capacityMonitor.Capture().IsOverloaded)
+            {
+                _logger.LogWarning(
+                    "Job {JobName}: manual trigger refused because this node is overloaded.", job.Name);
+                return ManualTriggerResult.NodeOverloaded;
+            }
 
             // The request object belongs to the HTTP scope. Copy it before the detached task so a
             // caller cannot mutate values while the job waits for a throttle slot or retry.
@@ -436,7 +449,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 return ManualTriggerResult.AlreadyRunning;
             }
 
-            QueueJob(job, () => ExecuteJobAsync(job, capturedOverrides));
+            QueueJob(job, () => ExecuteAdmittedJobAsync(job, capturedOverrides));
             return ManualTriggerResult.Accepted;
         }
 
@@ -502,12 +515,17 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     "The current saved script could not be validated for checkpoint resume.");
             }
 
+            if (_capacityMonitor.Capture().IsOverloaded)
+                return new(ResumeTriggerStatus.NodeOverloaded,
+                    history.CheckpointLabel,
+                    "This Orchestrator node is overloaded. Retry the resume shortly.");
+
             if (!_scheduledJobStarts.TryAdd(job.Id, 0))
                 return new(ResumeTriggerStatus.AlreadyRunning,
                     history.CheckpointLabel,
                     "The job already has an execution in progress.");
 
-            QueueJob(job, () => ExecuteJobAsync(
+            QueueJob(job, () => ExecuteAdmittedJobAsync(
                 job, initialSessionId: history.SessionId, resumeFromCheckpoint: true));
 
             return new(ResumeTriggerStatus.Accepted, history.CheckpointLabel);
@@ -541,6 +559,20 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 return;
             }
 
+            await ExecuteAdmittedJobAsync(job, variableOverrides, initialSessionId, resumeFromCheckpoint);
+        }
+
+        /// <summary>
+        /// Runs a job that has already passed the capacity check. A manual trigger or resume is
+        /// checked when it is accepted: its caller has been told it is queued, so a later sample
+        /// showing the node overloaded must not drop it.
+        /// </summary>
+        private async Task ExecuteAdmittedJobAsync(
+            JobDefinition job,
+            IReadOnlyDictionary<string, string>? variableOverrides = null,
+            string? initialSessionId = null,
+            bool resumeFromCheckpoint = false)
+        {
             // P1.1: claim the per-job execution lease before doing anything observable. This is the
             // single choke point for both scheduled and manually triggered runs — another scheduler
             // instance holding the lease means this occurrence is already being executed elsewhere.

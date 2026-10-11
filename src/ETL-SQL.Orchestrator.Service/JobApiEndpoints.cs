@@ -591,6 +591,12 @@ namespace ETL_SQL.Orchestrator.Service
                     return Results.NotFound(new { Error = result.Reason, result.CheckpointLabel });
                 if (result.Status is ResumeTriggerStatus.NotResumable or ResumeTriggerStatus.AlreadyRunning)
                     return Results.Conflict(new { Error = result.Reason, result.CheckpointLabel });
+                if (result.Status == ResumeTriggerStatus.NodeOverloaded)
+                {
+                    ctx.Response.Headers.RetryAfter = "30";
+                    return Results.Json(new { Error = result.Reason, result.CheckpointLabel },
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
 
                 logger.LogWarning(
                     "Run {HistoryId} resumed from named checkpoint {CheckpointLabel} by {Actor}.",
@@ -1752,6 +1758,13 @@ namespace ETL_SQL.Orchestrator.Service
                     {
                         Error = $"Job '{unescaped}' already has an execution in progress. Retry the one-run trigger after it finishes."
                     });
+                if (triggerResult == ManualTriggerResult.NodeOverloaded)
+                {
+                    ctx.Response.Headers.RetryAfter = "30";
+                    return Results.Json(
+                        new { Error = $"Job '{unescaped}' was not started: this Orchestrator node is overloaded. Retry shortly." },
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
 
                 var actor = RequestActor(ctx);
                 logger.LogInformation(

@@ -263,6 +263,14 @@ process CPU percent, processor count, and `IsOverloaded`. The scheduler uses the
 `INodeCapacityMonitor` locally before it claims a job lease. If the node is overloaded, it skips
 the claim for that cycle so another healthy node can acquire the work.
 
+A manual trigger or checkpoint resume has no later cycle and no peer: it exists only in the request
+that asked for it. An overloaded node therefore refuses it with `503` and `Retry-After` instead of
+accepting it. Once a trigger is accepted it runs even if a later sample shows the node overloaded.
+
+Process CPU percent is a rate over the time since the previous sample. A sample taken less than
+half a second after the last one reports the previous reading: processor time is accounted in
+clock ticks, so a shorter window reads a couple of busy threads as every core saturated.
+
 Concurrent `NodeHeartbeatService.StopAsync` calls share one shutdown task. Each caller waits for
 the heartbeat loop and the same node deregistration write before the host's store is disposed.
 

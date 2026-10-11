@@ -40,7 +40,10 @@ public sealed class NodeCapacityMonitor : INodeCapacityMonitor
     private readonly object _lock = new();
     private TimeSpan _lastCpu = Process.GetCurrentProcess().TotalProcessorTime;
     private DateTime _lastUtc = DateTime.UtcNow;
+    private double _lastCpuPercent;
     private NodeCapacitySnapshot? _cachedSnapshot;
+
+    private const double MinimumCpuWindowSeconds = 0.5;
 
     // Whole-host CPU baseline (cumulative idle/total counters from the last sample). Needs two
     // samples to yield a rate, so the first Capture returns null for host CPU.
@@ -60,15 +63,23 @@ public sealed class NodeCapacityMonitor : INodeCapacityMonitor
 
             using var process = Process.GetCurrentProcess();
             var cpu = process.TotalProcessorTime;
-            var elapsed = Math.Max(0.001, (now - _lastUtc).TotalSeconds);
-            var cpuDelta = Math.Max(0, (cpu - _lastCpu).TotalSeconds);
-            var cpuPercent = Math.Clamp(
-                cpuDelta / (elapsed * Math.Max(1, Environment.ProcessorCount)) * 100.0,
-                0,
-                100);
-
-            _lastCpu = cpu;
-            _lastUtc = now;
+            // Processor time is accounted in clock ticks of about 15 ms per thread. Over a window
+            // shorter than that, two busy threads read as every core saturated: the first sample
+            // after start-up reported the node overloaded. A window that short is not a rate, so
+            // the previous reading stands and the baseline keeps accumulating.
+            var elapsed = (now - _lastUtc).TotalSeconds;
+            var cpuPercent = _lastCpuPercent;
+            if (elapsed >= MinimumCpuWindowSeconds)
+            {
+                var cpuDelta = Math.Max(0, (cpu - _lastCpu).TotalSeconds);
+                cpuPercent = Math.Clamp(
+                    cpuDelta / (elapsed * Math.Max(1, Environment.ProcessorCount)) * 100.0,
+                    0,
+                    100);
+                _lastCpu = cpu;
+                _lastUtc = now;
+                _lastCpuPercent = cpuPercent;
+            }
 
             var hostCpuPercent = TryGetHostCpuPercent();
 

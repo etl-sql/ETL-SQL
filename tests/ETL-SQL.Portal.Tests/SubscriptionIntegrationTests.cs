@@ -146,7 +146,10 @@ namespace ETL_SQL.Portal.Tests
                     new OrchestratorCaller("user", "1", "admin", ["Admin"], [], tenantId),
                     OrchestratorWebFactory.IdentitySecret));
             var triggerRes = await orchClient.SendAsync(triggerReq);
-            Assert.Equal(HttpStatusCode.Accepted, triggerRes.StatusCode);
+            // The body is the evidence: a refusal names its reason (an overloaded node, a run already
+            // in progress), which a bare status code or a later history timeout does not.
+            Assert.True(triggerRes.StatusCode == HttpStatusCode.Accepted,
+                $"Trigger of '{jobName}' answered {(int)triggerRes.StatusCode}: {await triggerRes.Content.ReadAsStringAsync()}");
         }
 
         private static async Task PollPortalOrchestratorAsync(PortalWebFactory factory)

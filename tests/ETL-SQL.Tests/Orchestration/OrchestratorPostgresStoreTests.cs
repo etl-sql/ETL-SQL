@@ -239,7 +239,7 @@ namespace ETL_SQL.Tests.Orchestration
                 await connection.OpenAsync();
                 await using var command = connection.CreateCommand();
                 command.CommandText = @"
-                    INSERT INTO ThrottleSlots (ProcessId, JobName, AcquiredAt, MachineName)
+                    INSERT INTO throttle_slots (process_id, job_name, acquired_at, machine_name)
                     VALUES (999999, 'abandoned', @at, 'remote-node');";
                 command.Parameters.AddWithValue("at", DateTime.UtcNow.AddMinutes(-5).ToString("O"));
                 await command.ExecuteNonQueryAsync();
