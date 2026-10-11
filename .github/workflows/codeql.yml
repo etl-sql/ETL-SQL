@@ -54,7 +54,11 @@ jobs:
             - '**/src/ETL-SQL.ReportPlayer/wwwroot/**'
             - '**/src/ETL-SQL.WorkstationEditor/wwwroot/**'
             - '**/src/etl-sql-vscode/media/**'
-            - '**/src/ETL-SQL.ReportRuntime/**'
+            # Generated outputs, vendor bundles and map data only. The authored implementation is
+            # Resources/TypeScript and BrowserSources, which must stay analysed:
+            # scripts/test-source-analysis-coverage.mjs fails if a rule here hides an owner.
+            - '**/src/ETL-SQL.ReportRuntime/Resources/Shared/**'
+            - '**/src/ETL-SQL.Portal/wwwroot/designer/**'
             # WiX/Windows Installer custom-action scripts are WSH JScript (e.g. Session.Property(x)=v,
             # ActiveXObject), not standard ECMAScript — the CodeQL JS extractor cannot parse them.
             - '**/src/ETL-SQL.Installer/*.js'

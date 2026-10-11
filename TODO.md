@@ -1111,6 +1111,12 @@ does not close build, package, runtime, or Git-index acceptance.
   In `.github/workflows/codeql.yml`, audit the whole `ETL-SQL.ReportRuntime` exclusion so its
   `Resources/TypeScript/` owners are analyzed. Audit the blanket `wwwroot/js` and `scripts` exclusions
   while handwritten Portal modules and relevant generator inputs remain there.
+  Progress (2026-10-11): the workflow now excludes `Resources/Shared` and Portal `wwwroot/designer`
+  instead of the whole ReportRuntime project, so all 200 TypeScript owners are analysed and all 456
+  generated scripts are excluded; `test-source-analysis-coverage.mjs` enforces both from the inventory,
+  so it holds after untracking. No handwritten module remains under `wwwroot/js`. Still open: `scripts/`
+  is excluded as build tooling, so the generators are not analysed; and the first CodeQL run over the
+  88 newly analysed owners has not happened, so new alerts are possible.
 - [ ] **Keep source-only preparation covered in CI.** Run an isolated source-only generation check with
   all inventoried outputs absent, then exercise the prepared assets through the existing consumer gates.
   Include this check when TypeScript sources, generators, asset configuration, or lockfiles change.

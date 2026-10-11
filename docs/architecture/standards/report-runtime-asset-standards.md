@@ -287,6 +287,11 @@ means running `--write-ignore`; the gate fails until the block matches the inven
 block before the delivery paths in the
 [delivery matrix](../../releases/v0.21.0-browser-asset-delivery-matrix.md) are accepted.
 
+CodeQL excludes generated JavaScript so findings land on the TypeScript that produced it.
+`scripts/test-source-analysis-coverage.mjs` reads the exclusions from `.github/workflows/codeql.yml` and
+fails when one hides a TypeScript owner or leaves a generated script analysed. Exclude output folders,
+never a source project. `scripts/` stays excluded: it is build tooling and does not ship.
+
 `scripts/test-asset-generation.mjs` runs preparation in an isolated source-only tree. It covers
 missing directories and outputs, repeat-run stability, rename/delete cleanup, import closure,
 failed compilation, and the MSBuild verifier's missing/stale/new-source failures.

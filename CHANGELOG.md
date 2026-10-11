@@ -14,6 +14,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Analyse the shared runtime and designer TypeScript in CodeQL. The workflow excluded the whole
+  `ETL-SQL.ReportRuntime` project, which hid all 88 owners; it now excludes only generated outputs,
+  vendor bundles, and map data. A consumer check fails if an exclusion hides an owner again.
 - Add a Git-index ownership check for generated browser assets, run by pre-push, CI, and pre-release.
   It reports the exact removal plan and the ignore rules derived from the ownership inventory. It rejects an
   untracked or ignored owner, a staged edit to a generated file, and a page or project file naming
