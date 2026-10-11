@@ -30,6 +30,141 @@ Stationery
 0
 3
 
+# GROUP BY ALL with calculated expression
+query TI
+SELECT UPPER(category) AS cat, SUM(quantity) FROM items GROUP BY ALL ORDER BY cat;
+----
+GEAR
+20
+STATIONERY
+90
+
+# GROUP BY ALL with literal constants (must not break grouping or cause invalid column reference)
+query TITI
+SELECT 'Catalog' AS source, 2026 AS year, category, SUM(quantity) FROM items GROUP BY ALL ORDER BY category;
+----
+Catalog
+2026
+Gear
+20
+Catalog
+2026
+Stationery
+90
+
+# GROUP BY ALL with window function (window function must not be included in group keys)
+query TII
+SELECT category, SUM(quantity) AS total_qty, ROW_NUMBER() OVER (ORDER BY SUM(quantity) DESC) AS rnk
+FROM items
+GROUP BY ALL
+ORDER BY category;
+----
+Gear
+20
+2
+Stationery
+90
+1
+
+# GROUP BY ALL with lateral column aliases
+query TII
+SELECT category, SUM(quantity) AS total_qty, total_qty * 2 AS doubled_qty
+FROM items
+GROUP BY ALL
+ORDER BY category;
+----
+Gear
+20
+40
+Stationery
+90
+180
+
+# GROUP BY ALL with only aggregate expressions (evaluates as scalar aggregation)
+query II
+SELECT COUNT(*), SUM(quantity) FROM items GROUP BY ALL;
+----
+5
+110
+
+# GROUP BY ALL with NULL values in grouping column (all NULL values group together)
+statement ok
+CREATE TABLE items_with_nulls(id INT, category STRING, quantity INT);
+
+statement ok
+INSERT INTO items_with_nulls VALUES
+  (1, 'A', 10),
+  (2, 'A', 20),
+  (3, NULL, 5),
+  (4, NULL, 15),
+  (5, 'B', 30);
+
+query TI
+SELECT category, SUM(quantity) FROM items_with_nulls GROUP BY ALL ORDER BY category;
+----
+NULL
+20
+A
+30
+B
+30
+
+# GROUP BY ALL combined with HAVING and ORDER BY ALL
+query TI
+SELECT category, SUM(quantity) AS total_qty
+FROM items_with_nulls
+GROUP BY ALL
+HAVING total_qty >= 30
+ORDER BY ALL;
+----
+A
+30
+B
+30
+
+# GROUP BY ALL with single SUM and no other columns
+query I
+SELECT SUM(quantity) FROM items GROUP BY ALL;
+----
+110
+
+# GROUP BY ALL with single SUM on empty table
+statement ok
+CREATE TABLE empty_inventory(id INT, quantity INT);
+
+query I
+SELECT SUM(quantity) FROM empty_inventory GROUP BY ALL;
+----
+NULL
+
+# GROUP BY ALL with only non-aggregate columns (acts as DISTINCT grouping)
+query T
+SELECT category FROM items GROUP BY ALL ORDER BY category;
+----
+Gear
+Stationery
+
+# GROUP BY ALL with constant literal only
+query I
+SELECT 42 AS answer GROUP BY ALL;
+----
+42
+
+# GROUP BY ALL with expression wrapping an aggregate
+query I
+SELECT SUM(quantity) + 10 FROM items GROUP BY ALL;
+----
+120
+
+# GROUP BY ALL with arithmetic on aggregate and group key
+query TI
+SELECT category, SUM(quantity) * 2 AS doubled_total FROM items GROUP BY ALL ORDER BY category;
+----
+Gear
+40
+Stationery
+180
+
 # ORDER BY ALL
 query TT
 SELECT category, name FROM items ORDER BY ALL;

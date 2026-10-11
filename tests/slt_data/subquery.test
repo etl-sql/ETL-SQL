@@ -81,3 +81,24 @@ query T
 SELECT name FROM dept d WHERE NOT EXISTS (SELECT 1 FROM emp e WHERE e.dept_id = d.id) ORDER BY name;
 ----
 Legal
+
+# Scalar subquery in SELECT yielding 0 rows must produce NULL (not drop the row)
+query TT
+SELECT d.name, (SELECT e.name FROM emp e WHERE e.dept_id = d.id AND e.salary > 9999) AS top_earner
+FROM dept d
+WHERE d.name = 'Legal';
+----
+Legal
+NULL
+
+# NOT IN with subquery containing NULL: in 3-valued logic, evaluates to UNKNOWN and yields 0 rows
+statement ok
+CREATE TABLE lookup_with_null(val INT);
+
+statement ok
+INSERT INTO lookup_with_null VALUES (1), (2), (NULL);
+
+query T
+SELECT name FROM dept WHERE id NOT IN (SELECT val FROM lookup_with_null);
+----
+

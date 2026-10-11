@@ -150,3 +150,46 @@ Ops
 CHI
 Sales
 LA
+
+# RIGHT JOIN: preserves right rows when left has no match (order 13 has user_id 4)
+query ITTI
+SELECT o.id, u.name, o.amount
+FROM users u
+RIGHT JOIN orders o ON u.id = o.user_id
+ORDER BY o.id;
+----
+10
+Alice
+100
+11
+Alice
+50
+12
+Bob
+200
+13
+NULL
+300
+
+# FULL OUTER JOIN: preserves unmatched rows on both left (Charlie) and right (order 13)
+query TITI
+SELECT u.name, o.id, o.amount
+FROM users u
+FULL OUTER JOIN orders o ON u.id = o.user_id
+ORDER BY u.name, o.id;
+----
+NULL
+13
+300
+Alice
+10
+100
+Alice
+11
+50
+Bob
+12
+200
+Charlie
+NULL
+NULL

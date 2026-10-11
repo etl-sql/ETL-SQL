@@ -351,6 +351,9 @@ public class JoinEngine
 
     private async IAsyncEnumerable<Row> StreamSingleJoin(IAsyncEnumerable<Row> leftStream, JoinClause join, SelectStatement stmt)
     {
+        var leftAlias = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
+        var rightAlias = join.Table.Alias ?? join.Table.TableName;
+
         if (join.IsApply)
         {
             // CROSS/OUTER APPLY (and their LATERAL spellings). The right side is correlated and
@@ -359,7 +362,14 @@ public class JoinEngine
             bool conditionIsTrue = join.Condition is LiteralExpression lit && true.Equals(lit.Value);
             await foreach (var left in leftStream)
             {
-                _context.OuterRowStack.Push(left);
+                var qualifiedLeft = left;
+                if (!string.IsNullOrEmpty(leftAlias))
+                {
+                    qualifiedLeft = left.Clone();
+                    left.ForEachColumn((k, v) => { if (!k.Contains('.')) qualifiedLeft[$"{leftAlias}.{k}"] = v; });
+                }
+
+                _context.OuterRowStack.Push(qualifiedLeft);
                 try
                 {
                     var rightBatches = _context.ResolveAndApplyOperators(join.Table);
@@ -368,7 +378,13 @@ public class JoinEngine
                     {
                         foreach (var rr in rb.Rows)
                         {
-                            var combined = CombineRows(left, rr);
+                            var qualifiedRight = rr;
+                            if (!string.IsNullOrEmpty(rightAlias))
+                            {
+                                qualifiedRight = rr.Clone();
+                                rr.ForEachColumn((k, v) => { if (!k.Contains('.')) qualifiedRight[$"{rightAlias}.{k}"] = v; });
+                            }
+                            var combined = CombineRows(qualifiedLeft, qualifiedRight);
                             if (!conditionIsTrue && !await _context.EvaluateCondition(join.Condition, combined))
                                 continue;
                             hasMatch = true;
@@ -377,16 +393,13 @@ public class JoinEngine
                     }
                     if (!hasMatch && join.JoinType.Equals("OUTER APPLY", StringComparison.OrdinalIgnoreCase))
                     {
-                        yield return left.Clone();
+                        yield return qualifiedLeft.Clone();
                     }
                 }
                 finally { _context.OuterRowStack.Pop(); }
             }
             yield break;
         }
-
-        var leftAlias = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
-        var rightAlias = join.Table.Alias ?? join.Table.TableName;
 
         var streamingLeftKeys = new List<string>();
         var streamingRightKeys = new List<string>();
@@ -621,6 +634,7 @@ public class JoinEngine
     private async Task<List<Row>> PerformApplyJoin(List<Row> leftRows, JoinClause join)
     {
         var nextRows = new List<Row>();
+        var rightAlias = join.Table.Alias ?? join.Table.TableName;
         foreach (var left in leftRows)
         {
             _context.OuterRowStack.Push(left);
@@ -632,7 +646,13 @@ public class JoinEngine
                 {
                     foreach (var rr in rb.Rows)
                     {
-                        nextRows.Add(CombineRows(left, rr));
+                        var qualifiedRight = rr;
+                        if (!string.IsNullOrEmpty(rightAlias))
+                        {
+                            qualifiedRight = rr.Clone();
+                            rr.ForEachColumn((k, v) => { if (!k.Contains('.')) qualifiedRight[$"{rightAlias}.{k}"] = v; });
+                        }
+                        nextRows.Add(CombineRows(left, qualifiedRight));
                         foundMatch = true;
                     }
                 }

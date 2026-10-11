@@ -1,0 +1,275 @@
+# LATERAL and APPLY Join Tests
+# Validates CROSS JOIN LATERAL, LEFT JOIN LATERAL, Comma LATERAL,
+# CROSS APPLY, OUTER APPLY, and correlated subquery semantics.
+
+statement ok
+CREATE TABLE departments(dept_id INT, name STRING, budget INT);
+
+statement ok
+CREATE TABLE employees(emp_id INT, dept_id INT, name STRING, salary INT);
+
+statement ok
+INSERT INTO departments VALUES
+  (1, 'Engineering', 200000),
+  (2, 'Sales', 150000),
+  (3, 'Research', 100000),
+  (4, 'Legal', 80000);
+
+statement ok
+INSERT INTO employees VALUES
+  (101, 1, 'Alice', 120000),
+  (102, 1, 'Bob', 110000),
+  (103, 1, 'Carol', 95000),
+  (201, 2, 'David', 130000),
+  (202, 2, 'Eve', 90000),
+  (301, 3, 'Frank', 85000);
+
+# CROSS JOIN LATERAL with correlated filter + TOP-1 per group
+query TTII
+SELECT d.name, e.name, e.salary, d.budget
+FROM departments d
+CROSS JOIN LATERAL (
+  SELECT name, salary
+  FROM employees
+  WHERE dept_id = d.dept_id
+  ORDER BY salary DESC
+  LIMIT 1
+) AS e
+ORDER BY d.dept_id;
+----
+Engineering
+Alice
+120000
+200000
+Sales
+David
+130000
+150000
+Research
+Frank
+85000
+100000
+
+# LEFT JOIN LATERAL ... ON true preserves outer rows when inner subquery yields 0 rows (Legal)
+query TTII
+SELECT d.name, e.name, e.salary, d.budget
+FROM departments d
+LEFT JOIN LATERAL (
+  SELECT name, salary
+  FROM employees
+  WHERE dept_id = d.dept_id
+  ORDER BY salary DESC
+  LIMIT 1
+) AS e ON true
+ORDER BY d.dept_id;
+----
+Engineering
+Alice
+120000
+200000
+Sales
+David
+130000
+150000
+Research
+Frank
+85000
+100000
+Legal
+NULL
+NULL
+80000
+
+# Comma LATERAL syntax as CROSS APPLY
+query TII
+SELECT d.name, d.budget, x.overhead
+FROM departments d, LATERAL (SELECT d.budget * 0.10 AS overhead) AS x
+ORDER BY d.dept_id;
+----
+Engineering
+200000
+20000
+Sales
+150000
+15000
+Research
+100000
+10000
+Legal
+80000
+8000
+
+# CROSS APPLY syntax equivalence
+query TTI
+SELECT d.name, e.name, e.salary
+FROM departments d
+CROSS APPLY (
+  SELECT name, salary
+  FROM employees
+  WHERE dept_id = d.dept_id
+  ORDER BY salary DESC
+  LIMIT 1
+) AS e
+ORDER BY d.dept_id;
+----
+Engineering
+Alice
+120000
+Sales
+David
+130000
+Research
+Frank
+85000
+
+# OUTER APPLY syntax equivalence (preserves empty Legal department)
+query TTI
+SELECT d.name, e.name, e.salary
+FROM departments d
+OUTER APPLY (
+  SELECT name, salary
+  FROM employees
+  WHERE dept_id = d.dept_id
+  ORDER BY salary DESC
+  LIMIT 1
+) AS e
+ORDER BY d.dept_id;
+----
+Engineering
+Alice
+120000
+Sales
+David
+130000
+Research
+Frank
+85000
+Legal
+NULL
+NULL
+
+# JOIN LATERAL with explicit ON condition post-filters joined rows
+query TTI
+SELECT d.name, e.name, e.salary
+FROM departments d
+JOIN LATERAL (
+  SELECT name, salary
+  FROM employees
+  WHERE dept_id = d.dept_id
+) AS e ON e.salary >= 110000
+ORDER BY d.dept_id, e.salary DESC;
+----
+Engineering
+Alice
+120000
+Engineering
+Bob
+110000
+Sales
+David
+130000
+
+# Multi-row expansion: LATERAL emitting multiple rows per outer row
+query TTI
+SELECT d.name, e.name, e.salary
+FROM departments d
+CROSS JOIN LATERAL (
+  SELECT name, salary
+  FROM employees
+  WHERE dept_id = d.dept_id
+  ORDER BY salary DESC
+) AS e
+WHERE d.dept_id = 1
+ORDER BY e.salary DESC;
+----
+Engineering
+Alice
+120000
+Engineering
+Bob
+110000
+Engineering
+Carol
+95000
+
+# Empty outer table yields 0 rows for both CROSS and OUTER APPLY
+statement ok
+CREATE TABLE empty_depts(dept_id INT, name STRING, budget INT);
+
+query TT
+SELECT d.name, e.name
+FROM empty_depts d
+CROSS JOIN LATERAL (
+  SELECT name FROM employees WHERE dept_id = d.dept_id
+) AS e;
+----
+
+query TT
+SELECT d.name, e.name
+FROM empty_depts d
+OUTER APPLY (
+  SELECT name FROM employees WHERE dept_id = d.dept_id
+) AS e;
+----
+
+# Scalar aggregate lateral (no GROUP BY): yields 1 row even for 0 matching rows (COUNT=0, SUM=NULL)
+query TII
+SELECT d.name, stats.cnt, stats.total_sal
+FROM departments d
+CROSS JOIN LATERAL (
+  SELECT COUNT(*) AS cnt, SUM(salary) AS total_sal
+  FROM employees
+  WHERE dept_id = d.dept_id
+) AS stats
+ORDER BY d.dept_id;
+----
+Engineering
+3
+325000
+Sales
+2
+220000
+Research
+1
+85000
+Legal
+0
+NULL
+
+# Grouped aggregate lateral (WITH GROUP BY): yields 0 rows for non-matching group, so CROSS drops it
+query TI
+SELECT d.name, stats.cnt
+FROM departments d
+CROSS JOIN LATERAL (
+  SELECT dept_id, COUNT(*) AS cnt
+  FROM employees
+  WHERE dept_id = d.dept_id
+  GROUP BY dept_id
+) AS stats
+ORDER BY d.dept_id;
+----
+Engineering
+3
+Sales
+2
+Research
+1
+
+# Correlation using calculated arithmetic expression comparing against outer budget
+query TTI
+SELECT d.name, e.name, e.salary
+FROM departments d
+CROSS JOIN LATERAL (
+  SELECT name, salary
+  FROM employees
+  WHERE dept_id = d.dept_id AND salary > d.budget * 0.60
+) AS e
+ORDER BY d.dept_id;
+----
+Sales
+David
+130000
+Research
+Frank
+85000
+

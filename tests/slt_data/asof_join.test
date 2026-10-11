@@ -1,0 +1,303 @@
+# ASOF JOIN Tests
+# Validates nearest-match temporal/inequality joins, partition isolation,
+# inner vs. left null preservation, forward vs. backward inequality, and edge cases.
+
+statement ok
+CREATE TABLE trades(trade_id INT, symbol STRING, trade_time INT, volume INT);
+
+statement ok
+CREATE TABLE quotes(quote_id INT, symbol STRING, quote_time INT, bid DECIMAL(10,2), ask DECIMAL(10,2));
+
+statement ok
+INSERT INTO quotes VALUES
+  (101, 'AAPL', 10, 150.00, 150.10),
+  (102, 'AAPL', 20, 150.25, 150.35),
+  (103, 'AAPL', 30, 150.50, 150.60),
+  (201, 'MSFT', 15, 300.00, 300.10),
+  (202, 'MSFT', 25, 301.00, 301.20);
+
+statement ok
+INSERT INTO trades VALUES
+  (1, 'AAPL', 10, 100),
+  (2, 'AAPL', 25, 200),
+  (3, 'AAPL', 35, 150),
+  (4, 'MSFT', 20, 50),
+  (5, 'MSFT', 25, 75);
+
+# Standard backward ASOF JOIN (trade_time >= quote_time) with partition key
+query IITTR
+SELECT t.trade_id, t.trade_time, t.symbol, q.quote_id, q.bid
+FROM trades t
+ASOF JOIN quotes q ON t.symbol = q.symbol AND t.trade_time >= q.quote_time
+ORDER BY t.trade_id;
+----
+1
+10
+AAPL
+101
+150.000
+2
+25
+AAPL
+102
+150.250
+3
+35
+AAPL
+103
+150.500
+4
+20
+MSFT
+201
+300.000
+5
+25
+MSFT
+202
+301.000
+
+# Multiple trades matching the same quote (high-frequency trades between quotes)
+statement ok
+INSERT INTO trades VALUES
+  (6, 'AAPL', 21, 10),
+  (7, 'AAPL', 22, 20),
+  (8, 'AAPL', 29, 30);
+
+query IITI
+SELECT t.trade_id, t.trade_time, t.symbol, q.quote_id
+FROM trades t
+ASOF JOIN quotes q ON t.symbol = q.symbol AND t.trade_time >= q.quote_time
+WHERE t.trade_id IN (6, 7, 8)
+ORDER BY t.trade_id;
+----
+6
+21
+AAPL
+102
+7
+22
+AAPL
+102
+8
+29
+AAPL
+102
+
+# Inner ASOF drops trade prior to any quote; ASOF LEFT preserves with NULL
+statement ok
+INSERT INTO trades VALUES
+  (9, 'AAPL', 5, 50),
+  (10, 'GOOG', 20, 80);
+
+query IITI
+SELECT t.trade_id, t.trade_time, t.symbol, q.quote_id
+FROM trades t
+ASOF JOIN quotes q ON t.symbol = q.symbol AND t.trade_time >= q.quote_time
+WHERE t.trade_id IN (9, 10)
+ORDER BY t.trade_id;
+----
+
+query IITI
+SELECT t.trade_id, t.trade_time, t.symbol, q.quote_id
+FROM trades t
+ASOF LEFT JOIN quotes q ON t.symbol = q.symbol AND t.trade_time >= q.quote_time
+WHERE t.trade_id IN (9, 10)
+ORDER BY t.trade_id;
+----
+9
+5
+AAPL
+NULL
+10
+20
+GOOG
+NULL
+
+# Forward ASOF JOIN (trade_time <= quote_time) picks nearest quote at or after trade
+query IITI
+SELECT t.trade_id, t.trade_time, t.symbol, q.quote_id
+FROM trades t
+ASOF JOIN quotes q ON t.symbol = q.symbol AND t.trade_time <= q.quote_time
+WHERE t.trade_id IN (1, 2, 9)
+ORDER BY t.trade_id;
+----
+1
+10
+AAPL
+101
+2
+25
+AAPL
+103
+9
+5
+AAPL
+101
+
+# Unsorted input rows: engine finds nearest regardless of insertion sequence
+statement ok
+CREATE TABLE events_unsorted(id INT, ts INT);
+
+statement ok
+CREATE TABLE checkpoints_unsorted(cp_id INT, ts INT);
+
+statement ok
+INSERT INTO checkpoints_unsorted VALUES
+  (300, 30),
+  (100, 10),
+  (400, 40),
+  (200, 20);
+
+statement ok
+INSERT INTO events_unsorted VALUES
+  (3, 28),
+  (1, 12),
+  (4, 5),
+  (2, 20);
+
+query IIII
+SELECT e.id, e.ts, c.cp_id, c.ts
+FROM events_unsorted e
+ASOF JOIN checkpoints_unsorted c ON e.ts >= c.ts
+ORDER BY e.id;
+----
+1
+12
+100
+10
+2
+20
+200
+20
+3
+28
+200
+20
+
+# NULL partition key and NULL timestamp rows must not produce false matches
+statement ok
+CREATE TABLE left_nulls(id INT, grp STRING, ts INT);
+
+statement ok
+CREATE TABLE right_nulls(rid INT, grp STRING, ts INT);
+
+statement ok
+INSERT INTO left_nulls VALUES
+  (1, 'A', 10),
+  (2, NULL, 15),
+  (3, 'A', NULL),
+  (4, 'B', 20);
+
+statement ok
+INSERT INTO right_nulls VALUES
+  (10, 'A', 8),
+  (20, NULL, 12),
+  (30, 'B', NULL),
+  (40, 'B', 18);
+
+query IITIIT
+SELECT l.id, l.ts, l.grp, r.rid, r.ts, r.grp
+FROM left_nulls l
+ASOF LEFT JOIN right_nulls r ON l.grp = r.grp AND l.ts >= r.ts
+ORDER BY l.id;
+----
+1
+10
+A
+10
+8
+A
+2
+15
+NULL
+NULL
+NULL
+NULL
+3
+NULL
+A
+NULL
+NULL
+NULL
+4
+20
+B
+40
+18
+B
+
+# Empty left table yields 0 rows
+statement ok
+CREATE TABLE empty_trades(trade_id INT, symbol STRING, trade_time INT);
+
+query II
+SELECT t.trade_id, q.quote_id
+FROM empty_trades t
+ASOF JOIN quotes q ON t.symbol = q.symbol AND t.trade_time >= q.quote_time;
+----
+
+# Empty right table: inner ASOF drops all rows; ASOF LEFT keeps all left rows with NULL right columns
+statement ok
+CREATE TABLE empty_quotes(quote_id INT, symbol STRING, quote_time INT);
+
+query II
+SELECT t.trade_id, q.quote_id
+FROM trades t
+ASOF JOIN empty_quotes q ON t.symbol = q.symbol AND t.trade_time >= q.quote_time;
+----
+
+query II
+SELECT t.trade_id, q.quote_id
+FROM trades t
+ASOF LEFT JOIN empty_quotes q ON t.symbol = q.symbol AND t.trade_time >= q.quote_time
+WHERE t.trade_id IN (1, 2)
+ORDER BY t.trade_id;
+----
+1
+NULL
+2
+NULL
+
+# Strict inequality: t.trade_time > q.quote_time excludes exact timestamp match (picks strictly earlier quote)
+statement ok
+INSERT INTO trades VALUES (11, 'AAPL', 20, 99);
+
+query IITI
+SELECT t.trade_id, t.trade_time, t.symbol, q.quote_id
+FROM trades t
+ASOF JOIN quotes q ON t.symbol = q.symbol AND t.trade_time > q.quote_time
+WHERE t.trade_id IN (1, 11, 2)
+ORDER BY t.trade_id;
+----
+2
+25
+AAPL
+102
+11
+20
+AAPL
+101
+
+# Duplicate timestamps on right table: must not multiply outer rows
+statement ok
+CREATE TABLE dup_quotes(quote_id INT, symbol STRING, quote_time INT, bid DECIMAL(10,2));
+
+statement ok
+INSERT INTO dup_quotes VALUES
+  (501, 'XYZ', 10, 50.00),
+  (502, 'XYZ', 10, 50.50);
+
+statement ok
+CREATE TABLE dup_trades(trade_id INT, symbol STRING, trade_time INT);
+
+statement ok
+INSERT INTO dup_trades VALUES (1, 'XYZ', 10);
+
+query I
+SELECT COUNT(*)
+FROM dup_trades t
+ASOF JOIN dup_quotes q ON t.symbol = q.symbol AND t.trade_time >= q.quote_time;
+----
+1
+

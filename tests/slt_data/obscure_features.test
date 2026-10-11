@@ -69,7 +69,7 @@ West
 1
 
 # QUALIFY clause referencing rank alias
-query ITI
+query ITII
 SELECT id, region, amount, RANK() OVER (PARTITION BY region ORDER BY amount DESC) as rnk
 FROM sales
 QUALIFY rnk = 1
@@ -83,3 +83,215 @@ East
 West
 200
 1
+
+# QUALIFY with compound predicate (window alias AND scalar amount filter)
+query ITII
+SELECT id, region, amount, ROW_NUMBER() OVER (ORDER BY amount DESC) as rn
+FROM sales
+QUALIFY rn <= 3 AND amount >= 180
+ORDER BY id;
+----
+3
+West
+200
+1
+4
+West
+180
+2
+
+# Setup tables for full pipeline tests
+statement ok
+CREATE TABLE store_orders(order_id INT, store STRING, dept STRING, total INT);
+
+statement ok
+INSERT INTO store_orders VALUES
+  (1, 'StoreA', 'Electronics', 500),
+  (2, 'StoreA', 'Electronics', 300),
+  (3, 'StoreA', 'Clothing', 200),
+  (4, 'StoreA', 'Clothing', 150),
+  (5, 'StoreB', 'Electronics', 700),
+  (6, 'StoreB', 'Clothing', 400),
+  (7, 'StoreB', 'Clothing', 100);
+
+# Full pipeline execution order: WHERE -> GROUP BY -> HAVING -> WINDOW -> QUALIFY -> ORDER BY
+query TTIII
+SELECT store, dept, SUM(total) as dept_total, COUNT(*) as order_count,
+       ROW_NUMBER() OVER (PARTITION BY store ORDER BY SUM(total) DESC) as store_rank
+FROM store_orders
+WHERE total >= 200
+GROUP BY store, dept
+HAVING SUM(total) >= 400
+QUALIFY store_rank = 1
+ORDER BY store;
+----
+StoreA
+Electronics
+800
+2
+1
+StoreB
+Electronics
+700
+1
+1
+
+# Setup leaderboard for ties testing
+statement ok
+CREATE TABLE leaderboard(player STRING, score INT);
+
+statement ok
+INSERT INTO leaderboard VALUES
+  ('Alice', 100),
+  ('Bob', 90),
+  ('Charlie', 90),
+  ('David', 80),
+  ('Eve', 70);
+
+# QUALIFY with RANK() preserving ties at rank 2
+query TII
+SELECT player, score, RANK() OVER (ORDER BY score DESC) as rnk
+FROM leaderboard
+QUALIFY rnk <= 2
+ORDER BY score DESC, player;
+----
+Alice
+100
+1
+Bob
+90
+2
+Charlie
+90
+2
+
+# QUALIFY with DENSE_RANK()
+query TII
+SELECT player, score, DENSE_RANK() OVER (ORDER BY score DESC) as drnk
+FROM leaderboard
+QUALIFY drnk = 3
+ORDER BY player;
+----
+David
+80
+3
+
+# QUALIFY condition that matches 0 rows
+query TI
+SELECT player, score FROM leaderboard
+QUALIFY score > 999
+ORDER BY player;
+----
+
+# QUALIFY combined with LIMIT
+query TII
+SELECT player, score, ROW_NUMBER() OVER (ORDER BY score DESC) as rn
+FROM leaderboard
+QUALIFY rn <= 4
+ORDER BY score DESC
+LIMIT 2;
+----
+Alice
+100
+1
+Bob
+90
+2
+
+# QUALIFY on completely empty table (nothing qualifies)
+statement ok
+CREATE TABLE empty_sales(id INT, amount INT);
+
+query II
+SELECT id, ROW_NUMBER() OVER (ORDER BY amount) as rn
+FROM empty_sales
+QUALIFY rn = 1;
+----
+
+# QUALIFY with explicit false condition 1 = 0 (nothing qualifies)
+query II
+SELECT id, ROW_NUMBER() OVER (ORDER BY amount) as rn
+FROM sales
+QUALIFY 1 = 0;
+----
+
+# QUALIFY with impossible negative rank (nothing qualifies)
+query II
+SELECT id, ROW_NUMBER() OVER (ORDER BY amount) as rn
+FROM sales
+QUALIFY rn < 0;
+----
+
+# QUALIFY with NULL comparison (three-valued logic: nothing qualifies)
+query II
+SELECT id, ROW_NUMBER() OVER (ORDER BY amount) as rn
+FROM sales
+QUALIFY rn = NULL;
+----
+
+# QUALIFY where everything qualifies (1 = 1)
+query II
+SELECT id, ROW_NUMBER() OVER (ORDER BY id) as rn
+FROM sales
+QUALIFY 1 = 1
+ORDER BY id;
+----
+1
+1
+2
+2
+3
+3
+4
+4
+
+# QUALIFY with LAG() to find boundary rows (first row where prev is NULL)
+query III
+SELECT id, amount, LAG(amount) OVER (ORDER BY id) as prev_amount
+FROM sales
+QUALIFY prev_amount IS NULL
+ORDER BY id;
+----
+1
+100
+NULL
+
+# QUALIFY with overall COUNT(*) OVER () window
+query III
+SELECT id, amount, COUNT(*) OVER () as total_rows
+FROM sales
+QUALIFY total_rows = 4
+ORDER BY id;
+----
+1
+100
+4
+2
+150
+4
+3
+200
+4
+4
+180
+4
+
+# QUALIFY combined with DISTINCT deduplication
+statement ok
+CREATE TABLE dup_ranks(grp STRING, score INT);
+
+statement ok
+INSERT INTO dup_ranks VALUES
+  ('A', 100),
+  ('A', 100),
+  ('B', 200),
+  ('B', 200);
+
+query TI
+SELECT DISTINCT grp, DENSE_RANK() OVER (ORDER BY score) as drnk
+FROM dup_ranks
+QUALIFY drnk = 1;
+----
+A
+1
+

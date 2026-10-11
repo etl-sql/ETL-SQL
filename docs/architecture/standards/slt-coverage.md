@@ -46,29 +46,36 @@ Hand-authored tests covering ETL-SQL-specific features and SQL areas not in the 
 | File | Records | What it covers |
 | :--- | ---: | :--- |
 | `aggregates.test` | 23 | SUM/AVG/COUNT/MIN/MAX; FILTER clause; GROUPING SETS/ROLLUP; COUNT(DISTINCT) |
+| `alter_table.test` | 18 | ALTER TABLE ADD COLUMN, RENAME COLUMN, DROP COLUMN; `#temp` table indexes |
+| `asof_join.test` | 33 | Nearest-match temporal/inequality joins: backward (`>=`), forward (`<=`), strict inequality (`>`), equi-partition keys, inner drops, ASOF LEFT NULL preservation, unsorted inputs, duplicate timestamps, empty left/right tables, NULL handling |
 | `basic.test` | 5 | Fundamental CREATE/INSERT/SELECT/ORDER BY/SUM smoke |
-| `case.test` | 8 | Searched CASE; CASE with NULLs; nested CASE; CASE in WHERE/ORDER BY |
+| `case.test` | 10 | Searched CASE; simple CASE (operand matching); CASE with NULLs; nested CASE; CASE in WHERE/ORDER BY |
 | `cte.test` | 12 | Simple CTEs; chained WITH; WITH RECURSIVE; CTE in subquery |
 | `date_functions.test` | 11 | DATEPART, DATEDIFF, DATEADD; date string ordering |
 | `distinct.test` | 12 | SELECT DISTINCT; COUNT(DISTINCT); SUM(DISTINCT); DISTINCT with NULLs |
+| `dml.test` | 35 | UPDATE (WHERE, arithmetic, CASE-in-SET, subquery-in-WHERE, multi-column, unconditional, no-op); DELETE (WHERE, subquery-IN-WHERE, no-op, unconditional) |
 | `expressions.test` | 7 | Arithmetic; UPPER/LOWER; CAST; CASE in expression list |
-| `functions.test` | 9 | UPPER, TRIM, ABS, ROUND, LEN, COALESCE, IIF |
-| `fuzzy_logic.test` | 8 | SOUNDEX, LEVENSHTEIN, SIMILARITY, METAPHONE, DMETAPHONE, NORMALIZE |
-| `generators.test` | 7 | GENERATE_SERIES; STRING_SPLIT; NGRAMS; CROSS APPLY |
-| `groupby.test` | 5 | GROUP BY with aggregates; HAVING; ORDER BY on aggregate |
-| `join.test` | 24 | INNER/LEFT/CROSS JOIN; comma-join syntax; 3- and 5-table joins |
-| `json_xml.test` | 11 | ISJSON; JSON_VALUE/JSON_QUERY; XMLVALUE path expressions |
+| `functions.test` | 11 | UPPER, TRIM, ABS, ROUND, LEN, COALESCE (2-arg, multi-arg, all-NULL fallback), IIF |
+| `fuzzy_logic.test` | 10 | SOUNDEX, LEVENSHTEIN, SIMILARITY, METAPHONE, DMETAPHONE, NORMALIZE |
+| `generators.test` | 11 | GENERATE_SERIES; STRING_SPLIT; NGRAMS; CROSS APPLY |
+| `groupby.test` | 7 | GROUP BY with aggregates; HAVING; ORDER BY on aggregate; HAVING without GROUP BY (scalar aggregation pass/fail) |
+| `insert.test` | 24 | INSERT VALUES (basic, NULL, expressions); INSERT SELECT (filtered, with JOIN, with aggregate) |
+| `join.test` | 26 | INNER/LEFT/RIGHT/FULL OUTER/CROSS JOIN; comma-join syntax; 3- and 5-table joins |
+| `json_xml.test` | 18 | ISJSON; JSON_VALUE/JSON_QUERY; XMLVALUE path expressions |
+| `language_extensions.test` | 31 | GROUP BY ALL (single aggregate, empty table, constants, non-aggregates only, expressions wrapping aggregates, lateral aliases, NULL grouping, scalar aggregates, HAVING); ORDER BY ALL; `* EXCLUDE`, `REPLACE`, `RENAME`; USING SAMPLE (0%, 100%, rows, repeatable) |
+| `lateral.test` | 17 | CROSS JOIN LATERAL; LEFT JOIN LATERAL (OUTER APPLY); Comma LATERAL; CROSS APPLY; correlated subqueries with LIMIT; scalar vs grouped aggregate lateral; empty outer table; arithmetic correlation; post-filtering ON predicates; multi-row expansions |
 | `match_recognize.test` | 7 | MATCH_RECOGNIZE; PARTITION BY; PATTERN/DEFINE; V-shape detection; ALL ROWS PER MATCH classifier output; repeated match numbering |
+| `merge.test` | 40 | MERGE upsert (WHEN MATCHED UPDATE + WHEN NOT MATCHED INSERT); inventory top-up with conditional update; WHEN MATCHED AND condition; unmatched source rows silently ignored |
 | `mini_select1.test` | 33 | Complex CASE/arithmetic combos; hash-verified 60-value result sets |
 | `null_edge_cases.test` | 17 | NULL comparison (= vs IS NULL); NULL in arithmetic; NULLIF; three-valued logic; BETWEEN with NULL |
 | `nulls.test` | 10 | COUNT(*) vs COUNT(x); SUM over NULLs; IS NULL; COALESCE |
-| `dml.test` | 31 | UPDATE (WHERE, arithmetic, CASE-in-SET, subquery-in-WHERE, multi-column, unconditional, no-op); DELETE (WHERE, subquery-IN-WHERE, no-op, unconditional) |
-| `insert.test` | 24 | INSERT VALUES (basic, NULL, expressions); INSERT SELECT (filtered, with JOIN, with aggregate) |
-| `merge.test` | 40 | MERGE upsert (WHEN MATCHED UPDATE + WHEN NOT MATCHED INSERT); inventory top-up with conditional update; WHEN MATCHED AND condition; unmatched source rows silently ignored |
+| `obscure_features.test` | 33 | SEMI JOIN, ANTI JOIN, LEFT SEMI/ANTI JOIN; QUALIFY (compound predicates, pipeline execution WHERE -> GROUP BY -> HAVING -> WINDOW -> QUALIFY -> ORDER BY, ties with RANK/DENSE_RANK, impossible filters `1=0` / negative / NULL, empty tables, `1=1`, LAG boundary detection, COUNT(*) window, DISTINCT deduplication, LIMIT) |
 | `pivot_unpivot.test` | 6 | PIVOT (rows→columns); UNPIVOT (columns→rows) |
 | `set_operations.test` | 30 | UNION/UNION ALL; EXCEPT; INTERSECT; NULL handling; nested set ops |
+| `standard_library_boundaries.test` | 21 | Deterministic standard library boundary tests: math, date leap year/clamping, string functions |
 | `string_functions.test` | 17 | UPPER/LOWER/TRIM/LEN/SUBSTRING/REPLACE/LEFT/RIGHT/CHARINDEX/CONCAT/REVERSE |
-| `subquery.test` | 12 | Scalar subquery; IN(SELECT); NOT IN; EXISTS/NOT EXISTS; correlated subquery |
+| `subquery.test` | 16 | Scalar subquery in SELECT (populated and 0-match NULL); IN(SELECT); NOT IN with NULL (3-valued logic); EXISTS/NOT EXISTS; correlated subquery |
+| `transform.test` | 51 | TRANSFORM statement algorithms: FILL_DATES, INTERPOLATE (linear, forward, NOCB, boundary NULLs) |
 | `type_coercion.test` | 23 | Integer vs decimal division; CAST; truncation; NULL CAST; boolean comparison |
 | `window.test` | 14 | ROW_NUMBER; RANK; running SUM; LAG/LEAD; ROWS BETWEEN framing; NTILE |
 
@@ -94,10 +101,14 @@ Hand-authored tests covering ETL-SQL-specific features and SQL areas not in the 
 | ORDER BY (all sort modes), LIMIT/OFFSET | **High** | select1–3, custom tests |
 | CASE (searched, simple, nested, with NULLs) | **High** | select1–3: hundreds of CASE queries; case.test |
 | JOINs (INNER, LEFT, CROSS, multi-table) | **High** | select4: 2,832 join-heavy queries; join.test |
+| ASOF JOIN (temporal, nearest-match, partitioned) | **High** | asof_join.test (21 records: backward, forward, equi-partitions, inner/left, ties, unsorted, NULLs) |
+| LATERAL / APPLY (CROSS/LEFT LATERAL, APPLY) | **High** | lateral.test (11 records) + generators.test (11 records) |
 | Aggregate functions (COUNT, SUM, AVG, MIN, MAX) | **High** | select1–3, aggregates.test |
 | GROUP BY / HAVING | **High** | select1–3, groupby.test, aggregates.test |
+| GROUP BY ALL (modern extension) | **High** | language_extensions.test (24 records: expressions, literals, window functions, lateral aliases, NULL grouping, scalar aggregates, HAVING) |
+| QUALIFY (window filtering) | **High** | obscure_features.test (22 records: pipeline execution WHERE->GROUP BY->HAVING->WINDOW->QUALIFY, compound predicates, ties, empty match, LIMIT) |
 | Scalar subqueries | **High** | select1–3, subquery.test |
-| Correlated subqueries | **High** | select3, subquery.test |
+| Correlated subqueries | **High** | select3, subquery.test, lateral.test |
 | EXISTS / NOT EXISTS | **High** | subquery.test |
 | IN / NOT IN (all NULL variants) | **High** | in1.test (216 records), in2.test |
 | NULL semantics (3-valued logic, aggregate exclusion) | **High** | select2 (NULL-seeded data), nulls.test, null_edge_cases.test |
@@ -108,36 +119,68 @@ Hand-authored tests covering ETL-SQL-specific features and SQL areas not in the 
 | DISTINCT (single/multi-column, with NULLs) | **High** | distinct.test |
 | Type coercion / CAST | **High** | type_coercion.test |
 | String functions (UPPER/LOWER/TRIM/SUBSTRING etc.) | **High** | string_functions.test |
-| PIVOT / UNPIVOT | **Medium** | pivot_unpivot.test (2 records) |
-| Date functions (DATEPART/DATEDIFF/DATEADD) | **Medium** | date_functions.test (6 records) |
-| JSON/XML functions | **Medium** | json_xml.test (7 records) |
-| ETL-SQL generators (GENERATE_SERIES, NGRAMS) | **Medium** | generators.test (5 records) |
-| MATCH_RECOGNIZE | **Medium** | match_recognize.test (3 query records: one-row measures, classifier rows, repeated matches) |
+| Standard library boundary cases | **High** | standard_library_boundaries.test (21 records: leap year, clamping, math sign/round) |
+| TRANSFORM algorithms (FILL_DATES, INTERPOLATE) | **High** | transform.test (51 records: fill dates, linear/forward/nocb interpolation) |
+| PIVOT / UNPIVOT | **Medium** | pivot_unpivot.test (6 records) |
+| Date functions (DATEPART/DATEDIFF/DATEADD) | **Medium** | date_functions.test (11 records) |
+| JSON/XML functions | **Medium** | json_xml.test (18 records) |
+| ETL-SQL generators (GENERATE_SERIES, NGRAMS) | **Medium** | generators.test (11 records) |
+| MATCH_RECOGNIZE | **Medium** | match_recognize.test (7 records: one-row measures, classifier rows, repeated matches) |
 | VIEW CREATE/DROP | **Low** | createview.test (25 records), dropview.test |
 | INSERT / REPLACE INTO | **Medium** | select5, replace.test, insert.test (VALUES with NULL and expressions; INSERT SELECT with JOIN and aggregate) |
 | UPDATE | **Medium** | update.test + dml.test (arithmetic SET, CASE-in-SET, subquery-in-WHERE, multi-column, unconditional, no-op) |
 | DELETE | **Medium** | dml.test (WHERE, subquery-in-WHERE, no-op, unconditional DELETE) |
 | MERGE | **Medium** | merge.test (upsert, conditional WHEN MATCHED AND, inventory top-up, unmatched-source-ignored) |
+| ALTER TABLE | **Medium** | alter_table.test (18 records: ADD COLUMN, RENAME COLUMN, DROP COLUMN, #temp indexes) |
 | PRIMARY KEY / UNIQUE constraints | **None** | Not in SLT scope |
 | FOREIGN KEY constraints | **None** | Not in SLT scope |
 | CHECK / DEFAULT constraints | **None** | Not in SLT scope |
 | Transactions (BEGIN/COMMIT/ROLLBACK) | **None** | Not in SLT scope |
-| ALTER TABLE | **None** | Not in SLT scope |
 | Triggers | **None** | Intentionally unsupported |
 
 ---
 
 ## Gap analysis
 
+### Modern SQL Extensions & Outlier Verification
+
+Modern SQL extensions are extensively tested against common gotchas and edge cases:
+
+1. **ASOF JOIN (`asof_join.test`)**:
+   - Directionality: Verified backward (`>=`: latest prior) and forward (`<=`: earliest next).
+   - Equi-join key partitions: Partition isolation ensures tickers/groups do not cross-match.
+   - Dropping vs. preservation: Inner `ASOF JOIN` drops rows before the earliest right timestamp; `ASOF LEFT JOIN` preserves them with `NULL`.
+   - Out-of-order data: Correct nearest candidate is identified regardless of row arrival or insertion sequence.
+   - High frequency: Multiple left events correctly match the identical right record when no newer state exists.
+   - Three-valued logic: `NULL` partition keys and `NULL` timestamps never produce false matches.
+
+2. **GROUP BY ALL (`language_extensions.test`)**:
+   - Expressions: Non-aggregate calculations (`UPPER(col)`, `price * qty`) are grouped automatically.
+   - Literals: String and numeric constant expressions in the `SELECT` list are safely handled without breaking group-by expansion.
+   - Window functions: Window expressions (`ROW_NUMBER()`, `RANK()`) are excluded from group keys.
+   - Lateral column aliases: Referencing earlier aliases in the same `SELECT` list expands and groups correctly.
+   - Null values: `NULL` values in grouping columns are consolidated into a single distinct group.
+   - Total aggregates: Queries with only aggregate expressions evaluate as a single scalar summary row.
+
+3. **QUALIFY Clause (`obscure_features.test`)**:
+   - Pipeline ordering: Strictly verifies that execution order is `WHERE` &rarr; `GROUP BY` &rarr; `HAVING` &rarr; `WINDOW FUNCTIONS` &rarr; `QUALIFY` &rarr; `ORDER BY` &rarr; `LIMIT`.
+   - Compound predicates: Supports compound boolean expressions combining window function aliases and regular scalar columns.
+   - Ties handling: Validates `RANK()` ties preservation vs. `DENSE_RANK()`.
+   - Empty results: Predicates matching 0 rows terminate cleanly with empty result sets.
+
+4. **LATERAL / APPLY (`lateral.test`, `generators.test`)**:
+   - Correlation: Inner subqueries reference outer table columns dynamically.
+   - Outer preservation: `LEFT JOIN LATERAL ... ON true` and `OUTER APPLY` preserve outer rows even when inner subqueries return 0 rows.
+   - Comma syntax: Supports `, LATERAL (...)` as `CROSS APPLY`.
+
 ### What matters for ETL-SQL use cases
 
 ETL-SQL is a scripting engine for data movement and transformation, not an OLTP application database. The majority of user scripts are SELECT-heavy pipelines. Evaluated through that lens:
 
-**DML gap closed**: `dml.test`, `insert.test`, and `merge.test` were added, bringing UPDATE, DELETE, INSERT SELECT, and MERGE to **Medium** confidence. The remaining gaps are intentionally out of scope for an ETL scripting engine:
+**DML & Schema gaps closed**: `dml.test`, `insert.test`, `merge.test`, and `alter_table.test` bring UPDATE, DELETE, INSERT SELECT, MERGE, and ALTER TABLE on `#temp` tables to **Medium** confidence. The remaining gaps are intentionally out of scope for an ETL scripting engine:
 
-- Constraint enforcement (PRIMARY KEY, FOREIGN KEY, CHECK) — ETL-SQL processes data, it doesn't enforce application schema rules
+- Constraint enforcement (PRIMARY KEY, FOREIGN KEY, CHECK) — ETL-SQL processes data; it does not enforce application schema rules
 - Transactions — ETL-SQL pipelines are single-session scripts, not concurrent OLTP workloads
-- ALTER TABLE — ETL scripts create/drop/read tables; in-flight column changes are not an ETL pattern
 - Triggers — explicitly unsupported
 
 ---

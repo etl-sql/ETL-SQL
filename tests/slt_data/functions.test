@@ -45,3 +45,15 @@ SELECT IIF(b > 0, 'positive', 'negative') FROM t1 ORDER BY b;
 ----
 negative
 positive
+
+# COALESCE with 3+ arguments and all-NULL fallback
+query T
+SELECT COALESCE(NULL, NULL, 'third', 'fourth');
+----
+third
+
+query T
+SELECT COALESCE(NULL, NULL, NULL);
+----
+NULL
+

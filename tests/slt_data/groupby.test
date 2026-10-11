@@ -32,3 +32,15 @@ East
 125
 West
 125
+
+# HAVING without GROUP BY: scalar aggregation matching filter
+query I
+SELECT COUNT(*) FROM sales HAVING COUNT(*) > 0;
+----
+5
+
+# HAVING without GROUP BY: scalar aggregation failing filter (0 rows returned)
+query I
+SELECT COUNT(*) FROM sales HAVING COUNT(*) > 999;
+----
+

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -109,11 +109,19 @@ namespace ETL_SQL.SqlLogicTests
             // that use CREATE INDEX on regular (non-temp) tables — not supported in ETL-SQL.
             // ETL-SQL supports CREATE INDEX only on #temp tables.
             var indexDir = Path.Combine(root, "index") + Path.DirectorySeparatorChar;
+            var fileFilter = Environment.GetEnvironmentVariable("ETL_SQL_SLT_FILE");
 
-            return Directory.GetFiles(root, "*.test", SearchOption.AllDirectories)
+            var files = Directory.GetFiles(root, "*.test", SearchOption.AllDirectories)
                 .Where(f => new FileInfo(f).Length > 0)
                 .Where(f => !excluded.Contains(Path.GetFileName(f)))
-                .Where(f => !f.StartsWith(indexDir, StringComparison.OrdinalIgnoreCase))
+                .Where(f => !f.StartsWith(indexDir, StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrWhiteSpace(fileFilter))
+            {
+                files = files.Where(f => Path.GetFileName(f).Contains(fileFilter, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return files
                 .OrderBy(f => f)
                 .Select(f => new object[] { f });
         }

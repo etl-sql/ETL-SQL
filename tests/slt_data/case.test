@@ -56,3 +56,20 @@ bar
 baz
 foo
 NULL
+
+# Simple CASE expression (CASE operand WHEN ...)
+query T
+SELECT CASE a WHEN 1 THEN 'first' WHEN 2 THEN 'second' ELSE 'other' END
+FROM t1 ORDER BY a;
+----
+first
+second
+other
+other
+
+# Simple CASE with NULL operand (NULL does not match literal values, falls to ELSE)
+query T
+SELECT CASE b WHEN 'foo' THEN 'match' ELSE 'no_match' END
+FROM t1 WHERE b IS NULL;
+----
+no_match
