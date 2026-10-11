@@ -264,6 +264,17 @@ class load and shared background-service state from its startup/shutdown observa
   now prints the breaches. Nothing else about it was changed; read the breach before touching the
   thresholds.
 
+  **Open: the browser lane on the Windows CI runner.** Three CI runs on `release/v0.21.0` gave three
+  different results: one sandbox journey timed out after 20 seconds (2026-10-08), all tests passed
+  (2026-10-11, `90de4963d`), and two failed (`3c7d89195`). The same commit range passes 929 of 929
+  locally and in a clean worktree. In the last run one navigation failed in 54 ms with
+  `net::ERR_NO_BUFFER_SPACE`, which is Windows refusing a socket for lack of buffer space or ports,
+  and a reader sandbox page never reported ready while its folder tree still said "Loading". Both
+  fit one cause, requests that could not be made, but only the first is shown by the log. The run
+  took 19 minutes against 13 locally. Not yet known: whether the runner is short of memory or the
+  lane is leaving sockets open. No wait was lengthened and no retry was added. The next step is to
+  record failed requests and the process's handle and socket counts when a navigation fails.
+
 
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
 diagnostics belong in generated evidence, not a new release-specific tracking file.

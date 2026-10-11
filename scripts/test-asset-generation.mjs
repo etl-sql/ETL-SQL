@@ -11,7 +11,9 @@ import assetInputs from './lib/browser-asset-inputs.cjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const entrypointsOnly = process.argv.includes('--entrypoints-only');
-const tempBase = fs.existsSync(path.join(repo, 'scratch')) ? path.join(repo, 'scratch') : os.tmpdir();
+// The wrappers report the real path. A temp directory given as a Windows short name
+// (RUNNER~1) or through a symlink (macOS /var) would otherwise never compare equal to it.
+const tempBase = fs.realpathSync.native(fs.existsSync(path.join(repo, 'scratch')) ? path.join(repo, 'scratch') : os.tmpdir());
 const root = fs.mkdtempSync(path.join(tempBase, 'etlsql-asset-generation espaces-é-$literal-'));
 const sharedRel = 'src/ETL-SQL.ReportRuntime/Resources/Shared';
 const portalJsRel = 'src/ETL-SQL.Portal/wwwroot/js';
