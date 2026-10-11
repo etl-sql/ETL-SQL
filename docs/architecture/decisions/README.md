@@ -45,5 +45,11 @@
 | [Verified Viewer Context for Gateway PostgreSQL Resources](verified-viewer-context.md) | Separates asserted application context from delegated authentication and defines the signed envelope and PostgreSQL installation contract. |
 | [Provider-Neutral Fault Certification](provider-neutral-fault-certification.md) | Provider-neutral fault certification scenarios and observations across local, Docker, and cloud adapters. |
 | [ETL-SQL Studio (Report Studio, Script Editor, and Pipeline Studio Architecture)](etl-sql-studio.md) | Flagship visual authoring environment combining Report Studio (WYSIWYG dashboard builder), Script Editor, and Pipeline Studio with live data snapshots. |
+| [Studio Authoring Completeness](studio-authoring-completeness.md) | Decision that Studio combines the ReportBuilder and WorkstationEditor foundations into one authoring experience, with the status of the completeness inventories. |
+| [Studio Report-Authoring Completeness Inventory](studio-report-authoring-inventory.md) | Report workflows mapped to Studio in both hosts, with the acceptance fixture each still needs. |
+| [Studio Script and ETL Authoring Completeness Inventory](studio-script-etl-authoring-inventory.md) | Script and ETL workflows mapped to Studio in both hosts, with the acceptance fixture each still needs. |
+| [Studio Restricted Practice Execution](studio-practice-execution.md) | Decision on how a learner may run the practice failure and repair exercise, and what acceptance requires. |
+| [Studio Beginner Report Journey Evidence](studio-beginner-report-evidence.md) | Recorded run of the beginner report journey in the Portal and desktop hosts. |
+| [Studio Desktop Practice Evidence](studio-desktop-practice-evidence.md) | Recorded run of the desktop failure and repair practice exercise. |
 | [New Chart Types Architectural Evaluation](new-chart-types-evaluation.md) | Architectural evaluation of candidate chart types: Polar coordinate bar/line, Calendar heatmap, Streamgraph, and Parallel coordinates. |
 | [Geographic Density Map Architectural Evaluation](geographic-density-map-evaluation.md) | Architectural evaluation of geographic density maps (MAP MODE = DENSITY) evaluating hexbin, 2D KDE contour, and raster approaches. |
