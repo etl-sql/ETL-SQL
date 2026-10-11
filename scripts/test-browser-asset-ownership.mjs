@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ignoreEnd, ignoreStart, ownershipPlan, writeIgnoreRules } from './browser-asset-ownership.mjs';
+import { touchesBrowserAssets } from './check-staged-browser-ownership.mjs';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'etlsql-ownership espaces-é-'));
 const shared = 'src/ETL-SQL.ReportRuntime/Resources/Shared';
@@ -42,6 +43,13 @@ const inventory = () => write('artifacts/browser-assets.json', JSON.stringify({ 
 const problems = () => ownershipPlan(root).problems;
 const expectProblem = (pattern, message) => assert.ok(problems().some(problem => pattern.test(problem)),
     `${message}\nReported: ${JSON.stringify(problems(), null, 2)}`);
+
+// The pre-commit hook runs the check only for commits that can change the answer.
+for (const file of [owner, emitted, portalCopy, playerCopy, page, 'types/etlsql.d.ts', '.gitignore',
+    'scripts/lib/browser-asset-inputs.cjs', 'src/etl-sql-vscode/media/report-runtime.js', 'Directory.Build.targets'])
+    assert.equal(touchesBrowserAssets([file]), true, `${file} must trigger the staged ownership check.`);
+for (const file of ['src/ETL-SQL.Engine/Program.cs', 'docs/README.md', 'scripts/test-dag.mjs', 'src/ETL-SQL.Portal/Program.cs', 'TODO.md'])
+    assert.equal(touchesBrowserAssets([file]), false, `${file} must not trigger the staged ownership check.`);
 
 try {
     git('init', '-q');

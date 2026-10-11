@@ -270,7 +270,8 @@ enter the output set automatically. No broad JavaScript ignore is needed to iden
 
 `scripts/browser-asset-ownership.mjs` reconciles that inventory with the Git index. Run without
 arguments it prints the removal plan: each output, its owner, and the count of inputs that must stay
-tracked. `--check` is the gate pre-push and CI run after preparation. It reads staged content, so an
+tracked. `--check` is the gate pre-push, pre-release, and CI run after preparation; the pre-commit hook runs it
+for commits that touch browser assets. It reads staged content, so an
 unstaged file cannot stand in for a missing one. It fails when:
 
 - an owner or another freshness input is untracked or ignored;

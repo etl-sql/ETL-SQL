@@ -1115,7 +1115,7 @@ does not close build, package, runtime, or Git-index acceptance.
   block, an unignored or re-tracked output, and any rule that hides a required input. Fixture checks use
   a real Git repository and cover an added output, an output that becomes authored again, and a path
   containing glob characters. Applying the block belongs to the untracking task below.
-- [ ] **Adapt gates to generated, ignored outputs.** Update asset drift checks, pre-push/pre-release gates,
+- [x] **Adapt gates to generated, ignored outputs.** Update asset drift checks, pre-push/pre-release gates,
   browser type/lint checks, and tests that read JavaScript from disk to run after preparation. Continue
   checking deterministic output and host parity, detect missing/stale assets, and prevent generated files
   from being accidentally tracked again. Reconcile the PowerShell sync path with the canonical Node entry
@@ -1130,6 +1130,10 @@ does not close build, package, runtime, or Git-index acceptance.
   The three test projects that read browser assets from disk each reference a host project that runs
   the asset verifier, so an ordinary build cannot test stale files; `--no-build` paths are covered by
   their own task above.
+  Done (2026-10-11). The pre-commit hook now runs the same check for commits that touch browser assets,
+  judging the staged tree. The PowerShell sync wrapper delegates to the Node entry point, the type and
+  lint baselines hold no entries, and the fixture checks cover a newly generated output and a
+  force-added one. CI has run the index check on every push since `490b9f57d`.
 - [ ] **Verify source-analysis coverage after untracking outputs.** Audit CodeQL exclusions and tools
   that discover files through Git or JavaScript-only patterns. Ensure they still inspect retained
   Portal and shared-runtime TypeScript, remaining handwritten JavaScript, and relevant generator inputs.

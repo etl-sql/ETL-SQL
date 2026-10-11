@@ -4,5 +4,7 @@
 set -eu
 
 node scripts/check-staged-csharp.mjs
+# Browser owners, generated outputs and the index must agree in the commit being made.
+node scripts/check-staged-browser-ownership.mjs
 
 exit 0
