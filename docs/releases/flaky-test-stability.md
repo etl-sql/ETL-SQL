@@ -259,10 +259,13 @@ class load and shared background-service state from its startup/shutdown observa
   first now has a timeout sized for what it runs; the second measures one preparation and waits ten
   of them.
 
-  The third has no known cause. `test-service-capacity-smoke.mjs` reported that a 0.2-second
-  workload against a local stub breached its criteria, and its message did not say which one. It
-  now prints the breaches. Nothing else about it was changed; read the breach before touching the
-  thresholds.
+  The third needed its own message first. `test-service-capacity-smoke.mjs` reported that a
+  0.2-second workload against a local stub breached its criteria without saying which. Once it
+  printed the breach, the next failure read `p95 3325.01ms > 2000ms` for the Orchestrator step, in
+  a run where the consumer gate took 22 minutes against 8 locally. The smoke run checks the
+  harness against a stub in its own process, so a latency ceiling there measures the runner. It
+  now uses a ceiling that only a hang would reach; error rate, contention, and queue criteria are
+  unchanged.
 
   **Open: the browser lane on the Windows CI runner.** Three CI runs on `release/v0.21.0` gave three
   different results: one sandbox journey timed out after 20 seconds (2026-10-08), all tests passed
@@ -274,6 +277,18 @@ class load and shared background-service state from its startup/shutdown observa
   took 19 minutes against 13 locally. Not yet known: whether the runner is short of memory or the
   lane is leaving sockets open. No wait was lengthened and no retry was added. The next step is to
   record failed requests and the process's handle and socket counts when a navigation fails.
+
+  Two further runs the same day: one passed all 929, and one failed a single test in teardown.
+  `OrchestratorWebFactory.DisposeAsync` deleted its temporary directory while `etlsql.db` was still
+  open (`ScheduledJobActivityBrowserTests.TriageUsesRealDurableEvidenceAndReportsPartialProxyReruns`).
+  It clears the connection pool for one connection string and then deletes; `PortalWebFactory`
+  clears every factory pool and reports what is left. Whether a second pool or a run still
+  executing held the file is not known. Five runs, four different outcomes, none reproduced locally.
+
+  **Open: `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds` in the Docker lane.** It failed in
+  2 ms with "Failed to connect to host" in two runs on 2026-10-11 and passed in the two before
+  them. A 2 ms refusal means nothing was listening on the mapped port when the test ran. The
+  container's readiness check was not examined.
 
 
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
