@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Add a Git-index ownership check for generated browser assets, run by pre-push and CI. It reports
+  the exact removal plan and the ignore rules derived from the ownership inventory. It rejects an
+  untracked or ignored owner, a staged edit to a generated file, and a page or project file naming
+  an asset nobody owns. Generated outputs stay tracked until the delivery matrix is accepted.
 - Prepare and verify browser assets before .NET builds in the Portal, Orchestrator service, and
   sandbox-worker images; preserve prepared bytes during Portal publish. Keep the alert evaluator's
   Orchestrator client inside its per-run scope

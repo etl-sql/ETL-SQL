@@ -268,6 +268,25 @@ API validator remain tracked inputs. Their existing generators own changes; do n
 The inventory is generated from discovered source paths and host import closures, so new migrations
 enter the output set automatically. No broad JavaScript ignore is needed to identify outputs.
 
+`scripts/browser-asset-ownership.mjs` reconciles that inventory with the Git index. Run without
+arguments it prints the removal plan: each output, its owner, and the count of inputs that must stay
+tracked. `--check` is the gate pre-push and CI run after preparation. It reads staged content, so an
+unstaged file cannot stand in for a missing one. It fails when:
+
+- an owner or another freshness input is untracked or ignored;
+- a staged output differs from its prepared bytes, which means someone edited generated code;
+- a tracked page or one of the five asset-consuming project files names a script, stylesheet, or
+  map that is neither a tracked input nor an inventoried output;
+- an output sits on the wrong side of the index for the declared layout.
+
+The layout is declared by a managed block in `.gitignore`. Without the block, every output must be
+tracked. With it, no output may be tracked and each must be ignored by its own anchored rule; no
+pattern is used, so a rule cannot hide an authored neighbour. `--ignore-rules` prints the block and
+`--write-ignore` replaces it, leaving other rules untouched. After the cutover, adding a module
+means running `--write-ignore`; the gate fails until the block matches the inventory. Do not add the
+block before the delivery paths in the
+[delivery matrix](../../releases/v0.21.0-browser-asset-delivery-matrix.md) are accepted.
+
 `scripts/test-asset-generation.mjs` runs preparation in an isolated source-only tree. It covers
 missing directories and outputs, repeat-run stability, rename/delete cleanup, import closure,
 failed compilation, and the MSBuild verifier's missing/stale/new-source failures.

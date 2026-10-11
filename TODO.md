@@ -635,6 +635,11 @@ remain open. Evidence is under `artifacts/section1/container-source-only-*`,
 - [x] Pass the isolated candidate startup, tenant-partition, alert-delivery, and hosted-service tests.
 - [x] Pass source-only container runtime checks: served-asset hashes, embedded runtime resources,
   and the absence of Node in all three runtime images.
+- [x] Add the Git-index ownership check (`scripts/browser-asset-ownership.mjs`): removal plan, staged-byte
+  comparison, page and project-file consumer tracing, and the tracked/ignored layout gate. Pre-push and
+  CI run it after preparation. Fixture checks cover both layouts; each rule fails when removed.
+- [x] Record the [delivery matrix](docs/releases/v0.21.0-browser-asset-delivery-matrix.md) for the
+  current candidate. Source-state rows are accepted; every package and platform row is open.
 
 **Horizon:** v0.21.0
 
@@ -660,11 +665,12 @@ have passed acceptance. Published JavaScript must continue to be generated and s
 cutover is ready only when the required checks below pass against the same candidate. Completing a
 TypeScript conversion does not by itself close that output's build, package, or runtime acceptance.
 
-**Readiness (2026-10-09):** Preparation and preliminary source-only checks are implemented. The current
-prepared inventory contains 473 outputs from 88 shared and 94 Portal TypeScript owners, including
-the offline bundle and host copies. Governance read, mutation, dialog, and native-host acceptance
+**Readiness (2026-10-11):** Preparation and preliminary source-only checks are implemented. The current
+prepared inventory contains 491 outputs from 88 shared and 112 Portal TypeScript owners, including
+the offline bundle and 290 host copies. All 491 are still tracked; 263 retained inputs are tracked and
+none is ignored. Governance read, mutation, dialog, and native-host acceptance
 have passed. This inventory does not complete source-control acceptance: the earlier
-source-only build and packaged-host evidence covered 403 outputs and must be refreshed against
+source-only build and packaged-host evidence covered 380 to 403 outputs and must be refreshed against
 the final candidate. Refresh the inventory and evidence after further source edits.
 Git cleanup remains pending the complete delivery-path checks below. Refresh the earlier snapshot
 evidence against the final source state before untracking; migration of every remaining handwritten Portal module is not a prerequisite
@@ -672,9 +678,9 @@ for removing verified generated outputs.
 
 The v0.21.0 cleanup can proceed through the implementation and verification tasks below. The decision
 to remove outputs from Git depends on their reproducibility and delivery evidence, not just on the
-TypeScript migration milestone. Two Portal page conversion acceptance items remain open in §1.
-The handwritten Orchestrator and catalog/home page modules still need TypeScript owners; admin
-composition and settings now have strict owners and focused/native acceptance.
+TypeScript migration milestone. Every Portal page and module now has a TypeScript owner. The only
+JavaScript left as a tracked input under the asset roots is the schema-generated API validator and
+three vendor bundles (Arrow, Tabulator, CodeMirror).
 The separately generated API validator remains a retained input until its own generation path passes
 the ownership and bootstrap checks below.
 
@@ -835,6 +841,8 @@ does not close build, package, runtime, or Git-index acceptance.
   Windows x64, Linux x64, macOS arm64, and macOS x64 when shipped. For each path, record preparation,
   build/package commands, runtime checks, candidate source state, owner, blockers, and evidence. A skipped
   or unavailable platform check remains open unless that artifact is explicitly removed from the release scope.
+  Progress (2026-10-11): the matrix exists and names every path and platform. It records no owner
+  per path, and no package row has been run on the current candidate.
 - [ ] **Inventory generated outputs and their owners.** Identify TypeScript emits, the offline runtime
   bundle, and generated host copies for Portal, ReportPlayer, WorkstationEditor, and VS Code. Distinguish
   handwritten JavaScript, build/test scripts, vendor libraries, and C#-generated browser contracts; retain
@@ -850,6 +858,9 @@ does not close build, package, runtime, or Git-index acceptance.
   before producing the clean clones or source archives used for final acceptance.
   Before removing an output from the index, check for intentional local edits to that file. Move any
   required change into its canonical owner and regenerate; do not discard work during the cleanup.
+  Progress (2026-10-11): the ownership check now gates owner tracking, staged output edits, and
+  references from tracked pages and the five asset-consuming project files. Still open: the extension's
+  `out/` and React UI build outputs, C# string references to asset URLs, and VSIX file lists.
 - [ ] **Reject ownership conflicts before writing assets.** Preflight the complete compiler, bundle,
   and host-copy output set before preparation overwrites or removes files. Reject duplicate owners,
   case-only collisions, and a generated target that is also a retained handwritten or vendor input.
@@ -1026,12 +1037,17 @@ does not close build, package, runtime, or Git-index acceptance.
   repeat preparation restores the complete asset set without changing tracked inputs. Document how Git
   cleanup affects ignored assets, dependencies, and manifests, with a preview and targeted cleanup
   commands; preserve authored files and local source edits. Cover IDE and sandbox startup after cleanup.
-- [ ] **Maintain precise generated-output ignore rules.** Derive the ignored paths from the verified
+- [x] **Maintain precise generated-output ignore rules.** Derive the ignored paths from the verified
   ownership inventory, or provide a checked update command that keeps the rules in sync with it. Cover
   new TypeScript modules and host copies, source renames/deletions, and an output path becoming an authored
   input again. Reject broad rules that hide handwritten JavaScript, tooling, vendor sources, declarations,
   or lockfiles. Verify ignore behavior with Git as well as the inventory; adding a new module must not
   require someone to remember an unverified parallel list. Apply the rules only at the verified cutover.
+  Done as tooling; not yet applied. `browser-asset-ownership.mjs --ignore-rules` derives one anchored
+  rule per inventoried output and `--write-ignore` replaces the managed block. The gate rejects a stale
+  block, an unignored or re-tracked output, and any rule that hides a required input. Fixture checks use
+  a real Git repository and cover an added output, an output that becomes authored again, and a path
+  containing glob characters. Applying the block belongs to the untracking task below.
 - [ ] **Adapt gates to generated, ignored outputs.** Update asset drift checks, pre-push/pre-release gates,
   browser type/lint checks, and tests that read JavaScript from disk to run after preparation. Continue
   checking deterministic output and host parity, detect missing/stale assets, and prevent generated files
@@ -1042,6 +1058,9 @@ does not close build, package, runtime, or Git-index acceptance.
   file so precise ignore rules cannot silently fall behind the ownership inventory. Keep type/lint baselines empty.
   Commit checks must inspect staged ownership/configuration so unrelated unstaged changes cannot mask
   a missing input or generated file in the proposed change. CI must enforce the resulting tracked tree.
+  Progress (2026-10-11): the Git-index ownership check runs in pre-push and CI and reads staged content.
+  Still open: the pre-release gates do not run it, and tests that read JavaScript from disk have not
+  been audited for running after preparation.
 - [ ] **Verify source-analysis coverage after untracking outputs.** Audit CodeQL exclusions and tools
   that discover files through Git or JavaScript-only patterns. Ensure they still inspect retained
   Portal and shared-runtime TypeScript, remaining handwritten JavaScript, and relevant generator inputs.
@@ -1129,6 +1148,9 @@ does not close build, package, runtime, or Git-index acceptance.
   the precise ignore changes and flag modified outputs for reconciliation with their owners. Verify the
   report excludes handwritten tooling and vendor inputs, preserves local files, and does not rewrite
   release tags or history. Recompute the plan if its source state or ownership inventory changes.
+  Progress (2026-10-11): `node scripts/browser-asset-ownership.mjs` (add `--json` for the full list)
+  produces the plan from the current inventory and index: 491 removals today. It does not yet attach
+  delivery-path evidence per removal; the final plan waits for the accepted candidate.
 - [ ] **Untrack only reproducible generated assets.** After the source-only build and packaged-runtime checks
   pass, add precise ignore rules and remove the identified outputs from the Git index while retaining locally
   generated files. Preserve canonical CSS, maps, vendor assets, source files, and notices; remove duplicated

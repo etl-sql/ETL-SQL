@@ -26,6 +26,7 @@
 | [v0.19.0 Performance Results — Scale Certification](v0.19.0-performance-results.md) | **Status:** Decision record. **There is no v0.19.0 performance regression.** Measured by the |
 | [ETL-SQL v0.19.0](v0.19.0.md) | **Released:** 2026-09-06 |
 | [v0.19.0 Code Review](v0.19.0-code-review.md) | **Reviewed:** 2026-09-07 · Checkout `1188a56e1` including the working tree; no product source changed. |
+| [v0.21.0 Browser Asset Delivery Matrix](v0.21.0-browser-asset-delivery-matrix.md) | Which delivery paths have been accepted with generated browser JavaScript absent from the Git index, and what blocks the rest. |
 | [v0.20.0 Browser File Split — Baseline](v0.20.0-browser-split-baseline.md) | Pre-split measurements for `designer.js` and `report-runtime.js`, recorded before any code moved. |
 | [v0.20.0 Performance Results — Scale Harness Investigation](v0.20.0-performance-results.md) | Output capture and theory-discovery measurements; clean-candidate calibration remains open. |
 | [ETL-SQL v0.20.0 — Candidate](v0.20.0.md) | Code stability, Studio authoring and native chart semantics; release certification is pending. |

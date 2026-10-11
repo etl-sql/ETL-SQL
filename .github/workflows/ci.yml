@@ -52,6 +52,9 @@ jobs:
         shell: pwsh
         run: node .\scripts\sync-assets.js -Check
 
+      - name: Check browser asset ownership against the Git index
+        run: node scripts/browser-asset-ownership.mjs --check
+
       - name: Check browser-side types
         run: node scripts/typecheck-browser.mjs
 

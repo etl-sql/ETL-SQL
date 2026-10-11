@@ -42,6 +42,13 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "Shared report runtime assets are out of sync. Edit canonical files in 'src/ETL-SQL.ReportRuntime/Resources/Shared/' and run 'node .\scripts\sync-assets.js'."
     exit $LASTEXITCODE
 }
+# The staged tree must hold every owner and input; generated outputs sit on the side of the index
+# that .gitignore declares.
+& node (Join-Path $ScriptRoot "browser-asset-ownership.mjs") --check
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Browser ownership check failed. Track the listed inputs, or move output edits into their owners and run 'node .\scripts\sync-assets.js'."
+    exit $LASTEXITCODE
+}
 
 # 3. Browser Type Gate
 Write-Host "[3/13] Checking browser-side types..." -ForegroundColor White
