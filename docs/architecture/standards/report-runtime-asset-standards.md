@@ -110,8 +110,8 @@ under `scripts/typecheck`; do not add another bundler or a Node invocation to th
 
 Keep unmigrated JavaScript where it is. A migrated module has exactly one authored implementation:
 its `.ts` file. Its old `.js` path becomes generated output, with a banner identifying the TypeScript
-source. These outputs remain tracked until the clean-checkout and packaged-host checks in `TODO.md`
-§1.1 pass. Do not untrack them individually ahead of the verified preparation workflow.
+source. Generated outputs are not tracked: since v0.21.0 each one is ignored by an exact rule in
+`.gitignore`, and a fresh clone builds them with preparation.
 Portal's generated shared copies must never become Portal-owned TypeScript inputs.
 
 Preparation emits into memory, validates the offline bundle and host import closures, then preflights
@@ -284,9 +284,9 @@ The layout is declared by a managed block in `.gitignore`. Without the block, ev
 tracked. With it, no output may be tracked and each must be ignored by its own anchored rule; no
 pattern is used, so a rule cannot hide an authored neighbour. `--ignore-rules` prints the block and
 `--write-ignore` replaces it, leaving other rules untouched. After the cutover, adding a module
-means running `--write-ignore`; the gate fails until the block matches the inventory. Do not add the
-block before the delivery paths in the
-[delivery matrix](../../releases/v0.21.0-browser-asset-delivery-matrix.md) are accepted.
+means running `--write-ignore`; the gate fails until the block matches the inventory. The block was
+added in v0.21.0; the [delivery matrix](../../releases/v0.21.0-browser-asset-delivery-matrix.md)
+records what was verified first and what was still open.
 
 CodeQL excludes generated JavaScript so findings land on the TypeScript that produced it.
 `scripts/test-source-analysis-coverage.mjs` reads the exclusions from `.github/workflows/codeql.yml` and
@@ -331,7 +331,7 @@ failed compilation, and the MSBuild verifier's missing/stale/new-source failures
 `dotnet clean` removes build output and the build record under `artifacts/browser-assets-built/`. It
 does not touch prepared assets, which live in source folders, so no preparation is needed afterwards.
 
-Once generated outputs are ignored by Git, `git clean -X` deletes them together with the manifests and
+Generated outputs are ignored by Git, so `git clean -X` deletes them together with the manifests and
 the restored compiler. Preview first with `git clean -ndX`. Afterwards run the restore and preparation
 commands above; nothing authored is ignored, so nothing authored is lost. To remove only generated
 outputs, use the proof script instead of `git clean`: it deletes exactly the inventoried files and

@@ -202,7 +202,7 @@ It serves a Storybook-style harness (opens at `http://localhost:8099/tools/ui-sa
 **Build & deploy notes:**
 
 - The sandbox is **dev-only** — it is not part of any build or shipped artifact (safe to delete).
-- After editing a **canonical** shared asset under `Resources/Shared/...`, run `scripts/sync-assets.ps1` so the host copies (`wwwroot`, VS Code `media`) match. CI fails if they drift — verify with `scripts/sync-assets.ps1 -Check`.
+- Generated browser files (compiled TypeScript, the offline bundle, and the host copies under `wwwroot` and VS Code `media`) are not in Git. After cloning, and after editing a TypeScript owner or a **canonical** shared asset under `Resources/Shared/...`, run `node scripts/sync-assets.js`, then verify with `node scripts/sync-assets.js -Check`. If you add, rename, or delete an owner, also run `node scripts/browser-asset-ownership.mjs --write-ignore` and commit `.gitignore`.
 - To run a change in the real portal, build/run the `ETL-SQL.Portal` project as usual.
 
 ---

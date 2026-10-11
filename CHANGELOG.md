@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Remove generated browser JavaScript from source control. The 491 compiler emits, host copies, and
+  the offline bundle are now ignored by exact rules and rebuilt by `node scripts/sync-assets.js`. A
+  fresh clone needs `npm ci --prefix scripts/typecheck` and that command before its first build;
+  published products are unchanged and still need no Node.js.
 - Reject binaries built from an older browser asset preparation when a build is skipped. Each
   asset-consuming project records the preparation it built against. `dotnet publish --no-build`,
   `dotnet run --no-build`, and the `-NoBuild` test and smoke lanes now fail with a rebuild instruction

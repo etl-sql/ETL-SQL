@@ -665,10 +665,9 @@ have passed acceptance. Published JavaScript must continue to be generated and s
 cutover is ready only when the required checks below pass against the same candidate. Completing a
 TypeScript conversion does not by itself close that output's build, package, or runtime acceptance.
 
-**Readiness (2026-10-11):** Preparation and preliminary source-only checks are implemented. The current
-prepared inventory contains 491 outputs from 88 shared and 112 Portal TypeScript owners, including
-the offline bundle and 290 host copies. All 491 are still tracked; 263 retained inputs are tracked and
-none is ignored. Governance read, mutation, dialog, and native-host acceptance
+**Cutover (2026-10-11):** The 491 generated outputs left the Git index and are ignored by exact rules.
+The prepared inventory contains 491 outputs from 88 shared and 112 Portal TypeScript owners, including
+the offline bundle and 290 host copies; 263 retained inputs are tracked and none is ignored. Governance read, mutation, dialog, and native-host acceptance
 have passed. This inventory does not complete source-control acceptance: the earlier
 source-only build and packaged-host evidence covered 380 to 403 outputs and must be refreshed against
 the final candidate. Refresh the inventory and evidence after further source edits.
@@ -1267,16 +1266,16 @@ does not close build, package, runtime, or Git-index acceptance.
   in `test-asset-generation.mjs`). After a full 115-check run the read-only asset check and the index
   ownership check both pass, no temporary module remains, and no tracked browser file has changed. CI
   and pre-push rerun the read-only check after the consumer gate.
-- [ ] **Produce the exact source-control removal plan.** Generate a read-only report from the final
+- [x] **Produce the exact source-control removal plan.** Generate a read-only report from the final
   ownership inventory and current Git index. List each proposed removal, its retained owner or generator,
   regeneration command, and delivery-path evidence; list the inputs that must remain tracked. Include
   the precise ignore changes and flag modified outputs for reconciliation with their owners. Verify the
   report excludes handwritten tooling and vendor inputs, preserves local files, and does not rewrite
   release tags or history. Recompute the plan if its source state or ownership inventory changes.
-  Progress (2026-10-11): `node scripts/browser-asset-ownership.mjs` (add `--json` for the full list)
-  produces the plan from the current inventory and index: 491 removals today. It does not yet attach
-  delivery-path evidence per removal; the final plan waits for the accepted candidate.
-- [ ] **Untrack only reproducible generated assets.** After the source-only build and packaged-runtime checks
+  Done (2026-10-11). `node scripts/browser-asset-ownership.mjs --json` produced the plan the cutover
+  applied: 491 removals, each with its owner and regeneration command, no modified output, no problem,
+  and 263 inputs that stay tracked. Delivery evidence is per path in the delivery matrix, not per file.
+- [x] **Untrack only reproducible generated assets.** After the source-only build and packaged-runtime checks
   pass, add precise ignore rules and remove the identified outputs from the Git index while retaining locally
   generated files. Preserve canonical CSS, maps, vendor assets, source files, and notices; remove duplicated
   non-JavaScript host assets only where the ownership inventory and generation checks explicitly cover them.
@@ -1284,6 +1283,13 @@ does not close build, package, runtime, or Git-index acceptance.
   fresh checkout of the resulting source state. Confirm a second generation leaves Git clean and that the
   ownership gate rejects accidentally retracked outputs, including outputs from newly migrated modules.
   Apply the cleanup to the v0.21.0 tree; preserve released tags and repository history.
+  Done (2026-10-11). One commit adds the managed ignore block and removes the 491 inventoried outputs
+  from the index; local files are kept, and no tag or earlier commit is rewritten. From a fresh clone of
+  that commit: no generated file exists, an unprepared build fails with the preparation command,
+  preparation yields 491 outputs byte-identical to the last tracked ones, a second preparation leaves
+  Git clean, and a force-added output is rejected by the ownership check. The decision to cut over
+  before every delivery-matrix row was accepted was taken with the open rows listed there: installs
+  other than the workstation MSI, the VSIX in a webview, and macOS.
 - [ ] **Verify existing-clone and branch-switch behavior.** Exercise updating a v0.20.0 clone to the
   source-only layout and switching between revisions with tracked and ignored outputs. Document when
   preparation must run, verify stale outputs/manifests cannot pass the build gate, and preserve local

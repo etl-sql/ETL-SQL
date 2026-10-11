@@ -456,15 +456,23 @@ startup also prepares assets once. `sync-assets.js -Check` verifies compiled out
 the browser type gate checks strict TypeScript plus remaining JavaScript. No Node step is added
 to .NET builds; they verify the generated manifest from preparation. Portal-owned TypeScript lives
 under `src/ETL-SQL.Portal/BrowserSources/` and emits to the existing `wwwroot/js/` URLs. See the asset
-standards for source and output ownership. Generated outputs remain tracked until the source-only
-and packaged-host acceptance checks in `TODO.md` §1.1 pass.
+standards for source and output ownership.
+
+**Generated browser files are not in Git.** Every compiler emit, the offline bundle, and every host copy
+is ignored by an exact rule in `.gitignore` and rebuilt by preparation. A fresh clone has none of them,
+so run the two commands above before the first build, and again after pulling changes to browser
+sources. Published products still ship the JavaScript; Node.js is a build prerequisite only. After
+adding, renaming, or deleting a TypeScript owner or a shared asset, run
+`node scripts/browser-asset-ownership.mjs --write-ignore` and commit `.gitignore` with the change; the
+pre-commit hook, pre-push, and CI fail if the ignore rules and the ownership inventory disagree, or if
+a generated file is staged.
 
 1. Edit the canonical file in `src/ETL-SQL.ReportRuntime/Resources/Shared/`, or its TypeScript owner
    when the JavaScript banner identifies generated output.
 2. Run `node .\scripts\sync-assets.js`.
 3. Run `node .\scripts\sync-assets.js -Check`.
 
-Do not "fix" drift by editing generated host copies. The check step compares host copies to the canonical shared source and will fail if they diverge.
+Do not edit generated files. They are not tracked, preparation refuses to overwrite a hand-edited one, and the change would be lost on the next clone; make it in the owner and prepare again.
 
 The sync writes `// @ts-nocheck` into each generated `.js` copy's banner. A host copy is byte-identical
 to the canonical file, so the browser type gate would otherwise report every finding twice, under a path
