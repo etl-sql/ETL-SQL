@@ -81,6 +81,87 @@ function Get-MsiProperty {
 
 <#
 .SYNOPSIS
+    Long file names an MSI installs with one feature.
+
+.DESCRIPTION
+    A component may belong to several features, and a file is only on disk when one of its features
+    is selected. Reading the join answers "does this profile get this file" without an install.
+#>
+function Get-MsiFeatureFileNames {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Feature
+    )
+
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $database = $null
+    $view = $null
+    $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    try {
+        $database = $installer.OpenDatabase($Path, 0)
+        $view = $database.OpenView("SELECT ``File``.``FileName`` FROM ``File``, ``FeatureComponents`` " +
+            "WHERE ``File``.``Component_`` = ``FeatureComponents``.``Component_`` AND ``FeatureComponents``.``Feature_`` = '$Feature'")
+        [void]$view.Execute()
+        while ($null -ne ($record = $view.Fetch())) {
+            # FileName is "short|long" when the long name is not a valid 8.3 name.
+            [void]$names.Add(([string]$record.StringData(1)).Split('|')[-1])
+        }
+        return ,$names
+    } finally {
+        if ($null -ne $view) { try { [void]$view.Close() } catch { } }
+        foreach ($comObject in @($view, $database, $installer)) {
+            if ($null -ne $comObject -and [Runtime.InteropServices.Marshal]::IsComObject($comObject)) {
+                [void][Runtime.InteropServices.Marshal]::ReleaseComObject($comObject)
+            }
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+    The browser files the Desktop Player needs, from the prepared ownership inventory.
+
+.DESCRIPTION
+    Returns each ReportPlayer output's path relative to wwwroot with its SHA-256. The Player is part
+    of the Workstation feature, so these are the files a workstation-only install must contain.
+#>
+function Get-PlayerBrowserAssets {
+    param([Parameter(Mandatory)][string]$RepoRoot)
+
+    $inventoryPath = Join-Path $RepoRoot 'artifacts/browser-assets.json'
+    if (-not (Test-Path -LiteralPath $inventoryPath)) {
+        throw "Browser ownership inventory not found at '$inventoryPath'. Run node scripts/sync-assets.js first."
+    }
+    $prefix = 'src/ETL-SQL.ReportPlayer/wwwroot/'
+    $assets = @((Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json).outputs |
+        Where-Object { $_.path.StartsWith($prefix, [StringComparison]::Ordinal) } |
+        ForEach-Object { [pscustomobject]@{ RelativePath = $_.path.Substring($prefix.Length); Sha256 = [string]$_.sha256 } })
+    if ($assets.Count -eq 0) { throw 'The ownership inventory lists no ReportPlayer assets.' }
+    return $assets
+}
+
+<#
+.SYNOPSIS
+    Fails when the Workstation feature does not carry every file the Desktop Player loads.
+#>
+function Assert-MsiWorkstationPlayerAssets {
+    param(
+        [Parameter(Mandatory)][string]$MsiPath,
+        [Parameter(Mandatory)][string]$RepoRoot
+    )
+
+    $installed = Get-MsiFeatureFileNames -Path $MsiPath -Feature 'Feature_Workstation'
+    $missing = @(Get-PlayerBrowserAssets -RepoRoot $RepoRoot |
+        ForEach-Object { Split-Path -Leaf $_.RelativePath } |
+        Where-Object { -not $installed.Contains($_) } | Sort-Object -Unique)
+    if ($missing.Count -gt 0) {
+        throw ("The Workstation feature installs ETL-SQL-Player.exe without $($missing.Count) of the files it serves " +
+               "(for example $($missing[0])). A workstation-only install would open reports with no runtime.")
+    }
+}
+
+<#
+.SYNOPSIS
     The static upgrade contract: same UpgradeCode, ascending ProductVersion.
 
 .DESCRIPTION

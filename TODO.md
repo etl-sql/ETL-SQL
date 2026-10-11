@@ -1200,6 +1200,12 @@ does not close build, package, runtime, or Git-index acceptance.
   journeys and confirm the current import closure loads. Use the documented rollback or reinstall path
   and verify that revision's own assets. Preserve configuration and user data, and require no Node.js
   installation or checkout during these runtime checks. Link the upgrade evidence in the delivery matrix.
+  Progress (2026-10-11): the MSI workflow's v0.20.1 to current in-place upgrade passes in CI again after
+  its job gained the compiler restore. It now also asserts, in the package and on disk after the
+  upgrade, that the workstation install holds every Desktop Player asset with the prepared bytes; that
+  assertion found the assets missing from the Workstation feature in the shipped v0.20.1 installer, now
+  fixed. Not yet run in CI. Still open: a Portal-profile upgrade with served-asset checks, DEB upgrade,
+  VSIX update, browser caches, and rollback.
 - [ ] **Verify the published asset boundary.** Inspect the actual publish folders, installers, container
   images, and VSIX to confirm generated JavaScript and required canonical assets are included even when
   Git ignores them. Ensure TypeScript sources, declaration files, development source maps, temporary test

@@ -94,6 +94,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Install the Desktop Player's report runtime with the Workstation feature. The Windows installer
+  shipped `ETL-SQL-Player.exe` there but its scripts and styles only with the Portal features, so a
+  workstation-only install opened reports with no runtime. The MSI certification now checks this in
+  the package and after the upgrade.
 - Start the Linux CLI and hosts for an account that has no `~/.local/share` yet. Start-up failed with
   "Local application data directory could not be resolved" before any command ran, including
   `--version`. A new user or service account is in exactly that state.

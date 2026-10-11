@@ -144,6 +144,9 @@
                      Description="Script editor (TUI), Language Server (LSP), Report CLI, and Desktop Player — the workstation authoring toolkit. Adds the install folder to the system PATH.">
                 <Condition Level="0"><![CDATA[INSTALL_WORKSTATION <> "1"]]></Condition>
                 <ComponentGroupRef Id="WorkstationComponents" />
+                <!-- The Desktop Player serves its report runtime from wwwroot. Without this group a
+                     workstation-only install has the Player and none of the scripts it loads. -->
+                <ComponentGroupRef Id="PortalWwwroot" />
                 <ComponentRef Id="PathEnvironment" />
                 <ComponentRef Id="AppSettings" />
             </Feature>

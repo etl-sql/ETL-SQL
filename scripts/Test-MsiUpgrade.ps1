@@ -106,6 +106,10 @@ $currentVersionText = $contract.CurrentVersion
 Write-Host ("Static contract OK: UpgradeCode {0}, {1} -> {2}" -f
     $contract.UpgradeCode, $previousVersionText, $currentVersionText) -ForegroundColor Green
 
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Assert-MsiWorkstationPlayerAssets -MsiPath $currentPath -RepoRoot $repoRoot
+Write-Host 'Static contract OK: the Workstation feature carries the Desktop Player assets.' -ForegroundColor Green
+
 if ($StaticChecksOnly) {
     Write-Host 'StaticChecksOnly: skipping the install sequence.' -ForegroundColor Yellow
     return
@@ -182,6 +186,17 @@ try {
         throw 'The upgrade removed or changed the sentinel file; config/data preservation failed.'
     }
 
+    # This install is workstation-only, so anything the Desktop Player serves must be here.
+    foreach ($asset in Get-PlayerBrowserAssets -RepoRoot $repoRoot) {
+        $installedAsset = Join-Path (Join-Path $currentEntry.InstallLocation 'wwwroot') $asset.RelativePath
+        if (-not (Test-Path -LiteralPath $installedAsset)) {
+            throw "The upgraded workstation install is missing Desktop Player asset '$($asset.RelativePath)'."
+        }
+        if ((Get-FileHash -LiteralPath $installedAsset -Algorithm SHA256).Hash -ne $asset.Sha256) {
+            throw "Installed Desktop Player asset '$($asset.RelativePath)' differs from the prepared candidate."
+        }
+    }
+
     $cliPath = Join-Path $currentEntry.InstallLocation 'ETL-SQL.exe'
     if (-not (Test-Path -LiteralPath $cliPath)) { throw "Installed CLI not found at '$cliPath'." }
     $versionOutput = (& $cliPath --version 2>&1 | Out-String).Trim()
@@ -208,7 +223,8 @@ try {
         upgradeCode = $contract.UpgradeCode
         assertions = @(
             'one previous uninstall entry', 'sentinel written to InstallLocation',
-            'one current uninstall entry', 'sentinel preserved', 'installed CLI reports current version',
+            'one current uninstall entry', 'sentinel preserved', 'installed Desktop Player assets match the candidate',
+            'installed CLI reports current version',
             'zero uninstall entries after uninstall'
         )
         logs = @($previousLog, $upgradeLog, $uninstallLog)
