@@ -1064,7 +1064,9 @@ does not close build, package, runtime, or Git-index acceptance.
   a missing input or generated file in the proposed change. CI must enforce the resulting tracked tree.
   Progress (2026-10-11): the Git-index ownership check runs in pre-push, CI, and both pre-release gates
   (on every resume) and reads staged content.
-  Still open: tests that read JavaScript from disk have not been audited for running after preparation.
+  The three test projects that read browser assets from disk each reference a host project that runs
+  the asset verifier, so an ordinary build cannot test stale files; `--no-build` paths are covered by
+  their own task above.
 - [ ] **Verify source-analysis coverage after untracking outputs.** Audit CodeQL exclusions and tools
   that discover files through Git or JavaScript-only patterns. Ensure they still inspect retained
   Portal and shared-runtime TypeScript, remaining handwritten JavaScript, and relevant generator inputs.
@@ -1115,6 +1117,11 @@ does not close build, package, runtime, or Git-index acceptance.
   usable content types, with no HTML fallback or CSP rejection. Exercise case-sensitive URLs and a
   deliberately missing module so the runtime check detects a broken import closure, not just a successful
   host health probe. Confirm the offline viewer loads its embedded runtime without network requests.
+  Progress (2026-10-11): Portal run from the extracted DEB, with no Node on the path, serves its 213
+  outputs with matching bytes and JavaScript content types, and answers 404 for a missing module, a
+  wrong-case URL, and `.ts`/`.map`. That run exposed a start-up failure for accounts with no
+  `~/.local/share`, now fixed. Still open: ReportPlayer, WorkstationEditor, the VSIX in a real webview,
+  the report CLI's offline export, and every non-Linux package.
 - [ ] **Verify installed upgrades deliver the current assets.** Extend the release checklist's existing
   upgrade lanes with browser-asset checks: install v0.20.0, upgrade through each supported delivery path,
   and verify the installed JavaScript, CSS, and embedded bundle match the candidate package. Cover removed
@@ -1132,6 +1139,11 @@ does not close build, package, runtime, or Git-index acceptance.
   prepared outputs even when they are absent from `git ls-files`. Compare packaged asset bytes with
   the final prepared inventory so an older but complete asset set cannot satisfy the package check.
   Preserve the existing no-browser-source-maps policy unless a separate delivery decision changes it.
+  Progress (2026-10-11): the Linux ZIP, DEB, and linux-x64 VSIX built from a source-only archive of
+  `e97278ac5` carry every inventoried output for their hosts with matching bytes (213 Portal, 29
+  ReportPlayer, 101 WorkstationEditor, 59 VS Code media) and no `.ts` or `.map` file. The three
+  container images pass the same comparison over HTTP. Windows and macOS packages, the MSI, and the
+  DMG have not been inspected.
 - [ ] **Verify release metadata after asset generation.** Check checksums, SBOM, provenance, and
   third-party notices against the final assembled packages containing the generated assets. Audit
   file-discovery rules so ignored outputs and bundled vendor components remain represented. Generate
