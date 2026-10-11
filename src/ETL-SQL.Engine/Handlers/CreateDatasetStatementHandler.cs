@@ -221,9 +221,9 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
     private async Task MaterializeSourceQuery(CreateDatasetStatement stmt, IExecutionContext context)
     {
         // Enforce CREATE vs. CREATE OR ALTER uniqueness
+        var reportCtx = context as IReportContext ?? context.ReportContext;
         if (stmt.Mode == ObjectCreationMode.Create
-            && context is IReportContext rc
-            && rc.DatasetDefinitions.ContainsKey(stmt.TempTableName))
+            && reportCtx?.DatasetDefinitions.ContainsKey(stmt.TempTableName) == true)
         {
             throw new ExecutionException(
                 $"Dataset '{stmt.TempTableName}' already exists. Use CREATE OR ALTER DATASET or DROP DATASET first.",
@@ -304,7 +304,8 @@ public class CreateDatasetStatementHandler(ILogger logger) : IStatementHandler
 
     private static void RegisterReportContext(CreateDatasetStatement stmt, IExecutionContext context)
     {
-        if (context is IReportContext rc)
+        var rc = context as IReportContext ?? context.ReportContext;
+        if (rc != null)
             rc.DatasetDefinitions[stmt.TempTableName] = stmt;
     }
 

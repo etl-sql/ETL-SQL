@@ -214,6 +214,7 @@ release-validation/
 
 # Sample Output
 samples/output/
+samples/integration/data/
 *.tmp.json
 
 # Ignore large stress test data

@@ -1,4 +1,25 @@
--- @requires: orchestrator
+/* @owner: 'Manufacturing Analytics'; @steward: 'Manufacturing Analytics';
+   @contact: 'manufacturing-analytics@example.test'; @classification: 'public'; @quality: 'gold'; */
+
+DECLARE @parquet_file PATH = 'data/manufacturing_master.parquet';
+IF FILE_EXISTS(@parquet_file)
+BEGIN
+    CREATE CONNECTION parquet_conn AS PARQUET(PATH=@parquet_file);
+    CREATE OR ALTER DATASET &manufacturing_data
+        ACCESS PUBLIC
+        AS (SELECT * FROM parquet_conn);
+END
+ELSE
+BEGIN
+    CREATE OR ALTER DATASET &manufacturing_data
+        ACCESS PUBLIC
+        AS (
+            SELECT 'M-100' AS MachineID, CAST('2026-01-01 00:00:00' AS DATETIME) AS EventTime, 85.5 AS Temperature, 32.1 AS Pressure, 'Running' AS Status
+            UNION ALL
+            SELECT 'M-101' AS MachineID, CAST('2026-01-01 00:05:00' AS DATETIME) AS EventTime, 92.0 AS Temperature, 35.4 AS Pressure, 'Warning' AS Status
+        );
+END
+
 USE DATASET &manufacturing_data;
 -- ==============================================================================
 -- manufacturing_report.rptsql

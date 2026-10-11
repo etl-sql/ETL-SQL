@@ -19,19 +19,37 @@ END;
 
 -- Change this to !DEV for a non-production rehearsal and update the target
 -- folder/script literals below before replaying the promotion.
-USE SETS !PROD;
+USE SETS !DEV;
 
-CREATE FOLDER '/Finance';
-GRANT EXECUTE ON FOLDER '/Finance' TO GROUP 'FinanceAnalysts';
-GRANT MANAGE ON FOLDER '/Finance' TO GROUP 'FinanceAdmins';
+CREATE CONNECTION portal AS PORTAL(
+    HOST = 'http://localhost:5000',
+    USER = 'admin',
+    PASSWORD = 'Admin12345!Password'
+);
 
-PUBLISH REPORT 'Monthly Sales'
-    FROM 'reports/prod/monthly_sales.rptsql'
-    IN FOLDER '/Finance'
-    WITH (DESCRIPTION = 'Certified monthly revenue by region');
+CREATE CONNECTION orch AS ORCHESTRATOR(
+    HOST = 'localhost',
+    PORT = 5001,
+    API_KEY = 'LocalDevApiKey_32CharsMinimumRequiredForSecurity!'
+);
 
-ALTER REPORT 'Monthly Sales'
-    SET DESCRIPTION = 'Certified monthly revenue by region';
+EXECUTE portal
+BEGIN
+    CREATE GROUP 'FinanceAnalysts';
+    CREATE GROUP 'FinanceAdmins';
+
+    CREATE FOLDER '/Finance';
+    GRANT EXECUTE ON FOLDER '/Finance' TO GROUP 'FinanceAnalysts';
+    GRANT MANAGE ON FOLDER '/Finance' TO GROUP 'FinanceAdmins';
+
+    PUBLISH REPORT 'Monthly Sales'
+        FROM '08_Reporting/sales_report.rptsql'
+        IN FOLDER '/Finance'
+        WITH (DESCRIPTION = 'Certified monthly revenue by region');
+
+    ALTER REPORT 'Monthly Sales'
+        SET DESCRIPTION = 'Certified monthly revenue by region';
+END;
 
 EXECUTE orch
 BEGIN
@@ -39,4 +57,8 @@ BEGIN
     CREATE OR ALTER JOB RefreshMonthlySales FOR REPORT 'Monthly Sales';
     ALTER JOB RefreshMonthlySales ADD SCHEDULE MonthlySalesMorning;
 END;
-REFRESH REPORT 'Monthly Sales';
+
+EXECUTE portal
+BEGIN
+    REFRESH REPORT 'Monthly Sales';
+END;

@@ -136,6 +136,8 @@ namespace ETL_SQL.Connectors.Orchestrator
                 case DropPortalRefreshJobStatement s: await DropJobAsync(s, context); break;
                 case CreateJobStatement s: await CreateScriptJobAsync(s, context); break;
                 case AlterJobStatement s: await AlterScriptJobAsync(s, context); break;
+                case CreateScheduleStatement s: await CreateScheduleAsync(s, context); break;
+                case AlterJobAttachmentStatement s when s.Kind == CatalogObjectKind.Schedule: await AlterJobScheduleAsync(s, context); break;
                 case EnableJobStatement s: await EnableDisableJobAsync(s.Name, enable: true, context); break;
                 case DisableJobStatement s: await EnableDisableJobAsync(s.Name, enable: false, context); break;
                 case TriggerJobStatement s: await TriggerJobAsync(s.Name, context); break;
@@ -238,6 +240,55 @@ namespace ETL_SQL.Connectors.Orchestrator
                 throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
             }
             _logger.WriteLine($"Job '{stmt.JobName}' created in Orchestrator.", ConsoleColor.Green);
+        }
+
+        private async Task CreateScheduleAsync(CreateScheduleStatement stmt, IExecutionContext context)
+        {
+            var req = new
+            {
+                Name = stmt.Name,
+                Cron = stmt.Cron,
+                TimeZone = stmt.TimeZone ?? "UTC",
+                IsEnabled = true,
+                DisplayName = stmt.Metadata.DisplayName ?? stmt.Name,
+                Description = stmt.Metadata.Description,
+                Options = stmt.Metadata.Options
+            };
+            var content = new StringContent(JsonSerializer.Serialize(req, _json), Encoding.UTF8, "application/json");
+            var resp = await SendHttpAsync(() => _http.PostAsync("api/schedules", content));
+            if (resp.StatusCode == System.Net.HttpStatusCode.Conflict &&
+                (stmt.Mode == ObjectCreationMode.CreateOrAlter || stmt.Mode == ObjectCreationMode.CreateOrReplace))
+            {
+                var encoded = Uri.EscapeDataString(stmt.Name);
+                resp = await SendHttpAsync(() => _http.PutAsync($"api/schedules/{encoded}", content));
+            }
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+            }
+            _logger.WriteLine($"Schedule '{stmt.Name}' created in Orchestrator.", ConsoleColor.Green);
+        }
+
+        private async Task AlterJobScheduleAsync(AlterJobAttachmentStatement stmt, IExecutionContext context)
+        {
+            var encodedJob = Uri.EscapeDataString(stmt.JobName);
+            var encodedSchedule = Uri.EscapeDataString(stmt.TargetName);
+            HttpResponseMessage resp;
+            if (stmt.Action == JobAttachmentAction.Add)
+            {
+                resp = await SendHttpAsync(() => _http.PostAsync($"api/scheduled-jobs/{encodedJob}/schedules/{encodedSchedule}", null));
+            }
+            else
+            {
+                resp = await SendHttpAsync(() => _http.DeleteAsync($"api/scheduled-jobs/{encodedJob}/schedules/{encodedSchedule}"));
+            }
+            if (!resp.IsSuccessStatusCode)
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                throw new ExecutionException($"Orchestrator API error ({(int)resp.StatusCode}): {body}");
+            }
+            _logger.WriteLine($"Schedule '{stmt.TargetName}' {(stmt.Action == JobAttachmentAction.Add ? "attached to" : "detached from")} job '{stmt.JobName}'.", ConsoleColor.Green);
         }
 
         private async Task CreateSharedConnectionAsync(CreateConnectionStatement stmt, IExecutionContext context)

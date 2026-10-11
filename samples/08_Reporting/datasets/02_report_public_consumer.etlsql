@@ -1,4 +1,4 @@
--- @requires: portal
+-- @requires: portal-manual
 -- Consumes datasets the producer script deployed to the portal, so it needs portal
 -- execution for the registry, folders, identity and ACLs. Parser coverage is in
 -- DatasetExampleDeckTests; the CLI sample gate skips it.

@@ -33,10 +33,11 @@ public class UseDatasetStatementHandler(ILogger logger) : IStatementHandler
 
         var registry = context is Evaluator e ? e.DatasetRegistry : null;
 
+        var reportCtx = context as IReportContext ?? context.ReportContext;
         if (registry == null)
         {
             // Non-portal: the dataset should already be in the execution context
-            if (context is IReportContext rc && rc.DatasetDefinitions.ContainsKey(stmt.DatasetName))
+            if (reportCtx?.DatasetDefinitions.ContainsKey(stmt.DatasetName) == true)
             {
                 _logger.Debug("USE DATASET '{Name}': dataset already loaded in script context.", stmt.DatasetName);
                 return;
@@ -81,7 +82,7 @@ public class UseDatasetStatementHandler(ILogger logger) : IStatementHandler
             context,
             existing.AtRestKeyVersion);
 
-        if (context is IReportContext reportCtx)
+        if (reportCtx != null)
         {
             // Synthesise a minimal CreateDatasetStatement to satisfy ManifestBuilder lookups
             reportCtx.DatasetDefinitions[stmt.DatasetName] = new CreateDatasetStatement

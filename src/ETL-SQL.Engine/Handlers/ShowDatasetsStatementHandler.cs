@@ -53,7 +53,7 @@ public class ShowDatasetsStatementHandler : IStatementHandler
                 await table.AddRowAsync(row);
             }
         }
-        else if (context is IReportContext rc)
+        else if ((context as IReportContext ?? context.ReportContext) is { } rc)
         {
             foreach (var kv in rc.DatasetDefinitions)
             {

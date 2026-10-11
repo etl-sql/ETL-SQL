@@ -51,7 +51,11 @@ $orchestratorDatabasePath = Join-Path $validatorStateRoot "orchestrator.db"
 New-Item -ItemType Directory -Path $validatorStateRoot -Force | Out-Null
 
 $pgContainerName = "etlsql-sample-pg-$PID"
+$orchContainerName = "etlsql-sample-orch-$PID"
+$portalContainerName = "etlsql-sample-portal-$PID"
 $startedPgContainer = $false
+$startedOrchContainer = $false
+$startedPortalContainer = $false
 
 if ($ReleaseMode) {
     Write-Host " [ReleaseMode] Checking Docker availability for release services..." -ForegroundColor Yellow
@@ -59,6 +63,7 @@ if ($ReleaseMode) {
     if ($null -ne $dockerCmd) {
         $osType = & $dockerCmd.Source info --format '{{.OSType}}' 2>$null
         if ($LASTEXITCODE -eq 0 -and $osType -eq 'linux') {
+            # 1. PostgreSQL
             Write-Host " [ReleaseMode] Starting ephemeral PostgreSQL container on port 5432..." -ForegroundColor Yellow
             & docker rm -f $pgContainerName 2>$null | Out-Null
             & docker run -d --rm --name $pgContainerName -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:15-alpine | Out-Null
@@ -82,6 +87,115 @@ if ($ReleaseMode) {
             }
             else {
                 Write-Warning " [ReleaseMode] Failed to start PostgreSQL container."
+            }
+
+            # 2. Orchestrator Service
+            Write-Host " [ReleaseMode] Determining Orchestrator image..." -ForegroundColor Yellow
+            $orchImage = $null
+            foreach ($candidate in @("etlsql-section1-source-only-service:candidate", "etl-sql-orchestrator-service-test:latest")) {
+                & docker image inspect $candidate 2>$null | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    $orchImage = $candidate
+                    break
+                }
+            }
+            if ($null -eq $orchImage) {
+                Write-Host " [ReleaseMode] Building Orchestrator image 'etl-sql-orchestrator-service-test:latest'..." -ForegroundColor Yellow
+                & docker build -f "src/ETL-SQL.Orchestrator.Service/Dockerfile" -t "etl-sql-orchestrator-service-test:latest" . | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    $orchImage = "etl-sql-orchestrator-service-test:latest"
+                }
+            }
+            if ($null -ne $orchImage) {
+                Write-Host " [ReleaseMode] Starting ephemeral Orchestrator container on port 5001 ($orchImage)..." -ForegroundColor Yellow
+                & docker rm -f $orchContainerName 2>$null | Out-Null
+                & docker run -d --rm --name $orchContainerName -p 5001:5001 `
+                    -e "ASPNETCORE_URLS=http://+:5001" `
+                    -e "Orchestrator__ApiKey=LocalDevApiKey_32CharsMinimumRequiredForSecurity!" `
+                    -e "Orchestrator__IdentitySigningSecret=LocalDevIdentitySigningSecret_32CharsMinimum!" `
+                    -e "Orchestrator__RequireFederatedIdentity=false" `
+                    -e "Jobs__UseProcessSpawning=false" `
+                    -e "Session__Root=/tmp/Sessions" `
+                    $orchImage | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    $startedOrchContainer = $true
+                    Write-Host " [ReleaseMode] Waiting for Orchestrator readiness on port 5001..." -ForegroundColor Yellow
+                    $ready = $false
+                    for ($attempt = 1; $attempt -le 30; $attempt++) {
+                        try {
+                            $resp = Invoke-WebRequest -Uri "http://localhost:5001/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
+                            if ($resp.StatusCode -eq 200) { $ready = $true; break }
+                        } catch {}
+                        Start-Sleep -Seconds 1
+                    }
+                    if ($ready) {
+                        Write-Host " [ReleaseMode] Orchestrator container is ready on port 5001." -ForegroundColor Green
+                    }
+                    else {
+                        Write-Warning " [ReleaseMode] Orchestrator container started but did not respond on port 5001 within 30s."
+                    }
+                }
+                else {
+                    Write-Warning " [ReleaseMode] Failed to start Orchestrator container."
+                }
+            }
+
+            # 3. Portal Service
+            Write-Host " [ReleaseMode] Determining Portal image..." -ForegroundColor Yellow
+            $portalImage = $null
+            foreach ($candidate in @("etlsql-portal:smoke-parity", "etlsql-section1-source-only-portal:candidate", "etl-sql-portal-test:latest")) {
+                & docker image inspect $candidate 2>$null | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    $portalImage = $candidate
+                    break
+                }
+            }
+            if ($null -eq $portalImage) {
+                Write-Host " [ReleaseMode] Building Portal image 'etl-sql-portal-test:latest'..." -ForegroundColor Yellow
+                & docker build -f "src/ETL-SQL.Portal/Dockerfile" -t "etl-sql-portal-test:latest" . | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    $portalImage = "etl-sql-portal-test:latest"
+                }
+            }
+            if ($null -ne $portalImage) {
+                Write-Host " [ReleaseMode] Starting ephemeral Portal container on port 5000 ($portalImage)..." -ForegroundColor Yellow
+                & docker rm -f $portalContainerName 2>$null | Out-Null
+                & docker run -d --rm --name $portalContainerName -p 5000:5000 `
+                    -v "${solutionRoot}/samples:/app/reports" `
+                    -e "ASPNETCORE_URLS=http://+:5000" `
+                    -e "Portal__ScriptRootPath=/app/reports" `
+                    -e "Portal__DatabasePath=/tmp/portal.db" `
+                    -e "Portal__SnapshotDirectory=/tmp/snapshots" `
+                    -e "Portal__Jwt__Secret=LocalDevelopmentSecretKeyForPortal_32CharsMinimum!" `
+                    -e "Portal__Dataset__AtRestKey=c29tZS1zZWN1cmUtYmFzZTY0LWF0LXJlc3Qta2V5LTMyLWJ5dGVzLSE=" `
+                    -e "Portal__FirstRun__AdminUsername=admin" `
+                    -e "Portal__FirstRun__AdminPassword=Admin12345!Password" `
+                    -e "Portal__FirstRun__MustChangePassword=false" `
+                    -e "Portal__Studio__Mode=SourceControlled" `
+                    -e "Portal__Studio__RoleCapabilities__Admin__0=StudioAccess" `
+                    -e "Portal__Studio__RoleCapabilities__Admin__1=ReportPublish" `
+                    $portalImage | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    $startedPortalContainer = $true
+                    Write-Host " [ReleaseMode] Waiting for Portal readiness on port 5000..." -ForegroundColor Yellow
+                    $ready = $false
+                    for ($attempt = 1; $attempt -le 30; $attempt++) {
+                        try {
+                            $resp = Invoke-WebRequest -Uri "http://localhost:5000/healthz" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
+                            if ($resp.StatusCode -eq 200) { $ready = $true; break }
+                        } catch {}
+                        Start-Sleep -Seconds 1
+                    }
+                    if ($ready) {
+                        Write-Host " [ReleaseMode] Portal container is ready on port 5000." -ForegroundColor Green
+                    }
+                    else {
+                        Write-Warning " [ReleaseMode] Portal container started but did not respond on port 5000 within 30s."
+                    }
+                }
+                else {
+                    Write-Warning " [ReleaseMode] Failed to start Portal container."
+                }
             }
         }
         else {
@@ -134,10 +248,13 @@ foreach ($script in $etlScripts) {
             $available = $ReleaseMode.IsPresent  # Enabled when running in -ReleaseMode
         }
         elseif ($service -eq 'portal') {
-            $available = $false  # portal management scripts require a running portal instance
+            $available = (Test-NetConnection -ComputerName localhost -Port 5000 -WarningAction SilentlyContinue -InformationLevel Quiet)
         }
         elseif ($service -eq 'orchestrator') {
-            $available = $false  # orchestrator scripts require a running Orchestrator service
+            $available = (Test-NetConnection -ComputerName localhost -Port 5001 -WarningAction SilentlyContinue -InformationLevel Quiet)
+        }
+        elseif ($service -eq 'portal-manual' -or $service -eq 'portal-interactive') {
+            $available = $false  # Multi-user verification deck documented in datasets/README.md; verified by DatasetExampleDeckTests
         }
         elseif ($service -eq 'docker') {
             $dockerCommand = Get-Command docker -ErrorAction SilentlyContinue
@@ -247,6 +364,16 @@ finally {
         Write-Host "`n [ReleaseMode] Stopping and removing ephemeral PostgreSQL container '$pgContainerName'..." -ForegroundColor Gray
         & docker stop $pgContainerName 2>$null | Out-Null
         & docker rm -f $pgContainerName 2>$null | Out-Null
+    }
+    if ($startedOrchContainer) {
+        Write-Host " [ReleaseMode] Stopping and removing ephemeral Orchestrator container '$orchContainerName'..." -ForegroundColor Gray
+        & docker stop $orchContainerName 2>$null | Out-Null
+        & docker rm -f $orchContainerName 2>$null | Out-Null
+    }
+    if ($startedPortalContainer) {
+        Write-Host " [ReleaseMode] Stopping and removing ephemeral Portal container '$portalContainerName'..." -ForegroundColor Gray
+        & docker stop $portalContainerName 2>$null | Out-Null
+        & docker rm -f $portalContainerName 2>$null | Out-Null
     }
 
     # Do not mix certification events or sessions with the interactive user's machine state.

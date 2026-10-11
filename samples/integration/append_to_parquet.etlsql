@@ -8,11 +8,14 @@
 -- Intended to be run hourly via Orchestrator at 5 minutes past the top of the hour.
 -- ==============================================================================
 
+SET ALLOW_FILE_OPERATIONS = 2000;
+
 -- The current time is HH:05. The file from the current hour has the same HH timestamp.
 -- Example: At 01:05, FORMAT yields '01'. The file generated at 01:00 also used '01'.
 DECLARE @timestamp STRING = FORMAT(GETDATE(), 'yyyyMMdd_HH');
-DECLARE @csv_file  STRING = '/app/data/manufacturing_' + @timestamp + '.csv';
-DECLARE @parquet_master STRING = '/app/data/manufacturing_master.parquet';
+DECLARE @data_dir  PATH   = 'data/';
+DECLARE @csv_file  PATH   = @data_dir + 'manufacturing_' + @timestamp + '.csv';
+DECLARE @parquet_master PATH = @data_dir + 'manufacturing_master.parquet';
 
 IF NOT FILE_EXISTS(@csv_file)
 BEGIN

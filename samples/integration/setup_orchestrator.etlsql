@@ -1,4 +1,3 @@
-﻿USE PASSWORD PROMPT;
 -- ==============================================================================
 -- setup_orchestrator.etlsql
 -- Registers the Orchestrator jobs and publishes the report dataset.
@@ -7,9 +6,7 @@
 
 -- 1. Create connection to the Orchestrator Service
 DROP CONNECTION IF EXISTS orch;
-CREATE CONNECTION orch AS ORCHESTRATOR(HOST='localhost', PORT=5001, API_KEY='ENC:AXllqv7L+qj6c3UFQlHUjypkqRtvA6ufSt6XIX9G2yYGfwAtrw8GNJlpnYkDGL90J3mtIpVtZNMeTQBuK4I108w=');
-SELECT * FROM orch.eng.jobs;
-SELECT * FROM orch.eng.job_history;
+CREATE CONNECTION orch AS ORCHESTRATOR(HOST='localhost', PORT=5001, API_KEY='LocalDevApiKey_32CharsMinimumRequiredForSecurity!');
 
 
 EXECUTE orch
@@ -18,7 +15,7 @@ BEGIN
     --    Unversioned orch:// paths below are pinned to the latest published version
     --    when the scheduled jobs are created or updated.
     PUBLISH BUNDLE 'manufacturing-integration'
-        FROM '/samples/integration'
+        FROM '.'
         ENTRY 'generate_manufacturing.etlsql';
 
     -- 3. Schedule Job 1: Generate Data (top of the hour)
@@ -42,12 +39,13 @@ PRINT 'Orchestrator Jobs created successfully.';
 
 -- 5. Publish the Report and Dataset to the Portal
 -- The dataset definition is embedded in the report, so publishing the report registers the dataset.
-CREATE CONNECTION portal AS PORTAL(HOST='localhost', PORT=5000, USER='admin', PASSWORD='ENC:AV1QYOWmcD/pmLkaT5Xpa0RZtNh40ndG3TUJY1LRjXm3iNoOtCR3+pmtfyAZ1Zzp9MWyI1F+GEfMfHr/oWBWQlA=');
+CREATE CONNECTION portal AS PORTAL(HOST='http://localhost:5000', USER='admin', PASSWORD='Admin12345!Password');
 
 EXECUTE portal 
 BEGIN
+    CREATE FOLDER '/Finance';
     PUBLISH REPORT 'Manufacturing Analytics' 
-        FROM '/app/Reports/integration/manufacturing_report.rptsql'
+        FROM 'integration/manufacturing_report.rptsql'
         IN FOLDER '/Finance';
 END;
 
