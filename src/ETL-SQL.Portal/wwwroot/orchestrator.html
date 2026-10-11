@@ -217,6 +217,8 @@
       margin-top: 6px;
     }
     .orch-acl-add input, .orch-acl-owner-set input { flex: 1 1 16ch; min-width: 0; }
+    .orch-acl-add input, .orch-acl-owner-set input { padding: 4px 8px; font-size: 0.82em; height: 28px; }
+    .orch-acl-add select, .orch-acl-owner-set select { flex: 0 0 auto; width: auto; }
     .orch-acl-hint {
       margin: 6px 0 0;
       font-size: 0.82em;
@@ -1113,11 +1115,11 @@
     <div class="modal-body">
       <div id="unownedList"></div>
       <div class="orch-acl-add" style="margin-top:12px">
-        <select id="unownedOwnerKind" aria-label="Owner kind">
+        <select id="unownedOwnerKind" class="form-select form-select-sm" aria-label="Owner kind">
           <option value="USER">User</option>
           <option value="SERVICE">Service</option>
         </select>
-        <input id="unownedOwnerKey" type="text" placeholder="Principal key" aria-label="Owner principal key">
+        <input id="unownedOwnerKey" class="param-input" type="text" placeholder="Principal key" aria-label="Owner principal key">
       </div>
       <p class="orch-acl-hint">The principal <em>key</em>, not a username — a name can be reassigned, and ownership that followed one would move with it.</p>
     </div>

@@ -131,10 +131,10 @@ export function ownerFormHtml(state) {
         return '';
     return `
         <div class="orch-acl-owner-set">
-          <select id="aclOwnerKind" aria-label="Owner kind">
+          <select id="aclOwnerKind" class="form-select form-select-sm" aria-label="Owner kind">
             ${OWNER_KINDS.map(kind => `<option value="${kind}">${kind.charAt(0)}${kind.slice(1).toLowerCase()}</option>`).join('')}
           </select>
-          <input id="aclOwnerKey" type="text" placeholder="Principal key" aria-label="Owner principal key">
+          <input id="aclOwnerKey" class="param-input" type="text" placeholder="Principal key" aria-label="Owner principal key">
           <button class="btn btn-sm btn-outline" id="aclOwnerBtn">Set owner</button>
         </div>`;
 }
@@ -157,11 +157,11 @@ export function accessPanelHtml(state, esc, escAttr) {
         : 'No grants.';
     const form = editable ? `
         <div class="orch-acl-add">
-          <select id="aclPrincipalKind" aria-label="Principal kind">
+          <select id="aclPrincipalKind" class="form-select form-select-sm" aria-label="Principal kind">
             ${PRINCIPAL_KINDS.map(kind => `<option value="${kind}">${kind.charAt(0)}${kind.slice(1).toLowerCase()}</option>`).join('')}
           </select>
-          <input id="aclPrincipalKey" type="text" placeholder="Principal key" aria-label="Principal key">
-          <select id="aclPermission" aria-label="Permission">
+          <input id="aclPrincipalKey" class="param-input" type="text" placeholder="Principal key" aria-label="Principal key">
+          <select id="aclPermission" class="form-select form-select-sm" aria-label="Permission">
             ${PERMISSIONS.map(permission => `<option value="${permission}">${permission}</option>`).join('')}
           </select>
           <button class="btn btn-sm btn-primary" id="aclGrantBtn">Grant</button>

@@ -36,6 +36,8 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
     },
     hourly_orders: { schedules: [], notifications: [], state: [], history: [], grants: [] }
   };
+  // Objects nobody is accountable for; adopting assigns one owner to all of them.
+  let unowned = [{ objectId: 'job-1', kind: 'JOB', name: 'hourly_orders' }, { objectId: 'schedule-1', kind: 'SCHEDULE', name: 'hourly_us' }];
   const detailWaiters = [];
   let detailPausedFor = null;
   async function detailRoute(path, method, init) {
@@ -167,6 +169,18 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
         failureCount: 0, incidentCount: 0, runningCount: 0, missedCount: 0, truncated: false, incidents: [], running: [], missed: [] });
       if (/^\/api\/orchestrator\/jobs\/[^/]+\/(history|schedules|notifications|state|dag|audit|dependencies)(\/|$)/.test(path)
         || path.startsWith('/api/orchestrator/authorization/Job/')) return detailRoute(path, method, { ...init, query: url.search });
+      if (path === '/api/orchestrator/authorization/unowned') return failure === 'legacy'
+        ? json({ error: 'Per-object grants and ownership require federated identity.' }, 409) : json(unowned);
+      if (path === '/api/orchestrator/authorization/adopt') {
+        if (paused) await new Promise(resolve => pending.push(resolve));
+        if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
+        const body = JSON.parse(init.body), owner = `${body.principalKind.toLowerCase()}:${body.principalId}`;
+        const adopted = failure === 'adopt-partial' ? unowned.slice(0, 1) : unowned;
+        unowned = unowned.filter(item => !adopted.includes(item));
+        for (const item of adopted) { const job = jobs.find(candidate => candidate.name === item.name); if (job) job.createdBy = owner; }
+        return json(failure === 'adopt-unconfirmed' ? { owner: 'user:someone-else', count: adopted.length, adopted }
+          : { owner, count: adopted.length, adopted });
+      }
       if (/^\/api\/orchestrator\/runs\/\d+\/resume$/.test(path)) {
         if (paused) await new Promise(resolve => pending.push(resolve));
         return failure === 'failed' ? json({ error: 'Resume failed: the checkpoint session expired.' }, 409) : new Response(null, { status: 202 });
@@ -193,7 +207,7 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
         const body = JSON.parse(init.body);
         if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
         if (jobs.some(item => item.name === body.name)) return relayed(`Job '${body.name}' already exists.`, 409);
-        jobs.push({ id: `job-${jobs.length}`, name: body.name, script: '', interval: body.interval, unit: body.unit, isEnabled: true,
+        jobs.push({ id: `job-${jobs.length}`, name: body.name, script: '', interval: body.interval ?? 1, unit: body.unit ?? 'HOUR', isEnabled: true,
           maxRetries: body.maxRetries, retryDelaySeconds: body.retryDelaySeconds, hashPolicy: body.hashPolicy, version: 1, jobType: 0,
           targetPath: body.targetPath, displayName: body.displayName, createdBy: 'user:sandbox-admin', lastRun: null, nextRun: null });
         details[body.name] = { schedules: [], notifications: [], state: [], history: [], grants: [] };

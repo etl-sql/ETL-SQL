@@ -156,6 +156,37 @@ public sealed class OrchestratorAuditParityTests
         Assert.Equal(SecurityEventSeverity.Warning, stopEvent.Severity);
     }
 
+    [Theory]
+    [InlineData("OrchestratorManager")]
+    [InlineData("OrchestratorViewer")]
+    public async Task ManagementStopIsRefusedForACallerWhoIsNotAnAdministrator(string role)
+    {
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: true);
+        using var client = factory.CreateClient();
+        var sink = new RecordingSecurityEventSink();
+        using var sinkScope = new SecurityEventSinkScope(sink);
+
+        using var stop = Request(HttpMethod.Post, "/management/stop", new OrchestratorCaller("user", "7", "Ada Lovelace", [role], []));
+        var response = await client.SendAsync(stop);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.DoesNotContain(sink.Events, e => e.SanitizedTarget == $"SERVICE:{Environment.MachineName}");
+        // The service is still answering: the refused request did not stop it.
+        using var status = Request(HttpMethod.Get, "/management/status", new OrchestratorCaller("user", "7", "Ada Lovelace", [role], []));
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(status)).StatusCode);
+    }
+
+    [Fact]
+    public async Task ManagementStopStillAcceptsTheApiKeyAloneInLegacyMode()
+    {
+        using var factory = new OrchestratorWebFactory(requireFederatedIdentity: false);
+        using var client = factory.CreateClient();
+        using var stop = new HttpRequestMessage(HttpMethod.Post, "/management/stop");
+        stop.Headers.Add("X-Orchestrator-Key", "test-orch-key-12345");
+
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(stop)).StatusCode);
+    }
+
     private static async Task UpdateAsync(
         HttpClient client, OrchestratorWebFactory factory, OrchestratorCaller caller, object body)
     {

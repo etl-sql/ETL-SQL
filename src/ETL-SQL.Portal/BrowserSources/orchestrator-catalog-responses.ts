@@ -96,3 +96,21 @@ export async function readDispatchOutcome(response: Response): Promise<DispatchO
         throw new Error('The dispatch response was incomplete. Delivery was not confirmed.');
     return { delivered: body.delivered, skipped: body.skipped, detail: body.message?.trim() ?? '' };
 }
+
+export type UnownedObject = Pick<UnownedObjectResponse, 'kind' | 'name'>;
+
+/** The objects no principal is accountable for. Each must name its kind, or it cannot be shown as what it is. */
+export function readUnownedObjects(value: unknown): UnownedObject[] {
+    if (!Array.isArray(value) || !value.every((item): item is Record<string, unknown> => isObject(item) && isText(item.kind) && isText(item.name)))
+        throw new TypeError('Invalid unowned-object response.');
+    return value.map(item => ({ kind: item.kind as string, name: item.name as string }));
+}
+
+/** An adoption is confirmed by its receipt: the owner that was asked for, and a count that matches the objects it lists. */
+export function readAdoption(value: unknown, principalKind: string, principalId: string): number {
+    if (!isObject(value) || typeof value.count !== 'number' || !Number.isSafeInteger(value.count) || value.count < 0
+        || !Array.isArray(value.adopted) || value.adopted.length !== value.count || typeof value.owner !== 'string'
+        || value.owner.toLowerCase() !== `${principalKind}:${principalId}`.toLowerCase())
+        throw new Error('The ownership change was not confirmed by its receipt. Reload the list before trying again.');
+    return value.count;
+}

@@ -83,6 +83,21 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Report unavailable Orchestrator schedule and notification catalogs as unavailable. A failed or
   refused read returned an empty list, so the page showed "No shared schedules defined yet" and a
   count of zero. The Portal now answers 503 or 403, and the page clears stale rows and counts.
+- Require an administrator to stop the Orchestrator at the service itself. `/management/stop` checked
+  only the API key, so any caller the Portal signed for could stop the scheduler. Where federated
+  identity is required the service now refuses a non-administrator; legacy mode is unchanged.
+- Let bundle jobs be created from the Orchestrator page. The dialog sent a job type the service does
+  not have, so every bundle job was refused. A bundle is now sent as a script target at its URI.
+- Wire the Orchestrator page's "Unowned objects" button. It opened nothing. Administrators can now
+  list jobs, schedules, and notifications that have no owner and assign one, confirmed by receipt.
+- Keep the interval a job is created with. The Orchestrator service stored every job created from
+  the Portal as hourly, so a job set to run every two days at 03:30 ran every hour. Interval, unit,
+  and time of day are now stored and validated; a job created on a shared schedule sends none.
+- Start the New Job dialog from its defaults each time it opens. It kept the previous job's target,
+  schedule mode, and interval.
+- Style the owner and grant fields on the Orchestrator page; they rendered as bare browser controls.
+- Redraw a governance tab opened while a scan's reload is still in flight. It stayed on "Loading
+  governance data…" until the page was refreshed.
 - Show subfolders in the reader's folder tree. The server returns folders nested under their
   parents, but the catalog page read the list as flat and discarded each folder's children, so a
   subfolder could be reached only through search.

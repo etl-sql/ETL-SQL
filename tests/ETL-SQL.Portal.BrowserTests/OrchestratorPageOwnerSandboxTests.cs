@@ -52,7 +52,7 @@ public sealed class OrchestratorPageOwnerSandboxTests(SandboxStoryFixture fixtur
         var page = session.Page;
         await OpenAsync(page, role: "OrchestratorViewer");
         await Expect(page.Locator("#statusLabel")).ToHaveTextAsync("Online");
-        foreach (var control in new[] { "#newJobBtn", "#newScheduleBtn", "#newNotificationBtn", "#stopBtn" })
+        foreach (var control in new[] { "#newJobBtn", "#newScheduleBtn", "#newNotificationBtn", "#stopBtn", "#unownedBtn" })
             await Expect(page.Locator(control)).ToBeHiddenAsync();
         await Expect(page.Locator("#restartBtn")).ToHaveCountAsync(0);
         Assert.Empty(session.PageErrors);
@@ -178,8 +178,46 @@ public sealed class OrchestratorPageOwnerSandboxTests(SandboxStoryFixture fixtur
         await WaitForMessageAsync(page, "Job 'month_end' was created, but schedule 'nightly_utc' was not attached");
         await Expect(page.Locator("tr.job-row[data-name='month_end']")).ToBeVisibleAsync();
         Assert.DoesNotContain("Job 'month_end' created.", await MessagesAsync(page));
+        // The schedule drives this job, so the values left in the hidden inline fields are not sent.
+        Assert.Equal("||", await CreatedIntervalAsync(page));
         Assert.Empty(session.PageErrors);
     }
+
+    [Fact]
+    public async Task AJobOnAnInlineIntervalSendsTheIntervalItWasGiven()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenAsync(page);
+        await page.Locator("#newJobBtn").ClickAsync();
+        await page.Locator("#cj-name").FillAsync("two_daily");
+        await page.Locator("#cj-script-path").FillAsync("etl/two_daily.etlsql");
+        await page.Locator("#cj-interval").FillAsync("2");
+        await page.Locator("#cj-unit").SelectOptionAsync("DAY");
+        await page.Locator("#cj-at-time").FillAsync("03:30");
+        await page.Locator("#cj-saveBtn").ClickAsync();
+        await WaitForMessageAsync(page, "Job 'two_daily' created.");
+        Assert.Equal("2|DAY|03:30", await CreatedIntervalAsync(page));
+
+        // The next job starts from the shipped defaults, not from this one's target and schedule.
+        await page.Locator("#newJobBtn").ClickAsync();
+        await Expect(page.Locator("#cj-script-path")).ToHaveValueAsync("");
+        await Expect(page.Locator("#cj-interval")).ToHaveValueAsync("1");
+        await Expect(page.Locator("#cj-at-time")).ToHaveValueAsync("");
+        await page.Locator("#cj-sched-mode-shared").CheckAsync();
+        await page.Locator("#cj-target-kind").SelectOptionAsync("Bundle");
+        await page.Locator("#cj-cancelBtn").ClickAsync();
+        await page.Locator("#newJobBtn").ClickAsync();
+        await Expect(page.Locator("#cj-sched-mode-inline")).ToBeCheckedAsync();
+        await Expect(page.Locator("#cj-inline-sched-wrap")).ToBeVisibleAsync();
+        await Expect(page.Locator("#cj-shared-sched-wrap")).ToBeHiddenAsync();
+        await Expect(page.Locator("#cj-script-target-row")).ToBeVisibleAsync();
+        await Expect(page.Locator("#cj-bundle-target-row")).ToBeHiddenAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static Task<string> CreatedIntervalAsync(IPage page) => page.EvaluateAsync<string>(
+        "() => { const body = window.__orchestratorMock.calls.find(call => call.method === 'POST' && call.path === '/api/orchestrator/jobs').body; return [body.interval, body.unit, body.atTime].map(value => value ?? '').join('|'); }");
 
     [Theory]
     [InlineData("healthy", "Stop signal sent to the Orchestrator service.")]
@@ -201,6 +239,92 @@ public sealed class OrchestratorPageOwnerSandboxTests(SandboxStoryFixture fixtur
             Assert.DoesNotContain(await MessagesAsync(page), text => text.StartsWith("Stop signal sent", StringComparison.Ordinal));
         Assert.Empty(session.PageErrors);
     }
+
+    [Fact]
+    public async Task AnAdministratorSeesUnownedObjectsAndAssignsOneOwnerToAll()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenAsync(page);
+        var opener = page.Locator("#unownedBtn");
+        await Expect(opener).ToHaveTextAsync("Unowned objects (2)");
+        await opener.ClickAsync();
+        await Expect(page.Locator("#unownedList tr")).ToHaveCountAsync(2);
+        await Expect(page.Locator("#unownedList")).ToContainTextAsync("hourly_orders");
+        await page.Locator("#unownedAdoptBtn").ClickAsync();
+        await WaitForMessageAsync(page, "Enter the principal key of the new owner.");
+        Assert.Equal(0, await AdoptCallsAsync(page));
+
+        await page.Locator("#unownedOwnerKind").SelectOptionAsync("SERVICE");
+        await page.Locator("#unownedOwnerKey").FillAsync("etl-runner");
+        await page.Locator("#unownedAdoptBtn").ClickAsync();
+        Assert.Equal(0, await AdoptCallsAsync(page));
+        await page.Locator(".etlsql-feedback-btn-primary").ClickAsync();
+        await WaitForMessageAsync(page, "Owner assigned to 2 objects.");
+        await Expect(page.Locator("#unownedList")).ToContainTextAsync("Every job, schedule, and notification has a recorded owner.");
+        await Expect(page.Locator("#unownedAdoptBtn")).ToBeDisabledAsync();
+        await Expect(opener).ToHaveTextAsync("Unowned objects");
+        Assert.Equal("SERVICE|etl-runner", await page.EvaluateAsync<string>(
+            "() => { const body = window.__orchestratorMock.calls.find(call => call.path.endsWith('/authorization/adopt')).body; return body.principalKind + '|' + body.principalId; }"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Theory]
+    [InlineData("adopt-unconfirmed", "The ownership change was not confirmed by its receipt")]
+    [InlineData("failed", "Orchestrator service unavailable.")]
+    public async Task AnAdoptionThatWasNotConfirmedIsNotAnnounced(string scenario, string reason)
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenAsync(page);
+        await page.Locator("#unownedBtn").ClickAsync();
+        await Expect(page.Locator("#unownedList tr")).ToHaveCountAsync(2);
+        await page.EvaluateAsync("scenario => window.__orchestratorMock.setFailure(scenario)", scenario);
+        await page.Locator("#unownedOwnerKey").FillAsync("3f2a9c1d");
+        await page.Locator("#unownedAdoptBtn").ClickAsync();
+        await page.Locator(".etlsql-feedback-btn-primary").ClickAsync();
+        await WaitForMessageAsync(page, reason);
+        Assert.DoesNotContain(await MessagesAsync(page), text => text.StartsWith("Owner assigned", StringComparison.Ordinal));
+        await Expect(page.Locator("#unownedModal")).ToBeVisibleAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task UnownedObjectsThatCannotBeListedAreNotShownAsNoneAndCannotBeAssigned()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenAsync(page, "legacy");
+        await Expect(page.Locator("#unownedBtn")).ToHaveTextAsync("Unowned objects");
+        await page.Locator("#unownedBtn").ClickAsync();
+        await Expect(page.Locator("#unownedList [role='alert']")).ToContainTextAsync(
+            "Objects without an owner could not be listed: Per-object grants and ownership require federated identity.");
+        await Expect(page.Locator("#unownedList")).Not.ToContainTextAsync("has a recorded owner");
+        await Expect(page.Locator("#unownedAdoptBtn")).ToBeDisabledAsync();
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ABundleJobIsCreatedAsAScriptTargetAtItsBundleUri()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenAsync(page);
+        await page.Locator("#newJobBtn").ClickAsync();
+        await page.Locator("#cj-name").FillAsync("bundled_sales");
+        await page.Locator("#cj-target-kind").SelectOptionAsync("Bundle");
+        await Expect(page.Locator("#cj-bundle-target-row")).ToBeVisibleAsync();
+        await page.Locator("#cj-bundle-select").SelectOptionAsync("bundle://sales_bundle/latest");
+        await page.Locator("#cj-saveBtn").ClickAsync();
+        await WaitForMessageAsync(page, "Job 'bundled_sales' created.");
+        // The service accepts SCRIPT or REPORT; a bundle is a script target addressed by its URI.
+        Assert.Equal("Script|bundle://sales_bundle/latest", await page.EvaluateAsync<string>(
+            "() => { const body = window.__orchestratorMock.calls.find(call => call.method === 'POST' && call.path === '/api/orchestrator/jobs').body; return body.jobType + '|' + body.targetPath; }"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static Task<int> AdoptCallsAsync(IPage page) => page.EvaluateAsync<int>(
+        "() => window.__orchestratorMock.calls.filter(call => call.path.endsWith('/authorization/adopt')).length");
 
     private async Task OpenAsync(IPage page, string scenario = "healthy", string role = "Admin")
     {

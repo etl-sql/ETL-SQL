@@ -21,6 +21,7 @@ import { readCatalogJson } from '../orchestrator-catalog-responses.js';
 import { createJobDetail } from '../orchestrator-job-detail.js';
 import { createJobDialog } from '../orchestrator-create-job.js';
 import { createJobTimeline } from '../orchestrator-timeline.js';
+import { createUnownedDialog } from '../orchestrator-unowned.js';
 const VIEWS = ['jobs', 'schedules', 'notifications'];
 const job = (name) => `/api/orchestrator/jobs/${encodeURIComponent(name)}`;
 function mountOrchestratorPage() {
@@ -123,6 +124,8 @@ function mountOrchestratorPage() {
             box('offlineBanner').style.display = online ? 'none' : '';
             // Stopping the service is an administrator's action; nobody else is offered it.
             box('stopBtn').style.display = online && isAdmin ? '' : 'none';
+            // Ownership is an administrator's concern too, and needs the service to answer.
+            box('unownedBtn').style.display = online && isAdmin ? '' : 'none';
         },
         renderCatalog: jobs => { catalogJobs = jobs; box('jobsNavCount').textContent = String(jobs.length); timeline.render(jobs); },
         clearCatalog: () => { catalogJobs = []; box('jobsNavCount').textContent = '—'; timeline.clear(); },
@@ -169,6 +172,14 @@ function mountOrchestratorPage() {
     }, { signal: lifetime.signal });
     box('refreshJobsBtn').addEventListener('click', () => { void activity.refresh(); }, { signal: lifetime.signal });
     const createDialog = createJobDialog({ root: document, fetch: apiFetch, notify, sessionExpired, created: () => activity.refresh() });
+    const unowned = createUnownedDialog({ root: document, fetch: apiFetch, notify, confirm: ask, sessionExpired,
+        changed: async () => {
+            await activity.refresh();
+            // The open panel shows an owner and grants that may just have changed.
+            const open = findOpenJob();
+            if (open)
+                detail.open(open);
+        } });
     // ── Schedule and notification catalogs ─────────────────────────────────────
     const catalogHost = { root: document, notify, confirm: ask };
     const schedules = createScheduleCatalog(catalogHost, {
@@ -259,6 +270,8 @@ function mountOrchestratorPage() {
         // Both catalogs load with the page so their navigation counts are read, not assumed to be zero.
         void schedules.load();
         void notifications.load();
+        if (isAdmin)
+            void unowned.refreshCount();
         await activity.refresh();
         const requested = lifetime.signal.aborted ? null : findJob(new URLSearchParams(location.search).get('job'));
         if (requested)
@@ -268,7 +281,7 @@ function mountOrchestratorPage() {
     window.addEventListener('pagehide', () => {
         clearInterval(statusTimer);
         lifetime.abort();
-        for (const owner of [jobActions, runDialog, createDialog, triage, schedules, notifications, detail, timeline, activity])
+        for (const owner of [jobActions, runDialog, createDialog, unowned, triage, schedules, notifications, detail, timeline, activity])
             owner.dispose();
     }, { once: true });
     // A page restored from the back/forward cache has disposed owners; load it again instead.

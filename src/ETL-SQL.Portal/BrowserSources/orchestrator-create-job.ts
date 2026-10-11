@@ -81,7 +81,7 @@ export function createJobDialog(options: CreateJobOptions) {
         const current = ++opening;
         reads?.abort();
         const scope = reads = new AbortController();
-        for (const id of ['cj-name', 'cj-display-name', 'cj-description']) input(id).value = '';
+        reset();
         error.textContent = '';
         save.disabled = saving;
         modal.style.display = 'flex';
@@ -97,16 +97,27 @@ export function createJobDialog(options: CreateJobOptions) {
         if (unavailable.length) error.textContent = unavailable.join(' ');
     }, { signal: lifetime.signal });
 
-    select('cj-target-kind').addEventListener('change', event => {
-        const bundle = (event.target as HTMLSelectElement).value === 'Bundle';
+    /** Shows the rows that belong to the chosen target kind and schedule mode. */
+    function layout() {
+        const bundle = select('cj-target-kind').value === 'Bundle', shared = input('cj-sched-mode-shared').checked;
         box('cj-script-target-row').style.display = bundle ? 'none' : '';
         box('cj-bundle-target-row').style.display = bundle ? '' : 'none';
-    }, { signal: lifetime.signal });
-    for (const [id, shared] of [['cj-sched-mode-inline', false], ['cj-sched-mode-shared', true]] as const)
-        input(id).addEventListener('change', () => {
-            box('cj-inline-sched-wrap').style.display = shared ? 'none' : '';
-            box('cj-shared-sched-wrap').style.display = shared ? '' : 'none';
-        }, { signal: lifetime.signal });
+        box('cj-inline-sched-wrap').style.display = shared ? 'none' : '';
+        box('cj-shared-sched-wrap').style.display = shared ? '' : 'none';
+    }
+
+    /** Returns every field to what the page shipped with: a new job must not inherit the last one's target or schedule. */
+    function reset() {
+        for (const field of modal.querySelectorAll('input, select, textarea')) {
+            if (field instanceof HTMLInputElement) { field.value = field.defaultValue; field.checked = field.defaultChecked; }
+            else if (field instanceof HTMLTextAreaElement) field.value = field.defaultValue;
+            else if (field instanceof HTMLSelectElement) field.selectedIndex = Math.max(0, [...field.options].findIndex(option => option.defaultSelected));
+        }
+        layout();
+    }
+
+    for (const id of ['cj-target-kind', 'cj-sched-mode-inline', 'cj-sched-mode-shared'])
+        get(id, HTMLElement).addEventListener('change', layout, { signal: lifetime.signal });
     for (const id of ['closeCreateBtn', 'cj-cancelBtn'])
         get(id, HTMLButtonElement).addEventListener('click', close, { signal: lifetime.signal });
 
@@ -123,8 +134,12 @@ export function createJobDialog(options: CreateJobOptions) {
         if (input('cj-sched-mode-shared').checked && !shared) { error.textContent = 'Choose the shared schedule to attach.'; return; }
         const body = {
             name, displayName: input('cj-display-name').value.trim() || name, description: input('cj-description').value.trim() || null,
-            jobType: kind, targetPath, interval: Number(input('cj-interval').value) || 1, unit: select('cj-unit').value,
-            atTime: input('cj-at-time').value || null, maxRetries: Number(input('cj-retries').value) || 0,
+            // A bundle is a script target addressed by a bundle:// URI; the service knows only SCRIPT and REPORT.
+            jobType: 'Script', targetPath,
+            // The interval drives a job only while no schedule is attached, so a job created on a
+            // shared schedule names none rather than the values left in the hidden inline fields.
+            ...(shared ? {} : { interval: Number(input('cj-interval').value) || 1, unit: select('cj-unit').value, atTime: input('cj-at-time').value || null }),
+            maxRetries: Number(input('cj-retries').value) || 0,
             retryDelaySeconds: Number(input('cj-retry-delay').value) || 30, hashPolicy: select('cj-hash-policy').value,
             options: sandbox !== 'Default' ? { SandboxProfile: sandbox } : null, mode: 'Create'
         };

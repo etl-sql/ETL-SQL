@@ -238,10 +238,11 @@ event boundaries without exposing the opaque session handle.
 
 ## Service Control
 
-When the Orchestrator is **online**, two service-control buttons appear next to the Online chip:
+When the Orchestrator is **online**, administrators see a **Stop** button next to the Online chip.
 
-- **Stop** — sends `POST /management/stop` to the Orchestrator, which calls `IHostApplicationLifetime.StopApplication()`. If the Orchestrator is registered as a Windows Service or systemd unit, the OS supervisor restarts it automatically. The portal polls `/health` every 3 seconds and updates the status chip as soon as the service comes back.
-- **Restart** — equivalent to Stop; the portal waits for the service to come back online.
+- **Stop** — asks for confirmation, then sends `POST /management/stop` to the Orchestrator, which calls `IHostApplicationLifetime.StopApplication()`. If the Orchestrator is registered as a Windows Service or systemd unit, the OS supervisor restarts it automatically, so Stop is also how the service is restarted. The page reports the stop only after the Orchestrator accepts it, and its status chip follows the service as it goes offline and returns.
+
+Stopping the scheduler halts every job on that host, so it takes an administrator at both layers: the Portal route requires the `Admin` role, and an Orchestrator that requires federated identity refuses a caller who is not an administrator. An Orchestrator in legacy mode has no caller identities; there the API key alone authorizes the request.
 
 When the Orchestrator is **offline**, the portal displays a banner: *"Orchestrator is offline."* The portal cannot start a stopped Orchestrator — start it on its own host, through the Windows service manager or `systemctl`. This is why **Stop** is safe to offer and starting is not: a stopped service that the OS supervises comes back by itself, whereas starting one from a browser would mean the Portal holding service-control rights on another machine.
 

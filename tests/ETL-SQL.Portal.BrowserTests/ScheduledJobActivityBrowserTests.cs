@@ -26,7 +26,7 @@ public sealed class ScheduledJobActivityBrowserCollection
 /// <summary>Native Portal controls against the signed Portal-to-Orchestrator API and real stored evidence.</summary>
 [Trait("Category", "Browser")]
 [Collection(ScheduledJobActivityBrowserCollection.Name)]
-public sealed class ScheduledJobActivityBrowserTests : IAsyncLifetime
+public sealed partial class ScheduledJobActivityBrowserTests : IAsyncLifetime
 {
     private static readonly DateTimeOffset AsOf = DateTimeOffset.Parse("2026-10-07T12:00:00Z");
     private const string Tenant = "portal-host";

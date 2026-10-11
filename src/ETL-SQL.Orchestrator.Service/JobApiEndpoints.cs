@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -348,12 +349,24 @@ namespace ETL_SQL.Orchestrator.Service
                         : null;
                     var patches = existing is not null && mode == ObjectCreationMode.CreateOrAlter;
 
+                    // The interval drives a job only while no schedule is attached to it. A caller
+                    // that names one gets it; one that names none keeps the hourly default (or, on
+                    // CREATE OR ALTER, what the job already had). It was once discarded here, so a
+                    // job created as "daily at 02:00" ran hourly.
+                    if (req.Interval is <= 0)
+                        return Results.BadRequest(new { Error = "Interval must be positive." });
+                    var intervalUnit = req.Unit?.ToUpperInvariant();
+                    if (intervalUnit is not (null or "SECOND" or "MINUTE" or "HOUR" or "DAY" or "WEEK" or "MONTH"))
+                        return Results.BadRequest(new { Error = "Unit must be one of: SECOND, MINUTE, HOUR, DAY, WEEK, MONTH" });
+                    if (!string.IsNullOrEmpty(req.AtTime) && !TimeSpan.TryParse(req.AtTime, CultureInfo.InvariantCulture, out _))
+                        return Results.BadRequest(new { Error = "AtTime must be a time of day, such as 02:00." });
+
                     job = new JobDefinition(
                         req.Name,
                         scriptText,
-                        1,
-                        "HOUR",
-                        null,
+                        req.Interval ?? (patches ? existing!.Interval : 1),
+                        intervalUnit ?? (patches ? existing!.Unit : "HOUR"),
+                        string.IsNullOrEmpty(req.AtTime) ? (patches ? existing!.AtTime : null) : req.AtTime,
                         existing?.LastRun,
                         null,
                         existing?.IsEnabled ?? true,
@@ -2128,6 +2141,11 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 var caller = RequestCaller(ctx);
+                // Stopping the scheduler halts every tenant's jobs on this host, so where callers
+                // carry an identity it takes an administrator. In legacy mode the API key is the
+                // only identity there is, and holding it is the authorization.
+                if (!OrchestratorAuthorizationMode.IsLegacy(cfg) && !IsObjectAdministrator(caller))
+                    return Results.StatusCode(StatusCodes.Status403Forbidden);
                 EmitObjectMutationAudit(
                     caller,
                     $"SERVICE:{Environment.MachineName}",

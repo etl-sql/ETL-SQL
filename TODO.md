@@ -137,7 +137,7 @@ alongside §1.1; they do not authorize untracking handwritten JavaScript.
   Settings and page composition now have strict owners, draft/lifetime guards, and focused native/sandbox
   acceptance. Every mounted panel is disposed when leaving the page; tab changes retain loaded drafts.
   The page-wide regression and corrected dataset selector have passing evidence below.
-- [ ] Orchestrator page composition (`pages/orchestrator.js`). Job table actions and the run-override
+- [x] Orchestrator page composition (`pages/orchestrator.js`). Job table actions and the run-override
   dialog now have strict TypeScript owners. Update/delete send the loaded version; expected HTTP
   statuses gate success messages. Pending actions survive table repaint without duplicate writes,
   and closed/replaced dialogs and disposed pages ignore late responses. Focused production-page
@@ -160,11 +160,14 @@ alongside §1.1; they do not authorize untracking handwritten JavaScript.
   dialog and day timeline have strict owners, Stop is administrator-only at the Portal and confirmed,
   every owner is disposed on page hide, and a back/forward-cache restore reloads the page. Ten
   page-owner sandbox checks (mutation-tested) and the page-owner consumer check pass.
-  Remaining before this item closes: native Portal/service journeys for the catalogs, detail panel,
-  and create dialog (coverage so far is the production page against the sandbox service fixture);
-  the unowned-objects dialog in `orchestrator.html` has no opener and is not wired; the Orchestrator
-  service's own `/management/stop` checks only the API key; a job created in shared-schedule mode
-  still also sends its inline interval; and the panel has not been reviewed visually.
+  Closed 2026-10-10. Three native journeys now drive the catalogs, the create dialog, the detail
+  panel, and ownership against the real Portal and Orchestrator and read the result from the store.
+  The unowned-objects dialog is wired (`orchestrator-unowned.ts`); the service's own
+  `/management/stop` requires an administrator outside legacy mode. The journeys exposed two more
+  defects, both fixed: a bundle job was sent with a job type the service refuses, and the service
+  stored every Portal-created job as hourly whatever interval it was given. The create dialog now
+  resets on open and a shared-schedule job sends no interval. The panels were reviewed visually;
+  the owner and grant fields were unstyled and now use the shared form styles.
 - [x] Catalog/home page composition (`pages/index.js`).
   Reader subscriptions now have strict owners (2026-10-11): `reader-subscriptions.ts` and its view
   module reuse the administrator page's subscription client, validators, and parameter editor, whose
