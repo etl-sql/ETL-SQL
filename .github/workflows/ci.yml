@@ -29,6 +29,21 @@ jobs:
       - name: Prepare browser assets
         run: node scripts/sync-assets.js
 
+      # Deletes every inventoried output and both manifests, prepares again, and requires identical
+      # bytes. A checkout that still tracks its outputs proves nothing about a tree without them.
+      - name: Prove source-only browser asset preparation
+        run: node scripts/verify-source-only-preparation.mjs --evidence artifacts/browser-assets-source-only.json
+
+      - name: Upload browser asset ownership and hashes
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-asset-ownership
+          path: |
+            artifacts/browser-assets.json
+            artifacts/browser-assets-source-only.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Verify .NET
         run: dotnet --info
 

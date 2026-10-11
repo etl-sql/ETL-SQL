@@ -1117,11 +1117,16 @@ does not close build, package, runtime, or Git-index acceptance.
   so it holds after untracking. No handwritten module remains under `wwwroot/js`. Still open: `scripts/`
   is excluded as build tooling, so the generators are not analysed; and the first CodeQL run over the
   88 newly analysed owners has not happened, so new alerts are possible.
-- [ ] **Keep source-only preparation covered in CI.** Run an isolated source-only generation check with
+- [x] **Keep source-only preparation covered in CI.** Run an isolated source-only generation check with
   all inventoried outputs absent, then exercise the prepared assets through the existing consumer gates.
   Include this check when TypeScript sources, generators, asset configuration, or lockfiles change.
   Verify the gate fails for a missing output or omitted new module and does not repair the checkout
   during read-only verification. Retain ownership and source/output hashes with the test evidence.
+  Done (2026-10-11). CI runs on every push and pull request with no path filter. It now runs
+  `verify-source-only-preparation.mjs` on the real checkout after preparation and uploads the ownership
+  inventory and output hashes. `test-asset-generation.mjs`, in the consumer gate, covers the isolated
+  tree: a missing output, an added owner, and read-only verification that repairs nothing. The new step
+  has run locally (491 outputs, identical bytes) but not yet in GitHub Actions.
 - [ ] **Prove source-only clean-checkout builds on Windows and Linux.** Use isolated checkouts with no generated
   outputs or pre-existing dependency/build caches. Run the documented preparation, scoped builds for
   Portal, ReportPlayer, and WorkstationEditor on both platforms, focused tests,

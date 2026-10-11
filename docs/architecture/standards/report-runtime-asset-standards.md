@@ -292,6 +292,11 @@ CodeQL excludes generated JavaScript so findings land on the TypeScript that pro
 fails when one hides a TypeScript owner or leaves a generated script analysed. Exclude output folders,
 never a source project. `scripts/` stays excluded: it is build tooling and does not ship.
 
+`scripts/verify-source-only-preparation.mjs` proves the real checkout can rebuild its outputs. It
+checks each output against the inventory, deletes all of them and both manifests, prepares again, and
+requires the same paths and bytes. If preparation fails, it restores what it removed. CI runs it after
+preparation and uploads the inventory and hashes. Run it locally before proposing the cutover.
+
 `scripts/test-asset-generation.mjs` runs preparation in an isolated source-only tree. It covers
 missing directories and outputs, repeat-run stability, rename/delete cleanup, import closure,
 failed compilation, and the MSBuild verifier's missing/stale/new-source failures.

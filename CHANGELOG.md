@@ -14,6 +14,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Prove source-only browser asset preparation in CI: delete every generated output and both manifests,
+  prepare again, and require identical bytes. A failed run restores the files it removed. CI keeps
+  the ownership inventory and output hashes as a build artifact.
 - Analyse the shared runtime and designer TypeScript in CodeQL. The workflow excluded the whole
   `ETL-SQL.ReportRuntime` project, which hid all 88 owners; it now excludes only generated outputs,
   vendor bundles, and map data. A consumer check fails if an exclusion hides an owner again.
