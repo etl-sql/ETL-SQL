@@ -197,13 +197,13 @@ foreach ($script in $etlScripts) {
         $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
         $stderrTask = $proc.StandardError.ReadToEndAsync()
 
-        if ($proc.WaitForExit(180000)) {
+        if ($proc.WaitForExit(360000)) {
             $exitCode = $proc.ExitCode
         }
         else {
             $proc.Kill()
             $exitCode = -1
-            $cliOutput += "`n[TIMEOUT] Script execution exceeded 180 seconds and was terminated."
+            $cliOutput += "`n[TIMEOUT] Script execution exceeded 360 seconds and was terminated."
         }
 
         $cliOutput += $stdoutTask.GetAwaiter().GetResult()

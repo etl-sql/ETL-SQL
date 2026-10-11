@@ -2,10 +2,10 @@
 -- Path: samples/conversion/cleanup.etlsql
 SET ALLOW_FILE_OPERATIONS = 100;
 
-DECLARE @StagingDir PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\import_staging\';
-DECLARE @KeyDir     PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\keys\';
-DECLARE @ZipFile    PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\hr_migration.zip';
-DECLARE @OutputDir  PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\output\';
+DECLARE @StagingDir PATH = 'import_staging/';
+DECLARE @KeyDir     PATH = 'keys/';
+DECLARE @ZipFile    PATH = 'hr_migration.zip';
+DECLARE @OutputDir  PATH = 'output/';
 
 PRINT 'Cleaning up migration artifacts...';
 

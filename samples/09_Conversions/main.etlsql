@@ -1,11 +1,13 @@
-﻿-- Main Orchestration: HR Data Conversion (30 Entities)
+-- Main Orchestration: HR Data Conversion (30 Entities)
 -- Path: samples/09_Conversions/main.etlsql
 -- @requires: postgres
 
--- 1. Setup Environment
-DECLARE @InputDir   PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\extract_staging\';
-DECLARE @OutputDir  PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\output\';
-DECLARE @ZipFile    PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\hr_migration.zip';
+SET ALLOW_FILE_OPERATIONS = 10000;
+
+DECLARE @InputDir   PATH = 'extract_staging/';
+DECLARE @OutputDir  PATH = 'output/';
+DECLARE @KeyDir     PATH = 'keys/';
+DECLARE @ZipFile    PATH = 'hr_migration.zip';
 
 -- 2. Define System A Connection
 CREATE CONNECTION system_a AS POSTGRES(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
@@ -24,36 +26,73 @@ DECLARE @entities LIST = (
 BEGIN TRY
     PRINT 'Starting Conversion of 30 HR Entities...';
 
+    -- Ensure schemas are initialized
+    RUN SCRIPT 'system_a/setup_db.etlsql';
+    RUN SCRIPT 'system_b/setup_sys_b.etlsql';
+
+    IF NOT DIRECTORY_EXISTS(@InputDir)
+        CREATE DIRECTORY @InputDir;
+    IF NOT DIRECTORY_EXISTS(@OutputDir)
+        CREATE DIRECTORY @OutputDir;
+    IF NOT DIRECTORY_EXISTS(@KeyDir)
+        CREATE DIRECTORY @KeyDir;
+
+    DECLARE @pubKey PATH = @KeyDir + 'public.asc';
+    IF NOT FILE_EXISTS(@pubKey)
+    BEGIN
+        PRINT 'Generating PGP Key Pair...';
+        CREATE PGP_KEY_PAIR @KeyDir 
+            WITH(IDENTITY='HR-Migration <hr@company.com>', PASSPHRASE='hr-secret');
+    END
+
     -- 3. Extract and Clean each entity
     FOREACH @entity IN @entities
     BEGIN
         PRINT 'Processing Topic: ' + @entity;
         
         -- RUN SCRIPT handles specialized enforcement for each topic
-        RUN SCRIPT 'samples/09_Conversions/system_a/export_entity.etlsql' 
+        RUN SCRIPT 'system_a/export_entity.etlsql' 
             WITH (@Topic = @entity);
             
         -- Data is staged in #ExportSet by the sub-script
         DECLARE @targetPath = @InputDir + @entity + '.csv';
-        SELECT * INTO FLATFILE(@targetPath) FROM #ExportSet;
+        CREATE CONNECTION temp_csv AS FLATFILE(PATH = @targetPath, DELIMITER = PIPE, HEADER = ON, ENCODING = 'UTF8');
+        INSERT INTO temp_csv.FILE SELECT * FROM #ExportSet;
+        DROP CONNECTION temp_csv;
+        DROP TABLE #ExportSet;
         
         -- 4. Secure the data (Encrypt)
         DECLARE @pgpPath = @targetPath + '.pgp';
-        ENCRYPT FILE @targetPath TO @pgpPath 
-            PGP_KEY 'samples/09_Conversions/keys/public.asc';
+        ENCRYPT FILE @targetPath TO @pgpPath PGP_KEY @pubKey;
             
         DELETE FILE @targetPath;
     END
 
     -- 5. Bundle for transport
     PRINT 'Compressing migration package...';
-    COMPRESS DIRECTORY @InputDir TO @ZipFile;
+    COMPRESS DIRECTORY @InputDir TO @ZipFile WITH(OVERWRITE=ON);
+    DELETE DIRECTORY_CONTENTS @InputDir WITH(RECURSIVE=ON);
+    DELETE DIRECTORY @InputDir;
 
     -- 6. Hand off to System B
     PRINT 'Handing off to System B...';
-    RUN SCRIPT 'samples/09_Conversions/system_b/import_main.etlsql';
+    RUN SCRIPT 'system_b/import_main.etlsql';
 
-    PRINT 'Conversion Complete. 30 files generated in ' + @OutputDir;
+    IF FILE_EXISTS(@ZipFile)
+        DELETE FILE @ZipFile;
+    IF DIRECTORY_EXISTS(@OutputDir)
+    BEGIN
+        DELETE DIRECTORY_CONTENTS @OutputDir WITH(RECURSIVE=ON);
+        DELETE DIRECTORY @OutputDir;
+    END
+
+    IF DIRECTORY_EXISTS(@KeyDir)
+    BEGIN
+        DELETE DIRECTORY_CONTENTS @KeyDir WITH(RECURSIVE=ON);
+        DELETE DIRECTORY @KeyDir;
+    END
+
+    PRINT 'Conversion Complete.';
 
 END TRY
 BEGIN CATCH

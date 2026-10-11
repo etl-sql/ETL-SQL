@@ -1,4 +1,4 @@
-﻿-- Main Orchestration: System A Secure Export
+-- Main Orchestration: System A Secure Export
 -- Path: samples/conversion/system_a/export_main.etlsql
 -- @requires: postgres
 
@@ -7,11 +7,11 @@
    @description: Secure HR Data Export with PGP and Compression
 */
 -- 1. Setup Environment
-SET ALLOW_FILE_OPERATIONS = 200;
+SET ALLOW_FILE_OPERATIONS = 10000;
 
-DECLARE @OutputDir = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\output\';
-DECLARE @KeyDir    = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\keys\';
-DECLARE @ZipFile   = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\hr_migration.zip';
+DECLARE @OutputDir PATH = '../output/';
+DECLARE @KeyDir    PATH = '../keys/';
+DECLARE @ZipFile   PATH = '../hr_migration.zip';
 
 -- 2. Define Source Connection (Postgres)
 CREATE CONNECTION system_a AS POSTGRES(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
@@ -30,8 +30,17 @@ DECLARE @topics LIST = (
 BEGIN TRY
     PRINT 'Starting Secure Export Process...';
 
+    IF NOT DIRECTORY_EXISTS(@OutputDir)
+        CREATE DIRECTORY @OutputDir;
+    IF NOT DIRECTORY_EXISTS(@KeyDir)
+        CREATE DIRECTORY @KeyDir;
+
+    -- Ensure tables are provisioned
+    RUN SCRIPT './setup_db.etlsql';
+
     -- 3. Generate PGP Key Pair (if not exists)
-    IF NOT FILE_EXISTS(@KeyDir + 'public.asc')
+    DECLARE @publicKey PATH = @KeyDir + 'public.asc';
+    IF NOT FILE_EXISTS(@publicKey)
     BEGIN
         PRINT 'Generating PGP Key Pair...';
         CREATE PGP_KEY_PAIR @KeyDir 
@@ -44,7 +53,7 @@ BEGIN TRY
         PRINT 'Processing: ' + @topic;
         
         -- Extraction logic
-        RUN SCRIPT 'samples/09_Conversions/system_a/export_entity.etlsql' 
+        RUN SCRIPT './export_entity.etlsql' 
             WITH (@Topic = @topic);
         
         -- File Paths
@@ -60,7 +69,7 @@ BEGIN TRY
         
         -- 5. Encrypt each file
         PRINT 'Encrypting ' + @topic + '...';
-        ENCRYPT FILE @csvPath TO @pgpPath PGP_KEY (@KeyDir + 'public.asc');
+        ENCRYPT FILE @csvPath TO @pgpPath PGP_KEY @publicKey;
         
         -- 6. Cleanup plaintext file
         DELETE FILE @csvPath;
@@ -72,6 +81,7 @@ BEGIN TRY
 
     -- 8. Final Cleanup of staging directory
     DELETE DIRECTORY_CONTENTS @OutputDir WITH(RECURSIVE=ON);
+    DELETE DIRECTORY @OutputDir;
 
     PRINT 'Secure Export Complete: ' + @ZipFile;
 

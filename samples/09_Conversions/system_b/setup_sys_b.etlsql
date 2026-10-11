@@ -1,9 +1,10 @@
-﻿-- @requires: postgres
+-- @requires: postgres
 -- Setup Script for System B (Target)
 -- Path: samples/conversion/setup_sys_b.etlsql
 
 BEGIN TRY
     -- 1. Define Connection to System B (Postgres)
+    DROP CONNECTION IF EXISTS system_b;
     CREATE CONNECTION system_b AS POSTGRES(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
 
     DECLARE @topics LIST = (
