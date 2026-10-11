@@ -984,6 +984,10 @@ does not close build, package, runtime, or Git-index acceptance.
   survive the explicit artifact file list and match the producing candidate's hashes. Recreate or
   validate preparation manifests for the receiving checkout; reject missing assets, changed inputs,
   and a manifest whose paths or hashes describe another job's working tree.
+  Progress (2026-10-11): the Portal, Orchestrator service, and sandbox-worker images build from an archive
+  of `e97278ac5` with all 491 outputs deleted. Portal serves its 213 outputs with matching bytes, Node is
+  absent from all three images, and their embedded runtime resources match. The lean-worker Dockerfile,
+  workflow cache and artifact handoffs, and the macOS jobs are not covered.
 - [ ] **Make package scripts reproducible and fail fast.** Audit PowerShell and shell versions of
   `build-vsix`, `publish-vsix`, and affected release scripts. Use locked dependency installs for the
   compiler, extension, and React UI, and propagate failures from preparation, builds, publishes, and
