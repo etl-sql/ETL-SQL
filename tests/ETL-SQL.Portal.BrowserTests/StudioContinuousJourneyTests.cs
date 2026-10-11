@@ -1,7 +1,7 @@
 using System.Text.Json;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.WorkstationEditor;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
 
@@ -50,16 +50,19 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await fixture.SignInAsync(page);
-
         var alias = $"studio_journey_{Guid.NewGuid():N}";
-        await CreateSharedConnectionAsync(page, alias);
-        var reportId = await CreateReportAsync(page, alias);
+        await using (var setup = await fixture.NewSessionAsync())
+        {
+            await fixture.SignInAsync(setup.Page);
+            await CreateSharedConnectionAsync(setup.Page, alias);
+        }
+        var authorId = await SignInAsPublisherAsync(page);
+        var reportId = await CreateReportAsync(page, alias, authorId);
 
         await page.GotoAsync($"/studio.html?reportId={reportId}");
         await WaitForStudioAsync(session);
 
-        var marker = await DriveJourneyAsync(session, alias, "-- continuous Portal journey");
+        var expected = await DriveJourneyAsync(session, alias, "-- continuous Portal journey");
 
         await page.Locator("[data-action='save']").ClickAsync();
         await page.WaitForFunctionAsync("() => window.__STUDIO__.state.documents[0].isDirty === false");
@@ -77,11 +80,22 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
                 return payload.scriptText ?? payload.script ?? payload.content ?? '';
             }
             """, reportId);
-        Assert.Contains(marker, reloaded, StringComparison.Ordinal);
-
+        Assert.Equal(NormalizeEndings(expected), NormalizeEndings(reloaded));
+        await page.ReloadAsync();
+        await WaitForStudioAsync(session);
+        Assert.Equal(NormalizeEndings(expected), NormalizeEndings(await ScriptAsync(page)));
         StudioCertification.Certify(
-            new CertifiedArtifact("continuous authoring", StudioHost.Portal, $"report-{reportId}.rptsql", reloaded),
+            new CertifiedArtifact("continuous authoring", StudioHost.Portal, $"report-{reportId}.rptsql", expected),
             reloaded);
+        await page.GotoAsync($"/index.html#report-{reportId}");
+        var execute = page.Locator("#execBtn");
+        var refresh = page.Locator("#refreshBtn");
+        await Microsoft.Playwright.Assertions.Expect(execute.Or(refresh).First).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        if (await execute.IsVisibleAsync()) await execute.ClickAsync();
+        else await refresh.ClickAsync();
+        var report = page.FrameLocator("#reportFrame iframe");
+        await Microsoft.Playwright.Assertions.Expect(report.Locator("[data-visual-name='UsersTable'] tbody tr").First)
+            .ToBeVisibleAsync(new() { Timeout = 60_000 });
         Assert.Empty(session.PageErrors);
     }
 
@@ -103,24 +117,32 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
         await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=journey-token");
         await WaitForStudioAsync(session);
 
-        var marker = await DriveJourneyAsync(session, "sample_data", "-- continuous desktop journey");
+        var expected = await DriveJourneyAsync(session, "sample_data", "-- continuous desktop journey");
 
         await page.Locator("[data-action='save']").ClickAsync();
         await page.WaitForFunctionAsync("() => window.__STUDIO__.state.documents[0].isDirty === false");
 
         // On this host the file on disk is what the host wrote, so it is what the claim is made against.
         var reloaded = await File.ReadAllTextAsync(file);
-        Assert.Contains(marker, reloaded, StringComparison.Ordinal);
-
+        Assert.Equal(NormalizeEndings(expected), NormalizeEndings(reloaded));
+        await page.ReloadAsync();
+        await WaitForStudioAsync(session);
+        Assert.Equal(NormalizeEndings(expected), NormalizeEndings(await ScriptAsync(page)));
         StudioCertification.Certify(
-            new CertifiedArtifact("continuous authoring", StudioHost.Desktop, "journey.rptsql", reloaded),
+            new CertifiedArtifact("continuous authoring", StudioHost.Desktop, "journey.rptsql", expected),
             reloaded);
+        var run = page.WaitForResponseAsync(response =>
+            response.Url.EndsWith("/api/designer/run", StringComparison.Ordinal)
+            && response.Request.Method == "POST");
+        await page.Locator("[data-action='run']").ClickAsync();
+        Assert.True((await run).Ok);
+        await page.WaitForFunctionAsync("() => window.__STUDIO__.state.documents[0].studioContext.runActive === false");
+        await AssertLearningResultAsync(page);
         Assert.Empty(session.PageErrors);
     }
 
     /// <summary>
-    /// The journey itself, identical on both hosts. Returns the marker the code-edit step wrote, so
-    /// the caller can assert it survived that host's own idea of a reload.
+    /// The same gestures on both hosts. Returns an independent pre-save capture for persistence checks.
     /// </summary>
     private static async Task<string> DriveJourneyAsync(BrowserSession session, string alias, string marker)
     {
@@ -212,29 +234,91 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
         await Microsoft.Playwright.Assertions.Expect(page.Locator("[data-visual-stage]")).ToBeVisibleAsync();
         await Microsoft.Playwright.Assertions.Expect(page.Locator("[data-code-stage]")).ToBeVisibleAsync();
 
-        // ── Edit the code ────────────────────────────────────────────────────
-        await page.EvaluateAsync(
-            "text => window.__STUDIO__.state.editorInstance.setValue(window.__STUDIO__.state.editorInstance.getValue() + `\n${text}\n`)",
-            marker);
+        // Inspect the helper's SQL and explanation before making a keyboard edit.
+        await AssertExplainedHelperCancelsWithoutEditingAsync(page);
+        var editor = page.Locator("[data-code-stage] .cm-content");
+        await editor.ClickAsync();
+        await editor.PressAsync("ControlOrMeta+End");
+        await page.Keyboard.InsertTextAsync($"\n{marker}\nSELECT 42 AS LearningCheck;");
         await page.WaitForFunctionAsync("() => window.__STUDIO__.state.documents[0].isDirty === true");
+        var expected = await ScriptAsync(page);
+        Assert.Contains("SELECT 42 AS LearningCheck;", expected, StringComparison.Ordinal);
 
-        // ── Run ──────────────────────────────────────────────────────────────
-        // Run the statement the author is looking at, not the whole document. The Portal's
-        // interactive-run policy refuses presentation statements — a report script is executed by
-        // rendering the report, not by an ad-hoc run — so "run all" is a desktop-only affordance and
-        // running a selection is the step both hosts actually offer an author mid-edit.
-        await page.EvaluateAsync("() => window.__STUDIO__.state.editorInstance.gotoLine(1, 1)");
+        // Returning to the helper must not discard what the author typed.
+        await AssertExplainedHelperCancelsWithoutEditingAsync(page);
+        Assert.Equal(expected, await ScriptAsync(page));
+
+        await editor.ClickAsync();
+        await editor.PressAsync("ControlOrMeta+End");
+        await editor.PressAsync("Shift+Home");
+        Assert.Equal("SELECT 42 AS LearningCheck;", await page.EvaluateAsync<string>(
+            "() => window.__STUDIO__.state.editorInstance.getSelection()"));
+        var response = page.WaitForResponseAsync(response =>
+            response.Url.EndsWith("/api/designer/run", StringComparison.Ordinal)
+            && response.Request.Method == "POST");
         await page.Locator("[data-action='run-selected']").ClickAsync();
+        Assert.True((await response).Ok);
         await page.WaitForFunctionAsync(
             "() => window.__STUDIO__.state.documents[0].studioContext.runActive === false",
             null, new PageWaitForFunctionOptions { Timeout = 60_000 });
-        var trace = await page.EvaluateAsync<JsonElement>(
-            "() => window.__STUDIO__.state.documents[0].studioContext.resultsTrace");
-        Assert.True(
-            trace.EnumerateArray().Any(item => item.GetProperty("type").GetString() == "results"),
-            $"The run produced no result set. Trace: {trace}");
+        await AssertLearningResultAsync(page);
+        return expected;
+    }
 
-        return marker;
+    private static async Task AssertLearningResultAsync(IPage page)
+    {
+        var result = await page.EvaluateAsync<JsonElement>(
+            "() => window.__STUDIO__.state.documents[0].studioContext.resultsTrace.find(item => item.type === 'results')");
+        Assert.Equal("LearningCheck", Assert.Single(result.GetProperty("columns").EnumerateArray()).GetString());
+        Assert.Equal(42m, Assert.Single(result.GetProperty("rows").EnumerateArray()).GetProperty("LearningCheck").GetDecimal());
+    }
+
+    private static async Task AssertExplainedHelperCancelsWithoutEditingAsync(IPage page)
+    {
+        var before = await ScriptAsync(page);
+        await page.Locator("[data-workflow-step='palette']").ClickAsync();
+        await page.Locator("[data-dialog-action='build']").ClickAsync();
+        var preview = page.Locator(".etlsql-studio-sql-preview").First;
+        await preview.WaitForAsync();
+        Assert.Contains("CREATE VISUAL", await preview.Locator("pre").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.False(string.IsNullOrWhiteSpace(await preview.Locator(".etlsql-studio-sql-explains").TextContentAsync()));
+        await page.Locator("[data-dialog-action='cancel']").ClickAsync();
+        await page.WaitForFunctionAsync(
+            "() => { const backdrop = document.querySelector('[data-modal-backdrop]'); return !backdrop || backdrop.hidden; }");
+        Assert.Equal(before, await ScriptAsync(page));
+    }
+
+    private static Task<string> ScriptAsync(IPage page) => page.EvaluateAsync<string>(
+        "() => window.__STUDIO__.state.editorInstance.getValue()");
+
+    private static string NormalizeEndings(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    private async Task<int> SignInAsPublisherAsync(IPage page)
+    {
+        var name = $"studio_author_{Guid.NewGuid():N}"[..28];
+        var password = $"Studio!9{Guid.NewGuid():N}";
+        int userId;
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
+            var user = new PortalUser
+            {
+                UserName = name,
+                Email = $"{name}@example.invalid",
+                IsActive = true,
+                MustChangePassword = false
+            };
+            Assert.True((await users.CreateAsync(user, password)).Succeeded);
+            Assert.True((await users.AddToRoleAsync(user, "Publisher")).Succeeded);
+            Assert.Equal("Publisher", Assert.Single(await users.GetRolesAsync(user)));
+            userId = user.Id;
+        }
+        await page.GotoAsync("/login.html");
+        await page.FillAsync("#username", name);
+        await page.FillAsync("#password", password);
+        await page.ClickAsync("#loginBtn");
+        await page.WaitForURLAsync("**/index.html");
+        return userId;
     }
 
     private static async Task<int> CountVisualsAsync(IPage page) => await page.EvaluateAsync<int>(
@@ -260,9 +344,9 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
         Assert.Equal(204, status);
     }
 
-    private async Task<int> CreateReportAsync(IPage page, string alias)
+    private async Task<int> CreateReportAsync(IPage page, string alias, int authorId)
     {
-        var folderId = await CreateWritableFolderAsync();
+        var folderId = await CreateWritableFolderAsync(authorId);
         var report = await page.EvaluateAsync<JsonElement>(
             """
             async request => {
@@ -275,6 +359,7 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
                 folderId,
                 name = $"Continuous Journey {Guid.NewGuid():N}",
                 scriptText = $"""
+                    CREATE CONNECTION {alias} AS MOCKDB('SHARED:{alias}');
                     SELECT UserID, UserName INTO #users FROM {alias}.Users;
                     CREATE VISUAL UsersTable AS TABLE (
                       SOURCE = #users,
@@ -288,19 +373,16 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
         return report.GetProperty("id").GetInt32();
     }
 
-    private async Task<int> CreateWritableFolderAsync()
+    private async Task<int> CreateWritableFolderAsync(int authorId)
     {
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-        var adminId = await db.Users.Where(user => user.UserName == PortalBrowserFixture.AdminUsername)
-            .Select(user => user.Id)
-            .SingleAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var folder = new Folder
         {
             Name = $"Journey {suffix}",
             Path = $"/Journey-{suffix}",
-            OwnerId = adminId
+            OwnerId = authorId
         };
         db.Folders.Add(folder);
         await db.SaveChangesAsync();

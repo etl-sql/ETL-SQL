@@ -437,10 +437,10 @@ an author gets stuck. Support both production hosts without requiring VS Code or
 including ordinary capability-scoped authors and readers. Learning must not require publishing or
 administration rights.
 
-**Why next:** Resume the remaining authoring, recovery and certification work next sprint. Legacy
-retirement remains unscheduled until certified journeys, a parity matrix and a migration decision
-establish that Studio can replace the existing entry points. Mobile authoring retains its separate
-Later horizon.
+**Why next:** Resume the remaining authoring, recovery and certification work next sprint. Completeness
+is measured by successful report and ETL journeys across both hosts, with visual helpers and code
+editing working together. Entry-point retirement is a separate future decision. Mobile authoring
+retains its separate Later horizon.
 
 **Boundaries:** Preserve standard `.rptsql` and `.etlsql` scripts as the source of truth, surgical
 parser/patcher edits, per-document state, caller identity and row-level security, bounded previews,
@@ -454,13 +454,22 @@ and Orchestrator execution and scheduling.
 **Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
 Select individual IDs when this initiative is scheduled; task sizes exclude external waits.
 
-#### Replacement criteria and migration decisions
+#### Unified authoring experience and completeness criteria
+
+Studio combines ReportBuilder visual authoring and WorkstationEditor code editing into one complete
+authoring experience across desktop and Portal. Users familiar with Power BI, Tableau, SSRS, and SSIS
+should be able to build useful reports and pipelines while learning the generated SQL. SQL remains
+the authoritative artifact; visual helpers preserve hand edits. Host differences follow local files,
+permissions, and execution boundaries. These components are foundations of Studio; retiring their
+entry points is a separate future decision, not the measure of success.
+
+**Working inventory:** [Studio authoring completeness](docs/architecture/decisions/studio-authoring-completeness.md).
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| ST01 | **ReportBuilder parity inventory.** Map existing workflows to Studio coverage; link passing evidence or define a missing acceptance fixture for each required workflow, and record deliberate non-goals. No feature or test implementation. | — | S |
-| ST02 | **WorkstationEditor parity inventory.** Map script editing, files, execution and recovery workflows with the same explicit gap/evidence inventory. No feature or test implementation. | — | S |
-| ST03 | **Legacy retirement decision.** Use both inventories and completed required journeys to decide whether either entry point can retire; record migration steps or continued support. This does not remove an editor. | ST01, ST02; required journey evidence | S |
+| ST01 | **Report-authoring completeness inventory — complete.** [Workflow and fixture mapping](docs/architecture/decisions/studio-report-authoring-inventory.md); runtime acceptance remains open. Map the ReportBuilder foundation and full connect, shape, visualize, interact, preview and save/publish workflow to both Studio hosts. Record beginner friction, improvements, evidence or missing acceptance fixtures, and non-goals. No feature or test implementation. | — | S |
+| ST02 | **Script and ETL-authoring completeness inventory — complete.** [Workflow and fixture mapping](docs/architecture/decisions/studio-script-etl-authoring-inventory.md); runtime acceptance remains open. Map the WorkstationEditor foundation, code suggestions/highlighting, files, guided pipelines, execution, diagnostics and recovery to both hosts. Record improvements and gaps/evidence. No feature or test implementation. | — | S |
+| ST03 | **Unified beginner-experience acceptance.** Assess completed report and ETL journeys, helper/code transitions without lost work, and the learner’s understanding of generated SQL. Record remaining gaps and host-specific limits. | ST01, ST02; required journey evidence | S |
 
 #### Portal pipelines and schedule handoffs
 
@@ -486,15 +495,18 @@ Select individual IDs when this initiative is scheduled; task sizes exclude exte
 
 #### Author, reader and beginner practice journeys
 
+ST16/ST17 automated report sequences passed on 2026-10-11; both remain open for learner explanation.
+See [beginner report evidence](docs/architecture/decisions/studio-beginner-report-evidence.md).
+
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
 | ST16 | **Portal beginner report journey.** An ordinary scoped author uses sample data, makes a visual change, explains its generated syntax, hand-edits, reopens the helper, saves/reopens and runs one report with real parser/patcher responses. | — | M |
 | ST17 | **Desktop beginner report journey.** Run the same bounded sequence in the self-installed WorkstationEditor host, with external editors unavailable. | — | M |
 | ST18 | **Dedicated Portal reader journey.** A separate reader opens one permitted report, uses its parameters/interactions and reopens a saved view without receiving author/publish controls. | — | M |
 | ST19 | **Second-identity RLS journey.** Two ordinary identities open the same report and receive their expected disjoint rows, including preview/data/export paths that the chosen report exposes. No new RLS model. | ST18 | M |
-| ST20 | **Decide restricted practice execution.** Specify how a learner may run the MOCKDB failure/repair exercise in each host, including mutating steps, cleanup and permission boundaries. Portal execution must use the sanctioned sandbox path. | — | D |
-| ST21 | **Portal beginner ETL exercise.** Run the deliberate ASSERT failure, repair it, check expected rows and cleanup under the agreed practice identity; use no external service. | ST20; ST04 if the chosen path requires it | M |
-| ST22 | **Desktop beginner ETL exercise.** Execute the same failure/repair lifecycle and verify rows/cleanup under the agreed local restrictions. | ST20 | M |
+| ST20 | **Complete: decide restricted practice execution.** Specify how a learner may run the MOCKDB failure/repair exercise in each host, including mutating steps, cleanup and permission boundaries. Portal execution uses saved-revision Orchestrator sandbox submission; desktop uses disposable local sessions. [Decision](docs/architecture/decisions/studio-practice-execution.md). | — | D |
+| ST21 | **Portal beginner ETL exercise.** Run the deliberate ASSERT failure, repair it, check expected rows and cleanup under the agreed practice identity; use no external service. | ST20; ST04 | M |
+| ST22 | **Complete: desktop beginner ETL exercise.** Execute the same failure/repair lifecycle and verify rows/cleanup under the agreed local restrictions. [Passing browser evidence](docs/architecture/decisions/studio-desktop-practice-evidence.md). | ST20 | M |
 
 #### Keyboard and assistive technology
 
@@ -561,7 +573,7 @@ more work; do not fill a sprint by assuming every M task takes three days.
 
 | Outcome | Select first | Initial engineering range | Follow-on work |
 | :--- | :--- | :--- | :--- |
-| Know the replacement gaps | ST01, ST02 | 2–4 days | Select required journeys individually; ST03 waits for their evidence. |
+| Identify authoring gaps and improvements | ST01, ST02 completed | Inventory delivered | Select required journeys individually; ST03 assesses their combined evidence. |
 | Keep one unpublished Portal draft | ST12, ST13 | 4–7 days | ST14 recovery and ST15 publishing are separate increments. |
 | Submit and observe one Portal pipeline | ST04, ST05 | 6–10 days | ST06 cancellation, then ST10 ordinary-author proof; ST07 scheduling is separate. |
 | Set measurable delivery limits | ST53, ST54 | 2–4 days | Schedule ST47 and ST42 independently after the decisions. |
@@ -574,8 +586,8 @@ separately selectable increments outside the remaining Alpha backlog.
 identity, real parser/patcher/execution responses, exact saved/reopened bytes and expected output.
 Add focused regression evidence for defects found within that task. Preserve existing typed contracts,
 asset sync, lint/type gates, isolation, draft policy and performance ceilings. Sandbox/source-pattern
-checks alone do not certify a production-host journey. The parity inventories identify which
-completed task IDs are required before the retirement decision can approve a replacement.
+checks alone do not certify a production-host journey. The completeness inventories identify which
+completed task IDs are required for ST03 to assess the unified beginner experience.
 
 ---
 

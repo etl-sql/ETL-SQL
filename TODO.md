@@ -1289,18 +1289,34 @@ does not close build, package, runtime, or Git-index acceptance.
 
 ---
 
-## 2. Studio — Replacement criteria and migration decisions
+## 2. Studio — Unified authoring experience and completeness criteria
 
 **Horizon:** Next  
 **Authoritative design:** [ETL-SQL Studio](docs/architecture/decisions/etl-sql-studio.md) and [Portal ETL documents](docs/architecture/decisions/portal-etl-documents.md)
 
-- [ ] **ST01 — ReportBuilder parity inventory.** Map existing workflows to Studio coverage; link passing
-  evidence or define a missing acceptance fixture for each required workflow, and record deliberate non-goals.
-  No feature or test implementation. (Size: S)
-- [ ] **ST02 — WorkstationEditor parity inventory.** Map script editing, files, execution, and recovery workflows
-  with the same explicit gap/evidence inventory. No feature or test implementation. (Size: S)
-- [ ] **ST03 — Legacy retirement decision.** Use both inventories and completed required journeys to decide whether
-  either entry point can retire; record migration steps or continued support. Does not remove an editor.
+Studio combines ReportBuilder visual authoring and WorkstationEditor code editing into one complete
+authoring experience across desktop and Portal. Users familiar with Power BI, Tableau, SSRS, and SSIS
+should be able to build useful reports and pipelines while learning the generated SQL. SQL remains
+the authoritative artifact; visual helpers preserve hand edits. Host differences follow local files,
+permissions, and execution boundaries. These components are foundations of Studio; retiring their
+entry points is a separate future decision, not the measure of success.
+
+**Working inventory:** [Studio authoring completeness](docs/architecture/decisions/studio-authoring-completeness.md)
+
+- [x] **ST01 — Report-authoring completeness inventory.** Map the ReportBuilder foundation and the full
+  connect → shape → visualize → interact → preview → save/publish workflow to Studio in both hosts.
+  Identify beginner friction, improvements, passing evidence or missing acceptance fixtures, and deliberate
+  non-goals. No feature or test implementation. (Size: S)
+  Completed source/evidence mapping: [24 report workflows and missing acceptance fixtures](docs/architecture/decisions/studio-report-authoring-inventory.md).
+  Inventory completion does not certify those journeys; implementation and passing evidence remain open.
+- [x] **ST02 — Script and ETL-authoring completeness inventory.** Map the WorkstationEditor foundation,
+  code suggestions/highlighting, files, guided pipeline construction, execution, diagnostics, and recovery
+  to Studio in both hosts. Record improvements and explicit gaps/evidence. No feature or test implementation. (Size: S)
+  Completed source/evidence mapping: [26 script and ETL workflows with acceptance fixtures](docs/architecture/decisions/studio-script-etl-authoring-inventory.md).
+  Inventory completion does not certify execution or recovery; required journeys remain open.
+- [ ] **ST03 — Unified beginner-experience acceptance.** Use both inventories and completed required journeys
+  to assess whether users can complete report and ETL workflows, move between helpers and code without
+  losing work, and explain the SQL they generated. Record remaining gaps and host-specific limits.
   (Depends on: ST01, ST02, required journey evidence; Size: S)
 
 ---
@@ -1355,20 +1371,26 @@ does not close build, package, runtime, or Git-index acceptance.
 - [ ] **ST16 — Portal beginner report journey.** An ordinary scoped author uses sample data, makes a visual change,
   explains its generated syntax, hand-edits, reopens the helper, saves/reopens, and runs one report with real
   parser/patcher responses. (Size: M)
+  Automated Publisher sequence passed on 2026-10-11; [evidence and remaining learner observation](docs/architecture/decisions/studio-beginner-report-evidence.md).
 - [ ] **ST17 — Desktop beginner report journey.** Run the same bounded sequence in the self-installed WorkstationEditor
   host, with external editors unavailable. (Size: M)
+  Matching desktop sequence passed on 2026-10-11; the learner explanation remains to be observed.
 - [ ] **ST18 — Dedicated Portal reader journey.** A separate reader opens one permitted report, uses its parameters/interactions,
   and reopens a saved view without receiving author/publish controls. (Size: M)
 - [ ] **ST19 — Second-identity RLS journey.** Two ordinary identities open the same report and receive their expected
   disjoint rows, including preview/data/export paths that the chosen report exposes. No new RLS model.
   (Depends on: ST18; Size: M)
-- [ ] **ST20 — Decide restricted practice execution.** Specify how a learner may run the MOCKDB failure/repair exercise
+- [x] **ST20 — Decide restricted practice execution.** Specify how a learner may run the MOCKDB failure/repair exercise
   in each host, including mutating steps, cleanup, and permission boundaries. Portal execution must use the sanctioned
   sandbox path. (Size: D)
+  [Decision recorded](docs/architecture/decisions/studio-practice-execution.md): local disposable sessions;
+  Portal saved revisions through the Orchestrator sandbox. ST21 runtime evidence remains open; ST22 passed below.
 - [ ] **ST21 — Portal beginner ETL exercise.** Run the deliberate ASSERT failure, repair it, check expected rows and
-  cleanup under the agreed practice identity; use no external service. (Depends on: ST20, ST04 if chosen path requires it; Size: M)
-- [ ] **ST22 — Desktop beginner ETL exercise.** Execute the same failure/repair lifecycle and verify rows/cleanup
+  cleanup under the agreed practice identity; use no external service. (Depends on: ST20, ST04; Size: M)
+- [x] **ST22 — Desktop beginner ETL exercise.** Execute the same failure/repair lifecycle and verify rows/cleanup
   under the agreed local restrictions. (Depends on: ST20; Size: M)
+  [Browser evidence](docs/architecture/decisions/studio-desktop-practice-evidence.md): failure, keyboard repair,
+  exact loaded values, same-session cleanup and repeatability passed on 2026-10-11.
 
 ---
 

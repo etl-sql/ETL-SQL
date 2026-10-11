@@ -594,17 +594,29 @@ ETL-SQL Studio leverages autonomous agent testing to continuously evaluate and p
 
 ---
 
-## 12. Parallel Development & Safe Transition Policy
+## 12. Unified Product and Foundation Policy
 
-To ensure zero regression risk and maintain business continuity:
+Studio combines ReportBuilder visual authoring and WorkstationEditor code editing into one complete
+authoring experience across desktop and Portal. Users familiar with Power BI, Tableau, SSRS, and SSIS
+should be able to build useful reports and pipelines while learning the generated SQL. SQL remains
+the authoritative artifact; visual helpers preserve hand edits. Host differences follow local files,
+permissions, and execution boundaries. These components are foundations of Studio; retiring their
+entry points is a separate future decision, not the measure of success.
 
-1. **Independent Parallel Construction**:
-   - `ETL-SQL Studio` is built as an independent, side-by-side component (prototyped in `tools/ui-sandbox` stories and hosted via canonical assets).
-   - Existing `ReportBuilder` (`ETL-SQL.ReportBuilder`) and `WorkstationEditor` (`ETL-SQL.WorkstationEditor`) remain fully operational, tested, and untouched during Studio development.
-2. **Side-by-Side Availability**:
-   - During milestone stabilization, `etlsql studio` and `/studio/` will be available alongside legacy CLI commands and Portal designer routes.
-3. **Graceful Retirement Post-Stabilization**:
-   - Only after ETL-SQL Studio passes all Playwright browser test journeys, achieves 100% AST round-trip preservation, and completes user acceptance will `ReportBuilder` and legacy editor surfaces be deprecated and retired.
+ReportBuilder supplies visual report-authoring capabilities. WorkstationEditor supplies the desktop
+host and code-editing services, including completion, highlighting, diagnostics, and execution.
+Studio brings these foundations together with guided data preparation, report and pipeline authoring,
+preview, persistence, and recovery. Improvements should complete these user workflows and reduce
+the SQL knowledge required to get started while keeping the script visible and editable.
+
+The [authoring completeness inventory](studio-authoring-completeness.md) maps foundation workflows,
+beginner improvements, host differences, and required acceptance evidence. Existing entry points
+remain supported while this work proceeds. Any future consolidation or removal needs its own scoped
+decision; Studio completeness does not require removing either foundation.
+
+Acceptance requires production-host journeys, preservation of untouched script text, save/reopen
+evidence, and observed beginner understanding. A list of controls or isolated passing tests does not
+establish a complete authoring experience.
 
 ---
 
@@ -619,7 +631,7 @@ To ensure zero regression risk and maintain business continuity:
 - **Slice 7 — Pipeline Studio Foundational DAG**: Parser-derived execution-map canvas for multi-stage
   ETL pipelines, plus the task authoring described in §7.1 — add, edit, reorder, connect, and
   disconnect labelled tasks through a lossless span patcher.
-- **Slice 8 — Stabilization & Legacy Retirement**: Full parity certification, deprecation notices, and clean retirement of legacy `ReportBuilder` and `WorkstationEditor`.
+- **Slice 8 — Unified Authoring Completeness**: Certify complete report and ETL journeys across desktop and Portal, including helper/code transitions, learning, persistence, and recovery. Track improvements using ST01–ST03; entry-point retirement is separate scope.
 
 ---
 
