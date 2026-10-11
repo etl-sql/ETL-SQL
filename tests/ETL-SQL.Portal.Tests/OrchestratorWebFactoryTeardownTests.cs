@@ -7,6 +7,7 @@ using System.Net.Http.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.TestSupport;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -49,12 +50,14 @@ public class OrchestratorWebFactoryTeardownTests
 
             scheduler = factory.Services.GetRequiredService<SchedulerService>();
             var store = factory.Services.GetRequiredService<IJobHistoryStore>();
-            var deadline = DateTime.UtcNow.AddSeconds(15);
-            while (!(await store.GetHistoryAsync("teardown-run", 5)).Any(entry => entry.Status == "RUNNING"))
-            {
-                Assert.True(DateTime.UtcNow < deadline, "The triggered run never started.");
-                await Task.Delay(25);
-            }
+            await LoadAwareWait.UntilAsync(
+                "the triggered run to enter RUNNING",
+                async _ => (await store.GetHistoryAsync("teardown-run", 5))
+                    .FirstOrDefault(entry => entry.Status == "RUNNING" && entry.EndTime == null),
+                entry => entry is not null,
+                TimeSpan.FromSeconds(15),
+                TimeSpan.FromMilliseconds(50),
+                entry => entry is null ? "no running entry" : $"history id={entry.Id}");
         }
         finally
         {
