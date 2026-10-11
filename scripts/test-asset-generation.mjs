@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import synchronizer from './sync-assets.js';
 import { watchBrowser } from './compile-browser.mjs';
@@ -471,7 +472,7 @@ try {
     if (!entrypointsOnly) await verifyGeneration(configurationInputs);
     // Exercise the public wrappers with real preparation. Build spies prove that failed preparation
     // cannot reach downstream tools; they also record argument boundaries from an unrelated cwd.
-    for (const script of ['build-debug.ps1', 'build-debug.sh', 'sync-assets.ps1',
+    for (const script of ['build-debug.ps1', 'build-debug.sh', 'sync-assets.ps1', 'check-built-browser-assets.mjs',
         'test-smoke.ps1', 'test-smoke.sh', 'test-lane.ps1', 'test-lane.sh', 'Release.Helpers.ps1'])
         fs.copyFileSync(path.join(repo, 'scripts', script), path.join(root, 'scripts', script));
     const callsFile = path.join(root, 'entrypoint-calls.jsonl');
@@ -573,6 +574,24 @@ process.exit(process.argv[2] === 'dotnet' ? Number(process.env.ETLSQL_ENTRYPOINT
         for (const [relative, bytes] of before)
             assert.deepEqual(fs.readFileSync(path.join(root, relative)), bytes, 'No-build checks must not repair prepared state.');
     };
+    // The wrappers' dotnet is a spy, so the real target records the build the way a build would.
+    const recordBuild = () => {
+        const result = spawnSync('dotnet', ['msbuild', path.join(root, 'ETL-SQL.ReportRuntime.proj'), '-nologo',
+            '-target:StampBuiltBrowserAssets', '-p:Configuration=Debug', '-verbosity:minimal'], { encoding: 'utf8' });
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        const stamp = fs.readFileSync(path.join(root, 'artifacts/browser-assets-built/ETL-SQL.ReportRuntime.Debug.any.sha256'), 'utf8').trim();
+        const manifest = createHash('sha256').update(fs.readFileSync(path.join(root, 'artifacts/browser-assets.props'))).digest('hex');
+        assert.equal(stamp.toLowerCase(), manifest, 'A build must record the manifest it consumed.');
+    };
+    // dotnet publish/run --no-build reach MSBuild without PrepareForBuild; the same record guards them.
+    const verifyReuse = expectedFailure => {
+        const result = spawnSync('dotnet', ['msbuild', path.join(root, 'ETL-SQL.ReportRuntime.proj'), '-nologo',
+            '-target:VerifyBuiltBrowserAssets', '-p:Configuration=Debug', '-p:NoBuild=true', '-verbosity:minimal'], { encoding: 'utf8' });
+        if (expectedFailure) {
+            assert.notEqual(result.status, 0, 'Reusing binaries from another preparation must fail.');
+            assert.match(result.stdout + result.stderr, expectedFailure);
+        } else assert.equal(result.status, 0, result.stdout + result.stderr);
+    };
     for (const [index, entry] of testEntries.entries()) {
         const noBuild = process.platform === 'win32' ? { ...entry, parameters: { ...entry.parameters, NoBuild: true } } :
             { ...entry, argv: [...entry.argv, noBuildArgument] };
@@ -583,6 +602,15 @@ process.exit(process.argv[2] === 'dotnet' ? Number(process.env.ETLSQL_ENTRYPOINT
             assert.equal(calls()[0].args[1], path.join(root, 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'));
             assert.ok(calls()[0].args.includes('--no-restore'));
         };
+        // Preparation is current here, but nothing has been built from it: the first lane has no
+        // build record at all, the second has one from before the first lane's source was added.
+        const unbuilt = runEntrypoint(noBuild);
+        assert.notEqual(unbuilt.status, 0, 'No-build test lanes must reject binaries not built from the current preparation.');
+        assert.match(unbuilt.stdout + unbuilt.stderr, index === 0 ? /Build once without --no-build/ : /older browser asset preparation/);
+        assert.deepEqual(calls(), [], 'Stale binaries must be rejected before .NET runs.');
+        verifyReuse(index === 0 ? /no build recorded for the prepared browser assets/ : /built from an older browser asset preparation/);
+        recordBuild();
+        verifyReuse();
         const before = metadataSnapshot();
         const current = runEntrypoint(noBuild);
         assert.equal(current.status, 0, current.stdout + current.stderr);

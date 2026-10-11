@@ -292,6 +292,19 @@ CodeQL excludes generated JavaScript so findings land on the TypeScript that pro
 fails when one hides a TypeScript owner or leaves a generated script analysed. Exclude output folders,
 never a source project. `scripts/` stays excluded: it is build tooling and does not ship.
 
+A current preparation does not make existing binaries current. An assembly keeps the runtime bundle
+it embedded, and an output folder keeps the files it copied, until the project is built again. Each
+asset-consuming project therefore writes the manifest hash it built against to
+`artifacts/browser-assets-built/<Project>.<Configuration>.<Runtime>.sha256`. Two things read it:
+
+- `VerifyBuiltBrowserAssets` in `Directory.Build.targets` runs before `Publish` and before
+  `dotnet run` when `NoBuild` is set, and fails if the record is missing or older.
+- `scripts/check-built-browser-assets.mjs` runs in the `-NoBuild` branch of the test and smoke lanes,
+  because a test project is not itself an asset consumer.
+
+Both say to build without `--no-build`. A direct `dotnet test --no-build` is not guarded; use the lane
+scripts for acceptance runs.
+
 `scripts/verify-source-only-preparation.mjs` proves the real checkout can rebuild its outputs. It
 checks each output against the inventory, deletes all of them and both manifests, prepares again, and
 requires the same paths and bytes. If preparation fails, it restores what it removed. CI runs it after

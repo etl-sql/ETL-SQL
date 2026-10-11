@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Reject binaries built from an older browser asset preparation when a build is skipped. Each
+  asset-consuming project records the preparation it built against. `dotnet publish --no-build`,
+  `dotnet run --no-build`, and the `-NoBuild` test and smoke lanes now fail with a rebuild instruction
+  instead of testing or shipping an embedded runtime bundle from before the last source change.
 - Prove source-only browser asset preparation in CI: delete every generated output and both manifests,
   prepare again, and require identical bytes. A failed run restores the files it removed. CI keeps
   the ownership inventory and output hashes as a build artifact.

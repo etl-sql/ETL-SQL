@@ -64,4 +64,43 @@
     <Error Condition="'%(_VerifiedBrowserAsset.FileHash)' != '%(_VerifiedBrowserAsset.ExpectedHash)'"
            Text="Prepared browser asset is stale: %(_VerifiedBrowserAsset.Identity). Run node scripts/sync-assets.js before building." />
   </Target>
+
+  <!-- Publishing or running with NoBuild skips PrepareForBuild, and with it every check above.
+       Reused binaries must have been built from the preparation that is on disk now. -->
+  <Target Name="VerifyBuiltBrowserAssets" BeforeTargets="Publish;ComputeRunArguments"
+          Condition="'$(RequiresBrowserAssets)' == 'true' And '$(NoBuild)' == 'true' And '$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <_BrowserBuiltRuntime Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_BrowserBuiltRuntime>
+      <_BrowserBuiltRuntime Condition="'$(RuntimeIdentifier)' == ''">any</_BrowserBuiltRuntime>
+      <_BrowserBuiltStamp>$(BrowserAssetRoot)artifacts/browser-assets-built/$(MSBuildProjectName).$(Configuration).$(_BrowserBuiltRuntime).sha256</_BrowserBuiltStamp>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(BrowserAssetManifest)')"
+           Text="Browser assets are not prepared. Run node scripts/sync-assets.js, then build without --no-build." />
+    <Error Condition="!Exists('$(_BrowserBuiltStamp)')"
+           Text="$(MSBuildProjectName) has no build recorded for the prepared browser assets. Build without --no-build." />
+    <GetFileHash Files="$(BrowserAssetManifest)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_BrowserCurrentManifest" />
+    </GetFileHash>
+    <ReadLinesFromFile File="$(_BrowserBuiltStamp)">
+      <Output TaskParameter="Lines" PropertyName="_BrowserBuiltHash" />
+    </ReadLinesFromFile>
+    <Error Condition="'%(_BrowserCurrentManifest.FileHash)' != '$(_BrowserBuiltHash)'"
+           Text="$(MSBuildProjectName) was built from an older browser asset preparation. Build without --no-build." />
+  </Target>
+
+  <!-- Records which preparation each build consumed. Entry points that skip the build compare this
+       with the current manifest, so assemblies and copied assets from an older preparation cannot
+       be tested or accepted as the candidate. See scripts/check-built-browser-assets.mjs. -->
+  <Target Name="StampBuiltBrowserAssets" AfterTargets="Build"
+          Condition="'$(RequiresBrowserAssets)' == 'true' And '$(DesignTimeBuild)' != 'true' And Exists('$(BrowserAssetManifest)')">
+    <PropertyGroup>
+      <_BrowserBuiltRuntime Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_BrowserBuiltRuntime>
+      <_BrowserBuiltRuntime Condition="'$(RuntimeIdentifier)' == ''">any</_BrowserBuiltRuntime>
+      <_BrowserBuiltStamp>$(BrowserAssetRoot)artifacts/browser-assets-built/$(MSBuildProjectName).$(Configuration).$(_BrowserBuiltRuntime).sha256</_BrowserBuiltStamp>
+    </PropertyGroup>
+    <GetFileHash Files="$(BrowserAssetManifest)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_BrowserBuiltManifest" />
+    </GetFileHash>
+    <WriteLinesToFile File="$(_BrowserBuiltStamp)" Lines="@(_BrowserBuiltManifest->'%(FileHash)')" Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
 </Project>

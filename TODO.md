@@ -921,7 +921,7 @@ does not close build, package, runtime, or Git-index acceptance.
   authored file carrying a generated-looking banner invalidate preparation without repair. Package
   freshness is tracked under the published asset boundary task. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
   source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
-- [ ] **Verify route, DTO, and schema generator bootstrap.** Exercise the C# browser-contract and Studio
+- [x] **Verify route, DTO, and schema generator bootstrap.** Exercise the C# browser-contract and Studio
   route generators, plus the Portal API-schema validator generator, with browser outputs absent. Resolve
   any cycle where building a generator consumes assets that require its new contracts to compile.
   Document the supported dependency order and any narrowly scoped bootstrap bypass; ordinary builds
@@ -931,6 +931,12 @@ does not close build, package, runtime, or Git-index acceptance.
   A failed generator must return failure and must not certify partially updated declarations or routes.
   Validate the complete generated contract set against both registered hosts before preparing assets;
   passing individual generator tests does not close a failed bootstrap run.
+  Done (2026-10-11). From a source-only archive of `bbd27d820` with all 491 outputs and the three
+  generated contracts deleted, on Windows and Ubuntu: preparation fails without the contracts, the
+  coordinator regenerates all three byte-identically, preparation then yields the same 491 outputs, and
+  Portal builds. `test-browser-contract-bootstrap.mjs` covers host start-up and database failures,
+  invalid contracts, interruption, and recovery in the consumer gate. Evidence:
+  `artifacts/section1/s11-candidate/bootstrap-*`.
 - [x] **Verify source-only module resolution.** With every inventoried browser output absent, compile
   the retained TypeScript owners and their mixed JavaScript dependencies using the supported compiler
   configuration. Preserve relative `.js` import specifiers and public exports. Cover Portal imports of
@@ -1003,6 +1009,12 @@ does not close build, package, runtime, or Git-index acceptance.
   rebuild or reject stale compiled artifacts before recording release acceptance; identify the exact
   artifacts exercised in the evidence. Cover source-only startup with missing binaries and supported
   `--no-restore` paths after the documented locked restore, with actionable failure instructions.
+  Progress (2026-10-11): builds now record the preparation they consumed. `dotnet publish --no-build`,
+  `dotnet run --no-build`, and the `-NoBuild` test and smoke lanes reject a missing or older record with
+  a rebuild instruction; the wrapper fixture covers both cases on Windows and Linux, and a real build,
+  owner edit, and re-preparation showed the rejection end to end. Still open: a direct
+  `dotnet test --no-build` is not guarded, the certification and measurement scripts that accept
+  `-NoBuild` do not call the check, and `--no-restore` paths were not exercised.
 - [ ] **Integrate CI, release, and container preparation.** Audit every affected workflow/job, manual
   validation template, release script, installer/native-package path, and Docker build stage. Install the
   pinned toolchain and generate assets before checks/build/publish; ensure checkout filters, Docker contexts,
@@ -1206,13 +1218,19 @@ does not close build, package, runtime, or Git-index acceptance.
   type/lint gates and asset verification. Preserve public module URLs, exports, and report behavior;
   investigate any changed outcome before untracking outputs. Refresh results after source, generator,
   or package changes instead of relying on earlier migration snapshots.
-- [ ] **Keep acceptance tests from contaminating candidate assets.** Audit the discovered consumer
+- [x] **Keep acceptance tests from contaminating candidate assets.** Audit the discovered consumer
   checks and generator failure fixtures for writes to browser sources, outputs, and manifests. Prefer
   isolated fixture trees. Serialize any check that temporarily changes the acceptance checkout with
   builds, browser tests, preparation, and packaging that read it. Verify cleanup on success and failure,
   then rerun read-only asset verification and compare source/output hashes with the candidate before
   recording acceptance or assembling packages. Temporary modules, partial fixtures, and a manifest
   produced during a test must not become release inputs or certify the restored candidate.
+  Done (2026-10-11). The consumer gate runs its checks one at a time. Generator checks work in isolated
+  trees; checks that load a TypeScript-era module write a `*.__test-*.mjs` copy beside it, which is
+  ignored by Git and excluded from compilation, sync inventories, MSBuild discovery, and packages (covered
+  in `test-asset-generation.mjs`). After a full 115-check run the read-only asset check and the index
+  ownership check both pass, no temporary module remains, and no tracked browser file has changed. CI
+  and pre-push rerun the read-only check after the consumer gate.
 - [ ] **Produce the exact source-control removal plan.** Generate a read-only report from the final
   ownership inventory and current Git index. List each proposed removal, its retained owner or generator,
   regeneration command, and delivery-path evidence; list the inputs that must remain tracked. Include

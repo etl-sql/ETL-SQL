@@ -78,6 +78,12 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "Consumer contract checks failed. Each failure above names the script and how to rerun it on its own."
     exit $LASTEXITCODE
 }
+# Some checks write temporary modules beside the sources they load. Nothing may be left changed.
+& node (Join-Path $ScriptRoot "sync-assets.js") -Check
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "A consumer check left the prepared browser assets changed. Run 'node .\scripts\sync-assets.js' and find the check that wrote to the checkout."
+    exit $LASTEXITCODE
+}
 
 # 6. Syntax Index Sync
 Write-Host "[6/13] Checking syntax index synchronization..." -ForegroundColor White
