@@ -31,7 +31,12 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 .WithEnvironment("MIN_PORT", PassiveMinPort.ToString())
                 .WithEnvironment("MAX_PORT", PassiveMaxPort.ToString())
                 .WithPortBinding(21, true)
-                .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(21));
+                // Listening inside the container is not the same as reachable from the host: the
+                // first test to run connected through the mapped port before it was forwarding and
+                // was refused in two milliseconds, while the later ones passed.
+                .WithWaitStrategy(Wait.ForUnixContainer()
+                    .UntilInternalTcpPortIsAvailable(21)
+                    .UntilExternalTcpPortIsAvailable(21));
 
             for (var port = PassiveMinPort; port <= PassiveMaxPort; port++)
             {

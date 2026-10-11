@@ -309,9 +309,13 @@ class load and shared background-service state from its startup/shutdown observa
   The lesson: removing hosted services from a test host also removes their shutdown work.
 
   **Open: `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds` in the Docker lane.** It failed in
-  2 ms with "Failed to connect to host" in two runs on 2026-10-11 and passed in the two before
-  them. A 2 ms refusal means nothing was listening on the mapped port when the test ran. The
-  container's readiness check was not examined.
+  2 ms with "Failed to connect to host" in three runs on 2026-10-11 and passed in the two before
+  them, while the other FTP tests in the same class passed each time. A 2 ms refusal means nothing
+  was accepting on the mapped port when that test, the first to run, connected. The fixture waited
+  for port 21 to listen inside the container, which does not mean the host mapping is forwarding
+  yet. It now also waits for the mapped port from the host. This is a reading of the fixture and
+  the log, not a reproduction: the Docker lane was not run locally, and why it began failing on
+  that day is not known. The image is pulled as `latest`.
 
 
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
