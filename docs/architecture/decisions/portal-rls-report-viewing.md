@@ -1,6 +1,8 @@
 # Viewing Row-Level-Secured Reports in the Portal
 
-**Status:** proposed 2026-10-12, awaiting owner review. Nothing here is built.
+**Status:** decided with the owner 2026-10-12. Nothing here is built yet.
+**Owner decisions:** rows are produced live per viewer and not stored; Read on the folder is enough
+to open such a report; Subscribe is offered for these reports in this slice.
 **Task:** ST19. **Parent:** [Row-level security](row-level-security.md).
 **Finding it answers:** [reader journey evidence](studio-reader-journey-evidence.md#st19-two-identities-one-report).
 
@@ -60,7 +62,9 @@ This applies to every report. A report that does not read identity is unaffected
 `GET /api/reports/{id}/manifest` is what the report frame loads. For an identity-sensitive report
 it returns the caller's session manifest instead of looking for a snapshot.
 
-- Requires **Execute** on the report, not just Read: answering runs the script.
+- Requires **Read** on the report, the same as viewing a snapshot (owner decision). Answering runs
+  the script, so for these reports a Read-only reader causes an execution. That is the one place
+  Read does so; `POST …/execute` and Refresh of an ordinary report still need Execute.
 - The report is identified as identity-sensitive by the existing scan of its script. If the script
   cannot be read, it is treated as identity-sensitive.
 - Audited as `VIEW_REPORT_LIVE` with the report ID.
@@ -81,12 +85,10 @@ viewer skips the snapshot probe and the first-run gate and shows the frame at on
 | Export | Offered. See §5. |
 | Structure, Dependencies | Unchanged. |
 | History | Unchanged; it lists no snapshots. |
-| Subscribe | Not offered in this slice. |
+| Subscribe | Offered. See §7. |
 | Design | Unchanged: only for authors. |
 
-A reader with Read but not Execute sees the report in the library and is told on opening that
-running it needs Execute. This is the one place a reader's access gets narrower than today, where
-today they would see nothing at all.
+Refresh only discards the caller's own session, so it needs no more than Read here.
 
 ### 5. Export comes from the same session
 
@@ -104,11 +106,21 @@ impersonated run the manifest will no longer be written.
 *To confirm while building:* that nothing reads a job's manifest path for these runs. A search
 found no reader.
 
+### 7. Subscribe is offered
+
+Delivery already handles these reports: `SubscriptionDeliveryService` runs an identity-sensitive
+report once per recipient under that recipient's identity, and records a failure for a recipient
+who is not a Portal user. Creating a subscription does not need a snapshot. Only the viewer
+withholds the button, because it ties Subscribe to a snapshot existing.
+
+The live view offers Subscribe and opens the existing dialog. No delivery rule changes. What is
+added is proof: a delivery to two recipients in different groups carries each one's own rows.
+
 ## What does not change
 
 - No shared snapshot for identity-sensitive reports. Scheduled refresh still skips them.
 - The admin bypass setting, impersonation, and their audit entries.
-- Subscriptions, which already run per recipient.
+- How subscriptions are delivered: they already run per recipient.
 - The sandbox, the remote Orchestrator path, and reports that do not read identity.
 
 ## Limits accepted
@@ -134,11 +146,14 @@ Browser, real Chromium, no administrator:
 
 API:
 
-5. A reader with Read but not Execute is refused the live manifest and the export.
+5. A reader with Read but not Execute can open, filter and export the report; a reader with no
+   grant on the folder is refused all three.
 6. A reader removed from their group gets no rows on the next request, with no sign-out.
 7. With no resolvable identity the report returns no rows.
 8. An administrator sees all rows with the bypass on and only their own with it off.
 9. A report that does not read identity behaves exactly as before: snapshot, first-run gate, export.
+10. A reader subscribes from the live view. One delivery to two recipients in different groups
+    produces, for each, an export holding only that recipient's rows.
 
 ## Files expected to change
 
