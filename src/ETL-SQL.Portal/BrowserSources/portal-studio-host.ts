@@ -13,6 +13,12 @@ interface PortalDocument {
     lease?: { acquired?: boolean };
 }
 
+/** Where the Portal keeps a document's unsaved edits, or null when it has nowhere to keep them. */
+function recoveryDraftUrl(document: PortalDocument): string | null {
+    if (document.privateDraftId) return `/api/studio/private-drafts/${document.privateDraftId}/unsaved`;
+    return document.reportId ? `/api/studio/drafts/${reportId(document)}` : null;
+}
+
 function reportId(document: PortalDocument): number {
     const id = Number(document.reportId);
     if (!Number.isSafeInteger(id) || id <= 0) throw new Error('This document is not attached to a Portal catalog report.');
@@ -123,21 +129,25 @@ export function createPortalStudioHost(session: StudioSessionDto, fetch: Authori
         } : {}),
         ...(session.draftRecovery ? {
             onLoadDraft: async (doc: PortalDocument) => {
-                if (!doc.reportId) return null;
-                const response = await fetch(`/api/studio/drafts/${reportId(doc)}`);
+                const url = recoveryDraftUrl(doc);
+                if (!url) return null;
+                const response = await fetch(url);
                 return response.ok ? readStudioDraft(await readAuthoringJson(response)) : null;
             },
             onSaveDraft: async (doc: PortalDocument, draft: DraftRecord, { keepalive = false } = {}): Promise<DraftSaveResult> => {
-                if (!doc.reportId) return 'unavailable';
-                const response = await fetch(`/api/studio/drafts/${reportId(doc)}`, {
+                const url = recoveryDraftUrl(doc);
+                if (!url) return 'unavailable';
+                const response = await fetch(url, {
                     method: 'PUT', keepalive, headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ content: draft.content, baseVersion: draft.baseVersion ?? null,
                         baseSourceRevision: draft.baseSourceRevision == null ? null : String(draft.baseSourceRevision) })
                 });
                 return response.status === 422 ? 'refused' : response.ok ? 'kept' : 'unavailable';
             },
-            onRemoveDraft: (doc: PortalDocument) => doc.reportId
-                ? fetch(`/api/studio/drafts/${reportId(doc)}`, { method: 'DELETE' }) : Promise.resolve()
+            onRemoveDraft: (doc: PortalDocument) => {
+                const url = recoveryDraftUrl(doc);
+                return url ? fetch(url, { method: 'DELETE' }) : Promise.resolve();
+            }
         } : {}),
         onReacquireDocument: async (doc: PortalDocument) => {
             if (!doc.reportId) return null;

@@ -122,6 +122,9 @@ public sealed partial class StudioController
         draft.ContentHash = HashPrivateDraftText(content);
         draft.Version++;
         draft.UpdatedAt = now;
+        draft.UnsavedContent = null;
+        draft.UnsavedBaseVersion = null;
+        draft.UnsavedUpdatedAt = null;
         db.StudioPrivateDraftRevisions.Add(new StudioPrivateDraftRevision
         {
             DraftId = draft.Id,
@@ -192,6 +195,66 @@ public sealed partial class StudioController
             ? PrivateDraftNotFound()
             : Ok(new StudioPrivateDraftRevisionDto(revision.Version, revision.SavedAt, revision.ContentHash, revision.Content));
     }
+
+    // Unsaved edits to a private draft: what the author typed since the last save, kept so a crash
+    // or an expired sign-in loses nothing. They are not a version, and follow the recovery-draft
+    // policy (Portal:Studio:DraftRecovery and DraftRetentionDays), not the private-draft one.
+
+    [HttpGet("private-drafts/{id:int}/unsaved")]
+    [RequireStudioCapability(StudioCapabilities.ScriptRead,
+        StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
+    public async Task<ActionResult<StudioRecoveryDraftDto>> GetPrivateDraftUnsavedEdits(int id, CancellationToken ct)
+    {
+        if (!portalConfig.Studio.DraftRecovery) return DraftRecoveryOff();
+        var draft = await LivePrivateDraftAsync(id, tracking: false, ct);
+        if (draft is null) return PrivateDraftNotFound();
+        if (draft.UnsavedContent is null || draft.UnsavedUpdatedAt is not { } updatedAt) return NotFound();
+        if (updatedAt < DraftExpiry())
+        {
+            await ClearPrivateDraftUnsavedEditsAsync(id, ct);
+            return NotFound();
+        }
+        return Ok(new StudioRecoveryDraftDto(draft.UnsavedContent, draft.UnsavedBaseVersion, null, updatedAt));
+    }
+
+    [HttpPut("private-drafts/{id:int}/unsaved")]
+    [RequireStudioCapability(StudioCapabilities.ScriptRead,
+        StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
+    public async Task<IActionResult> PutPrivateDraftUnsavedEdits(
+        int id, [FromBody] SaveStudioRecoveryDraftRequest request, CancellationToken ct)
+    {
+        if (!portalConfig.Studio.DraftRecovery) return DraftRecoveryOff();
+        if (!portalConfig.Studio.PrivateDrafts) return PrivateDraftsOff();
+        if (await LivePrivateDraftAsync(id, tracking: false, ct) is null) return PrivateDraftNotFound();
+        var content = request.Content ?? "";
+        if (RefusePrivateDraftText(content) is { } refusal) return refusal;
+
+        // Written without loading the row: the draft's version is a concurrency token, and unsaved
+        // edits must neither move it nor lose a race against a save that does.
+        var now = DateTime.UtcNow;
+        var baseVersion = request.BaseVersion;
+        var written = await OwnPrivateDrafts.Where(draft => draft.Id == id).ExecuteUpdateAsync(update => update
+            .SetProperty(draft => draft.UnsavedContent, content)
+            .SetProperty(draft => draft.UnsavedBaseVersion, baseVersion)
+            .SetProperty(draft => draft.UnsavedUpdatedAt, now), ct);
+        return written == 0 ? PrivateDraftNotFound() : NoContent();
+    }
+
+    [HttpDelete("private-drafts/{id:int}/unsaved")]
+    [RequireStudioCapability(StudioCapabilities.ScriptRead,
+        StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
+    public async Task<IActionResult> DeletePrivateDraftUnsavedEdits(int id, CancellationToken ct)
+    {
+        // Allowed with recovery off, as for a catalog document's recovery draft.
+        await ClearPrivateDraftUnsavedEditsAsync(id, ct);
+        return NoContent();
+    }
+
+    private Task<int> ClearPrivateDraftUnsavedEditsAsync(int id, CancellationToken ct) =>
+        OwnPrivateDrafts.Where(draft => draft.Id == id).ExecuteUpdateAsync(update => update
+            .SetProperty(draft => draft.UnsavedContent, (string?)null)
+            .SetProperty(draft => draft.UnsavedBaseVersion, (long?)null)
+            .SetProperty(draft => draft.UnsavedUpdatedAt, (DateTime?)null), ct);
 
     /// <summary>The caller's own drafts in the caller's tenant. Nothing else is ever queried.</summary>
     private IQueryable<StudioPrivateDraft> OwnPrivateDrafts =>

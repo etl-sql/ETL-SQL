@@ -45,6 +45,11 @@ public sealed class StudioPrivateDraftTests
         protected override void Customize(PortalStudioConfig studio) => studio.PrivateDrafts = false;
     }
 
+    private sealed class RecoveryOffFactory : LearnerFactory
+    {
+        protected override void Customize(PortalStudioConfig studio) => studio.DraftRecovery = false;
+    }
+
     [Fact]
     public async Task ALearnerWithNoPublishRightsOrFolderCreatesSavesAndReopensADraft()
     {
@@ -268,6 +273,107 @@ public sealed class StudioPrivateDraftTests
         Assert.Equal("PRIVATE_DRAFTS_OFF", (await Json(refused))["code"]!.GetValue<string>());
         using var scope = factory.Services.CreateScope();
         Assert.False(await scope.ServiceProvider.GetRequiredService<PortalDbContext>().StudioPrivateDrafts.AnyAsync());
+    }
+
+    [Fact]
+    public async Task UnsavedEditsAreKeptBesideTheDraftWithoutBecomingAVersion()
+    {
+        using var factory = new LearnerFactory();
+        using var client = factory.CreateClient();
+        var admin = await AdminTokenAsync(client);
+        var learner = await CreateSignedInUserAsync(client, admin, "Viewer");
+        var id = (await Json(await Send(client, HttpMethod.Post, learner, "/api/studio/private-drafts",
+            new { name = "Recover me", content = Script })))["id"]!.GetValue<int>();
+        var unsaved = $"/api/studio/private-drafts/{id}/unsaved";
+        Assert.Equal(HttpStatusCode.NotFound, (await Send(client, HttpMethod.Get, learner, unsaved)).StatusCode);
+
+        var savedAt = await SavedAtAsync(factory, id);
+        Assert.Equal(HttpStatusCode.NoContent, (await Send(client, HttpMethod.Put, learner, unsaved,
+            new { content = "-- typed, not saved", baseVersion = 1 })).StatusCode);
+
+        var kept = await Json(await Send(client, HttpMethod.Get, learner, unsaved));
+        Assert.Equal("-- typed, not saved", kept["content"]!.GetValue<string>());
+        Assert.Equal(1, kept["baseVersion"]!.GetValue<long>());
+        // The saved draft is untouched: same text, same version, and its retention clock did not move.
+        var draft = await Json(await Send(client, HttpMethod.Get, learner, $"/api/studio/private-drafts/{id}"));
+        Assert.Equal(Script, draft["content"]!.GetValue<string>());
+        Assert.Equal(1, draft["version"]!.GetValue<long>());
+        Assert.Equal(savedAt, await SavedAtAsync(factory, id));
+        Assert.Single(await JsonArray(await Send(client, HttpMethod.Get, learner, $"/api/studio/private-drafts/{id}/revisions")));
+
+        // Nobody else can read, replace or clear them.
+        foreach (var other in new[] { admin, await CreateSignedInUserAsync(client, admin, "Viewer") })
+        {
+            Assert.Equal(HttpStatusCode.NotFound, (await Send(client, HttpMethod.Get, other, unsaved)).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await Send(client, HttpMethod.Put, other, unsaved,
+                new { content = "-- planted", baseVersion = 1 })).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, (await Send(client, HttpMethod.Delete, other, unsaved)).StatusCode);
+        }
+        Assert.Equal("-- typed, not saved", (await Json(await Send(client, HttpMethod.Get, learner, unsaved)))["content"]!.GetValue<string>());
+
+        // A plaintext credential is refused and what was kept stays.
+        var refused = await Send(client, HttpMethod.Put, learner, unsaved,
+            new { content = "CREATE CONNECTION db AS MSSQL(SERVER = 'h', PASSWORD = 'hunter2');", baseVersion = 1 });
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, refused.StatusCode);
+        Assert.Equal("PLAINTEXT_SECRET", (await Json(refused))["code"]!.GetValue<string>());
+        Assert.Equal("-- typed, not saved", (await Json(await Send(client, HttpMethod.Get, learner, unsaved)))["content"]!.GetValue<string>());
+
+        // Saving makes a version of the text and there is nothing left to recover.
+        Assert.Equal(HttpStatusCode.OK, (await Send(client, HttpMethod.Put, learner, $"/api/studio/private-drafts/{id}",
+            new { content = "-- typed, now saved", baseVersion = 1 })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Send(client, HttpMethod.Get, learner, unsaved)).StatusCode);
+    }
+
+    [Fact]
+    public async Task UnsavedEditsExpireOnTheRecoveryPolicyAndTheDraftDoesNot()
+    {
+        using var factory = new LearnerFactory();
+        using var client = factory.CreateClient();
+        var learner = await CreateSignedInUserAsync(client, await AdminTokenAsync(client), "Viewer");
+        var id = (await Json(await Send(client, HttpMethod.Post, learner, "/api/studio/private-drafts",
+            new { name = "Old edits", content = Script })))["id"]!.GetValue<int>();
+        var unsaved = $"/api/studio/private-drafts/{id}/unsaved";
+        Assert.Equal(HttpStatusCode.NoContent, (await Send(client, HttpMethod.Put, learner, unsaved,
+            new { content = "-- a week old", baseVersion = 1 })).StatusCode);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            await db.StudioPrivateDrafts.Where(item => item.Id == id).ExecuteUpdateAsync(update =>
+                update.SetProperty(item => item.UnsavedUpdatedAt, DateTime.UtcNow.AddDays(-8)));
+        }
+
+        Assert.Equal(HttpStatusCode.NotFound, (await Send(client, HttpMethod.Get, learner, unsaved)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Send(client, HttpMethod.Get, learner, $"/api/studio/private-drafts/{id}")).StatusCode);
+        using var check = factory.Services.CreateScope();
+        Assert.Null(await check.ServiceProvider.GetRequiredService<PortalDbContext>().StudioPrivateDrafts
+            .Where(item => item.Id == id).Select(item => item.UnsavedContent).SingleAsync());
+    }
+
+    [Fact]
+    public async Task WithDraftRecoveryOff_UnsavedEditsAreRefusedAndSavingStillWorks()
+    {
+        using var factory = new RecoveryOffFactory();
+        using var client = factory.CreateClient();
+        var learner = await CreateSignedInUserAsync(client, await AdminTokenAsync(client), "Viewer");
+        var id = (await Json(await Send(client, HttpMethod.Post, learner, "/api/studio/private-drafts",
+            new { name = "No recovery", content = Script })))["id"]!.GetValue<int>();
+
+        var refused = await Send(client, HttpMethod.Put, learner, $"/api/studio/private-drafts/{id}/unsaved",
+            new { content = "-- typed", baseVersion = 1 });
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Equal("DRAFT_RECOVERY_OFF", (await Json(refused))["code"]!.GetValue<string>());
+        Assert.Equal(HttpStatusCode.OK, (await Send(client, HttpMethod.Put, learner, $"/api/studio/private-drafts/{id}",
+            new { content = "-- saved", baseVersion = 1 })).StatusCode);
+        using var scope = factory.Services.CreateScope();
+        Assert.Null(await scope.ServiceProvider.GetRequiredService<PortalDbContext>().StudioPrivateDrafts
+            .Where(item => item.Id == id).Select(item => item.UnsavedContent).SingleAsync());
+    }
+
+    private static async Task<DateTime> SavedAtAsync(PortalWebFactory factory, int id)
+    {
+        using var scope = factory.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<PortalDbContext>().StudioPrivateDrafts
+            .Where(item => item.Id == id).Select(item => item.UpdatedAt).SingleAsync();
     }
 
     [Fact]

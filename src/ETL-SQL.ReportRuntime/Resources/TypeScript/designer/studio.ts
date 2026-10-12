@@ -462,7 +462,9 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
             const moved = draft.baseVersion != null && doc.version != null && String(draft.baseVersion) !== String(doc.version)
                 || draft.baseSourceRevision != null && doc.sourceRevision != null && String(draft.baseSourceRevision) !== String(doc.sourceRevision);
             _feedback.notify(
-                moved
+                moved && doc.privateDraftId
+                    ? `Unsaved edits to "${doc.name}" from a previous session were kept, but the draft has changed since: it was saved again after those edits began. Restoring puts them over the newer saved text, which stays among the draft's saved versions.`
+                    : moved
                     ? `Unsaved edits to "${doc.name}" from a previous session were kept, but the report has changed since. Restoring puts your edits back over the newer version; saving will then ask you to resolve the conflict.`
                     : `Unsaved edits to "${doc.name}" from a previous session were kept.`,
                 {

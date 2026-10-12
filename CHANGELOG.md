@@ -21,6 +21,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   not kept. `Portal:Studio:PrivateDrafts`, `PrivateDraftRetentionDays` (90), `PrivateDraftRevisionsKept`
   (10) and `PrivateDraftsPerUser` (25) set the policy. Before this, Save on a new document without
   publish rights answered "Not Saved" and the work lived only in that browser tab.
+- Recover unsaved edits to a private draft after a browser crash or a renewed sign-in. Reopening the
+  draft offers them back; if the draft was saved again in the meantime Studio says so first, and a
+  save from a stale tab is refused instead of overwriting the newer text.
 - Run a saved pipeline from Portal Studio through the Orchestrator. **Run** submits the saved
   revision to the pipeline's Orchestrator job under the author's own identity, shows that run's
   status and bounded statement log by its run ID, and **Stop** asks the Orchestrator to cancel it.

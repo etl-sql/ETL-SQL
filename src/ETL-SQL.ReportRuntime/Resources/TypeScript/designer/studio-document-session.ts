@@ -531,6 +531,7 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
             rememberPrivateDraft(draft);
             hostContext.state.documents.push(newDoc);
             await switchDoc(newDoc.id);
+            hostContext.checkRecoverableDraft(newDoc);
             return newDoc;
         } catch (error) {
             _feedback.notify(errorMessage(error) || 'The private draft could not be opened.', { title: 'Open Draft Failed', tone: 'error' });

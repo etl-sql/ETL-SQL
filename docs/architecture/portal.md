@@ -980,6 +980,9 @@ kept saves in `studio_private_draft_revisions`. Policy and its reasons are in th
 | DELETE | `/api/studio/private-drafts/{id}` | Delete the draft and its kept saves |
 | GET | `/api/studio/private-drafts/{id}/revisions` | Kept saves, newest first |
 | GET | `/api/studio/private-drafts/{id}/revisions/{version}` | The text of one kept save |
+| GET | `/api/studio/private-drafts/{id}/unsaved` | Edits typed since the last save, and the version they started from |
+| PUT | `/api/studio/private-drafts/{id}/unsaved` | Keep `Content` as unsaved edits against `BaseVersion` |
+| DELETE | `/api/studio/private-drafts/{id}/unsaved` | Discard the unsaved edits |
 
 Every route needs `StudioAccess` and `ScriptRead`. Every query carries the caller's tenant and user
 id, so a draft that is not the caller's answers `404 DRAFT_NOT_FOUND`, the same as a missing one,
@@ -999,6 +1002,13 @@ Refusals return `{ code, error, currentVersion? }`:
 The draft's version is an EF concurrency token, and `(draft_id, version)` is unique among its kept
 saves, so two saves racing from the same version cannot both succeed. Expiry is applied when a draft
 is read and, tenant-wide, when any caller lists or creates drafts; there is no background sweep.
+
+Unsaved edits are two columns on the draft, not a version. They follow the recovery-draft policy
+(`DraftRecovery`, `DraftRetentionDays`), are refused with `DRAFT_RECOVERY_OFF` when it is off, and
+are written with a set-based update so they never move the draft's version or its retention clock.
+A save clears them. Studio's existing recovery callbacks address them for a private-draft document,
+so the offer, the changed-since warning and the plaintext-credential refusal are the same code paths
+a catalog report uses.
 
 Studio reaches these through the `privateDrafts` host option. Save on an untitled document keeps it
 as a draft, Studio Home lists the caller's drafts, and Save on an open draft writes the next version.

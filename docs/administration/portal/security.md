@@ -103,6 +103,11 @@ Drafts** on Studio Home.
 | `Portal:Studio:PrivateDraftRevisionsKept` | `10` | Saved versions kept per draft. |
 | `Portal:Studio:PrivateDraftsPerUser` | `25` | Drafts one user may hold. |
 
+Edits typed into a private draft and not yet saved are recovered the same way as edits to a catalog
+report, under the recovery settings below. They are kept beside the draft, are not one of its
+versions, and do not extend its retention. If the draft was saved again after those edits began,
+Studio says so before restoring them, and the newer text stays among the draft's saved versions.
+
 ## Studio Recovery Drafts
 
 Studio keeps each author's unsaved edits on the Portal, so a crashed browser, a dropped

@@ -98,6 +98,202 @@ public sealed class StudioPrivateDraftJourneyTests(PortalJourneyFixture fixture)
         Assert.Empty(other.PageErrors);
     }
 
+    private const string Edit = "-- unsaved edit that must survive";
+
+    [Fact]
+    public async Task UnsavedEditsToADraftSurviveACrashAndARenewedSignIn()
+    {
+        var learner = await CreateLearnerAsync();
+        int draftId;
+        await using (var crashed = await fixture.NewSessionAsync())
+        {
+            var page = crashed.Page;
+            await SignInAsync(page, learner.UserName);
+            draftId = await KeepNewDraftAsync(page);
+
+            // The access token stops being accepted mid-session; the refresh token is still good.
+            await page.EvaluateAsync("() => sessionStorage.setItem('etlsql_token', 'expired.access.token')");
+            await TypeAndWaitForUnsavedEditsAsync(page, draftId, Edit);
+            Assert.Contains("/studio.html", page.Url, StringComparison.Ordinal);
+            Assert.NotEqual("expired.access.token", await page.EvaluateAsync<string>("() => sessionStorage.getItem('etlsql_token')"));
+            Assert.Empty(crashed.PageErrors);
+            // Disposing the context closes the page without beforeunload: nothing gets a last chance.
+        }
+        var stored = await StoredDraftAsync(draftId);
+        Assert.Equal(1, stored.Version);
+        Assert.DoesNotContain(Edit, stored.Content);
+        Assert.Contains(Edit, stored.UnsavedContent);
+
+        // A new browser and a new sign-in: the edits are offered back, with no conflict to report.
+        await using var session = await fixture.NewSessionAsync();
+        var restored = session.Page;
+        await SignInAsync(restored, learner.UserName);
+        await ReopenDraftAsync(restored, draftId);
+        var offer = restored.Locator(".etlsql-feedback-toast", new() { HasText = "from a previous session were kept" });
+        await Expect(offer).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await Expect(offer).Not.ToContainTextAsync("changed since");
+        await offer.Locator(".etlsql-feedback-action", new() { HasText = "Restore" }).ClickAsync();
+        await restored.WaitForFunctionAsync("edit => window.__STUDIO__.state.editorInstance.getValue().includes(edit)", Edit);
+        Assert.True(await restored.EvaluateAsync<bool>($"() => {ActiveDraft}.isDirty"));
+
+        // Saved, the edits become version 2 and there is nothing left to recover.
+        await restored.Locator("[data-action='save']").ClickAsync();
+        await restored.WaitForFunctionAsync($"() => {ActiveDraft}.isDirty === false && {ActiveDraft}.version === 2",
+            null, new() { Timeout = 15_000 });
+        await WaitForAsync(async () => (await StoredDraftAsync(draftId)).UnsavedContent is null);
+        var saved = await StoredDraftAsync(draftId);
+        Assert.Contains(Edit, saved.Content);
+        Assert.Equal(2, saved.Version);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ADraftThatMovedOnIsShownAsAConflictAndAStaleSaveIsRefused()
+    {
+        var learner = await CreateLearnerAsync();
+        int draftId;
+        await using (var first = await fixture.NewSessionAsync())
+        {
+            await SignInAsync(first.Page, learner.UserName);
+            draftId = await KeepNewDraftAsync(first.Page);
+            await TypeAndWaitForUnsavedEditsAsync(first.Page, draftId, Edit);
+
+            // The same learner saves the draft from somewhere else while this tab is open.
+            // A page makes the text a dashboard, so reopening it does not stop to ask which kind it is.
+            await SaveElsewhereAsync(draftId,
+                "-- Saved elsewhere\nCREATE TABLE #t (A INT);\nCREATE VISUAL T AS TABLE (SOURCE = #t);\n"
+                + "CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = T));\n");
+
+            // This tab still thinks it is editing version 1. Its save is refused, out loud, and
+            // neither the newer text nor the edits in this tab are lost.
+            await first.Page.Locator("[data-action='save']").ClickAsync();
+            var refusal = first.Page.Locator(".etlsql-feedback-toast", new() { HasText = "saved somewhere else" });
+            await Expect(refusal).ToBeVisibleAsync(new() { Timeout = 15_000 });
+            Assert.True(await first.Page.EvaluateAsync<bool>($"() => {ActiveDraft}.isDirty"));
+            Assert.Contains(Edit, await first.Page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()"));
+            var afterRefusal = await StoredDraftAsync(draftId);
+            Assert.Equal(2, afterRefusal.Version);
+            Assert.Contains("Saved elsewhere", afterRefusal.Content);
+            Assert.Empty(first.PageErrors);
+        }
+
+        // Reopened, the kept edits are offered with the conflict stated before anything is restored.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await SignInAsync(page, learner.UserName);
+        await ReopenDraftAsync(page, draftId);
+        await page.WaitForFunctionAsync("() => window.__STUDIO__.state.editorInstance.getValue().includes('Saved elsewhere')",
+            null, new() { Timeout = 15_000 });
+        var offer = page.Locator(".etlsql-feedback-toast", new() { HasText = "from a previous session were kept" });
+        await Expect(offer).ToContainTextAsync("the draft has changed since", new() { Timeout = 15_000 });
+        await Expect(offer).ToContainTextAsync("stays among the draft's saved versions");
+
+        // Restoring and saving is the learner's explicit choice; the newer text is kept as version 2.
+        await offer.Locator(".etlsql-feedback-action", new() { HasText = "Restore" }).ClickAsync();
+        await page.WaitForFunctionAsync("edit => window.__STUDIO__.state.editorInstance.getValue().includes(edit)", Edit);
+        await page.Locator("[data-action='save']").ClickAsync();
+        await page.WaitForFunctionAsync($"() => {ActiveDraft}.isDirty === false && {ActiveDraft}.version === 3",
+            null, new() { Timeout = 15_000 });
+        using var scope = fixture.Factory.Services.CreateScope();
+        var revisions = await scope.ServiceProvider.GetRequiredService<PortalDbContext>().StudioPrivateDraftRevisions
+            .AsNoTracking().Where(revision => revision.DraftId == draftId).OrderBy(revision => revision.Version).ToListAsync();
+        Assert.Equal([1L, 2L, 3L], revisions.Select(revision => revision.Version).ToArray());
+        Assert.Contains("Saved elsewhere", revisions[1].Content);
+        Assert.Contains(Edit, revisions[2].Content);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task UnsavedEditsHoldingAPlaintextCredentialAreRefusedAndTheLearnerIsTold()
+    {
+        var learner = await CreateLearnerAsync();
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await SignInAsync(page, learner.UserName);
+        var draftId = await KeepNewDraftAsync(page);
+
+        await page.EvaluateAsync(
+            "() => { const editor = window.__STUDIO__.state.editorInstance; editor.replaceAll(editor.getValue() + \"\\nCREATE CONNECTION db AS MSSQL(SERVER = 'h', PASSWORD = 'hunter2');\\n\"); }");
+        var notice = page.Locator(".etlsql-feedback-toast", new() { HasText = "holds a plaintext credential" });
+        await Expect(notice).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await Expect(notice).ToContainTextAsync("not kept as a recovery draft");
+
+        var stored = await StoredDraftAsync(draftId);
+        Assert.Null(stored.UnsavedContent);
+        Assert.DoesNotContain("hunter2", stored.Content);
+        Assert.Empty(session.PageErrors);
+    }
+
+    /// <summary>Creates a dashboard, keeps it as a private draft and leaves it open in the code view.</summary>
+    private static async Task<int> KeepNewDraftAsync(IPage page)
+    {
+        await page.GotoAsync("/studio.html");
+        await page.Locator("[data-create-from-home='dashboard']:not([data-seed-sample])").ClickAsync();
+        await page.WaitForFunctionAsync($"() => {ActiveDraft}?.path?.startsWith('untitled_dashboard')", null, new() { Timeout = 20_000 });
+        await page.EvaluateAsync("() => window.__STUDIO__.setProjection('code')");
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__.state.editorInstance)", null, new() { Timeout = 20_000 });
+        await page.Locator("[data-action='save']").ClickAsync();
+        var dialog = page.Locator(".etlsql-feedback-dialog");
+        await dialog.Locator("input").FillAsync($"Recover {Guid.NewGuid():N}"[..20]);
+        await dialog.Locator(".etlsql-feedback-btn-primary").ClickAsync();
+        await page.WaitForFunctionAsync($"() => {ActiveDraft}?.privateDraftId > 0 && {ActiveDraft}.isDirty === false",
+            null, new() { Timeout = 20_000 });
+        return await page.EvaluateAsync<int>($"() => {ActiveDraft}.privateDraftId");
+    }
+
+    private static async Task ReopenDraftAsync(IPage page, int draftId)
+    {
+        await page.GotoAsync("/studio.html");
+        var open = page.Locator($"[data-private-draft='{draftId}'] [data-open-private-draft][data-open-proj='code']");
+        await Expect(open).ToBeVisibleAsync(new() { Timeout = 20_000 });
+        await open.ClickAsync();
+        await page.WaitForFunctionAsync(
+            $"id => {ActiveDraft}?.privateDraftId === id && Boolean(window.__STUDIO__.state.editorInstance)",
+            draftId, new() { Timeout = 20_000 });
+    }
+
+    /// <summary>Types the edit and waits for the Portal to accept it as unsaved edits to the draft.</summary>
+    private static async Task TypeAndWaitForUnsavedEditsAsync(IPage page, int draftId, string edit)
+    {
+        var kept = page.WaitForResponseAsync(response =>
+            response.Url.EndsWith($"/api/studio/private-drafts/{draftId}/unsaved", StringComparison.Ordinal)
+            && response.Request.Method == "PUT" && response.Status == 204,
+            new() { Timeout = 20_000 });
+        await page.EvaluateAsync(
+            "edit => { const editor = window.__STUDIO__.state.editorInstance; editor.replaceAll(editor.getValue() + '\\n' + edit + '\\n'); }",
+            edit);
+        await kept;
+    }
+
+    /// <summary>The draft's owner saves a new version outside this browser, as a second tab would.</summary>
+    private async Task SaveElsewhereAsync(int draftId, string content)
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var draft = await db.StudioPrivateDrafts.SingleAsync(item => item.Id == draftId);
+        draft.Content = content;
+        draft.Version += 1;
+        draft.UpdatedAt = DateTime.UtcNow;
+        db.StudioPrivateDraftRevisions.Add(new StudioPrivateDraftRevision
+        {
+            DraftId = draftId,
+            Version = draft.Version,
+            Content = content,
+            ContentHash = "sha256:elsewhere"
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task WaitForAsync(Func<Task<bool>> condition)
+    {
+        for (var attempt = 0; attempt < 200; attempt++)
+        {
+            if (await condition()) return;
+            await Task.Delay(50);
+        }
+        throw new TimeoutException("The expected state was not reached.");
+    }
+
     private static string Normalize(string text) => text.Replace("\r\n", "\n").TrimEnd();
 
     private static async Task SignInAsync(IPage page, string userName)

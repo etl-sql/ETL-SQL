@@ -649,9 +649,18 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
   learner, a second version, a fresh page reopening it, and a colleague who sees nothing).
   Open: publishing a private draft is ST15, and until then its Publish button is disabled. Expiry runs
   when drafts are read or listed; there is no background sweep.
-- [ ] **ST14 — Portal private draft crash recovery.** Recover that unpublished draft after browser restart and
+- [x] **ST14 — Portal private draft crash recovery.** Recover that unpublished draft after browser restart and
   authentication renewal, with explicit revision-conflict handling and policy refusal. No offline persistence guarantee.
   (Depends on: ST13; Size: M)
+  Done 2026-10-12. Unsaved edits to a draft are kept beside it (`/api/studio/private-drafts/{id}/unsaved`)
+  under the existing recovery policy, and Studio's existing recovery callbacks address them.
+  `StudioPrivateDraftJourneyTests`, in real Chromium as the learner: the access token is invalidated
+  mid-session, the edit is still kept, the browser context is destroyed, and a new browser and sign-in
+  are offered the edit back and save it as version 2; a draft saved elsewhere refuses the stale tab's
+  save out loud with both texts intact, then states the conflict before restoring; edits holding a
+  plaintext credential are refused and the learner is told. `StudioPrivateDraftTests` covers the same
+  rules at the API, including isolation, expiry on the recovery retention and `DraftRecovery` off.
+  Not claimed: offline persistence. Edits typed while the Portal is unreachable live only in the tab.
 - [ ] **ST15 — Publish a private draft.** Promote the saved host draft through the existing catalog publish action
   without losing text/history; an unauthorized attempt leaves the private draft intact. (Depends on: ST13; Size: M)
 
