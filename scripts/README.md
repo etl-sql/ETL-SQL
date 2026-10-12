@@ -355,6 +355,12 @@ Direct .NET builds verify preparation and show the command above for missing or 
 They do not invoke Node. Published products include their assets and need no Node installation.
 `sync-assets.ps1` delegates to the same Node entry point.
 
+When rolling back to a revision with tracked browser outputs, use
+`clean-obsolete-browser-outputs.mjs --root <checkout> --inventory-root <saved-inventory>`
+from the newer checkout. It previews verified untracked leftovers; add `--apply` after reviewing
+the plan. See [branch-switch recovery](../docs/architecture/standards/report-runtime-asset-standards.md#switching-between-revisions)
+for inventory preservation and the destination revision's build steps.
+
 After restoring the compiler and development package dependencies, both `build-debug` scripts prepare
 browser assets before invoking .NET. A preparation failure stops the build before .NET, Vite, or the
 extension compiler runs. These scripts resolve their checkout and package paths independently of

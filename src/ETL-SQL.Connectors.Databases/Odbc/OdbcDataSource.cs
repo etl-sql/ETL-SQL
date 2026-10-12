@@ -24,11 +24,23 @@ namespace ETL_SQL.Connectors.Odbc
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
         private readonly int _commandTimeout;
-        private OdbcConnection? _transactionalConnection;
-        private OdbcTransaction? _activeTransaction;
+        private readonly TransactionState _transactionState;
+        private readonly bool _ownsTransactionState;
+
+        private sealed class TransactionState
+        {
+            public OdbcConnection? Connection;
+            public OdbcTransaction? Transaction;
+        }
 
         public OdbcDataSource(IExecutionContext context, string connectionString, string? tableName = null, Dictionary<string, string>? options = null)
+            : this(context, connectionString, tableName, options, new TransactionState(), ownsTransactionState: true) { }
+
+        private OdbcDataSource(IExecutionContext context, string connectionString, string? tableName,
+            Dictionary<string, string>? options, TransactionState transactionState, bool ownsTransactionState)
         {
+            _transactionState = transactionState;
+            _ownsTransactionState = ownsTransactionState;
             _context = context;
             _logger = context.Logger;
             _connectionString = connectionString;
@@ -48,15 +60,9 @@ namespace ETL_SQL.Connectors.Odbc
         public string ConnectorType => "ODBC";
         public Dictionary<string, string>? Options => _options;
 
-        // The clone shares the open transaction, so a write through it is covered by the same
-        // commit or rollback as the source it was made from.
-        public IDataSource WithTable(string tableName)
-        {
-            var ds = new OdbcDataSource(_context!, _connectionString, tableName, _options);
-            ds._transactionalConnection = _transactionalConnection;
-            ds._activeTransaction = _activeTransaction;
-            return ds;
-        }
+        // COMPAT_BREAK: 0.21.0 — table views share live state and do not own transaction disposal.
+        public IDataSource WithTable(string tableName) => new OdbcDataSource(
+            _context!, _connectionString, tableName, _options, _transactionState, ownsTransactionState: false);
 
         public async Task<string> GetVersionAsync()
         {
@@ -99,7 +105,7 @@ namespace ETL_SQL.Connectors.Odbc
             try
             {
                 using var cmd = CreateCommand($"SELECT * FROM {OdbcSyntax.QuoteIdentifier(_tableName)}", conn);
-                if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
+                if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
                 using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
 
                 var columns = new List<string>();
@@ -152,7 +158,7 @@ namespace ETL_SQL.Connectors.Odbc
 
             var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             OdbcTransaction? localTx = null;
-            if (_activeTransaction == null) localTx = conn.BeginTransaction();
+            if (_transactionState.Transaction == null) localTx = conn.BeginTransaction();
 
             OdbcCommand? insertCmd = null;
             try
@@ -168,7 +174,7 @@ namespace ETL_SQL.Connectors.Odbc
                         var cols = string.Join(", ", batch.ColumnNames.Select(OdbcSyntax.QuoteIdentifier));
                         var params_arr = string.Join(", ", batch.ColumnNames.Select(_ => "?"));
                         insertCmd = CreateCommand($"INSERT INTO {OdbcSyntax.QuoteIdentifier(_tableName)} ({cols}) VALUES ({params_arr})", conn);
-                        if (_activeTransaction != null) insertCmd.Transaction = _activeTransaction;
+                        if (_transactionState.Transaction != null) insertCmd.Transaction = _transactionState.Transaction;
                         else insertCmd.Transaction = localTx;
 
                         foreach (var col in batch.ColumnNames)
@@ -230,7 +236,7 @@ namespace ETL_SQL.Connectors.Odbc
             try
             {
                 using var cmd = CreateCommand(sql, conn);
-                if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
+                if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
 
                 int paramCount = 0;
                 if (parameters != null)
@@ -397,27 +403,27 @@ namespace ETL_SQL.Connectors.Odbc
 
         public async Task BeginTransactionAsync()
         {
-            if (_activeTransaction != null) return;
+            if (_transactionState.Transaction != null) return;
             var (conn, _) = await GetConnectionAsync();
             try
             {
-                _transactionalConnection = conn;
-                _activeTransaction = _transactionalConnection.BeginTransaction();
+                _transactionState.Connection = conn;
+                _transactionState.Transaction = _transactionState.Connection.BeginTransaction();
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
                 conn.Dispose();
-                _transactionalConnection = null;
+                _transactionState.Connection = null;
                 throw ConnectorExceptionWrapper.Wrap("ODBC", ex);
             }
         }
 
         public Task CommitAsync()
         {
-            if (_activeTransaction == null) return Task.CompletedTask;
+            if (_transactionState.Transaction == null) return Task.CompletedTask;
             try
             {
-                _activeTransaction.Commit();
+                _transactionState.Transaction.Commit();
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -425,20 +431,20 @@ namespace ETL_SQL.Connectors.Odbc
             }
             finally
             {
-                _activeTransaction.Dispose();
-                _transactionalConnection?.Dispose();
-                _activeTransaction = null;
-                _transactionalConnection = null;
+                _transactionState.Transaction.Dispose();
+                _transactionState.Connection?.Dispose();
+                _transactionState.Transaction = null;
+                _transactionState.Connection = null;
             }
             return Task.CompletedTask;
         }
 
         public Task RollbackAsync()
         {
-            if (_activeTransaction == null) return Task.CompletedTask;
+            if (_transactionState.Transaction == null) return Task.CompletedTask;
             try
             {
-                _activeTransaction.Rollback();
+                _transactionState.Transaction.Rollback();
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -446,17 +452,17 @@ namespace ETL_SQL.Connectors.Odbc
             }
             finally
             {
-                _activeTransaction.Dispose();
-                _transactionalConnection?.Dispose();
-                _activeTransaction = null;
-                _transactionalConnection = null;
+                _transactionState.Transaction.Dispose();
+                _transactionState.Connection?.Dispose();
+                _transactionState.Transaction = null;
+                _transactionState.Connection = null;
             }
             return Task.CompletedTask;
         }
 
         private async Task<(OdbcConnection, bool isShared)> GetConnectionAsync(CancellationToken cancellationToken = default)
         {
-            if (_transactionalConnection != null) return (_transactionalConnection, true);
+            if (_transactionState.Connection != null) return (_transactionState.Connection, true);
             if (string.IsNullOrWhiteSpace(_connectionString))
                 throw new ExecutionException("Connection string is missing for ODBC data source.");
 
@@ -498,10 +504,11 @@ namespace ETL_SQL.Connectors.Odbc
 
         public async ValueTask DisposeAsync()
         {
-            if (_activeTransaction != null) await RollbackAsync();
-            _transactionalConnection?.Dispose();
-            _activeTransaction = null;
-            _transactionalConnection = null;
+            if (!_ownsTransactionState) return;
+            if (_transactionState.Transaction != null) await RollbackAsync();
+            _transactionState.Connection?.Dispose();
+            _transactionState.Transaction = null;
+            _transactionState.Connection = null;
         }
 
         private OdbcCommand CreateCommand(string sql, OdbcConnection conn)

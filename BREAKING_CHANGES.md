@@ -17,6 +17,27 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.21.0 — Connector: Ambiguous BigQuery inserts are not replayed
+- **What changed**: Streaming inserts previously retried failures using best-effort insert IDs. Connector and SDK transport retries are now disabled for inserts; errors require reconciliation before another attempt. Engine decimals serialize as invariant numeric strings instead of failing SDK validation.
+- **Who is affected**: BigQuery streaming writes.
+- **Migration**: Reconcile destination rows after an ambiguous failure before resubmitting. Do not assume an error means no rows were accepted.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.21.0 — Connector: ODBC and Snowflake table views share transaction lifetime
+- **What changed**: Table clones copied transaction references and could retain completed transactions or roll back their owner during disposal. They now share live state; only the owner disposes it.
+- **Who is affected**: Connector consumers using table views across transactions.
+- **Migration**: Commit or roll back explicitly through the transactional source; do not rely on disposing a table view to roll back its owner.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.21.0 — Semantic: NULL keys do not collide in uniqueness fallback scans
+- **What changed**: The fallback duplicate scan could reject repeated NULL keys even though the index builder allowed them. Both paths now exclude NULL keys from collisions.
+- **Who is affected**: Unique constraints over nullable engine columns, including connector DBNull values.
+- **Migration**: Add a NOT NULL constraint when NULLs must be rejected.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.21.0 — Runtime: The default machine key is a random installation key
 - **What changed**: Without `ETLSQL_MACHINE_KEY_FILE`, the machine key was a digest of the host and account name. It is now derived from random material generated on first use and kept in `machine.key` under the account's local application data (`etl-sql` folder). `ENC:` values written under the old key can no longer be read.
 - **Who is affected**: Installations that do not mount a machine key. A container whose local application data is not on a volume gets a new key on every start, so `ENC:` values it writes do not survive a restart. Any `ENC:` value or session checkpoint written before the upgrade must be recreated.

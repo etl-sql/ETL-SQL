@@ -95,7 +95,7 @@ namespace ETL_SQL.LSP
             // ── Fast debounce (300 ms) ────────────────────────────────────────────
             // Runs: lex → parse → metadata discovery → lineage → parser diagnostics.
             // Cancelled and restarted on every keystroke.
-            ScheduleDebounced(_debouncers, uri, FastDebounceMs, async () =>
+            _ = ScheduleDebouncedAsync(_debouncers, uri, FastDebounceMs, async () =>
             {
                 var parserDiags = await FastAnalyzeAsync(uri, text);
                 PublishDiagnostics(uri, parserDiags);
@@ -106,7 +106,7 @@ namespace ETL_SQL.LSP
             // Fires only after the user pauses typing for 1.5 s, preventing the
             // expensive lint chain from blocking the LSP thread during rapid edits
             // of large scripts.
-            ScheduleDebounced(_lintDebouncers, uri, LintDebounceMs, async () =>
+            _ = ScheduleDebouncedAsync(_lintDebouncers, uri, LintDebounceMs, async () =>
             {
                 // Re-read the document state that the fast pass already stored.
                 var state = _store.GetState(uri);
@@ -153,10 +153,13 @@ namespace ETL_SQL.LSP
             var uri = request.TextDocument.Uri;
             _logger.LogInformation("LSP: didClose {Uri}. Cleaning up metadata and signaling session recycle.", uri);
 
-            if (_debouncers.TryRemove(uri, out var cts))
+            foreach (var pending in new[] { _debouncers, _lintDebouncers })
             {
-                try { await cts.CancelAsync(); } catch { }
-                try { cts.Dispose(); } catch { }
+                if (pending.TryRemove(uri, out var cts))
+                {
+                    // The scheduled task owns disposal, including when a document closes.
+                    try { await cts.CancelAsync(); } catch (ObjectDisposedException) { }
+                }
             }
 
             // 1. Clear session metadata and temp tables for this document
@@ -314,7 +317,7 @@ namespace ETL_SQL.LSP
         /// Schedules a debounced async action using the given dictionary as the token store.
         /// Any in-flight task for the same URI is cancelled before the new delay starts.
         /// </summary>
-        private static void ScheduleDebounced(
+        private Task ScheduleDebouncedAsync(
             System.Collections.Concurrent.ConcurrentDictionary<DocumentUri, CancellationTokenSource> debouncers,
             DocumentUri uri,
             int delayMs,
@@ -331,7 +334,7 @@ namespace ETL_SQL.LSP
                 return newCts;
             });
 
-            _ = Task.Run(async () =>
+            return Task.Run(async () =>
             {
                 try
                 {
@@ -341,6 +344,10 @@ namespace ETL_SQL.LSP
                 }
                 catch (TaskCanceledException) { /* debounced */ }
                 catch (OperationCanceledException) { /* debounced */ }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Debounced document analysis failed for {Uri}", uri);
+                }
                 finally
                 {
                     debouncers.TryRemove(KeyValuePair.Create(uri, newCts));

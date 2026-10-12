@@ -3,6 +3,7 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Core;
 
+[Trait("CompatBreak", "0.21.0")]
 public sealed class InMemoryTableIndexTests
 {
     [Fact]
@@ -66,6 +67,7 @@ public sealed class InMemoryTableIndexTests
 
         Assert.True(index.ContainsKey("id", 1));
         Assert.False(index.ContainsKey("id", DBNull.Value));
+        Assert.False(index.IsDuplicate(new[] { "id" }, table.Rows[0], new[] { table }));
     }
 
     [Theory]

@@ -70,6 +70,11 @@ and `CURRENT_DATETIME()` respectively.
 **Write behavior:** `COPY INTO` uses BigQuery streaming inserts (low latency, no staging).
 `COPY INTO … APPEND=FALSE` truncates via `TRUNCATE TABLE` before inserting.
 
+- **Insert failures** — Streaming inserts are not automatically retried. A failed response can follow
+  partial acceptance; reconcile destination rows before retrying the operation. Insert IDs provide
+  best-effort deduplication, not an exactly-once guarantee.
+- **Numeric values** — Engine decimal values are sent as invariant numeric strings to preserve precision.
+
 ## Troubleshooting
 
 - **Dataset Not Found**: Verify `PROJECT_ID` and `DATASET` match your GCP console exactly.
@@ -78,6 +83,7 @@ and `CURRENT_DATETIME()` respectively.
 
 ## References
 
+- [BigQuery streaming insert deduplication](https://docs.cloud.google.com/bigquery/docs/write-api-rest)
 - [Database Connectors](README.md)
 - [Connectors](../README.md)
 - [Snowflake](snowflake.md) · [ODBC](odbc.md)

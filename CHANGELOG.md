@@ -149,6 +149,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   opening or exporting one runs it. Saving the report's script again ends its readers' sessions, so
   a changed filter applies on their next request. A run of such a report no longer leaves its rows
   in snapshot storage, where nothing pruned them.
+- Keep ODBC and Snowflake table views on live shared transaction state. Disposing a view no longer
+  rolls back its owner's transaction or retries a transaction that already completed.
+- Stop replaying ambiguous BigQuery streaming inserts, including SDK transport retries. Fail with
+  reconciliation guidance, sanitize transport failures, and serialize engine decimals without precision loss.
+- Allow NULL keys through the uniqueness fallback scan as well as the index builder.
+- Observe failed LSP debounce actions, cancel both analysis queues when a document closes, and reject
+  negative completion line positions without crashing.
+
 - Read a scalar subquery again after the data it reads has changed. A subquery repeated later in
   the same script answered from its first evaluation, so `ASSERT (SELECT COUNT(*) FROM #t) = 3`,
   an `INSERT`, then the same subquery still returned 3, and a count taken after `DROP TABLE`

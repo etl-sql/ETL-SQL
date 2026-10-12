@@ -26,8 +26,14 @@ namespace ETL_SQL.Connectors.Snowflake
         private readonly IExecutionContext? _context;
         private readonly int _commandTimeout;
 
-        private SnowflakeDbConnection? _transactionalConnection;
-        private DbTransaction? _activeTransaction;
+        private readonly TransactionState _transactionState;
+        private readonly bool _ownsTransactionState;
+
+        private sealed class TransactionState
+        {
+            public SnowflakeDbConnection? Connection;
+            public DbTransaction? Transaction;
+        }
 
         // PKCS#8 private-key extension Snowflake documents for key-pair auth. Scoped to this connector's
         // PRIVATE_KEY_FILE validation so other file connectors keep their default whitelist.
@@ -35,7 +41,13 @@ namespace ETL_SQL.Connectors.Snowflake
             new(StringComparer.OrdinalIgnoreCase) { ".p8" };
 
         public SnowflakeDataSource(IExecutionContext context, string connectionString, string? tableName, Dictionary<string, string>? options)
+            : this(context, connectionString, tableName, options, new TransactionState(), ownsTransactionState: true) { }
+
+        private SnowflakeDataSource(IExecutionContext context, string connectionString, string? tableName,
+            Dictionary<string, string>? options, TransactionState transactionState, bool ownsTransactionState)
         {
+            _transactionState = transactionState;
+            _ownsTransactionState = ownsTransactionState;
             _context = context;
             _logger = context.Logger;
             _connectionString = connectionString;
@@ -103,15 +115,9 @@ namespace ETL_SQL.Connectors.Snowflake
         public Dictionary<string, string>? Options => _options;
         public string ConnectorType => "SNOWFLAKE";
 
-        // The clone shares the open transaction, so a write through it is covered by the same
-        // commit or rollback as the source it was made from.
-        public IDataSource WithTable(string tableName)
-        {
-            var ds = new SnowflakeDataSource(_context!, _connectionString, tableName, _options);
-            ds._transactionalConnection = _transactionalConnection;
-            ds._activeTransaction = _activeTransaction;
-            return ds;
-        }
+        // COMPAT_BREAK: 0.21.0 — table views share live state and do not own transaction disposal.
+        public IDataSource WithTable(string tableName) => new SnowflakeDataSource(
+            _context!, _connectionString, tableName, _options, _transactionState, ownsTransactionState: false);
 
         public async Task<string> GetVersionAsync()
         {
@@ -151,7 +157,7 @@ namespace ETL_SQL.Connectors.Snowflake
             {
                 using var cmd = CreateCommand(conn);
                 cmd.CommandText = $"SELECT * FROM {QuoteIdentifier(_tableName)}";
-                if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
+                if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
 
                 using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 var columns = Enumerable.Range(0, reader.FieldCount).Select(i => reader.GetName(i)).ToList();
@@ -210,7 +216,7 @@ namespace ETL_SQL.Connectors.Snowflake
                         effectiveCancellationToken.ThrowIfCancellationRequested();
                         using var cmd = CreateCommand(conn);
                         cmd.CommandText = sql;
-                        if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
+                        if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
                         for (int i = 0; i < batch.ColumnNames.Count; i++)
                         {
                             var p = cmd.CreateParameter();
@@ -255,7 +261,7 @@ namespace ETL_SQL.Connectors.Snowflake
             {
                 using var cmd = CreateCommand(conn);
                 cmd.CommandText = sql;
-                if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
+                if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
 
                 int pIdx = 0;
                 if (parameters != null)
@@ -414,44 +420,45 @@ namespace ETL_SQL.Connectors.Snowflake
 
         public async Task BeginTransactionAsync()
         {
-            if (_activeTransaction != null) return;
-            _transactionalConnection = new SnowflakeDbConnection { ConnectionString = _connectionString };
+            if (_transactionState.Transaction != null) return;
+            _transactionState.Connection = new SnowflakeDbConnection { ConnectionString = _connectionString };
             await ConnectorRetryPolicy.ForSnowflake(_logger)
-                .ExecuteAsync(async ct => await _transactionalConnection.OpenAsync(ct));
-            _activeTransaction = await _transactionalConnection.BeginTransactionAsync();
+                .ExecuteAsync(async ct => await _transactionState.Connection.OpenAsync(ct));
+            _transactionState.Transaction = await _transactionState.Connection.BeginTransactionAsync();
         }
 
         public async Task CommitAsync()
         {
-            if (_activeTransaction == null) return;
-            await _activeTransaction.CommitAsync();
-            await _activeTransaction.DisposeAsync();
-            if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
-            _activeTransaction = null;
-            _transactionalConnection = null;
+            if (_transactionState.Transaction == null) return;
+            await _transactionState.Transaction.CommitAsync();
+            await _transactionState.Transaction.DisposeAsync();
+            if (_transactionState.Connection != null) await _transactionState.Connection.DisposeAsync();
+            _transactionState.Transaction = null;
+            _transactionState.Connection = null;
         }
 
         public async Task RollbackAsync()
         {
-            if (_activeTransaction == null) return;
-            await _activeTransaction.RollbackAsync();
-            await _activeTransaction.DisposeAsync();
-            if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
-            _activeTransaction = null;
-            _transactionalConnection = null;
+            if (_transactionState.Transaction == null) return;
+            await _transactionState.Transaction.RollbackAsync();
+            await _transactionState.Transaction.DisposeAsync();
+            if (_transactionState.Connection != null) await _transactionState.Connection.DisposeAsync();
+            _transactionState.Transaction = null;
+            _transactionState.Connection = null;
         }
 
         public async ValueTask DisposeAsync()
         {
-            if (_activeTransaction != null) await RollbackAsync();
-            if (_transactionalConnection != null) await _transactionalConnection.DisposeAsync();
-            _activeTransaction = null;
-            _transactionalConnection = null;
+            if (!_ownsTransactionState) return;
+            if (_transactionState.Transaction != null) await RollbackAsync();
+            if (_transactionState.Connection != null) await _transactionState.Connection.DisposeAsync();
+            _transactionState.Transaction = null;
+            _transactionState.Connection = null;
         }
 
         private async Task<(SnowflakeDbConnection conn, bool isShared)> GetConnectionAsync(CancellationToken cancellationToken = default)
         {
-            if (_transactionalConnection != null) return (_transactionalConnection, true);
+            if (_transactionState.Connection != null) return (_transactionState.Connection, true);
             var conn = new SnowflakeDbConnection { ConnectionString = _connectionString };
             await ConnectorRetryPolicy.ForSnowflake(_logger)
                 .ExecuteAsync(async ct => await conn.OpenAsync(ct), cancellationToken);

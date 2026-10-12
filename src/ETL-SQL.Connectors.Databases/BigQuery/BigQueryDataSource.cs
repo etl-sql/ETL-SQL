@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -27,6 +28,7 @@ namespace ETL_SQL.Connectors.BigQuery
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
         private readonly IExecutionContext _context;
+        private readonly BigQueryClient? _client;
 
         private readonly string _projectId;
         private readonly string? _dataset;
@@ -35,7 +37,11 @@ namespace ETL_SQL.Connectors.BigQuery
         private readonly int _commandTimeout;
 
         public BigQueryDataSource(IExecutionContext context, string connectionString, string? tableName, Dictionary<string, string>? options)
+            : this(context, connectionString, tableName, options, null) { }
+
+        internal BigQueryDataSource(IExecutionContext context, string connectionString, string? tableName, Dictionary<string, string>? options, BigQueryClient? client)
         {
+            _client = client;
             _context = context;
             _logger = context.Logger;
             _connectionString = connectionString;
@@ -162,9 +168,8 @@ namespace ETL_SQL.Connectors.BigQuery
                     effectiveCancellationToken.ThrowIfCancellationRequested();
                     if (batch.Rows.Count == 0) continue;
 
-                    // Each row gets its insert id once, outside the retry. A retry of a request
-                    // that partly landed or timed out then resends the same ids, and BigQuery
-                    // drops the rows it already took.
+                    // Insert ids offer best-effort deduplication only. Never replay a request
+                    // whose response may have been lost after some rows were accepted.
                     var batchId = Guid.NewGuid().ToString("N");
                     var rows = batch.Rows.Select((row, ordinal) =>
                     {
@@ -172,21 +177,27 @@ namespace ETL_SQL.Connectors.BigQuery
                         foreach (var col in batch.ColumnNames)
                         {
                             var val = row[col];
-                            insertRow[col] = val == DBNull.Value ? null : val;
+                            insertRow[col] = val switch
+                            {
+                                DBNull => null,
+                                // COMPAT_BREAK: 0.21.0 — preserve engine decimals the SDK rejects directly.
+                                decimal number => number.ToString(CultureInfo.InvariantCulture),
+                                _ => val
+                            };
                         }
                         return insertRow;
                     }).ToList();
 
-                    await ConnectorRetryPolicy.ForBigQuery(_logger)
-                        .ExecuteAsync(async ct =>
-                        {
-                            await client.InsertRowsAsync(datasetId, table, rows, null, ct);
-                        }, effectiveCancellationToken);
+                    // This client is dedicated to this write operation. Disable SDK transport
+                    // retries as well as connector retries for the non-idempotent insert.
+                    // COMPAT_BREAK: 0.21.0 — ambiguous inserts fail without automatic replay.
+                    client.Service.HttpClient.MessageHandler.NumTries = 1;
+                    await client.InsertRowsAsync(datasetId, table, rows, null, effectiveCancellationToken);
                 }
             }
-            catch (Google.GoogleApiException ex)
+            catch (Exception ex) when (ex is Google.GoogleApiException or HttpRequestException)
             {
-                throw new ExecutionException($"BigQuery streaming insert error: {ex.Error?.Message ?? ex.Message}");
+                throw new ExecutionException("BigQuery streaming insert failed. Some rows may have been accepted; reconcile the destination before retrying.");
             }
         }
 
@@ -338,6 +349,7 @@ namespace ETL_SQL.Connectors.BigQuery
 
         private async Task<BigQueryClient> CreateClientAsync()
         {
+            if (_client is not null) return _client;
             try
             {
                 var emulatorHost = Environment.GetEnvironmentVariable("BIGQUERY_EMULATOR_HOST");

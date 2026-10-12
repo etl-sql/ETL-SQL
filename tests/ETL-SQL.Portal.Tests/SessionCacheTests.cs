@@ -7,6 +7,25 @@ namespace ETL_SQL.Portal.Tests;
 [Trait("Category", "Portal")]
 public sealed class SessionCacheTests : IDisposable
 {
+    [Fact]
+    public void TimerEvictionFailureIsLoggedWithoutEscapingAndNextPassCanRun()
+    {
+        using var services = new ServiceCollection().BuildServiceProvider();
+        var config = new PortalConfig();
+        var log = new Moq.Mock<Microsoft.Extensions.Logging.ILogger<SessionCache>>();
+        using var cache = new SessionCache(config, services.GetRequiredService<IServiceScopeFactory>(), log.Object);
+        var evict = typeof(SessionCache).GetMethod("EvictScheduled",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var resources = config.Resources;
+        config.Resources = null!; // Inject a failure in the timer's eviction body.
+        evict.Invoke(cache, null);
+        config.Resources = resources;
+        evict.Invoke(cache, null);
+        log.Verify(x => x.Log(Microsoft.Extensions.Logging.LogLevel.Error,
+            Moq.It.IsAny<Microsoft.Extensions.Logging.EventId>(), Moq.It.IsAny<Moq.It.IsAnyType>(),
+            Moq.It.IsAny<Exception>(), Moq.It.IsAny<Func<Moq.It.IsAnyType, Exception?, string>>()), Moq.Times.Once);
+    }
+
     private readonly string _tempDir =
         Path.Combine(Path.GetTempPath(), $"session_cache_{Guid.NewGuid():N}");
 

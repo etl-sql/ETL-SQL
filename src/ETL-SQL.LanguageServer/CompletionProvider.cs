@@ -32,6 +32,7 @@ namespace ETL_SQL.LSP
         {
             var line = (int)request.Position.Line;
             var col = (int)request.Position.Character;
+            if (line < 0) return new CompletionList();
 
             if (!_store.TryGetState(request.TextDocument.Uri, out var state))
                 return new CompletionList();

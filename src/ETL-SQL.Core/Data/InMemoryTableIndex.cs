@@ -193,6 +193,8 @@ public class InMemoryTableIndex
         var cols = columns.ToList();
         var indexKey = GetIndexKey(cols);
         var val = GetRowKey(cols, row);
+        // COMPAT_BREAK: 0.21.0 — NULL keys never collide in the fallback uniqueness scan.
+        if (val is null) return false;
         if (val != null && _uniqueKeys.TryGetValue(indexKey, out var uniqueKeys))
             return uniqueKeys.Contains(val);
         if (_indexes.TryGetValue(indexKey, out var index))
