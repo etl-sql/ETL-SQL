@@ -33,6 +33,21 @@ namespace ETL_SQL.Tests.Orchestration
         private RelationalJobHistoryStore NewStore() =>
             new(new NpgsqlOrchestratorDialect(_pg.GetConnectionString()));
 
+        [Fact]
+        public async Task LegacyUnquotedHistory_MigratesWithoutLosingRows()
+        {
+            var dialect = new NpgsqlOrchestratorDialect(_pg.GetConnectionString());
+            await using var connection = dialect.CreateConnection();
+            await connection.OpenAsync();
+            await using (var command = connection.CreateCommand())
+            {
+                command.CommandText = OrchestratorSchemaMigrationTests.LegacyHistorySql + OrchestratorSchemaMigrationTests.LegacyJobsSql;
+                await command.ExecuteNonQueryAsync();
+            }
+            await OrchestratorSchemaMigrationTests.VerifyHistoryMigrationAsync(dialect, connection);
+            await OrchestratorSchemaMigrationTests.VerifyLegacyStoreAsync(dialect);
+        }
+
         private RelationalSandboxAdmissionLedger NewAdmissionLedger() =>
             new(new NpgsqlOrchestratorDialect(_pg.GetConnectionString()));
 

@@ -98,6 +98,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Make Portal and Orchestrator test fixtures disable engine file sinks when application file logging
+  is disabled; dedicated file-logging tests still use the real configured sink.
+- Preserve untracked authored files during browser-asset branch cleanup. The new cleanup command
+  previews inventory-owned leftovers and verifies hashes and Git tracking before removal.
+
 - Fix codebase-audit defects. Keep a `WithTable` clone inside the open transaction on ODBC and
   Snowflake. Carry single and composite in-memory indexes through a column rename, and let a
   single-column unique index hold many NULLs. Give BigQuery streaming rows a stable insert id so a
@@ -118,6 +123,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   generated per installation. Values encrypted under the old key are no longer readable. See
   [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 - Return the `GENERATE JWT_SECRET` secret as a result row instead of writing it to the log.
+- Preserve legacy Orchestrator data when upgrading PostgreSQL schemas to snake_case. Recognize
+  PostgreSQL-folded table and column names, including script hashes and lease fields. Rename each
+  table transactionally, reject ambiguous table/column collisions, and propagate migration failures
+  and cancellation instead of silently continuing with an incomplete schema.
 - Stop the capacity driver's process sampling from inflating the latencies it reports on Windows. It
   ran PowerShell synchronously, which froze the event loop that sends and times requests; a request
   to a local stub measured about 300 ms and now measures under 1 ms.

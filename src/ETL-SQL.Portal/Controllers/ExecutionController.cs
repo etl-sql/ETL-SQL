@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace ETL_SQL.Portal.Controllers;
 
@@ -28,7 +29,8 @@ public class ExecutionController(
     SnapshotPackageService snapshotPackages,
     LineageStewardNotificationService stewardNotifications,
     DatasetTenantScope? datasetScope = null,
-    PortalTenantCatalogScope? catalogScope = null) : ControllerBase
+    PortalTenantCatalogScope? catalogScope = null,
+    ILogger<ExecutionController>? logger = null) : ControllerBase
 {
     private readonly DatasetTenantScope _datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
     private PortalTenantCatalogScope CatalogScope => catalogScope ?? new PortalTenantCatalogScope(db, _datasetScope);
@@ -614,6 +616,7 @@ public class ExecutionController(
             catch (Exception ex)
             {
                 // Fire and forget
+                logger?.LogError(ex, "Failed to persist interaction lineage or notify stewards for report {ReportId}: {Message}", id, ex.Message);
                 await audit.LogAsync(CurrentUserId, "PERSIST_LINEAGE_FAILED", "Report", id.ToString(), ex.Message);
             }
         }

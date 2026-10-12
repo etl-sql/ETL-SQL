@@ -106,6 +106,11 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
 
         builder.ConfigureServices(services =>
         {
+            if (!EnableApplicationFileLogging)
+            {
+                services.RemoveAll<ETL_SQL.Common.LoggerService>();
+                services.AddSingleton(_ => new ETL_SQL.Common.LoggerService { SuppressConsole = true });
+            }
             // Replace DbContext with test-specific SQLite. RemoveAll of the options/context services
             // alone leaves the production IDbContextOptionsConfiguration in place, so both it and this
             // registration would apply — an implicit double-configuration. Strip it and re-add the

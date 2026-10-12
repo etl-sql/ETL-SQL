@@ -370,7 +370,7 @@ public partial class SpillStore : ISpillStore
         }
         else
         {
-            var arrowReader = new ArrowSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress);
+            var arrowReader = new ArrowSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress, _context.Logger);
             await arrowReader.InitializeAsync();
             reader = arrowReader;
         }
@@ -424,7 +424,14 @@ public partial class SpillStore : ISpillStore
         // Clean up non-persistent spill directories
         if (!IsPersistent && _cachedRootPath != null && Directory.Exists(_cachedRootPath))
         {
-            try { Directory.Delete(_cachedRootPath, true); } catch { }
+            try
+            {
+                Directory.Delete(_cachedRootPath, true);
+            }
+            catch (Exception ex)
+            {
+                _context.Logger.Warning("Failed to cleanup spill directory on dispose {Path}: {Message}", _cachedRootPath, ex.Message);
+            }
         }
 
         if (_cachedSessionKey != null) System.Array.Clear(_cachedSessionKey);
@@ -1189,7 +1196,14 @@ public partial class SpillStore : ISpillStore
             // Empty partition: delete the file so the reader sees "not found" → null
             if (_arrowWriter == null)
             {
-                try { File.Delete(_filePath); } catch { }
+                try
+                {
+                    File.Delete(_filePath);
+                }
+                catch (Exception ex)
+                {
+                    _context.Logger.Warning("Failed to delete empty spill file {Path}: {Message}", _filePath, ex.Message);
+                }
             }
         }
     }
@@ -1219,14 +1233,16 @@ public partial class SpillStore : ISpillStore
         private string?[]? _logicalTypes;
 
         public string ChunkName => _chunkName;
+        private readonly ILogger? _logger;
 
-        public ArrowSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress)
+        public ArrowSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress, ILogger? logger = null)
         {
             _path = path;
             _chunkName = chunkName;
             _key = key;
             _encrypt = encrypt;
             _compress = compress;
+            _logger = logger;
         }
 
         public async Task InitializeAsync()
@@ -1423,7 +1439,7 @@ public partial class SpillStore : ISpillStore
                 : null;
         }
 
-        private static object? ExtractValue(IArrowArray array, int index, string? logicalType)
+        private object? ExtractValue(IArrowArray array, int index, string? logicalType)
         {
             if (array.IsNull(index)) return null;
 
@@ -1438,14 +1454,14 @@ public partial class SpillStore : ISpillStore
                     => ParseDateTimeOffsetString(a.GetString(index)!),
                 StringArray a when IsGuidLogicalType(logicalType)
                     => Guid.Parse(a.GetString(index)!),
-                StringArray a => (object?)DecodeArrowString(a.GetString(index), logicalType),
+                StringArray a => (object?)DecodeArrowString(a.GetString(index), logicalType, _logger),
                 _ => null
             };
         }
 
         private const string JsonPrefix = "\x1Ejson:";
 
-        private static object? DecodeArrowString(string? s, string? logicalType)
+        private static object? DecodeArrowString(string? s, string? logicalType, ILogger? logger = null)
         {
             if (s == null) return null;
             if (logicalType == "String") return s;
@@ -1458,7 +1474,10 @@ public partial class SpillStore : ISpillStore
                     var element = JsonSerializer.Deserialize<JsonElement>(s.AsSpan(JsonPrefix.Length));
                     return UnwrapJsonValue(element);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    logger?.Warning("Failed to deserialize spilled JSON value for logical type {LogicalType}: {Message}", logicalType, ex.Message);
+                }
             }
             // Match JSON reader: try numeric then date parse on plain strings
             if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d)) return d;
