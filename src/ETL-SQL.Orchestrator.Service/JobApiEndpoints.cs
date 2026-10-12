@@ -278,6 +278,7 @@ namespace ETL_SQL.Orchestrator.Service
             // ── Scheduled job management ──────────────────────────────────────
 
             app.MapScheduledJobActivity();
+            app.MapJobRevisionRuns();
 
             app.MapGet("/api/scheduled-jobs", async (HttpContext ctx, IJobHistoryStore store,
                 OrchestratorObjectAuthorizationService authorization, IConfiguration cfg,

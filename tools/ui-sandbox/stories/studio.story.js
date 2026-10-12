@@ -139,6 +139,52 @@ const STUDIO_DESIGN_STATE = {
   connections: ['corp_db', 'staging_db'],
 };
 
+/**
+ * A stand-in for the Portal's pipeline-run host: a run is "running" for a few polls and then ends.
+ *
+ * Set `window.__STUDIO_PIPELINE_RUN__` to script the other endings before pressing Run:
+ * `{ outcome: 'FAILURE' }`, `{ outcome: 'refuse' }` (no grant, nothing runs), `{ outcome: 'lost' }`
+ * (status reads stop answering), `{ cancel: 'refuse' }` (Stop is never confirmed).
+ */
+function makePipelineRunHost() {
+  let lastRunId = 100;
+  const runs = new Map();
+  const scripted = () => window.__STUDIO_PIPELINE_RUN__ || {};
+  const scriptHash = 'sha256:5f2c9a41d07be36c1a9f04d2e8b7c3a15d60f9e2';
+  return {
+    submit: async document => {
+      if (scripted().outcome === 'refuse')
+        throw new Error("This account holds no EXECUTE grant on Orchestrator job 'PIPELINE:42'. An owner or manager of the job grants it.");
+      const runId = ++lastRunId;
+      runs.set(runId, { polls: 0, cancelled: false });
+      return { runId, version: document.version, scriptHash };
+    },
+    read: async (_document, runId) => {
+      if (scripted().outcome === 'lost') throw new TypeError('Failed to fetch');
+      const run = runs.get(runId);
+      run.polls += 1;
+      const done = run.cancelled || run.polls >= 4;
+      const status = run.cancelled ? 'CANCELLED'
+        : !done ? 'RUNNING'
+        : scripted().outcome === 'FAILURE' ? 'FAILURE' : 'SUCCESS';
+      return {
+        runId, status, isTerminal: done, scriptHash, logTruncated: false,
+        rowsProcessed: status === 'SUCCESS' ? 128 : 0,
+        errorMessage: status === 'FAILURE' ? 'Assertion failed: No clean sales rows were staged.'
+          : status === 'CANCELLED' ? 'The operation was canceled.' : null,
+        statements: !done || run.cancelled ? [] : [
+          { statement: 'SELECT id, product_id, quantity, amount, sale_date INTO #raw_sales FROM staging_db.sales_orders WHERE sale_date >= ?;', durationMs: 412, rowsProcessed: 128, failed: false },
+          { statement: 'ASSERT ((SELECT COUNT(*) FROM #ready_sales) > ?);', durationMs: 3, rowsProcessed: 0, failed: status === 'FAILURE' },
+        ],
+      };
+    },
+    cancel: async (_document, runId) => {
+      if (scripted().cancel === 'refuse') throw new TypeError('Failed to fetch');
+      runs.get(runId).cancelled = true;
+    },
+  };
+}
+
 export default {
   id: 'studio',
   title: 'ETL-SQL Studio',
@@ -147,6 +193,7 @@ export default {
     { id: 'default', label: 'Multi-Tab Workbench (Report, ETL, Script)' },
     { id: 'pending-save', label: 'Slow Save (type while saving)' },
     { id: 'crlf-pipeline', label: 'CRLF Pipeline (initial projection)' },
+    { id: 'pipeline-run', label: 'Saved Pipeline Run (Run, follow, Stop)' },
   ],
   async mount(stage, fixtureId, ctx) {
     // Import canonical studio module
@@ -181,9 +228,14 @@ export default {
       const pipeline = documents.find(document => document.id === 'doc-etl');
       pipeline.content = pipeline.content.replace(/\r?\n/g, '\r\n');
     }
+    if (fixtureId === 'pipeline-run') {
+      // A saved catalog pipeline: Run submits its saved version to the host and follows that run.
+      Object.assign(documents.find(document => document.id === 'doc-etl'), { reportId: 42, version: 3 });
+    }
     const workbench = await studioMod.createStudioWorkbench(stage, {
       documents,
-      activeDocId: fixtureId === 'crlf-pipeline' ? 'doc-etl' : undefined,
+      activeDocId: fixtureId === 'crlf-pipeline' || fixtureId === 'pipeline-run' ? 'doc-etl' : undefined,
+      pipelineRuns: fixtureId === 'pipeline-run' ? makePipelineRunHost() : undefined,
       workspaceFiles: JSON.parse(JSON.stringify(sandboxWorkspace.files)),
       workspaceFolders: JSON.parse(JSON.stringify(sandboxWorkspace.folders)),
       authFetch,
@@ -270,6 +322,7 @@ export default {
       delete STUDIO_DESIGN_STATE.unreadableConnections;
       window.__STUDIO_SEED_STATE__ = null;
       window.__STUDIO_API_DELAY__ = null;
+      window.__STUDIO_PIPELINE_RUN__ = null;
       window.__STUDIO_NO_GIT__ = null;
       workbench?.dispose?.();
     };

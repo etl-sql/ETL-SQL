@@ -1445,13 +1445,34 @@ entry points is a separate future decision, not the measure of success.
 
 **Horizon:** Next
 
-- [ ] **ST04 — Submit one saved pipeline.** One Orchestrator-backed MOCKDB run under federated author identity
+Run path decided 2026-10-12: one Orchestrator job per pipeline (`PIPELINE:{id}`) used as a run slot,
+created on first run by an `Admin` or `OrchestratorManager`. Design, routes and what is not yet shown:
+[Portal ETL documents §5](docs/architecture/decisions/portal-etl-documents.md#5-slice-2-as-built-2026-10-12).
+
+- [x] **ST04 — Submit one saved pipeline.** One Orchestrator-backed MOCKDB run under federated author identity
   uses the saved revision, checks run grants, and reports a missing Orchestrator clearly. No scheduling or
   Portal-process writes. (Size: M)
-- [ ] **ST05 — Follow one pipeline run.** Studio shows that submitted run's status and bounded log through
+  Done 2026-10-12. `POST /api/studio/pipelines/{id}/runs` names a saved version; the Portal reads that
+  revision and submits it to the job under the caller's assertion. Evidence: `StudioPipelineRunTests`
+  (Portal joined to a real federated Orchestrator: run hash equals saved-revision hash, stale version
+  refused, nothing in the Portal's own job store, `orchestrator_not_connected`, `job_not_provisioned`,
+  `run_grant_denied`) and `JobRevisionRunTests` (stored job script unchanged, tenant isolation, no
+  quarantine, never due on its own). Open: the sandbox executor path was not run; see the decision doc.
+- [x] **ST05 — Follow one pipeline run.** Studio shows that submitted run's status and bounded log through
   completion or failure, retaining its run ID; never displays another run's output. (Depends on: ST04; Size: M)
-- [ ] **ST06 — Cancel one pipeline run.** Stop reaches the submitted Orchestrator run, displays confirmed
+  Done 2026-10-12. Studio polls the run ID it was given and rejects an answer about any other; the Portal
+  shows a run only under the pipeline whose job the Orchestrator reports it against. The log is the
+  Orchestrator's normalized statement list, capped at 200. A lost status read ends as `Unknown`, not as
+  a result. Evidence: `AFailedRunIsFollowedToItsFailureWithItsOwnBoundedLog`, `AnotherPipelinesRunIsNotShown`,
+  both browser journeys, and the `pipeline-run` sandbox fixture.
+- [x] **ST06 — Cancel one pipeline run.** Stop reaches the submitted Orchestrator run, displays confirmed
   cancellation or an explicitly unconfirmed outcome, and preserves diagnostics. (Depends on: ST04, ST05; Size: M)
+  Done 2026-10-12. `POST /api/job-runs/{id}/cancel` records `CANCELLED`; the submitter may stop their own
+  run with `EXECUTE`, anyone else needs `MANAGE`. Studio reports "accepted" and "confirmed" separately,
+  says when a stop request never arrived, and says when the run finished first. Evidence:
+  `StopReachesTheSubmittedRunAndTheOrchestratorConfirmsIt`, `AnAuthorStopsTheirOwnRunButNotAColleagues`,
+  `StopReachesTheRunAndStudioSaysOnlyWhatWasConfirmed` (browser, with the stop request aborted in transit).
+  Open: cancel signals only the node executing the run; kill-by-job-name still records `FAILURE`.
 - [ ] **ST07 — Schedule one saved pipeline.** Create a governed schedule for the saved revision, advance the
   controlled clock to one due occurrence, and verify the resulting run and output. No new recurrence vocabulary.
   (Depends on: ST04, ST05; Size: M)
@@ -1459,9 +1480,14 @@ entry points is a separate future decision, not the measure of success.
   exclude secrets and host-owned bindings, and verify report-only surfaces still refuse it. (Size: M)
 - [ ] **ST09 — Pipeline promotion.** Promote that package to one permitted target, verify ownership/bindings,
   and reject a collision without partial changes. No new promotion topology. (Depends on: ST08; Size: M)
-- [ ] **ST10 — Ordinary-author pipeline journey.** A Publisher with the required folder and Orchestrator grants
+- [x] **ST10 — Ordinary-author pipeline journey.** A Publisher with the required folder and Orchestrator grants
   creates, saves, reopens, runs, and cancels one pipeline; denied grants fail explicitly. Admin identity cannot
   satisfy this task. (Depends on: ST04, ST05, ST06; Size: M)
+  Done 2026-10-12. `StudioPipelineRunJourneyTests.AnOrdinaryAuthorRunsASavedPipelineAndFollowsThatRun`
+  drives real Chromium as a Publisher who owns one folder and holds no administrative or Orchestrator
+  role. No administrator signs in: an operator provisions the job and grants `EXECUTE` on the Orchestrator
+  directly. The author is refused with no job, refused with no grant, then runs, fails, repairs, reopens,
+  reruns and stops the same pipeline. Each outcome is checked against the Orchestrator's history.
 - [ ] **ST11 — Report schedule handoff.** A Studio-authored report reaches one authorized scheduled execution
   and produces one verified artifact under the scheduled identity. (Size: M)
 

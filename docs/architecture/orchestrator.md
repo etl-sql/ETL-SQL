@@ -335,6 +335,41 @@ rendering. Page disposal aborts pending loads and removes controller listeners.
 
 ---
 
+### 3.8 Revision runs and runs addressed by ID
+
+A job can act as a grantable run slot. A caller with `EXECUTE` on it submits script text for one
+run, then follows or cancels that run by its history ID. Portal Studio uses this to run a saved
+catalog pipeline ([Portal routes](portal.md#studio-pipeline-runs)).
+
+| Method | Path | Requires | Description |
+| :--- | :--- | :--- | :--- |
+| POST | `/api/scheduled-jobs/{name}/runs` | `EXECUTE` on the job | Run the submitted `ScriptText` once through the job. `202` returns `RunId`, `JobName` and `ScriptHash` |
+| GET | `/api/job-runs/{historyId}` | `READ` on the job | Status, error, rows and up to 200 normalized statements of that run |
+| POST | `/api/job-runs/{historyId}/cancel` | `MANAGE`, or `EXECUTE` and being the submitter | Signal that run to stop. `202` is an accepted request, not an outcome |
+
+`SchedulerService.RunRevisionAsync` reuses the scheduled path: the start guard, capacity check,
+execution lease, throttle, sandbox executor when one is registered, history and metering. It differs
+from a trigger in five ways:
+
+- The stored job definition is never changed. The submitted text runs; the stored script stays.
+- The hash recorded on the run is the hash of the submitted text. The stored hash policy is skipped.
+- The run is never retried and does not count toward quarantine.
+- It neither consumes a scheduled occurrence nor re-arms `NextRun`.
+- Without the sandbox executor it runs under the submitting caller's `ExecutionIdentity`.
+
+`ProvisionIfMissing` creates the slot when the caller passes
+`OrchestratorObjectAuthorizationService.CanCreate`. The slot is an enabled job with no schedule and
+`NextRun` parked at `SchedulerService.ManualOnlyNextRun`. It cannot be a disabled job: the execution
+lease refuses one, and disabling the job is how an operator stops it being run at all.
+
+Cancel by run ID records `CANCELLED`. The older `POST /api/scheduled-jobs/{name}/kill` is unchanged
+and still records `FAILURE` with a cancellation message. Who submitted a run is held in memory for
+the life of the run, so after a restart only `MANAGE` can cancel it. A cancel for a run this node is
+not executing answers `409 not_running_here`; there is no cross-node signal.
+
+Refusals return `{ Code, Error }`: `job_not_provisioned`, `run_grant_denied`, `already_running`,
+`node_overloaded`, `not_started`, `cancel_denied`, `run_already_finished`, `not_running_here`.
+
 ## 4. Concurrency — `JobThrottle`
 
 `JobThrottle` enforces a configurable cap on concurrently executing jobs using a `SemaphoreSlim`. Jobs that exceed the cap are **queued**, not rejected.

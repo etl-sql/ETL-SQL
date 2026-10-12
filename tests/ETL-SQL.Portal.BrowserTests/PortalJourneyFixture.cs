@@ -17,6 +17,9 @@ public sealed class PortalJourneyFixture : PortalBrowserFixture
     private PortalJourneyFixture(JourneyOrchestratorFactory orchestrator)
         : base(new JourneyPortalFactory(orchestrator)) => this.orchestrator = orchestrator;
 
+    /// <summary>The Orchestrator behind this Portal, for acting as an operator and reading its store.</summary>
+    public OrchestratorWebFactory Orchestrator => orchestrator;
+
     public override async Task InitializeAsync()
     {
         orchestrator.CreateClient().Dispose();

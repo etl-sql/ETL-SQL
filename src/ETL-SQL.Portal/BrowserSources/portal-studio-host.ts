@@ -1,5 +1,5 @@
 /** Catalog persistence callbacks for the shared Studio workbench. */
-import { PortalAuthoringError, readDesignerLease, readDesignerSave, readScriptContent, readStudioDraft, readStudioReport } from './authoring-responses.js';
+import { PortalAuthoringError, readDesignerLease, readDesignerSave, readPipelineRun, readPipelineRunCancelRequested, readPipelineRunSubmitted, readScriptContent, readStudioDraft, readStudioReport } from './authoring-responses.js';
 import { asError, isObject } from './http-error.js';
 import { readAuthoringJson } from './portal-authoring.js';
 import type { AuthoringFetch } from './portal-authoring.js';
@@ -64,6 +64,28 @@ export function createPortalStudioHost(session: StudioSessionDto, fetch: Authori
                 scriptText: request.scriptText, description: null, kind: request.kind || 'Report' }));
         },
         onRenewDocument: (doc: PortalDocument) => acquireLease(reportId(doc)),
+        // A saved pipeline runs in the Orchestrator. Only its saved version is named here; the
+        // Portal reads that revision itself, so text in the editor is never what runs.
+        ...(capabilities.has('ScriptRun') ? {
+            pipelineRuns: {
+                submit: async (doc: PortalDocument) => {
+                    if (!Number.isSafeInteger(doc.version) || (doc.version ?? 0) <= 0)
+                        throw new Error('This pipeline has no saved version to run.');
+                    return readPipelineRunSubmitted(await readJson(`/api/studio/pipelines/${reportId(doc)}/runs`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ version: doc.version })
+                    }));
+                },
+                read: async (doc: PortalDocument, runId: number) =>
+                    readPipelineRun(await readJson(`/api/studio/pipelines/${reportId(doc)}/runs/${runId}`)),
+                // Resolves when the Orchestrator has accepted the request, which is not yet the
+                // outcome. A refusal carries the server's reason as the error message.
+                cancel: async (doc: PortalDocument, runId: number) => {
+                    readPipelineRunCancelRequested(await readJson(
+                        `/api/studio/pipelines/${reportId(doc)}/runs/${runId}/cancel`, { method: 'POST' }));
+                }
+            }
+        } : {}),
         ...(session.draftRecovery ? {
             onLoadDraft: async (doc: PortalDocument) => {
                 if (!doc.reportId) return null;

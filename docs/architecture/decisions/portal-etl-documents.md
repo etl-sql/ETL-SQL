@@ -86,3 +86,38 @@ No new capability is needed unless D2 B is chosen.
 - Multi-file pipelines (`RUN SCRIPT` across catalog documents) beyond resolving paths inside the
   tenant's script root.
 - Migrating existing Orchestrator `ScriptRoot` files into the catalog.
+
+## 5. Slice 2 as built (2026-10-12)
+
+Decided with the owner before building:
+
+- **A job is the run slot.** Each pipeline maps to one Orchestrator job, `PIPELINE:{id}`. Run
+  submits the saved revision's text to that job for one run; the job's stored definition is not
+  changed. The ad-hoc `/jobs` channel was rejected: it has no per-object grant, no sandbox and no
+  durable run record.
+- **First run provisions, if allowed.** A caller with `Admin` or `OrchestratorManager` creates the
+  job on first run and owns it. Anyone else is refused with `job_not_provisioned` until an operator
+  provisions it and grants `EXECUTE`.
+
+Consequences worth knowing:
+
+- An author with only `EXECUTE` can run a revision they just saved. The grant is on the slot, not
+  on a pinned script, so the document's own Author permission is what limits what they can submit.
+- Run always means the saved revision. The request names a version, not text, and a stale or
+  unsaved one is refused.
+- There is no Portal run table. The run ID is the Orchestrator's history ID.
+
+Evidence: `JobRevisionRunTests`, `StudioPipelineRunTests` (Portal joined to a real Orchestrator in
+federated mode) and `StudioPipelineRunJourneyTests` (Chromium, as a Publisher with no Orchestrator
+role). Routes and refusal codes are in [Portal](../portal.md#studio-pipeline-runs) and
+[Orchestrator](../orchestrator.md#38-revision-runs-and-runs-addressed-by-id).
+
+Not yet shown:
+
+- **Sandbox execution.** The tests use the in-process executor. When `ISandboxScheduledJobExecutor`
+  is registered the submitted text goes through it under the job's tenant policy, and that path has
+  not been run. The sandbox request carries no caller identity, so a sandboxed revision run is the
+  tenant's, not the author's, for row-level security.
+- **More than one Orchestrator node.** Cancel signals only the node that is executing the run.
+- **Orchestrator restart mid-run.** The submitter is remembered in memory, so afterwards only
+  `MANAGE` can cancel.

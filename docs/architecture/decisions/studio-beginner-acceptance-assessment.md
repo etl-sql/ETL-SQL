@@ -18,6 +18,12 @@ lifecycle. The other three exercises are not accepted:
 No learner has been observed, so "explain the SQL they generated" is unproven in every exercise.
 Closing ST03 records this assessment. It does not certify the beginner experience.
 
+> **Since this assessment (2026-10-12, later the same day):** ST04–ST06 and ST10 landed. A Publisher
+> can now submit, follow and stop a saved Portal pipeline through the Orchestrator
+> ([as built](portal-etl-documents.md#5-slice-2-as-built-2026-10-12)). The Portal ETL *exercise*
+> (ST21: deliberate failure, repair, exact rows and cleanup in a real sandbox) is still open, so the
+> verdict above is unchanged. The rest of this document is the assessment as it was made.
+
 ## Evidence run
 
 Assets were prepared and passed Check mode. Fifteen tests ran; fifteen passed, none skipped.

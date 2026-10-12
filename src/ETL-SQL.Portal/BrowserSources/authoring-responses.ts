@@ -88,6 +88,35 @@ export function readStudioDraft(value: unknown): StudioRecoveryDraftDto {
         baseSourceRevision: value.baseSourceRevision, updatedAt: value.updatedAt };
 }
 
+export function readPipelineRunSubmitted(value: unknown): PipelineRunSubmittedDto {
+    if (!isObject(value) || !version(value.runId) || !integer(value.pipelineId) || !version(value.version)
+        || !string(value.scriptHash) || !string(value.jobName))
+        throw new TypeError('Invalid pipeline run submission response.');
+    return { runId: value.runId, pipelineId: value.pipelineId, version: value.version,
+        scriptHash: value.scriptHash, jobName: value.jobName };
+}
+export function readPipelineRunCancelRequested(value: unknown): PipelineRunCancelRequestedDto {
+    if (!isObject(value) || !version(value.runId) || !integer(value.pipelineId))
+        throw new TypeError('Invalid pipeline run cancellation response.');
+    return { runId: value.runId, pipelineId: value.pipelineId };
+}
+function pipelineRunStatement(value: unknown): value is PipelineRunStatementDto {
+    return isObject(value) && string(value.statement) && number(value.durationMs)
+        && number(value.rowsProcessed) && boolean(value.failed);
+}
+export function readPipelineRun(value: unknown): PipelineRunDto {
+    if (!isObject(value) || !version(value.runId) || !integer(value.pipelineId) || !string(value.status)
+        || !boolean(value.isTerminal) || !date(value.startTime) || !nullable(value.endTime, date)
+        || !nullable(value.errorMessage, string) || !number(value.rowsProcessed)
+        || !nullable(value.scriptHash, string) || !boolean(value.logTruncated)
+        || !array(value.statements, pipelineRunStatement))
+        throw new TypeError('Invalid pipeline run response.');
+    return { runId: value.runId, pipelineId: value.pipelineId, status: value.status,
+        isTerminal: value.isTerminal, startTime: value.startTime, endTime: value.endTime,
+        errorMessage: value.errorMessage, rowsProcessed: value.rowsProcessed, scriptHash: value.scriptHash,
+        logTruncated: value.logTruncated, statements: value.statements };
+}
+
 function textFormatting(value: unknown): value is DesignerTextFormattingDto {
     return isObject(value) && optionalStrings(value, ['text', 'color', 'font', 'size', 'weight', 'align']);
 }

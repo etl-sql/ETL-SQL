@@ -549,6 +549,12 @@ export function createScriptResultsPanel(container: HTMLElement, { onNavigate = 
             case 'message':
                 messages.push(message);
                 break;
+            case 'show':
+                // A run with no result set says where its outcome is, instead of leaving the
+                // panel on a tab it has nothing to put in.
+                if (['results', 'messages', 'pipeline', 'performance'].includes(String(message.tab)))
+                    activeTab = String(message.tab);
+                break;
             case 'progress':
                 progress.push(Array.isArray(message.data) ? (message.data as RunPipelineNode[]) : []);
                 break;

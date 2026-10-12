@@ -43,6 +43,28 @@ namespace ETL_SQL.Orchestrator.Scheduling
         string? CheckpointLabel = null,
         string? Reason = null);
 
+    public enum RevisionRunStatus
+    {
+        Accepted,
+        JobNotFound,
+        AlreadyRunning,
+        NodeOverloaded,
+        /// <summary>Queued, but no run was recorded: another instance holds the job or history is unavailable.</summary>
+        NotStarted
+    }
+
+    /// <summary><see cref="RunId"/> is the history id of the run, set only when it was accepted.</summary>
+    public sealed record RevisionRunResult(RevisionRunStatus Status, long? RunId = null);
+
+    /// <summary>
+    /// One submitted script revision run through a job without changing the job's stored definition.
+    /// </summary>
+    internal sealed record RevisionRun(
+        string ScriptText,
+        ExecutionIdentity? Identity,
+        string? SubmittedBy,
+        TaskCompletionSource<long> Started);
+
     /// <summary>
     /// Background service that manages the scheduling and execution of automated ETL-SQL jobs.
     /// Concurrency is limited by <see cref="JobThrottle"/> — jobs beyond the cap are queued
@@ -63,6 +85,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
         // COMPAT_BREAK: 0.21.0 — equal job names in different tenants can run independently.
         private readonly System.Collections.Concurrent.ConcurrentDictionary<JobId, byte> _scheduledJobStarts = new();
         private readonly System.Collections.Concurrent.ConcurrentDictionary<long, Task> _jobTasks = new();
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<long, string> _runSubmitters = new();
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<long, byte> _cancelRequested = new();
         private long _nextJobTaskId;
 
         /// <summary>Identifies this scheduler instance as a lease owner (P1.1). Unique per process
@@ -92,6 +116,13 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
         /// <summary>Lease name for the periodic history/metrics maintenance pass.</summary>
         internal const string MaintenanceLockName = "orchestrator:history-maintenance";
+
+        /// <summary>
+        /// Next run of a job that exists only to be run on request. An unscheduled job is driven by
+        /// its interval and a null next run means "due now", so a run slot is parked here instead;
+        /// a disabled job would not do, because the execution lease refuses one.
+        /// </summary>
+        public static readonly DateTime ManualOnlyNextRun = new(9000, 1, 1, 0, 0, 0, DateTimeKind.Local);
 
         /// <summary>Returns a snapshot of current concurrency metrics.</summary>
         public JobThrottleMetrics GetMetrics() => _throttle.GetMetrics();
@@ -453,6 +484,57 @@ namespace ETL_SQL.Orchestrator.Scheduling
             return ManualTriggerResult.Accepted;
         }
 
+        /// <summary>
+        /// Runs one submitted script revision through an existing job and returns the run it started.
+        /// The job supplies the lease, sandbox policy, history and grants; the text comes from the
+        /// caller. The stored definition is not changed, the run is never retried, and it does not
+        /// count toward quarantine.
+        /// </summary>
+        public async Task<RevisionRunResult> RunRevisionAsync(
+            JobId jobId,
+            string scriptText,
+            ExecutionIdentity? identity,
+            string? submittedBy,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(scriptText);
+            var job = await _store.GetJobByIdAsync(jobId);
+            if (job == null) return new(RevisionRunStatus.JobNotFound);
+
+            if (_capacityMonitor.Capture().IsOverloaded)
+            {
+                _logger.LogWarning(
+                    "Job {JobName}: revision run refused because this node is overloaded.", job.Name);
+                return new(RevisionRunStatus.NodeOverloaded);
+            }
+
+            if (!_scheduledJobStarts.TryAdd(job.Id, 0))
+                return new(RevisionRunStatus.AlreadyRunning);
+
+            var revision = new RevisionRun(
+                scriptText, identity, submittedBy,
+                new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously));
+            QueueJob(job, async () =>
+            {
+                try
+                {
+                    await ExecuteAdmittedJobAsync(job, revision: revision);
+                }
+                finally
+                {
+                    // Reached without a history row only when the lease or the history write failed.
+                    revision.Started.TrySetResult(0);
+                }
+            });
+
+            var runId = await revision.Started.Task.WaitAsync(cancellationToken);
+            return runId > 0 ? new(RevisionRunStatus.Accepted, runId) : new(RevisionRunStatus.NotStarted);
+        }
+
+        /// <summary>The principal that submitted a still-running revision run, or null.</summary>
+        public string? GetRunSubmitter(long historyId) =>
+            _runSubmitters.TryGetValue(historyId, out var submitter) ? submitter : null;
+
         /// <summary>Resumes one failed persistent run from its last completed named checkpoint.</summary>
         public async Task<ResumeTriggerResult> ResumeJobAsync(long historyId)
         {
@@ -544,6 +626,36 @@ namespace ETL_SQL.Orchestrator.Scheduling
             return false;
         }
 
+        /// <summary>
+        /// Cancels one run by its history id and marks it, so its outcome is recorded as
+        /// <c>CANCELLED</c> and not as a failure of the script. False when this node is not running
+        /// that run: it may have finished already, or be running on another node.
+        /// </summary>
+        public bool CancelRun(long historyId)
+        {
+            if (!_runningJobs.TryGetValue(historyId, out var cts)) return false;
+            _cancelRequested[historyId] = 0;
+            try
+            {
+                cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // The run ended between the lookup and the signal.
+                _cancelRequested.TryRemove(historyId, out _);
+                return false;
+            }
+            _logger.LogInformation("Cancellation requested for run {HistoryId}.", historyId);
+            return true;
+        }
+
+        /// <summary>
+        /// The recorded status of an attempt that did not succeed. A run someone asked to cancel
+        /// ended because of that request, whatever error the interrupted statement reported.
+        /// </summary>
+        private string UnsuccessfulStatus(long historyId) =>
+            historyId > 0 && _cancelRequested.ContainsKey(historyId) ? "CANCELLED" : "FAILURE";
+
         private async Task ExecuteJobAsync(
             JobDefinition job,
             IReadOnlyDictionary<string, string>? variableOverrides = null,
@@ -571,7 +683,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
             JobDefinition job,
             IReadOnlyDictionary<string, string>? variableOverrides = null,
             string? initialSessionId = null,
-            bool resumeFromCheckpoint = false)
+            bool resumeFromCheckpoint = false,
+            RevisionRun? revision = null)
         {
             // P1.1: claim the per-job execution lease before doing anything observable. This is the
             // single choke point for both scheduled and manually triggered runs — another scheduler
@@ -600,7 +713,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             {
                 await ExecuteLeasedJobAsync(
                     job, leaseDuration, fenceToken.Value, variableOverrides,
-                    initialSessionId, resumeFromCheckpoint);
+                    initialSessionId, resumeFromCheckpoint, revision);
             }
             finally
             {
@@ -622,15 +735,19 @@ namespace ETL_SQL.Orchestrator.Scheduling
             long fenceToken,
             IReadOnlyDictionary<string, string>? variableOverrides,
             string? initialSessionId,
-            bool resumeFromCheckpoint)
+            bool resumeFromCheckpoint,
+            RevisionRun? revision = null)
         {
             _logger.LogInformation("Job runner: {JobName} starting execution cycle (MaxRetries={Max}).", job.Name, job.MaxRetries);
 
+            // A revision run executes the submitted text, so the stored hash policy does not apply
+            // to it; the hash recorded on the run is the hash of what actually ran.
+            var script = revision?.ScriptText ?? job.Script;
             var currentHash = "sha256:" + Convert.ToHexString(
-                SHA256.HashData(Encoding.UTF8.GetBytes(job.Script))).ToLowerInvariant();
+                SHA256.HashData(Encoding.UTF8.GetBytes(script))).ToLowerInvariant();
 
             bool? hashMatched = null;
-            if (job.ScriptHash is not null)
+            if (revision is null && job.ScriptHash is not null)
             {
                 hashMatched = string.Equals(currentHash, job.ScriptHash, StringComparison.OrdinalIgnoreCase);
                 if (!hashMatched.Value)
@@ -661,7 +778,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             string sessionId = string.IsNullOrWhiteSpace(initialSessionId)
                 ? $"job-{Guid.NewGuid():N}"
                 : initialSessionId;
-            int maxAttempts = Math.Max(1, job.MaxRetries + 1);
+            int maxAttempts = revision is null ? Math.Max(1, job.MaxRetries + 1) : 1;
             ScriptExecutionResult? lastResult = null;
             var finalStatus = "FAILURE";
 
@@ -694,6 +811,16 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         _logger.LogError(ex, "Failed to log job start for {JobName}.", job.Name);
                     }
 
+                    if (revision is not null)
+                    {
+                        // The submitter follows this run by its id. Without one there is nothing to
+                        // follow, so the text is not executed.
+                        if (historyId <= 0) break;
+                        if (!string.IsNullOrWhiteSpace(revision.SubmittedBy))
+                            _runSubmitters[historyId] = revision.SubmittedBy;
+                        revision.Started.TrySetResult(historyId);
+                    }
+
                     var attemptSw = System.Diagnostics.Stopwatch.StartNew();
                     using var attemptActivity = SchedulerObservability.StartScheduledJobActivity(historyId, currentHash, attempt);
                     var attemptStatus = "FAILURE";
@@ -718,14 +845,20 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         if (sandboxExecutor is not null)
                         {
                             usedSandbox = true;
+                            // A local copy carrying the submitted text; it is never saved.
                             lastResult = await sandboxExecutor.ExecuteAsync(
-                                job, historyId, attempt, sessionId, resumeFromCheckpoint, queueWaitMs,
+                                revision is null ? job : job with { Script = script },
+                                historyId, attempt, sessionId, resumeFromCheckpoint, queueWaitMs,
                                 variableOverrides, cycleCts.Token);
                         }
                         else
                         {
                             var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
-                            lastResult = resumeFromCheckpoint
+                            lastResult = revision is not null
+                                ? await executor.ExecuteTextAsync(
+                                    script, sessionId, cycleCts.Token, job.Name, queueWaitMs,
+                                    executionIdentity: revision.Identity)
+                                : resumeFromCheckpoint
                                 ? await executor.ResumeTextAsync(
                                     job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs)
                                 : variableOverrides is { Count: > 0 }
@@ -758,13 +891,13 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             var safeError = SecretRedactor.Redact(lastResult.ErrorMessage);
                             _logger.LogWarning("Job {JobName} finished with failure on attempt {Attempt}/{Max}: {Error}",
                                 job.Name, attempt, maxAttempts, safeError);
-                            attemptStatus = "FAILURE";
+                            attemptStatus = UnsuccessfulStatus(historyId);
                             attemptRows = lastResult.RowsProcessed;
                             attemptPeakMemory = lastResult.PeakMemoryBytes;
                             attemptCpuSeconds = lastResult.CpuTimeSeconds;
                             finalStatus = "FAILURE";
 
-                            await PersistAttemptEvidenceAsync(job, historyId, "FAILURE", lastResult,
+                            await PersistAttemptEvidenceAsync(job, historyId, attemptStatus, lastResult,
                                 sessionId, currentHash, hashMatched);
                         }
                     }
@@ -773,7 +906,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         _logger.LogError(ex, "Error executing job {JobName} on attempt {Attempt}.", job.Name, attempt);
                         lastResult = new ScriptExecutionResult(false, 0, SecretRedactor.Redact(ex.Message));
                         finalStatus = "FAILURE";
-                        await PersistAttemptEvidenceAsync(job, historyId, "FAILURE", lastResult,
+                        attemptStatus = UnsuccessfulStatus(historyId);
+                        await PersistAttemptEvidenceAsync(job, historyId, attemptStatus, lastResult,
                             sessionId, currentHash, hashMatched);
                     }
                     finally
@@ -908,6 +1042,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 if (lastHistoryId > 0)
                 {
                     _runningJobs.TryRemove(lastHistoryId, out _);
+                    _runSubmitters.TryRemove(lastHistoryId, out _);
+                    _cancelRequested.TryRemove(lastHistoryId, out _);
                 }
 
                 if (!cycleCts.IsCancellationRequested)
@@ -922,7 +1058,11 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     job, finalStatus, lastHistoryId, lastResult, _cts?.Token ?? default);
             }
 
-            var nextRun = await AdvanceScheduleLinksAsync(job, DateTime.UtcNow) ?? CalculateNextRun(job);
+            // A revision run is nobody's scheduled occurrence: it neither consumes one nor re-arms
+            // the interval, so a run slot stays manual and a scheduled job keeps its next run.
+            var nextRun = revision is not null
+                ? job.NextRun
+                : await AdvanceScheduleLinksAsync(job, DateTime.UtcNow) ?? CalculateNextRun(job);
             try
             {
                 // Fenced write: if this node was paused past its lease and another instance took over the
@@ -938,7 +1078,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 _logger.LogError(ex, "Failed to update last run info for {JobName}.", job.Name);
             }
 
-            await QuarantineIfRepeatedlyFailingAsync(job);
+            // An author's failing draft must not disable the job for everyone else.
+            if (revision is null)
+                await QuarantineIfRepeatedlyFailingAsync(job);
         }
 
         private static long ToMilliseconds(double seconds)

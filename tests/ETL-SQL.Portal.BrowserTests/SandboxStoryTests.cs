@@ -5204,6 +5204,64 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task Studio_SavedPipelineRun_ShowsOnlyWhatTheHostReportedForThatRun()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.SelectOptionAsync("#fixtureSel", "pipeline-run");
+        await WaitForStudioAsync(page);
+        await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__?.state.activeDocId === 'doc-etl'");
+
+        const string trace = "window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').studioContext.resultsTrace";
+        async Task<string> Messages() => await page.EvaluateAsync<string>(
+            $"() => {trace}.filter(e => e.type === 'message').map(e => String(e.text)).join('\\n')");
+        Task Done(string outcome) => page.WaitForFunctionAsync(
+            $"outcome => {trace}.some(e => e.type === 'done' && e.status === outcome)", outcome,
+            new PageWaitForFunctionOptions { Timeout = 20_000 });
+
+        // A completed run: its id, its statements, and no request to the read-only run endpoint.
+        await page.Locator("[data-action='run']").ClickAsync();
+        await Done("Complete");
+        var completed = await Messages();
+        Assert.Contains("Run 101 accepted by the Orchestrator for saved version 3", completed);
+        Assert.Contains("Ran: SELECT id, product_id", completed);
+        Assert.Contains("Run 101 finished with status SUCCESS. 128 rows processed.", completed);
+        Assert.False(await page.EvaluateAsync<bool>(
+            "() => window.__STUDIO_API_REQUESTS__.some(r => r.url.endsWith('/api/designer/run'))"));
+        await Expect(page.Locator(".etlsql-script-results")).ToContainTextAsync("Run 101 finished with status SUCCESS");
+
+        // A failed run is a failure, with the failing statement and the error, under its own id.
+        await page.EvaluateAsync("() => { window.__STUDIO_PIPELINE_RUN__ = { outcome: 'FAILURE' }; }");
+        await page.Locator("[data-action='run']").ClickAsync();
+        await Done("Failed");
+        var failed = await Messages();
+        Assert.Contains("Failed: ASSERT", failed);
+        Assert.Contains("Assertion failed: No clean sales rows were staged.", failed);
+        Assert.Contains("Run 102 finished with status FAILURE", failed);
+        Assert.DoesNotContain("Run 101", failed);
+
+        // A refused submission ran nothing and says so.
+        await page.EvaluateAsync("() => { window.__STUDIO_PIPELINE_RUN__ = { outcome: 'refuse' }; }");
+        await page.Locator("[data-action='run']").ClickAsync();
+        await Done("Not run");
+        var refused = await Messages();
+        Assert.Contains("holds no EXECUTE grant", refused);
+        Assert.Contains("Nothing was run.", refused);
+        Assert.DoesNotContain("accepted by the Orchestrator", refused);
+
+        // Unsaved edits are refused before the host is asked at all.
+        await page.EvaluateAsync("() => { window.__STUDIO_PIPELINE_RUN__ = null; const e = window.__STUDIO_INSTANCE__.state.editorInstance; e.setValue(e.getValue() + '\\n-- edit'); }");
+        await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').isDirty === true");
+        await page.Locator("[data-action='run']").ClickAsync();
+        await page.WaitForFunctionAsync($"() => {trace}.some(e => e.type === 'message' && String(e.text).includes('unsaved edits'))");
+        Assert.DoesNotContain("Run 103", await Messages());
+
+        Assert.Empty(session.PageErrors);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

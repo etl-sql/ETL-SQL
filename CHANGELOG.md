@@ -12,6 +12,20 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Run a saved pipeline from Portal Studio through the Orchestrator. **Run** submits the saved
+  revision to the pipeline's Orchestrator job under the author's own identity, shows that run's
+  status and bounded statement log by its run ID, and **Stop** asks the Orchestrator to cancel it.
+  Nothing executes in the Portal, unsaved edits are refused, and a missing Orchestrator, a missing
+  job and a missing `EXECUTE` grant each say so. An ordinary Publisher needs Execute on the document
+  and `EXECUTE` on the job `PIPELINE:{id}`; an `Admin` or `OrchestratorManager` creates that job on
+  first run.
+- Add Orchestrator routes for runs addressed by ID: `POST /api/scheduled-jobs/{name}/runs` runs
+  submitted script text once through a job without changing its definition,
+  `GET /api/job-runs/{id}` returns status and statements, and `POST /api/job-runs/{id}/cancel` stops
+  one run and records it as `CANCELLED`. The existing kill-by-job-name route is unchanged.
+
 ### Changed
 
 - Remove generated browser JavaScript from source control. The 491 compiler emits, host copies, and

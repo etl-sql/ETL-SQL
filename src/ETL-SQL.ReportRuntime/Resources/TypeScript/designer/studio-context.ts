@@ -40,6 +40,8 @@ export interface StudioRuntimeContext {
     runActive: boolean;
     currentRunId?: string | null;
     stopRequested?: boolean;
+    /** The pipeline run this document is following, while it is following one. */
+    pipelineRun?: PipelineRunTracking | null;
     resultsTrace: RunTraceEvent[];
     diagnostics: RunDiagnostic[];
     dagRevision: number;
@@ -58,6 +60,44 @@ export interface StudioRunRequest {
     selection?: string | null;
     label: string;
     parameters?: Record<string, unknown> | null;
+}
+
+/**
+ * One submitted pipeline run and what is known about a request to stop it. `accepted` means the
+ * host took the request; only the run's own status says it stopped.
+ */
+export interface PipelineRunTracking {
+    runId: number | null;
+    accepted: string;
+    status: string;
+    stop: 'none' | 'pending' | 'requested' | 'accepted' | 'unconfirmed';
+    stopNote: string | null;
+}
+
+/** One run of a saved pipeline, as the host that ran it reports it. */
+export interface StudioPipelineRunStatus {
+    runId: number;
+    status: string;
+    isTerminal: boolean;
+    errorMessage?: string | null;
+    rowsProcessed: number;
+    scriptHash?: string | null;
+    logTruncated: boolean;
+    statements: { statement: string; durationMs: number; rowsProcessed: number; failed: boolean }[];
+}
+
+/**
+ * Supplied by a host that runs a saved pipeline outside the authoring process. The run is named by
+ * the id `submit` returns, and every later call is about that id alone.
+ */
+export interface StudioPipelineRunHost {
+    submit(document: any): Promise<{ runId: number; version: number; scriptHash: string }>;
+    read(document: any, runId: number): Promise<StudioPipelineRunStatus>;
+    /**
+     * Asks the host to stop that run. Resolving means the request was accepted, not that the run
+     * has stopped; the run's own status says how it ended.
+     */
+    cancel(document: any, runId: number): Promise<void>;
 }
 
 export interface SyntaxBridgeContext {
@@ -232,6 +272,8 @@ export interface StudioOptions extends StudioStateOptions {
     onOpenDocument?: (report: any) => Promise<any> | any;
     /** The catalog keeps pipelines and queries (.etlsql) as well as reports. */
     catalogPipelines?: boolean;
+    /** Runs a saved catalog pipeline. Absent where the host has nowhere to run one. */
+    pipelineRuns?: StudioPipelineRunHost;
     onCreateDocument?: (request: Record<string, any>) => Promise<any> | any;
     onCloseDocument?: (document: any, options: { keepalive: boolean }) => any;
     onRenameDocument?: (document: any, name: string) => Promise<any> | any;

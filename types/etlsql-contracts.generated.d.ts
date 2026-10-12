@@ -1497,9 +1497,49 @@ interface PipelineDependencyDto {
     expression?: string | null;
 }
 
+interface PipelineRunCancelRequestedDto {
+    runId: number;
+    pipelineId: number;
+}
+
+interface PipelineRunDto {
+    runId: number;
+    pipelineId: number;
+    status: string;
+    isTerminal: boolean;
+    startTime: string;
+    endTime?: string | null;
+    errorMessage?: string | null;
+    rowsProcessed: number;
+    scriptHash?: string | null;
+    logTruncated: boolean;
+    statements: PipelineRunStatementDto[];
+}
+
 interface PipelineRunPlanRequest {
     script?: string | null;
     id?: string | null;
+}
+
+interface PipelineRunRefusalDto {
+    code: string;
+    error: string;
+    currentVersion?: number | null;
+}
+
+interface PipelineRunStatementDto {
+    statement: string;
+    durationMs: number;
+    rowsProcessed: number;
+    failed: boolean;
+}
+
+interface PipelineRunSubmittedDto {
+    runId: number;
+    pipelineId: number;
+    version: number;
+    scriptHash: string;
+    jobName: string;
 }
 
 interface PipelineScopeRequest {
@@ -2352,6 +2392,10 @@ interface StudioSessionDto {
     capabilities: string[];
     sourceControlEnabled: boolean;
     draftRecovery: boolean;
+}
+
+interface SubmitPipelineRunRequest {
+    version: number;
 }
 
 interface SubscriptionDto {

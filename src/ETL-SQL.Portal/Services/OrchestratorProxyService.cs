@@ -145,6 +145,50 @@ public class OrchestratorProxyService(
         catch (Exception ex) { logger.LogWarning(ex, "Failed to kill job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
     }
 
+    // ── Revision runs ─────────────────────────────────────────────────────────
+    //
+    // A saved catalog pipeline runs through one Orchestrator job. The Orchestrator decides whether
+    // the caller may run or provision it; these carry the caller's assertion and return its answer.
+
+    public async Task<HttpResponseMessage?> RunJobRevisionAsync(
+        string jobName, string scriptText, string? displayName, string? description,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            return await SendAsync(
+                HttpMethod.Post,
+                $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/runs",
+                new { ScriptText = scriptText, ProvisionIfMissing = true, DisplayName = displayName, Description = description },
+                cancellationToken: ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to submit a revision run for job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(jobName));
+            return null;
+        }
+    }
+
+    public async Task<HttpResponseMessage?> GetJobRunAsync(long runId, CancellationToken ct = default)
+    {
+        try { return await SendAsync(HttpMethod.Get, $"api/job-runs/{runId}", cancellationToken: ct); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to read job run {RunId}.", runId);
+            return null;
+        }
+    }
+
+    public async Task<HttpResponseMessage?> CancelJobRunAsync(long runId, CancellationToken ct = default)
+    {
+        try { return await SendAsync(HttpMethod.Post, $"api/job-runs/{runId}/cancel", cancellationToken: ct); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to cancel job run {RunId}.", runId);
+            return null;
+        }
+    }
+
     // ── Per-object grants ─────────────────────────────────────────────────────
     //
     // Proxied rather than reimplemented. The Orchestrator owns the grant store and already enforces

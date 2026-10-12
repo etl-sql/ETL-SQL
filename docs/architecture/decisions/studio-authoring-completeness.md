@@ -101,6 +101,8 @@ On 2026-10-12 the six journey classes behind ST03 (15 tests) passed at 9f966778f
 ST01 and ST02 are complete as inventories, and ST03 is complete as an assessment with open gaps:
 the required paginated and Portal ETL journeys and all learner observations. ST20 is defined in the
 [practice-execution decision](studio-practice-execution.md). Record ST16/ST17 learner observations;
-ST22’s [desktop failure/repair exercise](studio-desktop-practice-evidence.md) passed. Next implement
-ST04’s saved Portal pipeline submission, which is required for ST21’s sandbox exercise. The inventories name supplemental work, including editor assistance and
+ST22’s [desktop failure/repair exercise](studio-desktop-practice-evidence.md) passed. ST04–ST06 and
+ST10 landed on 2026-10-12: a Publisher submits, follows and stops a saved Portal pipeline through the
+Orchestrator ([as built](portal-etl-documents.md#5-slice-2-as-built-2026-10-12)). Next is ST21’s
+sandbox exercise, which also has to show the sandbox executor path those tasks did not run. The inventories name supplemental work, including editor assistance and
 guided paginated parameter binding, that needs its own sizing before implementation.

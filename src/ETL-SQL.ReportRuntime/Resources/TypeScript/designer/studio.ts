@@ -81,12 +81,13 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         get workspaceTreeMarkup() { return workspaceTreeMarkup; },
     });
 
-    const { updateSnapshotPackage, setDocumentTrace, paintResults, setDocumentDiagnostics, updateRunControls, handleStopRun, executeRun } = createStudioRunSession({
+    const { updateSnapshotPackage, setDocumentTrace, paintResults, setDocumentDiagnostics, updateRunControls, handleStopRun, executeRun, executePipelineRun, runsAsSavedPipeline } = createStudioRunSession({
         get activeDocumentContext() { return activeDocumentContext; },
         get apiBase() { return apiBase; },
         get authFetch() { return authFetch; },
         get documentContext() { return documentContext; },
         get getActiveDoc() { return getActiveDoc; },
+        get pipelineRuns() { return opts.pipelineRuns; },
         get shell() { return shell; },
         get state() { return state; },
     });
@@ -883,6 +884,12 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
     queryElement(shell, '[data-action="run"]')?.addEventListener('click', async () => {
         const doc = getActiveDoc();
         if (!doc) return;
+        // A saved catalog pipeline runs as its saved revision in the Orchestrator. Selection runs
+        // and previews stay on the bounded read-only path.
+        if (runsAsSavedPipeline(doc)) {
+            await executePipelineRun(doc);
+            return;
+        }
         const script = state.editorInstance ? state.editorInstance.getValue() : doc.content;
         await executeRun(doc, { script, label: 'script' });
     });

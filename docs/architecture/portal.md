@@ -965,6 +965,47 @@ across reordered polls; request generations and disposal guards reject stale rea
 retain failed selections, prevent duplicate submissions, and require explicit refresh after an
 unconfirmed result. The sandbox imports this controller directly.
 
+### Studio pipeline runs
+
+A saved catalog pipeline runs in the Orchestrator, never in the Portal
+([decision](decisions/portal-etl-documents.md)). `StudioPipelineRunsController` checks the document,
+reads the saved revision, and hands it to the pipeline's Orchestrator job under the caller's own
+identity assertion. The Orchestrator decides whether that caller may run the job.
+
+| Method | Path | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| POST | `/api/studio/pipelines/{id}/runs` | `ScriptRun` + document Execute | Submit the saved revision. The body names the version the author sees; a stale one is `409 stale_revision`. Returns `202` with the run ID |
+| GET | `/api/studio/pipelines/{id}/runs/{runId}` | `ScriptRun` + document Execute | Status and bounded statement log of that run. A run of another pipeline's job is `404` |
+| POST | `/api/studio/pipelines/{id}/runs/{runId}/cancel` | `ScriptRun` + document Execute | Ask the Orchestrator to stop that run. `202` means the request was accepted; the run reports `CANCELLED` when it has stopped |
+
+Each pipeline maps to one Orchestrator job named `PIPELINE:{id}` in the Portal's tenant. The job is
+a run slot: enabled, unscheduled, and never due on its own. A caller with `Admin` or
+`OrchestratorManager` creates it on first run and owns it. Anyone else needs an `EXECUTE` grant on
+it, set from the Orchestrator's access panel or API.
+
+Refusals carry a stable `code` so the author can tell whose decision it was:
+
+| Code | Decided by | Meaning |
+| :--- | :--- | :--- |
+| `document_execute_denied` | Portal | No Execute on the pipeline document |
+| `stale_revision` | Portal | The named version is not the saved one |
+| `orchestrator_not_connected` | Portal | No Orchestrator is configured. Nothing runs in its place |
+| `orchestrator_unreachable` | Portal | The configured Orchestrator did not answer |
+| `job_not_provisioned` | Orchestrator | No job exists and the caller may not create one |
+| `run_grant_denied` | Orchestrator | No `EXECUTE` grant on the job |
+| `already_running` | Orchestrator | The job has a run in progress |
+| `cancel_denied` | Orchestrator | The caller did not submit the run and holds no `MANAGE` grant |
+| `run_already_finished` | Orchestrator | Stop arrived after the run ended |
+
+There is no Portal-side run table. The run ID is the Orchestrator's history ID, and a run is shown
+under a pipeline only when the Orchestrator reports it against that pipeline's job. Submission and
+stop requests are written to the Portal audit log as `PIPELINE_RUN_SUBMITTED` (with version, hash,
+job and run ID) and `PIPELINE_RUN_CANCEL_REQUESTED`.
+
+In Studio, **Run** on a saved pipeline calls these routes through the `pipelineRuns` host callbacks
+in `BrowserSources/portal-studio-host.ts`. Unsaved edits are refused before any request. Run
+selection and helper previews stay on the read-only `/api/designer/run` path.
+
 ### System
 
 | Method | Path | Auth | Description |

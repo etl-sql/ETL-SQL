@@ -229,6 +229,16 @@ curl -X POST http://localhost:5001/api/scheduled-jobs/{name}/kill \
   -H "X-Orchestrator-Key: your-shared-secret"
 ```
 
+To stop one specific run and have it recorded as `CANCELLED`, address it by its history id. This
+needs `MANAGE` on the job, or `EXECUTE` if you submitted that run yourself:
+
+```bash
+curl -X POST http://localhost:5001/api/job-runs/{historyId}/cancel \
+  -H "X-Orchestrator-Key: your-shared-secret"
+```
+
+`202` means the request was accepted. Read `GET /api/job-runs/{historyId}` for the outcome.
+
 For ad-hoc jobs submitted directly to `POST /jobs`, cancel by job id. Like submission, the ad-hoc job routes require the `X-Orchestrator-Key` header when an API key is configured:
 
 ```bash
