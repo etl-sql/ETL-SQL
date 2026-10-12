@@ -14,6 +14,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Keep unpublished work in Portal Studio as a private draft. **Save** on a new document keeps it
+  where only its owner can open it, without publish rights or a writable folder, and **My Private
+  Drafts** on Studio Home reopens it. A draft is not in the catalog and nothing runs it. Each save
+  is versioned, a save from a stale copy is refused, and a draft holding a plaintext credential is
+  not kept. `Portal:Studio:PrivateDrafts`, `PrivateDraftRetentionDays` (90), `PrivateDraftRevisionsKept`
+  (10) and `PrivateDraftsPerUser` (25) set the policy. Before this, Save on a new document without
+  publish rights answered "Not Saved" and the work lived only in that browser tab.
 - Run a saved pipeline from Portal Studio through the Orchestrator. **Run** submits the saved
   revision to the pipeline's Orchestrator job under the author's own identity, shows that run's
   status and bounded statement log by its run ID, and **Stop** asks the Orchestrator to cancel it.

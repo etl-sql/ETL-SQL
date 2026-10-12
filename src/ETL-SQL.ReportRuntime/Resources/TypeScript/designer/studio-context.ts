@@ -10,7 +10,7 @@ import type { ScriptEditorHandle } from './script-editor.js';
 import type { SnapshotLike, SnapshotPackage } from './studio-data.js';
 import type { ActiveFilterSpec } from './studio-data.js';
 import type { StudioLeaseLifecycleHandle } from './studio-lifecycle.js';
-import type { StudioCatalogFolder, StudioCatalogReport, StudioDocument, StudioState, StudioStateOptions, StudioWorkspaceFile } from './studio-state.js';
+import type { StudioCatalogFolder, StudioCatalogReport, StudioDocument, StudioPrivateDraftSummaryState, StudioState, StudioStateOptions, StudioWorkspaceFile } from './studio-state.js';
 
 // Same binding designer-util.js exports, and deliberately without a fallback. The old one routed
 // notifications to console.log and confirmations to the native dialog whenever this module was
@@ -146,6 +146,8 @@ export type KnownProperties<T> = { [K in keyof T as string extends K ? never : n
 export interface StudioRuntimeDocument extends Omit<KnownProperties<StudioDocument>, 'studioContext'> {
     studioContext?: StudioRuntimeContext;
     reportId?: string | number;
+    /** Set while the document is one of the user's private drafts rather than a catalog document. */
+    privateDraftId?: number;
     reportWorkflow?: 'dashboard' | 'paginated' | null;
     reportWorkflowDeclined?: boolean;
     lineEnding?: '\n' | '\r\n';
@@ -287,6 +289,26 @@ export function catalogExtension(document: { kind?: unknown; name?: unknown } | 
     return String(document?.kind || '').toLowerCase() === 'pipeline' ? '.etlsql' : '.rptsql';
 }
 
+/** One of the signed-in user's own private drafts, without its text. */
+export type StudioPrivateDraftSummary = StudioPrivateDraftSummaryState;
+
+/** A private draft with its saved text. `version` is what the next save must name. */
+export interface StudioPrivateDraft extends StudioPrivateDraftSummary {
+    content: string;
+}
+
+/**
+ * Keeps saved, unpublished work private to its owner, without publish rights or a writable folder.
+ * A refusal rejects with the host's reason as the error message.
+ */
+export interface StudioPrivateDraftHost {
+    list(): Promise<StudioPrivateDraftSummary[]>;
+    create(request: { name: string; kind: string; content: string }): Promise<StudioPrivateDraft>;
+    open(id: number): Promise<StudioPrivateDraft>;
+    save(id: number, content: string, baseVersion: number): Promise<StudioPrivateDraft>;
+    remove(id: number): Promise<void>;
+}
+
 export interface StudioOptions extends StudioStateOptions {
     initialSnapshot?: any;
     previewUrl?: string;
@@ -299,6 +321,8 @@ export interface StudioOptions extends StudioStateOptions {
     pipelineRuns?: StudioPipelineRunHost;
     /** Schedules a saved catalog pipeline. Absent where the script's own statements declare the job. */
     pipelineSchedule?: StudioPipelineScheduleHost;
+    /** Keeps unpublished work private to its owner. Absent where the host has no such store. */
+    privateDrafts?: StudioPrivateDraftHost;
     onCreateDocument?: (request: Record<string, any>) => Promise<any> | any;
     onCloseDocument?: (document: any, options: { keepalive: boolean }) => any;
     onRenameDocument?: (document: any, name: string) => Promise<any> | any;
@@ -313,10 +337,11 @@ export interface StudioOptions extends StudioStateOptions {
     leaseRenewIntervalMs?: number;
 }
 
-export interface StudioRuntimeState extends Omit<StudioState, 'workspaceFiles' | 'catalogReports' | 'catalogFolders' | 'capabilities' | 'deploymentMode' | 'sourceControlEnabled' | 'documents' | 'workspaceFolders' | 'explorerExpanded' | 'activeDocId' | 'activeActivity' | 'filterSidebarOpen' | 'selectedVisualId' | 'sidebarOpen' | 'editorInstance' | 'resultsPanel' | 'dagInstance' | 'dataModelInstance' | 'enginePlanScope' | 'governance' | 'governanceScopeId' | 'previewAs' | 'previewAsVocabulary'> {
+export interface StudioRuntimeState extends Omit<StudioState, 'workspaceFiles' | 'catalogReports' | 'catalogFolders' | 'privateDraftSummaries' | 'capabilities' | 'deploymentMode' | 'sourceControlEnabled' | 'documents' | 'workspaceFolders' | 'explorerExpanded' | 'activeDocId' | 'activeActivity' | 'filterSidebarOpen' | 'selectedVisualId' | 'sidebarOpen' | 'editorInstance' | 'resultsPanel' | 'dagInstance' | 'dataModelInstance' | 'enginePlanScope' | 'governance' | 'governanceScopeId' | 'previewAs' | 'previewAsVocabulary'> {
     workspaceFiles: StudioWorkspaceFile[];
     catalogReports: StudioCatalogReport[];
     catalogFolders: StudioCatalogFolder[];
+    privateDraftSummaries: StudioPrivateDraftSummary[];
     capabilities: Set<string>;
     deploymentMode: string;
     sourceControlEnabled: boolean;
@@ -358,6 +383,7 @@ export interface StudioWorkbenchHandle {
     duplicateVisual: (...args: any[]) => Promise<any> | any;
     deleteVisual: (...args: any[]) => Promise<any> | any;
     openCatalogReport: (...args: any[]) => Promise<any> | any;
+    openPrivateDraft?: (summary: StudioPrivateDraftSummary, projection?: string) => Promise<any>;
     publishCatalogReport?: (targetDoc?: any) => Promise<boolean | undefined>;
     openSyntaxBridge?: (context?: any) => Promise<void> | void;
     closeSyntaxBridge?: () => void;

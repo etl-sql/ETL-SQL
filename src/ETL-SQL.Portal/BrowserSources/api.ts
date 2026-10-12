@@ -352,6 +352,7 @@ export const studioApi = {
     session: () => apiJson('/api/studio/session'),
     reports: () => apiJson('/api/studio/reports'),
     folders: () => apiJson('/api/studio/folders'),
+    privateDrafts: () => apiJson('/api/studio/private-drafts'),
     createReport: (body: CreateStudioReportRequest) => apiJson('/api/studio/reports', { method: 'POST', body })
 };
 

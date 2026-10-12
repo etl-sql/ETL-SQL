@@ -49,6 +49,10 @@ public sealed class PortalTenantCatalogScope(
     public IQueryable<StudioRecoveryDraft> StudioRecoveryDrafts => db.StudioRecoveryDrafts.Where(draft =>
         Documents.Any(report => report.Id == draft.ReportId));
 
+    /// <summary>Private drafts carry their tenant themselves: they have no catalog document to join to.</summary>
+    public IQueryable<StudioPrivateDraft> StudioPrivateDrafts => db.StudioPrivateDrafts.Where(draft =>
+        draft.TenantId == TenantId);
+
     public IQueryable<ReportAlert> ReportAlerts => db.ReportAlerts.Where(alert =>
         Reports.Any(report => report.Id == alert.ReportId));
 

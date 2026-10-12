@@ -2389,6 +2389,25 @@ interface StudioFolderDto {
     name: string;
 }
 
+interface StudioPrivateDraftDto {
+    id: number;
+    name: string;
+    kind: string;
+    version: number;
+    content: string;
+    updatedAt: string;
+    expiresAt: string;
+}
+
+interface StudioPrivateDraftSummaryDto {
+    id: number;
+    name: string;
+    kind: string;
+    version: number;
+    updatedAt: string;
+    expiresAt: string;
+}
+
 interface StudioRecoveryDraftDto {
     content: string;
     baseVersion?: number | null;
@@ -2412,6 +2431,7 @@ interface StudioSessionDto {
     capabilities: string[];
     sourceControlEnabled: boolean;
     draftRecovery: boolean;
+    privateDrafts: boolean;
 }
 
 interface SubmitPipelineRunRequest {

@@ -76,6 +76,33 @@ When a user has `MustChangePassword = true`, a middleware layer (`MustChangePass
 
 All script paths submitted to `POST /api/reports` are resolved to absolute paths and validated to remain within `ScriptRootPath`. A path like `../../etc/passwd` is rejected with `400 Bad Request`.
 
+## Studio Private Drafts
+
+A Studio user can keep saved, unpublished work on the Portal without publish rights or a writable
+folder. Pressing **Save** on a new document keeps it as a private draft, listed under **My Private
+Drafts** on Studio Home.
+
+- A draft belongs to one user in one tenant. Nobody else can read it, administrators included; to
+  them it answers exactly as a draft that does not exist.
+- A draft is not a catalog document. It is not listed, shared, scheduled, or run. Preview works as it
+  does for any unsaved document.
+- Keeping a draft needs the `StudioAccess` and `ScriptRead` capabilities.
+- A draft that contains a plaintext password, key, or token is refused.
+- Each save has a version number. A save from a stale copy, such as a second browser tab, is refused
+  as a conflict instead of overwriting the newer text.
+- A draft is discarded when it has gone the retention period without a save, and with its owner's
+  account. Expired drafts are removed the next time anyone in the tenant opens their draft list.
+- Private drafts are tenant data: they are in scope for tenant backup and restore, and are deleted
+  with the tenant. The audit log records that a draft was created or deleted, never
+  its text.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `Portal:Studio:PrivateDrafts` | `true` | Set to `false` where unpublished script text must not be stored. Existing drafts can still be deleted. |
+| `Portal:Studio:PrivateDraftRetentionDays` | `90` | Days a draft is kept after its last save. |
+| `Portal:Studio:PrivateDraftRevisionsKept` | `10` | Saved versions kept per draft. |
+| `Portal:Studio:PrivateDraftsPerUser` | `25` | Drafts one user may hold. |
+
 ## Studio Recovery Drafts
 
 Studio keeps each author's unsaved edits on the Portal, so a crashed browser, a dropped

@@ -23,6 +23,7 @@ export interface StudioFileCommandsContext {
     readonly documentContext: (document?: StudioRuntimeDocument | null) => StudioRuntimeContext;
     readonly getActiveDoc: () => StudioRuntimeDocument | null;
     readonly handlePublishCatalogReport: (targetDoc?: StudioRuntimeDocument | null) => Promise<boolean>;
+    readonly keepAsPrivateDraft: (targetDoc?: StudioRuntimeDocument | null) => Promise<boolean>;
     readonly hasCapability: (capability: string) => boolean;
     readonly hasGitHost: boolean;
     readonly leaseLifecycle: StudioLeaseLifecycleHandle<LeaseDocument>;
@@ -168,16 +169,20 @@ export function createStudioFileCommands(hostContext: StudioFileCommandsContext)
             _feedback.notify(doc.readOnlyReason || 'This document is read-only.', { title: 'Save Unavailable', tone: 'warning' });
             return false;
         }
-        if (_isUntitledPath(doc.path)) {
+        if (_isUntitledPath(doc.path) && !doc.privateDraftId) {
             if (hostContext.opts.onCreateDocument) {
+                const keepsPrivateDrafts = Boolean(hostContext.opts.privateDrafts);
                 if (hostContext.hasCapability('ReportPublish')) {
                     const shouldPublish = await _feedback.confirm(
-                        'This document is an unpublished draft. Would you like to publish it to the Portal Catalog now?',
-                        { title: 'Publish Draft', confirmLabel: 'Publish to Catalog', cancelLabel: 'Save Local Draft' });
+                        keepsPrivateDrafts
+                            ? 'This document is not saved yet. Publish it to the Portal Catalog now, or keep it as a private draft only you can open?'
+                            : 'This document is an unpublished draft. Would you like to publish it to the Portal Catalog now?',
+                        { title: 'Publish Draft', confirmLabel: 'Publish to Catalog', cancelLabel: keepsPrivateDrafts ? 'Keep Private Draft' : 'Not Now' });
                     if (shouldPublish) {
                         return hostContext.handlePublishCatalogReport(doc);
                     }
                 }
+                if (keepsPrivateDrafts) return hostContext.keepAsPrivateDraft(doc);
                 // A report the catalog has not seen has nowhere to be kept yet; saying it was saved
                 // would be how it gets lost. It stays unsaved in this tab until it is published.
                 _feedback.notify('This report is not in the catalog yet, so it cannot be kept anywhere else. Keep this tab open, or publish it to the catalog to save it.',

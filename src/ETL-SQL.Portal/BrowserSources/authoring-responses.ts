@@ -35,7 +35,25 @@ export function readStudioSession(value: unknown): StudioSessionDto {
         || !boolean(value.sourceControlEnabled) || !boolean(value.draftRecovery))
         throw new TypeError('Invalid Studio session response.');
     return { mode: value.mode, capabilities: value.capabilities,
-        sourceControlEnabled: value.sourceControlEnabled, draftRecovery: value.draftRecovery };
+        sourceControlEnabled: value.sourceControlEnabled, draftRecovery: value.draftRecovery,
+        privateDrafts: value.privateDrafts === true };
+}
+
+function studioPrivateDraftSummary(value: unknown): value is StudioPrivateDraftSummaryDto {
+    return isObject(value) && integer(value.id) && string(value.name) && string(value.kind)
+        && version(value.version) && date(value.updatedAt) && date(value.expiresAt);
+}
+export function readStudioPrivateDrafts(value: unknown): StudioPrivateDraftSummaryDto[] {
+    if (!array(value, studioPrivateDraftSummary)) throw new TypeError('Invalid private draft list response.');
+    return value.map(draft => ({ id: draft.id, name: draft.name, kind: draft.kind, version: draft.version,
+        updatedAt: draft.updatedAt, expiresAt: draft.expiresAt }));
+}
+export function readStudioPrivateDraft(value: unknown): StudioPrivateDraftDto {
+    if (!studioPrivateDraftSummary(value) || !string((value as { content?: unknown }).content))
+        throw new TypeError('Invalid private draft response.');
+    const draft = value as StudioPrivateDraftDto;
+    return { id: draft.id, name: draft.name, kind: draft.kind, version: draft.version, content: draft.content,
+        updatedAt: draft.updatedAt, expiresAt: draft.expiresAt };
 }
 
 function studioReport(value: unknown): value is StudioReportDto {

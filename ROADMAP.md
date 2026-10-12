@@ -490,7 +490,7 @@ entry points is a separate future decision, not the measure of success.
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
 | ST12 | **Complete: decide unpublished draft identity and policy.** [Decision](docs/architecture/decisions/studio-private-drafts.md). Define host ownership, tenant/principal isolation, retention, allowed practice access and revision handling before a catalog report ID exists. No browser script storage. | — | D |
-| ST13 | **Portal private draft save/reopen.** A learner without folder Manage or ReportPublish creates, edits, saves and reopens one permitted host draft; another principal or tenant cannot read it. | ST12 | M |
+| ST13 | **Complete: Portal private draft save/reopen.** A learner without folder Manage or ReportPublish creates, edits, saves and reopens one permitted host draft; another principal or tenant cannot read it. | ST12 | M |
 | ST14 | **Portal private draft crash recovery.** Recover that unpublished draft after browser restart and authentication renewal, with explicit revision-conflict handling and policy refusal. No offline persistence guarantee. | ST13 | M |
 | ST15 | **Publish a private draft.** Promote the saved host draft through the existing catalog publish action without losing text/history; an unauthorized attempt leaves the private draft intact. | ST13 | M |
 

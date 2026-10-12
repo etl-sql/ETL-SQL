@@ -45,6 +45,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<ReportEmbedToken> ReportEmbedTokens => Set<ReportEmbedToken>();
     public DbSet<SavedReportView> SavedReportViews => Set<SavedReportView>();
     public DbSet<StudioRecoveryDraft> StudioRecoveryDrafts => Set<StudioRecoveryDraft>();
+    public DbSet<StudioPrivateDraft> StudioPrivateDrafts => Set<StudioPrivateDraft>();
+    public DbSet<StudioPrivateDraftRevision> StudioPrivateDraftRevisions => Set<StudioPrivateDraftRevision>();
     public DbSet<ReportAlert> ReportAlerts => Set<ReportAlert>();
     public DbSet<AlertNotification> AlertNotifications => Set<AlertNotification>();
     public DbSet<ServiceAccount> ServiceAccounts => Set<ServiceAccount>();
@@ -321,6 +323,25 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Report).WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.Cascade);
             e.Property(x => x.BaseSourceRevision).HasMaxLength(200);
+        });
+
+        builder.Entity<StudioPrivateDraft>(e =>
+        {
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.Property(x => x.Name).HasMaxLength(160);
+            e.Property(x => x.ContentHash).HasMaxLength(80);
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.Version).IsConcurrencyToken();
+            // Every read is "this owner's drafts in this tenant".
+            e.HasIndex(x => new { x.TenantId, x.OwnerUserId });
+            e.HasOne(x => x.Owner).WithMany().HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<StudioPrivateDraftRevision>(e =>
+        {
+            e.Property(x => x.ContentHash).HasMaxLength(80);
+            e.HasIndex(x => new { x.DraftId, x.Version }).IsUnique();
+            e.HasOne(x => x.Draft).WithMany(d => d.Revisions).HasForeignKey(x => x.DraftId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<SavedReportView>(e =>

@@ -638,8 +638,17 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
   expires 90 days after its last save, keeps its last 10 saves, allows preview only, and is published
   through the existing catalog create action. Retention, revisions kept, drafts per user and the
   on/off switch are `Portal:Studio` settings.
-- [ ] **ST13 — Portal private draft save/reopen.** A learner without folder Manage or ReportPublish creates, edits,
+- [x] **ST13 — Portal private draft save/reopen.** A learner without folder Manage or ReportPublish creates, edits,
   saves, and reopens one permitted host draft; another principal or tenant cannot read it. (Depends on: ST12; Size: M)
+  Done 2026-10-12. `/api/studio/private-drafts` keeps a draft per owner and tenant; Studio's Save keeps
+  a new document as one and Studio Home reopens it. Evidence: `StudioPrivateDraftTests` (a Viewer with
+  only StudioAccess, ScriptRead and ScriptPreview creates, saves and reopens; a colleague, an
+  administrator and another tenant's partition all get the answer of a missing draft; a stale save is a
+  conflict; a plaintext credential is refused; the configured draft limit, saves kept and retention each
+  take effect; off means nothing is kept) and `StudioPrivateDraftJourneyTests` (real Chromium, the same
+  learner, a second version, a fresh page reopening it, and a colleague who sees nothing).
+  Open: publishing a private draft is ST15, and until then its Publish button is disabled. Expiry runs
+  when drafts are read or listed; there is no background sweep.
 - [ ] **ST14 — Portal private draft crash recovery.** Recover that unpublished draft after browser restart and
   authentication renewal, with explicit revision-conflict handling and policy refusal. No offline persistence guarantee.
   (Depends on: ST13; Size: M)

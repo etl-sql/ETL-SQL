@@ -160,6 +160,22 @@ public class PortalStudioConfig
     /// <summary>Days an untouched recovery draft is kept before it is discarded.</summary>
     public int DraftRetentionDays { get; set; } = 7;
 
+    /// <summary>
+    /// When true (the default), a Studio user may keep saved, unpublished work on the Portal, private
+    /// to them, without publish rights or a writable folder. Turn off where unpublished script text
+    /// must not be stored; existing drafts can still be deleted.
+    /// </summary>
+    public bool PrivateDrafts { get; set; } = true;
+
+    /// <summary>Days a private draft is kept after its last save.</summary>
+    public int PrivateDraftRetentionDays { get; set; } = 90;
+
+    /// <summary>Saved texts kept per private draft, newest first.</summary>
+    public int PrivateDraftRevisionsKept { get; set; } = 10;
+
+    /// <summary>Private drafts one user may hold.</summary>
+    public int PrivateDraftsPerUser { get; set; } = 25;
+
     public StudioDeploymentMode Mode { get; set; } = StudioDeploymentMode.CatalogOnly;
     public Dictionary<string, List<string>> RoleCapabilities { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

@@ -7,7 +7,7 @@
 
 import type { StudioDomElement } from './studio-context.js';
 
-import type { StudioDom, StudioDynamic, StudioOptions, StudioRuntimeDocument, StudioRuntimeState } from './studio-context.js';
+import type { StudioDom, StudioDynamic, StudioOptions, StudioPrivateDraftSummary, StudioRuntimeDocument, StudioRuntimeState } from './studio-context.js';
 import { _documentKindLabel, _escapeHtml, _feedback, _fileIcon, _studioIcon, asHtml, catalogExtension, queryElement, queryElements } from './studio-context.js';
 
 export interface StudioNavigationContext {
@@ -22,6 +22,8 @@ export interface StudioNavigationContext {
     readonly homeStage: StudioDomElement;
     readonly inspector: StudioDomElement;
     readonly openCatalogReport: (report: StudioDynamic, proj?: string) => Promise<any>;
+    readonly openPrivateDraft: (summary: StudioPrivateDraftSummary, proj?: string) => Promise<any>;
+    readonly deletePrivateDraft: (summary: StudioPrivateDraftSummary) => Promise<boolean>;
     readonly openWorkspaceFile: (filePath: string, proj?: string) => Promise<boolean>;
     readonly opts: StudioOptions;
     readonly renderDataWorkflow: () => void;
@@ -346,6 +348,12 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
             })
             : hostContext.state.workspaceFiles || [];
 
+        const privateDrafts = hostContext.state.privateDraftSummaries;
+        const formatDraftDate = (value: string) => {
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString([], { dateStyle: 'medium' });
+        };
+
         hostContext.homeStage.innerHTML = `
             <div class="etlsql-studio-home">
                 <section class="etlsql-studio-home-hero">
@@ -399,6 +407,48 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
                         </button>
                     </div>
                 </section>
+
+                ${hostContext.opts.privateDrafts ? `
+                <section class="etlsql-studio-home-recent" data-private-drafts>
+                    <div class="etlsql-studio-recent-header">
+                        <h2>My Private Drafts</h2>
+                        <span class="etlsql-recent-count">${privateDrafts.length} draft${privateDrafts.length === 1 ? '' : 's'}, visible only to you</span>
+                    </div>
+                    ${privateDrafts.length === 0 ? `
+                        <div style="padding:24px; text-align:center; color:var(--portal-text-soft,#8b949e); background:var(--portal-surface,#161b22); border:1px dashed var(--portal-border,#30363d); border-radius:8px;">
+                            <p style="margin:0; font-size:0.875rem;">Nothing kept yet. Start a document above and press <strong>Save</strong> to keep it as a private draft.</p>
+                        </div>
+                    ` : `
+                        <div class="etlsql-studio-recent-grid">
+                            ${privateDrafts.map(draft => {
+                                const filename = `${draft.name}${catalogExtension(draft)}`;
+                                return `
+                                    <div class="etlsql-studio-recent-card" data-private-draft="${_escapeHtml(draft.id)}">
+                                        <div class="etlsql-recent-card-top">
+                                            <span class="etlsql-card-type-pill" style="font-size:9px;">Private draft</span>
+                                            <div class="etlsql-recent-card-meta">
+                                                <button type="button" class="etlsql-recent-card-dismiss" data-delete-private-draft="${_escapeHtml(draft.id)}" title="Delete this private draft" aria-label="Delete the private draft ${_escapeHtml(draft.name)}">${_studioIcon('close', 10)}</button>
+                                            </div>
+                                        </div>
+                                        <div class="etlsql-recent-card-title" title="${_escapeHtml(filename)}">
+                                            <span>${_fileIcon(filename)}</span>
+                                            <span>${_escapeHtml(draft.name)}</span>
+                                        </div>
+                                        <div class="etlsql-recent-card-path">Saved ${_escapeHtml(formatDraftDate(draft.updatedAt))} &middot; kept until ${_escapeHtml(formatDraftDate(draft.expiresAt))}</div>
+                                        <div class="etlsql-recent-card-actions">
+                                            <button type="button" class="etlsql-recent-card-btn" data-open-private-draft="${_escapeHtml(draft.id)}" data-open-proj="split">
+                                                ${_studioIcon('canvas', 12)} Design
+                                            </button>
+                                            <button type="button" class="etlsql-recent-card-btn" data-open-private-draft="${_escapeHtml(draft.id)}" data-open-proj="code">
+                                                ${_studioIcon('code', 12)} Code
+                                            </button>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    `}
+                </section>` : ''}
 
                 <section class="etlsql-studio-home-recent">
                     <div class="etlsql-studio-recent-header">
@@ -479,6 +529,20 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
             });
         });
 
+        const privateDraftFor = (id: string | undefined) => privateDrafts.find(draft => String(draft.id) === id);
+        queryElements(hostContext.homeStage, '[data-open-private-draft]').forEach(button => {
+            button.addEventListener('click', async () => {
+                const draft = privateDraftFor(button.dataset.openPrivateDraft);
+                if (draft) await hostContext.openPrivateDraft(draft, button.dataset.openProj || 'split');
+            });
+        });
+        queryElements(hostContext.homeStage, '[data-delete-private-draft]').forEach(button => {
+            button.addEventListener('click', async () => {
+                const draft = privateDraftFor(button.dataset.deletePrivateDraft);
+                if (draft) await hostContext.deletePrivateDraft(draft);
+            });
+        });
+
         queryElements(hostContext.homeStage, '[data-dismiss-file]').forEach(button => {
             button.addEventListener('click', () => {
                 const filePath = button.dataset.dismissFile;
@@ -520,12 +584,14 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
 
         const publishBtn = queryElement<HTMLButtonElement>(hostContext.shell, '[data-action="publish"]');
         if (publishBtn && hostContext.opts.onCreateDocument) {
-            const canPublish = Boolean(doc && !doc.reportId);
+            const canPublish = Boolean(doc && !doc.reportId && !doc.privateDraftId);
             publishBtn.disabled = !canPublish;
             publishBtn.style.opacity = canPublish ? '1' : '0.5';
             publishBtn.title = doc?.reportId
                 ? `'${doc.name}' is published in the catalog.`
-                : 'Publish this draft report to the Portal Catalog';
+                : doc?.privateDraftId
+                    ? `'${doc.name}' is a private draft only you can open.`
+                    : 'Publish this draft report to the Portal Catalog';
         }
 
         if (paletteBtn) {

@@ -1,5 +1,5 @@
 /** Catalog persistence callbacks for the shared Studio workbench. */
-import { PortalAuthoringError, readDesignerLease, readDesignerSave, readPipelineRun, readPipelineRunCancelRequested, readPipelineRunSubmitted, readPipelineSchedule, readScriptContent, readStudioDraft, readStudioReport } from './authoring-responses.js';
+import { PortalAuthoringError, readDesignerLease, readDesignerSave, readPipelineRun, readPipelineRunCancelRequested, readPipelineRunSubmitted, readPipelineSchedule, readScriptContent, readStudioDraft, readStudioPrivateDraft, readStudioPrivateDrafts, readStudioReport } from './authoring-responses.js';
 import { asError, isObject } from './http-error.js';
 import { readAuthoringJson } from './portal-authoring.js';
 import type { AuthoringFetch } from './portal-authoring.js';
@@ -7,6 +7,7 @@ import type { DraftRecord, DraftSaveResult } from '../designer/studio-lifecycle.
 
 interface PortalDocument {
     reportId?: string | number;
+    privateDraftId?: number;
     version?: number | null;
     sourceRevision?: string | number | null;
     lease?: { acquired?: boolean };
@@ -99,6 +100,27 @@ export function createPortalStudioHost(session: StudioSessionDto, fetch: Authori
                     readPipelineSchedule(await readJson(`/api/studio/pipelines/${reportId(doc)}/schedule`, { method: 'DELETE' }))
             }
         } : {}),
+        // Saved, unpublished work the Portal keeps for this user alone. It needs no publish right
+        // and no folder; the Portal answers for any draft that is not the caller's as for none.
+        ...(session.privateDrafts && capabilities.has('ScriptRead') ? {
+            privateDrafts: {
+                list: async () => readStudioPrivateDrafts(await readJson('/api/studio/private-drafts')),
+                create: async (request: { name: string; kind: string; content: string }) =>
+                    readStudioPrivateDraft(await readJson('/api/studio/private-drafts', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request)
+                    })),
+                open: async (id: number) => readStudioPrivateDraft(await readJson(`/api/studio/private-drafts/${id}`)),
+                save: async (id: number, content: string, baseVersion: number) =>
+                    readStudioPrivateDraft(await readJson(`/api/studio/private-drafts/${id}`, {
+                        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content, baseVersion })
+                    })),
+                remove: async (id: number) => {
+                    const response = await fetch(`/api/studio/private-drafts/${id}`, { method: 'DELETE' });
+                    if (!response.ok) throw new Error(`The private draft could not be deleted (${response.status}).`);
+                }
+            }
+        } : {}),
         ...(session.draftRecovery ? {
             onLoadDraft: async (doc: PortalDocument) => {
                 if (!doc.reportId) return null;
@@ -135,6 +157,14 @@ export function createPortalStudioHost(session: StudioSessionDto, fetch: Authori
             doc.lease.acquired = false;
         },
         onSave: async (content: string, _filePath: string, doc?: PortalDocument) => {
+            if (doc?.privateDraftId) {
+                // A private draft has one editor, so the version it started from is its whole lock.
+                const saved = readStudioPrivateDraft(await readJson(`/api/studio/private-drafts/${doc.privateDraftId}`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, baseVersion: doc.version })
+                }));
+                return { version: saved.version };
+            }
             if (!doc?.reportId || !Number.isSafeInteger(doc.version) || (doc.version ?? 0) <= 0)
                 throw new Error('This document is not attached to a versioned Portal catalog report.');
             if (!capabilities.has('ScriptSave') || !doc.lease?.acquired)

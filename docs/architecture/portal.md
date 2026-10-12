@@ -965,6 +965,44 @@ across reordered polls; request generations and disposal guards reject stale rea
 retain failed selections, prevent duplicate submissions, and require explicit refresh after an
 unconfirmed result. The sandbox imports this controller directly.
 
+### Studio private drafts
+
+`StudioController.PrivateDrafts` keeps saved, unpublished work in `studio_private_drafts`, with its
+kept saves in `studio_private_draft_revisions`. Policy and its reasons are in the
+[private drafts decision](decisions/studio-private-drafts.md).
+
+| Method | Path | Description |
+| :--- | :--- | :--- |
+| GET | `/api/studio/private-drafts` | The caller's drafts, without text |
+| POST | `/api/studio/private-drafts` | Create a draft from `Name`, `Content` and `Kind` (`Report` or `Pipeline`) |
+| GET | `/api/studio/private-drafts/{id}` | One draft with its saved text and version |
+| PUT | `/api/studio/private-drafts/{id}` | Save `Content` against `BaseVersion`; answers the new version |
+| DELETE | `/api/studio/private-drafts/{id}` | Delete the draft and its kept saves |
+| GET | `/api/studio/private-drafts/{id}/revisions` | Kept saves, newest first |
+| GET | `/api/studio/private-drafts/{id}/revisions/{version}` | The text of one kept save |
+
+Every route needs `StudioAccess` and `ScriptRead`. Every query carries the caller's tenant and user
+id, so a draft that is not the caller's answers `404 DRAFT_NOT_FOUND`, the same as a missing one,
+and a delete of one answers `204` and removes nothing.
+
+Refusals return `{ code, error, currentVersion? }`:
+
+| Code | Status | Meaning |
+| :--- | :--- | :--- |
+| `PRIVATE_DRAFTS_OFF` | 409 | `Portal:Studio:PrivateDrafts` is `false` |
+| `DRAFT_LIMIT` | 409 | The caller already holds `PrivateDraftsPerUser` drafts |
+| `DRAFT_NAME_TAKEN` | 409 | The caller already has a draft of that name |
+| `DRAFT_CONFLICT` | 409 | `BaseVersion` is not the saved version; `currentVersion` names it |
+| `PLAINTEXT_SECRET` | 422 | The text assigns a credential as a plain literal |
+| `DRAFT_TOO_LARGE` | 413 | The text exceeds `DesignerLimits:MaxScriptCharacters` |
+
+The draft's version is an EF concurrency token, and `(draft_id, version)` is unique among its kept
+saves, so two saves racing from the same version cannot both succeed. Expiry is applied when a draft
+is read and, tenant-wide, when any caller lists or creates drafts; there is no background sweep.
+
+Studio reaches these through the `privateDrafts` host option. Save on an untitled document keeps it
+as a draft, Studio Home lists the caller's drafts, and Save on an open draft writes the next version.
+
 ### Studio pipeline runs
 
 A saved catalog pipeline runs in the Orchestrator, never in the Portal

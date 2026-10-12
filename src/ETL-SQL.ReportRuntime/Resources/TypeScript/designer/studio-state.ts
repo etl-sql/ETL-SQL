@@ -72,6 +72,15 @@ export interface StudioCatalogFolder {
     [key: string]: unknown;
 }
 
+export interface StudioPrivateDraftSummaryState {
+    id: number;
+    name: string;
+    kind: string;
+    version: number;
+    updatedAt: string;
+    expiresAt: string;
+}
+
 export interface StudioStateOptions {
     workspaceFiles?: StudioWorkspaceFile[];
     documents?: StudioDocument[];
@@ -79,6 +88,8 @@ export interface StudioStateOptions {
     initialContent?: string;
     catalogReports?: StudioCatalogReport[];
     catalogFolders?: StudioCatalogFolder[];
+    /** The signed-in user's private drafts, where the host keeps them. */
+    privateDraftSummaries?: StudioPrivateDraftSummaryState[];
     capabilities?: Iterable<string>;
     deploymentMode?: string;
     sourceControlEnabled?: boolean;
@@ -91,6 +102,7 @@ export interface StudioState {
     workspaceFiles: StudioWorkspaceFile[];
     catalogReports: StudioCatalogReport[];
     catalogFolders: StudioCatalogFolder[];
+    privateDraftSummaries: StudioPrivateDraftSummaryState[];
     capabilities: Set<string>;
     deploymentMode: string;
     sourceControlEnabled: boolean;
@@ -164,6 +176,7 @@ export function createStudioState(options: StudioStateOptions = {}): StudioState
         workspaceFiles,
         catalogReports: [...(options.catalogReports || [])],
         catalogFolders: [...(options.catalogFolders || [])],
+        privateDraftSummaries: [...(options.privateDraftSummaries || [])],
         capabilities: new Set(options.capabilities || []),
         deploymentMode: options.deploymentMode || 'Desktop',
         sourceControlEnabled: Boolean(options.sourceControlEnabled),

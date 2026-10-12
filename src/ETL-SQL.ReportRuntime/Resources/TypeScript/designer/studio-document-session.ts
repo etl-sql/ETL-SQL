@@ -6,6 +6,8 @@
  */
 
 import { _escapeHtml, _feedback, catalogExtension, errorMessage, getStoredProjectionPreference, queryElement } from './studio-context.js';
+import type { StudioPrivateDraft, StudioPrivateDraftSummary } from './studio-context.js';
+import { detectPlaintextSecrets } from './studio-security.js';
 import type { LeaseDocument } from './studio-lifecycle.js';
 
 import type { StudioDesignState, StudioDomElement, StudioDynamic, StudioOptions, StudioRuntimeContext, StudioRuntimeDocument, StudioRuntimeState } from './studio-context.js';
@@ -227,6 +229,10 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
             _feedback.notify(`'${doc.name}' is already published in the catalog. Use Save (Ctrl+S) to persist updates.`, { title: 'Already Published', tone: 'info' });
             return false;
         }
+        if (doc.privateDraftId) {
+            _feedback.notify(`'${doc.name}' is a private draft. Publishing a private draft is not available here yet.`, { title: 'Publish Unavailable', tone: 'warning' });
+            return false;
+        }
         if (!hostContext.hasCapability('ReportPublish')) {
             _feedback.notify('Publishing to the catalog requires the ReportPublish capability. Contact an administrator to request publishing rights.', { title: 'Publish Restricted', tone: 'warning' });
             return false;
@@ -304,7 +310,9 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
                 // Separate learning/drafting from publishing:
                 // An author without ReportPublish is not blocked; they can design, preview, and test in private practice draft mode.
                 _feedback.notify(
-                    'Opening in private draft mode. You can design, preview, and test reports; publishing to the catalog requires the ReportPublish capability.',
+                    hostContext.opts.privateDrafts
+                        ? 'Opening a private draft. You can design and preview it, and Save keeps it where only you can open it. Publishing to the catalog requires the ReportPublish capability.'
+                        : 'Opening in practice mode. You can design and preview this report, but it cannot be saved here; publishing to the catalog requires the ReportPublish capability.',
                     { title: 'Practice Draft Mode', tone: 'info' });
             } else if (!hostContext.hasCapability('ScriptSave')) {
                 _feedback.notify(
@@ -441,6 +449,118 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
         }
     }
 
+    /** Where a private draft shows in tabs and Studio Home. It is a label, not a catalog location. */
+    function privateDraftPath(draft: { name: string; kind: string }) {
+        return `My private drafts/${draft.name}${catalogExtension(draft)}`;
+    }
+
+    function rememberPrivateDraft(draft: StudioPrivateDraft) {
+        const summary: StudioPrivateDraftSummary = { id: draft.id, name: draft.name, kind: draft.kind,
+            version: draft.version, updatedAt: draft.updatedAt, expiresAt: draft.expiresAt };
+        hostContext.state.privateDraftSummaries = [summary,
+            ...hostContext.state.privateDraftSummaries.filter(item => item.id !== draft.id)];
+    }
+
+    /**
+     * Keeps an unsaved document as one of the user's private drafts. From then on Save writes to
+     * that draft; nobody else can read it and nothing runs it until it is published.
+     */
+    async function keepAsPrivateDraft(targetDoc?: StudioRuntimeDocument | null): Promise<boolean> {
+        const doc = targetDoc || hostContext.getActiveDoc();
+        const host = hostContext.opts.privateDrafts;
+        if (!doc || !host) return false;
+        const content = hostContext.state.editorInstance && hostContext.getActiveDoc() === doc
+            ? hostContext.state.editorInstance.getValue() : doc.content;
+        doc.content = content;
+        if (detectPlaintextSecrets(content).length > 0) {
+            _feedback.notify('This draft holds a plaintext credential, so it cannot be kept. Encrypt the credential or use a SECRET: reference, then save again.',
+                { title: 'Draft Not Kept', tone: 'warning' });
+            return false;
+        }
+
+        const pipeline = (doc.path || '').toLowerCase().endsWith('.etlsql');
+        const suggested = pipeline ? 'My pipeline' : doc.reportWorkflow === 'paginated' ? 'My paginated report' : 'My dashboard';
+        const name = (await _feedback.prompt(
+            'Only you can open a private draft. It is not in the catalog, and nothing runs it until it is published.',
+            { title: 'Keep as private draft', label: 'Draft name', value: suggested, required: true, confirmLabel: 'Keep draft' }))?.trim();
+        if (!name) return false;
+
+        try {
+            const created = await host.create({ name, kind: pipeline ? 'Pipeline' : 'Report',
+                content: hostContext.withLineEnding(content, doc.lineEnding || '\n') });
+            const newerEdits = doc.content !== content;
+            doc.privateDraftId = created.id;
+            doc.version = created.version;
+            doc.name = `${created.name}${catalogExtension(created)}`;
+            doc.path = privateDraftPath(created);
+            doc.isDirty = newerEdits;
+            rememberPrivateDraft(created);
+            hostContext.renderTabs();
+            hostContext.setContextualRailVisibility();
+            _feedback.notify(`Kept '${created.name}' as a private draft. Only you can open it.`, { title: 'Private Draft Kept', tone: 'success' });
+            return true;
+        } catch (error) {
+            _feedback.notify(errorMessage(error) || 'The draft could not be kept.', { title: 'Draft Not Kept', tone: 'error' });
+            return false;
+        }
+    }
+
+    async function openPrivateDraft(summary: StudioPrivateDraftSummary, proj = 'split') {
+        const host = hostContext.opts.privateDrafts;
+        if (!host) return null;
+        const pref = getStoredProjectionPreference();
+        const effectiveProj = (pref === 'code' || pref === 'split') ? pref : proj;
+        const existing = hostContext.state.documents.find(doc => doc.privateDraftId === summary.id);
+        if (existing) {
+            existing.projection = effectiveProj;
+            await switchDoc(existing.id);
+            return existing;
+        }
+        try {
+            const draft = await host.open(summary.id);
+            const newDoc: StudioRuntimeDocument = {
+                id: `private-draft-${draft.id}`,
+                privateDraftId: draft.id,
+                version: draft.version,
+                path: privateDraftPath(draft),
+                name: `${draft.name}${catalogExtension(draft)}`,
+                content: draft.content,
+                isDirty: false,
+                projection: effectiveProj
+            };
+            rememberPrivateDraft(draft);
+            hostContext.state.documents.push(newDoc);
+            await switchDoc(newDoc.id);
+            return newDoc;
+        } catch (error) {
+            _feedback.notify(errorMessage(error) || 'The private draft could not be opened.', { title: 'Open Draft Failed', tone: 'error' });
+            return null;
+        }
+    }
+
+    async function deletePrivateDraft(summary: StudioPrivateDraftSummary): Promise<boolean> {
+        const host = hostContext.opts.privateDrafts;
+        if (!host) return false;
+        if (hostContext.state.documents.some(doc => doc.privateDraftId === summary.id)) {
+            _feedback.notify(`'${summary.name}' is open in a tab. Close the tab before deleting the draft.`, { title: 'Draft Is Open', tone: 'warning' });
+            return false;
+        }
+        const confirmed = await _feedback.confirm(
+            `Delete the private draft '${summary.name}' and its saved versions? This cannot be undone.`,
+            { title: 'Delete Private Draft', confirmLabel: 'Delete Draft', cancelLabel: 'Keep' });
+        if (!confirmed) return false;
+        try {
+            await host.remove(summary.id);
+            hostContext.state.privateDraftSummaries = hostContext.state.privateDraftSummaries.filter(item => item.id !== summary.id);
+            if (hostContext.state.activeDocId === '__home__') hostContext.renderStudioHome();
+            _feedback.notify(`Deleted the private draft '${summary.name}'.`, { title: 'Private Draft Deleted', tone: 'info' });
+            return true;
+        } catch (error) {
+            _feedback.notify(errorMessage(error) || 'The draft could not be deleted.', { title: 'Delete Draft Failed', tone: 'error' });
+            return false;
+        }
+    }
+
     async function openWorkspaceFile(filePath: string, proj = 'split'): Promise<boolean> {
         const existing = hostContext.state.documents.find(d => d.path === filePath);
         if (existing) {
@@ -506,5 +626,5 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
         return true;
     }
 
-    return { switchDoc, closeDoc, handlePublishCatalogReport, createNewFile, openCatalogReport, openWorkspaceFile };
+    return { switchDoc, closeDoc, handlePublishCatalogReport, createNewFile, openCatalogReport, openWorkspaceFile, keepAsPrivateDraft, openPrivateDraft, deletePrivateDraft };
 }

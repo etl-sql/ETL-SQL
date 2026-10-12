@@ -3444,6 +3444,127 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.ToTable("stewardship_settings");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.StudioPrivateDraft", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("OwnerUserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("owner_user_id");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<long?>("UnsavedBaseVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("unsaved_base_version");
+
+                    b.Property<string>("UnsavedContent")
+                        .HasColumnType("text")
+                        .HasColumnName("unsaved_content");
+
+                    b.Property<DateTime?>("UnsavedUpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("unsaved_updated_at");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_studio_private_drafts");
+
+                    b.HasIndex("OwnerUserId")
+                        .HasDatabaseName("ix_studio_private_drafts_owner_user_id");
+
+                    b.HasIndex("TenantId", "OwnerUserId")
+                        .HasDatabaseName("ix_studio_private_drafts_tenant_id_owner_user_id");
+
+                    b.ToTable("studio_private_drafts");
+                });
+
+            modelBuilder.Entity("ETL_SQL.Portal.Data.StudioPrivateDraftRevision", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("content_hash");
+
+                    b.Property<int>("DraftId")
+                        .HasColumnType("integer")
+                        .HasColumnName("draft_id");
+
+                    b.Property<DateTime>("SavedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("saved_at");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_studio_private_draft_revisions");
+
+                    b.HasIndex("DraftId", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("ix_studio_private_draft_revisions_draft_id_version");
+
+                    b.ToTable("studio_private_draft_revisions");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.StudioRecoveryDraft", b =>
                 {
                     b.Property<int>("Id")
@@ -4282,6 +4403,30 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Navigation("Finding");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.StudioPrivateDraft", b =>
+                {
+                    b.HasOne("ETL_SQL.Portal.Data.PortalUser", "Owner")
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_studio_private_drafts_asp_net_users_owner_user_id");
+
+                    b.Navigation("Owner");
+                });
+
+            modelBuilder.Entity("ETL_SQL.Portal.Data.StudioPrivateDraftRevision", b =>
+                {
+                    b.HasOne("ETL_SQL.Portal.Data.StudioPrivateDraft", "Draft")
+                        .WithMany("Revisions")
+                        .HasForeignKey("DraftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_studio_private_draft_revisions_studio_private_drafts_draft_~");
+
+                    b.Navigation("Draft");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.StudioRecoveryDraft", b =>
                 {
                     b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
@@ -4493,6 +4638,11 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
             modelBuilder.Entity("ETL_SQL.Portal.Data.StewardshipFinding", b =>
                 {
                     b.Navigation("Decisions");
+                });
+
+            modelBuilder.Entity("ETL_SQL.Portal.Data.StudioPrivateDraft", b =>
+                {
+                    b.Navigation("Revisions");
                 });
 #pragma warning restore 612, 618
         }

@@ -90,6 +90,8 @@ internal static class BrowserContractsGenerator
         typeof(StudioReportDto),
         typeof(StudioFolderDto),
         typeof(StudioRecoveryDraftDto),
+        typeof(StudioPrivateDraftSummaryDto),
+        typeof(StudioPrivateDraftDto),
         typeof(CreateStudioReportRequest),
         typeof(SubmitPipelineRunRequest),
         typeof(PipelineRunSubmittedDto),

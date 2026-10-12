@@ -60,6 +60,8 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         get homeStage() { return homeStage; },
         get inspector() { return inspector; },
         get openCatalogReport() { return openCatalogReport; },
+        get openPrivateDraft() { return openPrivateDraft; },
+        get deletePrivateDraft() { return deletePrivateDraft; },
         get openWorkspaceFile() { return openWorkspaceFile; },
         get opts() { return opts; },
         get renderDataWorkflow() { return renderDataWorkflow; },
@@ -200,7 +202,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         get tabsContainer() { return tabsContainer; },
     });
 
-    const { switchDoc, closeDoc, handlePublishCatalogReport, createNewFile, openCatalogReport, openWorkspaceFile } = createStudioDocumentSession({
+    const { switchDoc, closeDoc, handlePublishCatalogReport, createNewFile, openCatalogReport, openWorkspaceFile, keepAsPrivateDraft, openPrivateDraft, deletePrivateDraft } = createStudioDocumentSession({
         get apiBase() { return apiBase; },
         get authFetch() { return authFetch; },
         get authoringRequest() { return authoringRequest; },
@@ -368,6 +370,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         get documentContext() { return documentContext; },
         get getActiveDoc() { return getActiveDoc; },
         get handlePublishCatalogReport() { return handlePublishCatalogReport; },
+        get keepAsPrivateDraft() { return keepAsPrivateDraft; },
         get hasCapability() { return hasCapability; },
         get hasGitHost() { return hasGitHost; },
         get leaseLifecycle() { return leaseLifecycle; },
@@ -990,6 +993,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         duplicateVisual,
         deleteVisual,
         openCatalogReport,
+        openPrivateDraft,
         publishCatalogReport: handlePublishCatalogReport,
         openSyntaxBridge,
         closeSyntaxBridge,

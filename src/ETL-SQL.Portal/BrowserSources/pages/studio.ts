@@ -6,7 +6,7 @@ import { applyNavigationSafely } from '../portal-nav.js';
 import { createStudioWorkbench } from '../../designer/studio.js';
 import { renderPortalHeader } from '../portal-header.js';
 import { installDialogAccessibility } from '../dialog-a11y.js';
-import { readStudioFolders, readStudioReports, readStudioSession } from '../authoring-responses.js';
+import { readStudioFolders, readStudioPrivateDrafts, readStudioReports, readStudioSession } from '../authoring-responses.js';
 import { showAuthoringError } from '../portal-authoring.js';
 import { createPortalStudioHost } from '../portal-studio-host.js';
 import { asError } from '../http-error.js';
@@ -30,14 +30,16 @@ async function openStudio(): Promise<void> {
     try {
         const studioSession = readStudioSession(await studioApi.session());
         const capabilities = new Set(studioSession.capabilities);
-        const [reports, folders] = await Promise.all([
+        const [reports, folders, privateDrafts] = await Promise.all([
             capabilities.has('ScriptRead') ? studioApi.reports() : Promise.resolve([]),
-            capabilities.has('ScriptSave') ? studioApi.folders() : Promise.resolve([])
+            capabilities.has('ScriptSave') ? studioApi.folders() : Promise.resolve([]),
+            studioSession.privateDrafts && capabilities.has('ScriptRead') ? studioApi.privateDrafts() : Promise.resolve([])
         ]);
         const catalogReports = readStudioReports(reports).map(report => ({ ...report }));
         const catalogFolders = readStudioFolders(folders).map(folder => ({ ...folder }));
         const studio = await createStudioWorkbench(container, {
-            catalogReports, catalogFolders, capabilities: studioSession.capabilities,
+            catalogReports, catalogFolders, privateDraftSummaries: readStudioPrivateDrafts(privateDrafts),
+            capabilities: studioSession.capabilities,
             deploymentMode: studioSession.mode, sourceControlEnabled: studioSession.sourceControlEnabled,
             activeDocId: '__home__', authFetch: apiFetch, apiBase: '', catalogPipelines: true,
             ...createPortalStudioHost(studioSession, apiFetch, studioApi.createReport)

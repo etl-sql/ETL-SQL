@@ -90,6 +90,10 @@ Certified topology profiles:
 | :--- | :--- | :--- | :--- |
 | `Portal:Studio:Mode` | enum | `CatalogOnly` | Studio boundary: `Disabled`, `CatalogOnly`, or `SourceControlled`. |
 | `Portal:Studio:RoleCapabilities:<role>` | string array | `[]` | Explicit Studio capabilities granted to a role. Empty mappings deny authoring. |
+| `Portal:Studio:PrivateDrafts` | bool | `true` | Lets a Studio user keep saved, unpublished work private to them. `false` stops new saves; stored drafts can still be deleted. |
+| `Portal:Studio:PrivateDraftRetentionDays` | int | `90` | Days a private draft is kept after its last save. |
+| `Portal:Studio:PrivateDraftRevisionsKept` | int | `10` | Saved texts kept per private draft. |
+| `Portal:Studio:PrivateDraftsPerUser` | int | `25` | Private drafts one user may hold. |
 
 Studio capability names: `StudioAccess`, `ScriptRead`, `ScriptPreview`, `ScriptRun`, `ScriptSave`, `ReportPublish`, `ReportApprove`, `ScriptIngress`, `SourceCommit`, `SourcePush`.
 
