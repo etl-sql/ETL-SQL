@@ -1508,6 +1508,14 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
   reruns and stops the same pipeline. Each outcome is checked against the Orchestrator's history.
 - [ ] **ST11 — Report schedule handoff.** A Studio-authored report reaches one authorized scheduled execution
   and produces one verified artifact under the scheduled identity. (Size: M)
+  Not started. Scoping notes from reading the code on 2026-10-12, not from running it: nothing executes
+  a report on a schedule outside subscriptions. A `CREATE JOB … FOR REPORT` job is stored with an empty
+  script and its target path is documented as a label, so the scheduler runs nothing for it; the only
+  scheduled report path is the subscription trigger job that the Portal poller turns into a delivery.
+  Three things need deciding before this can be built: what the artifact is (a stored snapshot is the
+  obvious candidate), which identity the scheduled execution runs under (the schedule's owner, or a
+  service principal), and who executes it (the Portal reacting to the job run, as subscriptions do, or
+  the Orchestrator). The scheduler's test clock from ST07 is reusable for the due-occurrence proof.
 
 ---
 
