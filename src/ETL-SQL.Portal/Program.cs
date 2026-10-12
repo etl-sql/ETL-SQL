@@ -740,6 +740,7 @@ AddPortalModuleHostedService<ETL_SQL.Portal.Services.CapacityReportAdminService>
     modules => modules.IsEnabled("Operations"));
 
 // Phase 2 — execution, session cache, Orchestrator poller
+builder.Services.AddSingleton<ETL_SQL.Portal.Services.PortalExecutionIdentityService>();
 builder.Services.AddSingleton<ETL_SQL.Portal.Services.SessionCache>();
 // A Shared deployment enforces each tenant's provisioned interactive-session ceiling, which lives in
 // the Orchestrator control plane. Registering it only for Shared keeps single-tenant deployments on
