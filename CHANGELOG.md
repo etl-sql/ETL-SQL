@@ -140,6 +140,18 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Read a scalar subquery again after the data it reads has changed. A subquery repeated later in
+  the same script answered from its first evaluation, so `ASSERT (SELECT COUNT(*) FROM #t) = 3`,
+  an `INSERT`, then the same subquery still returned 3, and a count taken after `DROP TABLE`
+  still saw the table. The engine now forgets cached subquery answers after any statement other
+  than a plain query. Consecutive queries still share one evaluation.
+- Name the statement that failed in a job run's statement log. A statement that threw was not
+  measured, so the log marked the statement before it as failed. Portal Studio's run panel and
+  `eng.job_statement_metrics` showed the wrong line beside the error.
+- Let a Portal reader save a report view. **Views → Save current view as…** threw inside the
+  report frame, which had never loaded the feedback module; the name prompt, confirmations and
+  notices raised from inside a Portal report were all affected.
+
 - Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
   starts, and a report link did not remember the completion it had already acted on, so a restart
   shortly after a scheduled refresh ran the report again.

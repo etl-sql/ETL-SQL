@@ -23,7 +23,7 @@ and scale baseline recalibration).
 | Studio — Unified authoring experience & completeness criteria (assessed; gaps routed to §3–§5) | [§2](#2-studio--unified-authoring-experience-and-completeness-criteria) |
 | Studio — Portal pipelines & schedule handoffs (ST04–ST11 complete; open points recorded per item) | [§3](#3-studio--portal-pipelines-and-schedule-handoffs) |
 | Studio — Private unpublished drafts & publishing (ST12–ST15 complete; open points recorded per item) | [§4](#4-studio--private-unpublished-drafts-and-publishing) |
-| Studio — Author, reader & beginner practice journeys | [§5](#5-studio--author-reader-and-beginner-practice-journeys) |
+| Studio — Author, reader & beginner practice journeys (ST16–ST18, ST21 complete; ST19 blocked on a decision; ST16b, ST21b open) | [§5](#5-studio--author-reader-and-beginner-practice-journeys) |
 | Studio — Keyboard & assistive technology | [§6](#6-studio--keyboard-and-assistive-technology) |
 | Studio — Execution scope, cancellation & helper previews | [§7](#7-studio--execution-scope-cancellation-and-bounded-helper-previews) |
 | Studio — Degraded editor & failed session recovery | [§8](#8-studio--degraded-editor-and-failed-session-recovery) |
@@ -679,24 +679,52 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
 
 ## 5. Studio — Author, reader and beginner practice journeys
 
-Completed prerequisites: [ST20 practice execution decision](docs/architecture/decisions/studio-practice-execution.md) and [ST22 desktop evidence](docs/architecture/decisions/studio-desktop-practice-evidence.md).
+Completed prerequisites: [ST20 practice execution decision](docs/architecture/decisions/studio-practice-execution.md) (amended 2026-10-12) and [ST22 desktop evidence](docs/architecture/decisions/studio-desktop-practice-evidence.md).
 
 **Horizon:** Next
 
-- [ ] **ST16 — Portal beginner report journey.** An ordinary scoped author uses sample data, makes a visual change,
+- [x] **ST16 — Portal beginner report journey.** An ordinary scoped author uses sample data, makes a visual change,
   explains its generated syntax, hand-edits, reopens the helper, saves/reopens, and runs one report with real
   parser/patcher responses. (Size: M)
-  Automated Publisher sequence passed on 2026-10-11; [evidence and remaining learner observation](docs/architecture/decisions/studio-beginner-report-evidence.md).
-- [ ] **ST17 — Desktop beginner report journey.** Run the same bounded sequence in the self-installed WorkstationEditor
+  Done 2026-10-12 for the automated sequence, by owner decision: the Publisher journey passed on 2026-10-11 and
+  again on 2026-10-12 ([evidence](docs/architecture/decisions/studio-beginner-report-evidence.md)). "Explains its
+  generated syntax" is not proven by automation and moved to ST16b.
+- [x] **ST17 — Desktop beginner report journey.** Run the same bounded sequence in the self-installed WorkstationEditor
   host, with external editors unavailable. (Size: M)
-  Matching desktop sequence passed on 2026-10-11; the learner explanation remains to be observed.
-- [ ] **ST18 — Dedicated Portal reader journey.** A separate reader opens one permitted report, uses its parameters/interactions,
+  Done 2026-10-12 for the automated sequence, on the same terms as ST16. The learner explanation is ST16b.
+- [ ] **ST16b — Observed learner walkthrough.** One learner new to Studio does the report sequence and the ETL
+  exercise in each host while an observer records, per step, what they did unaided and how they explained the
+  generated SQL and the repair. Needs a person; automation cannot close it. (Depends on: ST16, ST17, ST21, ST22; Size: S)
+  Script and record sheet: [learner walkthrough](docs/architecture/decisions/studio-learner-walkthrough.md). Not yet run.
+- [x] **ST18 — Dedicated Portal reader journey.** A separate reader opens one permitted report, uses its parameters/interactions,
   and reopens a saved view without receiving author/publish controls. (Size: M)
+  Done 2026-10-12. `PortalReaderJourneyTests.AReaderOpensAReportUsesItAndReopensASavedViewWithoutAuthorControls`,
+  real Chromium: a Viewer holding only Execute on the author's folder finds the report in the library, runs it,
+  filters with its slicer, saves a view, clicks a bar, and reopens the saved view from a fresh page. Design and
+  the Studio entry are absent; the script and delete routes answer 403.
+  [Evidence](docs/architecture/decisions/studio-reader-journey-evidence.md).
+  Found on the way: a Portal reader could not save a view at all. The report frame never loaded the feedback
+  module, so *Save current view as…* threw. Fixed.
 - [ ] **ST19 — Second-identity RLS journey.** Two ordinary identities open the same report and receive their expected
   disjoint rows, including preview/data/export paths that the chosen report exposes. No new RLS model.
   (Depends on: ST18; Size: M)
-- [ ] **ST21 — Portal beginner ETL exercise.** Run the deliberate ASSERT failure, repair it, check expected rows and
+  Blocked 2026-10-12 on an owner decision. The journey is written and fails: a row-level-secured report cannot
+  be viewed in the Portal UI by anyone. It keeps no shared snapshot (correct), and the viewer, its interactive
+  session and export all read only snapshots, so a reader who runs it is returned to *Ready for first run*.
+  Nothing leaks; every path fails closed. How a viewer receives their own result is a security-boundary
+  decision. [Finding](docs/architecture/decisions/studio-reader-journey-evidence.md#st19-two-identities-one-report).
+- [x] **ST21 — Portal beginner ETL exercise.** Run the deliberate ASSERT failure, repair it, check expected rows and
   cleanup under the agreed practice identity; use no external service. (Depends on: ST20, ST04; Size: M)
+  Done 2026-10-12 on the Orchestrator's in-process executor, by owner decision (ST20 amended).
+  `StudioPortalPracticeTests`, real Chromium, a Publisher with one folder and EXECUTE on the job: the ASSERT
+  fails the run with its repair message, a fresh run finds no leftover tables, the keyboard repair is saved,
+  and two runs of it assert the exact three rows and a clean catalog. Each run's hash equals the saved revision.
+  [Evidence](docs/architecture/decisions/studio-portal-practice-evidence.md).
+  Found on the way, both in the engine and both fixed: a scalar subquery repeated after an `INSERT` or `DROP`
+  answered from before the change, and a failed run's statement log blamed the statement before the failure.
+- [ ] **ST21b — Portal practice exercise in the sandbox.** Carry the submitter's identity in the sandbox request,
+  lift `sandbox_identity_unsupported` for run slots, and repeat ST21 on a real sandbox with its terminal status,
+  egress denial and cleanup recorded. Security-sensitive; needs a written design first. (Depends on: ST21; Size: L)
 ---
 
 ## 6. Studio — Keyboard and assistive technology

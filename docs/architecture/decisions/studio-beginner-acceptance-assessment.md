@@ -23,6 +23,13 @@ Closing ST03 records this assessment. It does not certify the beginner experienc
 > ([as built](portal-etl-documents.md#5-slice-2-as-built-2026-10-12)). The Portal ETL *exercise*
 > (ST21: deliberate failure, repair, exact rows and cleanup in a real sandbox) is still open, so the
 > verdict above is unchanged. The rest of this document is the assessment as it was made.
+>
+> **Later still (2026-10-12):** ST21 passed on the Orchestrator's in-process executor
+> ([evidence](studio-portal-practice-evidence.md)), so *ETL, Portal* criterion 4 is now met for a
+> scoped Publisher, outside the sandbox. ST18 gave the dashboard a separate reader with a saved view
+> ([evidence](studio-reader-journey-evidence.md)). Still open: a learner has not been observed
+> (ST16b), a row-level-secured report cannot be viewed in the Portal (ST19), the sandbox run
+> (ST21b), and both paginated exercises. The verdict stays **not yet accepted**.
 
 ## Evidence run
 

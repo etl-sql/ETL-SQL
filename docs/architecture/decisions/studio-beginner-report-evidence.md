@@ -48,11 +48,14 @@ and two passed tests. No browser runtime source or permission policy was changed
 
 ## Remaining acceptance
 
-ST16/ST17 remain open for the learner's own explanation of the generated SQL. Automation checks that
-the helper presents an explanation and that the workflow preserves and executes text; it cannot show
-that a learner understood it. Record a short observed walkthrough against this sequence: ask the
-learner what the visual's source and mappings mean, have them explain the code edit, and note help
-needed or confusing steps. Carry the observation into ST03.
+Both tests passed again on 2026-10-12 (two passed, zero failed), on the branch that adds the reader
+and Portal practice journeys. By owner decision that day, ST16 and ST17 are closed for the automated
+sequence and the learner's own explanation of the generated SQL is tracked as ST16b.
+
+Automation checks that the helper presents an explanation and that the workflow preserves and
+executes text; it cannot show that a learner understood it. The observed walkthrough, its questions
+and its record sheet are in [Studio learner walkthrough](studio-learner-walkthrough.md). It has not
+been run. Carry its result into ST03.
 
 Home creation, paginated parameter binding, exact dashboard aggregates, separate reader/RLS behavior,
 and the broader report/ETL matrices retain their own acceptance work. See the

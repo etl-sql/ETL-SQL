@@ -2,6 +2,13 @@
 
 **Decision:** ST20, 2026-10-11. Defines acceptance for ST21/ST22; does not claim either journey is implemented.
 
+> **Amended 2026-10-12 (owner decision).** ST21 is accepted on the Orchestrator's in-process
+> executor. A sandboxed Orchestrator refuses a submitted revision (`sandbox_identity_unsupported`)
+> until the sandbox request carries the submitter, so the "real sandbox" evidence below cannot be
+> produced yet. Wherever this document requires the sandbox for the Portal exercise, read it as the
+> target, not as what ST21 proved. The sandbox run is tracked as ST21b in `TODO.md`.
+> Evidence: [Portal practice evidence](studio-portal-practice-evidence.md).
+
 ## Execution and identity
 
 The exercise uses a script-declared, session-local MOCKDB connection and engine temporary tables.
