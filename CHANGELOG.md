@@ -27,6 +27,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   the saved version has moved on. Desktop Studio still writes the schedule statements into the script.
 - Add `PUT`, `GET` and `DELETE /api/scheduled-jobs/{name}/revision-schedule` to the Orchestrator.
   The scheduler now takes its schedule-due time from an injectable `TimeProvider`.
+- Export, import and promote catalog pipelines with the Portal configuration. `PUBLISH REPORT` takes
+  `WITH (KIND = 'PIPELINE')` for an `.etlsql` document; the export emits it and lists the script file
+  to copy. A replay of the same content changes nothing, and a name already taken by different
+  content is refused without touching the existing document. Orchestrator jobs, grants, schedules
+  and pinned revisions are named in the export as not carried over. Pipelines were previously left
+  out of the export without being mentioned.
 - Add Orchestrator routes for runs addressed by ID: `POST /api/scheduled-jobs/{name}/runs` runs
   submitted script text once through a job without changing its definition,
   `GET /api/job-runs/{id}` returns status and statements, and `POST /api/job-runs/{id}/cancel` stops

@@ -59,7 +59,11 @@ public class ReportScriptInspectionService(
             .ToList();
     }
 
-    public async Task<ReportScriptValidationDto> ValidateResolvedScriptAsync(string resolvedScriptPath)
+    /// <param name="pipeline">
+    /// Validates a pipeline document: it must be an <c>.etlsql</c> file, where a report must be
+    /// <c>.rptsql</c>. Each kind refuses the other's file, so neither can be published as the other.
+    /// </param>
+    public async Task<ReportScriptValidationDto> ValidateResolvedScriptAsync(string resolvedScriptPath, bool pipeline = false)
     {
         if (!System.IO.File.Exists(resolvedScriptPath))
         {
@@ -73,7 +77,7 @@ public class ReportScriptInspectionService(
                 ["Script file not found."]);
         }
 
-        if (!resolvedScriptPath.EndsWith(".rptsql", StringComparison.OrdinalIgnoreCase))
+        if (!resolvedScriptPath.EndsWith(pipeline ? ".etlsql" : ".rptsql", StringComparison.OrdinalIgnoreCase))
         {
             return new ReportScriptValidationDto(
                 false,
@@ -82,7 +86,9 @@ public class ReportScriptInspectionService(
                 System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath),
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
                 Array.Empty<ReportParameterDto>(),
-                ["Only .rptsql files may be published as reports."]);
+                [pipeline
+                    ? "Only .etlsql files may be published as pipelines."
+                    : "Only .rptsql files may be published as reports."]);
         }
 
         var scriptText = await System.IO.File.ReadAllTextAsync(resolvedScriptPath);

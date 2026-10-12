@@ -440,7 +440,8 @@ public class PortalParser : ParserComponent
 
     // ── Reports ───────────────────────────────────────────────────────────
 
-    // PUBLISH REPORT 'name' FROM '/scripts/x.rptsql' IN FOLDER '/Finance' [WITH (DESCRIPTION=...)]
+    // PUBLISH REPORT 'name' FROM '/scripts/x.rptsql' IN FOLDER '/Finance'
+    //     [WITH (DESCRIPTION = '...', CATALOG_OWNER = '...', KIND = 'REPORT' | 'PIPELINE')]
     public Statement ParsePublishReport(Token start)
     {
         Consume(TokenType.REPORT, "Expected REPORT");
@@ -450,23 +451,35 @@ public class PortalParser : ParserComponent
         Consume(TokenType.IN, "Expected IN");
         Consume(TokenType.FOLDER, "Expected FOLDER");
         string folder = ConsumeStringLiteral("Expected folder path string literal");
-        string? description = null, catalogOwner = null;
+        string? description = null, catalogOwner = null, kind = null;
         if (Match(TokenType.WITH))
         {
             Consume(TokenType.LPAREN, "Expected '('");
             ParseOptionList(() =>
             {
-                string key = Advance().Value;
+                var keyToken = Advance();
+                string key = keyToken.Value;
                 Consume(TokenType.EQUALS, "Expected '='");
                 if (key.Equals("DESCRIPTION", StringComparison.OrdinalIgnoreCase))
                     description = ConsumeStringLiteral("Expected description string literal");
                 else if (key.Equals("CATALOG_OWNER", StringComparison.OrdinalIgnoreCase))
                     catalogOwner = ConsumeStringLiteral("Expected catalog-owner username string literal");
+                else if (key.Equals("KIND", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Normalized, and REPORT is the default, so it is never carried on the node.
+                    var value = ConsumeStringLiteral("Expected KIND string literal: 'REPORT' or 'PIPELINE'").Trim().ToUpperInvariant();
+                    kind = value switch
+                    {
+                        "PIPELINE" => "PIPELINE",
+                        "REPORT" => null,
+                        _ => throw new SyntaxException($"Unknown PUBLISH REPORT KIND '{value}'. Use 'REPORT' or 'PIPELINE'.", keyToken.Line, keyToken.Column)
+                    };
+                }
                 else
                     ParseExpression();
             });
         }
-        return new PublishPortalReportStatement(name, scriptPath, folder, description, catalogOwner)
+        return new PublishPortalReportStatement(name, scriptPath, folder, description, catalogOwner, kind)
         { Line = start.Line, Column = start.Column };
     }
 

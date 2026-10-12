@@ -16,7 +16,9 @@ public record PublishReportRequest(
     string? Domain = null,
     string? Steward = null,
     string? Certification = null,
-    string? CreatedByUsername = null);
+    string? CreatedByUsername = null,
+    /// <summary><c>Pipeline</c> publishes an <c>.etlsql</c> catalog pipeline; absent means a report.</summary>
+    string? Kind = null);
 
 public record UpdateReportRequest(
     string? Name,

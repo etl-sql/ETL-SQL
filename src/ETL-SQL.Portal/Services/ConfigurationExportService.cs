@@ -26,7 +26,11 @@ public sealed class ConfigurationExportService(
     private IQueryable<Folder> Folders => catalogScope?.Folders ?? db.Folders.Where(value => value.TenantId == TenantId);
     private IQueryable<FolderAcl> FolderAcls => catalogScope?.FolderAcls ?? db.FolderAcls.Where(value =>
         Folders.Any(folder => folder.Id == value.FolderId));
-    private IQueryable<Report> Reports => catalogScope?.Reports ?? db.Reports.Where(value => value.TenantId == TenantId);
+    private IQueryable<Report> Reports => catalogScope?.Reports
+        ?? db.Reports.Where(value => value.TenantId == TenantId && value.Kind == CatalogDocumentKind.Report);
+    private IQueryable<Report> Pipelines =>
+        (catalogScope?.Documents ?? db.Reports.Where(value => value.TenantId == TenantId))
+            .Where(value => value.Kind == CatalogDocumentKind.Pipeline);
     private IQueryable<Subscription> Subscriptions => catalogScope?.Subscriptions ?? db.Subscriptions.Where(value =>
         Reports.Any(report => report.Id == value.ReportId));
     private IQueryable<ReportAlert> ReportAlerts => catalogScope?.ReportAlerts ?? db.ReportAlerts.Where(value =>
@@ -230,6 +234,35 @@ public sealed class ConfigurationExportService(
                 "Copy this .rptsql file into the target portal's script root before replay."));
         }
         emitted.Add($"{reportCount} report publication(s)");
+
+        // ── Pipelines (the same catalog document with a kind) ────────────────
+        // Only the document travels. The Orchestrator job it runs through is named after this
+        // host's document id, and its grants, owner, schedule and pinned revision belong to this
+        // host's Orchestrator, so they are named as not exported and set again at the target.
+        var pipelines = await (
+            from p in Pipelines.AsNoTracking()
+            join u in Users.AsNoTracking() on p.CreatedBy equals u.Id
+            where !p.IsDeleted
+            orderby p.Folder!.Path, p.Name
+            select new { p.Name, p.Description, p.ScriptPath, FolderPath = p.Folder!.Path, Owner = u.UserName })
+            .ToListAsync(ct);
+        if (pipelines.Count > 0)
+        {
+            AppendSection(body, "Pipelines (copy the referenced .etlsql script files before replay — see the export manifest)");
+            foreach (var p in pipelines)
+            {
+                var pipelineOptions = new List<string> { $"CATALOG_OWNER = {Q(p.Owner!)}", "KIND = 'PIPELINE'" };
+                if (!string.IsNullOrWhiteSpace(p.Description))
+                    pipelineOptions.Insert(0, $"DESCRIPTION = {Q(p.Description)}");
+                body.AppendLine($"    PUBLISH REPORT {Q(p.Name)} FROM {Q(p.ScriptPath)} IN FOLDER {Q(p.FolderPath)} WITH ({string.Join(", ", pipelineOptions)});");
+                manifest.Add(new ContentManifestItem(
+                    "PipelineScript", $"{p.FolderPath}/{p.Name}", p.ScriptPath,
+                    "Copy this .etlsql file into the target portal's script root before replay."));
+            }
+            emitted.Add($"{pipelines.Count} pipeline publication(s)");
+            skipped.Add($"Orchestrator bindings of {pipelines.Count} pipeline(s): the job each runs through, its grants and owner, "
+                + "its schedule and the revision pinned for it are owned by this host's Orchestrator — run or schedule each pipeline again at the target");
+        }
 
         // ── Dataset metadata + ACLs (datasets materialize when their report runs) ─
         var datasetCount = 0;
@@ -479,6 +512,14 @@ public sealed class ConfigurationExportService(
         sb.AppendLine($"-- Report scripts to copy into the target script root ({scripts.Count}):");
         foreach (var item in scripts.OrderBy(m => m.Logical))
             sb.AppendLine($"--   {item.Logical}  <=  {item.Source}");
+
+        var pipelineScripts = manifest.Where(m => m.Kind == "PipelineScript").ToList();
+        if (pipelineScripts.Count > 0)
+        {
+            sb.AppendLine($"-- Pipeline scripts to copy into the target script root ({pipelineScripts.Count}):");
+            foreach (var item in pipelineScripts.OrderBy(m => m.Logical))
+                sb.AppendLine($"--   {item.Logical}  <=  {item.Source}");
+        }
 
         var contentDatasets = manifest.Where(m => m.Kind == "Dataset").ToList();
         sb.AppendLine($"-- Datasets to re-materialize or re-publish ({contentDatasets.Count}):");

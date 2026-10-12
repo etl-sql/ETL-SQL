@@ -1020,6 +1020,16 @@ The governance rail's **Run it on a schedule** section uses the `pipelineSchedul
 for a catalog pipeline. It does not write `CREATE JOB` into the script there: a catalog document
 has no path a job statement could name. Desktop Studio keeps the statement-writing form.
 
+**Export and promotion.** The configuration export emits a pipeline with the same statement as a
+report, marked by kind: `PUBLISH REPORT '<name>' FROM '<file>.etlsql' IN FOLDER '<path>' WITH
+(CATALOG_OWNER = '<user>', KIND = 'PIPELINE')`. The script file travels by copy and is listed in the
+manifest as `PipelineScript`. `POST /api/reports` accepts `Kind`; each kind refuses the other's file
+extension. Publishing a pipeline that is already there with the same content answers `200` and
+changes nothing, so a replay is idempotent. A document already holding the name with different
+content, of either kind, is `409 document_collision` and is left untouched. The Orchestrator job, its
+grants and owner, the schedule and the pinned revision belong to the source host and are not
+exported; the export's summary says so, and the pipeline is run or scheduled again at the target.
+
 ### System
 
 | Method | Path | Auth | Description |

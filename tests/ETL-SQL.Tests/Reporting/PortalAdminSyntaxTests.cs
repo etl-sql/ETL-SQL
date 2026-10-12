@@ -70,6 +70,44 @@ namespace ETL_SQL.Tests
             Assert.Contains("CATALOG_OWNER = 'alice'", report.ToSql());
         }
 
+        [Fact]
+        public void PublishReport_KindOptionMarksAPipelineAndRoundTrips()
+        {
+            var script = TestHelpers.Parse("""
+                PUBLISH REPORT 'Nightly load' FROM 'etl/nightly.etlsql' IN FOLDER '/Etl'
+                    WITH (CATALOG_OWNER = 'alice', KIND = 'pipeline');
+                PUBLISH REPORT 'Monthly Sales' FROM 'reports/monthly.rptsql' IN FOLDER '/Finance' WITH (KIND = 'REPORT');
+                PUBLISH REPORT 'Weekly Sales' FROM 'reports/weekly.rptsql' IN FOLDER '/Finance';
+                """);
+
+            Assert.Empty(script.Diagnostics);
+            var pipeline = Assert.IsType<PublishPortalReportStatement>(script.Statements[0]);
+            // Normalized to upper case, and carried through the formatter so an export replays as written.
+            Assert.Equal("PIPELINE", pipeline.Kind);
+            Assert.Contains("KIND = 'PIPELINE'", pipeline.ToSql());
+            var reparsed = Assert.IsType<PublishPortalReportStatement>(TestHelpers.Parse(pipeline.ToSql()).Statements[0]);
+            Assert.Equal("PIPELINE", reparsed.Kind);
+
+            // REPORT is the default: stated or not, it is the same statement and prints without the option.
+            foreach (var index in new[] { 1, 2 })
+            {
+                var report = Assert.IsType<PublishPortalReportStatement>(script.Statements[index]);
+                Assert.Null(report.Kind);
+                Assert.DoesNotContain("KIND", report.ToSql());
+            }
+        }
+
+        [Fact]
+        public void PublishReport_RejectsAnUnknownKind()
+        {
+            var script = TestHelpers.Parse(
+                "PUBLISH REPORT 'Odd' FROM 'odd.etlsql' IN FOLDER '/Etl' WITH (KIND = 'SPREADSHEET');");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("'REPORT' or 'PIPELINE'", StringComparison.Ordinal));
+        }
+
         [Theory]
         [InlineData(
             "CREATE REFRESH JOB FOR REPORT 'Monthly Sales' SCHEDULE '0 2 * * *' AT orch;",

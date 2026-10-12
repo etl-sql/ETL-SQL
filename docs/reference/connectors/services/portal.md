@@ -39,6 +39,8 @@ EXECUTE portal BEGIN
 
     -- Report lifecycle
     PUBLISH REPORT 'Monthly Sales' FROM 'reports/monthly_sales.rptsql' IN FOLDER '/Finance/Reports';
+    -- A pipeline is the same catalog document with a kind. It must be an .etlsql file.
+    PUBLISH REPORT 'Nightly Load' FROM 'etl/nightly_load.etlsql' IN FOLDER '/Finance/Etl' WITH (KIND = 'PIPELINE');
     REFRESH REPORT 'Monthly Sales';
     REBUILD SNAPSHOT FOR REPORT 'Monthly Sales';
 

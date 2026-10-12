@@ -2887,8 +2887,13 @@ public sealed record GrantPortalDatasetPermissionStatement(
 public sealed record RevokePortalDatasetPermissionStatement(
     string DatasetName, string FolderPath, string GroupName, PortalDatasetPermission Permission) : Statement;
 
+/// <param name="Kind">
+/// <c>PIPELINE</c> when the catalog document is a pipeline; null for a report. A pipeline is the same
+/// catalog document with a kind, so it is published by the same statement.
+/// </param>
 public sealed record PublishPortalReportStatement(
-    string ReportName, string ScriptPath, string FolderPath, string? Description, string? CatalogOwner = null) : Statement;
+    string ReportName, string ScriptPath, string FolderPath, string? Description, string? CatalogOwner = null,
+    string? Kind = null) : Statement;
 
 public sealed record AlterPortalReportStatement(
     string ReportName, string? NewFolder, string? NewDescription) : Statement;

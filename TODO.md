@@ -1483,22 +1483,26 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
   unscheduling. Studio's governance rail drives it (`AnAuthorSchedulesTheSavedRevisionThroughTheOrchestrator`).
   Found on the way: the rail's statement-writing form wrote `CREATE JOB … FOR SCRIPT '<catalog path>'`
   for Portal pipelines, a job that could never find its script. It is no longer offered there.
-- [ ] **ST08 — Pipeline configuration export/import.** Round-trip one pipeline with its declared portable state;
+- [x] **ST08 — Pipeline configuration export/import.** Round-trip one pipeline with its declared portable state;
   exclude secrets and host-owned bindings, and verify report-only surfaces still refuse it. (Size: M)
-  Not started. Scoping notes from reading the code on 2026-10-12, not from running it:
-  `ConfigurationExportService` emits `PUBLISH REPORT … FROM '<script path>'` plus a manifest of script
-  files to copy, and replay goes through `PortalDataSource` to `POST /api/reports`. With the tenant
-  catalog scope it reads report documents only, so a pipeline is left out and is not named in the
-  export's skipped list; without that scope it would be emitted as a report. Neither round-trips a
-  pipeline. The statement has no way to say the document is a pipeline, so this needs a decision first:
-  a `KIND` option on `PUBLISH REPORT` or a separate statement (parser, serializer, reference page,
-  syntax index and grammar lane either way). Host-owned state to leave out: the document id and so the
-  `PIPELINE:{id}` job name, the job's grants and owner, the pinned revision hash, run history, lease
-  and version. Portable state: name, folder, description, kind, catalog owner, script file, and the
-  schedule's cron and time zone.
-- [ ] **ST09 — Pipeline promotion.** Promote that package to one permitted target, verify ownership/bindings,
+  Done 2026-10-12. Owner decision: a `KIND` option on `PUBLISH REPORT`, not a new statement. The export
+  emits `PUBLISH REPORT … WITH (CATALOG_OWNER = …, KIND = 'PIPELINE')` and a `PipelineScript` manifest
+  entry; before this a pipeline was left out of the export and not mentioned. Portable: name, folder,
+  description, kind, catalog owner, script file. Left behind and named in the export summary: the
+  Orchestrator job (its name carries the source document id), grants, owner, schedule and pinned revision.
+  `APipelineRoundTripsAsAPipelineAndLeavesHostOwnedBindingsBehind` replays the export twice into an
+  empty Portal: one pipeline, same folder and owner, script text intact and never inline in the export,
+  reader routes still 404. `NeitherKindCanBePublishedFromTheOthersFile` covers the extension guard.
+  Open: a pipeline's schedule is not exported; it is set again at the target.
+- [x] **ST09 — Pipeline promotion.** Promote that package to one permitted target, verify ownership/bindings,
   and reject a collision without partial changes. No new promotion topology. (Depends on: ST08; Size: M)
-- [x] **ST10 — Ordinary-author pipeline journey.** A Publisher with the required folder and Orchestrator grants
+  Done 2026-10-12. Promotion is the existing export replayed into another Portal; nothing new was added
+  to the topology. `PromotingAPipelineKeepsItsOwnerRebindsItsScriptAndRejectsACollisionUntouched`: the
+  logical owner (a Publisher, not the promoter) owns the pipeline and its folder in prod, the script is
+  bound under prod's root, an account with no rights on the folder is refused, and a target where the
+  name already holds different content gets `409 document_collision` with the existing row, version and
+  script text unchanged. Scope of "no partial changes": the collided document. Statements earlier in the
+  same replay (users, folders) have already applied, as for any bootstrap replay.- [x] **ST10 — Ordinary-author pipeline journey.** A Publisher with the required folder and Orchestrator grants
   creates, saves, reopens, runs, and cancels one pipeline; denied grants fail explicitly. Admin identity cannot
   satisfy this task. (Depends on: ST04, ST05, ST06; Size: M)
   Done 2026-10-12. `StudioPipelineRunJourneyTests.AnOrdinaryAuthorRunsASavedPipelineAndFollowsThatRun`

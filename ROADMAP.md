@@ -480,8 +480,8 @@ entry points is a separate future decision, not the measure of success.
 | ST05 | **Complete: follow one pipeline run.** Studio shows that submitted run's status and bounded log through completion or failure, retaining its run ID; it never displays another run's output. | ST04 | M |
 | ST06 | **Complete: cancel one pipeline run.** Stop reaches the submitted Orchestrator run, displays confirmed cancellation or an explicitly unconfirmed outcome, and preserves diagnostics. | ST04, ST05 | M |
 | ST07 | **Complete: schedule one saved pipeline.** Create a governed schedule for the saved revision, advance the controlled clock to one due occurrence and verify the resulting run and output. No new recurrence vocabulary. | ST04, ST05 | M |
-| ST08 | **Pipeline configuration export/import.** Round-trip one pipeline with its declared portable state; exclude secrets and host-owned bindings and verify report-only surfaces still refuse it. | — | M |
-| ST09 | **Pipeline promotion.** Promote that package to one permitted target, verify ownership/bindings and reject a collision without partial changes. No new promotion topology. | ST08 | M |
+| ST08 | **Complete: pipeline configuration export/import.** Round-trip one pipeline with its declared portable state; exclude secrets and host-owned bindings and verify report-only surfaces still refuse it. | — | M |
+| ST09 | **Complete: pipeline promotion.** Promote that package to one permitted target, verify ownership/bindings and reject a collision without partial changes. No new promotion topology. | ST08 | M |
 | ST10 | **Complete: ordinary-author pipeline journey.** A Publisher with the required folder and Orchestrator grants creates, saves, reopens, runs and cancels one pipeline; denied grants fail explicitly. Admin identity cannot satisfy this task. | ST04, ST05, ST06 | M |
 | ST11 | **Report schedule handoff.** A Studio-authored report reaches one authorized scheduled execution and produces one verified artifact under the scheduled identity. Pipeline scheduling is ST07; subscriptions are separate scope. | — | M |
 

@@ -203,11 +203,12 @@ public static class AstSerializer
         GrantPortalDatasetPermissionStatement s => $"GRANT {s.Permission.ToString().ToUpper()} ON DATASET {s.DatasetName} ON FOLDER '{s.FolderPath}' TO GROUP {s.GroupName};",
         RevokePortalDatasetPermissionStatement s => $"REVOKE {s.Permission.ToString().ToUpper()} ON DATASET {s.DatasetName} ON FOLDER '{s.FolderPath}' FROM GROUP {s.GroupName};",
         PublishPortalReportStatement s => $"PUBLISH REPORT {Quote(s.ReportName)} FROM {Quote(s.ScriptPath)} IN FOLDER {Quote(s.FolderPath)}"
-            + (s.Description != null || s.CatalogOwner != null
+            + (s.Description != null || s.CatalogOwner != null || s.Kind != null
                 ? " WITH (" + string.Join(", ", new[]
                 {
                     s.Description != null ? $"DESCRIPTION = {Quote(s.Description)}" : null,
-                    s.CatalogOwner != null ? $"CATALOG_OWNER = {Quote(s.CatalogOwner)}" : null
+                    s.CatalogOwner != null ? $"CATALOG_OWNER = {Quote(s.CatalogOwner)}" : null,
+                    s.Kind != null ? $"KIND = {Quote(s.Kind)}" : null
                 }.Where(value => value != null)) + ")"
                 : "") + ";",
         AlterPortalReportStatement s => $"ALTER REPORT {s.ReportName} ...;",

@@ -1829,6 +1829,7 @@ interface PublishReportRequest {
     steward?: string | null;
     certification?: string | null;
     createdByUsername?: string | null;
+    kind?: string | null;
 }
 
 interface QuarantineDispositionRequest {

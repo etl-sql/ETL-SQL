@@ -412,9 +412,38 @@ public class ReportsController : ControllerBase
         if (!PortalPathGuard.TryResolveScript(portalConfig, datasetScope.TenantId, req.ScriptPath, out var resolved))
             return BadRequest(new { error = "Script path must be within the configured ScriptRootPath" });
 
-        var validation = await scriptInspection.ValidateResolvedScriptAsync(resolved);
+        var kind = CatalogDocumentKind.Report;
+        if (!string.IsNullOrWhiteSpace(req.Kind) && !Enum.TryParse(req.Kind, ignoreCase: true, out kind))
+            return BadRequest(new { error = "Kind must be Report or Pipeline." });
+        var isPipeline = kind == CatalogDocumentKind.Pipeline;
+
+        var validation = await scriptInspection.ValidateResolvedScriptAsync(resolved, isPipeline);
         if (!validation.IsValid)
             return BadRequest(validation);
+
+        // Names are unique across kinds in a folder, as in Studio. Publishing a pipeline that is
+        // already there with the same content is a replay and changes nothing. Anything else under
+        // that name is a collision, refused before any write so the existing document is untouched.
+        if (isPipeline)
+        {
+            var existing = await catalogScope.Documents.AsNoTracking().FirstOrDefaultAsync(document =>
+                document.FolderId == req.FolderId && !document.IsDeleted && document.Name == req.Name);
+            if (existing is not null)
+            {
+                var sameContent = existing.Kind == CatalogDocumentKind.Pipeline
+                    && string.Equals(
+                        (await scriptInspection.ValidateResolvedScriptAsync(existing.ScriptPath, pipeline: true)).Hash,
+                        validation.Hash, StringComparison.OrdinalIgnoreCase);
+                return sameContent
+                    ? Ok(new { id = existing.Id, alreadyPublished = true })
+                    : Conflict(new
+                    {
+                        error = $"A {existing.Kind.ToString().ToLowerInvariant()} named '{req.Name}' already exists in this folder with different content. "
+                            + "Nothing was changed. Rename or remove one of them, then publish again.",
+                        code = "document_collision"
+                    });
+            }
+        }
 
         var scriptMetadata = new Dictionary<string, string>(validation.Metadata, StringComparer.OrdinalIgnoreCase);
         SetMetadata(scriptMetadata, "owner", req.Owner);
@@ -441,6 +470,7 @@ public class ReportsController : ControllerBase
         {
             TenantId = datasetScope.TenantId,
             FolderId = req.FolderId,
+            Kind = kind,
             Name = req.Name,
             Description = FirstNonBlank(req.Description, GetMetadata(scriptMetadata, "description", "d")),
             Owner = FirstNonBlank(req.Owner, GetMetadata(scriptMetadata, "owner")),

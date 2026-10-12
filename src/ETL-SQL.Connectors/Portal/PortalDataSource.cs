@@ -858,9 +858,13 @@ namespace ETL_SQL.Connectors.Portal
         {
             var folderId = await LookupFolderIdAsync(stmt.FolderPath);
 
-            // Idempotent: a report already published under this folder/name is left as-is.
-            if (await TryLookupReportIdAsync($"{stmt.FolderPath.TrimEnd('/')}/{stmt.ReportName}") is not null
-                || await TryLookupReportIdAsync(stmt.ReportName) is not null)
+            // Idempotent: a document already published under this folder/name is left as-is. A
+            // pipeline is not in the report lookup, so the Portal's own name check answers for it:
+            // a second publish of the same pipeline is refused there with 409 and skipped here.
+            var isPipeline = string.Equals(stmt.Kind, "PIPELINE", StringComparison.OrdinalIgnoreCase);
+            if (!isPipeline
+                && (await TryLookupReportIdAsync($"{stmt.FolderPath.TrimEnd('/')}/{stmt.ReportName}") is not null
+                    || await TryLookupReportIdAsync(stmt.ReportName) is not null))
             {
                 _logger.WriteLine(
                     $"Report '{stmt.ReportName}' already published in '{stmt.FolderPath}' — skipped.", ConsoleColor.DarkGray);
@@ -873,10 +877,52 @@ namespace ETL_SQL.Connectors.Portal
                 Name = stmt.ReportName,
                 ScriptPath = stmt.ScriptPath,
                 Description = stmt.Description,
-                CreatedByUsername = stmt.CatalogOwner
+                CreatedByUsername = stmt.CatalogOwner,
+                Kind = isPipeline ? "Pipeline" : null
             };
+            if (isPipeline)
+            {
+                await PublishPipelineAsync(stmt, req);
+                return;
+            }
             await CallAsync(HttpMethod.Post, "api/reports", req,
                 $"Report '{stmt.ReportName}' published to '{stmt.FolderPath}'.");
+        }
+
+        /// <summary>
+        /// Publishes a pipeline document. The Portal decides what a second publish under the same
+        /// name is: the same content answers 200 and is a replay, so it is skipped; anything else is
+        /// a collision, answered 409, and is an error here like any other refusal.
+        /// </summary>
+        private async Task PublishPipelineAsync(PublishPortalReportStatement stmt, object body)
+        {
+            HttpResponseMessage resp;
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Post, "api/reports")
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(body, _json), Encoding.UTF8, "application/json")
+                };
+                await ApplyVersionHeaderAsync(req);
+                resp = await _http.SendAsync(req);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new ExecutionException($"Portal connection error: {ex.Message}", ex);
+            }
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                var bodyText = await resp.Content.ReadAsStringAsync();
+                throw new ExecutionException($"Portal API error ({(int)resp.StatusCode} {resp.StatusCode}): {SanitizeBody(bodyText)}");
+            }
+            if (resp.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                _logger.WriteLine(
+                    $"Pipeline '{stmt.ReportName}' already published in '{stmt.FolderPath}' — skipped.", ConsoleColor.DarkGray);
+                return;
+            }
+            _logger.WriteLine($"Pipeline '{stmt.ReportName}' published to '{stmt.FolderPath}'.", ConsoleColor.Green);
         }
 
         private async Task AlterReportAsync(AlterPortalReportStatement stmt, IExecutionContext context)
