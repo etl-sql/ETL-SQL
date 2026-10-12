@@ -49,6 +49,13 @@ public static partial class JobApiEndpoints
                 return Results.StatusCode(StatusCodes.Status403Forbidden);
 
             var unescaped = Uri.UnescapeDataString(name);
+            // Checked before the lookup so the answer does not reveal whether such a job exists.
+            if (!SchedulerService.IsRunSlot(unescaped))
+                return Results.Json(
+                    new RunRefusal("not_a_run_slot",
+                        $"Only a run slot named '{SchedulerService.RunSlotNamePrefix}<id>' accepts submitted script text."),
+                    statusCode: StatusCodes.Status403Forbidden);
+
             var caller = RequestCaller(ctx);
             var job = await store.GetJobAsync(requestTenant, unescaped);
             if (job is null)
@@ -102,6 +109,15 @@ public static partial class JobApiEndpoints
                         new RunRefusal("node_overloaded",
                             $"Job '{unescaped}' was not started: this Orchestrator node is overloaded. Retry shortly."),
                         statusCode: StatusCodes.Status503ServiceUnavailable);
+                case RevisionRunStatus.NotARunSlot:
+                    return Results.Json(
+                        new RunRefusal("not_a_run_slot", $"Job '{unescaped}' runs only its stored script."),
+                        statusCode: StatusCodes.Status403Forbidden);
+                case RevisionRunStatus.IdentityNotCarried:
+                    return Results.Json(
+                        new RunRefusal("sandbox_identity_unsupported",
+                            $"Job '{unescaped}' was not started: this Orchestrator executes jobs in the sandbox, which cannot yet run submitted text under the submitter's identity."),
+                        statusCode: StatusCodes.Status501NotImplemented);
                 case RevisionRunStatus.NotStarted:
                     return Results.Json(
                         new RunRefusal("not_started",

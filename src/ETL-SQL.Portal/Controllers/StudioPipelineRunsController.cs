@@ -343,6 +343,9 @@ public sealed class StudioPipelineRunsController(
             (_, "run_grant_denied") => StatusCode(StatusCodes.Status403Forbidden, new PipelineRunRefusalDto(
                 "run_grant_denied",
                 $"This account holds no EXECUTE grant on Orchestrator job '{jobName}'. An owner or manager of the job grants it.")),
+            (_, "sandbox_identity_unsupported") => StatusCode(StatusCodes.Status501NotImplemented, new PipelineRunRefusalDto(
+                "sandbox_identity_unsupported",
+                "This Orchestrator runs jobs in its sandbox, which cannot yet run a pipeline under your own identity. The run was not started.")),
             (HttpStatusCode.Conflict, _) => Conflict(new PipelineRunRefusalDto(
                 "already_running", "This pipeline already has a run in progress. Wait for it to finish, or stop it.")),
             (HttpStatusCode.Unauthorized, _) => StatusCode(StatusCodes.Status503ServiceUnavailable, new PipelineRunRefusalDto(

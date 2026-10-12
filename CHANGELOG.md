@@ -36,7 +36,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Add Orchestrator routes for runs addressed by ID: `POST /api/scheduled-jobs/{name}/runs` runs
   submitted script text once through a job without changing its definition,
   `GET /api/job-runs/{id}` returns status and statements, and `POST /api/job-runs/{id}/cancel` stops
-  one run and records it as `CANCELLED`. The existing kill-by-job-name route is unchanged.
+  one run and records it as `CANCELLED`. The existing kill-by-job-name route is unchanged. Only a
+  job named `PIPELINE:<id>` accepts submitted text, and an Orchestrator that executes jobs in its
+  sandbox refuses it, because the sandbox cannot yet run text under the submitter's identity.
 
 ### Changed
 

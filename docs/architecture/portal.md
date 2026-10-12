@@ -997,6 +997,7 @@ Refusals carry a stable `code` so the author can tell whose decision it was:
 | `job_not_provisioned` | Orchestrator | No job exists and the caller may not create one |
 | `run_grant_denied` | Orchestrator | No `EXECUTE` grant on the job |
 | `already_running` | Orchestrator | The job has a run in progress |
+| `sandbox_identity_unsupported` | Orchestrator | The Orchestrator runs jobs in its sandbox, which cannot run text as its submitter |
 | `cancel_denied` | Orchestrator | The caller did not submit the run and holds no `MANAGE` grant |
 | `run_already_finished` | Orchestrator | Stop arrived after the run ended |
 | `schedule_grant_denied` | Orchestrator | Scheduling needs `MANAGE` on the job; `EXECUTE` is not enough |

@@ -118,6 +118,68 @@ public sealed class JobRevisionRunTests : IDisposable
     }
 
     [Fact]
+    public async Task AnOperatorsOwnJobRunsOnlyItsStoredScript()
+    {
+        // EXECUTE on a hash-pinned job is leave to start the pinned script, not to replace it.
+        using (var scope = factory.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<IJobHistoryStore>().SaveJobAsync(new JobDefinition(
+                "nightly-load", Provisioned, 100, "DAY", null, null, DateTime.Now.AddDays(100),
+                ScriptHash: Sha(Provisioned), HashPolicy: "Block", CreatedBy: "user:operator-key"));
+        await GrantAsync("nightly-load", "author-key", "EXECUTE");
+
+        foreach (var caller in new[] { Author, Operator })
+        {
+            var refused = await SubmitAsync("nightly-load", caller, Revised);
+            Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+            Assert.Equal("not_a_run_slot", (await Body(refused))["code"]!.GetValue<string>());
+        }
+
+        // The same answer for a name nobody holds, and no job is provisioned under it.
+        var absent = await SubmitAsync("weekly-load", Operator, Provisioned, provision: true);
+        Assert.Equal(HttpStatusCode.Forbidden, absent.StatusCode);
+        Assert.Equal("not_a_run_slot", (await Body(absent))["code"]!.GetValue<string>());
+        using var check = factory.Services.CreateScope();
+        var store = check.ServiceProvider.GetRequiredService<IJobHistoryStore>();
+        Assert.Null(await store.GetJobAsync(null, "weekly-load"));
+        Assert.Empty(await store.GetHistoryAsync((await StoredJobAsync("nightly-load")).Id));
+    }
+
+    [Fact]
+    public async Task ASandboxedOrchestratorRefusesTextItCannotRunAsItsSubmitter()
+    {
+        var sandbox = new RecordingSandboxExecutor();
+        using var sandboxed = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+            services.AddSingleton<ETL_SQL.Orchestrator.Execution.ISandboxScheduledJobExecutor>(sandbox)));
+        using var sandboxedClient = sandboxed.CreateClient();
+        using (var scope = sandboxed.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<IJobHistoryStore>().SaveJobAsync(new JobDefinition(
+                "PIPELINE:10", Provisioned, 1, "DAY", null, null, ETL_SQL.Orchestrator.Scheduling.SchedulerService.ManualOnlyNextRun,
+                CreatedBy: "user:operator-key"));
+
+        using var request = Request(HttpMethod.Post, "/api/scheduled-jobs/PIPELINE%3A10/runs", Operator,
+            new { scriptText = Revised, provisionIfMissing = false });
+        var refused = await sandboxedClient.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotImplemented, refused.StatusCode);
+        Assert.Equal("sandbox_identity_unsupported", (await Body(refused))["code"]!.GetValue<string>());
+        Assert.Equal(0, sandbox.Calls);
+    }
+
+    private sealed class RecordingSandboxExecutor : ETL_SQL.Orchestrator.Execution.ISandboxScheduledJobExecutor
+    {
+        private int calls;
+        public int Calls => Volatile.Read(ref calls);
+
+        public Task<ETL_SQL.Core.ScriptExecutionResult> ExecuteAsync(
+            JobDefinition job, long historyId, int attempt, string sessionId, bool resumeFromCheckpoint,
+            long queueWaitMs, IReadOnlyDictionary<string, string>? variableOverrides, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref calls);
+            throw new InvalidOperationException("Submitted text must not reach the sandbox executor.");
+        }
+    }
+
+    [Fact]
     public async Task AnotherTenantCanNeitherRunNorReadTheRun()
     {
         var owner = Operator with { TenantId = "tenant-a" };

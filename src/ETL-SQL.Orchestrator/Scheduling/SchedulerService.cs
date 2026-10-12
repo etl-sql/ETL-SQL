@@ -50,7 +50,11 @@ namespace ETL_SQL.Orchestrator.Scheduling
         AlreadyRunning,
         NodeOverloaded,
         /// <summary>Queued, but no run was recorded: another instance holds the job or history is unavailable.</summary>
-        NotStarted
+        NotStarted,
+        /// <summary>The job is an operator's own job, not a run slot, so it runs only its stored script.</summary>
+        NotARunSlot,
+        /// <summary>This node executes jobs in the sandbox, which cannot run text as its submitter.</summary>
+        IdentityNotCarried
     }
 
     /// <summary><see cref="RunId"/> is the history id of the run, set only when it was accepted.</summary>
@@ -128,6 +132,17 @@ namespace ETL_SQL.Orchestrator.Scheduling
         /// a disabled job would not do, because the execution lease refuses one.
         /// </summary>
         public static readonly DateTime ManualOnlyNextRun = new(9000, 1, 1, 0, 0, 0, DateTimeKind.Local);
+
+        /// <summary>Name prefix of a run slot, the only kind of job that accepts submitted text.</summary>
+        public const string RunSlotNamePrefix = "PIPELINE:";
+
+        /// <summary>
+        /// EXECUTE on an ordinary job means "start its stored script". Only a run slot extends that
+        /// to text the caller supplies, so a hash-pinned operator job cannot be used to run anything else.
+        /// </summary>
+        public static bool IsRunSlot(string jobName) =>
+            jobName.Length > RunSlotNamePrefix.Length
+            && jobName.StartsWith(RunSlotNamePrefix, StringComparison.Ordinal);
 
         /// <summary>Returns a snapshot of current concurrency metrics.</summary>
         public JobThrottleMetrics GetMetrics() => _throttle.GetMetrics();
@@ -505,6 +520,20 @@ namespace ETL_SQL.Orchestrator.Scheduling
             ArgumentException.ThrowIfNullOrWhiteSpace(scriptText);
             var job = await _store.GetJobByIdAsync(jobId);
             if (job == null) return new(RevisionRunStatus.JobNotFound);
+            if (!IsRunSlot(job.Name)) return new(RevisionRunStatus.NotARunSlot);
+
+            // The sandbox request carries the job's tenant and no caller, so the text would run as
+            // the tenant and past the submitter's row-level security. Refuse rather than widen.
+            using (var scope = _serviceProvider.CreateScope())
+            {
+                if (scope.ServiceProvider.GetService<ISandboxScheduledJobExecutor>() is not null)
+                {
+                    _logger.LogWarning(
+                        "Job {JobName}: revision run refused because sandbox execution cannot carry the submitter's identity.",
+                        job.Name);
+                    return new(RevisionRunStatus.IdentityNotCarried);
+                }
+            }
 
             if (_capacityMonitor.Capture().IsOverloaded)
             {
@@ -849,10 +878,14 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         var sandboxExecutor = scope.ServiceProvider.GetService<ISandboxScheduledJobExecutor>();
                         if (sandboxExecutor is not null)
                         {
+                            // RunRevisionAsync refuses this up front; submitted text must never
+                            // reach an executor that would run it as the tenant.
+                            if (revision is not null)
+                                throw new InvalidOperationException(
+                                    "Sandbox execution cannot carry a revision run's submitter identity.");
                             usedSandbox = true;
-                            // A local copy carrying the submitted text; it is never saved.
                             lastResult = await sandboxExecutor.ExecuteAsync(
-                                revision is null ? job : job with { Script = script },
+                                job,
                                 historyId, attempt, sessionId, resumeFromCheckpoint, queueWaitMs,
                                 variableOverrides, cycleCts.Token);
                         }

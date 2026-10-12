@@ -549,7 +549,9 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
   (Portal joined to a real federated Orchestrator: run hash equals saved-revision hash, stale version
   refused, nothing in the Portal's own job store, `orchestrator_not_connected`, `job_not_provisioned`,
   `run_grant_denied`) and `JobRevisionRunTests` (stored job script unchanged, tenant isolation, no
-  quarantine, never due on its own). Open: the sandbox executor path was not run; see the decision doc.
+  quarantine, never due on its own). Open: an Orchestrator that executes jobs in its sandbox refuses
+  the run (`sandbox_identity_unsupported`), because the sandbox cannot carry the submitter's identity;
+  see the decision doc. Only jobs named `PIPELINE:<id>` accept submitted text (`not_a_run_slot`).
 - [x] **ST05 — Follow one pipeline run.** Studio shows that submitted run's status and bounded log through
   completion or failure, retaining its run ID; never displays another run's output. (Depends on: ST04; Size: M)
   Done 2026-10-12. Studio polls the run ID it was given and rejects an answer about any other; the Portal

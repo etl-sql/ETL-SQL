@@ -343,19 +343,24 @@ catalog pipeline ([Portal routes](portal.md#studio-pipeline-runs)).
 
 | Method | Path | Requires | Description |
 | :--- | :--- | :--- | :--- |
-| POST | `/api/scheduled-jobs/{name}/runs` | `EXECUTE` on the job | Run the submitted `ScriptText` once through the job. `202` returns `RunId`, `JobName` and `ScriptHash` |
+| POST | `/api/scheduled-jobs/{name}/runs` | `EXECUTE` on a run slot (`PIPELINE:<id>`) | Run the submitted `ScriptText` once through the job. `202` returns `RunId`, `JobName` and `ScriptHash` |
 | GET | `/api/job-runs/{historyId}` | `READ` on the job | Status, error, rows and up to 200 normalized statements of that run |
 | POST | `/api/job-runs/{historyId}/cancel` | `MANAGE`, or `EXECUTE` and being the submitter | Signal that run to stop. `202` is an accepted request, not an outcome |
 
 `SchedulerService.RunRevisionAsync` reuses the scheduled path: the start guard, capacity check,
-execution lease, throttle, sandbox executor when one is registered, history and metering. It differs
-from a trigger in five ways:
+execution lease, throttle, history and metering. It differs from a trigger in seven ways:
 
 - The stored job definition is never changed. The submitted text runs; the stored script stays.
 - The hash recorded on the run is the hash of the submitted text. The stored hash policy is skipped.
 - The run is never retried and does not count toward quarantine.
 - It neither consumes a scheduled occurrence nor re-arms `NextRun`.
-- Without the sandbox executor it runs under the submitting caller's `ExecutionIdentity`.
+- It runs under the submitting caller's `ExecutionIdentity`.
+- Only a run slot, a job named `PIPELINE:<id>`, accepts submitted text. Any other name answers
+  `403 not_a_run_slot` before the job is looked up, so `EXECUTE` on an operator's hash-pinned job
+  still means "start the pinned script".
+- A node that executes jobs in the sandbox refuses with `501 sandbox_identity_unsupported`. The
+  sandbox request carries the job's tenant and no caller, so the text would run past the submitter's
+  row-level security.
 
 `ProvisionIfMissing` creates the slot when the caller passes
 `OrchestratorObjectAuthorizationService.CanCreate`. The slot is an enabled job with no schedule and
@@ -367,7 +372,8 @@ and still records `FAILURE` with a cancellation message. Who submitted a run is 
 the life of the run, so after a restart only `MANAGE` can cancel it. A cancel for a run this node is
 not executing answers `409 not_running_here`; there is no cross-node signal.
 
-Refusals return `{ Code, Error }`: `job_not_provisioned`, `run_grant_denied`, `already_running`,
+Refusals return `{ Code, Error }`: `not_a_run_slot`, `sandbox_identity_unsupported`,
+`job_not_provisioned`, `run_grant_denied`, `already_running`,
 `node_overloaded`, `not_started`, `cancel_denied`, `run_already_finished`, `not_running_here`,
 `schedule_grant_denied`, `invalid_schedule`, `job_changed`.
 
