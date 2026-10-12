@@ -602,7 +602,7 @@ Completed prerequisites: [ST20 practice execution decision](docs/architecture/de
 
 **Horizon:** Next
 
-- [ ] **ST23 — Portal keyboard editing journey.** Create, edit, undo, and save one permitted document using only the
+- [x] **ST23 — Portal keyboard editing journey.** Create, edit, undo, and save one permitted document using only the
   keyboard; verify modal/tab navigation and focus return. (Size: M)
 - [ ] **ST24 — Desktop keyboard editing journey.** Prove the same sequence in the self-installed host. (Size: M)
 - [ ] **ST25 — Keyboard visual move/resize.** Provide or verify non-drag controls for one visual and persist its resulting
