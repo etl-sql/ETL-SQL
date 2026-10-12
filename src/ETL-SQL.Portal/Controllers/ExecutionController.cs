@@ -233,9 +233,10 @@ public class ExecutionController(
         if (report is null) return null;
         if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var scriptPath))
             return null;
-        if (!await ReportIdentitySensitivity.IsSensitiveAsync(scriptPath, HttpContext.RequestAborted)) return null;
+        if (!await ReportIdentitySensitivity.IsRunLiveAsync(scriptPath, HttpContext.RequestAborted)) return null;
 
         if (await GetEffectiveReportPermissionAsync(report) is null) return Forbid();
+        if (!ReportIdentitySensitivity.CallerMayRunByReading(User)) return Forbid();
 
         var svc = await GetOrRebuildSessionAsync(id, scriptPath);
         var manifest = await svc.GetManifestAsync(HttpContext.RequestAborted);
@@ -244,7 +245,9 @@ public class ExecutionController(
     }
 
     // ── 2.2b  POST /api/reports/{id}/live/reset ──────────────────────────────
-    // Discards the caller's own session, so their next view runs the report again.
+    // Runs the report again in the caller's own session. The session is kept and rebuilt in place:
+    // its lock makes repeated resets wait their turn, where discarding it would let each one start
+    // another run beside the last.
 
     [HttpPost("reports/{id:int}/live/reset")]
     public async Task<IActionResult> ResetLiveSession(int id)
@@ -252,8 +255,15 @@ public class ExecutionController(
         var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
         if (await GetEffectiveReportPermissionAsync(report) is null) return Forbid();
+        if (!ReportIdentitySensitivity.CallerMayRunByReading(User)) return Forbid();
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var scriptPath))
+            return Forbid();
+        // Only a report shown live has a session to run again; any other is refreshed through its run.
+        if (!await ReportIdentitySensitivity.IsRunLiveAsync(scriptPath, HttpContext.RequestAborted))
+            return Conflict(new { error = "This report is not shown live. Refresh it instead." });
 
-        await sessions.InvalidateUserAsync(id, CurrentUserId, _datasetScope.TenantId);
+        var svc = await GetOrRebuildSessionAsync(id, scriptPath);
+        await svc.RebuildAsync(HttpContext.RequestAborted);
         return NoContent();
     }
 

@@ -170,6 +170,30 @@ API:
 | §5 export | `…EachReadersCsvHoldsOnlyTheirRows` |
 | §6 nothing on disk | `RowLevelSecurityPortalTests.IdentitySensitiveReport_PersistsNoSharedSnapshot_PlainReportDoes` |
 
+Changed after an independent review of the first build (2026-10-12):
+
+- **A rewritten script ends its sessions.** A session is also bound to its script file's last-write
+  time and length. Without that, an author who tightened a filter and saved did not reach a reader
+  who kept the report open, because no snapshot run exists to end these sessions.
+  `RowLevelSecurityLiveViewTests.ARepublishedScriptAppliesToAReaderWhoAlreadyHasItOpen`.
+- **A service account needs `reports.execute`.** "Read is enough" is for people. A service-account
+  token with only `portal.read` could not run a report before, and is refused the live manifest,
+  export and reset. `…AServiceAccountNeedsTheExecuteScopeToRunTheReport`. This narrows the owner's
+  Read decision for service accounts only and is the owner's to confirm.
+- **Refresh rebuilds the session in place.** `live/reset` runs the report again inside the caller's
+  existing session, behind its lock, and answers 409 for a report that is not shown live.
+  Discarding the session let repeated resets each start another run beside the last.
+  `…ResetRunsTheReportAgainForTheCallerOnly`.
+- **A script that is gone is not run live.** A missing file is left to the snapshot path, so an
+  ordinary report whose script was removed still shows its snapshot. A file that exists and cannot
+  be read still counts as identity-sensitive.
+  `…AnOrdinaryReportIsStillServedFromItsSnapshot_EvenWithItsScriptGone`.
+- **A result the remote Orchestrator wrote is always deleted** for these runs, whether or not it
+  also returned one. That branch has no test.
+- Evidence added: an ungranted reader is refused export and parameter changes as well
+  (`…AReaderWithNoGrantIsRefused`), and a session with no identity returns no rows
+  (`…ASessionWithNoIdentityReturnsNoRows`).
+
 Differences from the design above:
 
 - `perViewer` is set on the single-report read only. List and catalog responses do not carry it;
@@ -183,6 +207,15 @@ Still open:
 - A live view writes no `VIEW_SNAPSHOT` entry and does not set the report's last-viewed time, so
   these reports never appear under Popular or Recently viewed on the library home.
 - Whether an identity reference reached only through an included script is detected was not checked.
+- Export still uses its older permission check (group grants on the folder). A folder owner with no
+  grant row, or a reader holding only a report-level grant, can open the live view and is refused
+  Export. It predates this work and applies to every report.
+- A failure while running live (a script error, a timeout, an unreadable file) answers 500 with no
+  reader-facing reason. The run job gave one.
+- Live runs are bounded per reader by their one session, but do not pass through the report job
+  queue or the tenant quota.
+- The live manifest does not carry the owner, steward and tag fields the snapshot manifest adds.
+- A reader's parameter state resets when their groups or roles change, on every report.
 
 ## Files expected to change
 

@@ -121,7 +121,7 @@ export function createReportViewer(options: ReportViewerOptions) {
         box('reportFrame').replaceChildren(frame);
     }
 
-    /** Discards this reader's own session, then shows the report again. Nothing is built or stored. */
+    /** Runs the report again for this reader, then shows it. Nothing is built or stored. */
     async function refreshLive(current: ViewerReport) {
         const opened = enter();
         report = current; runInputs = null;

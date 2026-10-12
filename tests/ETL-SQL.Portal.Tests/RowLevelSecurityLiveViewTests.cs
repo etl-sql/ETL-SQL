@@ -38,7 +38,8 @@ public sealed class RowLevelSecurityLiveViewTests : IClassFixture<PortalWebFacto
                     WHERE (Region = 'North' AND HAS_GROUP('{north}'))
                        OR (Region = 'South' AND HAS_GROUP('{south}')))
         );
-        CREATE PAGE [Main] AS DASHBOARD (LAYOUT (STRUCTURE = 'A', MAP ('A' = Detail)));
+        CREATE VISUAL Stamp AS TABLE (SOURCE = (SELECT CAST(NEWID() AS VARCHAR(40)) AS Token));
+        CREATE PAGE [Main] AS DASHBOARD (LAYOUT (STRUCTURE = 'A B', MAP ('A' = Detail, 'B' = Stamp)));
         """;
 
     [Fact]
@@ -97,6 +98,10 @@ public sealed class RowLevelSecurityLiveViewTests : IClassFixture<PortalWebFacto
             (await AuthGet(outsider, $"/api/reports/{seed.ReportId}/manifest")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await AuthPost(outsider, $"/api/reports/{seed.ReportId}/live/reset", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await AuthGet(outsider, $"/api/reports/{seed.ReportId}/export/csv")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await AuthPost(outsider, $"/api/reports/{seed.ReportId}/parameters", new { @params = Array.Empty<object>() })).StatusCode);
     }
 
     [Theory]
@@ -119,15 +124,108 @@ public sealed class RowLevelSecurityLiveViewTests : IClassFixture<PortalWebFacto
     }
 
     [Fact]
-    public async Task ResetDiscardsTheCallersSessionAndTheReportRunsAgain()
+    public async Task ResetRunsTheReportAgainForTheCallerOnly()
     {
         var seed = await SeedAsync(FolderPermission.Read);
-        Assert.Equal(new[] { 1, 2 }, await SaleIdsAsync(seed.NorthToken, seed.ReportId));
+        var first = await TokenAsync(seed.NorthToken, seed.ReportId);
+        var southFirst = await TokenAsync(seed.SouthToken, seed.ReportId);
+        // Without a reset the reader keeps the result of their one run.
+        Assert.Equal(first, await TokenAsync(seed.NorthToken, seed.ReportId));
 
         var reset = await AuthPost(seed.NorthToken, $"/api/reports/{seed.ReportId}/live/reset", new { });
 
         Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
+        Assert.NotEqual(first, await TokenAsync(seed.NorthToken, seed.ReportId));
         Assert.Equal(new[] { 1, 2 }, await SaleIdsAsync(seed.NorthToken, seed.ReportId));
+        Assert.Equal(southFirst, await TokenAsync(seed.SouthToken, seed.ReportId));
+    }
+
+    /// <summary>
+    /// The author tightens the filter and saves. A reader who already has the report open must get
+    /// the new filter on their next request: no snapshot run exists to end their session.
+    /// </summary>
+    [Fact]
+    public async Task ARepublishedScriptAppliesToAReaderWhoAlreadyHasItOpen()
+    {
+        var seed = await SeedAsync(FolderPermission.Read);
+        Assert.Equal(new[] { 1, 2 }, await SaleIdsAsync(seed.NorthToken, seed.ReportId));
+
+        // North's group no longer unlocks anything.
+        await File.WriteAllTextAsync(seed.ScriptPath, Script($"nobody_{Guid.NewGuid():N}", seed.SouthGroup));
+        File.SetLastWriteTimeUtc(seed.ScriptPath, DateTime.UtcNow.AddSeconds(5));
+
+        Assert.Empty(await SaleIdsAsync(seed.NorthToken, seed.ReportId));
+        Assert.Equal(new[] { 3, 4 }, await SaleIdsAsync(seed.SouthToken, seed.ReportId));
+    }
+
+    /// <summary>
+    /// For a service account, reading does not include running. A token with only the read scope
+    /// could not run a report before these reports were shown live, and still cannot.
+    /// </summary>
+    [Theory]
+    [InlineData(new[] { "portal.read" }, HttpStatusCode.Forbidden)]
+    [InlineData(new[] { "portal.read", "reports.execute" }, HttpStatusCode.OK)]
+    public async Task AServiceAccountNeedsTheExecuteScopeToRunTheReport(string[] scopes, HttpStatusCode expected)
+    {
+        var seed = await SeedAsync(FolderPermission.Read);
+        // Owned by the north reader, so it acts with that reader's Read grant.
+        var token = await ServiceTokenAsync(scopes, seed.NorthUserId);
+
+        Assert.Equal(expected, (await AuthGet(token, $"/api/reports/{seed.ReportId}/manifest")).StatusCode);
+        Assert.Equal(expected, (await AuthGet(token, $"/api/reports/{seed.ReportId}/export/csv")).StatusCode);
+    }
+
+    [Fact]
+    public async Task ASessionWithNoIdentityReturnsNoRows()
+    {
+        var seed = await SeedAsync(FolderPermission.Read);
+        var sessions = _factory.Services.GetRequiredService<ETL_SQL.Portal.Services.SessionCache>();
+
+        var manifest = await sessions.GetOrCreate(seed.ReportId, userId: int.MaxValue, seed.ScriptPath, executionIdentity: null)
+            .GetManifestAsync();
+
+        var detail = manifest.Visuals.Single(visual => visual.Name == "Detail");
+        Assert.Empty(detail.Rows);
+    }
+
+    [Fact]
+    public async Task AnOrdinaryReportIsStillServedFromItsSnapshot_EvenWithItsScriptGone()
+    {
+        var admin = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var folderId = await CreateFolderAsync($"Plain snap {suffix}");
+        var stem = $"plain_snap_{suffix}";
+        var reportId = await CreateReportAsync(folderId, stem,
+            "CREATE VISUAL P AS TABLE (SOURCE = (SELECT 4242 AS Answer));");
+
+        var accepted = await AuthPost(admin, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
+        Assert.Equal(HttpStatusCode.Accepted, accepted.StatusCode);
+        var jobId = (await accepted.Content.ReadFromJsonAsync<JsonObject>(_json))!["jobId"]!.GetValue<string>();
+        for (var attempt = 0; ; attempt++)
+        {
+            var job = await (await AuthGet(admin, $"/api/jobs/{jobId}")).Content.ReadFromJsonAsync<JsonObject>(_json);
+            var status = job!["status"]!.GetValue<string>();
+            if (status == "Completed") break;
+            Assert.True(status is not ("Failed" or "Cancelled") && attempt < 300, $"The run ended as {status}.");
+            await Task.Delay(200);
+        }
+
+        var report = await (await AuthGet(admin, $"/api/reports/{reportId}")).Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.False(report!["perViewer"]!.GetValue<bool>());
+        Assert.True(report["hasSnapshot"]!.GetValue<bool>());
+        Assert.Equal(HttpStatusCode.OK, (await AuthGet(admin, $"/api/reports/{reportId}/manifest")).StatusCode);
+        Assert.Contains("4242", await (await AuthGet(admin, $"/api/reports/{reportId}/export/csv")).Content.ReadAsStringAsync());
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            Assert.Equal(1, await db.ReportSnapshots.CountAsync(s => s.ReportId == reportId));
+            Assert.False(await db.AuditLogs.AnyAsync(a => a.Action == "VIEW_REPORT_LIVE" && a.ResourceId == reportId.ToString()));
+        }
+
+        // A script that is gone cannot be run for anyone; the snapshot is still what there is to show.
+        File.Delete(Path.Combine(_factory.TempDir, "scripts", $"{stem}.rptsql"));
+        Assert.Equal(HttpStatusCode.OK, (await AuthGet(admin, $"/api/reports/{reportId}/manifest")).StatusCode);
+        Assert.Contains("4242", await (await AuthGet(admin, $"/api/reports/{reportId}/export/csv")).Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -172,7 +270,8 @@ public sealed class RowLevelSecurityLiveViewTests : IClassFixture<PortalWebFacto
     // ── helpers ────────────────────────────────────────────────────────────────
 
     private sealed record Seed(
-        int ReportId, int FolderId, string NorthToken, string SouthToken, int NorthUserId, int NorthGroupId);
+        int ReportId, int FolderId, string NorthToken, string SouthToken, int NorthUserId, int NorthGroupId,
+        string ScriptPath, string SouthGroup);
 
     /// <summary>
     /// One identity-filtered report in its own folder, and two Viewers, each in one region group
@@ -214,7 +313,42 @@ public sealed class RowLevelSecurityLiveViewTests : IClassFixture<PortalWebFacto
             reportId, folderId,
             await LoginWithRequiredChangeAsync(northName, "North@Test1!", "North@Test2!"),
             await LoginWithRequiredChangeAsync(southName, "South@Test1!", "South@Test2!"),
-            northUserId, northGroupId);
+            northUserId, northGroupId,
+            Path.Combine(_factory.TempDir, "scripts", $"rls_live_{suffix}.rptsql"), southGroup);
+    }
+
+    /// <summary>The value the caller's last run of the report produced; a new run produces a new one.</summary>
+    private async Task<string> TokenAsync(string token, int reportId)
+    {
+        var response = await AuthGet(token, $"/api/reports/{reportId}/manifest");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"{(int)response.StatusCode}: {body}");
+        var stamp = JsonNode.Parse(body)!["visuals"]!.AsArray()
+            .Single(visual => visual!["name"]!.GetValue<string>() == "Stamp")!;
+        return stamp["rows"]!.AsArray().Single()![0]!.ToString();
+    }
+
+    /// <summary>A token for a new service account owned by this user, holding exactly these scopes.</summary>
+    private async Task<string> ServiceTokenAsync(string[] scopes, int ownerId)
+    {
+        var admin = await GetAdminTokenAsync();
+        var created = await AuthPost(admin, "/api/admin/service-accounts", new
+        {
+            name = $"live-{Guid.NewGuid().ToString("N")[..6]}",
+            ownerUserId = ownerId,
+            scopes,
+            roles = new[] { "Viewer" },
+            expiresAt = DateTime.UtcNow.AddHours(1)
+        });
+        var body = await created.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.True(created.IsSuccessStatusCode, body?.ToJsonString());
+        var exchange = await _client.PostAsJsonAsync("/api/auth/service-token", new
+        {
+            clientId = body!["account"]!["clientId"]!.GetValue<string>(),
+            clientSecret = body["clientSecret"]!.GetValue<string>()
+        });
+        Assert.Equal(HttpStatusCode.OK, exchange.StatusCode);
+        return (await exchange.Content.ReadFromJsonAsync<JsonObject>(_json))!["accessToken"]!.GetValue<string>();
     }
 
     /// <summary>The SaleID values the caller's Detail table holds, sorted.</summary>

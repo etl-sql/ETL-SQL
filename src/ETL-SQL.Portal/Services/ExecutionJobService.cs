@@ -570,17 +570,16 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                             if (!identitySensitive)
                                 await SaveSnapshotManifestAsync(manifest, manifestKey, job.KeyScope, cts.Token);
                         }
-                        else if (identitySensitive)
-                        {
-                            // The Orchestrator may have written the result to the shared volume itself.
-                            await _snapshotPackages.DeleteAsync(manifestKey, cts.Token, job.KeyScope);
-                        }
-                        else if (!await _snapshotPackages.ExistsAsync(
+                        else if (!identitySensitive && !await _snapshotPackages.ExistsAsync(
                             manifestKey, cts.Token, job.KeyScope))
                         {
                             throw new InvalidOperationException(
                                 "Remote orchestrator completed the report without returning or writing a snapshot manifest.");
                         }
+                        // The Orchestrator may have written the result to the shared volume itself,
+                        // whether or not it also returned one.
+                        if (identitySensitive)
+                            await _snapshotPackages.DeleteAsync(manifestKey, cts.Token, job.KeyScope);
                         break;
                     }
                     if (status.Status == JobRunStatus.Failed) throw new Exception(status.ErrorMessage ?? "Remote job failed.");

@@ -38,9 +38,11 @@ WHERE HAS_GROUP('Region:' + r.RegionCode);   -- membership test, not a substring
   so one user's filtered rows can never be served to another. From v0.21.0 these reports are shown
   live: opening one in the Portal runs it for that reader, under their identity, and nothing is
   stored. Read on the folder is enough to open one, so for these reports a Read-only reader causes
-  a run. **Refresh** discards that reader's own session and runs it again. Filters, saved views,
+  a run. **Refresh** runs it again for that reader only. Filters, saved views,
   export and subscriptions each produce that person's own rows. A reader's session is reused until
-  it idles out, they press Refresh, the report is republished, or their groups or roles change.
+  it idles out, they press Refresh, the report's script is saved again, or their groups or roles
+  change. A service account is different: it needs the `reports.execute` scope to open or export
+  one of these reports, because doing so runs it.
 - **Predicate integrity depends on report change control.** RLS lives in the report's SQL, so the
   existing publish-permission and published-hash checks are what prevent an author from removing the
   filter. Treat edit/publish rights on RLS reports accordingly.

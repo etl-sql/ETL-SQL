@@ -64,8 +64,10 @@ public class ExportController(
         // A report whose rows depend on the viewer has no snapshot. Export what this caller sees:
         // their own session, under their identity, with their current parameters. Nothing is kept.
         if (PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var scriptPath)
-            && await ReportIdentitySensitivity.IsSensitiveAsync(scriptPath, HttpContext.RequestAborted))
+            && await ReportIdentitySensitivity.IsRunLiveAsync(scriptPath, HttpContext.RequestAborted))
         {
+            if (!ReportIdentitySensitivity.CallerMayRunByReading(User))
+                return (null, "Running this report needs the reports.execute scope", true);
             var identity = await identities.BuildAsync(
                 CurrentUserId, _datasetScope.TenantId, IsAdmin, impersonatedUserId: null, HttpContext.RequestAborted);
             var svc = sessions.GetOrCreate(

@@ -15,7 +15,7 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
 {
     private readonly record struct SessionKey(string TenantId, int ReportId, int UserId);
 
-    private readonly record struct Entry(DashboardService Service, string ScriptPath, string CallerContext, string IdentityKey)
+    private readonly record struct Entry(DashboardService Service, string ScriptPath, string CallerContext, string IdentityKey, string ScriptStamp)
     {
         public DateTime LastAccess { get; init; } = DateTime.UtcNow;
         public Entry Touch() => this with { LastAccess = DateTime.UtcNow };
@@ -51,6 +51,7 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
             ? $"UserId={userId};IsAdmin=true"
             : $"UserId={userId}";
         var identityKey = IdentityKey(executionIdentity);
+        var scriptStamp = ScriptStamp(scriptPath);
 
         while (true)
         {
@@ -58,15 +59,17 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
             {
                 // A session is reusable only for the same script, caller context *and* identity —
                 // a role change must not keep serving through a previously admin-elevated session,
-                // and rows filtered for one set of groups must not answer for another.
+                // and rows filtered for one set of groups must not answer for another. The script is
+                // the same only while the file is: a report shown live has no snapshot run to end
+                // its sessions on republish, so a rewritten script must not keep its old answers.
                 if (existing.ScriptPath == scriptPath && existing.CallerContext == callerContext
-                    && existing.IdentityKey == identityKey)
+                    && existing.IdentityKey == identityKey && existing.ScriptStamp == scriptStamp)
                 {
                     _sessions.TryUpdate(key, existing.Touch(), existing); // best-effort LRU touch
                     return existing.Service;
                 }
 
-                var replacement = CreateEntry(reportId, scriptPath, callerContext, keyScope, executionIdentity, identityKey);
+                var replacement = CreateEntry(reportId, scriptPath, callerContext, keyScope, executionIdentity, identityKey, scriptStamp);
                 if (_sessions.TryUpdate(key, replacement, existing))
                 {
                     _ = existing.Service.DisposeAsync();
@@ -79,7 +82,7 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
                 continue;
             }
 
-            var entry = CreateEntry(reportId, scriptPath, callerContext, keyScope, executionIdentity, identityKey);
+            var entry = CreateEntry(reportId, scriptPath, callerContext, keyScope, executionIdentity, identityKey, scriptStamp);
             if (_sessions.TryAdd(key, entry))
             {
                 Evict();
@@ -93,7 +96,7 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
 
     private Entry CreateEntry(
         int reportId, string scriptPath, string callerContext, string? keyScope,
-        ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity, string identityKey)
+        ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity, string identityKey, string scriptStamp)
     {
         var timeout = TimeSpan.FromSeconds(Math.Max(1, _config.Resources.ExecutionTimeoutSeconds));
         var svc = new DashboardService(
@@ -105,7 +108,21 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
             _config.KeyManagement.Enabled ? null : _config.Dataset.AtRestKey,
             executionIdentity: executionIdentity,
             keyScope: keyScope);
-        return new Entry(svc, scriptPath, callerContext, identityKey);
+        return new Entry(svc, scriptPath, callerContext, identityKey, scriptStamp);
+    }
+
+    /// <summary>The script file as it is now: when it was last written and how long it is.</summary>
+    private static string ScriptStamp(string scriptPath)
+    {
+        try
+        {
+            var file = new FileInfo(scriptPath);
+            return file.Exists ? $"{file.LastWriteTimeUtc.Ticks}:{file.Length}" : string.Empty;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return string.Empty;
+        }
     }
 
     /// <summary>

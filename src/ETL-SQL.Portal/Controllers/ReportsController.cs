@@ -551,7 +551,7 @@ public class ReportsController : ControllerBase
         var isFavorite = await catalogScope.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == report.Id);
         OptimisticConcurrency.SetETag(Response, report.Version);
         var perViewer = PortalPathGuard.TryResolveScript(portalConfig, datasetScope.TenantId, report.ScriptPath, out var scriptPath)
-            && await ReportIdentitySensitivity.IsSensitiveAsync(scriptPath, HttpContext.RequestAborted);
+            && await ReportIdentitySensitivity.IsRunLiveAsync(scriptPath, HttpContext.RequestAborted);
         return Ok(ToDto(report, report.Snapshots.FirstOrDefault(), isFavorite, perViewer));
     }
 
