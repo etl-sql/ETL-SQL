@@ -23,7 +23,7 @@ and scale baseline recalibration).
 | Studio — Unified authoring experience & completeness criteria (assessed; gaps routed to §3–§5) | [§2](#2-studio--unified-authoring-experience-and-completeness-criteria) |
 | Studio — Portal pipelines & schedule handoffs (ST04–ST11 complete; open points recorded per item) | [§3](#3-studio--portal-pipelines-and-schedule-handoffs) |
 | Studio — Private unpublished drafts & publishing (ST12–ST15 complete; open points recorded per item) | [§4](#4-studio--private-unpublished-drafts-and-publishing) |
-| Studio — Author, reader & beginner practice journeys (ST16–ST18, ST21 complete; ST19 blocked on a decision; ST16b, ST21b open) | [§5](#5-studio--author-reader-and-beginner-practice-journeys) |
+| Studio — Author, reader & beginner practice journeys (ST16–ST19, ST21 complete; ST16b, ST21b open) | [§5](#5-studio--author-reader-and-beginner-practice-journeys) |
 | Studio — Keyboard & assistive technology | [§6](#6-studio--keyboard-and-assistive-technology) |
 | Studio — Execution scope, cancellation & helper previews | [§7](#7-studio--execution-scope-cancellation-and-bounded-helper-previews) |
 | Studio — Degraded editor & failed session recovery | [§8](#8-studio--degraded-editor-and-failed-session-recovery) |
@@ -705,14 +705,22 @@ Completed prerequisites: [ST20 practice execution decision](docs/architecture/de
   [Evidence](docs/architecture/decisions/studio-reader-journey-evidence.md).
   Found on the way: a Portal reader could not save a view at all. The report frame never loaded the feedback
   module, so *Save current view as…* threw. Fixed.
-- [ ] **ST19 — Second-identity RLS journey.** Two ordinary identities open the same report and receive their expected
+- [x] **ST19 — Second-identity RLS journey.** Two ordinary identities open the same report and receive their expected
   disjoint rows, including preview/data/export paths that the chosen report exposes. No new RLS model.
   (Depends on: ST18; Size: M)
-  Blocked 2026-10-12 on an owner decision. The journey is written and fails: a row-level-secured report cannot
-  be viewed in the Portal UI by anyone. It keeps no shared snapshot (correct), and the viewer, its interactive
-  session and export all read only snapshots, so a reader who runs it is returned to *Ready for first run*.
-  Nothing leaks; every path fails closed. How a viewer receives their own result is a security-boundary
-  decision. [Finding](docs/architecture/decisions/studio-reader-journey-evidence.md#st19-two-identities-one-report).
+  Done 2026-10-12. `PortalReaderJourneyTests.TwoReadersOfOneReportEachSeeOnlyTheirOwnRows`, real Chromium: two
+  Viewers holding only Read, in different groups, each see exactly their rows on opening, after a parameter
+  change, in a reopened saved view, in the exported CSV and after Refresh; a row in neither group reaches
+  neither; one subscribes. `RowLevelSecurityLiveViewTests` covers a reader removed from a group, a reader with no
+  grant, the administrator bypass and nothing stored.
+  [Evidence](docs/architecture/decisions/studio-reader-journey-evidence.md#st19-two-identities-one-report).
+  Found on the way: a row-level-secured report could not be viewed in the Portal UI by anyone. It keeps no
+  shared snapshot (correct) and the viewer, its session and export read only snapshots. Owner decisions
+  2026-10-12: show it live from the reader's own session with nothing stored, Read is enough to open it, and
+  Subscribe is offered ([design and as built](docs/architecture/decisions/portal-rls-report-viewing.md)).
+  A run of such a report also left one reader's rows in snapshot storage with nothing to prune them; fixed.
+  Open: these reports never appear under Popular or Recently viewed, list responses do not say a report is
+  per viewer, and detection through an included script is unchecked.
 - [x] **ST21 — Portal beginner ETL exercise.** Run the deliberate ASSERT failure, repair it, check expected rows and
   cleanup under the agreed practice identity; use no external service. (Depends on: ST20, ST04; Size: M)
   Done 2026-10-12 on the Orchestrator's in-process executor, by owner decision (ST20 amended).

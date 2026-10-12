@@ -449,7 +449,8 @@ with `cascade=true`, which disables active subscriptions; attached refresh jobs 
 | POST | `/api/reports/{id}/execute` | Any | Start execution job |
 | GET | `/api/jobs/{jobId}` | Any | Poll job status |
 | GET | `/api/reports/{id}/snapshot` | Any | Get snapshot JSON |
-| GET | `/api/reports/{id}/manifest` | Any | Get current manifest JSON |
+| GET | `/api/reports/{id}/manifest` | Any | Get current manifest JSON. For a report that reads the viewer's identity this runs it in the caller's own session, under their identity, stores nothing, and is audited as `VIEW_REPORT_LIVE` |
+| POST | `/api/reports/{id}/live/reset` | Any | Discard the caller's own live session for the report (204) |
 | GET | `/api/reports/{id}/snapshot/manifest` | Any | Get snapshot manifest |
 | POST | `/api/reports/{id}/refresh` | Any | Rebuild snapshot |
 | POST | `/api/reports/{id}/parameter` | Any | Set one parameter value |

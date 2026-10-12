@@ -107,6 +107,7 @@ ST10 landed on 2026-10-12: a Publisher submits, follows and stops a saved Portal
 Orchestrator ([as built](portal-etl-documents.md#5-slice-2-as-built-2026-10-12)). ST21’s
 [practice exercise](studio-portal-practice-evidence.md) and ST18’s
 [reader journey](studio-reader-journey-evidence.md) passed the same day. ST21 ran on the in-process
-executor; the sandbox executor path is still unproven and is ST21b. ST19 is blocked: a
-row-level-secured report cannot yet be viewed in the Portal. The inventories name supplemental work, including editor assistance and
+executor; the sandbox executor path is still unproven and is ST21b. ST19 passed after a fix: a
+row-level-secured report could not be viewed in the Portal at all, and is now shown live to each
+reader ([design](portal-rls-report-viewing.md)). The inventories name supplemental work, including editor assistance and
 guided paginated parameter binding, that needs its own sizing before implementation.

@@ -35,8 +35,12 @@ WHERE HAS_GROUP('Region:' + r.RegionCode);   -- membership test, not a substring
   `@@CURRENT_USER` is null, so a well-formed predicate returns **no rows** rather than leaking all rows.
 - **No shared snapshot.** A report that references any identity primitive is automatically treated as
   identity-sensitive: it is executed per viewer and its result is **never** cached as a shared snapshot,
-  so one user's filtered rows can never be served to another. These reports run fresh on each view
-  rather than from the snapshot cache.
+  so one user's filtered rows can never be served to another. From v0.21.0 these reports are shown
+  live: opening one in the Portal runs it for that reader, under their identity, and nothing is
+  stored. Read on the folder is enough to open one, so for these reports a Read-only reader causes
+  a run. **Refresh** discards that reader's own session and runs it again. Filters, saved views,
+  export and subscriptions each produce that person's own rows. A reader's session is reused until
+  it idles out, they press Refresh, the report is republished, or their groups or roles change.
 - **Predicate integrity depends on report change control.** RLS lives in the report's SQL, so the
   existing publish-permission and published-hash checks are what prevent an author from removing the
   filter. Treat edit/publish rights on RLS reports accordingly.

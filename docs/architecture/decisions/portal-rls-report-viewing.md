@@ -1,6 +1,6 @@
 # Viewing Row-Level-Secured Reports in the Portal
 
-**Status:** decided with the owner 2026-10-12. Nothing here is built yet.
+**Status:** decided with the owner and built 2026-10-12. Evidence is listed [below](#as-built).
 **Owner decisions:** rows are produced live per viewer and not stored; Read on the folder is enough
 to open such a report; Subscribe is offered for these reports in this slice.
 **Task:** ST19. **Parent:** [Row-level security](row-level-security.md).
@@ -154,6 +154,35 @@ API:
 9. A report that does not read identity behaves exactly as before: snapshot, first-run gate, export.
 10. A reader subscribes from the live view. One delivery to two recipients in different groups
     produces, for each, an export holding only that recipient's rows.
+
+## As built
+
+| Evidence item | Test |
+| --- | --- |
+| 1, 2, 3, 4, and Subscribe from the live view | `PortalReaderJourneyTests.TwoReadersOfOneReportEachSeeOnlyTheirOwnRows` (real Chromium, two Viewers holding Read) |
+| 1, 3, 4 at the API, and the `VIEW_REPORT_LIVE` audit entry | `RowLevelSecurityLiveViewTests.EachReaderGetsOnlyTheirRows_WithReadAlone_AndNothingIsStored` |
+| 5 | `…AReaderWithNoGrantIsRefused`; every reader in that class holds Read only |
+| 6 | `…AReaderRemovedFromTheirGroupGetsNoRowsOnTheNextRequest`, `SessionCacheTests.GetOrCreate_GroupRemoved_ReplacesTheSession` |
+| 7 | `PortalExecutionIdentityServiceTests.AnUnknownUserHasNoIdentity`; the engine returns no rows without one |
+| 8 | `…AnAdministratorFollowsTheBypassSetting` |
+| 9 | `…AnOrdinaryReportStillHasNoManifestUntilItHasASnapshot`, and the unchanged viewer, export and library suites |
+| 10 | `SubscriptionDeliverySecurityTests.RlsReport_DeliveredToTwoRecipients_RunsOncePerRecipientUnderEachIdentity` |
+| §5 export | `…EachReadersCsvHoldsOnlyTheirRows` |
+| §6 nothing on disk | `RowLevelSecurityPortalTests.IdentitySensitiveReport_PersistsNoSharedSnapshot_PlainReportDoes` |
+
+Differences from the design above:
+
+- `perViewer` is set on the single-report read only. List and catalog responses do not carry it;
+  they would have to read every script.
+- Item 10 proves one run per recipient under that recipient's identity. It does not open the two
+  exported files; that identity filters rows is the engine's, covered by `RowLevelSecurityIdentityTests`.
+- Item 7 is proven in two halves, not as one request.
+
+Still open:
+
+- A live view writes no `VIEW_SNAPSHOT` entry and does not set the report's last-viewed time, so
+  these reports never appear under Popular or Recently viewed on the library home.
+- Whether an identity reference reached only through an included script is detected was not checked.
 
 ## Files expected to change
 

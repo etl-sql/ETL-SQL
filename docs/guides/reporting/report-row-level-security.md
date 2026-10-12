@@ -133,6 +133,7 @@ CREATE PAGE Main AS DASHBOARD (
 ## Common Pitfalls
 
 - **Admin Bypass Configuration**: By default, adding `OR @@IS_ADMIN = TRUE` allows platform administrators to see all rows. If your organization's compliance policy mandates that admins are subject to identical RLS filters, omit `OR @@IS_ADMIN = TRUE` and set `Portal:Security:AdminBypassRowLevelSecurity = false` in `appsettings.json`.
+- **How readers see the report**: A report that reads the viewer's identity has no shared snapshot. In the Portal it opens live, labelled **Live · your rows**, and each reader's filters, saved views, export and subscription deliveries carry only their own rows.
 - **Filtering in Tier 2 `#temp` tables**: If you filter by `@@CURRENT_USER` during initial `#temp` table creation, that `#temp` table will be scoped only to the user who triggered the report snapshot. When sharing pre-built snapshots across multiple users, perform RLS filtering in the visual's `SOURCE = (SELECT ...)` query.
 
 ---

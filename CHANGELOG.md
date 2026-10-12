@@ -140,6 +140,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Show a row-level-secured report in the Portal. A report that filters rows by the viewer keeps no
+  shared snapshot, and the viewer, its filters and export all read only snapshots, so a reader who
+  ran one was returned to "Ready for first run". These reports now open live, labelled
+  **Live · your rows**: each reader's rows are produced under their own identity and nothing is
+  stored. Filters, saved views, export and **Subscribe** work from that same result, and Read on
+  the folder is enough to open one. A run of such a report no longer leaves its rows in snapshot
+  storage, where nothing pruned them.
 - Read a scalar subquery again after the data it reads has changed. A subquery repeated later in
   the same script answered from its first evaluation, so `ASSERT (SELECT COUNT(*) FROM #t) = 3`,
   an `INSERT`, then the same subquery still returned 3, and a count taken after `DROP TABLE`
