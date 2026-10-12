@@ -55,7 +55,6 @@ public sealed class StudioPrivateDraftJourneyTests(PortalJourneyFixture fixture)
                 null, new() { Timeout = 20_000 });
             var draftId = await page.EvaluateAsync<int>($"() => {ActiveDraft}.privateDraftId");
             Assert.Equal(1, await page.EvaluateAsync<int>($"() => {ActiveDraft}.version"));
-            await Expect(page.Locator("[data-action='publish']")).ToBeDisabledAsync();
 
             // Edit and save again: the same draft takes a second version.
             var edited = await page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()") + "\n-- a second thought\n";
@@ -222,6 +221,125 @@ public sealed class StudioPrivateDraftJourneyTests(PortalJourneyFixture fixture)
         Assert.Null(stored.UnsavedContent);
         Assert.DoesNotContain("hunter2", stored.Content);
         Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AnAuthorPublishesAPrivateDraftAndALearnerCannot()
+    {
+        // An ordinary author: a Publisher who owns one folder. No administrator signs in.
+        var author = await CreateAuthorAsync();
+        var name = $"Published {Guid.NewGuid():N}"[..20];
+        await using (var session = await fixture.NewSessionAsync())
+        {
+            var page = session.Page;
+            await SignInAsync(page, author.UserName);
+            await page.GotoAsync("/studio.html");
+
+            // The sample dashboard opens unsaved. Save offers the catalog or a private draft.
+            await page.Locator("[data-create-from-home='dashboard'][data-seed-sample]").ClickAsync();
+            await page.WaitForFunctionAsync($"() => {ActiveDraft}?.path?.startsWith('untitled_dashboard')", null, new() { Timeout = 20_000 });
+            await page.EvaluateAsync("() => window.__STUDIO__.setProjection('code')");
+            await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__.state.editorInstance)", null, new() { Timeout = 20_000 });
+            await page.Locator("[data-action='save']").ClickAsync();
+            var choice = page.Locator(".etlsql-feedback-dialog", new() { HasText = "keep it as a private draft" });
+            await choice.Locator(".etlsql-feedback-btn", new() { HasText = "Keep Private Draft" }).ClickAsync();
+            var prompt = page.Locator(".etlsql-feedback-dialog", new() { HasText = "Only you can open a private draft" });
+            await prompt.Locator("input").FillAsync(name);
+            await prompt.Locator(".etlsql-feedback-btn-primary").ClickAsync();
+            await page.WaitForFunctionAsync($"() => {ActiveDraft}?.privateDraftId > 0 && {ActiveDraft}.isDirty === false",
+                null, new() { Timeout = 20_000 });
+            var draftId = await page.EvaluateAsync<int>($"() => {ActiveDraft}.privateDraftId");
+
+            // Edit without saving, then publish: the edit is saved to the draft first, as version 2.
+            await page.EvaluateAsync(
+                "edit => { const editor = window.__STUDIO__.state.editorInstance; editor.replaceAll(editor.getValue() + '\\n' + edit + '\\n'); }", Edit);
+            await page.WaitForFunctionAsync($"() => {ActiveDraft}.isDirty === true", null, new() { Timeout = 15_000 });
+            await page.Locator("[data-action='publish']").ClickAsync();
+            var nameInput = page.Locator("[data-catalog-report-name]");
+            await Expect(nameInput).ToHaveValueAsync(name, new() { Timeout = 15_000 });
+            var draft = await StoredDraftAsync(draftId);
+            Assert.Equal(2, draft.Version);
+            Assert.Contains(Edit, draft.Content);
+            await page.Locator("[data-catalog-report-folder]").SelectOptionAsync(author.FolderId.ToString());
+            await page.Locator("[data-catalog-create-confirm]").ClickAsync();
+            await page.WaitForFunctionAsync($"() => {ActiveDraft}?.reportId > 0 && !{ActiveDraft}.privateDraftId && {ActiveDraft}.lease?.acquired === true",
+                null, new() { Timeout = 20_000 });
+            var reportId = await page.EvaluateAsync<int>($"() => {ActiveDraft}.reportId");
+
+            // One catalog document in the author's folder; the draft and its saves are gone; the
+            // audit trail names both saved versions.
+            using (var scope = fixture.Factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                var report = await db.Reports.AsNoTracking().SingleAsync(item => item.Id == reportId);
+                Assert.Equal(name, report.Name);
+                Assert.Equal(author.FolderId, report.FolderId);
+                Assert.Equal(author.UserId, report.CreatedBy);
+                Assert.False(await db.StudioPrivateDrafts.AnyAsync(item => item.Id == draftId));
+                Assert.False(await db.StudioPrivateDraftRevisions.AnyAsync(item => item.DraftId == draftId));
+                var entry = await db.AuditLogs.AsNoTracking().SingleAsync(log =>
+                    log.Action == "PUBLISH_PRIVATE_DRAFT" && log.ResourceId == reportId.ToString());
+                Assert.Contains($"draft={draftId}", entry.Detail);
+                Assert.Contains("v1@", entry.Detail);
+                Assert.Contains("v2@", entry.Detail);
+            }
+
+            // It is now an ordinary catalog document: it saves as one, and reopens with the text.
+            await page.EvaluateAsync(
+                "() => { const editor = window.__STUDIO__.state.editorInstance; editor.replaceAll(editor.getValue() + '\\n-- after publishing\\n'); }");
+            await page.WaitForFunctionAsync($"() => {ActiveDraft}.isDirty === true", null, new() { Timeout = 15_000 });
+            await page.Locator("[data-action='save']").ClickAsync();
+            await page.WaitForFunctionAsync($"() => {ActiveDraft}.isDirty === false && {ActiveDraft}.version === 2",
+                null, new() { Timeout = 15_000 });
+            await page.GotoAsync($"/studio.html?reportId={reportId}");
+            await page.WaitForFunctionAsync(
+                "edit => { const editor = window.__STUDIO__?.state?.editorInstance; return Boolean(editor) && editor.getValue().includes(edit) && editor.getValue().includes('-- after publishing'); }",
+                Edit, new() { Timeout = 30_000 });
+            await Expect(page.Locator("[data-private-draft]")).ToHaveCountAsync(0);
+            Assert.Empty(session.PageErrors);
+        }
+
+        // A learner has no publish right. Publish says so and the draft stays as it was.
+        var learner = await CreateLearnerAsync();
+        await using var learnerSession = await fixture.NewSessionAsync();
+        var learnerPage = learnerSession.Page;
+        await SignInAsync(learnerPage, learner.UserName);
+        var learnerDraft = await KeepNewDraftAsync(learnerPage);
+        var before = await StoredDraftAsync(learnerDraft);
+        await learnerPage.Locator("[data-action='publish']").ClickAsync();
+        await Expect(learnerPage.Locator(".etlsql-feedback-toast", new() { HasText = "Publish Restricted" }))
+            .ToBeVisibleAsync(new() { Timeout = 15_000 });
+        Assert.Equal(learnerDraft, await learnerPage.EvaluateAsync<int>($"() => {ActiveDraft}.privateDraftId"));
+        var after = await StoredDraftAsync(learnerDraft);
+        Assert.Equal(before.Version, after.Version);
+        Assert.Equal(before.Content, after.Content);
+        Assert.Empty(learnerSession.PageErrors);
+    }
+
+    private sealed record Author(string UserName, int UserId, int FolderId);
+
+    /// <summary>A Publisher who owns one folder. No administrative role.</summary>
+    private async Task<Author> CreateAuthorAsync()
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var user = new PortalUser
+        {
+            UserName = $"draftauthor_{suffix}",
+            Email = $"draftauthor_{suffix}@test.local",
+            IsActive = true,
+            MustChangePassword = false,
+            Provider = "Local"
+        };
+        var created = await users.CreateAsync(user, Password);
+        Assert.True(created.Succeeded, string.Join(", ", created.Errors.Select(error => error.Description)));
+        Assert.True((await users.AddToRoleAsync(user, "Publisher")).Succeeded);
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var folder = new Folder { Name = $"Drafts {suffix}", Path = $"/Drafts-{suffix}", OwnerId = user.Id };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+        return new Author(user.UserName, user.Id, folder.Id);
     }
 
     /// <summary>Creates a dashboard, keeps it as a private draft and leaves it open in the code view.</summary>

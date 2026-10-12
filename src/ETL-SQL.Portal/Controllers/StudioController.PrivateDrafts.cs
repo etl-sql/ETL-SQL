@@ -196,6 +196,47 @@ public sealed partial class StudioController
             : Ok(new StudioPrivateDraftRevisionDto(revision.Version, revision.SavedAt, revision.ContentHash, revision.Content));
     }
 
+    /// <summary>
+    /// Publishes a private draft as a catalog document through the catalog create action, with all
+    /// of its checks. The draft is removed in the same transaction that creates the document, so a
+    /// refusal or a failure leaves it exactly as it was.
+    /// </summary>
+    [HttpPost("private-drafts/{id:int}/publish")]
+    [RequireStudioCapability(StudioCapabilities.ScriptSave,
+        StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
+    [RequireStudioCapability(StudioCapabilities.ReportPublish,
+        StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
+    public async Task<ActionResult<StudioReportDto>> PublishPrivateDraft(
+        int id, [FromBody] PublishStudioPrivateDraftRequest request, CancellationToken ct)
+    {
+        var draft = await LivePrivateDraftAsync(id, tracking: true, ct);
+        if (draft is null) return PrivateDraftNotFound();
+        // What is published is the version the author is looking at, not one saved since.
+        if (request.Version != draft.Version) return PrivateDraftConflict(draft.Version);
+        if (draft.UnsavedContent is not null)
+            return Conflict(new StudioPrivateDraftRefusalDto("DRAFT_HAS_UNSAVED_EDITS",
+                "This draft has edits that were never saved. Save or discard them before publishing, so they are not lost with the draft.",
+                draft.Version));
+
+        // The history that leaves with the draft: which versions were kept, when, and what they
+        // hashed to. The text itself goes to the catalog once, as the published document.
+        var revisions = await db.StudioPrivateDraftRevisions.AsNoTracking()
+            .Where(revision => revision.DraftId == id)
+            .OrderBy(revision => revision.Version)
+            .Select(revision => new { revision.Version, revision.SavedAt, revision.ContentHash })
+            .ToListAsync(ct);
+        var history = string.Join(", ", revisions.Select(revision =>
+            $"v{revision.Version}@{revision.SavedAt:yyyy-MM-ddTHH:mm:ssZ}={revision.ContentHash}"));
+
+        var (refusal, report) = await CreateCatalogDocumentAsync(
+            string.IsNullOrWhiteSpace(request.Name) ? draft.Name : request.Name, draft.Kind, request.FolderId,
+            request.Description, draft.Content,
+            "PUBLISH_PRIVATE_DRAFT",
+            $"draft={draft.Id}; draftCreated={draft.CreatedAt:yyyy-MM-ddTHH:mm:ssZ}; publishedVersion={draft.Version}; savedVersions=[{history}]",
+            () => RemovePrivateDraftAsync(draft, ct), ct);
+        return refusal ?? CreatedAtAction(nameof(GetReports), new { }, ToDto(report!));
+    }
+
     // Unsaved edits to a private draft: what the author typed since the last save, kept so a crash
     // or an expired sign-in loses nothing. They are not a version, and follow the recovery-draft
     // policy (Portal:Studio:DraftRecovery and DraftRetentionDays), not the private-draft one.

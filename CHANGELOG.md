@@ -24,6 +24,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Recover unsaved edits to a private draft after a browser crash or a renewed sign-in. Reopening the
   draft offers them back; if the draft was saved again in the meantime Studio says so first, and a
   save from a stale tab is refused instead of overwriting the newer text.
+- Publish a private draft to the catalog from Studio's **Publish** button. It goes through the
+  existing catalog create checks, and the document is created and the draft removed together or
+  not at all. The audit trail records the draft's saved versions with their times and content
+  hashes; the catalog document holds the last saved text.
 - Run a saved pipeline from Portal Studio through the Orchestrator. **Run** submits the saved
   revision to the pipeline's Orchestrator job under the author's own identity, shows that run's
   status and bounded statement log by its run ID, and **Stop** asks the Orchestrator to cancel it.

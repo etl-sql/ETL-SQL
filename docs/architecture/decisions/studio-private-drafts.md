@@ -29,6 +29,12 @@ Decided with the owner on 2026-10-12.
 | Revisions | Every save has a version number and names the version it started from; a stale save is refused as a conflict. The last 10 saved texts are kept. |
 | Publishing | The existing catalog create action, with its existing checks. Success removes the draft and records its history in the audit trail; a refusal leaves the draft as it was. |
 
+**What "history" means on publish.** The catalog keeps no earlier versions of a document, so the
+published document carries the draft's last saved text and nothing before it. The audit entry
+`PUBLISH_PRIVATE_DRAFT` records the draft's ID and creation time, the version published, and for
+every kept save its version number, time and content hash. The text of earlier saves is discarded
+with the draft. An author who wants an earlier text copies it out before publishing.
+
 ## Settings
 
 All four live under `Portal:Studio` in `appsettings.json`.

@@ -584,13 +584,13 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
 
         const publishBtn = queryElement<HTMLButtonElement>(hostContext.shell, '[data-action="publish"]');
         if (publishBtn && hostContext.opts.onCreateDocument) {
-            const canPublish = Boolean(doc && !doc.reportId && !doc.privateDraftId);
+            const canPublish = Boolean(doc && !doc.reportId);
             publishBtn.disabled = !canPublish;
             publishBtn.style.opacity = canPublish ? '1' : '0.5';
             publishBtn.title = doc?.reportId
                 ? `'${doc.name}' is published in the catalog.`
                 : doc?.privateDraftId
-                    ? `'${doc.name}' is a private draft only you can open.`
+                    ? 'Publish this private draft to the Portal Catalog'
                     : 'Publish this draft report to the Portal Catalog';
         }
 

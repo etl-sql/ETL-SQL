@@ -22,7 +22,7 @@ and scale baseline recalibration).
 | Generated browser assets — Build preparation & source-control cleanup | [§1.1](#11-generated-browser-assets--build-preparation-and-source-control-cleanup) |
 | Studio — Unified authoring experience & completeness criteria (assessed; gaps routed to §3–§5) | [§2](#2-studio--unified-authoring-experience-and-completeness-criteria) |
 | Studio — Portal pipelines & schedule handoffs (ST04–ST11 complete; open points recorded per item) | [§3](#3-studio--portal-pipelines-and-schedule-handoffs) |
-| Studio — Private unpublished drafts & publishing | [§4](#4-studio--private-unpublished-drafts-and-publishing) |
+| Studio — Private unpublished drafts & publishing (ST12–ST15 complete; open points recorded per item) | [§4](#4-studio--private-unpublished-drafts-and-publishing) |
 | Studio — Author, reader & beginner practice journeys | [§5](#5-studio--author-reader-and-beginner-practice-journeys) |
 | Studio — Keyboard & assistive technology | [§6](#6-studio--keyboard-and-assistive-technology) |
 | Studio — Execution scope, cancellation & helper previews | [§7](#7-studio--execution-scope-cancellation-and-bounded-helper-previews) |
@@ -647,8 +647,7 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
   conflict; a plaintext credential is refused; the configured draft limit, saves kept and retention each
   take effect; off means nothing is kept) and `StudioPrivateDraftJourneyTests` (real Chromium, the same
   learner, a second version, a fresh page reopening it, and a colleague who sees nothing).
-  Open: publishing a private draft is ST15, and until then its Publish button is disabled. Expiry runs
-  when drafts are read or listed; there is no background sweep.
+  Open: expiry runs when drafts are read or listed; there is no background sweep.
 - [x] **ST14 — Portal private draft crash recovery.** Recover that unpublished draft after browser restart and
   authentication renewal, with explicit revision-conflict handling and policy refusal. No offline persistence guarantee.
   (Depends on: ST13; Size: M)
@@ -661,8 +660,20 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
   plaintext credential are refused and the learner is told. `StudioPrivateDraftTests` covers the same
   rules at the API, including isolation, expiry on the recovery retention and `DraftRecovery` off.
   Not claimed: offline persistence. Edits typed while the Portal is unreachable live only in the tab.
-- [ ] **ST15 — Publish a private draft.** Promote the saved host draft through the existing catalog publish action
+- [x] **ST15 — Publish a private draft.** Promote the saved host draft through the existing catalog publish action
   without losing text/history; an unauthorized attempt leaves the private draft intact. (Depends on: ST13; Size: M)
+  Done 2026-10-12. `POST /api/studio/private-drafts/{id}/publish` runs the same method as the catalog
+  create and deletes the draft inside its transaction. Evidence: `StudioPrivateDraftTests` (the catalog
+  script equals the draft's last save; the audit entry names all three kept saves by version, time and
+  hash and holds no text; a pipeline draft publishes as a pipeline; a learner, another person's draft,
+  a Publisher without folder Manage, a stale version, a taken name and unsaved edits are each refused
+  with the draft, its saves and the catalog unchanged) and
+  `AnAuthorPublishesAPrivateDraftAndALearnerCannot` (real Chromium, a Publisher who owns one folder:
+  keeps a draft, edits, publishes, then saves and reopens it as a catalog document; a learner's Publish
+  is refused and the draft stays).
+  Limit on "history", for the owner: the catalog keeps no earlier versions of a document, so earlier
+  saves survive as audit metadata (version, time, hash), not as text. Keeping their text would need a
+  catalog version history, which does not exist.
 
 ---
 

@@ -377,6 +377,149 @@ public sealed class StudioPrivateDraftTests
     }
 
     [Fact]
+    public async Task PublishingADraftCreatesTheCatalogDocumentWithItsTextAndRecordsItsHistory()
+    {
+        using var factory = new LearnerFactory();
+        using var client = factory.CreateClient();
+        var admin = await AdminTokenAsync(client);
+        var folderId = await CreateFolderAsync(client, admin);
+        var id = (await Json(await Send(client, HttpMethod.Post, admin, "/api/studio/private-drafts",
+            new { name = "Quarterly", content = "-- v1\n" + Script })))["id"]!.GetValue<int>();
+        Assert.Equal(HttpStatusCode.OK, (await Send(client, HttpMethod.Put, admin, $"/api/studio/private-drafts/{id}",
+            new { content = "-- v2\n" + Script, baseVersion = 1 })).StatusCode);
+        var final = "-- v3\n" + Script;
+        Assert.Equal(HttpStatusCode.OK, (await Send(client, HttpMethod.Put, admin, $"/api/studio/private-drafts/{id}",
+            new { content = final, baseVersion = 2 })).StatusCode);
+        var hashes = (await JsonArray(await Send(client, HttpMethod.Get, admin, $"/api/studio/private-drafts/{id}/revisions")))
+            .Select(item => item!["contentHash"]!.GetValue<string>()).ToList();
+        Assert.Equal(3, hashes.Count);
+
+        var published = await Send(client, HttpMethod.Post, admin, $"/api/studio/private-drafts/{id}/publish",
+            new { folderId, version = 3, name = "Quarterly sales" });
+
+        Assert.Equal(HttpStatusCode.Created, published.StatusCode);
+        var report = await Json(published);
+        var reportId = report["id"]!.GetValue<int>();
+        Assert.Equal("Quarterly sales", report["name"]!.GetValue<string>());
+        Assert.Equal("Report", report["kind"]!.GetValue<string>());
+        Assert.Equal(folderId, report["folderId"]!.GetValue<int>());
+        // The text is the draft's last save, unchanged.
+        var script = await Json(await Send(client, HttpMethod.Get, admin, $"/api/reports/{reportId}/script-content"));
+        Assert.Equal(final, script["scriptText"]!.GetValue<string>());
+
+        // The draft is gone, and the audit trail names every kept save without holding any text.
+        Assert.Equal(HttpStatusCode.NotFound, (await Send(client, HttpMethod.Get, admin, $"/api/studio/private-drafts/{id}")).StatusCode);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.False(await db.StudioPrivateDrafts.AnyAsync(item => item.Id == id));
+        Assert.False(await db.StudioPrivateDraftRevisions.AnyAsync(item => item.DraftId == id));
+        var entry = await db.AuditLogs.SingleAsync(log => log.Action == "PUBLISH_PRIVATE_DRAFT");
+        Assert.Equal(reportId.ToString(), entry.ResourceId);
+        Assert.Contains($"draft={id}", entry.Detail);
+        Assert.Contains("publishedVersion=3", entry.Detail);
+        foreach (var hash in hashes) Assert.Contains(hash, entry.Detail);
+        Assert.Contains("v1@", entry.Detail);
+        Assert.Contains("v3@", entry.Detail);
+        Assert.DoesNotContain("REPORT TITLE", entry.Detail);
+    }
+
+    [Fact]
+    public async Task APipelineDraftIsPublishedAsAPipeline()
+    {
+        using var factory = new LearnerFactory();
+        using var client = factory.CreateClient();
+        var admin = await AdminTokenAsync(client);
+        var folderId = await CreateFolderAsync(client, admin);
+        var id = (await Json(await Send(client, HttpMethod.Post, admin, "/api/studio/private-drafts",
+            new { name = "Load users", content = "SELECT 1 AS One;\n", kind = "Pipeline" })))["id"]!.GetValue<int>();
+
+        var published = await Send(client, HttpMethod.Post, admin, $"/api/studio/private-drafts/{id}/publish", new { folderId, version = 1 });
+
+        Assert.Equal(HttpStatusCode.Created, published.StatusCode);
+        var report = await Json(published);
+        Assert.Equal("Pipeline", report["kind"]!.GetValue<string>());
+        // With no name given, the draft's own.
+        Assert.Equal("Load users", report["name"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task ARefusedPublishLeavesTheDraftAndTheCatalogAsTheyWere()
+    {
+        using var factory = new LearnerFactory();
+        using var client = factory.CreateClient();
+        var admin = await AdminTokenAsync(client);
+        var folderId = await CreateFolderAsync(client, admin);
+        var learner = await CreateSignedInUserAsync(client, admin, "Viewer");
+        var publisher = await CreateSignedInUserAsync(client, admin, "Publisher");
+
+        async Task<int> DraftAsync(string owner, string name)
+        {
+            var id = (await Json(await Send(client, HttpMethod.Post, owner, "/api/studio/private-drafts",
+                new { name, content = Script })))["id"]!.GetValue<int>();
+            Assert.Equal(HttpStatusCode.OK, (await Send(client, HttpMethod.Put, owner, $"/api/studio/private-drafts/{id}",
+                new { content = Script + "-- kept\n", baseVersion = 1 })).StatusCode);
+            return id;
+        }
+
+        async Task AssertIntactAsync(string owner, int id)
+        {
+            var draft = await Json(await Send(client, HttpMethod.Get, owner, $"/api/studio/private-drafts/{id}"));
+            Assert.Equal(Script + "-- kept\n", draft["content"]!.GetValue<string>());
+            Assert.Equal(2, draft["version"]!.GetValue<long>());
+            Assert.Equal(2, (await JsonArray(await Send(client, HttpMethod.Get, owner, $"/api/studio/private-drafts/{id}/revisions"))).Count);
+        }
+
+        // A learner without ReportPublish or ScriptSave.
+        var learnerDraft = await DraftAsync(learner, "Learner");
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(client, HttpMethod.Post, learner,
+            $"/api/studio/private-drafts/{learnerDraft}/publish", new { folderId, version = 2 })).StatusCode);
+        await AssertIntactAsync(learner, learnerDraft);
+
+        // Someone who may publish cannot publish another person's draft: to them it does not exist.
+        Assert.Equal(HttpStatusCode.NotFound, (await Send(client, HttpMethod.Post, admin,
+            $"/api/studio/private-drafts/{learnerDraft}/publish", new { folderId, version = 2 })).StatusCode);
+        await AssertIntactAsync(learner, learnerDraft);
+
+        // A Publisher with the capability but no Manage on the folder.
+        var publisherDraft = await DraftAsync(publisher, "Publisher");
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(client, HttpMethod.Post, publisher,
+            $"/api/studio/private-drafts/{publisherDraft}/publish", new { folderId, version = 2 })).StatusCode);
+        await AssertIntactAsync(publisher, publisherDraft);
+
+        // The owner, fully entitled, but naming a stale version, a taken name, or leaving edits unsaved.
+        var adminDraft = await DraftAsync(admin, "Mine");
+        var stale = await Send(client, HttpMethod.Post, admin, $"/api/studio/private-drafts/{adminDraft}/publish", new { folderId, version = 1 });
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal("DRAFT_CONFLICT", (await Json(stale))["code"]!.GetValue<string>());
+
+        Assert.True((await Send(client, HttpMethod.Post, admin, "/api/studio/reports",
+            new { folderId, name = "Taken", scriptText = Script })).IsSuccessStatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(client, HttpMethod.Post, admin,
+            $"/api/studio/private-drafts/{adminDraft}/publish", new { folderId, version = 2, name = "Taken" })).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await Send(client, HttpMethod.Put, admin,
+            $"/api/studio/private-drafts/{adminDraft}/unsaved", new { content = "-- not saved yet", baseVersion = 2 })).StatusCode);
+        var unsaved = await Send(client, HttpMethod.Post, admin, $"/api/studio/private-drafts/{adminDraft}/publish", new { folderId, version = 2 });
+        Assert.Equal(HttpStatusCode.Conflict, unsaved.StatusCode);
+        Assert.Equal("DRAFT_HAS_UNSAVED_EDITS", (await Json(unsaved))["code"]!.GetValue<string>());
+        await AssertIntactAsync(admin, adminDraft);
+
+        // Nothing but the one report created on purpose reached the catalog.
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.Equal("Taken", (await db.Reports.SingleAsync()).Name);
+        Assert.False(await db.AuditLogs.AnyAsync(log => log.Action == "PUBLISH_PRIVATE_DRAFT"));
+    }
+
+    private static async Task<int> CreateFolderAsync(HttpClient client, string admin)
+    {
+        var folder = await Send(client, HttpMethod.Post, admin, "/api/folders",
+            new { name = $"publish_{Guid.NewGuid():N}"[..20], parentId = (int?)null });
+        Assert.True(folder.IsSuccessStatusCode, $"folder create: {(int)folder.StatusCode}");
+        return (await Json(folder))["id"]!.GetValue<int>();
+    }
+
+    [Fact]
     public async Task AUserWhoMayNotReadScriptsMayNotKeepADraft()
     {
         // The stock test Portal maps no Studio capability to Viewer.

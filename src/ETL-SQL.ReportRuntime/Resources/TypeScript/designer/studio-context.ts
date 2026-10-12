@@ -307,6 +307,8 @@ export interface StudioPrivateDraftHost {
     open(id: number): Promise<StudioPrivateDraft>;
     save(id: number, content: string, baseVersion: number): Promise<StudioPrivateDraft>;
     remove(id: number): Promise<void>;
+    /** Creates the catalog document and removes the draft together; a refusal leaves the draft as it was. */
+    publish(id: number, request: { folderId: number; name: string; version: number }): Promise<any>;
 }
 
 export interface StudioOptions extends StudioStateOptions {

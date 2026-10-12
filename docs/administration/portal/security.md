@@ -103,6 +103,13 @@ Drafts** on Studio Home.
 | `Portal:Studio:PrivateDraftRevisionsKept` | `10` | Saved versions kept per draft. |
 | `Portal:Studio:PrivateDraftsPerUser` | `25` | Drafts one user may hold. |
 
+**Publishing a draft.** An author with `ScriptSave`, `ReportPublish` and Manage on a folder publishes
+a private draft from Studio's **Publish** button. The Portal creates the catalog document and removes
+the draft in one step, or does neither: a missing right, a stale copy, a name already taken in the
+folder, or edits that were never saved each leave the draft exactly as it was. The audit entry
+`PUBLISH_PRIVATE_DRAFT` records which saved versions the draft had, when, and their content hashes.
+The catalog document holds the last saved text; the text of earlier saves is not carried over.
+
 Edits typed into a private draft and not yet saved are recovered the same way as edits to a catalog
 report, under the recovery settings below. They are kept beside the draft, are not one of its
 versions, and do not extend its retention. If the draft was saved again after those edits began,

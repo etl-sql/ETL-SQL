@@ -124,7 +124,12 @@ export function createPortalStudioHost(session: StudioSessionDto, fetch: Authori
                 remove: async (id: number) => {
                     const response = await fetch(`/api/studio/private-drafts/${id}`, { method: 'DELETE' });
                     if (!response.ok) throw new Error(`The private draft could not be deleted (${response.status}).`);
-                }
+                },
+                // The Portal creates the catalog document and removes the draft together, or does neither.
+                publish: async (id: number, request: { folderId: number; name: string; version: number }) =>
+                    readStudioReport(await readJson(`/api/studio/private-drafts/${id}/publish`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request)
+                    }))
             }
         } : {}),
         ...(session.draftRecovery ? {

@@ -171,7 +171,7 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
         await switchDoc(hostContext.state.activeDocId);
     }
 
-    async function promptForCatalogReport(noun = 'report'): Promise<{ name: string; folderId: any } | null> {
+    async function promptForCatalogReport(noun = 'report', suggestedName = ''): Promise<{ name: string; folderId: any } | null> {
         if (!hostContext.state.catalogFolders.length) {
             // A dead end with no explanation is the worst first impression the Portal can give, so
             // say what is missing and who can grant it.
@@ -187,7 +187,7 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
             const titleId = 'etlsql-catalog-create-title';
             hostContext.modalBox.innerHTML = `
                 <h2 id="${titleId}">Create catalog ${_escapeHtml(noun)}</h2>
-                <label>${_escapeHtml(noun.charAt(0).toUpperCase() + noun.slice(1))} name<input type="text" data-catalog-report-name value="Untitled ${_escapeHtml(noun)}" autocomplete="off"></label>
+                <label>${_escapeHtml(noun.charAt(0).toUpperCase() + noun.slice(1))} name<input type="text" data-catalog-report-name value="${_escapeHtml(suggestedName || `Untitled ${noun}`)}" autocomplete="off"></label>
                 <label>Folder<select data-catalog-report-folder>${hostContext.state.catalogFolders.map((folder: StudioDynamic) => `<option value="${_escapeHtml(folder.id)}">${_escapeHtml(folder.path || folder.name)}</option>`).join('')}</select></label>
                 <div class="etlsql-studio-modal-actions">
                     <button type="button" class="etlsql-studio-btn" data-catalog-create-cancel>Cancel</button>
@@ -229,10 +229,6 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
             _feedback.notify(`'${doc.name}' is already published in the catalog. Use Save (Ctrl+S) to persist updates.`, { title: 'Already Published', tone: 'info' });
             return false;
         }
-        if (doc.privateDraftId) {
-            _feedback.notify(`'${doc.name}' is a private draft. Publishing a private draft is not available here yet.`, { title: 'Publish Unavailable', tone: 'warning' });
-            return false;
-        }
         if (!hostContext.hasCapability('ReportPublish')) {
             _feedback.notify('Publishing to the catalog requires the ReportPublish capability. Contact an administrator to request publishing rights.', { title: 'Publish Restricted', tone: 'warning' });
             return false;
@@ -241,6 +237,8 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
             _feedback.notify('Publishing to the catalog requires the ScriptSave capability.', { title: 'Publish Restricted', tone: 'warning' });
             return false;
         }
+
+        if (doc.privateDraftId) return publishPrivateDraft(doc);
 
         const request = await promptForCatalogReport();
         if (!request) return false;
@@ -281,6 +279,48 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
             return true;
         } catch (error) {
             _feedback.notify('Publish failed: ' + errorMessage(error), { title: 'Publish Failed', tone: 'error' });
+            return false;
+        }
+    }
+
+    /**
+     * Publishes a private draft's saved text. Unsaved edits are saved to the draft first, so what
+     * reaches the catalog is a version the draft's history names. The host creates the catalog
+     * document and removes the draft together; until it answers, the document stays a draft.
+     */
+    async function publishPrivateDraft(doc: StudioRuntimeDocument): Promise<boolean> {
+        const host = hostContext.opts.privateDrafts;
+        const draftId = doc.privateDraftId;
+        if (!host || !draftId) return false;
+        if (doc.isDirty) {
+            await hostContext.handleSave();
+            if (doc.isDirty) return false;
+        }
+        const pipeline = (doc.path || '').toLowerCase().endsWith('.etlsql');
+        const draftName = String(doc.name || '').replace(/\.(etlsql|rptsql)$/i, '');
+        const request = await promptForCatalogReport(pipeline ? 'pipeline' : 'report', draftName);
+        if (!request) return false;
+        const folder = hostContext.state.catalogFolders.find((f: StudioDynamic) => String(f.id) === String(request.folderId));
+        const folderPath = folder ? (folder.path || folder.name) : '';
+        try {
+            const created = await host.publish(draftId, { folderId: Number(request.folderId), name: request.name, version: Number(doc.version) });
+            if (doc.reportWorkflow) created.reportWorkflow = doc.reportWorkflow;
+            hostContext.state.catalogReports.push(created);
+            hostContext.state.privateDraftSummaries = hostContext.state.privateDraftSummaries.filter(item => item.id !== draftId);
+            delete doc.privateDraftId;
+            doc.reportId = created.id;
+            doc.version = created.version ?? 1;
+            doc.sourceRevision = created.sourceRevision ?? null;
+            doc.name = `${created.name}${catalogExtension(created)}`;
+            doc.path = `${folderPath}/${created.name}${catalogExtension(created)}`.replace(/^\//, '');
+            doc.isDirty = false;
+            if (hostContext.opts.onRenewDocument) doc.lease = await hostContext.opts.onRenewDocument(doc);
+            hostContext.renderTabs();
+            hostContext.setContextualRailVisibility();
+            _feedback.notify(`Published '${created.name}' to the catalog. It is no longer a private draft.`, { title: 'Draft Published', tone: 'success' });
+            return true;
+        } catch (error) {
+            _feedback.notify(`Publish failed: ${errorMessage(error)} Your private draft is unchanged.`, { title: 'Publish Failed', tone: 'error' });
             return false;
         }
     }

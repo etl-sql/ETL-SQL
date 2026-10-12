@@ -492,7 +492,7 @@ entry points is a separate future decision, not the measure of success.
 | ST12 | **Complete: decide unpublished draft identity and policy.** [Decision](docs/architecture/decisions/studio-private-drafts.md). Define host ownership, tenant/principal isolation, retention, allowed practice access and revision handling before a catalog report ID exists. No browser script storage. | — | D |
 | ST13 | **Complete: Portal private draft save/reopen.** A learner without folder Manage or ReportPublish creates, edits, saves and reopens one permitted host draft; another principal or tenant cannot read it. | ST12 | M |
 | ST14 | **Complete: Portal private draft crash recovery.** Recover that unpublished draft after browser restart and authentication renewal, with explicit revision-conflict handling and policy refusal. No offline persistence guarantee. | ST13 | M |
-| ST15 | **Publish a private draft.** Promote the saved host draft through the existing catalog publish action without losing text/history; an unauthorized attempt leaves the private draft intact. | ST13 | M |
+| ST15 | **Complete: publish a private draft.** Promote the saved host draft through the existing catalog publish action without losing text/history; an unauthorized attempt leaves the private draft intact. | ST13 | M |
 
 #### Author, reader and beginner practice journeys
 
@@ -575,7 +575,7 @@ more work; do not fill a sprint by assuming every M task takes three days.
 | Outcome | Select first | Initial engineering range | Follow-on work |
 | :--- | :--- | :--- | :--- |
 | Identify authoring gaps and improvements | ST01, ST02 completed | Inventory delivered | Select required journeys individually; the ST03 assessment lists the gaps each one closes. |
-| Keep one unpublished Portal draft | ST12, ST13 | 4–7 days | ST14 recovery and ST15 publishing are separate increments. |
+| Keep one unpublished Portal draft | ST12–ST15 completed | Delivered | ST52's draft, publishing and recovery guide. |
 | Submit and observe one Portal pipeline | ST04–ST07, ST10 completed | Delivered | ST21's sandbox exercise. |
 | Set measurable delivery limits | ST53, ST54 | 2–4 days | Schedule ST47 and ST42 independently after the decisions. |
 

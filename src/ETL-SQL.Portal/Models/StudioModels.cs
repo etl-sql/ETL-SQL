@@ -31,6 +31,11 @@ public sealed record CreateStudioPrivateDraftRequest(string? Name, string? Conte
 /// <param name="BaseVersion">The saved version the edits started from; a stale one is refused.</param>
 public sealed record SaveStudioPrivateDraftRequest(string? Content, long BaseVersion, string? Name = null);
 
+/// <summary>Publishes a private draft as a catalog document in <see cref="FolderId"/>.</summary>
+/// <param name="Version">The saved version the author is looking at; a stale one is refused.</param>
+/// <param name="Name">The catalog name; the draft's own name when omitted.</param>
+public sealed record PublishStudioPrivateDraftRequest(int FolderId, long Version, string? Name = null, string? Description = null);
+
 /// <summary>One kept save of a private draft.</summary>
 public sealed record StudioPrivateDraftRevisionDto(long Version, DateTime SavedAt, string ContentHash, string? Content = null);
 

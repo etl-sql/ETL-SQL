@@ -112,32 +112,47 @@ public sealed partial class StudioController(
         [FromBody] CreateStudioReportRequest request,
         CancellationToken ct)
     {
-        var name = request.Name?.Trim() ?? string.Empty;
-        if (name.Length is < 1 or > 160)
-            return BadRequest(new { error = "Report name must be between 1 and 160 characters." });
         var kind = CatalogDocumentKind.Report;
         if (!string.IsNullOrWhiteSpace(request.Kind) && !Enum.TryParse(request.Kind, ignoreCase: true, out kind))
             return BadRequest(new { error = "Kind must be Report or Pipeline." });
-        if (request.ScriptText is null || request.ScriptText.Length > Math.Max(1, portalConfig.DesignerLimits.MaxScriptCharacters))
-            return BadRequest(new { error = $"Script text exceeds the {portalConfig.DesignerLimits.MaxScriptCharacters} character limit." });
+        var (refusal, report) = await CreateCatalogDocumentAsync(
+            request.Name, kind, request.FolderId, request.Description, request.ScriptText,
+            "CREATE_STUDIO_REPORT", auditDetail: null, alsoInTransaction: null, ct);
+        return refusal ?? CreatedAtAction(nameof(GetReports), new { }, ToDto(report!));
+    }
 
-        var folder = await CatalogScope.Folders.FirstOrDefaultAsync(value => value.Id == request.FolderId, ct);
+    /// <summary>
+    /// Creates one catalog document with every check a catalog create runs. A refusal has changed
+    /// nothing. <paramref name="alsoInTransaction"/> commits or rolls back with the document, which
+    /// is how publishing a private draft removes the draft only if the document exists.
+    /// </summary>
+    private async Task<(ActionResult? Refusal, Report? Report)> CreateCatalogDocumentAsync(
+        string? requestedName, CatalogDocumentKind kind, int folderId, string? description, string? scriptText,
+        string auditAction, string? auditDetail, Func<Task>? alsoInTransaction, CancellationToken ct)
+    {
+        var name = requestedName?.Trim() ?? string.Empty;
+        if (name.Length is < 1 or > 160)
+            return (BadRequest(new { error = "Report name must be between 1 and 160 characters." }), null);
+        if (scriptText is null || scriptText.Length > Math.Max(1, portalConfig.DesignerLimits.MaxScriptCharacters))
+            return (BadRequest(new { error = $"Script text exceeds the {portalConfig.DesignerLimits.MaxScriptCharacters} character limit." }), null);
+
+        var folder = await CatalogScope.Folders.FirstOrDefaultAsync(value => value.Id == folderId, ct);
         if (folder is null)
-            return NotFound(new { error = "Folder not found." });
+            return (NotFound(new { error = "Folder not found." }), null);
         if (!await folderPermissions.HasPermissionAsync(folder.Id, FolderPermission.Manage, User))
-            return Forbid();
+            return (Forbid(), null);
         // Names are unique across kinds in a folder, so a pipeline and a report never read the same.
         if (await CatalogScope.Documents.AnyAsync(report =>
                 report.FolderId == folder.Id && !report.IsDeleted && report.Name == name, ct))
-            return Conflict(new { error = $"A document named '{name}' already exists in {folder.Path}." });
+            return (Conflict(new { error = $"A document named '{name}' already exists in {folder.Path}." }), null);
 
-        sourceControl.ValidateScriptTextForCommit(request.ScriptText);
+        sourceControl.ValidateScriptTextForCommit(scriptText);
         var extension = kind == CatalogDocumentKind.Pipeline ? ".etlsql" : ".rptsql";
         var scriptKey = $"studio/{folder.Id}/{Slugify(name)}-{Guid.NewGuid():N}{extension}";
         if (!PortalPathGuard.TryResolveScript(
                 portalConfig, _tenantScope.TenantId, scriptKey, out var resolvedScriptPath))
-            return StatusCode(StatusCodes.Status503ServiceUnavailable,
-                new { error = "The Studio script storage root is unavailable." });
+            return (StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { error = "The Studio script storage root is unavailable." }), null);
 
         var now = DateTime.UtcNow;
         var report = new Report
@@ -147,25 +162,27 @@ public sealed partial class StudioController(
             Folder = folder,
             Kind = kind,
             Name = name,
-            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+            Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
             ScriptPath = resolvedScriptPath,
             ScriptLastModified = now,
             PublishedScriptHash = "sha256:" + Convert.ToHexString(
-                SHA256.HashData(Encoding.UTF8.GetBytes(request.ScriptText))).ToLowerInvariant(),
+                SHA256.HashData(Encoding.UTF8.GetBytes(scriptText))).ToLowerInvariant(),
             CreatedBy = CurrentUserId,
             CreatedAt = now,
             UpdatedAt = now
         };
 
-        await artifacts.WriteAllTextAsync(ArtifactArea.Scripts, scriptKey, request.ScriptText,
+        await artifacts.WriteAllTextAsync(ArtifactArea.Scripts, scriptKey, scriptText,
             overwrite: false, ct: ct);
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         try
         {
             db.Reports.Add(report);
             await db.SaveChangesAsync(ct);
-            audit.Stage(CurrentUserId, "CREATE_STUDIO_REPORT", "Report", report.Id.ToString(),
-                $"{folder.Path}/{name}; kind={kind}; mode={studioAuthorization.Mode}");
+            if (alsoInTransaction is not null) await alsoInTransaction();
+            audit.Stage(CurrentUserId, auditAction, "Report", report.Id.ToString(),
+                $"{folder.Path}/{name}; kind={kind}; mode={studioAuthorization.Mode}"
+                + (auditDetail is null ? "" : $"; {auditDetail}"));
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
         }
@@ -176,7 +193,7 @@ public sealed partial class StudioController(
             throw;
         }
 
-        return CreatedAtAction(nameof(GetReports), new { }, ToDto(report));
+        return (null, report);
     }
 
     private static StudioReportDto ToDto(Report report) => new(

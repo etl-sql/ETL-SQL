@@ -983,6 +983,7 @@ kept saves in `studio_private_draft_revisions`. Policy and its reasons are in th
 | GET | `/api/studio/private-drafts/{id}/unsaved` | Edits typed since the last save, and the version they started from |
 | PUT | `/api/studio/private-drafts/{id}/unsaved` | Keep `Content` as unsaved edits against `BaseVersion` |
 | DELETE | `/api/studio/private-drafts/{id}/unsaved` | Discard the unsaved edits |
+| POST | `/api/studio/private-drafts/{id}/publish` | Create the catalog document from the draft's saved text and remove the draft |
 
 Every route needs `StudioAccess` and `ScriptRead`. Every query carries the caller's tenant and user
 id, so a draft that is not the caller's answers `404 DRAFT_NOT_FOUND`, the same as a missing one,
@@ -998,6 +999,14 @@ Refusals return `{ code, error, currentVersion? }`:
 | `DRAFT_CONFLICT` | 409 | `BaseVersion` is not the saved version; `currentVersion` names it |
 | `PLAINTEXT_SECRET` | 422 | The text assigns a credential as a plain literal |
 | `DRAFT_TOO_LARGE` | 413 | The text exceeds `DesignerLimits:MaxScriptCharacters` |
+| `DRAFT_HAS_UNSAVED_EDITS` | 409 | Publish was asked while unsaved edits are kept for the draft |
+
+Publish additionally needs `ScriptSave` and `ReportPublish`, takes `FolderId`, `Version` and an
+optional `Name`, and runs `StudioController.CreateCatalogDocumentAsync`, the same method
+`POST /api/studio/reports` runs: folder `Manage`, name uniqueness in the folder, source-control
+validation, the script artifact write and the audit entry. The draft and its kept saves are deleted
+inside that method's transaction, so the document and the removal commit together. Its refusals are
+the catalog create's own (`403`, `404`, `409`), plus `DRAFT_CONFLICT` for a stale `Version`.
 
 The draft's version is an EF concurrency token, and `(draft_id, version)` is unique among its kept
 saves, so two saves racing from the same version cannot both succeed. Expiry is applied when a draft
