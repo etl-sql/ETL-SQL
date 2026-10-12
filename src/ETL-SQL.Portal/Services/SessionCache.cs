@@ -7,13 +7,15 @@ namespace ETL_SQL.Portal.Services;
 /// <summary>
 /// Per-user DashboardService pool with LRU eviction.
 /// Keyed on (tenantId, reportId, userId) so tenants and users have independent parameter state.
+/// A session also belongs to the identity it ran under: a caller whose groups, roles or
+/// administrator standing have changed gets a new one.
 /// On eviction the user's next interaction transparently rebuilds from the current snapshot.
 /// </summary>
 public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
 {
     private readonly record struct SessionKey(string TenantId, int ReportId, int UserId);
 
-    private readonly record struct Entry(DashboardService Service, string ScriptPath, string CallerContext)
+    private readonly record struct Entry(DashboardService Service, string ScriptPath, string CallerContext, string IdentityKey)
     {
         public DateTime LastAccess { get; init; } = DateTime.UtcNow;
         public Entry Touch() => this with { LastAccess = DateTime.UtcNow };
@@ -38,7 +40,8 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
         int userId,
         string scriptPath,
         bool isAdministrator = false,
-        string? keyScope = null)
+        string? keyScope = null,
+        ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
     {
         var tenantId = string.IsNullOrWhiteSpace(keyScope) ? "portal-host" : keyScope;
         var key = new SessionKey(tenantId, reportId, userId);
@@ -47,20 +50,23 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
         var callerContext = isAdministrator
             ? $"UserId={userId};IsAdmin=true"
             : $"UserId={userId}";
+        var identityKey = IdentityKey(executionIdentity);
 
         while (true)
         {
             if (_sessions.TryGetValue(key, out var existing))
             {
-                // A session is reusable only for the same script *and* caller context — a role
-                // change must not keep serving through a previously admin-elevated session.
-                if (existing.ScriptPath == scriptPath && existing.CallerContext == callerContext)
+                // A session is reusable only for the same script, caller context *and* identity —
+                // a role change must not keep serving through a previously admin-elevated session,
+                // and rows filtered for one set of groups must not answer for another.
+                if (existing.ScriptPath == scriptPath && existing.CallerContext == callerContext
+                    && existing.IdentityKey == identityKey)
                 {
                     _sessions.TryUpdate(key, existing.Touch(), existing); // best-effort LRU touch
                     return existing.Service;
                 }
 
-                var replacement = CreateEntry(reportId, scriptPath, callerContext, keyScope);
+                var replacement = CreateEntry(reportId, scriptPath, callerContext, keyScope, executionIdentity, identityKey);
                 if (_sessions.TryUpdate(key, replacement, existing))
                 {
                     _ = existing.Service.DisposeAsync();
@@ -73,7 +79,7 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
                 continue;
             }
 
-            var entry = CreateEntry(reportId, scriptPath, callerContext, keyScope);
+            var entry = CreateEntry(reportId, scriptPath, callerContext, keyScope, executionIdentity, identityKey);
             if (_sessions.TryAdd(key, entry))
             {
                 Evict();
@@ -85,7 +91,9 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
         }
     }
 
-    private Entry CreateEntry(int reportId, string scriptPath, string callerContext, string? keyScope)
+    private Entry CreateEntry(
+        int reportId, string scriptPath, string callerContext, string? keyScope,
+        ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity, string identityKey)
     {
         var timeout = TimeSpan.FromSeconds(Math.Max(1, _config.Resources.ExecutionTimeoutSeconds));
         var svc = new DashboardService(
@@ -95,15 +103,34 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
             callerContext,
             reportId,
             _config.KeyManagement.Enabled ? null : _config.Dataset.AtRestKey,
+            executionIdentity: executionIdentity,
             keyScope: keyScope);
-        return new Entry(svc, scriptPath, callerContext);
+        return new Entry(svc, scriptPath, callerContext, identityKey);
     }
+
+    /// <summary>
+    /// What a session's rows were computed for. A session answers only for the identity it ran
+    /// under, so a changed group, role or administrator flag is a different session.
+    /// </summary>
+    private static string IdentityKey(ETL_SQL.Core.Governance.ExecutionIdentity? identity) => identity is null
+        ? string.Empty
+        : string.Join('',
+            identity.EffectiveUser, identity.RealUser, identity.IsAdmin, identity.AdminBypassesRowLevelSecurity,
+            string.Join('', identity.Groups.Select(group => group.ToUpperInvariant()).Order(StringComparer.Ordinal)),
+            string.Join('', identity.Roles.Select(role => role.ToUpperInvariant()).Order(StringComparer.Ordinal)));
 
     /// <summary>Removes all sessions for a report (called on snapshot invalidation).</summary>
     public async Task InvalidateReportAsync(int reportId, string keyScope = "portal-host")
     {
         foreach (var key in _sessions.Keys.Where(k => k.TenantId == keyScope && k.ReportId == reportId))
             if (_sessions.TryRemove(key, out var entry)) await entry.Service.DisposeAsync();
+    }
+
+    /// <summary>Removes one user's session for a report, so their next request runs it again.</summary>
+    public async Task InvalidateUserAsync(int reportId, int userId, string keyScope = "portal-host")
+    {
+        if (_sessions.TryRemove(new SessionKey(keyScope, reportId, userId), out var entry))
+            await entry.Service.DisposeAsync();
     }
 
     // ── IHostedService ────────────────────────────────────────────────────────

@@ -123,4 +123,53 @@ public sealed class SessionCacheTests : IDisposable
         Assert.Contains(settled, results);
         Assert.Same(settled, cache.GetOrCreate(reportId: 1, userId: 7, script));
     }
+
+    private static ETL_SQL.Core.Governance.ExecutionIdentity Identity(string user, params string[] groups) => new()
+    {
+        EffectiveUser = user,
+        EffectiveUserId = 7,
+        RealUser = user,
+        IsAdmin = false,
+        Groups = groups,
+        Roles = ["Viewer"]
+    };
+
+    [Fact]
+    public void GetOrCreate_SameIdentity_ReusesTheSession_WhateverTheGroupOrder()
+    {
+        using var cache = NewCache();
+        var script = Path.Combine(_tempDir, "a.rptsql");
+
+        var first = cache.GetOrCreate(1, 7, script, executionIdentity: Identity("ann", "North", "East"));
+        var second = cache.GetOrCreate(1, 7, script, executionIdentity: Identity("ann", "east", "NORTH"));
+
+        Assert.Same(first, second);
+    }
+
+    /// <summary>A reader removed from a group must not keep a session that ran with it.</summary>
+    [Fact]
+    public void GetOrCreate_GroupRemoved_ReplacesTheSession()
+    {
+        using var cache = NewCache();
+        var script = Path.Combine(_tempDir, "a.rptsql");
+
+        var before = cache.GetOrCreate(1, 7, script, executionIdentity: Identity("ann", "North"));
+        var after = cache.GetOrCreate(1, 7, script, executionIdentity: Identity("ann"));
+
+        Assert.NotSame(before, after);
+    }
+
+    [Fact]
+    public async Task InvalidateUser_RemovesOnlyThatUsersSession()
+    {
+        using var cache = NewCache();
+        var script = Path.Combine(_tempDir, "a.rptsql");
+        var ann = cache.GetOrCreate(1, 7, script);
+        var bob = cache.GetOrCreate(1, 8, script);
+
+        await cache.InvalidateUserAsync(1, 7);
+
+        Assert.NotSame(ann, cache.GetOrCreate(1, 7, script));
+        Assert.Same(bob, cache.GetOrCreate(1, 8, script));
+    }
 }
