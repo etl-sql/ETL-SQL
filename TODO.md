@@ -1295,7 +1295,9 @@ does not close build, package, runtime, or Git-index acceptance.
   administrative extract of the MSI, built from an archive of `d226e13aa`, pass it too. After the
   cutover the native package workflow built the ZIP and VSIX on Windows, Linux, macOS arm64, and macOS
   x64 from checkouts with no generated file. `verify-packaged-browser-assets.mjs` now makes the byte
-  comparison a step of that workflow; its first run on macOS is pending. The DMG has not been inspected.
+  comparison a step of that workflow: 343 files match the prepared inventory on Windows, Linux, and
+  macOS arm64 (run 38194696393). The macOS x64 job was cancelled by its time limit before that step; the
+  limit has been raised. The DMG has not been inspected.
 - [ ] **Verify release metadata after asset generation.** Check checksums, SBOM, provenance, and
   third-party notices against the final assembled packages containing the generated assets. Audit
   file-discovery rules so ignored outputs and bundled vendor components remain represented. Generate

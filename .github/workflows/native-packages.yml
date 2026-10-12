@@ -12,7 +12,9 @@ jobs:
   native-package:
     name: Native package (${{ matrix.rid }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    # The Intel macOS runner takes about twice as long per publish as the others: 52 minutes for the
+    # eight hosts and several more for the VSIX. Sixty minutes cancelled it mid-package twice.
+    timeout-minutes: 100
     strategy:
       fail-fast: false
       matrix:
