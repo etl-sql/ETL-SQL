@@ -47,7 +47,8 @@ async function readJson(url: string, fallback: string, signal: AbortSignal): Pro
  *
  * The frame inherits this page's CSP, so its scripts must carry the nonce this page was served with;
  * `getAttribute('nonce')` is empty once CSP is active, and the property still answers. Its fetch
- * adds the session token to Portal API calls.
+ * adds the session token to Portal API calls. The frame is its own window, so it loads the feedback
+ * module itself: the runtime's saved-view prompt, confirmations and toasts all go through it.
  */
 export function buildReportFrameDocument(root: Document, id: number, preview: boolean, initialPage: string | null = null): string {
     const nonce = root.querySelector<HTMLScriptElement>('script[nonce]')?.nonce ?? '';
@@ -55,6 +56,7 @@ export function buildReportFrameDocument(root: Document, id: number, preview: bo
     const dark = root.body.classList.contains('theme-dark');
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <link rel="stylesheet" href="/css/report-runtime.css?v=0.18.0">
+<script nonce="${nonce}" src="/js/feedback.js?v=0.18.0"></script>
 <script nonce="${nonce}">
   window.__IS_WEB__ = true; window.__IS_PREVIEW__ = ${preview}; window.__API_BASE__ = '/api/reports/${Number(id)}';
   ${initialPage ? `window.__INITIAL_PAGE__ = ${JSON.stringify(initialPage).replace(/</g, '\\u003c')};` : ''}
