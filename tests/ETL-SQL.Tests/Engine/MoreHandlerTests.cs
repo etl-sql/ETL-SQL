@@ -533,6 +533,26 @@ namespace ETL_SQL.Tests.Engine
             Assert.NotNull(eval.LastResult);
         }
 
+        /// <summary>
+        /// A run's log marks its last measured statement as the one that failed. The statement
+        /// that throws must therefore be measured, or the log blames the one before it.
+        /// </summary>
+        [Theory]
+        [InlineData("SELECT 1 AS N INTO #T; ASSERT 1 = 0, 'boom';")]
+        [InlineData("IF 1 = 1 BEGIN SELECT 1 AS N INTO #T; ASSERT 1 = 0, 'boom'; END")]
+        public async Task Profiling_MeasuresTheStatementThatFailed_AsTheLastOne(string sql)
+        {
+            var eval = Eval();
+            eval.Telemetry.IsProfiling = true;
+
+            await Assert.ThrowsAnyAsync<Exception>(() => eval.Evaluate(Parse(sql)));
+
+            var failed = ETL_SQL.Core.Profiling.StatementMetricsPayload
+                .FromRun(eval.Telemetry.ProfileMetrics, runFailed: true)
+                .Single(statement => statement.Failed);
+            Assert.StartsWith("ASSERT", failed.Statement, StringComparison.OrdinalIgnoreCase);
+        }
+
         [Fact]
         public async Task ShowProfile_IncludesPlanDecisionSummary()
         {

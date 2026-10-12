@@ -259,7 +259,8 @@ The `SubqueryAnalyzer` service identifies "Outer References" within a subquery's
 2. **Capture**: At runtime, `ExpressionEvaluator` resolves these references against the `OuterRowStack` to build the `CapturedValues` array.
 3. **Lookup**: The cache is queried using the `SubqueryCacheKey`.
 4. **Execution**: On a miss, the subquery is evaluated natively, and the result is stored in the cache.
-5. **Observability**: Metrics are tracked in `ExecutionTelemetryManager` and exposed via `@@SUBQUERY_CACHE_HITS` and `@@SUBQUERY_CACHE_MISSES`.
+5. **Invalidation**: A cached answer is good for the data it read. The cache is emptied after every statement other than a plain `SELECT` (one with no `INTO`), at the start and end of a script, and under memory pressure. Consecutive queries share entries; a query after an `INSERT`, `DROP` or any other statement evaluates its subqueries again.
+6. **Observability**: Metrics are tracked in `ExecutionTelemetryManager` and exposed via `@@SUBQUERY_CACHE_HITS` and `@@SUBQUERY_CACHE_MISSES`.
 
 ### Static Subqueries
 

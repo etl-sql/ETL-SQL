@@ -215,6 +215,27 @@ namespace ETL_SQL.Tests.Engine
             Assert.Equal(2, _evaluator.Telemetry.SubqueryCacheHits);
         }
 
+        [Fact]
+        public async Task StaticSubquery_IsReadAgain_AfterAStatementChangesItsTable()
+        {
+            await Run(@"
+                CREATE TABLE #T1 (ID INT);
+                INSERT INTO #T1 (ID) VALUES (1), (2), (3);
+            ");
+            const string total = "SELECT (SELECT COUNT(*) FROM #T1) AS Total;";
+
+            Assert.Equal(3m, Convert.ToDecimal(Assert.Single(await Execute(total))["Total"]));
+
+            // The same subquery text, after its table changed, must not answer from before the change.
+            await Run("INSERT INTO #T1 (ID) VALUES (4);");
+            Assert.Equal(4m, Convert.ToDecimal(Assert.Single(await Execute(total))["Total"]));
+
+            // Two reads with nothing between them still share one evaluation.
+            var misses = _evaluator.Telemetry.SubqueryCacheMisses;
+            Assert.Equal(4m, Convert.ToDecimal(Assert.Single(await Execute(total))["Total"]));
+            Assert.Equal(misses, _evaluator.Telemetry.SubqueryCacheMisses);
+        }
+
         private async Task Run(string sql) => await Run(_evaluator, sql);
 
         private async Task Run(Evaluator eval, string sql)

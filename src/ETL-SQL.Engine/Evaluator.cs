@@ -1497,6 +1497,9 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         }
     }
 
+    /// <summary>The exception whose throwing statement has already been measured.</summary>
+    private Exception? _measuredFailure;
+
     public async Task EvaluateStatement(Statement statement, CancellationToken cancellationToken = default)
     {
         CancellationToken = cancellationToken;
@@ -1593,12 +1596,24 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
                     node.ErrorMessage = ex.Message;
                 }
                 LastError = new ErrorInfo(50000, ex.Message, 16, 1, statement.Line, null);
+                // A run's log marks its last measured statement as the failure, so the statement
+                // that threw is measured too. A block the exception passes through on its way out
+                // is not: it would take the failure's place.
+                if (sw != null && !ReferenceEquals(_measuredFailure, ex))
+                {
+                    _measuredFailure = ex;
+                    _metricsReporter.ReportPostExecutionMetrics(statement, sw.ElapsedMilliseconds);
+                }
                 throw;
             }
             finally
             {
                 if (node != null) node.EndTicks = Stopwatch.GetTimestamp();
                 CurrentNodeId = parentId;
+                // A cached subquery answers for the data it read. Anything but a plain query may
+                // have changed that data, even when it failed part-way, so the answers go with it.
+                if (statement is not SelectStatement { IntoTable: null } && _subqueryCache.Count > 0)
+                    await _subqueryCache.ClearAsync();
                 // statement boundaries (essential for CREATE VISUAL).
             }
         }
