@@ -479,7 +479,7 @@ entry points is a separate future decision, not the measure of success.
 | ST04 | **Complete: submit one saved pipeline.** [As built](docs/architecture/decisions/portal-etl-documents.md#5-slice-2-as-built-2026-10-12); the sandbox executor path is not yet shown. One Orchestrator-backed MOCKDB run under the federated author identity uses the saved revision, checks run grants and reports a missing Orchestrator clearly. No scheduling or Portal-process writes. | — | M |
 | ST05 | **Complete: follow one pipeline run.** Studio shows that submitted run's status and bounded log through completion or failure, retaining its run ID; it never displays another run's output. | ST04 | M |
 | ST06 | **Complete: cancel one pipeline run.** Stop reaches the submitted Orchestrator run, displays confirmed cancellation or an explicitly unconfirmed outcome, and preserves diagnostics. | ST04, ST05 | M |
-| ST07 | **Schedule one saved pipeline.** Create a governed schedule for the saved revision, advance the controlled clock to one due occurrence and verify the resulting run and output. No new recurrence vocabulary. | ST04, ST05 | M |
+| ST07 | **Complete: schedule one saved pipeline.** Create a governed schedule for the saved revision, advance the controlled clock to one due occurrence and verify the resulting run and output. No new recurrence vocabulary. | ST04, ST05 | M |
 | ST08 | **Pipeline configuration export/import.** Round-trip one pipeline with its declared portable state; exclude secrets and host-owned bindings and verify report-only surfaces still refuse it. | — | M |
 | ST09 | **Pipeline promotion.** Promote that package to one permitted target, verify ownership/bindings and reject a collision without partial changes. No new promotion topology. | ST08 | M |
 | ST10 | **Complete: ordinary-author pipeline journey.** A Publisher with the required folder and Orchestrator grants creates, saves, reopens, runs and cancels one pipeline; denied grants fail explicitly. Admin identity cannot satisfy this task. | ST04, ST05, ST06 | M |
@@ -576,7 +576,7 @@ more work; do not fill a sprint by assuming every M task takes three days.
 | :--- | :--- | :--- | :--- |
 | Identify authoring gaps and improvements | ST01, ST02 completed | Inventory delivered | Select required journeys individually; the ST03 assessment lists the gaps each one closes. |
 | Keep one unpublished Portal draft | ST12, ST13 | 4–7 days | ST14 recovery and ST15 publishing are separate increments. |
-| Submit and observe one Portal pipeline | ST04–ST06, ST10 completed | Delivered | ST07 scheduling, then ST21's sandbox exercise. |
+| Submit and observe one Portal pipeline | ST04–ST07, ST10 completed | Delivered | ST21's sandbox exercise. |
 | Set measurable delivery limits | ST53, ST54 | 2–4 days | Schedule ST47 and ST42 independently after the decisions. |
 
 **Separate Later backlog:** [Mobile page-layout authoring](#presentation--workspaces--studio-authoring-for-mobile-page-layouts)

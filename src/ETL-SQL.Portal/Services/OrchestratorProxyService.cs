@@ -179,6 +179,61 @@ public class OrchestratorProxyService(
         }
     }
 
+    public async Task<HttpResponseMessage?> ScheduleJobRevisionAsync(
+        string jobName, string scriptText, string cron, string? timeZone, string? displayName, string? revision,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            return await SendAsync(
+                HttpMethod.Put,
+                $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/revision-schedule",
+                new
+                {
+                    ScriptText = scriptText,
+                    Cron = cron,
+                    TimeZone = timeZone,
+                    ProvisionIfMissing = true,
+                    DisplayName = displayName,
+                    Revision = revision
+                },
+                cancellationToken: ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to schedule a revision of job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(jobName));
+            return null;
+        }
+    }
+
+    public async Task<HttpResponseMessage?> GetJobRevisionScheduleAsync(string jobName, CancellationToken ct = default)
+    {
+        try
+        {
+            return await SendAsync(
+                HttpMethod.Get, $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/revision-schedule", cancellationToken: ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to read the schedule of job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(jobName));
+            return null;
+        }
+    }
+
+    public async Task<HttpResponseMessage?> UnscheduleJobRevisionAsync(string jobName, CancellationToken ct = default)
+    {
+        try
+        {
+            return await SendAsync(
+                HttpMethod.Delete, $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/revision-schedule", cancellationToken: ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to remove the schedule of job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(jobName));
+            return null;
+        }
+    }
+
     public async Task<HttpResponseMessage?> CancelJobRunAsync(long runId, CancellationToken ct = default)
     {
         try { return await SendAsync(HttpMethod.Post, $"api/job-runs/{runId}/cancel", cancellationToken: ct); }

@@ -1,5 +1,5 @@
 /** Catalog persistence callbacks for the shared Studio workbench. */
-import { PortalAuthoringError, readDesignerLease, readDesignerSave, readPipelineRun, readPipelineRunCancelRequested, readPipelineRunSubmitted, readScriptContent, readStudioDraft, readStudioReport } from './authoring-responses.js';
+import { PortalAuthoringError, readDesignerLease, readDesignerSave, readPipelineRun, readPipelineRunCancelRequested, readPipelineRunSubmitted, readPipelineSchedule, readScriptContent, readStudioDraft, readStudioReport } from './authoring-responses.js';
 import { asError, isObject } from './http-error.js';
 import { readAuthoringJson } from './portal-authoring.js';
 import type { AuthoringFetch } from './portal-authoring.js';
@@ -84,6 +84,19 @@ export function createPortalStudioHost(session: StudioSessionDto, fetch: Authori
                     readPipelineRunCancelRequested(await readJson(
                         `/api/studio/pipelines/${reportId(doc)}/runs/${runId}/cancel`, { method: 'POST' }));
                 }
+            },
+            // The same handoff with a cadence: the Orchestrator pins the saved version and owns the
+            // schedule. A catalog pipeline has no path a CREATE JOB statement could name.
+            pipelineSchedule: {
+                read: async (doc: PortalDocument) =>
+                    readPipelineSchedule(await readJson(`/api/studio/pipelines/${reportId(doc)}/schedule`)),
+                set: async (doc: PortalDocument, cron: string, timeZone: string | null) =>
+                    readPipelineSchedule(await readJson(`/api/studio/pipelines/${reportId(doc)}/schedule`, {
+                        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ version: doc.version, cron, timeZone })
+                    })),
+                remove: async (doc: PortalDocument) =>
+                    readPipelineSchedule(await readJson(`/api/studio/pipelines/${reportId(doc)}/schedule`, { method: 'DELETE' }))
             }
         } : {}),
         ...(session.draftRecovery ? {

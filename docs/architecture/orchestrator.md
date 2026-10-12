@@ -368,7 +368,19 @@ the life of the run, so after a restart only `MANAGE` can cancel it. A cancel fo
 not executing answers `409 not_running_here`; there is no cross-node signal.
 
 Refusals return `{ Code, Error }`: `job_not_provisioned`, `run_grant_denied`, `already_running`,
-`node_overloaded`, `not_started`, `cancel_denied`, `run_already_finished`, `not_running_here`.
+`node_overloaded`, `not_started`, `cancel_denied`, `run_already_finished`, `not_running_here`,
+`schedule_grant_denied`, `invalid_schedule`, `job_changed`.
+
+**Scheduling a revision.** `PUT /api/scheduled-jobs/{name}/revision-schedule` takes `ScriptText`,
+`Cron` and an optional `TimeZone`. It needs `MANAGE` on the job, because it changes what runs
+unattended. It pins the text as the job's stored script with hash policy `Block`, creates or updates
+one schedule named after the job, and attaches it armed at the next occurrence. `GET` on the same
+path returns the cadence, next and last run, and the pinned hash; `DELETE` detaches and drops the
+schedule and parks `NextRun` again, so the job cannot fall back to its interval.
+
+`SchedulerService` takes an optional `TimeProvider`. It decides when a schedule link is due and
+where a link is armed next. Leases, history timestamps and the legacy interval path stay on the
+system clock.
 
 ## 4. Concurrency — `JobThrottle`
 

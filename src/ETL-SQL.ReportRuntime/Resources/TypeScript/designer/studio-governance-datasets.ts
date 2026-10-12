@@ -7,13 +7,16 @@
 
 import { _escapeHtml, _studioIcon, queryElement, queryElements } from './studio-context.js';
 
-import type { StudioDomElement, StudioDynamic, StudioRuntimeDocument, StudioRuntimeState } from './studio-context.js';
+import { errorMessage } from './studio-context.js';
+import type { StudioDomElement, StudioDynamic, StudioPipelineSchedule, StudioPipelineScheduleHost, StudioRuntimeDocument, StudioRuntimeState } from './studio-context.js';
 import { STUDIO_ROUTES } from './studio-contracts.js';
 
 export interface StudioGovernanceDatasetsContext {
     readonly canonicalScriptMutation: (label: string, route: string, operation: Record<string, unknown>) => Promise<unknown>;
     readonly getActiveDoc: () => StudioRuntimeDocument | null;
     readonly paintGovernancePanel: () => void;
+    /** Present where the host schedules a saved catalog pipeline itself. */
+    readonly pipelineSchedule?: StudioPipelineScheduleHost;
     readonly sidebarContent: StudioDomElement;
     readonly state: StudioRuntimeState;
 }
@@ -173,7 +176,102 @@ export function createStudioGovernanceDatasets(hostContext: StudioGovernanceData
     // thing only it can: write the statements that make *this* document recurring, into the file the
     // author is looking at — and then open the Orchestrator at the job it just named.
 
+    // ── Hosted schedule ──────────────────────────────────────────────────────
+    // A saved catalog pipeline has no path a job statement could name, so writing CREATE JOB into
+    // it would declare a job that fails on its first tick. Where the host can schedule the saved
+    // revision itself, the panel hands off to it instead: the host pins that revision and owns the
+    // schedule, and this panel only shows what the host says and asks it to change.
+
+    interface HostedScheduleState { schedule: StudioPipelineSchedule | null; error: string | null; busy: boolean; loaded: boolean; readForVersion: unknown }
+    const hostedSchedules = new Map<string, HostedScheduleState>();
+
+    function hostedDocument(): StudioRuntimeDocument | null {
+        const doc = hostContext.getActiveDoc();
+        return hostContext.pipelineSchedule && doc?.reportId && /\.etlsql$/i.test(doc.path || '') ? doc : null;
+    }
+
+    function hostedState(doc: StudioRuntimeDocument): HostedScheduleState {
+        let state = hostedSchedules.get(doc.id);
+        if (!state) {
+            state = { schedule: null, error: null, busy: false, loaded: false, readForVersion: undefined };
+            hostedSchedules.set(doc.id, state);
+        }
+        return state;
+    }
+
+    async function hostedScheduleCall(doc: StudioRuntimeDocument, call: (host: StudioPipelineScheduleHost) => Promise<StudioPipelineSchedule>) {
+        const host = hostContext.pipelineSchedule;
+        const state = hostedState(doc);
+        if (!host || state.busy) return;
+        state.busy = true;
+        state.error = null;
+        if (hostContext.state.activeActivity === 'governance') hostContext.paintGovernancePanel();
+        try {
+            state.schedule = await call(host);
+        } catch (error) {
+            // What the host said is kept as the last known state; the refusal is shown beside it.
+            state.error = errorMessage(error) || 'The schedule request did not complete.';
+        } finally {
+            state.busy = false;
+            state.loaded = true;
+            if (hostContext.state.activeActivity === 'governance') hostContext.paintGovernancePanel();
+        }
+    }
+
+    function hostedScheduleMarkup(doc: StudioRuntimeDocument, governance: StudioDynamic) {
+        const state = hostedState(doc);
+        const current = state.schedule;
+        const when = (value?: string | null) => value ? new Date(value).toLocaleString() : 'not armed';
+        const status = !state.loaded ? 'Reading the schedule from the Orchestrator…'
+            : !current ? 'The schedule could not be read.'
+            : current.scheduled
+                ? `Runs on ${current.cron} (${current.timeZone || 'server time zone'}). Next run: ${when(current.nextRun)}.`
+                : 'Not scheduled. This pipeline runs only when someone runs it.';
+        const stale = current?.scheduled && !current.scheduledRevisionIsSaved
+            ? `<div class="etlsql-studio-empty-compact" data-gov-hosted-schedule-stale>The schedule still runs the revision it was set from, not saved version ${current.savedVersion}. Schedule again to pin the newer one.</div>`
+            : '';
+        return `
+            <section class="etlsql-studio-library-section" data-gov-schedule data-gov-hosted-schedule>
+                <div class="etlsql-studio-subhead"><div><strong>Run it on a schedule</strong><span>The Orchestrator runs the saved revision you pin</span></div></div>
+                <p class="etlsql-studio-outline-note" data-gov-hosted-schedule-status>${_escapeHtml(status)}</p>
+                ${stale}
+                ${state.error ? `<div class="etlsql-studio-empty-compact" role="alert" data-gov-hosted-schedule-error>${_escapeHtml(state.error)}</div>` : ''}
+                <div class="etlsql-studio-gov-add">
+                    <label class="etlsql-studio-field-label" for="gov-hosted-cron">Cadence (cron)</label>
+                    <input type="text" id="gov-hosted-cron" data-gov-hosted-schedule-cron list="gov-hosted-cadences" value="${_escapeHtml(current?.cron || '0 2 * * *')}" placeholder="0 2 * * *">
+                    <datalist id="gov-hosted-cadences">${((governance.schedule?.cadences || []) as StudioDynamic[]).map(cadence => `<option value="${_escapeHtml(cadence.cron)}">${_escapeHtml(cadence.label)}</option>`).join('')}</datalist>
+                    <label class="etlsql-studio-field-label" for="gov-hosted-zone">Time zone</label>
+                    <input type="text" id="gov-hosted-zone" data-gov-hosted-schedule-zone value="${_escapeHtml(current?.timeZone || '')}" placeholder="UTC — empty uses the server default">
+                    <button type="button" class="etlsql-studio-btn is-primary" data-gov-hosted-schedule-apply ${state.busy || doc.isDirty ? 'disabled' : ''}>Schedule saved version ${_escapeHtml(String(doc.version ?? ''))}</button>
+                    ${current?.scheduled ? `<button type="button" class="etlsql-studio-btn" data-gov-hosted-schedule-remove ${state.busy ? 'disabled' : ''}>Remove schedule</button>` : ''}
+                    <p class="etlsql-studio-outline-note">${doc.isDirty
+                        ? 'Save first. A schedule pins the saved revision, and this pipeline has unsaved edits.'
+                        : 'This pins the saved revision in the Orchestrator and attaches a schedule to it. Saving later does not change what runs unattended until you schedule again. It needs a MANAGE grant on the pipeline&apos;s Orchestrator job.'}</p>
+                </div>
+            </section>`;
+    }
+
+    function bindHostedSchedule(doc: StudioRuntimeDocument) {
+        const state = hostedState(doc);
+        // Read once per saved version: a save can make the pinned revision stale, and only the host
+        // knows. Keyed on the version so a failed read is not retried on every repaint.
+        if (!state.busy && state.readForVersion !== doc.version) {
+            state.readForVersion = doc.version;
+            void hostedScheduleCall(doc, host => host.read(doc));
+        }
+        queryElement(hostContext.sidebarContent, '[data-gov-hosted-schedule-apply]')?.addEventListener('click', () => {
+            const cron = (queryElement(hostContext.sidebarContent, '[data-gov-hosted-schedule-cron]')?.value || '').trim();
+            const zone = (queryElement(hostContext.sidebarContent, '[data-gov-hosted-schedule-zone]')?.value || '').trim();
+            void hostedScheduleCall(doc, host => host.set(doc, cron, zone || null));
+        });
+        queryElement(hostContext.sidebarContent, '[data-gov-hosted-schedule-remove]')?.addEventListener('click', () => {
+            void hostedScheduleCall(doc, host => host.remove(doc));
+        });
+    }
+
     function governanceScheduleMarkup(governance: StudioDynamic) {
+        const hosted = hostedDocument();
+        if (hosted) return hostedScheduleMarkup(hosted, governance);
         const schedule = governance.schedule;
         if (!schedule) return '';
 
@@ -224,6 +322,11 @@ export function createStudioGovernanceDatasets(hostContext: StudioGovernanceData
     }
 
     function bindGovernanceSchedule() {
+        const hosted = hostedDocument();
+        if (hosted) {
+            bindHostedSchedule(hosted);
+            return;
+        }
         const schedule = hostContext.state.governance?.schedule;
         if (!schedule) return;
 

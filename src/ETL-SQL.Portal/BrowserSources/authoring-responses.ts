@@ -100,6 +100,17 @@ export function readPipelineRunCancelRequested(value: unknown): PipelineRunCance
         throw new TypeError('Invalid pipeline run cancellation response.');
     return { runId: value.runId, pipelineId: value.pipelineId };
 }
+export function readPipelineSchedule(value: unknown): PipelineScheduleDto {
+    if (!isObject(value) || !integer(value.pipelineId) || !boolean(value.scheduled) || !boolean(value.enabled)
+        || !nullable(value.cron, string) || !nullable(value.timeZone, string) || !nullable(value.nextRun, date)
+        || !nullable(value.lastRun, date) || !nullable(value.scheduledScriptHash, string)
+        || !boolean(value.scheduledRevisionIsSaved) || !version(value.savedVersion))
+        throw new TypeError('Invalid pipeline schedule response.');
+    return { pipelineId: value.pipelineId, scheduled: value.scheduled, cron: value.cron, timeZone: value.timeZone,
+        enabled: value.enabled, nextRun: value.nextRun, lastRun: value.lastRun,
+        scheduledScriptHash: value.scheduledScriptHash, scheduledRevisionIsSaved: value.scheduledRevisionIsSaved,
+        savedVersion: value.savedVersion };
+}
 function pipelineRunStatement(value: unknown): value is PipelineRunStatementDto {
     return isObject(value) && string(value.statement) && number(value.durationMs)
         && number(value.rowsProcessed) && boolean(value.failed);

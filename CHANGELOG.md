@@ -21,6 +21,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   job and a missing `EXECUTE` grant each say so. An ordinary Publisher needs Execute on the document
   and `EXECUTE` on the job `PIPELINE:{id}`; an `Admin` or `OrchestratorManager` creates that job on
   first run.
+- Schedule a saved pipeline from Portal Studio. The governance rail pins the saved revision in the
+  pipeline's Orchestrator job and attaches a cron schedule to it. Scheduling needs `MANAGE` on the
+  job. The schedule keeps running the pinned revision until it is set again, and Studio says when
+  the saved version has moved on. Desktop Studio still writes the schedule statements into the script.
+- Add `PUT`, `GET` and `DELETE /api/scheduled-jobs/{name}/revision-schedule` to the Orchestrator.
+  The scheduler now takes its schedule-due time from an injectable `TimeProvider`.
 - Add Orchestrator routes for runs addressed by ID: `POST /api/scheduled-jobs/{name}/runs` runs
   submitted script text once through a job without changing its definition,
   `GET /api/job-runs/{id}` returns status and statements, and `POST /api/job-runs/{id}/cancel` stops

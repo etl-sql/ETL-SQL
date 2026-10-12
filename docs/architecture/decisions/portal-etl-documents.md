@@ -112,6 +112,14 @@ federated mode) and `StudioPipelineRunJourneyTests` (Chromium, as a Publisher wi
 role). Routes and refusal codes are in [Portal](../portal.md#studio-pipeline-runs) and
 [Orchestrator](../orchestrator.md#38-revision-runs-and-runs-addressed-by-id).
 
+**Slice 3, schedule handoff (same day).** Scheduling is the Run handoff with a cadence: the saved
+revision is pinned into the same job and a cron schedule is attached. It needs `MANAGE` on the job,
+not `EXECUTE`. The schedule keeps running the pinned revision until it is set again, and Studio says
+when the saved version has moved on. Studio's statement-writing schedule form is not offered for a
+catalog pipeline, because `CREATE JOB … FOR SCRIPT '<path>'` cannot name a catalog document.
+Evidence: `StudioPipelineScheduleTests` moves a test clock to the due occurrence and checks the run
+used the pinned hash; `AnAuthorSchedulesTheSavedRevisionThroughTheOrchestrator` drives the rail.
+
 Not yet shown:
 
 - **Sandbox execution.** The tests use the in-process executor. When `ISandboxScheduledJobExecutor`

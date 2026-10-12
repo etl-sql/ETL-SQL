@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Diagnostics;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Engine.Scheduling;
 using ETL_SQL.Orchestrator.Scheduling;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -211,6 +212,187 @@ public static partial class JobApiEndpoints
             // Accepted, not done: the run records CANCELLED when it actually stops.
             return Results.Accepted($"/api/job-runs/{historyId}", new RunCancelAccepted(historyId, job.Name));
         }).WithName("cancelScheduledJobRun");
+
+        // Scheduling a revision is publication: what was run on request becomes what runs unattended.
+        // It therefore needs MANAGE, pins the text with a blocking hash policy, and owns one schedule
+        // named after the job. MANAGE already decides a job's interval, so it decides this too.
+        app.MapPut("/api/scheduled-jobs/{name}/revision-schedule", async (HttpContext ctx, string name,
+            ScheduleJobRevisionRequest req, IJobHistoryStore store, IJobCatalogStore catalog,
+            OrchestratorObjectAuthorizationService authorization, IConfiguration cfg, TimeProvider clock) =>
+        {
+            if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+            if (string.IsNullOrWhiteSpace(req.ScriptText))
+                return Results.BadRequest(new RunRefusal("invalid_request", "ScriptText is required."));
+            if (req.ScriptText.Length > MaxRevisionCharacters)
+                return Results.BadRequest(new RunRefusal("invalid_request", $"ScriptText exceeds the {MaxRevisionCharacters} character limit."));
+            if (string.IsNullOrWhiteSpace(req.Cron))
+                return Results.BadRequest(new RunRefusal("invalid_schedule", "A schedule needs a cadence, as a cron expression."));
+            var timeZone = string.IsNullOrWhiteSpace(req.TimeZone) ? CronSchedule.DefaultTimeZone : req.TimeZone.Trim();
+            try { CronSchedule.Validate(req.Cron, timeZone); }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new RunRefusal("invalid_schedule", $"Invalid cron schedule or time zone: {ex.Message}"));
+            }
+            if (!TryResolveRequestTenant(ctx, cfg, out var requestTenant))
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+            var unescaped = Uri.UnescapeDataString(name);
+            var caller = RequestCaller(ctx);
+            var job = await store.GetJobAsync(requestTenant, unescaped);
+            if (job is null)
+            {
+                if (!req.ProvisionIfMissing || !OrchestratorObjectAuthorizationService.CanCreate(caller))
+                    return Results.Json(
+                        new RunRefusal("job_not_provisioned",
+                            $"No Orchestrator job named '{unescaped}' is provisioned for this caller."),
+                        statusCode: req.ProvisionIfMissing ? StatusCodes.Status403Forbidden : StatusCodes.Status404NotFound);
+                await store.SaveJobAsync(new JobDefinition(
+                    unescaped, req.ScriptText, 1, "DAY", null, null, SchedulerService.ManualOnlyNextRun,
+                    HashPolicy: "Off",
+                    DisplayName: string.IsNullOrWhiteSpace(req.DisplayName) ? unescaped : req.DisplayName.Trim(),
+                    CreatedBy: caller.PrincipalKey,
+                    ModifiedBy: ReadActor(ctx),
+                    TenantId: requestTenant));
+                job = await store.GetJobAsync(requestTenant, unescaped);
+                if (job is null) return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                EmitObjectMutationAudit(
+                    caller, $"JOB:{unescaped}", "CREATE_JOB",
+                    $"Job '{unescaped}' provisioned as a run slot.", ctx.TraceIdentifier);
+            }
+
+            if (!await authorization.CanAsync(
+                    caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                    OrchestratorObjectPermission.Manage, job.CreatedBy, ctx.RequestAborted))
+                return Results.Json(
+                    new RunRefusal("schedule_grant_denied",
+                        $"Scheduling changes what job '{unescaped}' runs unattended, so it needs a MANAGE grant on it."),
+                    statusCode: StatusCodes.Status403Forbidden);
+
+            var schedule = await catalog.GetScheduleAsync(job.TenantId, unescaped);
+            if (schedule is not null && !await authorization.CanAsync(
+                    caller, OrchestratorObjectKind.Schedule, schedule.Id, schedule.TenantId,
+                    OrchestratorObjectPermission.Manage, schedule.CreatedBy, ctx.RequestAborted))
+                return Results.Json(
+                    new RunRefusal("schedule_grant_denied",
+                        $"A schedule named '{unescaped}' exists and this caller holds no MANAGE grant on it."),
+                    statusCode: StatusCodes.Status403Forbidden);
+
+            // Pin first: if anything below fails, the worst state is a pinned job with no schedule,
+            // which is still a job that only runs on request.
+            var scriptHash = "sha256:" + Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(req.ScriptText))).ToLowerInvariant();
+            var pinned = job with
+            {
+                Script = req.ScriptText,
+                ScriptHash = scriptHash,
+                HashPolicy = "Block",
+                Description = string.IsNullOrWhiteSpace(req.Revision) ? job.Description : $"Scheduled revision: {req.Revision.Trim()}",
+                ModifiedBy = ReadActor(ctx)
+            };
+            if (!await store.TrySaveJobAsync(pinned, job.Version))
+                return Results.Conflict(new RunRefusal("job_changed", $"Job '{unescaped}' changed while it was being scheduled. Retry."));
+
+            var cadenceChanged = schedule is null
+                || !string.Equals(schedule.Cron, req.Cron.Trim(), StringComparison.Ordinal)
+                || !string.Equals(schedule.TimeZone, timeZone, StringComparison.Ordinal);
+            await catalog.SaveScheduleAsync(schedule is null
+                ? new ScheduleDefinition(
+                    Name: unescaped, Cron: req.Cron.Trim(), TimeZone: timeZone,
+                    DisplayName: pinned.DisplayName ?? unescaped,
+                    Description: $"Schedule of job '{unescaped}'.",
+                    CreatedBy: caller.PrincipalKey, ModifiedBy: ReadActor(ctx), TenantId: job.TenantId)
+                : schedule with { Cron = req.Cron.Trim(), TimeZone = timeZone, IsEnabled = true, ModifiedBy = ReadActor(ctx) });
+            schedule = await catalog.GetScheduleAsync(job.TenantId, unescaped);
+            if (schedule is null || !schedule.Id.IsAssigned)
+                return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+
+            var now = clock.GetUtcNow();
+            var attached = await JobScheduleAttachment.AttachAsync(catalog, job.Id, job.TenantId, schedule.Name, now);
+            // An existing link keeps its armed time unless the cadence moved under it.
+            if (!attached && cadenceChanged)
+                await catalog.ArmJobScheduleAsync(job.Id, schedule.Id,
+                    CronSchedule.GetNextOccurrence(schedule.Cron, schedule.TimeZone, now));
+
+            EmitObjectMutationAudit(
+                caller, $"JOB:{unescaped}", "SCHEDULE_JOB_REVISION",
+                $"Job '{unescaped}' pinned to revision {scriptHash} and scheduled on '{schedule.Cron}' ({schedule.TimeZone}).",
+                ctx.TraceIdentifier, SecurityEventSeverity.Warning);
+            return Results.Ok(await ReadRevisionScheduleAsync(store, catalog, requestTenant, unescaped));
+        }).WithName("scheduleJobRevision");
+
+        app.MapGet("/api/scheduled-jobs/{name}/revision-schedule", async (HttpContext ctx, string name,
+            IJobHistoryStore store, IJobCatalogStore catalog,
+            OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
+        {
+            ctx.Response.Headers.CacheControl = "no-store";
+            if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+            if (!TryResolveRequestTenant(ctx, cfg, out var requestTenant))
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            var unescaped = Uri.UnescapeDataString(name);
+            var job = await store.GetJobAsync(requestTenant, unescaped);
+            if (job is null) return Results.NotFound(new RunRefusal("job_not_provisioned", $"Job '{unescaped}' not found."));
+            if (!await authorization.CanAsync(
+                    RequestCaller(ctx), OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                    OrchestratorObjectPermission.Read, job.CreatedBy, ctx.RequestAborted))
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            return Results.Ok(await ReadRevisionScheduleAsync(store, catalog, requestTenant, unescaped));
+        }).WithName("getJobRevisionSchedule");
+
+        app.MapDelete("/api/scheduled-jobs/{name}/revision-schedule", async (HttpContext ctx, string name,
+            IJobHistoryStore store, IJobCatalogStore catalog,
+            OrchestratorObjectAuthorizationService authorization, IConfiguration cfg) =>
+        {
+            if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+            if (!TryResolveRequestTenant(ctx, cfg, out var requestTenant))
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            var unescaped = Uri.UnescapeDataString(name);
+            var caller = RequestCaller(ctx);
+            var job = await store.GetJobAsync(requestTenant, unescaped);
+            if (job is null) return Results.NotFound(new RunRefusal("job_not_provisioned", $"Job '{unescaped}' not found."));
+            if (!await authorization.CanAsync(
+                    caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
+                    OrchestratorObjectPermission.Manage, job.CreatedBy, ctx.RequestAborted))
+                return Results.Json(
+                    new RunRefusal("schedule_grant_denied", $"Removing the schedule of job '{unescaped}' needs a MANAGE grant on it."),
+                    statusCode: StatusCodes.Status403Forbidden);
+
+            var schedule = await catalog.GetScheduleAsync(job.TenantId, unescaped);
+            if (schedule is not null && schedule.Id.IsAssigned)
+            {
+                await catalog.RemoveJobScheduleAsync(job.Id, schedule.Id);
+                // Left in place if some other job was attached to it by hand.
+                _ = await catalog.DeleteScheduleAsync(schedule.Id);
+                EmitObjectMutationAudit(
+                    caller, $"JOB:{unescaped}", "UNSCHEDULE_JOB_REVISION",
+                    $"Schedule removed from job '{unescaped}'.", ctx.TraceIdentifier, SecurityEventSeverity.Warning);
+            }
+
+            // Without a link the job is interval-driven again, and while scheduled its NextRun held
+            // the schedule's next occurrence. Park it, or the job would fire once at that time.
+            if ((await catalog.GetJobSchedulesAsync(job.Id)).Count == 0)
+            {
+                var current = await store.GetJobAsync(requestTenant, unescaped);
+                if (current is not null && !await store.TrySaveJobAsync(
+                        current with { NextRun = SchedulerService.ManualOnlyNextRun }, current.Version))
+                    return Results.Conflict(new RunRefusal("job_changed", $"Job '{unescaped}' changed while its schedule was being removed. Retry."));
+            }
+            return Results.Ok(await ReadRevisionScheduleAsync(store, catalog, requestTenant, unescaped));
+        }).WithName("unscheduleJobRevision");
+    }
+
+    /// <summary>The job's own schedule and the revision pinned for it, as stored now.</summary>
+    private static async Task<JobRevisionScheduleResponse> ReadRevisionScheduleAsync(
+        IJobHistoryStore store, IJobCatalogStore catalog, string? tenantId, string jobName)
+    {
+        var job = (await store.GetJobAsync(tenantId, jobName))!;
+        var schedule = await catalog.GetScheduleAsync(job.TenantId, jobName);
+        var link = schedule is null
+            ? null
+            : (await catalog.GetJobSchedulesAsync(job.Id)).FirstOrDefault(item => item.ScheduleId == schedule.Id);
+        return new JobRevisionScheduleResponse(
+            job.Name, link is not null, schedule?.Cron, schedule?.TimeZone,
+            schedule is not null && schedule.IsEnabled && job.IsEnabled,
+            link?.NextRun, link?.LastRun, job.ScriptHash, job.Description);
     }
 
     /// <summary>
@@ -243,6 +425,29 @@ public static partial class JobApiEndpoints
     public sealed record RunRefusal(string Code, string Error);
 
     public sealed record RunAccepted(long RunId, string JobName, string ScriptHash);
+
+    private sealed record ScheduleJobRevisionRequest(
+        string ScriptText,
+        string Cron,
+        string? TimeZone = null,
+        bool ProvisionIfMissing = false,
+        string? DisplayName = null,
+        string? Revision = null);
+
+    /// <summary>
+    /// <see cref="ScriptHash"/> is the hash of the pinned script the schedule runs, which is not
+    /// necessarily the latest text a caller could submit for a run.
+    /// </summary>
+    public sealed record JobRevisionScheduleResponse(
+        string JobName,
+        bool Scheduled,
+        string? Cron,
+        string? TimeZone,
+        bool Enabled,
+        DateTime? NextRun,
+        DateTime? LastRun,
+        string? ScriptHash,
+        string? Description);
 
     public sealed record RunCancelAccepted(long RunId, string JobName);
 

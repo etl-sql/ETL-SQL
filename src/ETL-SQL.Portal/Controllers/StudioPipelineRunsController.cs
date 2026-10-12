@@ -172,6 +172,136 @@ public sealed class StudioPipelineRunsController(
         };
     }
 
+    // ── Schedule ─────────────────────────────────────────────────────────────
+    //
+    // The same handoff as Run, with a cadence. The saved revision is pinned into the pipeline's job
+    // and the job is attached to a cron schedule of its own. The schedule keeps running that pinned
+    // revision until it is set again, so a later save does not change what runs unattended.
+
+    [HttpGet("{id:int}/schedule")]
+    public async Task<IActionResult> GetSchedule(int id, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "no-store";
+        var pipeline = await RunnablePipelineAsync(id, ct);
+        if (pipeline.Refusal is not null) return pipeline.Refusal;
+        if (!orchestrator.IsConfigured) return NotConnected();
+
+        using var response = await orchestrator.GetJobRevisionScheduleAsync(JobName(id), ct);
+        if (response is null) return Unreachable();
+        // No job yet is an unscheduled pipeline, not an error.
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return Ok(new PipelineScheduleDto(id, false, null, null, false, null, null, null, false, pipeline.Document!.Version));
+        if (!response.IsSuccessStatusCode) return await RelayScheduleRefusalAsync(response, JobName(id), ct);
+        return Ok(await ToScheduleDtoAsync(pipeline.Document!, response, ct));
+    }
+
+    [HttpPut("{id:int}/schedule")]
+    public async Task<IActionResult> SetSchedule(int id, [FromBody] SchedulePipelineRequest request, CancellationToken ct)
+    {
+        var pipeline = await RunnablePipelineAsync(id, ct);
+        if (pipeline.Refusal is not null) return pipeline.Refusal;
+        var document = pipeline.Document!;
+        if (request.Version != document.Version)
+            return Conflict(new PipelineRunRefusalDto(
+                "stale_revision",
+                $"A schedule pins the saved revision. This pipeline is at version {document.Version}; save or reload, then schedule again.",
+                document.Version));
+        if (string.IsNullOrWhiteSpace(request.Cron))
+            return BadRequest(new PipelineRunRefusalDto("invalid_schedule", "A schedule needs a cadence, as a cron expression."));
+        if (!orchestrator.IsConfigured) return NotConnected();
+
+        var scriptText = await ReadSavedRevisionAsync(document, ct);
+        if (string.IsNullOrWhiteSpace(scriptText))
+            return UnprocessableEntity(new PipelineRunRefusalDto(
+                "empty_revision", "The saved revision of this pipeline is empty or could not be read, so there is nothing to schedule."));
+
+        var jobName = JobName(document.Id);
+        using var response = await orchestrator.ScheduleJobRevisionAsync(
+            jobName, scriptText, request.Cron.Trim(), request.TimeZone, document.Name, $"v{document.Version}", ct);
+        if (response is null) return Unreachable();
+        if (!response.IsSuccessStatusCode) return await RelayScheduleRefusalAsync(response, jobName, ct);
+
+        var schedule = await ToScheduleDtoAsync(document, response, ct);
+        await audit.LogAsync(CurrentUserId, "PIPELINE_SCHEDULED", "Report", document.Id.ToString(),
+            $"version={document.Version}; hash={schedule.ScheduledScriptHash}; job={jobName}; cron={schedule.Cron}; zone={schedule.TimeZone}");
+        return Ok(schedule);
+    }
+
+    [HttpDelete("{id:int}/schedule")]
+    public async Task<IActionResult> RemoveSchedule(int id, CancellationToken ct)
+    {
+        var pipeline = await RunnablePipelineAsync(id, ct);
+        if (pipeline.Refusal is not null) return pipeline.Refusal;
+        if (!orchestrator.IsConfigured) return NotConnected();
+
+        var jobName = JobName(id);
+        using var response = await orchestrator.UnscheduleJobRevisionAsync(jobName, ct);
+        if (response is null) return Unreachable();
+        if (!response.IsSuccessStatusCode) return await RelayScheduleRefusalAsync(response, jobName, ct);
+
+        await audit.LogAsync(CurrentUserId, "PIPELINE_UNSCHEDULED", "Report", id.ToString(), $"job={jobName}");
+        return Ok(await ToScheduleDtoAsync(pipeline.Document!, response, ct));
+    }
+
+    private async Task<string?> ReadSavedRevisionAsync(Report document, CancellationToken ct)
+    {
+        var scriptKey = PortalPathGuard.ToScriptKey(portalConfig, document.ScriptPath);
+        return scriptKey is not null && await artifacts.ExistsAsync(ArtifactArea.Scripts, scriptKey, ct)
+            ? await artifacts.ReadAllTextAsync(ArtifactArea.Scripts, scriptKey, ct)
+            : null;
+    }
+
+    private async Task<PipelineScheduleDto> ToScheduleDtoAsync(Report document, HttpResponseMessage response, CancellationToken ct)
+    {
+        var schedule = await response.Content.ReadFromJsonAsync<OrchestratorRevisionSchedule>(Json, ct)
+            ?? new OrchestratorRevisionSchedule(false, null, null, false, null, null, null);
+        var saved = await ReadSavedRevisionAsync(document, ct);
+        var savedHash = saved is null
+            ? null
+            : "sha256:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(saved))).ToLowerInvariant();
+        return new PipelineScheduleDto(
+            document.Id, schedule.Scheduled, schedule.Cron, schedule.TimeZone, schedule.Enabled,
+            schedule.NextRun, schedule.LastRun,
+            schedule.Scheduled ? schedule.ScriptHash : null,
+            schedule.Scheduled && savedHash is not null
+                && string.Equals(savedHash, schedule.ScriptHash, StringComparison.OrdinalIgnoreCase),
+            document.Version);
+    }
+
+    private async Task<IActionResult> RelayScheduleRefusalAsync(HttpResponseMessage response, string jobName, CancellationToken ct)
+    {
+        OrchestratorRefusal? refusal = null;
+        try { refusal = await response.Content.ReadFromJsonAsync<OrchestratorRefusal>(Json, ct); }
+        catch (JsonException) { }
+
+        return (response.StatusCode, refusal?.Code) switch
+        {
+            (_, "job_not_provisioned") => StatusCode(StatusCodes.Status403Forbidden, new PipelineRunRefusalDto(
+                "job_not_provisioned",
+                $"No Orchestrator job is provisioned for this pipeline yet, and this account may not create one. "
+                + $"An Orchestrator manager schedules or runs it once to create '{jobName}'.")),
+            (_, "schedule_grant_denied") => StatusCode(StatusCodes.Status403Forbidden, new PipelineRunRefusalDto(
+                "schedule_grant_denied",
+                $"Scheduling changes what Orchestrator job '{jobName}' runs unattended, so it needs a MANAGE grant on that job. EXECUTE is enough to run it, not to schedule it.")),
+            (HttpStatusCode.BadRequest, _) => BadRequest(new PipelineRunRefusalDto(
+                "invalid_schedule", refusal?.Error ?? "The Orchestrator did not accept that schedule.")),
+            (HttpStatusCode.Conflict, _) => Conflict(new PipelineRunRefusalDto(
+                "job_changed", "The Orchestrator job changed while this was applied. Retry.")),
+            (HttpStatusCode.Forbidden, _) => StatusCode(StatusCodes.Status403Forbidden, new PipelineRunRefusalDto(
+                "schedule_grant_denied", "The Orchestrator does not let this account read or change that schedule.")),
+            _ => Unreachable()
+        };
+    }
+
+    private ObjectResult NotConnected() =>
+        StatusCode(StatusCodes.Status503ServiceUnavailable, new PipelineRunRefusalDto(
+            "orchestrator_not_connected",
+            "No Orchestrator is connected to this Portal, so a pipeline cannot be scheduled from here. "
+            + "An administrator connects one under Admin, Orchestrator."));
+
+    private sealed record OrchestratorRevisionSchedule(
+        bool Scheduled, string? Cron, string? TimeZone, bool Enabled, DateTime? NextRun, DateTime? LastRun, string? ScriptHash);
+
     private ObjectResult CancelDenied(long runId) =>
         StatusCode(StatusCodes.Status403Forbidden, new PipelineRunRefusalDto(
             "cancel_denied",

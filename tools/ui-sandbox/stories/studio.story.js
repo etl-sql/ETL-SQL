@@ -185,6 +185,33 @@ function makePipelineRunHost() {
   };
 }
 
+/**
+ * A stand-in for the Portal's schedule host. The schedule pins version 3; saving the document
+ * afterwards is what makes the panel report the pinned revision as stale.
+ * `window.__STUDIO_PIPELINE_RUN__ = { schedule: 'refuse' }` answers as a caller without MANAGE.
+ */
+function makePipelineScheduleHost() {
+  let schedule = { scheduled: false, cron: null, timeZone: null, enabled: false, nextRun: null, lastRun: null, pinnedVersion: null };
+  const view = document => ({
+    ...schedule,
+    scheduledRevisionIsSaved: schedule.scheduled && schedule.pinnedVersion === document.version,
+    savedVersion: document.version,
+  });
+  return {
+    read: async document => view(document),
+    set: async (document, cron, timeZone) => {
+      if (window.__STUDIO_PIPELINE_RUN__?.schedule === 'refuse')
+        throw new Error("Scheduling changes what Orchestrator job 'PIPELINE:42' runs unattended, so it needs a MANAGE grant on that job. EXECUTE is enough to run it, not to schedule it.");
+      schedule = { scheduled: true, cron, timeZone: timeZone || 'UTC', enabled: true, nextRun: '2030-01-02T02:00:00Z', lastRun: null, pinnedVersion: document.version };
+      return view(document);
+    },
+    remove: async document => {
+      schedule = { scheduled: false, cron: null, timeZone: null, enabled: false, nextRun: null, lastRun: null, pinnedVersion: null };
+      return view(document);
+    },
+  };
+}
+
 export default {
   id: 'studio',
   title: 'ETL-SQL Studio',
@@ -193,7 +220,7 @@ export default {
     { id: 'default', label: 'Multi-Tab Workbench (Report, ETL, Script)' },
     { id: 'pending-save', label: 'Slow Save (type while saving)' },
     { id: 'crlf-pipeline', label: 'CRLF Pipeline (initial projection)' },
-    { id: 'pipeline-run', label: 'Saved Pipeline Run (Run, follow, Stop)' },
+    { id: 'pipeline-run', label: 'Saved Pipeline (Run, follow, Stop, schedule)' },
   ],
   async mount(stage, fixtureId, ctx) {
     // Import canonical studio module
@@ -236,6 +263,7 @@ export default {
       documents,
       activeDocId: fixtureId === 'crlf-pipeline' || fixtureId === 'pipeline-run' ? 'doc-etl' : undefined,
       pipelineRuns: fixtureId === 'pipeline-run' ? makePipelineRunHost() : undefined,
+      pipelineSchedule: fixtureId === 'pipeline-run' ? makePipelineScheduleHost() : undefined,
       workspaceFiles: JSON.parse(JSON.stringify(sandboxWorkspace.files)),
       workspaceFolders: JSON.parse(JSON.stringify(sandboxWorkspace.folders)),
       authFetch,

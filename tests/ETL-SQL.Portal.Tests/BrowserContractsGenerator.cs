@@ -95,6 +95,8 @@ internal static class BrowserContractsGenerator
         typeof(PipelineRunSubmittedDto),
         typeof(PipelineRunRefusalDto),
         typeof(PipelineRunCancelRequestedDto),
+        typeof(SchedulePipelineRequest),
+        typeof(PipelineScheduleDto),
         typeof(PipelineRunStatementDto),
         typeof(PipelineRunDto),
         typeof(ScriptContentResponse),

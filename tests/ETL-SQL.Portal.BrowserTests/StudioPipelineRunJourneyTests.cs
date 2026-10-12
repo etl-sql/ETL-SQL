@@ -166,6 +166,73 @@ public sealed class StudioPipelineRunJourneyTests(PortalJourneyFixture fixture)
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task AnAuthorSchedulesTheSavedRevisionThroughTheOrchestrator()
+    {
+        var author = await CreateAuthorAsync();
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await SignInAsync(page, author.UserName);
+        await page.GotoAsync("/studio.html");
+        var pipelineId = await CreatePipelineInStudioAsync(page, author);
+        var job = $"PIPELINE:{pipelineId}";
+        await SetAndSaveAsync(page, pipelineId, Passing);
+        await OperatorProvisionsAsync(job);
+        await OperatorGrantsAsync(job, author.PrincipalKey, "EXECUTE");
+
+        await page.Locator("[data-activity='governance']").ClickAsync();
+        var panel = page.Locator("[data-gov-hosted-schedule]");
+        await panel.WaitForAsync(new() { Timeout = 15_000 });
+        var status = page.Locator("[data-gov-hosted-schedule-status]");
+        await Expect(status).ToContainTextAsync("Not scheduled", new() { Timeout = 15_000 });
+        // The statement-writing form is not offered: a catalog pipeline has no path a job could name.
+        Assert.Equal(0, await page.Locator("[data-gov-schedule-apply]").CountAsync());
+
+        // EXECUTE runs the job. It does not decide what runs unattended.
+        await page.Locator("[data-gov-hosted-schedule-cron]").FillAsync("0 2 * * *");
+        await page.Locator("[data-gov-hosted-schedule-zone]").FillAsync("UTC");
+        await page.Locator("[data-gov-hosted-schedule-apply]").ClickAsync();
+        await Expect(page.Locator("[data-gov-hosted-schedule-error]")).ToContainTextAsync("MANAGE grant", new() { Timeout = 15_000 });
+        Assert.Null(await StoredScheduleAsync(job));
+
+        await OperatorGrantsAsync(job, author.PrincipalKey, "MANAGE");
+        await page.Locator("[data-gov-hosted-schedule-cron]").FillAsync("0 2 * * *");
+        await page.Locator("[data-gov-hosted-schedule-zone]").FillAsync("UTC");
+        await page.Locator("[data-gov-hosted-schedule-apply]").ClickAsync();
+        await Expect(status).ToContainTextAsync("Runs on 0 2 * * * (UTC)", new() { Timeout = 15_000 });
+
+        // The Orchestrator holds it: a schedule on the job, and the saved revision pinned with a
+        // blocking hash. Nothing was written into the script.
+        var schedule = await StoredScheduleAsync(job);
+        Assert.Equal("0 2 * * *", schedule!.Cron);
+        var stored = await StoredJobAsync(job);
+        Assert.Equal(Passing, stored!.Script.Replace("\r\n", "\n"));
+        Assert.Equal("Block", stored.HashPolicy);
+        Assert.Equal(Passing, (await page.EvaluateAsync<string>(
+            "() => window.__STUDIO__.state.editorInstance.getValue()")).Replace("\r\n", "\n"));
+
+        // Saved again, the schedule still runs what it pinned, and the panel says so.
+        await SetAndSaveAsync(page, pipelineId, Failing);
+        // Close and reopen the rail so it reads the schedule against the new saved version.
+        await page.Locator("[data-activity='governance']").ClickAsync();
+        await Expect(panel).ToBeHiddenAsync(new() { Timeout = 15_000 });
+        await page.Locator("[data-activity='governance']").ClickAsync();
+        await Expect(page.Locator("[data-gov-hosted-schedule-stale]")).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        Assert.Equal(Passing, (await StoredJobAsync(job))!.Script.Replace("\r\n", "\n"));
+
+        await page.Locator("[data-gov-hosted-schedule-remove]").ClickAsync();
+        await Expect(status).ToContainTextAsync("Not scheduled", new() { Timeout = 15_000 });
+        Assert.Null(await StoredScheduleAsync(job));
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    private async Task<ScheduleDefinition?> StoredScheduleAsync(string job)
+    {
+        using var scope = fixture.Orchestrator.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<IJobCatalogStore>().GetScheduleAsync("portal-host", job);
+    }
+
     // ── Studio ───────────────────────────────────────────────────────────────
 
     /// <summary>Creates a pipeline from Studio Home in the author's folder and returns its id.</summary>

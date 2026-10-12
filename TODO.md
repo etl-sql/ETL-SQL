@@ -1473,9 +1473,16 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
   `StopReachesTheSubmittedRunAndTheOrchestratorConfirmsIt`, `AnAuthorStopsTheirOwnRunButNotAColleagues`,
   `StopReachesTheRunAndStudioSaysOnlyWhatWasConfirmed` (browser, with the stop request aborted in transit).
   Open: cancel signals only the node executing the run; kill-by-job-name still records `FAILURE`.
-- [ ] **ST07 — Schedule one saved pipeline.** Create a governed schedule for the saved revision, advance the
+- [x] **ST07 — Schedule one saved pipeline.** Create a governed schedule for the saved revision, advance the
   controlled clock to one due occurrence, and verify the resulting run and output. No new recurrence vocabulary.
   (Depends on: ST04, ST05; Size: M)
+  Done 2026-10-12. `PUT /api/studio/pipelines/{id}/schedule` pins the saved revision in the job with a
+  blocking hash and attaches a cron schedule; it needs `MANAGE` on the job. `StudioPipelineScheduleTests`
+  puts the scheduler on a test clock: nothing runs before 02:00, one run at 02:00 with the pinned hash
+  (not the later save), statements readable, link re-armed for the next day, no re-fire, and nothing after
+  unscheduling. Studio's governance rail drives it (`AnAuthorSchedulesTheSavedRevisionThroughTheOrchestrator`).
+  Found on the way: the rail's statement-writing form wrote `CREATE JOB … FOR SCRIPT '<catalog path>'`
+  for Portal pipelines, a job that could never find its script. It is no longer offered there.
 - [ ] **ST08 — Pipeline configuration export/import.** Round-trip one pipeline with its declared portable state;
   exclude secrets and host-owned bindings, and verify report-only surfaces still refuse it. (Size: M)
 - [ ] **ST09 — Pipeline promotion.** Promote that package to one permitted target, verify ownership/bindings,

@@ -355,6 +355,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
     const { governanceDatasetsMarkup, bindGovernanceDatasets, governanceScheduleMarkup, bindGovernanceSchedule } = createStudioGovernanceDatasets({
         get canonicalScriptMutation() { return canonicalScriptMutation; },
         get getActiveDoc() { return getActiveDoc; },
+        get pipelineSchedule() { return opts.pipelineSchedule; },
         get paintGovernancePanel() { return paintGovernancePanel; },
         get sidebarContent() { return sidebarContent; },
         get state() { return state; },

@@ -80,6 +80,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private readonly ETL_SQL.Core.Execution.ISessionStateManager _sessionManager;
         private readonly INodeCapacityMonitor _capacityMonitor;
         private readonly ITenantMeteringLedger? _meteringLedger;
+        // Decides when a schedule link is due and where it is armed next. Leases and history
+        // stamps stay on the system clock.
+        private readonly TimeProvider _clock;
         private CancellationTokenSource? _cts;
         private readonly System.Collections.Concurrent.ConcurrentDictionary<long, CancellationTokenSource> _runningJobs = new();
         // COMPAT_BREAK: 0.21.0 — equal job names in different tenants can run independently.
@@ -98,8 +101,10 @@ namespace ETL_SQL.Orchestrator.Scheduling
             ILogger<SchedulerService> logger, JobThrottle throttle, IConfiguration configuration,
             ETL_SQL.Core.Execution.ISessionStateManager sessionManager,
             INodeCapacityMonitor? capacityMonitor = null,
-            ITenantMeteringLedger? meteringLedger = null)
+            ITenantMeteringLedger? meteringLedger = null,
+            TimeProvider? clock = null)
         {
+            _clock = clock ?? TimeProvider.System;
             _serviceProvider = serviceProvider;
             _store = store;
             _logger = logger;
@@ -277,7 +282,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     // jobs with no schedule attached. The two sets are disjoint by construction, so
                     // there is nothing to de-duplicate between them.
                     if (_store is IJobCatalogStore catalog)
-                        dueJobs = dueJobs.Concat(await catalog.GetJobsDueByScheduleAsync(DateTime.UtcNow));
+                        dueJobs = dueJobs.Concat(await catalog.GetJobsDueByScheduleAsync(_clock.GetUtcNow().UtcDateTime));
 
                     foreach (var job in dueJobs)
                     {
@@ -768,7 +773,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             blockedActivity, "BLOCKED", blockedSw.ElapsedMilliseconds, 0, 0, 0);
                         // A blocked run still consumed its occurrence: advance the schedule so the job
                         // does not re-fire immediately and block again on every tick.
-                        var blockedNextRun = await AdvanceScheduleLinksAsync(job, DateTime.UtcNow) ?? CalculateNextRun(job);
+                        var blockedNextRun = await AdvanceScheduleLinksAsync(job, _clock.GetUtcNow().UtcDateTime) ?? CalculateNextRun(job);
                         try { await _store.TryUpdateJobLastRunFencedAsync(job.Id, DateTime.Now, blockedNextRun, fenceToken); } catch { }
                         return;
                     }
@@ -1062,7 +1067,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             // the interval, so a run slot stays manual and a scheduled job keeps its next run.
             var nextRun = revision is not null
                 ? job.NextRun
-                : await AdvanceScheduleLinksAsync(job, DateTime.UtcNow) ?? CalculateNextRun(job);
+                : await AdvanceScheduleLinksAsync(job, _clock.GetUtcNow().UtcDateTime) ?? CalculateNextRun(job);
             try
             {
                 // Fenced write: if this node was paused past its lease and another instance took over the

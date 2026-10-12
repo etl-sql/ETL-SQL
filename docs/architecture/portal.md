@@ -977,6 +977,9 @@ identity assertion. The Orchestrator decides whether that caller may run the job
 | POST | `/api/studio/pipelines/{id}/runs` | `ScriptRun` + document Execute | Submit the saved revision. The body names the version the author sees; a stale one is `409 stale_revision`. Returns `202` with the run ID |
 | GET | `/api/studio/pipelines/{id}/runs/{runId}` | `ScriptRun` + document Execute | Status and bounded statement log of that run. A run of another pipeline's job is `404` |
 | POST | `/api/studio/pipelines/{id}/runs/{runId}/cancel` | `ScriptRun` + document Execute | Ask the Orchestrator to stop that run. `202` means the request was accepted; the run reports `CANCELLED` when it has stopped |
+| GET | `/api/studio/pipelines/{id}/schedule` | `ScriptRun` + document Execute | The pipeline's schedule, and whether the revision it runs is still the saved one |
+| PUT | `/api/studio/pipelines/{id}/schedule` | `ScriptRun` + document Execute | Pin the named saved version in the job and attach a cron schedule. Needs `MANAGE` on the job |
+| DELETE | `/api/studio/pipelines/{id}/schedule` | `ScriptRun` + document Execute | Remove the schedule. The job goes back to running only on request |
 
 Each pipeline maps to one Orchestrator job named `PIPELINE:{id}` in the Portal's tenant. The job is
 a run slot: enabled, unscheduled, and never due on its own. A caller with `Admin` or
@@ -996,6 +999,13 @@ Refusals carry a stable `code` so the author can tell whose decision it was:
 | `already_running` | Orchestrator | The job has a run in progress |
 | `cancel_denied` | Orchestrator | The caller did not submit the run and holds no `MANAGE` grant |
 | `run_already_finished` | Orchestrator | Stop arrived after the run ended |
+| `schedule_grant_denied` | Orchestrator | Scheduling needs `MANAGE` on the job; `EXECUTE` is not enough |
+| `invalid_schedule` | Orchestrator | The cron expression or time zone is not usable |
+
+A schedule runs the revision that was pinned when it was set, with a blocking hash policy. Saving
+the pipeline later does not change what runs unattended; `scheduledRevisionIsSaved` turns false
+until the author schedules again. A run on request still runs the latest save and does not consume
+a scheduled occurrence. `PIPELINE_SCHEDULED` and `PIPELINE_UNSCHEDULED` are audited.
 
 There is no Portal-side run table. The run ID is the Orchestrator's history ID, and a run is shown
 under a pipeline only when the Orchestrator reports it against that pipeline's job. Submission and
@@ -1005,6 +1015,10 @@ job and run ID) and `PIPELINE_RUN_CANCEL_REQUESTED`.
 In Studio, **Run** on a saved pipeline calls these routes through the `pipelineRuns` host callbacks
 in `BrowserSources/portal-studio-host.ts`. Unsaved edits are refused before any request. Run
 selection and helper previews stay on the read-only `/api/designer/run` path.
+
+The governance rail's **Run it on a schedule** section uses the `pipelineSchedule` host callbacks
+for a catalog pipeline. It does not write `CREATE JOB` into the script there: a catalog document
+has no path a job statement could name. Desktop Studio keeps the statement-writing form.
 
 ### System
 

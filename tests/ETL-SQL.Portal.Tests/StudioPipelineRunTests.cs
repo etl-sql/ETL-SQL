@@ -18,11 +18,16 @@ namespace ETL_SQL.Portal.Tests;
 /// pipeline run involves: an administrator, an Orchestrator manager who is also an author, and an
 /// ordinary author who holds neither role.
 /// </summary>
-public sealed class StudioPipelineRunFixture : IAsyncLifetime
+public class StudioPipelineRunFixture : IAsyncLifetime
 {
     public const string Password = "Pipeline@Tests99!";
 
-    public OrchestratorWebFactory Orchestrator { get; } = new(requireFederatedIdentity: true);
+    public StudioPipelineRunFixture() : this(new OrchestratorWebFactory(requireFederatedIdentity: true)) { }
+
+    /// <summary>For a fixture that needs its own Orchestrator host, such as one on a test clock.</summary>
+    protected StudioPipelineRunFixture(OrchestratorWebFactory orchestrator) => Orchestrator = orchestrator;
+
+    public OrchestratorWebFactory Orchestrator { get; }
     public PortalWebFactory Portal { get; private set; } = null!;
     public HttpClient Client { get; private set; } = null!;
     public string AdminToken { get; private set; } = "";

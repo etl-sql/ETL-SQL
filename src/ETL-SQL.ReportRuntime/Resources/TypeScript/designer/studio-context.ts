@@ -74,6 +74,29 @@ export interface PipelineRunTracking {
     stopNote: string | null;
 }
 
+/** A saved pipeline's schedule, as the host that owns schedules reports it. */
+export interface StudioPipelineSchedule {
+    scheduled: boolean;
+    cron?: string | null;
+    timeZone?: string | null;
+    enabled: boolean;
+    nextRun?: string | null;
+    lastRun?: string | null;
+    /** False once the pipeline has been saved again since the schedule pinned its revision. */
+    scheduledRevisionIsSaved: boolean;
+    savedVersion: number;
+}
+
+/**
+ * Supplied by a host that schedules a saved pipeline somewhere else. A schedule pins the saved
+ * revision it was set from and keeps running that one until it is set again.
+ */
+export interface StudioPipelineScheduleHost {
+    read(document: any): Promise<StudioPipelineSchedule>;
+    set(document: any, cron: string, timeZone: string | null): Promise<StudioPipelineSchedule>;
+    remove(document: any): Promise<StudioPipelineSchedule>;
+}
+
 /** One run of a saved pipeline, as the host that ran it reports it. */
 export interface StudioPipelineRunStatus {
     runId: number;
@@ -274,6 +297,8 @@ export interface StudioOptions extends StudioStateOptions {
     catalogPipelines?: boolean;
     /** Runs a saved catalog pipeline. Absent where the host has nowhere to run one. */
     pipelineRuns?: StudioPipelineRunHost;
+    /** Schedules a saved catalog pipeline. Absent where the script's own statements declare the job. */
+    pipelineSchedule?: StudioPipelineScheduleHost;
     onCreateDocument?: (request: Record<string, any>) => Promise<any> | any;
     onCloseDocument?: (document: any, options: { keepalive: boolean }) => any;
     onRenameDocument?: (document: any, name: string) => Promise<any> | any;

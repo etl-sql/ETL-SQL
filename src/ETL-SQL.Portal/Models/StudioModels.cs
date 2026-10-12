@@ -54,6 +54,26 @@ public sealed record PipelineRunRefusalDto(string Code, string Error, long? Curr
 /// </summary>
 public sealed record PipelineRunCancelRequestedDto(long RunId, int PipelineId);
 
+/// <summary>Asks the Orchestrator to run one saved pipeline revision on a cron schedule.</summary>
+/// <param name="Version">The saved version to pin; a stale one is refused.</param>
+public sealed record SchedulePipelineRequest(long Version, string Cron, string? TimeZone = null);
+
+/// <summary>
+/// A pipeline's schedule in the Orchestrator. The schedule runs the revision that was pinned when it
+/// was set, not the latest save: <see cref="ScheduledRevisionIsSaved"/> is false once they differ.
+/// </summary>
+public sealed record PipelineScheduleDto(
+    int PipelineId,
+    bool Scheduled,
+    string? Cron,
+    string? TimeZone,
+    bool Enabled,
+    DateTime? NextRun,
+    DateTime? LastRun,
+    string? ScheduledScriptHash,
+    bool ScheduledRevisionIsSaved,
+    long SavedVersion);
+
 public sealed record PipelineRunStatementDto(string Statement, long DurationMs, long RowsProcessed, bool Failed);
 
 /// <summary>One run's status and bounded statement log, as the Orchestrator recorded it.</summary>

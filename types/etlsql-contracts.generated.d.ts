@@ -1542,6 +1542,19 @@ interface PipelineRunSubmittedDto {
     jobName: string;
 }
 
+interface PipelineScheduleDto {
+    pipelineId: number;
+    scheduled: boolean;
+    cron?: string | null;
+    timeZone?: string | null;
+    enabled: boolean;
+    nextRun?: string | null;
+    lastRun?: string | null;
+    scheduledScriptHash?: string | null;
+    scheduledRevisionIsSaved: boolean;
+    savedVersion: number;
+}
+
 interface PipelineScopeRequest {
     script?: string | null;
     id?: string | null;
@@ -2108,6 +2121,12 @@ interface ScheduleDefinitionDto {
     version: number;
     tenantId?: string | null;
     id: string | null;
+}
+
+interface SchedulePipelineRequest {
+    version: number;
+    cron: string;
+    timeZone?: string | null;
 }
 
 interface ScheduledJobActivity {
