@@ -1485,6 +1485,17 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
   for Portal pipelines, a job that could never find its script. It is no longer offered there.
 - [ ] **ST08 — Pipeline configuration export/import.** Round-trip one pipeline with its declared portable state;
   exclude secrets and host-owned bindings, and verify report-only surfaces still refuse it. (Size: M)
+  Not started. Scoping notes from reading the code on 2026-10-12, not from running it:
+  `ConfigurationExportService` emits `PUBLISH REPORT … FROM '<script path>'` plus a manifest of script
+  files to copy, and replay goes through `PortalDataSource` to `POST /api/reports`. With the tenant
+  catalog scope it reads report documents only, so a pipeline is left out and is not named in the
+  export's skipped list; without that scope it would be emitted as a report. Neither round-trips a
+  pipeline. The statement has no way to say the document is a pipeline, so this needs a decision first:
+  a `KIND` option on `PUBLISH REPORT` or a separate statement (parser, serializer, reference page,
+  syntax index and grammar lane either way). Host-owned state to leave out: the document id and so the
+  `PIPELINE:{id}` job name, the job's grants and owner, the pinned revision hash, run history, lease
+  and version. Portable state: name, folder, description, kind, catalog owner, script file, and the
+  schedule's cron and time zone.
 - [ ] **ST09 — Pipeline promotion.** Promote that package to one permitted target, verify ownership/bindings,
   and reject a collision without partial changes. No new promotion topology. (Depends on: ST08; Size: M)
 - [x] **ST10 — Ordinary-author pipeline journey.** A Publisher with the required folder and Orchestrator grants

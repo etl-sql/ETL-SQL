@@ -87,7 +87,7 @@ public sealed class StudioPipelineScheduleTests(StudioPipelineScheduleFixture fi
         Assert.Equal(new DateTime(2030, 1, 2, 2, 0, 0, DateTimeKind.Utc), NextRun(schedule));
 
         // The scheduler ticks every real second. Nothing is due at 10:00, so nothing runs.
-        await Task.Delay(2500);
+        await Task.Delay(2500); // flaky-delay-ok: negative check; spans two scheduler ticks so a wrongly due run would have started. Load can only hide a failure, not cause one
         Assert.Empty(await HistoryAsync(job));
 
         // A later save does not change what the schedule runs, and Studio is told they differ.
@@ -124,7 +124,7 @@ public sealed class StudioPipelineScheduleTests(StudioPipelineScheduleFixture fi
         // One occurrence, one run: the link moved to the next day and does not fire again.
         var afterRun = await WaitForScheduleAsync(id, item => NextRun(item) == new DateTime(2030, 1, 3, 2, 0, 0, DateTimeKind.Utc));
         Assert.NotNull(afterRun["lastRun"]);
-        await Task.Delay(2500);
+        await Task.Delay(2500); // flaky-delay-ok: negative check; spans two scheduler ticks so a wrongly due run would have started. Load can only hide a failure, not cause one
         Assert.Equal(2, (await HistoryAsync(job)).Count);
 
         // Unscheduled, the job is a run slot again and a later occurrence does not fire.
@@ -132,7 +132,7 @@ public sealed class StudioPipelineScheduleTests(StudioPipelineScheduleFixture fi
         Assert.True(removed.IsSuccessStatusCode);
         Assert.False((await Body(removed))["scheduled"]!.GetValue<bool>());
         fixture.Clock.Set(new DateTimeOffset(2030, 1, 5, 2, 0, 5, TimeSpan.Zero));
-        await Task.Delay(2500);
+        await Task.Delay(2500); // flaky-delay-ok: negative check; spans two scheduler ticks so a wrongly due run would have started. Load can only hide a failure, not cause one
         Assert.Equal(2, (await HistoryAsync(job)).Count);
         using (var scope = fixture.Orchestrator.Services.CreateScope())
         {

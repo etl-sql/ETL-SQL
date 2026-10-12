@@ -59,7 +59,7 @@ public sealed class JobRevisionRunTests : IDisposable
         // A run slot is never due on its own, and running a revision does not re-arm it: the
         // scheduler ticks every second here, and the only runs are the two that were submitted.
         Assert.True(stored.NextRun > DateTime.Now.AddYears(100), $"next run was {stored.NextRun:O}");
-        await Task.Delay(2500);
+        await Task.Delay(2500); // flaky-delay-ok: negative check; spans two scheduler ticks so a wrongly due run would have started. Load can only hide a failure, not cause one
         using var scope = factory.Services.CreateScope();
         var history = await scope.ServiceProvider.GetRequiredService<IJobHistoryStore>().GetHistoryAsync(stored.Id, 10);
         Assert.Equal(2, history.Count());
