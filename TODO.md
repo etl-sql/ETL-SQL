@@ -21,7 +21,7 @@ and scale baseline recalibration).
 | Security hardening — Environment & system path protection | [§0](#0-security-hardening--environment-variable-and-system-path-protection) |
 | Code stability — Browser sources, Studio, test lanes | [§1](#1-code-stability--browser-sources-studio-and-test-lanes) |
 | Generated browser assets — Build preparation & source-control cleanup | [§1.1](#11-generated-browser-assets--build-preparation-and-source-control-cleanup) |
-| Studio — Replacement criteria & migration decisions | [§2](#2-studio--replacement-criteria-and-migration-decisions) |
+| Studio — Unified authoring experience & completeness criteria (assessed; gaps routed to §3–§5) | [§2](#2-studio--unified-authoring-experience-and-completeness-criteria) |
 | Studio — Portal pipelines & schedule handoffs | [§3](#3-studio--portal-pipelines-and-schedule-handoffs) |
 | Studio — Private unpublished drafts & publishing | [§4](#4-studio--private-unpublished-drafts-and-publishing) |
 | Studio — Author, reader & beginner practice journeys | [§5](#5-studio--author-reader-and-beginner-practice-journeys) |
@@ -1428,10 +1428,16 @@ entry points is a separate future decision, not the measure of success.
   to Studio in both hosts. Record improvements and explicit gaps/evidence. No feature or test implementation. (Size: S)
   Completed source/evidence mapping: [26 script and ETL workflows with acceptance fixtures](docs/architecture/decisions/studio-script-etl-authoring-inventory.md).
   Inventory completion does not certify execution or recovery; required journeys remain open.
-- [ ] **ST03 — Unified beginner-experience acceptance.** Use both inventories and completed required journeys
+- [x] **ST03 — Unified beginner-experience acceptance.** Use both inventories and completed required journeys
   to assess whether users can complete report and ETL workflows, move between helpers and code without
   losing work, and explain the SQL they generated. Record remaining gaps and host-specific limits.
   (Depends on: ST01, ST02, required journey evidence; Size: S)
+  [Assessed 2026-10-12](docs/architecture/decisions/studio-beginner-acceptance-assessment.md): **not yet accepted.**
+  Dashboard passes in both hosts and desktop ETL passes run/repair (15 journey tests green). Portal ETL
+  is blocked on ST04/ST21; paginated passes only as Portal Admin with injected SQL and has no desktop
+  journey; no learner has been observed (ST16/ST17). Closing this item records the assessment, not a
+  certified experience. Paginated binding/delivery (R15–R18) and the pipeline helper round trip (E14)
+  have no ST task and need sizing.
 
 ---
 

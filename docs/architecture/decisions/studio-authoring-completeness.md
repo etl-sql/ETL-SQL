@@ -1,6 +1,6 @@
 # Studio Authoring Completeness
 
-**Status:** ST01 and ST02 inventories complete; ST03 pending journey evidence.
+**Status:** ST01 and ST02 inventories complete; ST03 assessed 2026-10-12 — beginner experience not yet accepted.
 **Decision:** Studio combines the ReportBuilder and WorkstationEditor foundations into one SQL-first
 product across desktop and Portal. Completeness and a better beginner experience define success.
 **Scope owner:** [Studio design](etl-sql-studio.md), with task status in [TODO §2](../../../TODO.md#2-studio--unified-authoring-experience-and-completeness-criteria).
@@ -65,8 +65,15 @@ For each exercise, collect evidence that the user can:
 5. Save/reopen, recover interrupted work, and complete the applicable publish/export/schedule handoff.
 
 For each friction point, record the foundation's existing steps, Studio's observed steps, help needed,
-and the improvement or remaining gap. Do not infer usability from control count. Keep ST03 open until
-required journeys and learner observations are recorded; narrow future feature work to the gaps found.
+and the improvement or remaining gap. Do not infer usability from control count. Narrow future
+feature work to the gaps found.
+
+**Outcome:** the [ST03 assessment](studio-beginner-acceptance-assessment.md) of 2026-10-12 closes the
+task with the verdict *not yet accepted*. The dashboard exercise is evidenced in both hosts and the
+desktop ETL exercise passes its run/repair lifecycle. Portal ETL execution is blocked on ST04, the
+paginated exercise passes only as Portal Admin with injected SQL and has no desktop journey, and no
+learner has been observed. Closing ST03 records the assessment; it does not certify the experience.
+Repeat the five-criterion check when those gaps close.
 
 ## Host differences and non-goals
 
@@ -84,12 +91,15 @@ required journeys and learner observations are recorded; narrow future feature w
 The [beginner report journeys](studio-beginner-report-evidence.md) passed their automated sequences
 on 2026-10-11 in Portal as a Publisher and in the desktop host. Both compare independent pre-save
 text with saved and reopened text, exercise keyboard editing and helper explanations, and execute
-the saved report. ST16/ST17 remain open for the learner’s own explanation; ST03 remains pending.
+the saved report. ST16/ST17 remain open for the learner’s own explanation.
+
+On 2026-10-12 the six journey classes behind ST03 (15 tests) passed at 9f966778f; the
+[assessment](studio-beginner-acceptance-assessment.md) records what each one does and does not establish.
 
 ## Next acceptance work
 
-ST01 and ST02 are complete as inventories. ST03 remains open until the required report and ETL
-journeys have recorded production-host results and learner observations. ST20 is defined in the
+ST01 and ST02 are complete as inventories, and ST03 is complete as an assessment with open gaps:
+the required paginated and Portal ETL journeys and all learner observations. ST20 is defined in the
 [practice-execution decision](studio-practice-execution.md). Record ST16/ST17 learner observations;
 ST22’s [desktop failure/repair exercise](studio-desktop-practice-evidence.md) passed. Next implement
 ST04’s saved Portal pipeline submission, which is required for ST21’s sandbox exercise. The inventories name supplemental work, including editor assistance and

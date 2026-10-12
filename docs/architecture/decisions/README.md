@@ -51,5 +51,6 @@
 | [Studio Restricted Practice Execution](studio-practice-execution.md) | Decision on how a learner may run the practice failure and repair exercise, and what acceptance requires. |
 | [Studio Beginner Report Journey Evidence](studio-beginner-report-evidence.md) | Recorded run of the beginner report journey in the Portal and desktop hosts. |
 | [Studio Desktop Practice Evidence](studio-desktop-practice-evidence.md) | Recorded run of the desktop failure and repair practice exercise. |
+| [Studio Beginner Acceptance Assessment](studio-beginner-acceptance-assessment.md) | Assessment of the combined beginner report and ETL journeys in both hosts, with the remaining gaps and host limits. |
 | [New Chart Types Architectural Evaluation](new-chart-types-evaluation.md) | Architectural evaluation of candidate chart types: Polar coordinate bar/line, Calendar heatmap, Streamgraph, and Parallel coordinates. |
 | [Geographic Density Map Architectural Evaluation](geographic-density-map-evaluation.md) | Architectural evaluation of geographic density maps (MAP MODE = DENSITY) evaluating hexbin, 2D KDE contour, and raster approaches. |

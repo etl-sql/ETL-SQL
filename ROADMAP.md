@@ -470,7 +470,7 @@ entry points is a separate future decision, not the measure of success.
 | :--- | :--- | :--- | :--- |
 | ST01 | **Report-authoring completeness inventory — complete.** [Workflow and fixture mapping](docs/architecture/decisions/studio-report-authoring-inventory.md); runtime acceptance remains open. Map the ReportBuilder foundation and full connect, shape, visualize, interact, preview and save/publish workflow to both Studio hosts. Record beginner friction, improvements, evidence or missing acceptance fixtures, and non-goals. No feature or test implementation. | — | S |
 | ST02 | **Script and ETL-authoring completeness inventory — complete.** [Workflow and fixture mapping](docs/architecture/decisions/studio-script-etl-authoring-inventory.md); runtime acceptance remains open. Map the WorkstationEditor foundation, code suggestions/highlighting, files, guided pipelines, execution, diagnostics and recovery to both hosts. Record improvements and gaps/evidence. No feature or test implementation. | — | S |
-| ST03 | **Unified beginner-experience acceptance.** Assess completed report and ETL journeys, helper/code transitions without lost work, and the learner’s understanding of generated SQL. Record remaining gaps and host-specific limits. | ST01, ST02; required journey evidence | S |
+| ST03 | **Unified beginner-experience acceptance — assessed, not yet accepted.** [Assessment, gaps and host limits](docs/architecture/decisions/studio-beginner-acceptance-assessment.md); Portal ETL, paginated and learner-observation evidence remain open. Assess completed report and ETL journeys, helper/code transitions without lost work, and the learner’s understanding of generated SQL. Record remaining gaps and host-specific limits. | ST01, ST02; required journey evidence | S |
 
 #### Portal pipelines and schedule handoffs
 
@@ -574,7 +574,7 @@ more work; do not fill a sprint by assuming every M task takes three days.
 
 | Outcome | Select first | Initial engineering range | Follow-on work |
 | :--- | :--- | :--- | :--- |
-| Identify authoring gaps and improvements | ST01, ST02 completed | Inventory delivered | Select required journeys individually; ST03 assesses their combined evidence. |
+| Identify authoring gaps and improvements | ST01, ST02 completed | Inventory delivered | Select required journeys individually; the ST03 assessment lists the gaps each one closes. |
 | Keep one unpublished Portal draft | ST12, ST13 | 4–7 days | ST14 recovery and ST15 publishing are separate increments. |
 | Submit and observe one Portal pipeline | ST04, ST05 | 6–10 days | ST06 cancellation, then ST10 ordinary-author proof; ST07 scheduling is separate. |
 | Set measurable delivery limits | ST53, ST54 | 2–4 days | Schedule ST47 and ST42 independently after the decisions. |
@@ -587,8 +587,8 @@ separately selectable increments outside the remaining Alpha backlog.
 identity, real parser/patcher/execution responses, exact saved/reopened bytes and expected output.
 Add focused regression evidence for defects found within that task. Preserve existing typed contracts,
 asset sync, lint/type gates, isolation, draft policy and performance ceilings. Sandbox/source-pattern
-checks alone do not certify a production-host journey. The completeness inventories identify which
-completed task IDs are required for ST03 to assess the unified beginner experience.
+checks alone do not certify a production-host journey. The ST03 assessment identifies which task IDs
+must complete before the unified beginner experience can be accepted.
 
 ---
 
