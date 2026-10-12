@@ -141,6 +141,34 @@ public sealed class RowLevelSecurityLiveViewTests : IClassFixture<PortalWebFacto
         Assert.Equal(HttpStatusCode.NotFound, (await AuthGet(admin, $"/api/reports/{reportId}/manifest")).StatusCode);
     }
 
+    [Fact]
+    public async Task TheReportSaysItIsPerViewer()
+    {
+        var seed = await SeedAsync(FolderPermission.Read);
+
+        var report = await (await AuthGet(seed.NorthToken, $"/api/reports/{seed.ReportId}"))
+            .Content.ReadFromJsonAsync<JsonObject>(_json);
+
+        Assert.True(report!["perViewer"]!.GetValue<bool>());
+        Assert.False(report["hasSnapshot"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task EachReadersCsvHoldsOnlyTheirRows()
+    {
+        var seed = await SeedAsync(FolderPermission.Read);
+
+        var north = await (await AuthGet(seed.NorthToken, $"/api/reports/{seed.ReportId}/export/csv")).Content.ReadAsStringAsync();
+        var south = await (await AuthGet(seed.SouthToken, $"/api/reports/{seed.ReportId}/export/csv")).Content.ReadAsStringAsync();
+
+        Assert.Contains("North", north);
+        Assert.DoesNotContain("South", north);
+        Assert.DoesNotContain("West", north);
+        Assert.Contains("South", south);
+        Assert.DoesNotContain("North", south);
+        Assert.DoesNotContain("West", south);
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────
 
     private sealed record Seed(

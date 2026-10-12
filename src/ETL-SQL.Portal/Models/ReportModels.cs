@@ -225,7 +225,10 @@ public record ReportDto(
     bool IsFavorite,
     bool IsStale,
     bool ScriptChanged,
-    long Version = 1);
+    long Version = 1,
+    // The report's rows depend on who is looking: it is viewed live and has no snapshot. Set on
+    // the single-report read only; lists would have to read every script to answer.
+    bool PerViewer = false);
 
 public record ReportDependencyDto(
     ReportDependencyReportDto Report,

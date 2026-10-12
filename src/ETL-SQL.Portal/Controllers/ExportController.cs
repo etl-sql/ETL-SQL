@@ -23,6 +23,8 @@ public class ExportController(
     AuditService audit,
     IArtifactStorage artifacts,
     SnapshotPackageService snapshotPackages,
+    SessionCache sessions,
+    PortalExecutionIdentityService identities,
     DatasetTenantScope? datasetScope = null,
     PortalTenantCatalogScope? catalogScope = null,
     ETL_SQL.Common.ILogger? logger = null) : ControllerBase
@@ -58,6 +60,23 @@ public class ExportController(
     {
         var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted);
         if (report is null) return (null, "Report not found", false);
+
+        // A report whose rows depend on the viewer has no snapshot. Export what this caller sees:
+        // their own session, under their identity, with their current parameters. Nothing is kept.
+        if (PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var scriptPath)
+            && await ReportIdentitySensitivity.IsSensitiveAsync(scriptPath, HttpContext.RequestAborted))
+        {
+            var identity = await identities.BuildAsync(
+                CurrentUserId, _datasetScope.TenantId, IsAdmin, impersonatedUserId: null, HttpContext.RequestAborted);
+            var svc = sessions.GetOrCreate(
+                reportId,
+                CurrentUserId,
+                scriptPath,
+                isAdministrator: IsAdmin,
+                keyScope: _datasetScope.TenantId,
+                executionIdentity: identity);
+            return (await svc.GetManifestAsync(HttpContext.RequestAborted), null, false);
+        }
 
         var snapshot = await CatalogScope.ReportSnapshots
             .Where(s => s.ReportId == reportId)

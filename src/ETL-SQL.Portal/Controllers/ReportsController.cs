@@ -138,7 +138,7 @@ public class ReportsController : ControllerBase
             || reportPermission.AtLeast(FolderPermission.Read);
     }
 
-    private ReportDto ToDto(Report r, ReportSnapshot? snap, bool isFavorite = false)
+    private ReportDto ToDto(Report r, ReportSnapshot? snap, bool isFavorite = false, bool perViewer = false)
     {
         var isStale = snap is not null && r.ScriptLastModified > snap.BuiltAt;
         var scriptChanged = false;
@@ -161,7 +161,8 @@ public class ReportsController : ControllerBase
             isFavorite,
             isStale,
             scriptChanged,
-            r.Version);
+            r.Version,
+            perViewer);
     }
 
     private async Task<string> GenerateUniqueShareTokenAsync()
@@ -549,7 +550,9 @@ public class ReportsController : ControllerBase
 
         var isFavorite = await catalogScope.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == report.Id);
         OptimisticConcurrency.SetETag(Response, report.Version);
-        return Ok(ToDto(report, report.Snapshots.FirstOrDefault(), isFavorite));
+        var perViewer = PortalPathGuard.TryResolveScript(portalConfig, datasetScope.TenantId, report.ScriptPath, out var scriptPath)
+            && await ReportIdentitySensitivity.IsSensitiveAsync(scriptPath, HttpContext.RequestAborted);
+        return Ok(ToDto(report, report.Snapshots.FirstOrDefault(), isFavorite, perViewer));
     }
 
     [HttpGet("reports/{id:int}/access-info")]
