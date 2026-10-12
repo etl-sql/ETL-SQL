@@ -84,7 +84,7 @@ Generate and install a portal secret with the CLI:
 ETL-SQL config setup-jwt --update
 ```
 
-Or generate a secret inside an ETL-SQL session and copy the value into your deployment secret store:
+Or generate a secret inside an ETL-SQL session. The statement returns one row; copy its `Secret` column into your deployment secret store. The secret is not written to the log.
 
 ```sql
 GENERATE JWT_SECRET;

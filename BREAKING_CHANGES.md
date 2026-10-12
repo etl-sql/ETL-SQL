@@ -17,6 +17,20 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.21.0 — Runtime: The default machine key is a random installation key
+- **What changed**: Without `ETLSQL_MACHINE_KEY_FILE`, the machine key was a digest of the host and account name. It is now derived from random material generated on first use and kept in `machine.key` under the account's local application data (`etl-sql` folder). `ENC:` values written under the old key can no longer be read.
+- **Who is affected**: Installations that do not mount a machine key. A container whose local application data is not on a volume gets a new key on every start, so `ENC:` values it writes do not survive a restart. Any `ENC:` value or session checkpoint written before the upgrade must be recreated.
+- **Migration**: Mount a key with `ETLSQL_MACHINE_KEY_FILE`, or keep the local application data folder on persistent storage. Re-enter and re-encrypt old `ENC:` values.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.21.0 — Semantic: `GENERATE JWT_SECRET` returns a result set
+- **What changed**: The statement printed the plain-text secret and the encrypted value as log messages. It now returns one row with `Secret` and `EncryptedConfigValue` columns and logs neither.
+- **Who is affected**: Anyone reading the secret from a job log or from captured message output.
+- **Migration**: Read the `Secret` column of the result. `ETL-SQL config setup-jwt` is unchanged.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.21.0 — Runtime: Numeric dataset filters exclude null cells
 - **What changed**: Inclusive numeric comparisons and ranges in the Portal dataset viewer previously treated null as equal to a threshold, including it in matching rows, statistics, and exports. Numeric comparisons now exclude null cells.
 - **Who is affected**: Dataset API consumers and viewer users filtering nullable numeric columns with `gte`, `lte`, or `between`.

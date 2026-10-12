@@ -321,13 +321,13 @@ namespace ETL_SQL.LSP
             Func<Task> action)
         {
             var newCts = new CancellationTokenSource();
+            // Read once, before anything can dispose the source.
+            var token = newCts.Token;
             debouncers.AddOrUpdate(uri, newCts, (_, existing) =>
             {
-                var __ = Task.Run(async () =>
-                {
-                    try { await existing.CancelAsync(); } catch { }
-                    try { existing.Dispose(); } catch { }
-                });
+                // The replacer only cancels. Each source is disposed by the task that owns it, in
+                // its finally below; a second disposer here raced that task's use of the token.
+                try { existing.Cancel(); } catch (ObjectDisposedException) { }
                 return newCts;
             });
 
@@ -335,8 +335,8 @@ namespace ETL_SQL.LSP
             {
                 try
                 {
-                    await Task.Delay(delayMs, newCts.Token);
-                    if (!newCts.Token.IsCancellationRequested)
+                    await Task.Delay(delayMs, token);
+                    if (!token.IsCancellationRequested)
                         await action();
                 }
                 catch (TaskCanceledException) { /* debounced */ }

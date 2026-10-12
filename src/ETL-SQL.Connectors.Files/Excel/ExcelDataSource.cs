@@ -342,6 +342,44 @@ namespace ETL_SQL.Connectors.Excel
             }
         }
 
+        private async IAsyncEnumerable<Dictionary<string, object?>> SheetRows(
+            List<Dictionary<string, object?>> existingRows,
+            List<string> existingColumns,
+            IAsyncEnumerable<ETL_SQL.Data.DataTable> batches,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            // An appended sheet keeps its own columns; a new one takes them from the first batch that has any.
+            var columns = existingColumns;
+            foreach (var row in existingRows)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var mapped = new Dictionary<string, object?>(columns.Count);
+                foreach (var col in columns)
+                {
+                    row.TryGetValue(col, out var raw);
+                    mapped[col] = CoerceValue(raw);
+                }
+                yield return mapped;
+            }
+
+            await foreach (var batch in batches.WithCancellation(cancellationToken))
+            {
+                if (columns.Count == 0 && batch.ColumnNames.Count > 0)
+                    columns = batch.ColumnNames.ToList();
+                var inBatch = new HashSet<string>(batch.ColumnNames, StringComparer.OrdinalIgnoreCase);
+
+                foreach (var row in batch.Rows)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var mapped = new Dictionary<string, object?>(columns.Count);
+                    foreach (var col in columns)
+                    {
+                        mapped[col] = inBatch.Contains(col) ? CoerceValue(row[col]) : CoerceValue(null);
+                    }
+                    yield return mapped;
+                }
+            }
+        }
         public Task WriteBatches(IAsyncEnumerable<ETL_SQL.Data.DataTable> batches, bool append = false) =>
             WriteBatches(batches, append, CancellationToken.None);
 
@@ -425,57 +463,13 @@ namespace ETL_SQL.Connectors.Excel
                 }
             }
 
-            var newRows = new List<Dictionary<string, object?>>();
-            var newColumns = new List<string>();
-
-            await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
-            {
-                if (newColumns.Count == 0 && batch.ColumnNames.Count > 0)
-                {
-                    newColumns.AddRange(batch.ColumnNames);
-                }
-
-                foreach (var row in batch.Rows)
-                {
-                    effectiveCancellationToken.ThrowIfCancellationRequested();
-                    var rowDict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var col in batch.ColumnNames)
-                    {
-                        rowDict[col] = row[col];
-                    }
-                    newRows.Add(rowDict);
-                }
-            }
-
-            var allRows = new List<Dictionary<string, object?>>(existingRows.Count + newRows.Count);
-            allRows.AddRange(existingRows);
-            allRows.AddRange(newRows);
-
-            var columns = existingColumns.Count > 0 ? existingColumns : newColumns;
-            if (columns.Count == 0 && allRows.Count > 0)
-            {
-                columns = allRows[0].Keys.ToList();
-            }
-
-            var materializedRows = new List<Dictionary<string, object?>>();
-            foreach (var row in allRows)
-            {
-                effectiveCancellationToken.ThrowIfCancellationRequested();
-                var mapped = new Dictionary<string, object?>(columns.Count);
-                foreach (var col in columns)
-                {
-                    row.TryGetValue(col, out var raw);
-                    mapped[col] = CoerceValue(raw);
-                }
-                materializedRows.Add(mapped);
-            }
-
             string sheetName = string.IsNullOrWhiteSpace(_sheetName) ? "Sheet1" : _sheetName;
             sheetName = SanitizeSheetName(sheetName);
 
+            // New rows go to the workbook as they arrive. Only an append holds rows in memory, and
+            // only the sheet it has to rewrite.
             var book = new Dictionary<string, object>();
-            book[sheetName] = materializedRows;
-
+            book[sheetName] = SheetRows(existingRows, existingColumns, batches, effectiveCancellationToken);
             string tempFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
             string? publicationFile = null;
             string? zippedTemp = null;

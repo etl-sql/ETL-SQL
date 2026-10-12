@@ -13,12 +13,17 @@ namespace ETL_SQL.Engine.Handlers;
 /// <summary>
 /// Handles the GENERATE JWT_SECRET statement.
 /// Generates a random 256-bit key, encrypts it with the machine key, and updates the portal configuration.
+/// The secret is returned as a one-row result set and is never passed to a logger: a job's log is
+/// kept, and a result set is only shown to whoever ran the statement.
 /// </summary>
 public class GenerateJwtSecretStatementHandler(ILogger logger) : IStatementHandler
 {
     private readonly ILogger _logger = logger;
 
     public Type SupportedStatementType => typeof(GenerateJwtSecretStatement);
+
+    /// <summary>The configuration file to update. Tests point this away from the running application's own.</summary>
+    internal string? ConfigPath { get; init; }
 
     public async Task Execute(Statement statement, IExecutionContext context)
     {
@@ -34,15 +39,23 @@ public class GenerateJwtSecretStatementHandler(ILogger logger) : IStatementHandl
         var machineKey = SecurityService.GetMachineKey();
         var encryptedSecret = CryptoUtils.Encrypt(secret, machineKey);
 
-        context.Log("JWT SETUP - CRITICAL SECURITY INFORMATION", ConsoleColor.Yellow);
-        context.Log("GENERATED PLAIN-TEXT SECRET:", ConsoleColor.Red);
-        context.Log(secret, ConsoleColor.Yellow);
-        context.Log("ENCRYPTED CONFIG VALUE (Machine-Bound):", ConsoleColor.White);
-        context.Log(encryptedSecret, ConsoleColor.Cyan);
-        context.Log("IMPORTANT: Record the plain-text secret in your password manager. It cannot be recovered from the encrypted value if the machine key changes.", ConsoleColor.Red);
+        var result = new ETL_SQL.Data.DataTable();
+        result.SetColumns(new[] { "Secret", "EncryptedConfigValue" });
+        var row = result.NewRow();
+        row["Secret"] = secret;
+        row["EncryptedConfigValue"] = encryptedSecret;
+        await result.AddRowAsync(row);
+        result.TotalRowsMatched = 1;
+
+        context.LastResult = result;
+        context.LastResultSets.Add(result);
+        context.OnResultSet?.Invoke(result);
+        if (!context.RedirectOutput) ResultFormatter.PrintBatch(result, true);
+
+        context.Log("JWT secret generated. Record the Secret value in your password manager: it cannot be recovered from the encrypted value if the machine key changes.", ConsoleColor.Yellow);
 
         // 4. Update appsettings.json if it exists in the execution directory
-        var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+        var configPath = ConfigPath ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
         if (File.Exists(configPath))
         {
             try

@@ -100,40 +100,43 @@ namespace ETL_SQL.Connectors.Json
         {
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
-            var allRows = new List<IDictionary<string, object?>>();
-            bool alreadyJson = false;
-            string? singleJson = null;
-
-            await foreach (var b in batches.WithCancellation(effectiveCancellationToken))
-            {
-                if (b.ColumnNames.Count == 1 && b.ColumnNames[0] == "JSON_F52E2B61")
-                {
-                    alreadyJson = true;
-                    singleJson = b.Rows.FirstOrDefault()?.Columns.Values.FirstOrDefault()?.ToString();
-                    break;
-                }
-
-                foreach (var r in b.Rows)
-                {
-                    var dict = new Dictionary<string, object?>();
-                    foreach (var col in b.ColumnNames) dict[col] = r[col];
-                    allRows.Add(dict);
-                }
-            }
-
             string tempFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
             string? publicationFile = null;
             string? zippedTemp = null;
             try
             {
+                // Rows go to the staging file a batch at a time, so the file's size is not held in memory.
+                string? singleJson = null;
+                bool alreadyJson = false;
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                await using (var stream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                {
+                    await using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true, Encoder = options.Encoder });
+                    writer.WriteStartArray();
+                    var dict = new Dictionary<string, object?>();
+                    await foreach (var b in batches.WithCancellation(effectiveCancellationToken))
+                    {
+                        if (b.ColumnNames.Count == 1 && b.ColumnNames[0] == "JSON_F52E2B61")
+                        {
+                            alreadyJson = true;
+                            singleJson = b.Rows.FirstOrDefault()?.Columns.Values.FirstOrDefault()?.ToString();
+                            break;
+                        }
+
+                        foreach (var r in b.Rows)
+                        {
+                            dict.Clear();
+                            foreach (var col in b.ColumnNames) dict[col] = r[col];
+                            JsonSerializer.Serialize(writer, dict, options);
+                        }
+                        await writer.FlushAsync(effectiveCancellationToken);
+                    }
+                    writer.WriteEndArray();
+                }
+
                 if (alreadyJson && singleJson != null)
                 {
                     await System.IO.File.WriteAllTextAsync(tempFile, singleJson, effectiveCancellationToken);
-                }
-                else
-                {
-                    var options = new JsonSerializerOptions { WriteIndented = true };
-                    await System.IO.File.WriteAllTextAsync(tempFile, JsonSerializer.Serialize(allRows, options), effectiveCancellationToken);
                 }
 
                 string fileToEncrypt = tempFile;

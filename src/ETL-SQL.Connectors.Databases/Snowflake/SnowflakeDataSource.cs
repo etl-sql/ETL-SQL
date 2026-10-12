@@ -103,8 +103,15 @@ namespace ETL_SQL.Connectors.Snowflake
         public Dictionary<string, string>? Options => _options;
         public string ConnectorType => "SNOWFLAKE";
 
+        // The clone shares the open transaction, so a write through it is covered by the same
+        // commit or rollback as the source it was made from.
         public IDataSource WithTable(string tableName)
-            => new SnowflakeDataSource(_context!, _connectionString, tableName, _options);
+        {
+            var ds = new SnowflakeDataSource(_context!, _connectionString, tableName, _options);
+            ds._transactionalConnection = _transactionalConnection;
+            ds._activeTransaction = _activeTransaction;
+            return ds;
+        }
 
         public async Task<string> GetVersionAsync()
         {

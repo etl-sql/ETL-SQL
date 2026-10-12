@@ -1,3 +1,4 @@
+using ETL_SQL.Common;
 using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Gateway;
@@ -52,7 +53,8 @@ public sealed class GatewayOperationDispatcher(
     GatewayResourceRegistry registry,
     IGatewayResourceExecutor executor,
     GatewayOutcomeLedger ledger,
-    IViewerContextEnvelopeVerifier? viewerContextVerifier = null)
+    IViewerContextEnvelopeVerifier? viewerContextVerifier = null,
+    ILogger? logger = null)
 {
     public async Task<IReadOnlyList<GatewayFrame>> DispatchAsync(
         GatewayFrame frame, string sessionTenantId, string sessionGatewayId, CancellationToken cancellationToken,
@@ -216,6 +218,7 @@ public sealed class GatewayOperationDispatcher(
         }
         catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
+            logger?.Warning("Gateway operation {OperationId} for resource {ResourceId} exceeded deadline.", operation.OperationId, operation.ResourceId);
             // A deadline on a mutating operation leaves the far side unknown. Recording it as Failed
             // would tell the caller the write did not happen, which is not something we know.
             var state = operation.Effect == GatewayOperationEffect.Mutating
@@ -237,6 +240,10 @@ public sealed class GatewayOperationDispatcher(
         {
             // The executor talks to a real local system, whose exception text can carry the host or
             // the credential. Only a fixed message crosses back to the cloud side.
+            // The same text is a risk in the local log, so it is redacted there too.
+            logger?.Error("Gateway operation {OperationId} for resource {ResourceId} failed on Gateway: {ErrorType}: {ErrorMessage}",
+                ETL_SQL.Core.Common.SecretRedactor.RedactException(ex), operation.OperationId, operation.ResourceId,
+                ex.GetType().Name, ETL_SQL.Core.Common.SecretRedactor.Redact(ex.Message));
             var state = operation.Effect == GatewayOperationEffect.Mutating
                 ? GatewayOutcomeState.Ambiguous
                 : GatewayOutcomeState.Failed;

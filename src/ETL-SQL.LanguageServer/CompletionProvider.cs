@@ -49,6 +49,9 @@ namespace ETL_SQL.LSP
             var lines = text.Split('\n');
             var adjustedLine = line + prefixLines;
             var currentLine = lines.Length > adjustedLine ? lines[adjustedLine] : "";
+            // A client may send a position past the end of the line, or on a line past the end
+            // of the document.
+            col = Math.Clamp(col, 0, currentLine.Length);
 
             // Calculate prefix and script before.
             // Include & so that &datasetName is captured as a single prefix token.

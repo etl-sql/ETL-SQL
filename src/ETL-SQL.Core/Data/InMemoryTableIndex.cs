@@ -107,10 +107,23 @@ public class InMemoryTableIndex
 
     public string GetIndexKey(IEnumerable<string> columns) => string.Join(",", columns.OrderBy(c => c, StringComparer.OrdinalIgnoreCase));
 
-    public object? GetRowKey(IEnumerable<string> columns, Row row)
+    public object? GetRowKey(IEnumerable<string> columns, Row row) => RowKey(SortColumns(columns), row);
+
+    private static List<string> SortColumns(IEnumerable<string> columns) =>
+        columns.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>
+    /// The key of one row for columns already in index order. Callers that key a whole batch sort
+    /// once and call this per row. A NULL in any key column, as C# null or DBNull, means no key:
+    /// NULLs never collide in a unique index.
+    /// </summary>
+    private static object? RowKey(List<string> sortedCols, Row row)
     {
-        var sortedCols = columns.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList();
-        if (sortedCols.Count == 1) return row[sortedCols[0]];
+        if (sortedCols.Count == 1)
+        {
+            var single = row[sortedCols[0]];
+            return single == DBNull.Value ? null : single;
+        }
 
         var values = new object?[sortedCols.Count];
         for (int i = 0; i < sortedCols.Count; i++)
@@ -126,13 +139,14 @@ public class InMemoryTableIndex
         var cols = columns.ToList();
         var indexKey = GetIndexKey(cols);
         var isUnique = _uniqueColumns.Contains(indexKey);
+        var sorted = SortColumns(cols);
 
         if (isUnique)
         {
             var keys = _uniqueKeys[indexKey];
             foreach (var row in batch.Rows)
             {
-                var value = GetRowKey(cols, row);
+                var value = RowKey(sorted, row);
                 if (value != null)
                 {
                     if (!keys.Add(value))
@@ -147,7 +161,7 @@ public class InMemoryTableIndex
 
         foreach (var row in batch.Rows)
         {
-            var val = GetRowKey(cols, row);
+            var val = RowKey(sorted, row);
             if (val == null) continue;
 
             if (!index.TryGetValue(val, out var rows))
@@ -165,9 +179,10 @@ public class InMemoryTableIndex
         {
             if (!_indexColumnMap.TryGetValue(indexKey, out var columns) ||
                 !_uniqueKeys.TryGetValue(indexKey, out var keys)) continue;
+            var sorted = SortColumns(columns);
             foreach (var row in batch.Rows)
             {
-                var value = GetRowKey(columns, row);
+                var value = RowKey(sorted, row);
                 if (value != null && keys.Remove(value))
                     _uniqueKeyBytes[indexKey] -= EstimateKeyBytes(value);
             }
@@ -217,35 +232,28 @@ public class InMemoryTableIndex
             UpdateIndexWithBatch(cols, batch);
         }
     }
-    public void RenameIndex(string oldName, string newName)
+    /// <summary>
+    /// Renames a column in every index that uses it and returns the column sets of those indexes.
+    /// Only the definitions move. A composite key is built in sorted column order, so a rename can
+    /// reorder it; the caller rebuilds each returned index from its rows once they carry the new name.
+    /// </summary>
+    public List<List<string>> RenameColumn(string oldColumn, string newColumn)
     {
-        if (_indexes.TryGetValue(oldName, out var index))
+        var renamed = new List<List<string>>();
+        foreach (var (oldKey, columns) in _indexColumnMap.ToList())
         {
-            _indexes.Remove(oldName);
-            _indexes[newName] = index;
-        }
-        if (_indexColumnMap.TryGetValue(oldName, out var columns))
-        {
-            _indexColumnMap.Remove(oldName);
-            _indexColumnMap[newName] = columns;
-        }
-        if (_uniqueColumns.Contains(oldName))
-        {
-            _uniqueColumns.Remove(oldName);
-            _uniqueColumns.Add(newName);
-        }
-        if (_uniqueKeys.TryGetValue(oldName, out var keys))
-        {
-            _uniqueKeys.Remove(oldName);
-            _uniqueKeys[newName] = keys;
-        }
-        if (_uniqueKeyBytes.TryGetValue(oldName, out var keyBytes))
-        {
-            _uniqueKeyBytes.Remove(oldName);
-            _uniqueKeyBytes[newName] = keyBytes;
-        }
-    }
+            if (!columns.Contains(oldColumn, StringComparer.OrdinalIgnoreCase)) continue;
 
+            var newColumns = columns
+                .Select(c => c.Equals(oldColumn, StringComparison.OrdinalIgnoreCase) ? newColumn : c)
+                .ToList();
+            var isUnique = _uniqueColumns.Contains(oldKey);
+            Remove(oldKey);
+            AddIndexDefinition(GetIndexKey(newColumns), newColumns, isUnique);
+            renamed.Add(newColumns);
+        }
+        return renamed;
+    }
     private static long EstimateKeyBytes(object key) => key switch
     {
         CompositeKey composite => 32L + composite.EstimateHeapBytes(),

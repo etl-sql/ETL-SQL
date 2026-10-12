@@ -182,7 +182,9 @@ namespace ETL_SQL.Connectors.Postgres
 
                     if (writer == null)
                     {
-                        var cols = string.Join(", ", batch.ColumnNames.Select(c => $"\"{c}\""));
+                        // A column name is data here. An embedded quote is doubled so it stays
+                        // inside the identifier.
+                        var cols = string.Join(", ", batch.ColumnNames.Select(c => $"\"{c.Replace("\"", "\"\"")}\""));
                         writer = await conn.BeginTextImportAsync(
                             $"COPY {QuoteIdentifier(_tableName)} ({cols}) FROM STDIN",
                             effectiveCancellationToken);

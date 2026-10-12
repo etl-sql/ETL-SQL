@@ -297,21 +297,14 @@ namespace ETL_SQL.Connectors.Xml
         {
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
-            bool alreadyXml = false;
+            // One enumeration: the first batch says whether this is a ready-made document, and the
+            // same enumerator then supplies the rows. Asking the source twice ran its query twice.
+            await using var enumerator = batches.GetAsyncEnumerator(effectiveCancellationToken);
+            bool hasBatch = await enumerator.MoveNextAsync();
             string? singleXml = null;
-
-            await foreach (var b in batches.WithCancellation(effectiveCancellationToken))
+            if (hasBatch && enumerator.Current.ColumnNames.Count == 1 && enumerator.Current.ColumnNames[0] == "XML_F52E2B61")
             {
-                if (b.ColumnNames.Count == 1 && b.ColumnNames[0] == "XML_F52E2B61")
-                {
-                    alreadyXml = true;
-                    singleXml = b.Rows.FirstOrDefault()?[0]?.ToString();
-                    break;
-                }
-                else
-                {
-                    break;
-                }
+                singleXml = enumerator.Current.Rows.FirstOrDefault()?[0]?.ToString();
             }
 
             string tempFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
@@ -319,66 +312,67 @@ namespace ETL_SQL.Connectors.Xml
             string? zippedTemp = null;
             try
             {
-                if (alreadyXml && singleXml != null)
+                if (singleXml != null)
                 {
                     await System.IO.File.WriteAllTextAsync(tempFile, singleXml, effectiveCancellationToken);
                 }
                 else
                 {
-                    XElement root;
-                    XElement deepRoot;
+                    var pathParts = string.IsNullOrEmpty(_rootPath)
+                        ? new[] { "root" }
+                        : _rootPath.Split(new[] { '.', '/' }, StringSplitOptions.RemoveEmptyEntries);
 
-                    if (string.IsNullOrEmpty(_rootPath))
+                    // Rows are written as they arrive, so the document is never held as one tree. The
+                    // settings match XElement.ToString(), which is how this file used to be produced.
+                    var settings = new System.Xml.XmlWriterSettings
                     {
-                        root = new XElement("root");
-                        deepRoot = root;
-                    }
-                    else
+                        Async = true,
+                        Indent = true,
+                        OmitXmlDeclaration = true,
+                        Encoding = new UTF8Encoding(false)
+                    };
+                    await using (var stream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                    await using (var writer = System.Xml.XmlWriter.Create(stream, settings))
                     {
-                        var pathParts = _rootPath.Split(new[] { '.', '/' }, StringSplitOptions.RemoveEmptyEntries);
-                        root = new XElement(pathParts[0]);
-                        deepRoot = root;
-                        for (int k = 1; k < pathParts.Length; k++)
-                        {
-                            var sub = new XElement(pathParts[k]);
-                            deepRoot.Add(sub);
-                            deepRoot = sub;
-                        }
-                    }
+                        foreach (var part in pathParts) writer.WriteStartElement(part);
 
-                    await foreach (var b in batches.WithCancellation(effectiveCancellationToken))
-                    {
-                        effectiveCancellationToken.ThrowIfCancellationRequested();
-                        var columnNames = b.ColumnNames;
-                        foreach (var r in b.Rows)
+                        while (hasBatch)
                         {
-                            var rowElem = new XElement("row");
-                            for (int i = 0; i < columnNames.Count; i++)
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
+                            var b = enumerator.Current;
+                            var columnNames = b.ColumnNames;
+                            foreach (var r in b.Rows)
                             {
-                                var col = columnNames[i];
-                                var val = r[i];
-                                if (val == null) continue;
-
-                                var parts = col.Split('.');
-                                XElement current = rowElem;
-                                for (int j = 0; j < parts.Length - 1; j++)
+                                var rowElem = new XElement("row");
+                                for (int i = 0; i < columnNames.Count; i++)
                                 {
-                                    var sub = current.Element(parts[j]);
-                                    if (sub == null)
-                                    {
-                                        sub = new XElement(parts[j]);
-                                        current.Add(sub);
-                                    }
-                                    current = sub;
-                                }
-                                current.Add(new XElement(parts.Last(), val));
-                            }
-                            deepRoot.Add(rowElem);
-                        }
-                    }
-                    await System.IO.File.WriteAllTextAsync(tempFile, root.ToString(), effectiveCancellationToken);
-                }
+                                    var col = columnNames[i];
+                                    var val = r[i];
+                                    if (val == null) continue;
 
+                                    var parts = col.Split('.');
+                                    XElement current = rowElem;
+                                    for (int j = 0; j < parts.Length - 1; j++)
+                                    {
+                                        var sub = current.Element(parts[j]);
+                                        if (sub == null)
+                                        {
+                                            sub = new XElement(parts[j]);
+                                            current.Add(sub);
+                                        }
+                                        current = sub;
+                                    }
+                                    current.Add(new XElement(parts.Last(), val));
+                                }
+                                rowElem.WriteTo(writer);
+                            }
+                            await writer.FlushAsync();
+                            hasBatch = await enumerator.MoveNextAsync();
+                        }
+
+                        foreach (var _ in pathParts) writer.WriteEndElement();
+                    }
+                }
                 string fileToEncrypt = tempFile;
                 if (_compress)
                 {

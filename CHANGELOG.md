@@ -98,6 +98,26 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Fix codebase-audit defects. Keep a `WithTable` clone inside the open transaction on ODBC and
+  Snowflake. Carry single and composite in-memory indexes through a column rename, and let a
+  single-column unique index hold many NULLs. Give BigQuery streaming rows a stable insert id so a
+  retry cannot duplicate them. Stop a failed session-cache eviction pass from ending the Portal
+  process. Make ad-hoc Orchestrator job status changes atomic, scope those jobs to their tenant,
+  and use full GUID ids. Filter the scheduled-job list by tenant in SQL before paging. Escape
+  quotes in Postgres `COPY` column names. Redact the Gateway's local failure log. Clamp the
+  completion column and give the LSP debounce one disposer.
+- Cut avoidable work in connectors: FTP calls are asynchronous and cancellable, Avro reads and
+  writes one background task per batch instead of per row, and JSON, XML, and Excel output stream
+  rows to disk instead of building the whole file in memory. The XML writer also stops enumerating
+  its source twice.
+- Keep a spilled `ORDER BY` as a stream through `OFFSET` / `LIMIT` and projection instead of
+  collecting the sorted rows into memory again. `TOP … PERCENT` keeps the list path.
+- Answer the Orchestrator job, schedule, and notification lists with one grant lookup per page
+  instead of one per row.
+- Replace the default machine key, a digest of the host and account name, with a random key
+  generated per installation. Values encrypted under the old key are no longer readable. See
+  [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
+- Return the `GENERATE JWT_SECRET` secret as a result row instead of writing it to the log.
 - Stop the capacity driver's process sampling from inflating the latencies it reports on Windows. It
   ran PowerShell synchronously, which froze the event loop that sends and times requests; a request
   to a local stub measured about 300 ms and now measures under 1 ms.

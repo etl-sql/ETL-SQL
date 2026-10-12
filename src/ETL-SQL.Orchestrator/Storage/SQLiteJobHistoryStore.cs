@@ -1331,6 +1331,24 @@ namespace ETL_SQL.Orchestrator.Storage
             return jobs;
         }
 
+        public async Task<IEnumerable<JobDefinition>> GetJobsPageAsync(string? tenantId, int limit, int offset)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT * FROM jobs WHERE tenant_id = @tenant ORDER BY name LIMIT @limit OFFSET @offset;";
+            command.AddParam("@tenant", TenantKey(tenantId));
+            command.AddParam("@limit", Math.Clamp(limit, 1, 1000));
+            command.AddParam("@offset", Math.Max(0, offset));
+
+            var jobs = new List<JobDefinition>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) jobs.Add(ReadJob(reader));
+            return jobs;
+        }
+
         public async Task<IEnumerable<JobDefinition>> GetJobsPageAsync(int limit = 100, int offset = 0)
         {
             await EnsureInitializedAsync();

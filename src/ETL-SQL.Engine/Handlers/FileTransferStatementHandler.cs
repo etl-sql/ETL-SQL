@@ -200,10 +200,11 @@ public class FileTransferStatementHandler : IStatementHandler
                     return;
                 }
 
-                var dir = Path.GetDirectoryName(localPath);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                // Authorized before anything is created: a refused path must not leave a directory behind.
                 localPath = pathAuthorizer.Authorize(context, localPath,
                     FileSystemAccessKind.Write).CanonicalPath;
+                var dir = Path.GetDirectoryName(localPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 await remoteFs.DownloadFileAsync(remotePath, localPath, overwrite);
                 _logger.WriteLine("Download complete.", ConsoleColor.Green);
             }

@@ -173,10 +173,12 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
         {
             removed = Evict();
         }
-        catch
+        catch (Exception ex)
         {
+            // This runs on a timer thread. An exception that leaves it is unhandled and ends the
+            // process, so a failed pass is recorded and the next tick tries again.
             status = "failure";
-            throw;
+            _log.LogError(ex, "SessionCache eviction pass failed.");
         }
         finally
         {

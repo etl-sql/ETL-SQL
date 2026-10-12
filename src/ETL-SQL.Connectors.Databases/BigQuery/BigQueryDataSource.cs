@@ -162,9 +162,13 @@ namespace ETL_SQL.Connectors.BigQuery
                     effectiveCancellationToken.ThrowIfCancellationRequested();
                     if (batch.Rows.Count == 0) continue;
 
-                    var rows = batch.Rows.Select(row =>
+                    // Each row gets its insert id once, outside the retry. A retry of a request
+                    // that partly landed or timed out then resends the same ids, and BigQuery
+                    // drops the rows it already took.
+                    var batchId = Guid.NewGuid().ToString("N");
+                    var rows = batch.Rows.Select((row, ordinal) =>
                     {
-                        var insertRow = new BigQueryInsertRow();
+                        var insertRow = new BigQueryInsertRow($"{batchId}-{ordinal}");
                         foreach (var col in batch.ColumnNames)
                         {
                             var val = row[col];
