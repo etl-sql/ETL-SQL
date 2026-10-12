@@ -1283,8 +1283,10 @@ does not close build, package, runtime, or Git-index acceptance.
   `e97278ac5` carry every inventoried output for their hosts with matching bytes (213 Portal, 29
   ReportPlayer, 101 WorkstationEditor, 59 VS Code media) and no `.ts` or `.map` file. The three
   container images pass the same comparison over HTTP. The Windows ZIP, win32-x64 VSIX, and an
-  administrative extract of the MSI, built from an archive of `d226e13aa`, pass it too. macOS packages
-  and the DMG have not been inspected.
+  administrative extract of the MSI, built from an archive of `d226e13aa`, pass it too. After the
+  cutover the native package workflow built the ZIP and VSIX on Windows, Linux, macOS arm64, and macOS
+  x64 from checkouts with no generated file. `verify-packaged-browser-assets.mjs` now makes the byte
+  comparison a step of that workflow; its first run on macOS is pending. The DMG has not been inspected.
 - [ ] **Verify release metadata after asset generation.** Check checksums, SBOM, provenance, and
   third-party notices against the final assembled packages containing the generated assets. Audit
   file-discovery rules so ignored outputs and bundled vendor components remain represented. Generate
