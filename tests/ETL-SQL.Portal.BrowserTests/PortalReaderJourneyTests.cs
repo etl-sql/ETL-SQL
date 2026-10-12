@@ -10,8 +10,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 
 /// <summary>
 /// A report read by someone who did not write it. The author is a Publisher who owns one folder;
-/// each reader is a Viewer who holds Execute on that folder through a group and nothing else. No
-/// administrator signs in.
+/// each reader is a Viewer who holds one grant on that folder through a group and nothing else.
+/// No administrator signs in.
 ///
 /// <para>The reader's half is what an author's own run cannot show: the report opened from the
 /// library, driven through its own controls, a saved view kept and reopened, and the author's
@@ -60,7 +60,7 @@ public sealed class PortalReaderJourneyTests(PortalJourneyFixture fixture)
         var author = await CreateUserAsync("Publisher");
         var folderId = await CreateFolderOwnedByAsync(author);
         var reader = await CreateUserAsync("Viewer");
-        await GrantExecuteAsync(folderId, reader);
+        await GrantAsync(folderId, reader, FolderPermission.Execute);
 
         int reportId;
         string reportName = $"Regional sales {Guid.NewGuid():N}"[..28];
@@ -75,9 +75,8 @@ public sealed class PortalReaderJourneyTests(PortalJourneyFixture fixture)
         await SignInAsync(page, reader);
         var afterSignIn = session.FailedRequests.Count;
 
-        // Found in the library, not reached by a link the author sent.
-        var card = page.Locator($".report-card-link[data-id='{reportId}']").First;
-        await Expect(card).ToBeVisibleAsync(new() { Timeout = 20_000 });
+        // Found in the library, in its folder, not reached by a link the author sent.
+        var card = await FindInFolderAsync(page, folderId, reportId);
         await Expect(card).ToHaveTextAsync(reportName);
         await card.ClickAsync();
 
@@ -99,13 +98,7 @@ public sealed class PortalReaderJourneyTests(PortalJourneyFixture fixture)
 
         // Kept as a saved view.
         var viewName = "South only";
-        await report.Locator("#etlsql-views-menu-button").ClickAsync();
-        await report.Locator("#etlsql-views-menu [role='menuitem']", new() { HasText = "Save current view as" }).ClickAsync();
-        var dialog = report.Locator(".etlsql-feedback-dialog");
-        await dialog.Locator("input").FillAsync(viewName);
-        await dialog.Locator(".etlsql-feedback-btn-primary").ClickAsync();
-        await Expect(report.Locator(".etlsql-feedback-toast", new() { HasText = $"Saved '{viewName}'." }))
-            .ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await SaveViewAsync(report, viewName);
 
         // An interaction: clicking a bar moves the same parameter somewhere else.
         var clicked = await ClickBarAsync(report);
@@ -114,7 +107,7 @@ public sealed class PortalReaderJourneyTests(PortalJourneyFixture fixture)
 
         // A fresh page opens the base report, and the saved view brings the reader's state back.
         await page.GotoAsync("/index.html");
-        await page.Locator($".report-card-link[data-id='{reportId}']").First.ClickAsync();
+        await (await FindInFolderAsync(page, folderId, reportId)).ClickAsync();
         report = await FrameAsync(page);
         await WaitForRegionsAsync(report, ["North", "South", "West"]);
         await report.Locator("#etlsql-views-menu-button").ClickAsync();
@@ -137,6 +130,179 @@ public sealed class PortalReaderJourneyTests(PortalJourneyFixture fixture)
         Assert.True(failed.Count == 2 && failed.All(entry => entry.StartsWith("403 ", StringComparison.Ordinal)),
             $"Unexpected failed requests:\n  {string.Join("\n  ", failed)}");
         Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task TwoReadersOfOneReportEachSeeOnlyTheirOwnRows()
+    {
+        var author = await CreateUserAsync("Publisher");
+        var folderId = await CreateFolderOwnedByAsync(author);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var north = await CreateUserAsync("Viewer");
+        var south = await CreateUserAsync("Viewer");
+        // Read is enough to open a report that runs for its reader.
+        var northGroup = await GrantAsync(folderId, north, FolderPermission.Read, $"region_north_{suffix}");
+        var southGroup = await GrantAsync(folderId, south, FolderPermission.Read, $"region_south_{suffix}");
+
+        // West belongs to neither group: a row no reader of this report may see.
+        var script = $"""
+            CREATE TABLE #sales (SaleID INT, Region VARCHAR(20), Total DECIMAL(10,2));
+            INSERT INTO #sales VALUES (1, 'North', 100), (2, 'North', 150), (3, 'South', 80),
+              (4, 'South', 60), (5, 'West', 200), (6, 'West', 40);
+            DECLARE @MinTotal INT = 0;
+            CREATE TABLE #floors (Floor INT);
+            INSERT INTO #floors VALUES (0), (70);
+            CREATE VISUAL FloorPicker AS SLICER (
+              SOURCE = #floors,
+              MAPPINGS (VALUE = Floor),
+              OPTIONS (MODE = SINGLE, LAYOUT = 'DROPDOWN', INCLUDE_ALL = OFF, TITLE = 'Minimum total'),
+              ACTIONS (ON_CHANGE = SET_PARAMETER(@MinTotal, value))
+            );
+            CREATE VISUAL Detail AS TABLE (
+              SOURCE = (SELECT SaleID, Region, Total FROM #sales
+                        WHERE Total >= @MinTotal
+                          AND ((Region = 'North' AND HAS_GROUP('{northGroup}'))
+                            OR (Region = 'South' AND HAS_GROUP('{southGroup}'))))
+            );
+            CREATE PAGE [Main] AS DASHBOARD (
+              LAYOUT (
+                STRUCTURE = 'A
+                             B',
+                MAP ('A' = FloorPicker, 'B' = Detail)
+              )
+            );
+            """;
+        int reportId;
+        await using (var authoring = await fixture.NewSessionAsync())
+        {
+            await SignInAsync(authoring.Page, author);
+            reportId = await PublishAsync(authoring.Page, folderId, $"Regional rows {suffix}", script);
+        }
+
+        await using var northSession = await fixture.NewSessionAsync();
+        await using var southSession = await fixture.NewSessionAsync();
+        var northPage = northSession.Page;
+        var southPage = southSession.Page;
+        var northFrame = await OpenLiveAsync(northPage, north, folderId, reportId);
+        var southFrame = await OpenLiveAsync(southPage, south, folderId, reportId);
+        Assert.Equal(new[] { 1, 2 }, await SaleIdsShownAsync(northFrame));
+        Assert.Equal(new[] { 3, 4 }, await SaleIdsShownAsync(southFrame));
+
+        // A parameter narrows each reader's own rows and never reaches the other's.
+        await northFrame.Locator("[data-visual-name='FloorPicker'] select").SelectOptionAsync("70");
+        await southFrame.Locator("[data-visual-name='FloorPicker'] select").SelectOptionAsync("70");
+        await WaitForSaleIdsAsync(southFrame, [3]);
+        await WaitForSaleIdsAsync(northFrame, [1, 2]);
+
+        // A saved view, reopened from a fresh page, is still that reader's rows.
+        await SaveViewAsync(southFrame, "Larger sales");
+        await southPage.GotoAsync("/index.html");
+        await (await FindInFolderAsync(southPage, folderId, reportId)).ClickAsync();
+        southFrame = await FrameAsync(southPage);
+        await southFrame.Locator("#etlsql-views-menu-button").ClickAsync();
+        await southFrame.Locator(".saved-view-menu-item", new() { HasText = "Larger sales" }).ClickAsync();
+        await WaitForSaleIdsAsync(southFrame, [3]);
+
+        // The exported file is that reader's rows, with their filter.
+        var northCsv = await ExportCsvAsync(northPage);
+        Assert.Contains("North", northCsv);
+        Assert.DoesNotContain("South", northCsv);
+        Assert.DoesNotContain("West", northCsv);
+        var southCsv = await ExportCsvAsync(southPage);
+        Assert.Contains("South", southCsv);
+        Assert.DoesNotContain("North", southCsv);
+        Assert.DoesNotContain("West", southCsv);
+
+        // Refresh runs it again for this reader; the first reader still sees only their own.
+        await northPage.Locator("#refreshBtn").ClickAsync();
+        northFrame = await FrameAsync(northPage);
+        Assert.Equal(new[] { 1, 2 }, await SaleIdsShownAsync(northFrame));
+
+        // Subscribe is offered from the live view and keeps a subscription for this reader.
+        await northPage.Locator("#subBtn").ClickAsync();
+        await Expect(northPage.Locator("#subscribeModal")).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await northPage.Locator("#sub-name").FillAsync("My regional rows");
+        await northPage.Locator("#sub-format").SelectOptionAsync("Link");
+        await Expect(northPage.Locator("#sub-saveBtn")).ToBeEnabledAsync(new() { Timeout = 15_000 });
+        await northPage.Locator("#sub-saveBtn").ClickAsync();
+        await Expect(northPage.Locator("#subscribeModal")).ToBeHiddenAsync(new() { Timeout = 15_000 });
+
+        // Nothing was kept that a later reader could be handed.
+        using (var scope = fixture.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            Assert.Equal(0, await db.ReportSnapshots.CountAsync(snapshot => snapshot.ReportId == reportId));
+            Assert.Equal(1, await db.Subscriptions.CountAsync(sub => sub.ReportId == reportId && sub.UserId == north.Id));
+        }
+
+        Assert.Empty(northSession.PageErrors);
+        Assert.Empty(southSession.PageErrors);
+    }
+
+    /// <summary>Signs in, opens the report from the library, and returns its frame once the live view shows rows.</summary>
+    private static async Task<IFrameLocator> OpenLiveAsync(IPage page, Person reader, int folderId, int reportId)
+    {
+        await SignInAsync(page, reader);
+        await (await FindInFolderAsync(page, folderId, reportId)).ClickAsync();
+        // No first run to press: the report runs for whoever opens it.
+        await Expect(page.Locator(".viewer-meta")).ToContainTextAsync("Live · your rows", new() { Timeout = 20_000 });
+        await Expect(page.Locator("#execBtn")).ToHaveCountAsync(0);
+        await Expect(page.Locator("#designBtn")).ToHaveCountAsync(0);
+        return await FrameAsync(page);
+    }
+
+    /// <summary>
+    /// Opens the folder in the library tree and returns the report's link. The library's home lists
+    /// only what the whole Portal has viewed most, so a report nobody has opened is found in its folder.
+    /// </summary>
+    private static async Task<ILocator> FindInFolderAsync(IPage page, int folderId, int reportId)
+    {
+        var folder = page.Locator($".folder-item[data-id='{folderId}']");
+        await Expect(folder).ToBeVisibleAsync(new() { Timeout = 20_000 });
+        await folder.ClickAsync();
+        var card = page.Locator($".report-card-link[data-id='{reportId}']").First;
+        await Expect(card).ToBeVisibleAsync(new() { Timeout = 20_000 });
+        return card;
+    }
+
+    private static async Task SaveViewAsync(IFrameLocator report, string name)
+    {
+        await report.Locator("#etlsql-views-menu-button").ClickAsync();
+        await report.Locator("#etlsql-views-menu [role='menuitem']", new() { HasText = "Save current view as" }).ClickAsync();
+        var dialog = report.Locator(".etlsql-feedback-dialog");
+        await dialog.Locator("input").FillAsync(name);
+        await dialog.Locator(".etlsql-feedback-btn-primary").ClickAsync();
+        await Expect(report.Locator(".etlsql-feedback-toast", new() { HasText = $"Saved '{name}'." }))
+            .ToBeVisibleAsync(new() { Timeout = 15_000 });
+    }
+
+    private static async Task<string> ExportCsvAsync(IPage page)
+    {
+        await page.Locator("#exportBtn").ClickAsync();
+        var download = await page.RunAndWaitForDownloadAsync(() => page.Locator("#exportCsvBtn").ClickAsync());
+        return await File.ReadAllTextAsync(await download.PathAsync());
+    }
+
+    private static async Task WaitForSaleIdsAsync(IFrameLocator report, int[] expected)
+    {
+        await ETL_SQL.TestSupport.LoadAwareWait.UntilAsync<int[]?>(
+            $"Detail should show exactly sales {string.Join(", ", expected)}",
+            async cancellationToken =>
+            {
+                try
+                {
+                    return await SaleIdsShownAsync(report).WaitAsync(cancellationToken);
+                }
+                catch (PlaywrightException)
+                {
+                    // The table is re-rendered by the refresh; read it again.
+                    return null;
+                }
+            },
+            ids => ids is not null && ids.SequenceEqual(expected),
+            TimeSpan.FromSeconds(30),
+            pollInterval: TimeSpan.FromMilliseconds(250),
+            describe: ids => ids is null ? "Table is re-rendering" : $"Sales: {string.Join(", ", ids)}");
     }
 
     // ── The running report ───────────────────────────────────────────────────
@@ -306,8 +472,8 @@ public sealed class PortalReaderJourneyTests(PortalJourneyFixture fixture)
         return folder.Id;
     }
 
-    /// <summary>Puts the reader in a new group that holds Execute on the folder, and returns the group's name.</summary>
-    private async Task<string> GrantExecuteAsync(int folderId, Person reader, string? groupName = null)
+    /// <summary>Puts the reader in a new group that holds the permission on the folder, and returns the group's name.</summary>
+    private async Task<string> GrantAsync(int folderId, Person reader, FolderPermission permission, string? groupName = null)
     {
         using var scope = fixture.Factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
@@ -315,7 +481,7 @@ public sealed class PortalReaderJourneyTests(PortalJourneyFixture fixture)
         db.Groups.Add(group);
         await db.SaveChangesAsync();
         db.UserGroups.Add(new UserGroup { UserId = reader.Id, GroupId = group.Id });
-        db.FolderAcls.Add(new FolderAcl { FolderId = folderId, GroupId = group.Id, Permission = FolderPermission.Execute });
+        db.FolderAcls.Add(new FolderAcl { FolderId = folderId, GroupId = group.Id, Permission = permission });
         await db.SaveChangesAsync();
         return group.Name;
     }
