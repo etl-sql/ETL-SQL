@@ -32,6 +32,29 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Throws<SecurityException>(() => _security.ValidatePath(path));
         }
 
+        [Theory]
+        [InlineData(@"/mnt/c/Users/data/sales.csv")]
+        [InlineData(@"/mnt/data/analytics/sales.parquet")]
+        [InlineData(@"C:\Projects\lib\helpers\data.csv")]
+        public void ValidatePath_ShouldAllowLegitimateMountedAndLibPaths(string path)
+        {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && path.StartsWith("C:", StringComparison.OrdinalIgnoreCase))
+            {
+                return; // Skip Windows drive syntax on Linux
+            }
+            _security.ValidatePath(path);
+        }
+
+        [Theory]
+        [InlineData(@"/mnt/c/Windows/System32/cmd.exe")]
+        [InlineData(@"/mnt/c/Users/chuck/.ssh/id_rsa")]
+        [InlineData(@"/boot/vmlinuz")]
+        [InlineData(@"/sys/class/net")]
+        public void ValidatePath_ShouldStillBlockSystemDirectoriesUnderMounts(string path)
+        {
+            Assert.Throws<SecurityException>(() => _security.ValidatePath(path));
+        }
+
         [Fact]
         public void ValidatePath_ShouldBlockRootAccess()
         {

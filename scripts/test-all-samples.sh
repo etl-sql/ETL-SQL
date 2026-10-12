@@ -43,7 +43,9 @@ service_available() {
         postgres|postgresql) port_open localhost 5432 ;;
         mssql|sqlserver)     port_open localhost 1433 ;;
         docker)              command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 ;;
-        performance|portal|orchestrator) return 1 ;;
+        portal)              port_open localhost 5000 ;;
+        orchestrator)        port_open localhost 5001 ;;
+        performance|portal-manual|portal-interactive) return 1 ;;
         *) return 0 ;;
     esac
 }

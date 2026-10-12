@@ -219,7 +219,7 @@ public partial class SecurityService
         "ProgramData", "AppData", "Documents and Settings", "Config.msi", "System Volume Information",
         // Linux System
         "/boot", "/dev", "/lib", "/lib32", "/lib64", "/libx32", "/lost+found",
-        "/media", "/mnt", "/run", "/srv", "/sys"
+        "/run", "/srv", "/sys"
     };
 
     // Kernel and OS directories whose modification would be catastrophic or where secrets live.
@@ -448,8 +448,7 @@ public partial class SecurityService
         // C. Block Standard restricted directories (VCS, AppData, etc.)
         foreach (var blocked in RestrictedDirectories)
         {
-            var blockedClean = blocked.Trim('/');
-            if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase)))
+            if (IsBlockedDirectoryMatch(normalizedPath, segments, blocked))
             {
                 throw new SecurityException($"Unauthorized access to restricted application/build directory: {blocked} in path {fullPath}");
             }
