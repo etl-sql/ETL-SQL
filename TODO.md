@@ -618,9 +618,9 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
   under the snapshot root, and the manifest title and both rows read back.
   Fix: the report link now skips a completion it already acted on. A poller starting again looks back a
   minute and used to run the report a second time.
-  Open, for the owner: the scheduled identity is the existing trusted, non-interactive one (no user), and
-  an identity-sensitive report is skipped by design. Running as the schedule's owner instead would change
-  the row-level-security rules for shared snapshots, so it was not done here. Also open: the two halves
+  Owner decision 2026-10-12: the scheduled identity stays the existing trusted, non-interactive one (no
+  user), and an identity-sensitive report is skipped by design. Running as the schedule's owner instead
+  would change the row-level-security rules for shared snapshots. Open: the two halves
   are joined by hand on the job name, there is no Studio control for it, and the retired
   `CREATE REFRESH JOB` connector path still creates a job named `REFRESH:<report>` that no link matches.
 
