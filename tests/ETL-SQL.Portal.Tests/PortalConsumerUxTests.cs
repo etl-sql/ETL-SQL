@@ -394,6 +394,7 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
             new FolderPermissionService(db),
             null!,
             null!,
+            null!,
             null!);
         controller.ControllerContext = new ControllerContext { HttpContext = context };
         return controller;

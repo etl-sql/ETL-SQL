@@ -28,6 +28,7 @@ public class ExecutionController(
     ETL_SQL.Core.Storage.IArtifactStorage artifacts,
     SnapshotPackageService snapshotPackages,
     LineageStewardNotificationService stewardNotifications,
+    PortalExecutionIdentityService identities,
     DatasetTenantScope? datasetScope = null,
     PortalTenantCatalogScope? catalogScope = null,
     ILogger<ExecutionController>? logger = null) : ControllerBase
@@ -215,8 +216,46 @@ public class ExecutionController(
 
     // ── 2.2  GET /api/reports/{id}/manifest (alias used by report-runtime.js) ──
 
+    // A report whose rows depend on the viewer has no snapshot. This route, the one the report
+    // frame loads, answers it live; the snapshot routes below keep answering that there is none.
+
     [HttpGet("reports/{id:int}/manifest")]
-    public Task<IActionResult> GetManifestAlias(int id) => GetManifest(id);
+    public async Task<IActionResult> GetManifestAlias(int id) => await TryGetLiveManifestAsync(id) ?? await GetManifest(id);
+
+    /// <summary>
+    /// Answers an identity-sensitive report from the caller's own session, run under the caller's
+    /// identity. Nothing is stored. Returns null for any other report, which is served from its
+    /// snapshot. Read is enough, as for a snapshot, although answering runs the script.
+    /// </summary>
+    private async Task<IActionResult?> TryGetLiveManifestAsync(int id)
+    {
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return null;
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var scriptPath))
+            return null;
+        if (!await ReportIdentitySensitivity.IsSensitiveAsync(scriptPath, HttpContext.RequestAborted)) return null;
+
+        if (await GetEffectiveReportPermissionAsync(report) is null) return Forbid();
+
+        var svc = await GetOrRebuildSessionAsync(id, scriptPath);
+        var manifest = await svc.GetManifestAsync(HttpContext.RequestAborted);
+        await audit.LogAsync(CurrentUserId, "VIEW_REPORT_LIVE", "Report", id.ToString());
+        return this.BrowserManifest(manifest);
+    }
+
+    // ── 2.2b  POST /api/reports/{id}/live/reset ──────────────────────────────
+    // Discards the caller's own session, so their next view runs the report again.
+
+    [HttpPost("reports/{id:int}/live/reset")]
+    public async Task<IActionResult> ResetLiveSession(int id)
+    {
+        var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+        if (await GetEffectiveReportPermissionAsync(report) is null) return Forbid();
+
+        await sessions.InvalidateUserAsync(id, CurrentUserId, _datasetScope.TenantId);
+        return NoContent();
+    }
 
     // ── 2.2  GET /api/reports/{id}/snapshot/manifest ─────────────────────────
     // Returns the raw manifest JSON (for the report viewer JS to consume).
@@ -627,12 +666,17 @@ public class ExecutionController(
     private async Task<ETL_SQL.ReportHosting.DashboardService> GetOrRebuildSessionAsync(
         int reportId, string scriptPath)
     {
+        // Built from the database on every request, never taken from the caller: a session is
+        // reused only while this identity is unchanged.
+        var identity = await identities.BuildAsync(
+            CurrentUserId, _datasetScope.TenantId, IsAdmin, impersonatedUserId: null, HttpContext.RequestAborted);
         var svc = sessions.GetOrCreate(
             reportId,
             CurrentUserId,
             scriptPath,
             isAdministrator: IsAdmin,
-            keyScope: _datasetScope.TenantId);
+            keyScope: _datasetScope.TenantId,
+            executionIdentity: identity);
 
         // If session was just created and there is a snapshot, verify it is available from shared
         // artifact storage. DashboardService doesn't expose a direct seed-from-manifest API, so
