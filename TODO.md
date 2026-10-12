@@ -1067,7 +1067,7 @@ does not close build, package, runtime, or Git-index acceptance.
   of `e97278ac5` with all 491 outputs deleted. Portal serves its 213 outputs with matching bytes, Node is
   absent from all three images, and their embedded runtime resources match. The lean-worker Dockerfile,
   workflow cache and artifact handoffs, and the macOS jobs are not covered.
-- [ ] **Make package scripts reproducible and fail fast.** Audit PowerShell and shell versions of
+- [x] **Make package scripts reproducible and fail fast.** Audit PowerShell and shell versions of
   `build-vsix`, `publish-vsix`, and affected release scripts. Use locked dependency installs for the
   compiler, extension, and React UI, and propagate failures from preparation, builds, publishes, and
   packaging. Scope cleanup to verified package-output paths and processes started by the script.
@@ -1088,6 +1088,15 @@ does not close build, package, runtime, or Git-index acceptance.
   Integrate the pinned unsigned toolchain in `scripts/vsix/` with every public packaging entry point;
   keep proprietary signing dependencies excluded, signing requests rejected, and redistributed
   dependency license files present. Refresh the toolchain/archive checks against the final candidate.
+  Done (2026-10-11). The four VSIX entry points and pre-release packaging go through one coordinator with
+  locked installs, no `npx` fallback, staged assembly, and atomic promotion. `test-vsix-coordinator.mjs`,
+  `test-vsix-cli-cancellation.mjs`, `test-vsix-toolchain.mjs`, `test-owned-command.mjs`, and
+  `test-package-inspector.mjs` pass in the consumer gate on the cutover candidate; they cover failures at
+  each stage, cancellation, and a foreign lock, which is refused and left untouched. Real packages were
+  built through the coordinator from source-only trees on Windows and Linux, on Windows also from a path
+  with spaces, and by the native package workflow on Linux, Windows, and macOS arm64. The coordinator has
+  no automatic lock recovery, so it cannot remove another run's lock; `scripts/vsix/README.md` gives the
+  manual steps.
 - [x] **Verify package version and architecture consistency.** Derive the release version and target
   architecture from the supported release inputs, and reject missing or inconsistent values. Remove
   the hard-coded version in `scripts/build-vsix.ps1` and the `0.0.0` fallback in

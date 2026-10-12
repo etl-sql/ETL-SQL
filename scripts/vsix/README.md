@@ -37,6 +37,17 @@ before an atomic rename replaces the accepted VSIX. Failed stages preserve that 
 Development `bin`, `out`, and `ui/dist` folders remain untouched. A workspace lock
 serializes packaging; an abandoned lock requires manual inspection before retrying.
 
+The coordinator never removes a lock it did not create: it deletes `artifacts/vsix-package.lock`
+only when the file still holds its own token, and a second run fails with "already locked" and
+leaves the file as it found it. So a lock left by a killed run stays until someone clears it:
+
+1. Read `artifacts/vsix-package.lock`. It holds `<process id>:<random id>`.
+2. Confirm that process is not running. If it is, a packaging run is active; wait for it.
+3. Delete the lock. Because the lock is exclusive, no run was active while it existed, so any
+   `.vsix-stage-*` folder beside the output VSIX is left over from the killed run and can be
+   deleted too.
+4. Run packaging again. The previously accepted VSIX was never touched.
+
 Ctrl+C and SIGTERM cancel the active command and its descendants, wait for shutdown,
 then remove the owned staging directory and lock. Archive hashing and inspection also
 observe cancellation before promotion. The coordinator exits with 130 for Ctrl+C and
