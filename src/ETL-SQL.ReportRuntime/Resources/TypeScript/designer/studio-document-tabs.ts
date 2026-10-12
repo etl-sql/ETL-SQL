@@ -121,6 +121,13 @@ export function createStudioDocumentTabs(hostContext: StudioDocumentTabsContext)
         });
     }
 
+    function focusTab(docId: string) {
+        if (!hostContext.tabsContainer) return;
+        const selector = docId === '__home__' ? '#etlsql-tab-home' : `#etlsql-tab-${docId}`;
+        const targetTab = queryElement(hostContext.tabsContainer, selector) as HTMLElement | null;
+        targetTab?.focus();
+    }
+
     function handleTabKeydown(e: KeyboardEvent) {
         if (closestElement(e, '.etlsql-tab-rename-input')) return;
         const tabs = Array.from(hostContext.tabsContainer ? queryElements(hostContext.tabsContainer, '.etlsql-studio-tab') : []).map(asHtml);
@@ -133,25 +140,25 @@ export function createStudioDocumentTabs(hostContext: StudioDocumentTabsContext)
             const nextTab = asHtml(tabs[(currentIdx + 1) % tabs.length]);
             const docId = nextTab?.dataset.docId || '__home__';
             hostContext.switchDoc(docId);
-            nextTab?.focus();
+            focusTab(docId);
         } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
             e.preventDefault();
             const prevTab = asHtml(tabs[(currentIdx - 1 + tabs.length) % tabs.length]);
             const docId = prevTab?.dataset.docId || '__home__';
             hostContext.switchDoc(docId);
-            prevTab?.focus();
+            focusTab(docId);
         } else if (e.key === 'Home') {
             e.preventDefault();
             const firstTab = asHtml(tabs[0]);
             const docId = firstTab?.dataset.docId || '__home__';
             hostContext.switchDoc(docId);
-            firstTab?.focus();
+            focusTab(docId);
         } else if (e.key === 'End') {
             e.preventDefault();
             const lastTab = asHtml(tabs[tabs.length - 1]);
             const docId = lastTab?.dataset.docId || '__home__';
             hostContext.switchDoc(docId);
-            lastTab?.focus();
+            focusTab(docId);
         } else if (e.key === 'Delete' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w')) {
             e.preventDefault();
             const docId = currentTarget.dataset.docId;

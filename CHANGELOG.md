@@ -128,6 +128,35 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   starts, and a report link did not remember the completion it had already acted on, so a restart
   shortly after a scheduled refresh ran the report again.
 
+- Make Portal and Orchestrator test fixtures disable engine file sinks when application file logging
+  is disabled; dedicated file-logging tests still use the real configured sink.
+- Preserve untracked authored files during browser-asset branch cleanup. The new cleanup command
+  previews inventory-owned leftovers and verifies hashes and Git tracking before removal.
+
+- Fix codebase-audit defects. Keep a `WithTable` clone inside the open transaction on ODBC and
+  Snowflake. Carry single and composite in-memory indexes through a column rename, and let a
+  single-column unique index hold many NULLs. Give BigQuery streaming rows a stable insert id so a
+  retry cannot duplicate them. Stop a failed session-cache eviction pass from ending the Portal
+  process. Make ad-hoc Orchestrator job status changes atomic, scope those jobs to their tenant,
+  and use full GUID ids. Filter the scheduled-job list by tenant in SQL before paging. Escape
+  quotes in Postgres `COPY` column names. Redact the Gateway's local failure log. Clamp the
+  completion column and give the LSP debounce one disposer.
+- Cut avoidable work in connectors: FTP calls are asynchronous and cancellable, Avro reads and
+  writes one background task per batch instead of per row, and JSON, XML, and Excel output stream
+  rows to disk instead of building the whole file in memory. The XML writer also stops enumerating
+  its source twice.
+- Keep a spilled `ORDER BY` as a stream through `OFFSET` / `LIMIT` and projection instead of
+  collecting the sorted rows into memory again. `TOP … PERCENT` keeps the list path.
+- Answer the Orchestrator job, schedule, and notification lists with one grant lookup per page
+  instead of one per row.
+- Replace the default machine key, a digest of the host and account name, with a random key
+  generated per installation. Values encrypted under the old key are no longer readable. See
+  [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
+- Return the `GENERATE JWT_SECRET` secret as a result row instead of writing it to the log.
+- Preserve legacy Orchestrator data when upgrading PostgreSQL schemas to snake_case. Recognize
+  PostgreSQL-folded table and column names, including script hashes and lease fields. Rename each
+  table transactionally, reject ambiguous table/column collisions, and propagate migration failures
+  and cancellation instead of silently continuing with an incomplete schema.
 - Stop the capacity driver's process sampling from inflating the latencies it reports on Windows. It
   ran PowerShell synchronously, which froze the event loop that sends and times requests; a request
   to a local stub measured about 300 ms and now measures under 1 ms.
@@ -695,10 +724,6 @@ For complete release details, highlights, and migration notes, see [Release Note
 
 ### Fixed
 
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
-
 - The browser lint toolchain locks its transitive brace-expansion dependency to patched 5.0.12.
   Release npm audits now cover the extension, UI and all three browser toolchains, and reject missing
   reports or registry errors. CI audits the browser toolchains alongside its existing extension checks.
@@ -924,10 +949,6 @@ For complete release details, highlights, and migration notes, see [Release Note
 
 ### Fixed
 
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
-
 - **The Windows installer honours the component properties it is given, and no longer fails when the Portal is slow to start.** `DEPLOY_PROFILE` defaulted to `ENTERPRISE`, so its preset ran on every install — including `/qn`, where there are no checkboxes to preset — and overwrote whatever the caller passed: `msiexec /i ETL-SQL.msi /qn INSTALL_ORCHESTRATOR=0` applied the property and then silently reset it 83 ms later, installing the Orchestrator anyway. It is now undefined by default, as its own documentation always said; the preset set every property to the value it already defaults to, so an ordinary install is unchanged. Separately, the installer waited for the Portal service to report *running* before finishing, but the Portal's first start creates and migrates `portal.db` — on a slow or cold machine that exceeds the Windows service start timeout, and the whole installation failed with error 1920 and rolled back a build whose files were all correct. The install no longer waits on that first start (the service is still `auto`, so Windows starts it); uninstall and upgrade still wait for the stop, where the file lock genuinely must be released.
 
 - `CUSTOM` charts cross-filter on the column they are keyed on, receive the resolved theme and style tokens named visuals receive, honour author-supplied `Y_START`/`Y_END` and `X_START`/`X_END` on non-stacked `RECT` layers, anchor each diagnostic to the node carrying the mistake, and report every duplicate in a single pass.
@@ -981,10 +1002,6 @@ For complete release details, highlights, and migration notes, see [Release Note
 - Removed legacy `api/admin/smtp` endpoints in favor of unified `api/admin/connections`.
 
 ### Fixed
-
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
 
 - Fixed Gateway registration race condition between `HelloAck` and routing table enrollment.
 - Fixed sandbox checkpoint session encryption key binding to use tenant authority.
@@ -1206,10 +1223,6 @@ For complete release details, highlights, and migration notes, see [Release Note
 
 ### Fixed
 
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
-
 **Real column types for MOCKDB and SQLite**
 - The schema and session explorers previously showed `ANY` for every MOCKDB and SQLite column. Both
   now report real declared types, including nullability and primary keys.
@@ -1326,10 +1339,6 @@ For complete release details, highlights, and migration notes, see [Release Note
 
 ### Fixed
 
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
-
 - Serialized enterprise policy initialization and ignored stale policy notifications so runtime configuration and security-event transport cannot regress during concurrent refreshes; disposed configuration roots now release their policy subscriptions.
 - Restored true Release builds for `ETL-SQL.Analysis`, redacted fatal CLI/TUI startup exceptions, and passed report-launch arguments without string concatenation.
 - Restored the repository format gate by correcting import ordering in enterprise security and fleet-policy files.
@@ -1420,10 +1429,6 @@ For complete release details, highlights, and migration notes, see [Release Note
 
 ### Fixed
 
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
-
 - **Parser and Security Fixes:** Sanitized `QuoteIdentifier` routines to prevent SQL injection.
 - **VS Code Extension & TUI Fixes:** Fixed VS Code extension vulnerabilities, terminal command builder escape bugs, and resolved window resize lag/input blocking on Unix in the TUI.
 
@@ -1498,10 +1503,6 @@ For complete release details, highlights, and migration notes, see [Release Note
 
 ### Fixed
 
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
-
 - **Support bundle redaction**: `SupportBundleBuilder` now redacts connection-string passwords, API keys, and JWT secrets from all diagnostic fields before archiving; added corresponding `OperatorToolingTests` coverage.
 - **Portal database migration test failures**: Resolved a portal database upgrade migration ordering issue and fixed a metric timezone normalization bug that caused flaky test failures under certain locale configurations.
 - **SFTP connector `ConnectionStringBuilder`**: Corrected option serialization for `SFTP` connector key-file auth paths.
@@ -1570,10 +1571,6 @@ For complete release details, highlights, and migration notes, see [Release Note
 
 ### Fixed
 
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
-
 **Test Stability**
 - Stabilized two timing-sensitive Docker integration-lane tests that failed intermittently only under full pre-release load: relaxed a `Retry-After` delay assertion to tolerate the ~15.6ms Windows timer quantum, and raised the orchestrator scheduled-job history poll timeout above the container's own job timeout so a job nearing its budget under load is not abandoned prematurely.
 
@@ -1621,10 +1618,6 @@ For complete release details, highlights, and migration notes, see [Release Note
 - Adopted an optimistic-concurrency contract for concurrent administration, batched dataset-listing permission checks for performance, and refreshed branding, trademark, logo, and README positioning.
 
 ### Fixed
-
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
 
 - Resolved FLATFILE connectors with EXCEL/JSON/XML/PARQUET/AVRO formats to their correct dialects in `PipelineGenerator`, and fixed a `FlatFileDataSource` compiler error.
 - Fixed `SessionCache` race leaks and stale admin caller context, a refresh debounce race, and disabled accounts surviving LDAP login; removed the hardcoded first-run admin password.
@@ -1687,10 +1680,6 @@ For complete release details, highlights, and migration notes, see [Release Note
 - Added scaling tests for portal administration catalogs and enterprise identity lifecycle verification.
 
 ### Fixed
-
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
 - **Query Parser:** Fixed parser bugs for `LEFT SEMI`/`LEFT ANTI` joins and tolerated trailing semicolons (`;`) for statements inside `BEGIN`/`TRY` blocks.
 - **Cookbook Recipes:** Audited and fixed all 23 Cookbook recipes to ensure they compile and parse cleanly, fixing issues with `ENCRYPT`, `SEND EMAIL`, `EXEC`, `DECLARE`, and deprecated `WITH PARAMETERS` report options.
 - **TUI Editor:** Implemented file overwrite warnings when a file changes on disk, fixed sidebar layout wipeout during redraw by clearing partial line width, and resolved keyboard input lockups on Windows.
@@ -1789,10 +1778,6 @@ Hardening from the v0.10.0 release-readiness security review:
 
 ### Fixed
 
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
-
 - **Report export rendering**: PDF chart export now uses the ECharts SSR pipeline so chart visuals render as real chart images; table and filter visual formatting paths were tightened for PDF/Markdown output.
 - **VS Code Extension cross-platform hardening**: Added automatic execute permissions setup (`chmod +x`) on Linux/macOS for bundled executables, resolved terminal commands using dynamic shell detection (fixing PowerShell-only `&` operator errors on zsh/bash/cmd), fixed notebook engine lookup in packaged environments, resolved broken welcome links using a GitHub repository fallback in production, added auto-cleanup of temporary scripts, and implemented child spawn error listeners to prevent crashes.
 - **`--resume` silently ignored**: passing `--resume` without `--session` would run the full script from the beginning with no warning. Now fails fast with a descriptive error.
@@ -1866,10 +1851,6 @@ Hardening from the v0.10.0 release-readiness security review:
 - SLT corpus coverage documented in `docs/architecture/standards/SLT_Coverage.md`.
 
 ### Fixed
-
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
 - **Snowflake StackOverflow**: `SnowflakeDataSource.CreateCommand` was recursively calling itself; fixed to delegate to the underlying connection.
 - **VS Code password prompt**: "requires an interactive console" error when an `ENC:`-protected connection was opened in VS Code; password masking now works via the VS Code input mechanism.
 - **Test coverage gate**: Coverage had slipped below 70%; restored to 70.8%+ with T4 exception-wrapping test additions.
@@ -1938,10 +1919,6 @@ Hardening from the v0.10.0 release-readiness security review:
 - **Deployment Packaging**: Integrated Windows MSI/ZIP, Linux `.deb`/ZIP, macOS DMG/ZIP, and platform-targeted VSIX generation into the release pipeline.
 
 ### Fixed
-
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
 - **Multi-Select Regression**: Fixed a duplication bug where legacy dropdown logic was overwriting the new checkbox-list implementation.
 - **Markdown Rendering**: Resolved issues where Markdown tables were displayed as raw text due to library interface mismatches.
 - **IntelliSense Regressions**: Fixed missing connector option suggestions and asterisk expansion failures.
@@ -1975,10 +1952,6 @@ Hardening from the v0.10.0 release-readiness security review:
 
 ### Fixed
 
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
-
 - **Portal Reactivity:** Stabilized slicer reactivity, multiselect visual components, and cross-filesystem path handling during portal publishing.
 
 ## [Unofficial 0.5.0] — 2026-05-04
@@ -2003,10 +1976,6 @@ Hardening from the v0.10.0 release-readiness security review:
 
 ### Fixed
 
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
-
 - **TUI & Telemetry bugs:** Resolved rendering artifacts, status bar layout errors, and stabilized TUI telemetry.
 - **LSP Cleanup:** Purged experimental unstable features (Quick Fixes, Smart Rename) for stability.
 
@@ -2028,10 +1997,6 @@ Hardening from the v0.10.0 release-readiness security review:
 
 ### Fixed
 
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
-
 - **SMTP Attachment Leak:** Fixed a handle leak for SMTP attachments.
 - **3VL Null Handling:** Implemented three-valued logic (3VL) null propagation and fixed substring start index boundary behaviors.
 
@@ -2052,10 +2017,6 @@ Hardening from the v0.10.0 release-readiness security review:
 - **Syntax Standardization:** Migrated `ON FILE` to `ON FLATFILE` for file connections.
 
 ### Fixed
-
-- Refresh a report once per completed refresh job. The Portal's poller looks back a minute when it
-  starts, and a report link did not remember the completion it had already acted on, so a restart
-  shortly after a scheduled refresh ran the report again.
 
 - **Thread Safety:** Eliminated deadlocks and silent exception swallowing under concurrent execution contexts.
 

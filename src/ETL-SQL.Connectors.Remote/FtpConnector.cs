@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
@@ -21,14 +22,14 @@ namespace ETL_SQL.Connectors
         public Dictionary<string, string>? Options => null;
         public string ConnectorType => "FTP";
 
-        private readonly FtpClient? _client;
+        private readonly AsyncFtpClient? _client;
 
         /// <summary>
         /// Allows tests and fixtures to apply additional post-construction configuration
-        /// to the underlying FtpClient before the first connection (e.g. AddressResolver
+        /// to the underlying AsyncFtpClient before the first connection (e.g. AddressResolver
         /// for Docker passive-mode port mapping).
         /// </summary>
-        internal void ConfigureClient(Action<FtpClient> configure)
+        internal void ConfigureClient(Action<AsyncFtpClient> configure)
         {
             if (_client != null) configure(_client);
         }
@@ -120,15 +121,18 @@ namespace ETL_SQL.Connectors
         public string BuildConnectionString(Dictionary<string, string> properties) =>
             ConnectionStringBuilder.Build(Name, properties);
 
-        private void EnsureConnected()
+        private CancellationToken Cancellation => _context?.CancellationToken ?? CancellationToken.None;
+
+        private async Task<AsyncFtpClient> EnsureConnectedAsync()
         {
             if (_client == null) throw new ExecutionException("FTP Client is not initialized.");
             if (_context != null)
                 ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(_context, _host);
             if (!_client.IsConnected)
             {
-                _client.Connect();
+                await _client.Connect(Cancellation);
             }
+            return _client;
         }
 
         public IAsyncEnumerable<FileMetaData> ListFilesAsync(string path) =>
@@ -136,9 +140,8 @@ namespace ETL_SQL.Connectors
 
         private async IAsyncEnumerable<FileMetaData> ListFilesCoreAsync(string path)
         {
-            await Task.CompletedTask;
-            EnsureConnected();
-            foreach (var i in _client!.GetListing(path))
+            var client = await EnsureConnectedAsync();
+            foreach (var i in await client.GetListing(path, Cancellation))
                 yield return new FileMetaData
                 {
                     Name = i.Name,
@@ -149,16 +152,15 @@ namespace ETL_SQL.Connectors
                 };
         }
 
-        public Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
+        public async Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
         {
             try
             {
-                EnsureConnected();
+                var client = await EnsureConnectedAsync();
                 var existsMode = overwrite ? FtpRemoteExists.Overwrite : FtpRemoteExists.Skip;
-                var status = _client!.UploadFile(localPath, remotePath, existsMode);
+                var status = await client.UploadFile(localPath, remotePath, existsMode, token: Cancellation);
                 if (status == FtpStatus.Skipped && !overwrite) throw new ExecutionException($"Remote file already exists (overwrite=OFF): {remotePath}");
                 if (status == FtpStatus.Failed) throw new ExecutionException($"Failed to upload file to FTP: {remotePath}");
-                return Task.CompletedTask;
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -166,16 +168,15 @@ namespace ETL_SQL.Connectors
             }
         }
 
-        public Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true)
+        public async Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true)
         {
             try
             {
-                EnsureConnected();
+                var client = await EnsureConnectedAsync();
                 var existsMode = overwrite ? FtpLocalExists.Overwrite : FtpLocalExists.Skip;
-                var status = _client!.DownloadFile(localPath, remotePath, existsMode);
+                var status = await client.DownloadFile(localPath, remotePath, existsMode, token: Cancellation);
                 if (status == FtpStatus.Skipped && !overwrite) throw new ExecutionException($"Local file already exists (overwrite=OFF): {localPath}");
                 if (status == FtpStatus.Failed) throw new ExecutionException($"Failed to download file from FTP: {remotePath}");
-                return Task.CompletedTask;
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -183,13 +184,12 @@ namespace ETL_SQL.Connectors
             }
         }
 
-        public Task DeleteFileAsync(string remotePath)
+        public async Task DeleteFileAsync(string remotePath)
         {
             try
             {
-                EnsureConnected();
-                _client!.DeleteFile(remotePath);
-                return Task.CompletedTask;
+                var client = await EnsureConnectedAsync();
+                await client.DeleteFile(remotePath, Cancellation);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -197,12 +197,12 @@ namespace ETL_SQL.Connectors
             }
         }
 
-        public Task<bool> FileExistsAsync(string remotePath)
+        public async Task<bool> FileExistsAsync(string remotePath)
         {
             try
             {
-                EnsureConnected();
-                return Task.FromResult(_client!.FileExists(remotePath));
+                var client = await EnsureConnectedAsync();
+                return await client.FileExists(remotePath, Cancellation);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -210,12 +210,12 @@ namespace ETL_SQL.Connectors
             }
         }
 
-        public Task<bool> DirectoryExistsAsync(string remotePath)
+        public async Task<bool> DirectoryExistsAsync(string remotePath)
         {
             try
             {
-                EnsureConnected();
-                return Task.FromResult(_client!.DirectoryExists(remotePath));
+                var client = await EnsureConnectedAsync();
+                return await client.DirectoryExists(remotePath, Cancellation);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -223,17 +223,16 @@ namespace ETL_SQL.Connectors
             }
         }
 
-        public Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true)
+        public async Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true)
         {
             try
             {
-                EnsureConnected();
-                if (overwrite && _client!.FileExists(remoteDest))
+                var client = await EnsureConnectedAsync();
+                if (overwrite && await client.FileExists(remoteDest, Cancellation))
                 {
-                    _client.DeleteFile(remoteDest);
+                    await client.DeleteFile(remoteDest, Cancellation);
                 }
-                _client!.Rename(remoteSource, remoteDest);
-                return Task.CompletedTask;
+                await client.Rename(remoteSource, remoteDest, Cancellation);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -241,13 +240,12 @@ namespace ETL_SQL.Connectors
             }
         }
 
-        public Task CreateDirectoryAsync(string remotePath)
+        public async Task CreateDirectoryAsync(string remotePath)
         {
             try
             {
-                EnsureConnected();
-                _client!.CreateDirectory(remotePath);
-                return Task.CompletedTask;
+                var client = await EnsureConnectedAsync();
+                await client.CreateDirectory(remotePath, Cancellation);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -255,13 +253,12 @@ namespace ETL_SQL.Connectors
             }
         }
 
-        public Task DeleteDirectoryAsync(string remotePath)
+        public async Task DeleteDirectoryAsync(string remotePath)
         {
             try
             {
-                EnsureConnected();
-                _client!.DeleteDirectory(remotePath);
-                return Task.CompletedTask;
+                var client = await EnsureConnectedAsync();
+                await client.DeleteDirectory(remotePath, Cancellation);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -298,12 +295,12 @@ namespace ETL_SQL.Connectors
 
         public async ValueTask DisposeAsync()
         {
-            if (_client != null && _client.IsConnected)
+            if (_client == null) return;
+            if (_client.IsConnected)
             {
-                _client.Disconnect();
+                await _client.Disconnect();
             }
-            _client?.Dispose();
-            await Task.CompletedTask;
+            await _client.DisposeAsync();
         }
 
         public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
@@ -312,10 +309,10 @@ namespace ETL_SQL.Connectors
             return NormalizeEndpoint(connectionString, 21).Host;
         }
 
-        private static FtpClient CreateClient(string host, int port, string username, string password,
+        private static AsyncFtpClient CreateClient(string host, int port, string username, string password,
             string? useSsl = null, bool passive = true)
         {
-            var client = new FtpClient(host, username, password) { Port = port };
+            var client = new AsyncFtpClient(host, username, password, port);
             client.Config.EncryptionMode = useSsl?.ToUpperInvariant() switch
             {
                 "EXPLICIT" or "ON" => FtpEncryptionMode.Explicit,

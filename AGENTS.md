@@ -632,7 +632,7 @@ To prevent cross-platform CI failures and avoid wasting 1-hour GitHub Actions ru
    - Shell scripts (`*.sh`) and systemd units (`*.service`) must strictly use LF line endings (CRLF causes `bad interpreter` / bash syntax errors on Linux runners).
    - Normalize with: `node scripts/check-shell-line-endings.js --fix`
 3. **Shared Report Runtime Assets Must Use LF**:
-   - Always edit canonical assets in `src/ETL-SQL.ReportRuntime/Resources/Shared/` and run `node .\scripts\sync-assets.js` followed by `node .\scripts\sync-assets.js -Check`.
+   - Edit shared runtime/designer modules in `src/ETL-SQL.ReportRuntime/Resources/TypeScript/`, Portal modules in `src/ETL-SQL.Portal/BrowserSources/`, and retained styles/vendor assets in `Resources/Shared/`. Run `node .\scripts\sync-assets.js` followed by `node .\scripts\sync-assets.js -Check`; never edit generated JavaScript.
 4. **C# Text/Doc Assertions Must Normalize Line Endings**:
    - When writing C# tests that read markdown or text files from disk via `File.ReadAllText()`, never assume `\r\n` or `\n`. Always use `.Replace("\r\n", "\n")` or regex `\r?\n` for cross-platform stability.
 5. **Always Run Pre-Push Validation Locally**:

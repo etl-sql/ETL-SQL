@@ -22,9 +22,10 @@ public partial class SecurityService
 {
     /// <summary>
     /// Returns the server-mounted machine/session key when <c>ETLSQL_MACHINE_KEY_FILE</c> is set;
-    /// otherwise returns the legacy SHA-256 digest of <c>MachineName:UserName</c>. The file indirection
-    /// keeps key material out of process arguments and environment values while allowing disposable
-    /// workers to rehydrate encrypted checkpoints.
+    /// otherwise a key derived from random material this installation generated on first use and
+    /// keeps in its local application data. The file indirection keeps key material out of process
+    /// arguments and environment values while allowing disposable workers to rehydrate encrypted
+    /// checkpoints.
     /// </summary>
     public static string GetMachineKey()
     {
@@ -39,11 +40,15 @@ public partial class SecurityService
             return key;
         }
 
-        var rawKey = $"{Environment.MachineName}:{Environment.UserName}";
-        using var sha256 = System.Security.Cryptography.SHA256.Create();
-        var bytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(rawKey));
-        return Convert.ToBase64String(bytes);
+        return PersistedMachineKey.Value;
     }
+
+    private static readonly Lazy<string> PersistedMachineKey = new(() => Convert.ToBase64String(
+        System.Security.Cryptography.HKDF.DeriveKey(
+            System.Security.Cryptography.HashAlgorithmName.SHA256,
+            ETL_SQL.Common.CryptoUtils.GetMachineKey(entropy: null),
+            32,
+            info: "etl-sql-machine-password"u8.ToArray())));
 
     private readonly ILogger _logger;
     [GeneratedRegex(@"(CREATE\s+CONNECTION\s+\w+\s+AS\s+\w+\s*\()(.*?)(\))", RegexOptions.IgnoreCase | RegexOptions.Singleline)]

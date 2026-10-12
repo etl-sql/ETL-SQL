@@ -301,6 +301,16 @@ public interface IJobHistoryStore
     Task<IEnumerable<JobDefinition>> GetAllJobsAsync();
     /// <summary>Returns a stable name-ordered page of saved jobs for management APIs.</summary>
     Task<IEnumerable<JobDefinition>> GetJobsPageAsync(int limit = 100, int offset = 0);
+
+    /// <summary>
+    /// One page of a single tenant's jobs. The tenant is applied before the page is cut, so another
+    /// tenant's jobs neither take up rows in it nor show through as a short page.
+    /// </summary>
+    async Task<IEnumerable<JobDefinition>> GetJobsPageAsync(string? tenantId, int limit, int offset) =>
+        (await GetAllJobsAsync())
+            .Where(job => string.Equals(job.TenantId ?? "", tenantId ?? "", StringComparison.Ordinal))
+            .OrderBy(job => job.Name, StringComparer.OrdinalIgnoreCase)
+            .Skip(Math.Max(0, offset)).Take(Math.Clamp(limit, 1, 1000));
     Task DeleteJobAsync(JobId jobId);
     Task<bool> TryDeleteJobAsync(JobId jobId, long expectedVersion);
     Task UpdateJobLastRunAsync(JobId jobId, DateTime lastRun, DateTime? nextRun);

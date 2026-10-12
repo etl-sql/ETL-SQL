@@ -98,28 +98,35 @@ namespace ETL_SQL.Connectors.Avro
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(colNames);
 
-                while (await Task.Run(() => reader.HasNext(), effectiveCancellationToken))
+                // The Avro reader is synchronous. One background task decodes a whole batch; a task per
+                // row cost more in scheduling than the decode itself.
+                var records = new List<GenericRecord>(Math.Max(1, batchSize));
+                while (true)
                 {
-                    effectiveCancellationToken.ThrowIfCancellationRequested();
-                    var record = await Task.Run(() => reader.Next(), effectiveCancellationToken);
-                    var row = currentBatch.NewRow();
-                    foreach (var field in schema.Fields)
+                    records.Clear();
+                    await Task.Run(() =>
                     {
-                        row[field.Name] = record[field.Name];
-                    }
-                    await currentBatch.AddRowAsync(row);
+                        while (records.Count < batchSize && reader.HasNext())
+                        {
+                            effectiveCancellationToken.ThrowIfCancellationRequested();
+                            records.Add(reader.Next());
+                        }
+                    }, effectiveCancellationToken);
+                    if (records.Count == 0) break;
 
-                    if (currentBatch.Rows.Count >= batchSize)
+                    foreach (var record in records)
                     {
-                        yield return currentBatch;
-                        currentBatch = new DataTable();
-                        currentBatch.SetColumns(colNames);
+                        var row = currentBatch.NewRow();
+                        foreach (var field in schema.Fields)
+                        {
+                            row[field.Name] = record[field.Name];
+                        }
+                        await currentBatch.AddRowAsync(row);
                     }
-                }
 
-                if (currentBatch.Rows.Count > 0)
-                {
                     yield return currentBatch;
+                    currentBatch = new DataTable();
+                    currentBatch.SetColumns(colNames);
                 }
             }
             finally
@@ -173,17 +180,20 @@ namespace ETL_SQL.Connectors.Avro
                     {
                         effectiveCancellationToken.ThrowIfCancellationRequested();
                         var batch = enumerator.Current;
-                        foreach (var r in batch.Rows)
+                        await Task.Run(() =>
                         {
-                            effectiveCancellationToken.ThrowIfCancellationRequested();
-                            var record = new GenericRecord(schema);
-                            foreach (var field in schema.Fields)
+                            foreach (var r in batch.Rows)
                             {
-                                var val = r[field.Name];
-                                record.Add(field.Name, CastValue(val, field.Schema));
+                                effectiveCancellationToken.ThrowIfCancellationRequested();
+                                var record = new GenericRecord(schema);
+                                foreach (var field in schema.Fields)
+                                {
+                                    var val = r[field.Name];
+                                    record.Add(field.Name, CastValue(val, field.Schema));
+                                }
+                                writer.Append(record);
                             }
-                            await Task.Run(() => writer.Append(record), effectiveCancellationToken);
-                        }
+                        }, effectiveCancellationToken);
                     } while (await enumerator.MoveNextAsync());
                 }
 

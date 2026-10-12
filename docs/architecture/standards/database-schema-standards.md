@@ -11,7 +11,7 @@ ETL-SQL distinguishes between **internal subsystem databases** and **external ta
 - **Internal Subsystem Databases** (owned by ETL-SQL infrastructure):
   - **Portal Catalog & State** (`PortalDbContext` backed by SQLite or PostgreSQL).
   - **Orchestrator Job & Cluster Storage** (`SQLiteJobHistoryStore`, `RelationalJobHistoryStore`, `SqliteOrchestratorDialect`, `NpgsqlOrchestratorDialect`).
-  - **Engine Virtual & Session Tables** (`eng.metrics`, `eng.security_events`, `eng.columns`, `eng.jobs`, memory session `#temp` tables, and SQLite session audit tables).
+  - **Engine Virtual & Session Tables** (`eng.metrics`, `eng.security_events`, `eng.columns`, `eng.jobs`, and SQLite session audit tables). User-defined `#temp` identifiers are outside this convention.
   - **Rule**: All internal tables, columns, primary keys, foreign keys, and indexes MUST use strict `snake_case`.
 
 - **External Target Databases** (user-defined or remote systems):
@@ -36,7 +36,7 @@ All internal SQL identifiers follow standard lowercase snake_case:
 
 ### 2.1 C# Mapping Utility
 
-The canonical naming conversion is provided by `DatabaseNamingConvention.ToSnakeCase(string? input)` in `ETL-SQL.Core.Common`:
+The canonical naming conversion is provided by `DatabaseNamingConvention.ToSnakeCase(string? input)` in the `ETL_SQL.Common` namespace of `ETL-SQL.Core`:
 - Inserts an underscore between lowercase/digit and uppercase characters (`JobHistory` → `job_history`, `OAuth2Client` → `oauth2_client`).
 - Collapses consecutive uppercase acronyms cleanly (`HTMLParser` → `html_parser`).
 - Converts all characters to lowercase.
@@ -72,14 +72,15 @@ Orchestrator uses direct relational storage through `IOrchestratorStoreDialect` 
 
 All DDL definitions in `SQLiteJobHistoryStore.InitializeAsync`, `RelationalSandboxAdmissionLedger`, `RelationalTenantMeteringLedger`, `SharedTenantLifecycleStore`, `TenantJobEvidenceStore`, and `JobThrottle` declare `snake_case` tables and columns:
 - All queries, parameters, and ordinal mappings read snake_case columns (`reader.GetOrdinal("job_id")`, `reader.GetOrdinal("start_time")`).
-- SQLite and PostgreSQL column ordinal resolution in `DbDataReader` is case-insensitive, allowing smooth transition during upgrades.
+- Case-insensitive column lookup does not bridge inserted underscores; legacy identifiers must be migrated before current queries run.
 
 ### 4.2 Automated Migration for Existing Databases
 
 When an Orchestrator database initializes, it automatically detects and migrates legacy PascalCase tables using `OrchestratorSchemaMigration.MigrateLegacyTableAsync`:
 - **SQLite Safe Renaming**: Because SQLite table names are case-insensitive, a direct `ALTER TABLE "Jobs" RENAME TO "jobs"` fails with a duplicate table error. The migration helper executes a two-step rename (`Jobs` → `_tmp_snake_jobs` → `jobs`).
-- **PostgreSQL Renaming**: PostgreSQL performs atomic `ALTER TABLE "{legacyTable}" RENAME TO "{canonicalTable}"`.
+- **PostgreSQL Folding**: Legacy unquoted names were folded to lowercase (`JobHistory` became `jobhistory`). The migration recognizes both preserved and folded table names and uses a fixed map of legacy column spellings to restore word boundaries (`jobid` becomes `job_id`).
 - **Column Renaming**: Existing columns with PascalCase names are safely altered to snake_case (`ALTER TABLE "jobs" RENAME COLUMN "JobId" TO "job_id"`).
+- **Atomicity and Refusal**: Each table's two-step rename and column renames run in one transaction on both providers. Failure rolls back and stops initialization. Coexisting legacy/canonical tables and colliding column names are refused for explicit reconciliation; cancellation is propagated.
 
 ---
 

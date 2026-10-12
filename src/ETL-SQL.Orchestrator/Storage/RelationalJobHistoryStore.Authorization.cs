@@ -73,17 +73,61 @@ public partial class RelationalJobHistoryStore
         using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            grants.Add(new OrchestratorObjectGrant(
-                reader.GetString(0),
-                Enum.Parse<OrchestratorObjectKind>(reader.GetString(1), ignoreCase: true),
-                Enum.Parse<OrchestratorPrincipalKind>(reader.GetString(2), ignoreCase: true),
-                reader.GetString(3),
-                Enum.Parse<OrchestratorObjectPermission>(reader.GetString(4), ignoreCase: true),
-                reader.GetString(5),
-                reader.GetInt64(6)));
+            grants.Add(ReadGrant(reader));
         }
         return grants;
     }
+
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<OrchestratorObjectGrant>>> GetObjectGrantsAsync(
+        IReadOnlyCollection<string> objectIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = objectIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).ToList();
+        var byObject = new Dictionary<string, List<OrchestratorObjectGrant>>(StringComparer.Ordinal);
+        if (ids.Count == 0) return new Dictionary<string, IReadOnlyList<OrchestratorObjectGrant>>();
+        await EnsureInitializedAsync();
+        using var connection = _dialect.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+
+        // Chunked so a large page stays under the provider's parameter limit.
+        const int chunkSize = 500;
+        for (var start = 0; start < ids.Count; start += chunkSize)
+        {
+            using var command = connection.CreateCommand();
+            var names = new List<string>();
+            for (var i = start; i < Math.Min(start + chunkSize, ids.Count); i++)
+            {
+                var name = "@id" + (i - start).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                names.Add(name);
+                command.AddParam(name, ids[i]);
+            }
+            command.CommandText = $@"
+                SELECT object_id, object_kind, principal_kind, principal_id, permission, granted_by, version
+                FROM orchestrator_object_acls
+                WHERE object_id IN ({string.Join(", ", names)})
+                ORDER BY object_id, principal_kind, principal_id;";
+
+            using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var grant = ReadGrant(reader);
+                if (!byObject.TryGetValue(grant.ObjectId, out var grants))
+                    byObject[grant.ObjectId] = grants = [];
+                grants.Add(grant);
+            }
+        }
+        return byObject.ToDictionary(
+            pair => pair.Key, pair => (IReadOnlyList<OrchestratorObjectGrant>)pair.Value, StringComparer.Ordinal);
+    }
+
+    private static OrchestratorObjectGrant ReadGrant(System.Data.Common.DbDataReader reader) => new(
+        reader.GetString(0),
+        Enum.Parse<OrchestratorObjectKind>(reader.GetString(1), ignoreCase: true),
+        Enum.Parse<OrchestratorPrincipalKind>(reader.GetString(2), ignoreCase: true),
+        reader.GetString(3),
+        Enum.Parse<OrchestratorObjectPermission>(reader.GetString(4), ignoreCase: true),
+        reader.GetString(5),
+        reader.GetInt64(6));
 
     public async Task SaveObjectGrantAsync(
         OrchestratorObjectGrant grant,

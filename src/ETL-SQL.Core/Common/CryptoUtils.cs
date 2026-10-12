@@ -854,27 +854,28 @@ public static class CryptoUtils
 
         if (File.Exists(keyPath))
         {
-            baseKey = File.ReadAllBytes(keyPath);
+            baseKey = ReadMachineKeyFile(keyPath);
         }
         else
         {
             baseKey = RandomNumberGenerator.GetBytes(32);
-            if (isWindows)
+            // CreateNew so two processes starting together cannot each keep a different key: the
+            // loser reads the winner's. On Unix the file is owner read/write only (0600) from creation.
+            var options = new FileStreamOptions
             {
-                File.WriteAllBytes(keyPath, baseKey);
-            }
-            else
+                Mode = FileMode.CreateNew,
+                Access = FileAccess.Write,
+                Share = FileShare.None
+            };
+            if (!isWindows) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            try
             {
-                // Create owner read/write only (0600) atomically so the key is never briefly world-readable.
-                var options = new FileStreamOptions
-                {
-                    Mode = FileMode.CreateNew,
-                    Access = FileAccess.Write,
-                    Share = FileShare.None,
-                    UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
-                };
                 using var fs = new FileStream(keyPath, options);
                 fs.Write(baseKey);
+            }
+            catch (IOException) when (File.Exists(keyPath))
+            {
+                baseKey = ReadMachineKeyFile(keyPath);
             }
         }
 
@@ -882,6 +883,24 @@ public static class CryptoUtils
 
         // Mix entropy into the key to make it user-bound if entropy is provided
         return Rfc2898DeriveBytes.Pbkdf2(baseKey, Encoding.UTF8.GetBytes(entropy), 1000, HashAlgorithmName.SHA256, 32);
+    }
+
+    private static byte[] ReadMachineKeyFile(string keyPath)
+    {
+        // Another process may still be writing the file it just created; an empty read is that, not a key.
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                var key = File.ReadAllBytes(keyPath);
+                if (key.Length >= 32) return key;
+            }
+            catch (IOException) when (attempt < 20)
+            {
+            }
+            if (attempt >= 20) throw new ExecutionException("The ETL-SQL machine key file is unreadable or incomplete.");
+            Thread.Sleep(25);
+        }
     }
 
     /// <summary>

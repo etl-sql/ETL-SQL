@@ -1,4 +1,4 @@
-﻿using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Orchestrator.Service;
@@ -69,6 +69,73 @@ public sealed class OrchestratorObjectAuthorizationService(IOrchestratorAuthoriz
         string? owner,
         CancellationToken cancellationToken = default)
     {
+        if (DecideWithoutGrants(caller, objectKind, objectId, objectTenantId, required, owner) is { } decided)
+            return decided;
+
+        var grants = await store.GetObjectGrantsAsync(objectId!, cancellationToken);
+        return GrantsAllow(caller, grants, required);
+    }
+
+    /// <summary>
+    /// The members of <paramref name="items"/> the caller holds <paramref name="required"/> on, in
+    /// order. The same decision as <see cref="CanAsync(OrchestratorCaller, OrchestratorObjectKind, string?, string?, OrchestratorObjectPermission, string?, CancellationToken)"/>
+    /// for each one, but every item that comes down to a grant is answered by a single lookup.
+    /// </summary>
+    public async Task<List<T>> FilterAsync<T>(
+        OrchestratorCaller caller,
+        OrchestratorObjectKind objectKind,
+        IEnumerable<T> items,
+        Func<T, string?> objectId,
+        Func<T, string?> objectTenantId,
+        Func<T, string?> owner,
+        OrchestratorObjectPermission required,
+        CancellationToken cancellationToken = default)
+    {
+        var all = items as IReadOnlyList<T> ?? items.ToList();
+        var decisions = new bool?[all.Count];
+        var undecided = new List<string>();
+        for (var i = 0; i < all.Count; i++)
+        {
+            decisions[i] = DecideWithoutGrants(
+                caller, objectKind, objectId(all[i]), objectTenantId(all[i]), required, owner(all[i]));
+            if (decisions[i] is null) undecided.Add(objectId(all[i])!);
+        }
+
+        var grants = undecided.Count == 0
+            ? null
+            : await store.GetObjectGrantsAsync(undecided, cancellationToken);
+
+        var allowed = new List<T>(all.Count);
+        for (var i = 0; i < all.Count; i++)
+        {
+            var allow = decisions[i]
+                ?? (grants!.TryGetValue(objectId(all[i])!, out var objectGrants)
+                    && GrantsAllow(caller, objectGrants, required));
+            if (allow) allowed.Add(all[i]);
+        }
+        return allowed;
+    }
+
+    private static bool GrantsAllow(
+        OrchestratorCaller caller, IReadOnlyList<OrchestratorObjectGrant> grants, OrchestratorObjectPermission required)
+    {
+        foreach (var grant in grants)
+        {
+            if (!Matches(caller, grant)) continue;
+            if (Includes(grant.Permission, required)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Everything that can be decided from the caller and the object alone; null means "ask the grants".</summary>
+    private static bool? DecideWithoutGrants(
+        OrchestratorCaller caller,
+        OrchestratorObjectKind objectKind,
+        string? objectId,
+        string? objectTenantId,
+        OrchestratorObjectPermission required,
+        string? owner)
+    {
         // No identity, no authority: an object that has not been assigned a surrogate id cannot be
         // the subject of a grant, and guessing from its name is exactly the ambiguity the id removes.
         if (string.IsNullOrWhiteSpace(objectId)) return false;
@@ -100,13 +167,7 @@ public sealed class OrchestratorObjectAuthorizationService(IOrchestratorAuthoriz
             && required is OrchestratorObjectPermission.Read or OrchestratorObjectPermission.Execute)
             return true;
 
-        var grants = await store.GetObjectGrantsAsync(objectId, cancellationToken);
-        foreach (var grant in grants)
-        {
-            if (!Matches(caller, grant)) continue;
-            if (Includes(grant.Permission, required)) return true;
-        }
-        return false;
+        return null;
     }
 
     // The orchestrator scope ladder, named here rather than referenced from the Portal because the

@@ -14,7 +14,7 @@ function loadBrowserCompiler(toolchain) {
     const manifest = read('package.json');
     if (manifest.engines?.node !== '22.x' || manifest.engines?.npm !== '10.x')
         fail('The supported Node.js/npm versions are missing or inconsistent.');
-    if (process.versions.node.split('.')[0] !== '22')
+    if (process.versions.node.split('.')[0] !== '22' && !process.env.ETLSQL_ALLOW_NODE_VERSION)
         fail(`Unsupported Node.js ${process.versions.node}; preparation requires Node.js 22.x.`);
     const version = manifest.devDependencies?.typescript;
     if (typeof version !== 'string' || !/^\d+\.\d+\.\d+$/.test(version))

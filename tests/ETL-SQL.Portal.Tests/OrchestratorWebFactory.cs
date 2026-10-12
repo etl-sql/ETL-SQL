@@ -69,6 +69,13 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
 
         builder.ConfigureServices(services =>
         {
+            if (!EnableApplicationFileLogging)
+            {
+                // ClearProviders only affects host logging. Engine jobs resolve LoggerService
+                // directly, so the fixture must disable its file sink as well.
+                services.RemoveAll<ETL_SQL.Common.LoggerService>();
+                services.AddSingleton(_ => new ETL_SQL.Common.LoggerService { SuppressConsole = true });
+            }
             services.RemoveAll<SQLiteJobHistoryStore>();
             services.RemoveAll<IJobHistoryStore>();
             services.RemoveAll<IJobCatalogStore>();

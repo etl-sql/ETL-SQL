@@ -78,6 +78,23 @@ public interface IOrchestratorAuthorizationStore
         string objectId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Grants for many objects at once, keyed by object id. An object with no grants has no entry.
+    /// A list endpoint uses this so a page costs one lookup rather than one per row.
+    /// </summary>
+    async Task<IReadOnlyDictionary<string, IReadOnlyList<OrchestratorObjectGrant>>> GetObjectGrantsAsync(
+        IReadOnlyCollection<string> objectIds,
+        CancellationToken cancellationToken = default)
+    {
+        var byObject = new Dictionary<string, IReadOnlyList<OrchestratorObjectGrant>>(StringComparer.Ordinal);
+        foreach (var objectId in objectIds.Distinct(StringComparer.Ordinal))
+        {
+            var grants = await GetObjectGrantsAsync(objectId, cancellationToken);
+            if (grants.Count > 0) byObject[objectId] = grants;
+        }
+        return byObject;
+    }
+
     Task SaveObjectGrantAsync(
         OrchestratorObjectGrant grant,
         CancellationToken cancellationToken = default);

@@ -42,6 +42,55 @@ public sealed class OrchestratorObjectAuthorizationTests : IDisposable
     }
 
     [Fact]
+    public async Task FilteringAPageDecidesEachObjectExactlyAsASingleCheckDoes()
+    {
+        var store = new SQLiteJobHistoryStore(dbPath);
+        var authorization = new OrchestratorObjectAuthorizationService(store);
+        var granted = await SaveJobAsync(store, "granted", null);
+        var readOnly = await SaveJobAsync(store, "read-only", null);
+        var ungranted = await SaveJobAsync(store, "ungranted", null);
+        var owned = await SaveJobAsync(store, "owned", null);
+        var foreign = await SaveJobAsync(store, "foreign", "tenant-b");
+        await store.SaveObjectGrantAsync(new OrchestratorObjectGrant(
+            granted, OrchestratorObjectKind.Job, OrchestratorPrincipalKind.Group, "7",
+            OrchestratorObjectPermission.Execute, "user:1"));
+        await store.SaveObjectGrantAsync(new OrchestratorObjectGrant(
+            readOnly, OrchestratorObjectKind.Job, OrchestratorPrincipalKind.Group, "7",
+            OrchestratorObjectPermission.Read, "user:1"));
+        await store.SaveObjectGrantAsync(new OrchestratorObjectGrant(
+            foreign, OrchestratorObjectKind.Job, OrchestratorPrincipalKind.Group, "7",
+            OrchestratorObjectPermission.Manage, "user:1"));
+        var caller = new OrchestratorCaller("user", "20", "reader", [], ["7"]);
+        (string Id, string? Tenant, string Owner)[] page =
+        [
+            (granted, null, "user:1"), (readOnly, null, "user:1"), (ungranted, null, "user:1"),
+            (owned, null, caller.PrincipalKey), (foreign, "tenant-b", "user:1")
+        ];
+
+        foreach (var required in new[] { OrchestratorObjectPermission.Read, OrchestratorObjectPermission.Execute })
+        {
+            var expected = new List<string>();
+            foreach (var item in page)
+            {
+                if (await authorization.CanAsync(
+                        caller, OrchestratorObjectKind.Job, item.Id, item.Tenant, required, item.Owner))
+                    expected.Add(item.Id);
+            }
+
+            var filtered = await authorization.FilterAsync(
+                caller, OrchestratorObjectKind.Job, page, item => item.Id, item => item.Tenant, item => item.Owner, required);
+
+            Assert.Equal(expected, filtered.Select(item => item.Id));
+        }
+
+        // The page is not all-or-nothing: a grant, an ownership and a refusal each show up.
+        var readable = await authorization.FilterAsync(
+            caller, OrchestratorObjectKind.Job, page, item => item.Id, item => item.Tenant, item => item.Owner,
+            OrchestratorObjectPermission.Execute);
+        Assert.Equal([granted, owned], readable.Select(item => item.Id));
+    }
+
+    [Fact]
     public async Task ReadExecuteOverrideAndManageRemainDistinct()
     {
         var store = new SQLiteJobHistoryStore(dbPath);

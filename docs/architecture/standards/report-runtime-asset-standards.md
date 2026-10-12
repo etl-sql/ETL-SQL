@@ -358,15 +358,29 @@ files it tracks on either side, and the build gate catches what is left over.
 | Switch | What Git does | What to run |
 | :--- | :--- | :--- |
 | Old revision to a source-only one (for example updating a v0.20.0 clone) | Deletes the outputs the old revision tracked | `npm ci --prefix scripts/typecheck`, then `node scripts/sync-assets.js`. Until then a build fails with "Prepared browser asset is missing" |
-| Source-only revision back to an old one | Restores the old revision's tracked outputs. Outputs for modules that did not exist then stay behind as untracked files | Preview with `git clean -nd` on the five asset roots, then `git clean -fd` on them. The old revision's own drift check fails until they are gone |
+| Source-only revision back to an old one | Restores the old revision's tracked outputs. Outputs for modules that did not exist then stay behind as untracked files | Save the newer ownership inventory before switching. Remove only leftover paths listed there that are untracked at the destination and whose SHA-256 still matches that inventory. Preserve edited outputs and all unlisted files. Then use the old revision's preparation and drift check |
 | Between two source-only revisions | Nothing: the outputs are ignored | `node scripts/sync-assets.js` if browser sources changed; the build says so if they did |
 
 The five asset roots are `src/ETL-SQL.Portal/wwwroot`, `src/ETL-SQL.ReportRuntime/Resources/Shared`,
 `src/ETL-SQL.ReportPlayer/wwwroot`, `src/ETL-SQL.WorkstationEditor/wwwroot`, and
-`src/etl-sql-vscode/media`. `git clean -fd` removes every untracked file under them, so commit or move
-new work there first. Exercised on a throwaway clone between v0.20.0 and the source-only layout in
-both directions: the old revision had 76 leftover files and its drift check failed until they were
-cleaned, and after returning, preparation restored all 491 outputs with Git clean.
+`src/etl-sql-vscode/media`. Do not use blanket `git clean -fd` on these roots: it also deletes
+untracked authored files. Resolve each cleanup path inside an asset root, reject symbolic links or
+junction escapes, and preserve the file if its recorded ownership or hash cannot be verified.
+Commit or preserve intentional generated-file edits in their canonical owners before switching.
+Keep a newer checkout containing the cleanup tool and save its prepared inventory before switching.
+The saved directory must contain `artifacts/browser-assets.json`. Preview the target checkout first:
+
+```powershell
+node C:\newer-checkout\scripts\clean-obsolete-browser-outputs.mjs --root C:\target-checkout --inventory-root C:\saved-inventory
+# Review the listed paths, then apply the same verified plan.
+node C:\newer-checkout\scripts\clean-obsolete-browser-outputs.mjs --root C:\target-checkout --inventory-root C:\saved-inventory --apply
+```
+
+The tool refuses changed outputs before deleting anything, skips tracked paths, and preserves
+unlisted files. Run the destination revision's own restore, preparation, check, and build afterwards.
+The 2026-10-12 audit exercised rollback to v0.20.0 and return to `00e53e45c`, including both Portal
+builds. An untracked authored file survived both switches and the tracked tree stayed clean.
+Evidence: `artifacts/closed-todo-audit/branch-build/`. The earlier blanket-cleanup check is superseded.
 
 #### Pilot acceptance
 

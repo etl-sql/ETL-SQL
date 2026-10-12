@@ -18,11 +18,10 @@ and scale baseline recalibration).
 
 | Remaining work | Where |
 | :--- | :--- |
-| Security hardening — Environment & system path protection | [§0](#0-security-hardening--environment-variable-and-system-path-protection) |
 | Code stability — Browser sources, Studio, test lanes | [§1](#1-code-stability--browser-sources-studio-and-test-lanes) |
 | Generated browser assets — Build preparation & source-control cleanup | [§1.1](#11-generated-browser-assets--build-preparation-and-source-control-cleanup) |
 | Studio — Unified authoring experience & completeness criteria (assessed; gaps routed to §3–§5) | [§2](#2-studio--unified-authoring-experience-and-completeness-criteria) |
-| Studio — Portal pipelines & schedule handoffs | [§3](#3-studio--portal-pipelines-and-schedule-handoffs) |
+| Studio — Portal pipelines & schedule handoffs (ST04–ST11 complete; open points recorded per item) | [§3](#3-studio--portal-pipelines-and-schedule-handoffs) |
 | Studio — Private unpublished drafts & publishing | [§4](#4-studio--private-unpublished-drafts-and-publishing) |
 | Studio — Author, reader & beginner practice journeys | [§5](#5-studio--author-reader-and-beginner-practice-journeys) |
 | Studio — Keyboard & assistive technology | [§6](#6-studio--keyboard-and-assistive-technology) |
@@ -31,7 +30,8 @@ and scale baseline recalibration).
 | Studio — Delivery budgets, catalog scale & large documents | [§9](#9-studio--delivery-budgets-catalog-scale-and-large-documents) |
 | Studio — Release-versioned guidance | [§10](#10-studio--release-versioned-guidance) |
 | Release engineering | [§11](#11-release-engineering-follow-ups) |
-| Database schema standardization — Table and column snake_case naming | [§12](#12-database-schema-standardization--table-and-column-snake_case-naming) |
+| Codebase audit findings — Bugs, security, performance and telemetry | [§13](#13-codebase-audit-findings--bugs-security-performance-and-telemetry) |
+
 
 ---
 
@@ -62,558 +62,13 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 
 ---
 
-## 0. Security hardening — Environment variable and system path protection
-
-**Horizon:** v0.21.0  
-**Authoritative design:** [Connectors & Security Standards](docs/architecture/standards/connectors-standards.md) and [Deployment Profiles](docs/architecture/deployment-profiles.md)
-
-- [x] **Block `/proc` in runtime `SecurityService` path validation.** Add `/proc` to `CriticalSystemDirectories` in `SecurityService.cs` so any file connector or script reading `/proc/self/environ` (or any `/proc/*` path) is blocked at the kernel path boundary on Linux hosts and containers, aligning the runtime with the linter's `SchemaValidationRule`.
-- [x] **Enforce `PathProtectionMode.Defined` for multi-tenant and Shared SaaS execution.** Require that multi-tenant and Shared SaaS worker profiles run in `PathProtectionMode.Defined` with explicit `ApprovedSafeZones`, preventing scripts from reading arbitrary host paths outside tenant storage directories.
-- [x] **Egress filtering for cloud metadata IP (`169.254.169.254`).** Add `169.254.169.254` (and `fd00:ec2::254` IPv6) to default blocked destinations in `SecurityService.ValidateHost()` to prevent SSRF credential extraction against AWS/Azure/GCP instance metadata services (IMDS).
-
----
-
 ## 1. Code stability — Browser sources, Studio, and test lanes
 
 **Horizon:** v0.21.0  
 **Authoritative design:** [ETL-SQL Studio](docs/architecture/decisions/etl-sql-studio.md)
 
-- [x] **Repair the browser and Portal test lanes.** Audit and address test wait-shapes watching for the
-  wrong conditions (connector `TIMEOUT_MS` vs action timeouts, `PlaywrightException` vs `System.TimeoutException`,
-  assertions before host answers health probe). Address shared state across test classes (single Portal,
-  single admin account, sign-in gate, mutable global connector registry). Wire all passing `scripts/test-*.mjs`
-  checks into the pre-push gate and CI.
-  The sandbox collection now owns Chromium without booting a Portal/catalog database; native
-  journeys keep their separate host fixtures. Verify the full sandbox and native lanes independently.
-  Closed 2026-10-10. The wait-shape and shared-state work is recorded in
-  [flaky-test-stability.md](docs/releases/flaky-test-stability.md). All 112 `scripts/test-*.mjs`
-  checks run through `check-consumer-contracts.mjs`, which `Test-PrePush.ps1` and `ci.yml` call. The
-  sandbox lane (368) and the native lane (561) each pass alone, and together (929). The two
-  journeys that had timed out "under load" were product defects, now fixed: a governance tab left
-  on its loading banner, and the subscription catalog sorting on an encrypted column.
-- [x] **Move remaining browser sources to `.ts`.** Build a real module graph with strict compilation over
-  linted, split, and type-checked modules. Inventory remaining handwritten Portal modules and page scripts,
-  migrate them with focused behavior tests, and preserve strict type/lint gates. Coordinate output ownership
-  with §1.1; removing already-generated JavaScript from source control does not require completing every migration.
-  Closed 2026-10-10. Every tracked `.js` under `src` now has a `.ts` source except vendored and
-  bundled libraries (`arrow.min.js`, `tabulator.min.js`, the CodeMirror and report-runtime bundles),
-  the generated API contracts, and two ESLint configuration files.
-- [x] **Orchestrator metric chips filtering.** Enable filtering on the Orchestrator service's four metric
-  chips by providing a run-state field on the job list or a filtered jobs API endpoint. Derive active,
-  queued, completed-today, and failed-today membership and counts from authoritative runtime/history
-  state. Respect tenant and job-read grants, pagination, and the documented day boundary; do not infer
-  outcomes from a job's last-run timestamp. Cover selection, clearing, refresh, and denied access.
-
-**Remaining authored-source checklist:** Each conversion needs a strict TypeScript owner, regenerated
-delivery files, focused behavior evidence, and passing type/lint/consumer checks. These tasks can proceed
-alongside §1.1; they do not authorize untracking handwritten JavaScript.
-
-- [x] Triage rendering and host interactions (`triage-ui.js`): retain running jobs on quiet boards,
-  reject incomplete board/run evidence, preserve incident selection across reordered polls, and guard
-  stale responses, disposal, and partial batch reruns.
-- [x] Gateway administration (`gateways-admin.js`): validate fleet and mutation responses, count
-  clusters across enrollment history, clear one-time credentials, and guard stale/disposed work.
-- [x] Policy authority administration (`policy-authority-admin.js`): bind rows/actions to their
-  loaded scope, validate response/receipt contracts, and reject stale validation and mutation work.
-- [x] Connection administration (`connections-admin.js`): retain gateway bindings and discovered
-  providers, validate catalog/diagnostic/import outcomes, and guard stale reads and duplicate writes.
-- [x] Data-quality queue (`data-quality-queue.js`): validate queue, row, trend, and submission
-  responses; guard superseded/disposed work, restored job identities, unconfirmed writes, and
-  observed row status. Preserve edits during polling, clear revoked previews, and handle arbitrary
-  row IDs and source column names without changing object prototypes.
-- [x] Dataset administration (`datasets-admin.js`): validate catalog, viewer, statistics, values,
-  permissions, lineage, and mutation receipts; guard stale/disposed work, duplicate submissions,
-  unconfirmed writes, and opened-version conflicts. Preserve viewer queries in exports and picker focus.
-- [x] Lineage catalog (`lineage-catalog.js`): validate history, stewardship, protected-data,
-  suggestion, impact, audit, and metric contracts; distinguish unavailable sources from empty
-  results, guard stale/disposed work, and preserve identity-scoped views, export filters, and keyboard tabs.
-- [x] Governance controller (`governance-portal.js`): validate mutation receipts and HTTP statuses,
-  guard duplicate/unconfirmed writes, and preserve dialog focus and drafts.
-  Preserve existing glossary stewards and disabled flags during edits; verify scan status and the scope
-  of finding counts and exceptions. Preserve public tab handling and verify sandbox reload imports
-  the latest compiled owner. Strict TypeScript owners, read/write validation, lifetime guards, and
-  native/sandbox acceptance pass. Transitive dependency reload remains tracked separately in §1.1.
-- [x] Admin page composition (`pages/admin.js`): add a strict TypeScript owner and focused page
-  behavior coverage. Offer the server's available roles in the user editor, including stewardship roles.
-  Server role validation, unknown-role rejection, and atomic account/role/audit creation are implemented;
-  the users panel now has strict TypeScript controller, API, and response-validation owners, and native
-  role-picker acceptance passes. Groups/membership also have strict owners and native acceptance.
-  Folders/ACL now have strict owners and native hierarchy/permission acceptance.
-  Reports/publish also has strict controller, API, and response-validation owners with native acceptance.
-  Audit browsing/export now has strict owners and native pagination, actor-retention, CSV, and token-refresh acceptance.
-  Subscriptions/parameters now have strict owners and native persistence, pagination, state, history,
-  and deletion acceptance. The three reproduced P0 parameter/history races are fixed.
-  Settings and page composition now have strict owners, draft/lifetime guards, and focused native/sandbox
-  acceptance. Every mounted panel is disposed when leaving the page; tab changes retain loaded drafts.
-  The page-wide regression and corrected dataset selector have passing evidence below.
-- [x] Orchestrator page composition (`pages/orchestrator.js`). Job table actions and the run-override
-  dialog now have strict TypeScript owners. Update/delete send the loaded version; expected HTTP
-  statuses gate success messages. Pending actions survive table repaint without duplicate writes,
-  and closed/replaced dialogs and disposed pages ignore late responses. Focused production-page
-  sandbox checks cover versions, rejection, conflict, overrides, duplicates, and disposal.
-  The schedule and notification catalogs now have strict owners and response validators
-  (2026-10-10). The Portal reports a failed or refused catalog read as 503/403 instead of an empty
-  list; writes are confirmed by status, rows stay locked while pending, late responses cannot close
-  a reused dialog, and a skipped test dispatch is no longer announced as sent. Eighteen sandbox
-  checks (mutation-tested), nine server checks, and the catalog response consumer check pass.
-  Schedule and notification writes still carry no version; the service does not accept one.
-  The job detail panel now has a strict owner and response validators (2026-10-10). Detail reads
-  answer 503/403/404 instead of an empty list. Each section belongs to the opening that requested
-  it; attach/detach, watermark, grant/owner, resume, and script-save writes are confirmed by status,
-  and script save adopts the new version. Three controls that had never worked are fixed: the
-  Access panel (wrong renderer arguments and button ids), Save script (un-awaited async editor),
-  and the quality tab (wrong fields, fabricated totals). Seventeen sandbox checks (mutation-tested),
-  fifteen server read checks, and the detail response consumer check pass.
-  The page owner is now `BrowserSources/pages/orchestrator.ts` (2026-10-10); no handwritten
-  Orchestrator JavaScript remains. Role exits return before anything else runs, the create-job
-  dialog and day timeline have strict owners, Stop is administrator-only at the Portal and confirmed,
-  every owner is disposed on page hide, and a back/forward-cache restore reloads the page. Ten
-  page-owner sandbox checks (mutation-tested) and the page-owner consumer check pass.
-  Closed 2026-10-10. Three native journeys now drive the catalogs, the create dialog, the detail
-  panel, and ownership against the real Portal and Orchestrator and read the result from the store.
-  The unowned-objects dialog is wired (`orchestrator-unowned.ts`); the service's own
-  `/management/stop` requires an administrator outside legacy mode. The journeys exposed two more
-  defects, both fixed: a bundle job was sent with a job type the service refuses, and the service
-  stored every Portal-created job as hourly whatever interval it was given. The create dialog now
-  resets on open and a shared-schedule job sends no interval. The panels were reviewed visually;
-  the owner and grant fields were unstyled and now use the shared form styles.
-- [x] Catalog/home page composition (`pages/index.js`).
-  Reader subscriptions now have strict owners (2026-10-11): `reader-subscriptions.ts` and its view
-  module reuse the administrator page's subscription client, validators, and parameter editor, whose
-  field rows moved to `subscription-parameter-fields.ts`. The production page now runs in the sandbox
-  (`reader-page` story) against a subscription service fixture. Nineteen sandbox checks
-  (mutation-tested) and the reader subscription consumer check pass.
-  The report viewer now has strict owners (2026-10-11): `report-viewer.ts`, its view module, and
-  `report-format.ts` cover open, first run, run/poll, the report frame, and the structure, export,
-  dependency, and history dialogs. The first-run form uses the shared parameter fields, so the
-  page's own parameter helpers are gone. Sixteen sandbox checks (mutation-tested) and the report
-  viewer consumer check pass.
-  The library and the page owner are now strict TypeScript (2026-10-11): `report-library.ts`, its
-  view module, `governance-access.ts`, and `BrowserSources/pages/index.ts`. No handwritten catalog
-  page JavaScript remains. One view owns the main area at a time, role gating for governance is a
-  pure module that the boundary check executes for every role and route, and the folder tree renders
-  the nested tree the server sends. Twelve sandbox checks (mutation-tested) and the report library
-  consumer check pass. Governance views are now disposed when another view takes over the page.
-
-**Whole-tree lane check (2026-10-10):** The first full runs against the complete change found the
-lanes red. Portal.Tests failed 21 of 1,535: the snake_case migration could not be applied on
-PostgreSQL (13 tests; the Portal did not start there), five tests still matched PascalCase table or
-column names, the control-plane module hid its routes from the reachability gate, and one test
-expected an empty history where the Portal now answers 503. All 21 pass after the fixes. The browser
-lane passed 823 of 826: one route glob predated the versioned folder ACL read (fixed), one sandbox
-reload check needs Node.js 22 on PATH (passes with it), and
-`AdminSubscriptionsPageTests.Subscriptions_ParametersPagingStatusAndDeletePersistThroughTheNativePage`
-timed out returning to page one under the full lane but passes alone; it is unresolved and tracked
-in [flaky-test-stability.md](docs/releases/flaky-test-stability.md). Rerun both lanes in full after
-the remaining page conversions.
-
-**Portal startup compatibility (2026-10-09):** PII maintenance now resolves tables, keys, and columns
-from the live EF model. It no longer queries the removed PascalCase table names after the schema
-migration. Four SQLite regressions cover all eight encrypted fields, quoted mapped identifiers,
-idempotent reruns, and independent key rings. Final native Portal and whole-candidate gates remain open.
-
-**Orchestrator activity storage:** The Core contract and relational-store implementation provide
-lease-fenced run state and tenant-scoped, distinct-job UTC-day outcome membership. Thirteen focused
-SQLite checks pass, covering identity reuse, time offsets, expired/reclaimed leases, cancellation,
-and existing-database migration. Tracking these APIs also repairs the missing members referenced by
-the archived Portal test sources. Scheduler/API/browser acceptance and the final candidate checks
-remain separate work; the storage checkpoint does not close those lanes.
-
-**Verified progress (2026-10-07):** The earlier full browser lane passed 582 tests without skips; the ordinary Portal lane passed
-1,352, and the separate hosted-service lane passed six. Earlier Portal conversions passed 26 affected
-journey checks and 69 sandbox checks. After the metric-chip integration, the combined sandbox,
-admin, critical-journey, and accessibility-snapshot regression passed 81 tests. All 81 discovered consumer
-checks pass; browser type and lint gates report zero findings. Connector-registry restoration has
-focused regression coverage. The 18 documentation sanity checks pass after fixing tracked-source
-scanning to avoid traversing ignored VS Code runtime caches. These results do not replace the final
-runs against the complete change.
-
-Shared runtime/designer TypeScript is complete. At the connection-administration checkpoint,
-fifty-five Portal modules had strict TypeScript owners, including login, documentation, navigation,
-branding, operational charts, lineage rendering,
-Orchestrator activity loading/table/access rendering, secret administration/response validation, and UI helpers.
-Secret administration has three passing focused browser stories covering saved-value clearing,
-malformed responses, superseded loads, and disposal.
-The operations dashboard now has a strict controller and response validators backed by C# declarations.
-Failed or malformed sources show unavailable state and clear stale counts, with refresh ordering and
-disposal guards. One-time credentials clear on dismissal/disposal; late mutations cannot reopen a
-closed dialog, and duplicate submissions are blocked. Service recipients retain the server's string
-shape. The API client now collects and validates all user-directory pages for account owners; focused
-checks cover directories beyond 100 users, incomplete pages, changing totals, and duplicate entries.
-Five focused browser checks passed, including a real Portal create/rotate/revoke/audit journey,
-along with 32 server/contract regressions and zero type/lint findings. The unavailable-source state
-was reproduced before the fix and its corrected sandbox screenshot was reviewed.
-All 83 consumer checks and 18 documentation sanity checks pass. The sandbox/surface regression
-passed 82 checks. A broader run found missing Orchestrator setup in the shared Portal journey
-fixture; it now owns an isolated real service behind the authenticated proxy. The repaired
-operations/accessibility set passed 49 checks. Final whole-change lane runs remain required.
-All five classes sharing the repaired Portal journey fixture passed 71 checks, including role,
-documentation, critical report journeys, accessibility, and surface snapshots.
-The API client and authentication transport now have strict TypeScript owners, with C# mutation
-contracts and validated authentication responses. Native headers, request inputs, and bodies survive
-authenticated requests. Refreshes are shared, malformed credentials are rejected, and late responses
-cannot restore a cleared session or replace a new identity. Logout clears local credentials before
-server revocation and keeps any credentials needed for expired-token revocation out of storage.
-The migration passed 82 browser journey checks, including real concurrent refresh, native-header
-mutation, sign-out during refresh, and expired-token logout with server session revocation. All
-84 consumer checks, 16 server/contract regressions, and 18 documentation sanity checks pass;
-strict browser type/lint gates report zero findings. The consumer checks exercise response validation,
-refresh cancellation, identity changes, and data-quality polling through the actual client.
-Final whole-change lanes and §1.1 delivery/index acceptance remain open.
-The control-plane dashboard now has strict TypeScript controller, rendering, and response-validation
-owners backed by the live C# platform contracts. Failed sources show unavailable metadata instead of
-empty results; filtering survives refresh, and superseded loads and disposed controllers cannot render.
-Mutations prevent duplicate submissions and require matching completed receipts before announcing
-completion. Unconfirmed responses require explicit refresh; jobs/storage edits preserve report-session
-quotas. Keyboard tabs and shared dialog focus handling are covered. The sandbox hosts the actual page
-and controller, replacing its duplicate implementation; before/after failure screenshots were reviewed.
-Thirteen focused browser checks passed, including real provision/quota/state receipts and a valid
-tenant JWT accepted for tenant administration but rejected by the platform endpoints. The final combined
-sandbox/control-plane regression passed 91 checks without skips. All 85 consumer checks, 14
-server/contract regressions, and 18 documentation checks pass; strict type/lint gates report zero findings.
-The prepared ownership inventory for those checks contained 420 outputs. Final whole-change delivery checks remain open.
-At that checkpoint, seven authored JavaScript modules still needed conversion, including
-administration/catalog controllers, lineage, governance/quality, and the admin/index/orchestrator pages.
-The separately generated API validator remains a tracked input pending its ownership audit.
-
-Triage now has strict TypeScript rendering, formatting, response-validation, and controller owners.
-Its contracts include C#-generated statement metrics with their serialized field names. Running jobs
-remain visible on quiet boards; incomplete boards or run evidence show unavailable state. Incident
-selection and keyboard focus follow signatures across reordered polls. Superseded reads, closed
-evidence panels, changed windows, and disposal cannot restore stale data or announce late outcomes.
-Batch reruns prevent duplicate submissions, report per-job outcomes, retain failed selections, and
-require explicit refresh after an unconfirmed response. The real Portal journey exercises stored
-statement/quality evidence and a partial rerun through its authenticated Orchestrator proxy.
-The final sandbox/activity regression passed 101 browser checks without skips, including seven triage
-checks. All 85 consumer checks, 22 server/contract checks, and 18 documentation checks pass; strict
-type/lint gates and the flaky-wait audit are clean. Before/after evidence screenshots were reviewed.
-The prepared inventory now contains 424 outputs. Evidence is under `artifacts/section1/triage/`.
-Final whole-change lanes and §1.1 delivery/index acceptance remain open.
-
-Gateway administration now has strict TypeScript controller, view, response-validation, and wizard
-adapter owners backed by C# enrollment, session, discovery, schema, and diagnostic declarations.
-Missing fleet data shows unavailable state; current enrollment selection prevents duplicate history
-rows from inflating cluster/node counts. Done, new enrollment, and disposal clear one-time tokens
-and setup commands. Expiration validation, literal PowerShell arguments, matching mutation receipts,
-duplicate-submit guards, explicit refresh recovery, and stale/disposal guards have focused coverage.
-Binding validates metadata before mounting the shared wizard; node dialogs preserve keyboard focus.
-Seven focused browser checks passed, including a real Portal enrollment/revocation journey. All 86
-consumer checks and 14 server/contract checks pass; strict type/lint gates and the flaky-wait audit
-are clean. The final sandbox/gateway regression passed 101 browser checks without skips, and all 18
-documentation checks pass. Failure and node-dialog screenshots were reviewed. Evidence is under
-`artifacts/section1/gateway/`; final whole-change lanes and §1.1 delivery/index acceptance remain open.
-
-Policy authority administration now has strict TypeScript controller, view, and response-validation
-owners backed by C# signer, validation, version, machine, and mutation declarations. Scope edits
-invalidate rows and pending confirmations; late reads, validation of older JSON, and disposed work
-cannot render or announce outcomes. Receipts must match the requested scope, identity, and rollout
-state, plus applicable hash/cohort/expiry. Duplicate submissions are blocked; unconfirmed sent writes
-require explicit successful scope refresh even after navigating away and back. Local expiry defaults
-preserve wall time across daylight saving changes. Canary selectors, GUIDs, and certificate thumbprints
-have focused validation. Seven focused browser checks passed, including real signed publish, staged
-activation, halt/reissue, promotion, rollback signature verification, audited machine lifecycle, and
-Dedicated tenant refusal. The percentage and named-group canary journeys both pass through the real
-Portal. The broader sandbox/policy/gateway regression passed 108 browser checks without skips; all 87
-consumer checks, 22 server/contract checks, and 18 documentation checks pass. Strict type/lint gates
-and the flaky-wait audit are clean. Before/after sandbox screenshots were reviewed. Evidence is
-under `artifacts/section1/policy-authority/`; final whole-change lanes and §1.1 delivery/index acceptance
-remain open.
-
-Connection administration now has strict TypeScript controller, view, and response-validation
-owners backed by C# catalog, verification, diagnostic, import, help, and parsed-string declarations.
-Detail edits retain gateway bindings and providers absent from the initial selector. Masked display
-values cannot round-trip into saves; malformed option errors report line numbers without copying
-possible credentials. Incomplete diagnostics and stale verification results cannot claim success.
-Read generations protect refreshes, closed panels, help, and in-progress form edits; disposal cancels
-work and clears temporary input. Duplicate writes are blocked, acknowledgements must match the
-endpoint's 204 contract, and unconfirmed writes require explicit successful refresh. Import/export
-retain disabled state and gateway definitions. Connection administration reuses the authenticated
-gateway wizard adapter with typed parsing, metadata, diagnostic, and save callbacks. Seven focused
-connection checks pass, including two real Portal lifecycle/wizard journeys; the final focused set
-including gateway enrollment passed eight checks. The broader sandbox/connection/gateway regression
-passed 113 browser checks without skips. All 88 consumer checks, 21 server/contract checks, and 18
-documentation checks pass; strict type/lint gates and the flaky-wait audit are clean. Before/after
-sandbox screenshots were reviewed. The prepared inventory contains 434 outputs. Evidence is under
-`artifacts/section1/connections/`; final whole-change lanes and §1.1 delivery/index acceptance remain open.
-
-Data-quality queue administration now has strict TypeScript controller, state, view, and response
-owners backed by C# queue, row, trend, rule, and submission declarations. Unavailable sources clear
-stale counts and cannot report confirmed empty results. Read generations, cancellation, and disposal
-guard target/filter changes and closed panels. Restored submission metadata is isolated by issuer,
-tenant, and subject and revalidated against matching job ID, kind, target, and terminal state.
-Accepted receipts require HTTP 202; duplicate/unconfirmed writes remain guarded until inspection
-and explicit refresh. Polling preserves row edits, notes, and keyboard focus. Refreshing revoked
-preview access clears rows and cancels pending reads; arbitrary row IDs and column names cannot
-change object prototypes. Disposition requests guard the observed row status and support quarantined,
-released, and replaying rows with the appropriate recovery actions. Nine focused browser checks pass,
-including two real Portal preview/trend/audit/submission journeys. The final sandbox/role regression
-passed 144 checks without skips. All 89 consumer checks, 50 server/contract checks, and 18
-documentation checks pass; strict type/lint, asset verification, and the flaky-wait audit are clean.
-Sandbox failure and source-key screenshots were reviewed. The prepared inventory contains 438
-outputs from 88 shared and 59 Portal TypeScript owners. Evidence is under
-`artifacts/section1/data-quality/`; six authored-source conversions, final whole-change lanes,
-and §1.1 delivery/index acceptance remain open.
-
-Dataset administration now has strict TypeScript controller, view, and response-validation owners
-backed by C# declarations. Unavailable or incomplete responses clear stale rows, counts, and statistics.
-Read generations and cancellation protect changed datasets, closed panels, picker searches, identity
-changes, and disposal. Saves retain the opened version, preserve another form's edits, and clear TTL
-through the server's supported request shape. Mutations require matching receipts and expected HTTP
-statuses; unconfirmed sent writes require explicit successful refresh before retry. Permissions include
-Refresh and distinct user/group revoke routes. The value picker preserves keyboard focus and ignores
-late searches; exports retain the displayed query. Real Portal coverage found and fixed Parquet text
-serializing as character arrays, inclusive numeric filters admitting null cells, and concurrent encrypted
-cache reads colliding. Each defect has a failing-before regression and passing corrected evidence.
-Nine focused browser checks pass, including two real Portal cache/filter/export/audit/conflict journeys.
-The final sandbox/role/data-quality/dataset regression passed 153 checks without skips. All 90 consumer
-checks, 57 server/contract checks, 46 encryption regressions, and 18 documentation checks pass; strict
-type/lint, asset verification, and the flaky-wait audit are clean. Sandbox failure and picker screenshots
-were reviewed. The prepared inventory contains 441 outputs from 88 shared and 62 Portal TypeScript
-owners. Evidence is under `artifacts/section1/datasets/`; five authored-source conversions, final
-whole-change lanes, and §1.1 delivery/index acceptance remain open.
-
-Lineage catalog now has strict TypeScript controller, view, response-validation, and contract owners
-backed by reflected C# declarations. Failed or malformed sources clear stale evidence and show
-unavailable state. Protected observations use the actual server shape; inventory counts and filter
-scope are explicit. Read generations, cancellation, identity changes, and disposal guard late results.
-Saved views retain visible edits and stay with their identity. Query edits invalidate exports; the
-inclusive UTC end date retains observations in the last fractional second. Impact responses must
-match the request and include alerts; graph names cannot collide with object properties or edge keys.
-Keyboard tabs, current-form visibility, and ownership facets have focused coverage. Nine focused
-browser checks pass, including a real Portal history/protected/stewardship/impact/export journey.
-The final sandbox/role/data-quality/dataset/lineage regression passed 162 checks without skips.
-All 91 consumer checks, 19 server/contract checks, and 18 documentation checks pass; strict type/lint,
-asset verification, and the flaky-wait audit are clean. Before/after sandbox screenshots were reviewed.
-The prepared inventory contains 445 outputs from 88 shared and 66 Portal TypeScript owners.
-Evidence is under `artifacts/section1/lineage/`; four authored-source conversions, final whole-change
-lanes, and §1.1 delivery/index acceptance remain open.
-
-**Governance conversion (2026-10-08):** The controller, view, response validators, and
-state contracts have strict TypeScript owners with reflected C# governance DTO and receipt declarations.
-Unavailable quality sources clear counts and rows; malformed dashboards cannot claim a valid estate.
-Read generations, cancellation, host ownership, and identity checks guard late work. Trend reads
-validate the requested job, cover all jobs with at most five concurrent requests, and keep missing
-evidence distinct from zero. Closed trend dialogs cannot overwrite a different job. Matching HTTP
-statuses and write receipts are required before success; duplicate and unconfirmed-write guards
-survive leaving and remounting the view. Explicit successful refresh recovers uncertain outcomes.
-Glossary stewards, disabled flags, settings edits, and new dialog drafts survive unrelated late work.
-Cancel/Escape, focus return, and Tab wrapping pass in the sandbox and native Portal. Running scans
-remain distinct from completed scans; findings and exceptions are labeled with their estate-wide scope.
-The seeded stewardship roles reach the views their APIs permit.
-The final sandbox/role/quality/dataset/lineage/governance/snapshot/accessibility regression passed
-233 browser checks without skips. The updated server also passed seven native governance/admin
-journeys. All 92 discovered consumer checks and 268 related server/API/identity/contract checks pass.
-Strict type/lint, asset verification, and the flaky-wait audit are clean. Seventeen filesystem-only
-documentation sanity checks pass; the Git-based source-path check remains part of final acceptance.
-The prepared inventory contains 449 outputs from 88 shared and 70 Portal TypeScript owners.
-Before/after quality-failure screenshots were reviewed. Evidence is under
-`artifacts/section1/governance/`, with gate logs beside it. Governance conversion acceptance is complete;
-final whole-change lanes and §1.1 delivery/index acceptance remain open.
-
-**Admin role validation (2026-10-08):** Before-fix regressions proved that unknown roles left persisted
-Local, LDAP, and tenant accounts. Creation and updates now reject unknown roles before mutation.
-New accounts, role grants, and audit/outbox records commit together; injected audit-write failures
-roll back creation. Receipts report canonical assigned roles and an empty list for unassigned users.
-Shared tenants can create equal usernames and edit one account's role without affecting the other.
-The related 268-test server regression and the seven native governance/admin journeys pass.
-Evidence is under `artifacts/section1/governance/` and the adjacent `admin-role-*` logs.
-The three handwritten Portal page conversions remain open.
-
-**Admin users progress (2026-10-08):** The users panel has strict controller, API, and response-validation
-owners backed by reflected C# user, role-catalog, and bulk-status contracts. Initial loading now starts
-after its state is initialized. Role choices come from the server; unrelated profile edits preserve
-unassigned and multiple roles. Editor writes use the opened version, and a following password reset
-uses the profile receipt's version. Mutation responses must confirm the requested identity and fields;
-password resets require HTTP 204. Duplicate writes, superseded reads, discarded drafts, and unconfirmed
-outcomes have focused coverage. Nine sandbox checks pass, including role-catalog recovery that keeps
-drafts and disposal that clears passwords and rejects late rendering. The native server journey verifies actual
-stewardship grants, profile/password persistence, audited resets, bulk status changes, and a rejected
-stale edit that keeps its draft. The broader regression passed 196 checks; the corrected native wait and
-all-story fixture mount check subsequently passed together. The related 196 server checks pass, including
-role catalog authorization, service-identity limits, tenant identity, and optimistic concurrency.
-Final users-panel, native admin/publish, and all-story fixture acceptance passes 12 checks. The publish
-journey waits for its destination folder to arrive, covering a catalog-response race exposed during
-acceptance. Seventeen filesystem-only documentation checks pass; the Git-based source-path check
-remains part of final acceptance. All 93 discovered consumer checks pass. Type/lint gates and the
-flaky-wait audit are clean.
-Evidence is under `artifacts/section1/admin/` and
-the adjacent `admin-users-*` logs. Remaining admin panels and its page composition still need conversion;
-final whole-change lanes and §1.1 delivery/index acceptance remain open.
-
-**Admin groups and membership progress (2026-10-08):** The controller, API, and response validators
-now have strict TypeScript owners. C# member catalogs carry the group ID and version from the same
-database snapshot as their rows. Named mutation receipts account for changed and skipped users and
-per-group deletion results. Editors retain opened versions; picker writes preserve rejected selections,
-and the user finder supports server pagination. Late reads and confirmations keep their original scope;
-duplicate writes, discarded drafts, disposal, and explicit recovery from unconfirmed outcomes have
-focused coverage. The selected member panel refreshes after a rename or confirmed deletion.
-Ten group sandbox checks pass, including both reproduced defects, and the native Portal journey verifies
-membership persistence, removal, stale-edit rejection, renaming, and deletion. The combined users/groups
-and publish regression passes 22 checks; the separate all-story fixture mount check also passes.
-All 200 related server checks and 94 discovered consumer checks pass. Browser type/lint gates are clean.
-Evidence is under `artifacts/section1/admin/` and the adjacent `admin-groups-*` logs. Folders/ACL,
-reports/publish, audit, subscriptions/parameters, settings, and the full admin page composition remain
-open, along with the Orchestrator/home conversions, final whole-change lanes, and §1.1 acceptance.
-
-**Admin folders and permissions progress (2026-10-09):** The controller, API, and response validators
-now have strict TypeScript owners. The complete nested hierarchy is displayed and available to parent
-pickers, which exclude an edited folder and its descendants. The grant editor is functional; permission
-names and authority ranks come from C#, preserving `Author = 3` and `Manage = 2` storage values.
-ACL catalogs carry their folder identity and version from the same database snapshot as their rows;
-grant/revoke receipts identify the folder, group, permission where applicable, and advanced version.
-Opened editors retain their versions. Rejected grants preserve selections, late reads/confirmations
-retain their scope, and duplicate writes and disposed controllers are guarded. Unconfirmed outcomes
-require successful explicit refresh, including cascading deletion of the selected child. A confirmed
-grant refresh enables retry with the confirmed snapshot; ordinary refresh retains opened versions.
-The four original defects were reproduced before implementation and corrected screenshots reviewed.
-Sixteen folder sandbox checks and the native Portal journey pass. The journey verifies hierarchy,
-numeric permission persistence, grant/revoke audit records, stale-edit rejection, renaming, and cascade
-deletion. The combined users/groups/folders, critical journey, and all-story fixture run passes 40
-checks. All 114 related server checks, including tenant and role isolation for the ACL catalog, and
-95 discovered consumer checks pass. Browser type/lint, asset verification, scoped C# formatting, and
-the flaky-wait audit are clean; 17 filesystem-based documentation sanity checks pass.
-Evidence is under `artifacts/section1/admin/` and the adjacent `admin-folders-*` logs. At that
-checkpoint, reports/publish, audit, subscriptions/parameters, settings, and full admin composition
-were open, along with the Orchestrator/home conversions, final lanes, and §1.1 acceptance.
-
-**Admin reports and publication progress (2026-10-09):** Strict TypeScript controller, API, and
-response validators own the report catalog, publication drafts, destination folders, validation,
-and script picker. C# declarations supply the named admin report catalog and validation/publication
-contracts. Opened versions survive refreshes; superseded reads and late writes cannot replace newer
-results, close a new draft, or retarget it. Accepted publications retain their confirmed identity
-when the draft changes during the write. Matching completed receipts are required; unconfirmed
-outcomes require successful explicit refresh, and unconfirmed publication cannot be retried as
-a duplicate. The script picker supports filtering during reads, retry, and keyboard selection.
-CatalogOnly exposes Studio actions without script paths; Disabled hides publication controls.
-The original four defects were reproduced before implementation and corrected screenshots reviewed.
-Twenty-two report sandbox checks pass. The native Portal journey verifies keyboard script selection,
-inline folder creation, validation/publication, persisted edits, retained conflict drafts, and cascade
-deletion that disables active subscriptions. The combined admin, critical report journey, and all-story
-fixture run passes 63 checks without skips. All 87 selected server/contract checks and 96 discovered
-consumer checks pass; browser type/lint, asset verification, scoped C# formatting, and the flaky-wait
-audit are clean. Seventeen filesystem-based documentation sanity checks pass. Evidence is under
-`artifacts/section1/admin/` and adjacent `admin-reports-*` logs.
-At that checkpoint, audit, subscriptions/parameters, settings, full admin composition, Orchestrator/home
-conversions, final whole-change lanes, and §1.1 delivery/index acceptance remained open.
-
-**Admin audit progress (2026-10-09):** Strict TypeScript controller, API, and response validators own
-audit browsing and CSV downloads through the reflected `PagedResult<AuditLogDto>` contract. The server
-retains events with no account, missing accounts, and accounts outside the tenant without exposing a
-foreign username. Count/page reads share a transaction; timestamp ties sort by event ID and page bounds
-are clamped safely. The shared pager reaches all pages, including the eleventh page in the 525-row fixture.
-Failed or malformed catalogs clear old evidence; filter changes, disposal, and identity changes discard
-late work. CSV uses authenticated token refresh, validates status/content type/body, prevents duplicate
-downloads, and releases object URLs. The existing 10,000-entry limit is visible and verified against
-10,001 actual server rows. Untrusted detail text is escaped.
-The original three browser defects and server actor-retention defect were reproduced before the fixes;
-corrected sandbox screenshots were reviewed. Fifteen audit sandbox checks and the native Portal journey
-pass. Native acceptance verifies known/missing account names, persisted paging order, actual CSV download
-content, export audit recording, and a real token refresh. The combined admin, critical report journey,
-and all-story fixture run passes 79 checks without skips. All 119 selected server/contract/outbox checks
-and 97 discovered consumer checks pass. Browser type/lint, prepared asset verification, scoped C# formatting,
-and the flaky-wait audit are clean; 17 filesystem-based documentation sanity checks pass. Evidence is
-under `artifacts/section1/admin/` and adjacent `admin-audit-*` logs. Subscriptions/parameters, settings,
-full admin composition, Orchestrator/home conversions, final whole-change lanes, and §1.1 delivery/index
-acceptance remain open.
-
-**Admin subscriptions progress (2026-10-09):** Strict controller, parameter-editor, API, and response
-owners use reflected C# subscription, parameter, history, and named bulk-status contracts. The three
-production-page sandbox reproductions are fixed: late parameter/history responses cannot replace a
-newer dialog, and a save captures its original target/version/values without re-fetching definitions.
-The Finance draft now sends `@Region=East` and preserves the newer Operations draft. Required values,
-definition-read failures, cleared overrides, conflicts, duplicate saves, partial bulk results, and
-uncertain receipts have focused acceptance. Explicit refresh checks the exact affected ID even outside
-the current page/filter; an in-dialog refresh action preserves the draft during recovery.
-Seventeen sandbox checks and the native journey pass. Native acceptance verifies paging, persisted values,
-empty override clearing, pause state, real and empty trigger history, deletion, and audit records. A native failure
-reproduction proved unavailable scheduler history was returned as an empty success; it now returns
-sanitized HTTP 503. Encryption maintenance resolves live EF names, fixing generator-host startup after
-the snake_case migration. The combined admin/critical-journey/sandbox regression passes 95 browser checks;
-the final subscription subset passes 18, with strengthened native real-history acceptance also passing.
-The affected subscription/tenant/identity/audit/contract server lane passes 134 checks. All 98 discovered
-consumer checks pass; browser type/lint gates report zero findings and asset verification passes.
-Seventeen filesystem documentation checks pass after replacing a hard-coded checkout depth with
-solution-marker discovery for isolated build layouts. Before/after screenshots were reviewed; evidence
-is in `admin-subscriptions-*.log` and matching TRX/screenshots under `artifacts/section1/` and
-`artifacts/section1/admin/`. Settings, admin page composition, Orchestrator/home conversions, final
-whole-change lanes, and §1.1 delivery/index acceptance remain open.
-
-**Admin settings and composition progress (2026-10-09):** Strict TypeScript owners now compose the
-admin page and handle settings, authenticated requests, and complete reflected response contracts.
-Five browser reproductions exposed late reads overwriting drafts, saves erasing the other form's edits,
-and failed connection-status reads being presented as confirmed offline results. The fixes preserve
-newer drafts, read each form independently, and require explicit refresh after an unconfirmed write.
-Accepted branding invalidates older public reads. Tab changes load each owner once; leaving the page
-disposes every mounted controller and prevents later mounts.
-
-Five server reproductions exposed lost keys, clears reverting after restart, partial branding changes,
-and failed disk writes being published as active settings. Settings now initialize asynchronously,
-persist atomically before publishing an immutable snapshot, preserve null keys, and honor explicit
-clears across restart. Proxy requests capture the destination and key from the same snapshot.
-Focused settings/composition acceptance passes 20 browser checks; the affected server lane passes
-49 checks. The broader admin/sandbox/critical-journey rerun passes 131 checks without skips after
-scoping an ambiguous dataset delete selector to the dataset table.
-All 100 discovered consumer checks pass, type/lint gates report zero findings, and read-only asset
-verification passes. Reviewed screenshots, TRX files, and logs are under `artifacts/section1/admin/`
-and the adjacent `admin-settings-*` / `admin-composition-*` logs. Settings persistence and the staged
-C# formatting hook were committed as `db632ea1c`; its isolated index archive passed 11 server checks.
-The proxy snapshot fix was committed as `1308aee3e`; its exact staged-tree archive passed 39 server checks.
-The Orchestrator/home conversions, final whole-change lanes, and §1.1 delivery/index acceptance remain open.
-
-Designer and Studio page controllers now have strict TypeScript owners, typed authoring-response
-validators, and catalog persistence callbacks. Designer retains the original script for generation
-and saving, refreshes expired tokens through the Portal client, adapts snapshot columns by visual
-name, and offers Retry after loading failures without mounting an empty editor. Nullable snapshot
-cells now survive nested collection reflection into browser declarations. The compiler resolves
-shared owners' vendor dependencies when Portal imports their contracts. Focused evidence passed
-19 real-browser/sandbox checks, 64 server/contract regressions, and all 82 consumer checks. The broader
-sandbox/accessibility-snapshot regression passed 79 checks, and 18 documentation checks passed. The
-snapshot journey executes a report, checks its persisted package and columns, and renders its chart
-through the real Portal endpoint. Its completion wait awaits each status observation. Sandbox
-screenshots of the snapshot and loading-error states were reviewed. Final gates against the whole
-change remain required.
-
-The Orchestrator metric-filter backend now exposes a tenant-scoped, authorized activity page with
-server pagination, lease-fenced queued/running states, and distinct-job UTC-day outcomes. Its checks
-passed 76 storage/scheduler regressions, 21 API/authorization/contract tests, one real Portal-proxy
-test, and one real PostgreSQL projection test. Coverage includes offset midnight boundaries,
-expired/reclaimed leases, cross-tenant equal names, catalogs beyond 1,000 jobs, malformed evidence,
-and state-write outages without replaying completed work. The Portal now uses strict TypeScript
-activity loading, view controls, catalog coordination, and table rendering. Six real Portal-to-service
-browser checks and two native-control sandbox checks pass for chip selection, keyboard activation,
-clear/search/status criteria, pagination, grant-limited counts and revocation, unavailable evidence,
-connection loss and recovery, and keyboard focus during polling. Sandbox and Portal screenshots were
-reviewed. The connection-loss regression reproduced stale counts and now proves that polling clears
-them and restores both the table and timeline catalog. Metric-chip filtering is complete; the
-remaining source migrations and §1.1 delivery/index checks remain open.
-
-Asset preparation writes `artifacts/browser-assets.json`, an exact ownership inventory covering
-compiler outputs, offline bundles, and host copies (including CSS, maps, and vendor copies). Canonical
-vendor/CSS assets and C#/schema-generated source contracts remain tracked inputs. Missing/stale-source
-build checks have focused regression coverage, including generation with no prior outputs,
-rename/delete cleanup, case-sensitive imports, new CSS sources, temporary-module exclusion, and
-source changes during compilation or manifest creation. Watch mode runs the complete preparation
-pipeline; its real CLI startup and Linux shutdown during preparation/idle have passing checks.
-
-An isolated Windows source-only snapshot excluded all 403 then-current outputs and used fresh npm/NuGet
-caches. Preparation and repeat-generation checks passed, browser type/lint reported zero findings,
-Release builds passed for Portal, ReportPlayer, and WorkstationEditor, and 17 focused Portal tests
-passed. A Linux Portal image also built and published from that snapshot with all outputs excluded
-from its Docker context and fresh dependency restores. Its runtime contains the required assets and
-has no Node executable or checkout directory. The published report CLI built a report and exported
-its offline viewer outside the checkout with Node absent from PATH.
-
-All 403 output hashes from that snapshot match across Windows/Linux; the Linux asset check regenerated them
-with every output absent and network access disabled. Published Portal, ReportPlayer, and
-WorkstationEditor browser checks passed outside the checkout, including the Portal CSP-protected
-report iframe, Studio, dynamic preview imports, and an offline snapshot with no network requests.
-The desktop proof found and fixed a missing WorkstationEditor stylesheet in standalone publish.
-The source-only VS Code extension passed compile/lint and 270 unit tests; its React UI passed
-lint/build and 144 unit tests. VSIX packaging/runtime, remaining release/container paths, and Git
-untracking remain open in §1.1. An asset-only VSIX archive check verified all 59 generated media
-assets against prepared hashes, the React UI, attribution, and temporary-module exclusion. It does
-not satisfy the bundled-CLI or actual VS Code runtime check. These snapshots prove generation from
-source-only inputs; fresh Git checkouts after the index cleanup remain required.
+Completed browser conversions and their historical progress notes were reviewed in the
+[closed-item audit](docs/releases/v0.21.0-closed-todo-audit.md). Remaining delivery acceptance is below.
 
 ### 1.1 Generated browser assets — Build preparation and source-control cleanup
 
@@ -630,16 +85,6 @@ embedded runtime resources match their source inputs. Node is absent from all th
 and both bundled CLI version checks pass. Source-control cutover and final package/platform acceptance
 remain open. Evidence is under `artifacts/section1/container-source-only-*`,
 `container-startup-before-fix.log`, and `container-publish-before-fix.*`.
-
-- [x] Fix the Portal hosted-service dependency lifetime and prove full startup with scope validation.
-- [x] Pass the isolated candidate startup, tenant-partition, alert-delivery, and hosted-service tests.
-- [x] Pass source-only container runtime checks: served-asset hashes, embedded runtime resources,
-  and the absence of Node in all three runtime images.
-- [x] Add the Git-index ownership check (`scripts/browser-asset-ownership.mjs`): removal plan, staged-byte
-  comparison, page and project-file consumer tracing, and the tracked/ignored layout gate. Pre-push and
-  CI run it after preparation. Fixture checks cover both layouts; each rule fails when removed.
-- [x] Record the [delivery matrix](docs/releases/v0.21.0-browser-asset-delivery-matrix.md) for the
-  current candidate. Source-state rows are accepted; every package and platform row is open.
 
 **Horizon:** v0.21.0
 
@@ -842,53 +287,6 @@ does not close build, package, runtime, or Git-index acceptance.
   or unavailable platform check remains open unless that artifact is explicitly removed from the release scope.
   Progress (2026-10-11): the matrix exists and names every path and platform. It records no owner
   per path, and no package row has been run on the current candidate.
-- [x] **Inventory generated outputs and their owners.** Identify TypeScript emits, the offline runtime
-  bundle, and generated host copies for Portal, ReportPlayer, WorkstationEditor, and VS Code. Distinguish
-  handwritten JavaScript, build/test scripts, vendor libraries, and C#-generated browser contracts; retain
-  these tracked inputs unless a separate reproducible generation path is explicitly covered. Record exact
-  output ownership so new migrations automatically enter the generated set. Include route/contract generators,
-  source maps, CSS, and other copied assets in the ownership audit. Avoid a blanket `*.js` ignore.
-  Audit the extension's `out/` and React UI build outputs alongside shared media; preserve handwritten
-  JavaScript configuration and tooling. Every removal must have a tracked owner and regeneration command.
-  Trace consumers beyond JavaScript imports: HTML script/style references, dynamic imports, C# embedded
-  resource names, offline export, and package file lists. Each required asset must resolve to a retained
-  input or a prepared output; a complete output inventory alone does not prove consumer coverage.
-  Ensure newly added owners, generators, declarations, configuration, and lockfiles enter source control
-  before producing the clean clones or source archives used for final acceptance.
-  Before removing an output from the index, check for intentional local edits to that file. Move any
-  required change into its canonical owner and regenerate; do not discard work during the cleanup.
-  Done (2026-10-11). `artifacts/browser-assets.json` lists all 491 outputs with owner and hash, built from
-  discovered sources, so a new migration enters it without a list to update. The ownership check gates
-  owner tracking, staged output edits, and every consumer that names an asset outside a module import:
-  10 tracked pages, the five asset-consuming project files, and script or style tags written from C#
-  in the three hosts, using each host's URL mounts. The extension's `out/` and `ui/dist` were already
-  ignored and untracked. The VSIX coordinator verifies its payload against the expected file list, and
-  both VSIX packages built from source-only archives carry all 59 media outputs with matching bytes.
-- [x] **Reject ownership conflicts before writing assets.** Preflight the complete compiler, bundle,
-  and host-copy output set before preparation overwrites or removes files. Reject duplicate owners,
-  case-only collisions, and a generated target that is also a retained handwritten or vendor input.
-  Exercise a new TypeScript owner whose output path already contains an authored file, and a shared
-  host copy colliding with a Portal-owned module. Report the conflicting owners and preserve both
-  inputs and the last prepared assets on failure. Reconcile intentional local output edits with their
-  owners before cutover preparation; a generated banner alone is not permission to overwrite them.
-  Done (2026-10-11). The checks cover a case-only duplicate owner, a TypeScript owner whose output path
-  holds an authored file, a Portal owner colliding with a shared host copy, and a competing bundle owner.
-  Each names the conflict and leaves every prepared file unchanged. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
-  source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
-- [x] **Define and implement one asset preparation entry point.** Use the pinned, locked toolchain to
-  compile TypeScript, create the offline bundle, and sync host assets in dependency order. Document the
-  Node.js/npm prerequisites and dependency-install command. Make missing tools and compilation failures
-  stop preparation with actionable errors; preserve license banners and deterministic LF output.
-  Record supported Node.js, npm, and TypeScript versions. Verify repeat preparation from different
-  checkout locations produces the same assets without embedding machine paths or timestamps.
-  Validate the running toolchain against the supported versions and locked dependencies before writing
-  outputs. Exercise an unsupported Node.js version and a missing or mismatched local compiler; fail
-  with the restore command instead of using a globally installed compiler or downloading a fallback.
-  Done (2026-10-11). `node scripts/sync-assets.js` is the entry point; the standards document records the
-  Node.js, npm, and TypeScript versions. The checks cover an unsupported Node.js version and a missing,
-  mismatched, or unloadable compiler. Preparation from four checkout locations on two platforms gives
-  byte-identical outputs with LF endings and no machine path. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
-  source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
 - [x] **Verify checkout paths and working directories.** Exercise the documented preparation, verification,
   build, and package entry points from checkout paths containing spaces and non-ASCII characters on
   Windows and Linux. Check each entry point's working-directory contract; resolve repository paths from
@@ -906,100 +304,8 @@ does not close build, package, runtime, or Git-index acceptance.
   inventory, no archive entry names the checkout path, and the checkout is clean afterwards. Linux
   packages were built from an ordinary path only. Evidence: `artifacts/section1/s11-candidate/paths-*`
   and `package-spaced/`.
-- [x] **Verify generation after dependency restore with network access disabled.** From source-only
-  inputs, install the locked build dependencies through the documented restore step, then disable
-  network access and prepare every required asset. Preparation must use the restored toolchain and
-  retained vendor inputs without downloading compilers, libraries, or browser assets. Repeat generation
-  and compare output hashes. Keep this separate from fresh-cache restore evidence so cached packages
-  cannot hide an undeclared preparation dependency. Record which restore and packaging steps need
-  network access in the delivery matrix.
-  Done (2026-10-11) on Ubuntu from the source-only archive: with the compiler restored, all 491 outputs
-  and both manifests deleted, and the process in a network namespace with only loopback, preparation
-  and its check pass and the outputs match the networked run byte for byte. The delivery matrix lists
-  which steps need the network.
-- [x] **Verify preparation freshness covers every required input.** Audit the preparation manifest and
-  .NET verifier together. Fingerprint TypeScript owners, retained JavaScript/vendor/CSS inputs, declarations,
-  generated route/schema contracts, compiler configuration, generator code, and dependency lockfiles.
-  Include transitive generator helpers and the build/package configuration that selects assets, such as
-  embedded-resource declarations, static-content rules, and VSIX file lists. Audit preparation freshness
-  separately from package freshness so a current browser manifest cannot certify an older assembled package.
-  Changes to any of these inputs must invalidate the prepared state even when existing output bytes
-  have not changed. Test each input category, added/removed inputs, and a modified output; ordinary
-  read-only verification must reject stale preparation without repairing it. Determine output ownership
-  from source paths and generator rules; a generated-file banner alone must not allow an authored input
-  to escape verification or be selected for removal from Git.
-  Keep `scripts/lib/browser-asset-inputs.cjs` exclusions tied to generator paths and validated ownership;
-  retained inputs must remain in watch and concurrent-edit detection. Cover an authored input containing a
-  generated-looking banner and verify that changing it still invalidates preparation.
-  Done (2026-10-11) for preparation freshness: each input category, an added and a removed input, and an
-  authored file carrying a generated-looking banner invalidate preparation without repair. Package
-  freshness is tracked under the published asset boundary task. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
-  source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
-- [x] **Verify route, DTO, and schema generator bootstrap.** Exercise the C# browser-contract and Studio
-  route generators, plus the Portal API-schema validator generator, with browser outputs absent. Resolve
-  any cycle where building a generator consumes assets that require its new contracts to compile.
-  Document the supported dependency order and any narrowly scoped bootstrap bypass; ordinary builds
-  must continue enforcing asset verification. Keep generated source contracts tracked until their own
-  source-only generation and checks are covered.
-  Exercise generator-host startup and database-initialization failures as well as invalid contracts.
-  A failed generator must return failure and must not certify partially updated declarations or routes.
-  Validate the complete generated contract set against both registered hosts before preparing assets;
-  passing individual generator tests does not close a failed bootstrap run.
-  Done (2026-10-11). From a source-only archive of `bbd27d820` with all 491 outputs and the three
-  generated contracts deleted, on Windows and Ubuntu: preparation fails without the contracts, the
-  coordinator regenerates all three byte-identically, preparation then yields the same 491 outputs, and
-  Portal builds. `test-browser-contract-bootstrap.mjs` covers host start-up and database failures,
-  invalid contracts, interruption, and recovery in the consumer gate. Evidence:
-  `artifacts/section1/s11-candidate/bootstrap-*`.
-- [x] **Verify source-only module resolution.** With every inventoried browser output absent, compile
-  the retained TypeScript owners and their mixed JavaScript dependencies using the supported compiler
-  configuration. Preserve relative `.js` import specifiers and public exports. Cover Portal imports of
-  shared modules before host copies exist, dynamic and side-effect imports, and exact import casing.
-  Repeat with stale generated implementations present: an error in a TypeScript owner must still fail
-  compilation, and the old JavaScript must never shadow its owner. Reject missing imports before writing
-  outputs. After preparation, run the existing type/lint and consumer gates without relaxing strictness
-  or adding baseline entries.
-  Done (2026-10-11). The compiler checks cover stale outputs that must not shadow their owner, a deleted
-  owner, import casing, Portal imports of shared owners before host copies exist, and missing imports.
-  Type and lint gates pass in the source-only tree; the consumer gate passes on the same output bytes. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
-  source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
-- [x] **Make generation work with no existing outputs.** Create missing host directories, validate import
-  closures, and remove obsolete generated files after source renames/deletions without touching handwritten
-  or vendor inputs. Cover clean generation, repeat-run stability, collisions, missing imports, stale outputs,
-  and failed compilation with focused generator tests. Retain the last successful asset set after a
-  compilation failure, and prevent a partial preparation from receiving a valid manifest. Exclude temporary
-  test modules and scratch files from synchronization, ownership inventories, build discovery, and packaging.
-  Cover failures during bundling and host copying as well as compilation; a retry must restore a complete,
-  consistent asset set before builds can consume it.
-  Done (2026-10-11). Covered: missing host directories, repeat stability, rename and delete cleanup,
-  collisions, missing imports, failed compilation, a bundling failure, a blocked host write, edits made
-  during preparation, and temporary test modules. A failed run leaves the last asset set and no valid
-  manifest; the next run restores a complete set. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
-  source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
-- [x] **Verify the offline bundle's complete module closure.** Reconcile `RUNTIME_PARTS` in
-  `scripts/sync-assets.js` with the runtime entry's transitive imports and discovered TypeScript owners.
-  Exercise a newly added runtime dependency omitted from the bundle list, a removed part, and emitted
-  syntax unsupported by the existing concatenator. Preparation must reject each case before certifying
-  assets. Preserve public exports and module-initialization behavior, and run the resulting offline
-  snapshot with networking disabled. Keep the existing bundle path and browser URLs.
-  Done (2026-10-11). Preparation rejects an unlisted part, a listed part that is missing, an import of an
-  unlisted module, aliased, external and dynamic imports, an unsupported export form, and a duplicate
-  declaration, each without changing the last bundle. `OfflineSnapshotViewerTests` opens the snapshot
-  from disk with every network request aborted; it passed in the full browser lane on these output bytes.
-- [x] **Verify obsolete-output cleanup preserves retained inputs.** Audit deletion in
-  `scripts/compile-browser.mjs` and `scripts/sync-assets.js`. Require validated paths, owners, and prior
-  output hashes before deleting an output. A handwritten or
-  vendor file containing a generated-looking banner must survive preparation. Resolve cleanup paths
-  within the intended output roots, reject traversal and symlink/junction escapes, and handle path
-  separators and casing consistently on Windows and Linux. Exercise a stale or malformed ownership
-  inventory, an output path becoming authored input, and source rename/delete recovery. Preview any
-  unresolved files for review instead of guessing that they are safe to remove.
-  Done (2026-10-11). Cleanup deletes only an inventoried output whose bytes still match its recorded hash.
-  The checks cover a forged banner, a locally edited obsolete output, path traversal, a junction or
-  symlink, a case-only collision, a malformed inventory, and a version-1 inventory, which lists the
-  unverified files instead of deleting them. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
-  source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
-- [x] **Integrate local build and publish entry points.** Establish the supported fresh-checkout workflow
+- [ ] **Integrate local build and publish entry points.** Establish the supported fresh-checkout workflow
+  Audit 2026-10-12: Real IDE launch remains unverified; MSBuild DesignTimeBuild is not IDE acceptance.
   for CLI and IDE builds, debug scripts, direct project/solution builds, and publish commands. Ensure assets
   exist before MSBuild discovers static files or embeds resources, including the offline snapshot bundle.
   Cover direct `dotnet test`, `dotnet run`, and `dotnet watch` entry points, IDE launch, and VS Code tasks;
@@ -1028,25 +334,6 @@ does not close build, package, runtime, or Git-index acceptance.
   the real build that follows fails with the preparation command. No IDE was launched: the check used
   the `DesignTimeBuild` property an IDE sets. Concurrent and interrupted preparation are covered by
   `test-asset-generation.mjs`. Evidence: `artifacts/section1/s11-candidate/watch/` and `incremental/`.
-- [x] **Verify acceptance paths that skip a build.** Audit supported `-NoBuild`/`--no-build` test,
-  run, smoke, and publish paths. Checking current preparation alone does not prove that reused assemblies,
-  embedded resources, copied static assets, or publish folders belong to the same candidate. Build once,
-  change an owner and prepare again without rebuilding, then exercise each affected path. Require a
-  rebuild or reject stale compiled artifacts before recording release acceptance; identify the exact
-  artifacts exercised in the evidence. Cover source-only startup with missing binaries and supported
-  `--no-restore` paths after the documented locked restore, with actionable failure instructions.
-  Progress (2026-10-11): builds now record the preparation they consumed. `dotnet publish --no-build`,
-  `dotnet run --no-build`, and the `-NoBuild` test and smoke lanes reject a missing or older record with
-  a rebuild instruction; the wrapper fixture covers both cases on Windows and Linux, and a real build,
-  owner edit, and re-preparation showed the rejection end to end. The first version of the run guard
-  did nothing, because `dotnet run --no-build` does not set `NoBuild`; a real `dotnet run` exposed it, and
-  the guard now runs on every launch. Verified with the real Player: an older record and a missing
-  record are refused, and a run after a build starts.
-  Done (2026-10-11). `dotnet test --no-build` is now guarded in MSBuild through the hosts a test project
-  references, which covers the certification and measurement scripts that call it directly. Verified with
-  real runs: hosts from an older preparation are refused, a run that builds first passes, a no-build run
-  after it passes, and a missing record is refused. `--no-restore` is used by CI after the locked restore
-  on every job. A tree with no binaries fails in the SDK before any of this.
 - [ ] **Integrate CI, release, and container preparation.** Audit every affected workflow/job, manual
   validation template, release script, installer/native-package path, and Docker build stage. Install the
   pinned toolchain and generate assets before checks/build/publish; ensure checkout filters, Docker contexts,
@@ -1076,50 +363,6 @@ does not close build, package, runtime, or Git-index acceptance.
   from a source-only context with no Node in the image. The MSI upgrade workflow now also runs when
   browser owners or preparation change. Still open: the release workflow itself (`release.yml`,
   `Master-Release.ps1`) has not run since the cutover, so its macOS DMG and upload steps are unverified.
-- [x] **Make package scripts reproducible and fail fast.** Audit PowerShell and shell versions of
-  `build-vsix`, `publish-vsix`, and affected release scripts. Use locked dependency installs for the
-  compiler, extension, and React UI, and propagate failures from preparation, builds, publishes, and
-  packaging. Scope cleanup to verified package-output paths and processes started by the script.
-  A failed stage must not leave a package that appears successful or reuse stale binaries/assets.
-  Restore the compiler before preparation on a fresh checkout. Replace unlocked `npm install` steps
-  in `scripts/build-vsix.ps1`, `scripts/build-vsix.sh`, and `scripts/publish-vsix.sh` with lockfile-based
-  installs; verify all variants build the same required assets from source-only inputs. Invoke the
-  lockfile-installed VSIX packager without an automatic `npx` download fallback. Rebuild the React UI
-  or verify it against its current inputs even when `ui/dist` already exists; test a changed UI source
-  with an old `dist` directory so `scripts/publish-vsix.ps1` cannot package stale UI assets.
-  Inject failures at restore, asset preparation, UI/extension compilation, tool publish, and VSIX assembly.
-  Each variant must return a nonzero exit status, preserve the last accepted package, and leave no new
-  artifact that appears complete. Use temporary assembly directories and guaranteed cleanup; restore
-  the caller's working directory and environment, and never stop unrelated application processes.
-  Exercise cancellation during each long stage and recovery after a terminated packager. Check owned
-  child shutdown, staging/lock cleanup, and preservation of the last accepted package; confirm manual
-  abandoned-lock recovery cannot remove another active run's lock or files.
-  Integrate the pinned unsigned toolchain in `scripts/vsix/` with every public packaging entry point;
-  keep proprietary signing dependencies excluded, signing requests rejected, and redistributed
-  dependency license files present. Refresh the toolchain/archive checks against the final candidate.
-  Done (2026-10-11). The four VSIX entry points and pre-release packaging go through one coordinator with
-  locked installs, no `npx` fallback, staged assembly, and atomic promotion. `test-vsix-coordinator.mjs`,
-  `test-vsix-cli-cancellation.mjs`, `test-vsix-toolchain.mjs`, `test-owned-command.mjs`, and
-  `test-package-inspector.mjs` pass in the consumer gate on the cutover candidate; they cover failures at
-  each stage, cancellation, and a foreign lock, which is refused and left untouched. Real packages were
-  built through the coordinator from source-only trees on Windows and Linux, on Windows also from a path
-  with spaces, and by the native package workflow on Linux, Windows, and macOS arm64. The coordinator has
-  no automatic lock recovery, so it cannot remove another run's lock; `scripts/vsix/README.md` gives the
-  manual steps.
-- [x] **Verify package version and architecture consistency.** Derive the release version and target
-  architecture from the supported release inputs, and reject missing or inconsistent values. Remove
-  the hard-coded version in `scripts/build-vsix.ps1` and the `0.0.0` fallback in
-  `scripts/build-vsix.sh`. Verify macOS x64 and arm64 selection instead of treating every Darwin host
-  as arm64. Check the extension manifest, bundled tools, VSIX target metadata, and package filename
-  against the requested version and platform in every shipped variant.
-  Read the bundled tools' actual assembly versions and PE/ELF/Mach-O architecture metadata;
-  names and requested parameters alone cannot certify their contents.
-  Done (2026-10-11). The four VSIX wrappers are five-line calls into one coordinator with no version of
-  their own. It requires the extension manifest, lockfile, requested version, and `Directory.Build.props`
-  to agree, resolves macOS x64 and arm64 separately, and inspects each bundled tool's assembly version
-  and binary architecture before assembly. `test-vsix-toolchain.mjs`, `test-vsix-coordinator.mjs`, and
-  `test-package-inspector.mjs` cover all four targets in the consumer gate. Real win32-x64 and linux-x64
-  packages were built through it on this candidate; macOS packages are tracked in the delivery matrix.
 - [ ] **Integrate VS Code and UI sandbox workflows.** Ensure extension compile/package and sandbox
   startup/watch paths work without tracked generated files. Verify the VSIX includes the runtime/designer
   import closure and development reloads use the latest successful compilation. Exercise added, renamed,
@@ -1135,16 +378,8 @@ does not close build, package, runtime, or Git-index acceptance.
   recovery, an edit made during preparation, and lock release on shutdown. The sandbox prepares on start
   from a tree with no outputs. Both VSIX packages built from source-only archives carry the designer
   import closure. Still open: none of this has been observed in a real development webview.
-- [x] **Verify sandbox reload refreshes imported dependencies.** Reload disposes the mounted story and
-  opens a fresh document, clearing the full module cache and restoring the story, fixture, theme,
-  sidebar, search, and category from the URL. A production Portal-view reproduction proved the old
-  reload kept a cached dependency. An isolated strict TypeScript fixture changes only its dependency,
-  verifies failed compilation preserves both delivery files, and loads two successive successful edits
-  while the entry stays byte-identical. Repeated reloads dispose each old instance once and retain one
-  action listener. All five focused/reload/story-inventory checks pass without skips. Before/after
-  screenshots and compile logs are under `artifacts/section1/sandbox-reload/`; browser results are in
-  `sandbox-reload-*.log` and matching TRX files under `artifacts/section1/admin/`.
-- [x] **Verify recovery after cleaning generated files.** In an isolated checkout, exercise `dotnet clean`
+- [ ] **Verify recovery after cleaning generated files.** In an isolated checkout, exercise `dotnet clean`
+  Audit 2026-10-12: Real IDE startup after cleanup remains unverified.
   and removal of inventoried outputs or preparation manifests, then restore dependencies and prepare again
   through the documented workflow. Confirm missing files cannot be masked by cached build output and
   repeat preparation restores the complete asset set without changing tracked inputs. Document how Git
@@ -1161,36 +396,6 @@ does not close build, package, runtime, or Git-index acceptance.
   fails and preparation restores every output with Git clean. The UI sandbox, started in a fresh clone
   with no outputs, prepares them and serves them, and leaves no lock on stop. An IDE launch was not
   exercised separately; it goes through the same MSBuild gate as `dotnet build`.
-- [x] **Maintain precise generated-output ignore rules.** Derive the ignored paths from the verified
-  ownership inventory, or provide a checked update command that keeps the rules in sync with it. Cover
-  new TypeScript modules and host copies, source renames/deletions, and an output path becoming an authored
-  input again. Reject broad rules that hide handwritten JavaScript, tooling, vendor sources, declarations,
-  or lockfiles. Verify ignore behavior with Git as well as the inventory; adding a new module must not
-  require someone to remember an unverified parallel list. Apply the rules only at the verified cutover.
-  Done as tooling; not yet applied. `browser-asset-ownership.mjs --ignore-rules` derives one anchored
-  rule per inventoried output and `--write-ignore` replaces the managed block. The gate rejects a stale
-  block, an unignored or re-tracked output, and any rule that hides a required input. Fixture checks use
-  a real Git repository and cover an added output, an output that becomes authored again, and a path
-  containing glob characters. Applying the block belongs to the untracking task below.
-- [x] **Adapt gates to generated, ignored outputs.** Update asset drift checks, pre-push/pre-release gates,
-  browser type/lint checks, and tests that read JavaScript from disk to run after preparation. Continue
-  checking deterministic output and host parity, detect missing/stale assets, and prevent generated files
-  from being accidentally tracked again. Reconcile the PowerShell sync path with the canonical Node entry
-  point so it cannot bypass compilation. Add a Git-index ownership check to pre-push and CI: after the
-  cleanup, no inventoried output may be tracked, and no required owner, vendor source, contract, or lockfile
-  may be ignored or missing from the index. Exercise a newly migrated module and a force-added generated
-  file so precise ignore rules cannot silently fall behind the ownership inventory. Keep type/lint baselines empty.
-  Commit checks must inspect staged ownership/configuration so unrelated unstaged changes cannot mask
-  a missing input or generated file in the proposed change. CI must enforce the resulting tracked tree.
-  Progress (2026-10-11): the Git-index ownership check runs in pre-push, CI, and both pre-release gates
-  (on every resume) and reads staged content.
-  The three test projects that read browser assets from disk each reference a host project that runs
-  the asset verifier, so an ordinary build cannot test stale files; `--no-build` paths are covered by
-  their own task above.
-  Done (2026-10-11). The pre-commit hook now runs the same check for commits that touch browser assets,
-  judging the staged tree. The PowerShell sync wrapper delegates to the Node entry point, the type and
-  lint baselines hold no entries, and the fixture checks cover a newly generated output and a
-  force-added one. CI has run the index check on every push since `490b9f57d`.
 - [ ] **Verify source-analysis coverage after untracking outputs.** Audit CodeQL exclusions and tools
   that discover files through Git or JavaScript-only patterns. Ensure they still inspect retained
   Portal and shared-runtime TypeScript, remaining handwritten JavaScript, and relevant generator inputs.
@@ -1206,44 +411,6 @@ does not close build, package, runtime, or Git-index acceptance.
   so it holds after untracking. No handwritten module remains under `wwwroot/js`. Still open: `scripts/`
   is excluded as build tooling, so the generators are not analysed; and the first CodeQL run over the
   88 newly analysed owners has not happened, so new alerts are possible.
-- [x] **Keep source-only preparation covered in CI.** Run an isolated source-only generation check with
-  all inventoried outputs absent, then exercise the prepared assets through the existing consumer gates.
-  Include this check when TypeScript sources, generators, asset configuration, or lockfiles change.
-  Verify the gate fails for a missing output or omitted new module and does not repair the checkout
-  during read-only verification. Retain ownership and source/output hashes with the test evidence.
-  Done (2026-10-11). CI runs on every push and pull request with no path filter. It now runs
-  `verify-source-only-preparation.mjs` on the real checkout after preparation and uploads the ownership
-  inventory and output hashes. `test-asset-generation.mjs`, in the consumer gate, covers the isolated
-  tree: a missing output, an added owner, and read-only verification that repairs nothing. The new step
-  has run locally (491 outputs, identical bytes) but not yet in GitHub Actions.
-- [x] **Prove source-only clean-checkout builds on Windows and Linux.** Use isolated checkouts with no generated
-  outputs or pre-existing dependency/build caches. Run the documented preparation, scoped builds for
-  Portal, ReportPlayer, and WorkstationEditor on both platforms, focused tests,
-  type/lint gates, and sync check; generate again and verify stable output. Include source rename/delete,
-  case-sensitive import resolution, and missing-output recovery checks. Compare generated bytes across
-  platforms and record commands and results. Exercise this source-only state before untracking outputs.
-  Construct acceptance checkouts from the proposed retained tracked inputs. Do not copy additional
-  owners, declarations, tools, or lockfiles from the developer's working tree to make them pass;
-  untracked local inputs must not hide an incomplete source-control removal plan.
-  Progress (2026-10-11): passed on Windows and Ubuntu (WSL2) from a `git archive` of `e97278ac5` with all
-  491 outputs deleted and a fresh npm cache. An unprepared build and check fail; preparation, repeat
-  preparation, type/lint, the compiler, bundle, and generation checks, the three scoped builds, and a
-  Portal publish pass. All 491 outputs are byte-identical across both platforms and the Git index.
-  Still open: the NuGet cache was warm on both hosts. Evidence: `artifacts/section1/s11-candidate/`.
-  Done (2026-10-11). After the cutover every CI job starts from a checkout with no generated file on a
-  fresh runner: CI run 38180570032 on `20c029f42` passed Build & Test and the browser lane on Windows, Docker integration and
-  enterprise certification on Linux, and the Studio performance job on Windows, Linux and macOS. A
-  fresh local clone passed pre-push, the Portal lane (1,574) and the browser lane (930).
-- [x] **Verify source-archive builds.** Extract the supported release source archives outside the
-  checkout, with no `.git` directory or generated outputs. Verify they contain every required owner,
-  contract, generator, configuration file, and lockfile. Run the documented preparation and affected
-  build/package commands from the extracted archive; these paths must not depend on Git metadata,
-  cached outputs, or files available only in the original checkout.
-  Progress (2026-10-11): the run above used an extracted archive with no `.git` directory, so preparation,
-  the scoped builds, and Portal publish are covered. No package command has run from an archive.
-  Done (2026-10-11). `git archive` of the source-only layout contains none of the 491 outputs and all 213
-  owners. Preparation, the three host builds, Portal publish, the Linux ZIP, DEB and VSIX, and the Windows
-  ZIP, MSI and VSIX were all built from extracted archives with no `.git` directory.
 - [ ] **Verify packaged runtime behavior.** Publish/package from the clean checkout and smoke-test Portal,
   ReportPlayer, WorkstationEditor, and the VS Code extension outside the source tree. Verify module requests,
   designer/report rendering, and an offline snapshot opened without network access. Confirm installers and
@@ -1315,40 +482,8 @@ does not close build, package, runtime, or Git-index acceptance.
   files with the inventory. `build-msi.ps1` prepares and publishes again; its output was compared with
   the inventory and matched. Still open: `release.yml` has not run since the cutover, so attestation
   over real release assets is unverified, and the DMG's contents have not been inspected.
-- [x] **Run behavior checks against the final cutover candidate.** Run the affected Portal and browser
-  lanes, UI sandbox stories, report runtime/offline checks, VS Code extension and React UI checks, and
-  discovered consumer checks against the same source state used for package acceptance. Include strict
-  type/lint gates and asset verification. Preserve public module URLs, exports, and report behavior;
-  investigate any changed outcome before untracking outputs. Refresh results after source, generator,
-  or package changes instead of relying on earlier migration snapshots.
-  Done (2026-10-11) from a fresh clone of the cutover: pre-push validation (asset verification, type and
-  lint gates with empty baselines, 115 consumer checks), the Portal lane (1,574 of 1,574), and the
-  browser lane (930 of 930), which includes the sandbox stories and the offline snapshot with networking
-  blocked. CI run 38180570032 on `20c029f42` passed the extension's unit tests and UI build. All 491 prepared outputs are
-  byte-identical to the last tracked ones, so public URLs and exports are unchanged.
-- [x] **Keep acceptance tests from contaminating candidate assets.** Audit the discovered consumer
-  checks and generator failure fixtures for writes to browser sources, outputs, and manifests. Prefer
-  isolated fixture trees. Serialize any check that temporarily changes the acceptance checkout with
-  builds, browser tests, preparation, and packaging that read it. Verify cleanup on success and failure,
-  then rerun read-only asset verification and compare source/output hashes with the candidate before
-  recording acceptance or assembling packages. Temporary modules, partial fixtures, and a manifest
-  produced during a test must not become release inputs or certify the restored candidate.
-  Done (2026-10-11). The consumer gate runs its checks one at a time. Generator checks work in isolated
-  trees; checks that load a TypeScript-era module write a `*.__test-*.mjs` copy beside it, which is
-  ignored by Git and excluded from compilation, sync inventories, MSBuild discovery, and packages (covered
-  in `test-asset-generation.mjs`). After a full 115-check run the read-only asset check and the index
-  ownership check both pass, no temporary module remains, and no tracked browser file has changed. CI
-  and pre-push rerun the read-only check after the consumer gate.
-- [x] **Produce the exact source-control removal plan.** Generate a read-only report from the final
-  ownership inventory and current Git index. List each proposed removal, its retained owner or generator,
-  regeneration command, and delivery-path evidence; list the inputs that must remain tracked. Include
-  the precise ignore changes and flag modified outputs for reconciliation with their owners. Verify the
-  report excludes handwritten tooling and vendor inputs, preserves local files, and does not rewrite
-  release tags or history. Recompute the plan if its source state or ownership inventory changes.
-  Done (2026-10-11). `node scripts/browser-asset-ownership.mjs --json` produced the plan the cutover
-  applied: 491 removals, each with its owner and regeneration command, no modified output, no problem,
-  and 263 inputs that stay tracked. Delivery evidence is per path in the delivery matrix, not per file.
-- [x] **Untrack only reproducible generated assets.** After the source-only build and packaged-runtime checks
+- [ ] **Untrack only reproducible generated assets.** After the source-only build and packaged-runtime checks
+  Audit 2026-10-12: Index cleanup is implemented, but its packaged-runtime prerequisites remain open in the delivery matrix. Complete those rows before closing this acceptance item.
   pass, add precise ignore rules and remove the identified outputs from the Git index while retaining locally
   generated files. Preserve canonical CSS, maps, vendor assets, source files, and notices; remove duplicated
   non-JavaScript host assets only where the ownership inventory and generation checks explicitly cover them.
@@ -1363,38 +498,6 @@ does not close build, package, runtime, or Git-index acceptance.
   Git clean, and a force-added output is rejected by the ownership check. The decision to cut over
   before every delivery-matrix row was accepted was taken with the open rows listed there: installs
   other than the workstation MSI, the VSIX in a webview, and macOS.
-- [x] **Verify existing-clone and branch-switch behavior.** Exercise updating a v0.20.0 clone to the
-  source-only layout and switching between revisions with tracked and ignored outputs. Document when
-  preparation must run, verify stale outputs/manifests cannot pass the build gate, and preserve local
-  source edits. Cleanup must use the ownership inventory and must not delete handwritten or vendor inputs.
-  Cover switches that replace ignored outputs with tracked files, including overwrite conflicts; provide
-  recovery commands that remove only verified outputs after preserving any intentional local changes.
-  Exercise rollback to the previous release's tracked-asset layout and a return to the source-only
-  layout. Each revision must build with its own supported preparation workflow; newer ignored files
-  and manifests must not override or certify the older revision's assets.
-  Done (2026-10-11) on a throwaway clone. Switching to v0.20.0 succeeds with no tracked file modified and
-  leaves 76 untracked outputs from the newer revision; v0.20.0's own drift check fails until
-  `git clean -fd` on the asset roots removes them, then passes. Switching back, Git deletes the outputs
-  v0.20.0 tracked, the build gate reports "Prepared browser asset is missing", and preparation restores
-  all 491 with Git clean. The standards document has the table of switches and commands.
-  Evidence: `artifacts/section1/s11-candidate/branch-switch/`.
-- [x] **Update contributor and release documentation.** Align `AGENTS.md`, asset/build standards, onboarding,
-  sandbox/extension instructions, architecture docs, and release guidance with source/output ownership and
-  preparation commands. Reconcile `ROADMAP.md` and remaining migration status; record verified completion
-  in `CHANGELOG.md` without claiming all handwritten JavaScript has been migrated prematurely. Document
-  the workflow for Git clones and source archives, when to rerun preparation after pulling changes, and
-  how to recover missing or stale assets. Make clear that Node.js is a build prerequisite and is not
-  required by published products.
-  Document recovery after interrupted preparation and rollback of the source-control transition;
-  regeneration must preserve local source edits and must never certify stale outputs as current.
-  Show the edit-owner → prepare → verify workflow explicitly. Remove instructions that ask contributors
-  to maintain generated JavaScript or fix drift in host copies; retain instructions for authored tooling
-  and vendor inputs. Explain that ignored delivery files still belong in published packages.
-  Done (2026-10-11). `AGENTS.md`, `CONTRIBUTING.md`, `README.md`, the asset standards, the release
-  checklist, `ROADMAP.md`, and `CHANGELOG.md` describe the source-only layout: prepare after cloning or
-  pulling browser changes, edit owners and never outputs, run `--write-ignore` when owners change, and
-  Node.js as a build prerequisite only. The standards document has the recovery table, the `git clean`
-  guidance, and the revision-switch table.
 - [ ] **Confirm cleanup completion from the resulting tracked tree.** Reconcile the delivery matrix
   with every preceding task and link its passing evidence. Record the exact source revision and final
   ownership inventory, confirm required inputs are tracked and verified outputs are absent from the
@@ -1415,19 +518,8 @@ the authoritative artifact; visual helpers preserve hand edits. Host differences
 permissions, and execution boundaries. These components are foundations of Studio; retiring their
 entry points is a separate future decision, not the measure of success.
 
-**Working inventory:** [Studio authoring completeness](docs/architecture/decisions/studio-authoring-completeness.md)
+**Working inventory:** [Studio authoring completeness](docs/architecture/decisions/studio-authoring-completeness.md). Completed inventories: [ST01 report workflows](docs/architecture/decisions/studio-report-authoring-inventory.md) and [ST02 script/ETL workflows](docs/architecture/decisions/studio-script-etl-authoring-inventory.md).
 
-- [x] **ST01 — Report-authoring completeness inventory.** Map the ReportBuilder foundation and the full
-  connect → shape → visualize → interact → preview → save/publish workflow to Studio in both hosts.
-  Identify beginner friction, improvements, passing evidence or missing acceptance fixtures, and deliberate
-  non-goals. No feature or test implementation. (Size: S)
-  Completed source/evidence mapping: [24 report workflows and missing acceptance fixtures](docs/architecture/decisions/studio-report-authoring-inventory.md).
-  Inventory completion does not certify those journeys; implementation and passing evidence remain open.
-- [x] **ST02 — Script and ETL-authoring completeness inventory.** Map the WorkstationEditor foundation,
-  code suggestions/highlighting, files, guided pipeline construction, execution, diagnostics, and recovery
-  to Studio in both hosts. Record improvements and explicit gaps/evidence. No feature or test implementation. (Size: S)
-  Completed source/evidence mapping: [26 script and ETL workflows with acceptance fixtures](docs/architecture/decisions/studio-script-etl-authoring-inventory.md).
-  Inventory completion does not certify execution or recovery; required journeys remain open.
 - [x] **ST03 — Unified beginner-experience acceptance.** Use both inventories and completed required journeys
   to assess whether users can complete report and ETL workflows, move between helpers and code without
   losing work, and explain the SQL they generated. Record remaining gaps and host-specific limits.
@@ -1502,7 +594,8 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
   bound under prod's root, an account with no rights on the folder is refused, and a target where the
   name already holds different content gets `409 document_collision` with the existing row, version and
   script text unchanged. Scope of "no partial changes": the collided document. Statements earlier in the
-  same replay (users, folders) have already applied, as for any bootstrap replay.- [x] **ST10 — Ordinary-author pipeline journey.** A Publisher with the required folder and Orchestrator grants
+  same replay (users, folders) have already applied, as for any bootstrap replay.
+- [x] **ST10 — Ordinary-author pipeline journey.** A Publisher with the required folder and Orchestrator grants
   creates, saves, reopens, runs, and cancels one pipeline; denied grants fail explicitly. Admin identity cannot
   satisfy this task. (Depends on: ST04, ST05, ST06; Size: M)
   Done 2026-10-12. `StudioPipelineRunJourneyTests.AnOrdinaryAuthorRunsASavedPipelineAndFollowsThatRun`
@@ -1550,6 +643,8 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
 
 ## 5. Studio — Author, reader and beginner practice journeys
 
+Completed prerequisites: [ST20 practice execution decision](docs/architecture/decisions/studio-practice-execution.md) and [ST22 desktop evidence](docs/architecture/decisions/studio-desktop-practice-evidence.md).
+
 **Horizon:** Next
 
 - [ ] **ST16 — Portal beginner report journey.** An ordinary scoped author uses sample data, makes a visual change,
@@ -1564,25 +659,15 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
 - [ ] **ST19 — Second-identity RLS journey.** Two ordinary identities open the same report and receive their expected
   disjoint rows, including preview/data/export paths that the chosen report exposes. No new RLS model.
   (Depends on: ST18; Size: M)
-- [x] **ST20 — Decide restricted practice execution.** Specify how a learner may run the MOCKDB failure/repair exercise
-  in each host, including mutating steps, cleanup, and permission boundaries. Portal execution must use the sanctioned
-  sandbox path. (Size: D)
-  [Decision recorded](docs/architecture/decisions/studio-practice-execution.md): local disposable sessions;
-  Portal saved revisions through the Orchestrator sandbox. ST21 runtime evidence remains open; ST22 passed below.
 - [ ] **ST21 — Portal beginner ETL exercise.** Run the deliberate ASSERT failure, repair it, check expected rows and
   cleanup under the agreed practice identity; use no external service. (Depends on: ST20, ST04; Size: M)
-- [x] **ST22 — Desktop beginner ETL exercise.** Execute the same failure/repair lifecycle and verify rows/cleanup
-  under the agreed local restrictions. (Depends on: ST20; Size: M)
-  [Browser evidence](docs/architecture/decisions/studio-desktop-practice-evidence.md): failure, keyboard repair,
-  exact loaded values, same-session cleanup and repeatability passed on 2026-10-11.
-
 ---
 
 ## 6. Studio — Keyboard and assistive technology
 
 **Horizon:** Next
 
-- [ ] **ST23 — Portal keyboard editing journey.** Create, edit, undo, and save one permitted document using only the
+- [x] **ST23 — Portal keyboard editing journey.** Create, edit, undo, and save one permitted document using only the
   keyboard; verify modal/tab navigation and focus return. (Size: M)
 - [ ] **ST24 — Desktop keyboard editing journey.** Prove the same sequence in the self-installed host. (Size: M)
 - [ ] **ST25 — Keyboard visual move/resize.** Provide or verify non-drag controls for one visual and persist its resulting
@@ -1690,21 +775,161 @@ Found while shipping v0.19.0. None blocked that release; all cost time or credib
 
 ---
 
-## 12. Database schema standardization — Table and column snake_case naming
+## 13. Codebase audit findings — Bugs, security, performance and telemetry
 
-**Horizon:** v0.21.0  
-**Authoritative design:** [Connector Standards](docs/architecture/standards/connectors-standards.md), [Connectors](docs/architecture/connectors.md), and [Platform Administration](docs/administration/platform/README.md)
+Comprehensive code review across all solution projects (`src/ETL-SQL.*`). Each finding was checked against source on 2026-10-12: fixed, left open with the reason, or dropped as not a defect.
 
-Standardize all internal SQL tables and column names across ETL-SQL subsystem databases to `snake_case` naming conventions, matching the engine's virtual/catalog tables (`eng.*`) and session SQLite tables (`security_events`, `variables`). Portal and Orchestrator persistence layers are internal infrastructure and will be migrated to `snake_case`.
+### 13.1 Bugs and logic defects
 
-- [x] **Configure EF Core snake_case naming convention in Portal.**
-  - Configure `PortalDbContext` (in `src/ETL-SQL.Portal.Data/PortalDbContext.cs` or EF Core naming conventions) to map entity names and properties to `snake_case` table and column names (`studio_recovery_drafts`, `reports`, `report_id`, `created_at`, etc.).
-  - Update or generate database migrations (`src/ETL-SQL.Portal.Data/Migrations/` and `src/ETL-SQL.Portal.Migrations.Postgres/Migrations/`) to apply the renamed tables, columns, foreign keys, and indexes for SQLite and PostgreSQL providers.
-  - Verify that Portal API endpoints, repositories, and Studio recovery drafts continue to function across database providers.
-- [x] **Standardize Orchestrator database storage schema to snake_case.**
-  - Migrate `RelationalJobHistoryStore.cs` / `SQLiteJobHistoryStore.cs` (and PostgreSQL store dialects under `src/ETL-SQL.Orchestrator/Storage/`) DDL schemas and raw SQL queries from `PascalCase` (`JobHistory`, `JobSchedules`, `JobId`, `StartTime`) to `snake_case` (`job_history`, `job_schedules`, `job_id`, `start_time`).
-  - Provide automated schema migration or bootstrap logic for SQLite/PostgreSQL Orchestrator databases so upgrade paths transition cleanly without manual intervention.
-  - Verify job scheduling, job execution history recording, metric queries, and Orchestrator API integration tests pass against the updated schema.
-- [x] **Audit and align internal catalog & temporary table documentation.**
-  - Confirm all internal virtual tables (`eng.metrics`, `eng.security_events`, `eng.columns`, `eng.jobs`, etc.) adhere strictly to the `snake_case` table and column standard.
-  - Document the unified database schema naming standard in `docs/architecture/standards/`, ensuring clear distinction between engine/internal tables (`snake_case`) and external target tables (which respect user-specified names).
+Reviewed against source 2026-10-12. Ordered by priority. Dropped as false positives: BigQuery row errors silently ignored (`InsertRowsAsync` throws `GoogleApiException` unless `SuppressInsertErrors = true`, and the connector catches it), share links requiring auth (`ResolveShareLink` already has `[AllowAnonymous]`), and hover offset drift on CRLF (`HoverProvider.Offset` scans for `\n`, so CRLF is handled), and join WHERE pushdown filtering the wrong table (the flawed code is `JoinEngine.ApplyJoins`, which has no callers; the live path is `ApplyJoinsStreaming`, and `JoinQualifiedPushdownTests` pins the correct result for the two- and three-table cases).
+
+- [x] **WithTable clones drop the active transaction in ODBC and Snowflake connectors.**
+  - *Location:* `src/ETL-SQL.Connectors.Databases/Odbc/OdbcDataSource.cs:51`, `src/ETL-SQL.Connectors.Databases/Snowflake/SnowflakeDataSource.cs:106-107`
+  - *Flaw:* `WithTable(string tableName)` builds a fresh instance without `_transactionalConnection` and `_activeTransaction`, so statements on the clone run on a separate connection outside the open transaction, and rollback doesn't cover them. SqlServer, Postgres and MySql copy both fields; SQLite shares `_transactionState`. Oracle has the same one-line `WithTable` but no transaction support, so this doesn't apply to it.
+  - *Remediation:* Copy `_transactionalConnection` and `_activeTransaction` onto the clone, matching `SqlServerDataSource.WithTable`. Add a connector test: begin a transaction, write through `WithTable`, roll back, then assert no rows.
+  - *Fixed 2026-10-12:* Both clones now carry `_transactionalConnection` and `_activeTransaction`. No connector test: it needs a live ODBC driver or Snowflake account.
+
+- [x] **Column rename leaves index definitions stale; composite indexes are skipped entirely.**
+  - *Location:* `src/ETL-SQL.Core/Data/InMemoryTableIndex.cs:220-247`, caller `src/ETL-SQL.Core/Data/DataSources.cs:809`
+  - *Flaw:* `RenameColumn` calls `RenameIndex(oldColumn, newColumn)`, but index keys come from `GetIndexKey` (column names sorted and comma-joined). For a single-column index, the key moves, but the stored column list still says `[oldColumn]`, so later `GetRowKey` calls read a column that no longer exists. A composite key such as `"a,b"` never equals the column name, so composite indexes aren't renamed at all.
+  - *Remediation:* Replace `RenameIndex` with a column-rename operation. For every index whose column list contains the old name, rewrite the list, recompute the key with `GetIndexKey` (the sort order can change), and move the entries in `_indexes`, `_indexColumnMap`, `_uniqueColumns`, `_uniqueKeys` and `_uniqueKeyBytes`. Test this with both single-column and composite unique indexes.
+  - *Fixed 2026-10-12:* `InMemoryTableIndex.RenameColumn` moves every definition that names the column and the caller rebuilds those indexes. `InMemoryTableIndexTests.RenamingAColumnCarriesItsSingleAndCompositeIndexes`.
+
+- [x] **Unhandled exception in SessionCache eviction timer terminates the Portal process.**
+  - *Location:* `src/ETL-SQL.Portal/Services/SessionCache.cs:166-193`
+  - *Flaw:* `EvictScheduled()` runs as a `System.Threading.Timer` callback, and its catch block records the failure status and then rethrows (`throw;`). An exception that escapes a timer callback goes unhandled on the threadpool and terminates the process.
+  - *Remediation:* Catch, record `status = "failure"`, and log through `_log.LogError`. Don't rethrow.
+  - *Fixed 2026-10-12:* The pass logs through `_log.LogError` and no longer rethrows.
+
+- [x] **Job cancellation races with completion in the Orchestrator service.**
+  - *Location:* `src/ETL-SQL.Orchestrator.Service/JobApiEndpoints.cs:247-252`
+  - *Flaw:* `DELETE /jobs/{id}` checks `entry.Status`, then sets `Cancelled`, with nothing stopping completion from landing between the two steps. Cancellation can overwrite a terminal `Completed`/`Failed` status, or `RunJobAsync` can overwrite `Cancelled` afterwards. The endpoint also returns `Status = "Cancelled"` even when the job had already finished.
+  - *Remediation:* Make the state change atomic (lock on the entry, or `Interlocked.CompareExchange` on an int-backed status) so only non-terminal jobs move to `Cancelled` and the completion path never overwrites a terminal state. Return the status that was actually applied.
+  - *Fixed 2026-10-12:* `JobEntry` status changes go through `TryStart`, `TryFinish` and `Cancel` under one lock; `DELETE /jobs/{id}` returns the status that was applied.
+
+- [x] **BigQuery streaming insert retries can duplicate rows.**
+  - *Location:* `src/ETL-SQL.Connectors.Databases/BigQuery/BigQueryDataSource.cs:165-180`
+  - *Flaw:* `ConnectorRetryPolicy.ForBigQuery` retries `InsertRowsAsync` for the whole batch. The rows carry no `insertId`, so a retry after a partly successful or timed-out request can write the same rows twice.
+  - *Remediation:* Give each row a stable `BigQueryInsertRow.InsertId` (batch id plus row ordinal) so BigQuery deduplicates retries, or retry only transient transport failures that happen before any rows are accepted.
+  - *Fixed 2026-10-12:* Rows are built once, outside the retry, with insert id `{batchId}-{ordinal}`.
+
+- [x] **Single-column unique indexes reject multiple NULL rows when DBNull reaches the engine.**
+  - *Location:* `src/ETL-SQL.Core/Data/InMemoryTableIndex.cs:113, 135-139`
+  - *Flaw:* For single-column indexes, `GetRowKey` returns `row[col]` as-is. The composite branch maps `DBNull.Value` to `null`; this branch doesn't. If a connector lets `DBNull.Value` into an in-memory row, the second NULL row throws `Unique index violation ... for value` because the first `DBNull` is already in the `HashSet`. Engine code mostly stores C# `null`, so this is latent until a connector skips normalization.
+  - *Remediation:* Return `null` for `DBNull.Value` in the single-column branch, matching the composite branch.
+  - *Fixed 2026-10-12:* `DBNull` maps to `null` in the single-column branch. `ASingleColumnUniqueIndexAllowsManyNullsHoweverTheyArrive`.
+
+- [x] **CompletionProvider throws ArgumentOutOfRangeException when the client column exceeds line length.**
+  - *Location:* `src/ETL-SQL.LanguageServer/CompletionProvider.cs:68`
+  - *Flaw:* The prefix block (line 57) guards `currentLine.Length >= col`, but `currentLine.Substring(0, col)` at line 68 doesn't. A position past the end of the line, or on a line beyond the end of the document (where `currentLine` is `""`), throws and breaks completion for that request.
+  - *Remediation:* Clamp once up front: `col = Math.Clamp(col, 0, currentLine.Length)`.
+  - *Fixed 2026-10-12:* Column clamped to the line length once.
+
+- [x] **LSP ScheduleDebounced disposes a CTS the owning task may still touch.**
+  - *Location:* `src/ETL-SQL.LanguageServer/TextDocumentHandler.cs:317-350`
+  - *Flaw:* The CTS has two disposers. The replacing caller cancels and then disposes `existing` on a background task, and the owning task's `finally` disposes the same CTS. If the old task hasn't reached `newCts.Token` yet, the token access throws `ObjectDisposedException`. Only cancellation exceptions are caught, so this ends up as an unobserved task exception. The new debounce still runs, so diagnostics keep working; this is lifecycle noise more than a functional break.
+  - *Remediation:* The replacer only cancels. The owning task alone disposes its CTS in `finally`. Catch and log non-cancellation exceptions from `action()`.
+  - *Fixed 2026-10-12:* The replacer only cancels; the owning task disposes.
+
+### 13.2 Security and multi-tenancy guardrails
+
+Dropped: `IsTestMode` bypassing ceilings (it is set only by the test host and by the non-script `SystemExecutionContext`), cloud connectors skipping path validation (every caller authorizes the local path through `pathAuthorizer` before the connector sees it; the one ordering slip, a download creating its directory first, is fixed), and VisualBuilder fallback XSS (the fallback text goes to an `aria-label` via `setAttribute`, to PDF and to Markdown, never into HTML).
+
+- [x] **Default machine key uses predictable MachineName:UserName hash.**
+  - *Location:* `src/ETL-SQL.Core/SecurityService.cs:42-46`
+  - *Flaw:* When `ETLSQL_MACHINE_KEY_FILE` is unset, the machine key falls back to `SHA256(MachineName:UserName)`. In container or cloud deployments (Kubernetes pods, AWS ECS, Docker containers), hostnames and usernames are static or predictable, allowing attackers to forge machine-bound encrypted secrets and session checkpoints.
+  - *Remediation:* Require an explicit `ETLSQL_MACHINE_KEY_FILE` in production/SaaS profiles or generate an ephemeral cryptographically random key with a security warning.
+  - *Fixed 2026-10-12:* Owner chose generate-and-persist. The unmounted key is derived from the random `machine.key` the installation already kept for generic protection; There is no fallback to the old digest: nothing was deployed, so values under it are simply unreadable. Key-file creation is now create-new so two starting processes cannot keep different keys. `MachineKeyAndJwtSecretTests`.
+
+- [x] **Plaintext JWT secret emitted directly to execution log.**
+  - *Location:* `src/ETL-SQL.Engine/Handlers/GenerateJwtSecretStatementHandler.cs:38-39`
+  - *Flaw:* Statement handler calls `context.Log(secret, ConsoleColor.Yellow)`, logging the generated raw JWT secret to stdout and persistent script execution logs, violating AGENTS.md §3 zero-trust secret protection rules.
+  - *Remediation:* Return generated secrets via statement result set only; never log secrets to `context.Log()`.
+  - *Fixed 2026-10-12:* Owner chose result set only. One row, `Secret` and `EncryptedConfigValue`; nothing secret reaches `context.Log` or the logger. `GenerateJwtSecretReturnsTheSecretAsARowAndLogsNoneOfIt`.
+
+- [x] **Postgres COPY FROM STDIN unescaped column identifier interpolation.**
+  - *Location:* `src/ETL-SQL.Connectors.Databases/Postgres/PostgresDataSource.cs:185-187`
+  - *Flaw:* Column names in `COPY ... FROM STDIN` are interpolated as `$"\"{c}\""` without escaping embedded double quotes. Column names containing double quotes can inject arbitrary SQL commands into Postgres.
+  - *Remediation:* Escape embedded double quotes (`c.Replace("\"", "\"\"")`) before identifier construction.
+  - *Fixed 2026-10-12:* Embedded `"` doubled in COPY column identifiers.
+
+- [x] **Orchestrator JobEntry lacks TenantId and uses 32-bit truncated Job IDs.**
+  - *Location:* `src/ETL-SQL.Orchestrator.Service/JobApiEndpoints.cs:215, 242, 261, 2302`
+  - *Flaw:* In-memory `JobEntry` objects do not record `TenantId`. Any tenant admin can inspect, trigger, or cancel ad-hoc and scheduled jobs belonging to other tenants. Furthermore, job IDs are truncated to 8 hex characters (`Guid.NewGuid().ToString("N")[..8]`), providing only 32 bits of entropy and enabling ID guessing in multi-tenant environments.
+  - *Remediation:* Store `TenantId` on `JobEntry`, enforce tenant checks on all `/jobs/{id}` routes, and use full GUIDs or cryptographically secure random IDs.
+  - *Fixed 2026-10-12:* Ad-hoc entries record the tenant, another tenant's id answers 404, and ids are full GUIDs. The scheduled-job half of the claim did not hold: those routes already check tenant in `CanAsync`.
+
+- [x] **Scheduled jobs query leaks job metadata across tenants via post-pagination filtering.**
+  - *Location:* `src/ETL-SQL.Orchestrator.Service/JobApiEndpoints.cs:282-297`, `SQLiteJobHistoryStore.cs:1334-1349`
+  - *Flaw:* `GET /api/scheduled-jobs` fetches paginated rows across all tenants from the database without a `WHERE tenant_id = @tenant` clause, filtering by tenant in-memory afterwards. This starves smaller tenants of page results and leaks operational job volume.
+  - *Remediation:* Push `tenant_id` filtering directly into SQL before applying `LIMIT` and `OFFSET`.
+  - *Fixed 2026-10-12:* `GetJobsPageAsync(tenantId, limit, offset)` filters in SQL before paging.
+
+### 13.3 Performance and scalability bottlenecks
+
+Dropped: grouping-set materialization in `AggregateEngine` (it is only handed rows already buffered under the admission threshold; larger inputs go to `ExternalAggregateEngine`), the `/api/scripts/content` directory walk (a deliberate allowlist so the path read never comes from the request), and `DiscoverTempTables` calling `ToSql()` (only for `SELECT … INTO #temp` columns, after a debounce and a full parse).
+
+- [x] **InMemoryTableIndex re-sorts column list on every row.**
+  - *Location:* `src/ETL-SQL.Core/Data/InMemoryTableIndex.cs:112, 126`
+  - *Flaw:* `GetRowKey(columns, row)` executes `columns.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList()` per row. For a 100,000-row batch, this causes 100,000 list allocations and sorts.
+  - *Remediation:* Pre-sort and cache the column order once at the batch level before iterating rows.
+  - *Fixed 2026-10-12:* Batch loops sort the column list once.
+
+- [x] **ExternalSortEngine re-materializes sorted chunks into in-memory list.**
+  - *Location:* `src/ETL-SQL.Engine/Engines/ExternalSortEngine.cs:53-66`
+  - *Flaw:* `SortExternal(List<Row> rows, ...)` converts input to `IAsyncEnumerable`, executes external merge sort, and calls `await sortedStream.ToListAsync()`. Materializing the entire result back into a single list negates disk spilling benefits for large datasets.
+  - *Remediation:* Expose streaming sort APIs that return `IAsyncEnumerable<Row>` directly so downstream operators can consume chunks without full materialization.
+  - *Fixed 2026-10-12:* A spilled ORDER BY now hands `SortStreamAsync` to the stream path through OFFSET / LIMIT and projection. `SpilledOrderByTests` compares it with the in-memory sort. TOP PERCENT keeps the list: the stream path counts rows through `SpillForReplay`, whose file format widens decimal scale (`1` returns as `1.000000000`). That replay defect is live today for TOP PERCENT after an external aggregate or window and is not fixed here.
+
+- [x] **FtpConnector uses synchronous blocking calls on async API paths.**
+  - *Location:* `src/ETL-SQL.Connectors.Remote/FtpConnector.cs:130-263`
+  - *Flaw:* Methods call synchronous FluentFTP APIs (`Connect()`, `UploadFile()`, `DownloadFile()`) and return `Task.CompletedTask`, blocking threadpool worker threads and ignoring cancellation tokens.
+  - *Remediation:* Migrate to FluentFTP async APIs (`ConnectAsync()`, `UploadFileAsync()`, `DownloadFileAsync()`) with `CancellationToken`.
+  - *Fixed 2026-10-12:* Moved to `AsyncFtpClient`; every call awaits and takes the execution context's cancellation token. `FtpIntegrationTests` (23) pass against a real server.
+
+- [x] **AvroDataSource schedules per-row Task.Run micro-tasks.**
+  - *Location:* `src/ETL-SQL.Connectors.Files/Avro/AvroDataSource.cs:101-185`
+  - *Flaw:* Every row read/write invokes `await Task.Run(...)`, scheduling hundreds of thousands of micro-tasks for moderate datasets and causing severe task scheduler churn.
+  - *Remediation:* Process rows synchronously in batches within a single background task.
+  - *Fixed 2026-10-12:* One background task per batch, read and write.
+
+- [x] **File data sources buffer entire datasets in memory before writing.**
+  - *Location:* `src/ETL-SQL.Connectors.Files/Excel/ExcelDataSource.cs:428-470`, `JsonDataSource.cs:103-137`, `XmlDataSource.cs:349-379`
+  - *Flaw:* `WriteBatches` buffers entire datasets in memory before serializing, causing OOM on large datasets instead of streaming chunks.
+  - *Remediation:* Stream rows directly to underlying format streams using buffered chunked writes.
+  - *Fixed 2026-10-12:* JSON and XML write rows as they arrive; Excel passes MiniExcel an async row stream, so only an append holds rows (the sheet it rewrites). The XML writer also enumerated its source twice — once to look for a ready-made document, once for the rows; it now uses one enumerator.
+
+- [x] **N+1 database queries on Orchestrator job endpoints.**
+  - *Location:* `src/ETL-SQL.Orchestrator.Service/JobApiEndpoints.cs:289-295, 2317-2329`
+  - *Flaw:* `/api/scheduled-jobs` and `/api/job-history` execute individual database queries per item in loops checking permissions and schedule metadata.
+  - *Remediation:* Batch permission and schedule lookups into a single SQL query using `IN (...)` or joins.
+  - *Fixed 2026-10-12:* `OrchestratorObjectAuthorizationService.FilterAsync` decides what it can without grants and fetches the rest in one `IN` query; used by the job, schedule and notification lists. `FilteringAPageDecidesEachObjectExactlyAsASingleCheckDoes`. There is no `/api/job-history` route.
+
+### 13.4 Missed logging and error telemetry
+
+- [x] **SpillStore empty catch blocks swallow cleanup and deletion errors.**
+  - *Location:* `src/ETL-SQL.Engine/Spill/SpillStore.cs:427, 1192`
+  - *Flaw:* Empty `catch { }` blocks in `Directory.Delete(_cachedRootPath, true)` and `File.Delete(_filePath)` silently ignore I/O and permission exceptions during spill cleanup, causing silent disk leaks when files are locked.
+  - *Remediation:* Log warnings via `_logger.Warning("Failed to clean up spill path {Path}: {Error}", path, ex.Message)`.
+
+- [x] **SpillStore silently swallows JSON deserialization failures.**
+  - *Location:* `src/ETL-SQL.Engine/Spill/SpillStore.cs:1461`
+  - *Flaw:* When deserializing spilled JSON elements, `catch { }` silently swallows JSON parse errors, falling back to treating corrupt JSON as raw strings without logging or warning.
+  - *Remediation:* Log a diagnostic warning when JSON deserialization of a prefixed payload fails.
+
+- [x] **Sync-over-async blocking call in ColumnQualityValidator.**
+  - *Location:* `src/ETL-SQL.Engine/Services/ColumnQualityValidator.cs:229`
+  - *Flaw:* `FinalizeUniquePrePass()` calls `FinalizeUniquePrePassAsync().GetAwaiter().GetResult()`, blocking calling thread with sync-over-async and risking deadlocks if executed within synchronization contexts.
+  - *Remediation:* Refactor callers to await `FinalizeUniquePrePassAsync()` and deprecate the synchronous blocking wrapper.
+  - *Follow-up 2026-10-12:* The wrapper had no callers, so it is deleted rather than marked obsolete.
+
+- [x] **Gateway dispatcher swallows operation exceptions without local logging.**
+  - *Location:* `src/ETL-SQL.Gateway/GatewayOperationDispatcher.cs:236-254`
+  - *Flaw:* When an operation fails on the Gateway, dispatcher catches `Exception ex`, constructs a generic fault frame, and returns it to the client without logging `ex` locally on the Gateway, hiding failure root causes from server administrators.
+  - *Remediation:* Log `ex` with full stack trace via `_logger.LogError(ex, "Gateway operation {OpId} failed", opId)` before returning fault frame.
+  - *Follow-up 2026-10-12:* The log line now passes the exception and its message through `SecretRedactor`; the comment above it says that text can carry a credential.
+
+- [x] **Portal lineage persistence swallows exception stack traces.**
+  - *Location:* `src/ETL-SQL.Portal/Controllers/ExecutionController.cs:614-618`
+  - *Flaw:* Lineage persistence failure catches `Exception ex` and records only `ex.Message` in audit without stack trace or `ILogger.LogError`, preventing root cause analysis of lineage storage failures.
+  - *Remediation:* Log complete exception details via `_logger.LogError(ex, "Lineage persistence failed for execution {ExecutionId}", executionId)`.

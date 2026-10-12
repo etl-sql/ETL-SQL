@@ -322,7 +322,10 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
 
         if (crossesModelBoundary) hostContext.renderVisualStage();
 
-        if (hostContext.state.editorInstance?.focus) {
+        const tabsBar = queryElement(hostContext.shell, '[data-studio-tabs]');
+        if ((mode === 'code' || mode === 'split')
+            && hostContext.state.editorInstance?.focus
+            && (!tabsBar || !tabsBar.contains(document.activeElement))) {
             hostContext.state.editorInstance.focus();
         }
     }

@@ -806,13 +806,17 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
             }
         }
 
-        _index.RenameIndex(oldName, newName);
+        var renamedIndexes = _index.RenameColumn(oldName, newName);
 
         foreach (var batch in _batches)
         {
             batch.RenameColumn(oldName, newName);
             // The new schema indices will map to the same slots in the row array.
         }
+
+        // After the rows carry the new name: the definitions moved, their data is rebuilt here.
+        foreach (var columns in renamedIndexes)
+            _index.RebuildIndex(columns, _batches);
     }
 
     public async Task TruncateAsync()

@@ -212,9 +212,11 @@ namespace ETL_SQL.Orchestrator.Service
                 EvictStaleAdHocJobs();
 
                 var caller = RequestCaller(ctx);
-                var jobId = Guid.NewGuid().ToString("N")[..8];
+                // The id is the only handle to the run, so it is the whole GUID: eight hex digits
+                // could be guessed by another caller on a shared host.
+                var jobId = Guid.NewGuid().ToString("N");
                 var cts = new CancellationTokenSource();
-                var entry = new JobEntry(jobId, cts, ctx.TraceIdentifier, caller.PrincipalKey);
+                var entry = new JobEntry(jobId, cts, ctx.TraceIdentifier, caller.PrincipalKey, caller.TenantId);
                 _jobs[jobId] = entry;
 
                 logger.LogInformation("Job {JobId} submitted by {Actor} (label={Label})", jobId,
@@ -222,9 +224,8 @@ namespace ETL_SQL.Orchestrator.Service
                 _ = RunJobAsync(entry, request, ToExecutionIdentity(caller), scopeFactory, logger, cts.Token)
                     .ContinueWith(t =>
                     {
-                        if (t.IsFaulted)
+                        if (t.IsFaulted && entry.TryFinish(JobRunStatus.Failed))
                         {
-                            entry.Status = JobRunStatus.Failed;
                             entry.ErrorMessage = SecretRedactor.Redact(t.Exception?.InnerException?.Message ?? "Unexpected job execution fault.");
                             logger.LogError("Job {JobId} faulted: {Message}", entry.JobId, entry.ErrorMessage);
                         }
@@ -237,26 +238,24 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
 
-                if (!_jobs.TryGetValue(id, out var entry))
+                // Another tenant's job answers as no job does, administrator or not.
+                if (!_jobs.TryGetValue(id, out var entry) || !SameAdHocTenant(RequestCaller(ctx), entry))
                     return Results.NotFound(new { Error = $"Job '{id}' not found." });
                 if (!CanAccessAdHoc(RequestCaller(ctx), entry))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
                 logger.LogInformation("Cancelling job {JobId} by {Actor}",
                     ETL_SQL.Core.Common.LogSanitizer.Clean(id), RequestActor(ctx));
-                if (entry.Status is JobRunStatus.Queued or JobRunStatus.Running)
-                {
-                    try { entry.Cts.Cancel(); } catch (ObjectDisposedException) { }
-                    entry.Status = JobRunStatus.Cancelled;
-                }
-                return Results.Ok(new { JobId = id, Status = "Cancelled" });
+                // Reports the status the job actually holds: a job that already finished is not
+                // rewritten to Cancelled, and is not reported as cancelled either.
+                return Results.Ok(new { JobId = id, Status = entry.Cancel().ToString() });
             }).WithName("cancelJob");
 
             app.MapGet("/jobs/{id}", (string id, HttpContext ctx, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
 
-                if (!_jobs.TryGetValue(id, out var entry))
+                if (!_jobs.TryGetValue(id, out var entry) || !SameAdHocTenant(RequestCaller(ctx), entry))
                     return Results.NotFound(new { Error = $"Job '{id}' not found." });
                 if (!CanAccessAdHoc(RequestCaller(ctx), entry))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
@@ -285,15 +284,11 @@ namespace ETL_SQL.Orchestrator.Service
                 int limit = 100, int offset = 0) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var jobs = await store.GetJobsPageAsync(limit, offset);
+                var jobs = await store.GetJobsPageAsync(RequestTenant(ctx, cfg), limit, offset);
                 var caller = RequestCaller(ctx);
-                var visible = new List<JobDefinition>();
-                foreach (var job in jobs)
-                {
-                    if (await authorization.CanAsync(caller, OrchestratorObjectKind.Job, job.Id, job.TenantId,
-                            OrchestratorObjectPermission.Read, job.CreatedBy, ctx.RequestAborted))
-                        visible.Add(job);
-                }
+                var visible = await authorization.FilterAsync(caller, OrchestratorObjectKind.Job, jobs,
+                    job => job.Id.ToString(), job => job.TenantId, job => job.CreatedBy,
+                    OrchestratorObjectPermission.Read, ctx.RequestAborted);
                 return Results.Ok(visible);
             }).WithName("listScheduledJobs");
 
@@ -770,11 +765,10 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 var caller = RequestCaller(ctx);
-                var visible = new List<ScheduleDefinition>();
-                foreach (var schedule in await catalog.GetSchedulesAsync(Math.Clamp(limit, 1, 1000), Math.Max(0, offset)))
-                    if (await authorization.CanAsync(caller, OrchestratorObjectKind.Schedule, schedule.Id, schedule.TenantId,
-                            OrchestratorObjectPermission.Read, schedule.CreatedBy, ctx.RequestAborted))
-                        visible.Add(schedule);
+                var schedules = await catalog.GetSchedulesAsync(Math.Clamp(limit, 1, 1000), Math.Max(0, offset));
+                var visible = await authorization.FilterAsync(caller, OrchestratorObjectKind.Schedule, schedules,
+                    schedule => schedule.Id.ToString(), schedule => schedule.TenantId, schedule => schedule.CreatedBy,
+                    OrchestratorObjectPermission.Read, ctx.RequestAborted);
                 return Results.Ok(visible);
             }).WithName("listSchedules");
 
@@ -1004,11 +998,10 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 var caller = RequestCaller(ctx);
-                var visible = new List<NotificationDefinition>();
-                foreach (var notification in await catalog.GetNotificationsAsync(Math.Clamp(limit, 1, 1000), Math.Max(0, offset)))
-                    if (await authorization.CanAsync(caller, OrchestratorObjectKind.Notification, notification.Id, notification.TenantId,
-                            OrchestratorObjectPermission.Read, notification.CreatedBy, ctx.RequestAborted))
-                        visible.Add(notification);
+                var notifications = await catalog.GetNotificationsAsync(Math.Clamp(limit, 1, 1000), Math.Max(0, offset));
+                var visible = await authorization.FilterAsync(caller, OrchestratorObjectKind.Notification, notifications,
+                    notification => notification.Id.ToString(), notification => notification.TenantId, notification => notification.CreatedBy,
+                    OrchestratorObjectPermission.Read, ctx.RequestAborted);
                 return Results.Ok(visible);
             }).WithName("listNotifications");
 
@@ -2300,6 +2293,10 @@ namespace ETL_SQL.Orchestrator.Service
             Groups = caller.EffectiveGroupNames
         };
 
+        /// <summary>An ad-hoc job belongs to the tenant that submitted it; a role does not cross that.</summary>
+        private static bool SameAdHocTenant(OrchestratorCaller caller, JobEntry entry) =>
+            OrchestratorObjectAuthorizationService.TenantsMatch(caller.TenantId, entry.TenantId);
+
         private static bool CanAccessAdHoc(OrchestratorCaller caller, JobEntry entry) =>
             caller.IsInRole("Admin")
             || string.Equals(caller.PrincipalKey, entry.OwnerPrincipal, StringComparison.OrdinalIgnoreCase);
@@ -2865,7 +2862,13 @@ namespace ETL_SQL.Orchestrator.Service
             ExecutionIdentity executionIdentity,
             IServiceScopeFactory scopeFactory, ILogger logger, CancellationToken ct)
         {
-            entry.Status = JobRunStatus.Running;
+            // Cancelled while still queued: there is nothing to run.
+            if (!entry.TryStart())
+            {
+                entry.Cts.Dispose();
+                entry.CompletedAt = DateTimeOffset.UtcNow;
+                return;
+            }
             var sw = System.Diagnostics.Stopwatch.StartNew();
             Activity? activity = null;
             try
@@ -2882,10 +2885,11 @@ namespace ETL_SQL.Orchestrator.Service
                 entry.RowsProcessed = result.RowsProcessed;
                 entry.PeakMemoryBytes = result.PeakMemoryBytes;
                 entry.CpuTimeSeconds = result.CpuTimeSeconds;
-                entry.Status = result.Success ? JobRunStatus.Completed : JobRunStatus.Failed;
-                entry.ErrorMessage = result.ErrorMessage;
+                // A job cancelled while its last statement was finishing stays cancelled.
+                if (entry.TryFinish(result.Success ? JobRunStatus.Completed : JobRunStatus.Failed))
+                    entry.ErrorMessage = result.ErrorMessage;
 
-                if (result.Success && request.Metadata != null &&
+                if (result.Success && entry.Status == JobRunStatus.Completed && request.Metadata != null &&
                     request.Metadata.TryGetValue("IsReport", out var isReport) && isReport == "true")
                 {
                     logger.LogInformation("Job {JobId} is a report; building manifest", entry.JobId);
@@ -2921,13 +2925,13 @@ namespace ETL_SQL.Orchestrator.Service
             }
             catch (OperationCanceledException)
             {
-                entry.Status = JobRunStatus.Cancelled;
+                entry.TryFinish(JobRunStatus.Cancelled);
                 logger.LogInformation("Job {JobId} was cancelled", entry.JobId);
             }
             catch (Exception ex)
             {
-                entry.Status = JobRunStatus.Failed;
-                entry.ErrorMessage = SecretRedactor.Redact(ex.Message);
+                if (entry.TryFinish(JobRunStatus.Failed))
+                    entry.ErrorMessage = SecretRedactor.Redact(ex.Message);
                 logger.LogError("Job {JobId} failed unexpectedly: {Message}. StackTrace: {Stack}",
                     entry.JobId, entry.ErrorMessage, SecretRedactor.Redact(ex.StackTrace));
             }
@@ -3258,13 +3262,56 @@ namespace ETL_SQL.Orchestrator.Service
             string jobId,
             CancellationTokenSource cts,
             string? correlationId,
-            string ownerPrincipal)
+            string ownerPrincipal,
+            string? tenantId)
         {
+            private readonly object gate = new();
+            private JobRunStatus status = JobRunStatus.Queued;
+
             public string JobId { get; } = jobId;
             public CancellationTokenSource Cts { get; } = cts;
             public string? CorrelationId { get; } = correlationId;
             public string OwnerPrincipal { get; } = ownerPrincipal;
-            public JobRunStatus Status { get; set; } = JobRunStatus.Queued;
+            public string? TenantId { get; } = tenantId;
+
+            // The runner and the cancel endpoint both move the status. Every move goes through the
+            // gate and only out of a non-terminal state, so neither can overwrite the other's outcome.
+            public JobRunStatus Status { get { lock (gate) return status; } }
+
+            private static bool IsTerminal(JobRunStatus value) =>
+                value is JobRunStatus.Completed or JobRunStatus.Failed or JobRunStatus.Cancelled;
+
+            public bool TryStart()
+            {
+                lock (gate)
+                {
+                    if (status != JobRunStatus.Queued) return false;
+                    status = JobRunStatus.Running;
+                    return true;
+                }
+            }
+
+            public bool TryFinish(JobRunStatus outcome)
+            {
+                lock (gate)
+                {
+                    if (IsTerminal(status)) return false;
+                    status = outcome;
+                    return true;
+                }
+            }
+
+            /// <summary>Cancels a job that has not finished and returns the status it holds afterwards.</summary>
+            public JobRunStatus Cancel()
+            {
+                lock (gate)
+                {
+                    if (IsTerminal(status)) return status;
+                    status = JobRunStatus.Cancelled;
+                }
+                try { Cts.Cancel(); } catch (ObjectDisposedException) { }
+                return JobRunStatus.Cancelled;
+            }
             public long RowsProcessed { get; set; }
             public long ExecutionTimeMs { get; set; }
             public long PeakMemoryBytes { get; set; }

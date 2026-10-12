@@ -11,6 +11,16 @@ namespace ETL_SQL.Portal.Tests;
 public class OrchestratorFileLoggingTests
 {
     [Fact]
+    public async Task DefaultFixtureDoesNotOpenAnEngineFileSink()
+    {
+        await using var factory = new OrchestratorWebFactory();
+        using var client = factory.CreateClient();
+        factory.Services.GetRequiredService<ETL_SQL.Common.ILogger>().Warning("fixture-engine-marker");
+        factory.Services.GetRequiredService<ILogger<OrchestratorFileLoggingTests>>().LogWarning("fixture-host-marker");
+        Assert.Empty(Directory.GetFiles(Path.Combine(factory.TempDir, "logs"), "*.log"));
+    }
+
+    [Fact]
     public void HostAndEngineShareConfiguredRollingJsonSink()
     {
         using var factory = new LoggingFactory();
