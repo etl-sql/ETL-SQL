@@ -316,6 +316,11 @@ asset-consuming project therefore writes the manifest hash it built against to
 
 All of them say to build without `--no-build`.
 
+`scripts/verify-packaged-browser-assets.mjs <published-folder>` compares a release folder's `wwwroot`
+with the inventory: every Portal, Player, and desktop editor output must be present with the prepared
+bytes, and no `.ts`, `.map`, manifest, or temporary test module may be there. An older but complete
+asset set fails. The native package workflow runs it on the extracted ZIP for each platform.
+
 `scripts/verify-source-only-preparation.mjs` proves the real checkout can rebuild its outputs. It
 checks each output against the inventory, deletes all of them and both manifests, prepares again, and
 requires the same paths and bytes. If preparation fails, it restores what it removed. CI runs it after

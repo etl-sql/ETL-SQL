@@ -129,6 +129,10 @@ jobs:
             if ($exitCode -ne 0 -or ($output -join "`n") -notmatch "(?m)^$expectedVersion\s*$") {
               throw 'Extracted CLI does not launch with the exact candidate version.'
             }
+            # Generated browser files are not in Git; the package must hold the prepared bytes.
+            & node scripts/verify-packaged-browser-assets.mjs (Join-Path $expanded 'bin') *>&1 |
+              Tee-Object -FilePath (Join-Path $outDir 'packaged-assets.log')
+            if ($LASTEXITCODE -ne 0) { throw 'Packaged browser assets do not match the prepared inventory.' }
             $dirty = @(git status --porcelain)
             if ($LASTEXITCODE -ne 0 -or $dirty.Count -ne 0) { throw 'Packaging changed candidate source files.' }
             $summary | Add-Member -NotePropertyName version -NotePropertyValue $version
