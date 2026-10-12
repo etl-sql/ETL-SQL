@@ -1510,16 +1510,24 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
   role. No administrator signs in: an operator provisions the job and grants `EXECUTE` on the Orchestrator
   directly. The author is refused with no job, refused with no grant, then runs, fails, repairs, reopens,
   reruns and stops the same pipeline. Each outcome is checked against the Orchestrator's history.
-- [ ] **ST11 — Report schedule handoff.** A Studio-authored report reaches one authorized scheduled execution
+- [x] **ST11 — Report schedule handoff.** A Studio-authored report reaches one authorized scheduled execution
   and produces one verified artifact under the scheduled identity. (Size: M)
-  Not started. Scoping notes from reading the code on 2026-10-12, not from running it: nothing executes
-  a report on a schedule outside subscriptions. A `CREATE JOB … FOR REPORT` job is stored with an empty
-  script and its target path is documented as a label, so the scheduler runs nothing for it; the only
-  scheduled report path is the subscription trigger job that the Portal poller turns into a delivery.
-  Three things need deciding before this can be built: what the artifact is (a stored snapshot is the
-  obvious candidate), which identity the scheduled execution runs under (the schedule's owner, or a
-  service principal), and who executes it (the Portal reacting to the job run, as subscriptions do, or
-  the Orchestrator). The scheduler's test clock from ST07 is reusable for the due-occurrence proof.
+  Done 2026-10-12, as evidence for a path that already existed plus one fix. An earlier note here said
+  nothing ran a report on a schedule outside subscriptions; that was wrong. An administrator links the
+  report to a refresh job (`POST /api/subscriptions/refresh-jobs`, which names
+  `portal-refresh:<alias>:<reportId>`), an operator schedules an Orchestrator job of that name, and the
+  Portal's poller refreshes the report's snapshot when an occurrence succeeds.
+  `ReportScheduleHandoffTests` runs it end to end on the scheduler's test clock with the Portal and
+  Orchestrator sharing one job-history database: a Publisher is refused the link, nothing refreshes
+  before 02:00, one job run at 02:00, one `Refresh` execution with `UserId` 0, a non-empty `.etlsnap`
+  under the snapshot root, and the manifest title and both rows read back.
+  Fix: the report link now skips a completion it already acted on. A poller starting again looks back a
+  minute and used to run the report a second time.
+  Open, for the owner: the scheduled identity is the existing trusted, non-interactive one (no user), and
+  an identity-sensitive report is skipped by design. Running as the schedule's owner instead would change
+  the row-level-security rules for shared snapshots, so it was not done here. Also open: the two halves
+  are joined by hand on the job name, there is no Studio control for it, and the retired
+  `CREATE REFRESH JOB` connector path still creates a job named `REFRESH:<report>` that no link matches.
 
 ---
 

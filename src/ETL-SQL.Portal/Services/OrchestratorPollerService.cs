@@ -106,6 +106,15 @@ public class OrchestratorPollerService(
 
                 if (reportJobLink is not null)
                 {
+                    // The link remembers the completion it last acted on, as a subscription does.
+                    // A poller that starts again looks back over the last minute, and without this
+                    // it would run the report a second time for a completion already handled.
+                    if (reportJobLink.LastRefreshedAt >= endTime)
+                    {
+                        _lastPollTime = endTime;
+                        continue;
+                    }
+
                     log.LogInformation("OrchestratorPoller: refreshing report {ReportId} after job {JobName}",
                         reportJobLink.ReportId, jobName);
 
