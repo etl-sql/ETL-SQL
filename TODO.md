@@ -1104,6 +1104,12 @@ does not close build, package, runtime, or Git-index acceptance.
   command only watches extension TypeScript. Establish an asset watcher or documented companion process
   that prepares shared and Portal dependencies before the webview reloads. Verify a dependency-only
   edit, a newly added module, and compiler failure/recovery through the actual development webview.
+  Progress (2026-10-11): the extension has `npm run watch:assets`, the shared preparation watcher, to run
+  beside `npm run watch`; the standards document says when. `npm run compile` already prepares first.
+  `test-asset-generation.mjs` covers the watcher for an added, renamed and deleted source, failure then
+  recovery, an edit made during preparation, and lock release on shutdown. The sandbox prepares on start
+  from a tree with no outputs. Both VSIX packages built from source-only archives carry the designer
+  import closure. Still open: none of this has been observed in a real development webview.
 - [x] **Verify sandbox reload refreshes imported dependencies.** Reload disposes the mounted story and
   opens a fresh document, clearing the full module cache and restoring the story, fixture, theme,
   sidebar, search, and category from the URL. A production Portal-view reproduction proved the old

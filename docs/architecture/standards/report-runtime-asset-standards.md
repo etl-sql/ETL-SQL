@@ -243,6 +243,11 @@ to consume JavaScript: named imports, direct exports, and the existing cycle rul
 Reject TypeScript constructs whose emitted helpers or module syntax violate those constraints;
 do not silently strip unsupported output or introduce a second bundle path.
 
+The extension's `npm run watch` recompiles extension TypeScript only. Its webviews load the shared
+runtime and designer from `media/`, which preparation writes, so run `npm run watch:assets` beside it
+when editing shared browser sources. That is the same watcher as below; it prepares after each change
+and keeps the last good files when a compile fails. `npm run compile` prepares once before compiling.
+
 The UI sandbox continues serving the same JavaScript paths. Use
 `node scripts/compile-browser.mjs --watch` for source editing; it runs full preparation, including
 host sync and manifest updates, after source changes. Sandbox startup prepares once.

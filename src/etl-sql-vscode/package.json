@@ -548,6 +548,7 @@
     "compile": "npm run sync-assets && tsc -p ./",
     "sync-assets": "node ../../scripts/sync-assets.js",
     "watch": "tsc -watch -p ./",
+    "watch:assets": "node ../../scripts/compile-browser.mjs --watch",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --max-warnings=0",
     "test": "node ./out/test/runTest.js",
