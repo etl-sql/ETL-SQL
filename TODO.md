@@ -995,7 +995,7 @@ does not close build, package, runtime, or Git-index acceptance.
   symlink, a case-only collision, a malformed inventory, and a version-1 inventory, which lists the
   unverified files instead of deleting them. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
   source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
-- [ ] **Integrate local build and publish entry points.** Establish the supported fresh-checkout workflow
+- [x] **Integrate local build and publish entry points.** Establish the supported fresh-checkout workflow
   for CLI and IDE builds, debug scripts, direct project/solution builds, and publish commands. Ensure assets
   exist before MSBuild discovers static files or embeds resources, including the offline snapshot bundle.
   Cover direct `dotnet test`, `dotnet run`, and `dotnet watch` entry points, IDE launch, and VS Code tasks;
@@ -1012,6 +1012,18 @@ does not close build, package, runtime, or Git-index acceptance.
   Exercise IDE design-time builds separately: `Directory.Build.targets` currently skips verification
   when `DesignTimeBuild=true`. Verify an IDE opened before preparation discovers newly generated
   assets on the subsequent real build and launch; design-time success must not certify runtime assets.
+  Done (2026-10-11), exercised on throwaway clones of the source-only layout.
+  `dotnet watch` on the desktop Player: started unprepared it reports the missing preparation and serves
+  nothing; prepared, it serves the module; an owner edit prepared while it runs is served; a type error
+  fails preparation and the last good module stays; the fix is served; no lock is left behind.
+  With existing `bin/` and `obj/`: adding a Portal module publishes it, renaming it publishes the new name
+  and removes the old one from the publish folder, deleting it removes it, and a runtime-part edit
+  appears in and then leaves the bundle embedded in the Reporting assembly.
+  `dotnet build`, `test`, `run`, and `publish` fail or regenerate as intended (see the no-build task for
+  reused binaries). A design-time build in an unprepared tree succeeds without certifying anything, and
+  the real build that follows fails with the preparation command. No IDE was launched: the check used
+  the `DesignTimeBuild` property an IDE sets. Concurrent and interrupted preparation are covered by
+  `test-asset-generation.mjs`. Evidence: `artifacts/section1/s11-candidate/watch/` and `incremental/`.
 - [ ] **Verify acceptance paths that skip a build.** Audit supported `-NoBuild`/`--no-build` test,
   run, smoke, and publish paths. Checking current preparation alone does not prove that reused assemblies,
   embedded resources, copied static assets, or publish folders belong to the same candidate. Build once,
