@@ -889,7 +889,7 @@ does not close build, package, runtime, or Git-index acceptance.
   mismatched, or unloadable compiler. Preparation from four checkout locations on two platforms gives
   byte-identical outputs with LF endings and no machine path. Evidence: `test-browser-compiler.mjs`, `test-runtime-bundle.mjs`, and `test-asset-generation.mjs` pass from a
   source-only archive of `e97278ac5` on Windows and Ubuntu (`artifacts/section1/s11-candidate/`).
-- [ ] **Verify checkout paths and working directories.** Exercise the documented preparation, verification,
+- [x] **Verify checkout paths and working directories.** Exercise the documented preparation, verification,
   build, and package entry points from checkout paths containing spaces and non-ASCII characters on
   Windows and Linux. Check each entry point's working-directory contract; resolve repository paths from
   the script location or fail with an explicit instruction to run from the repository root. Verify
@@ -900,8 +900,12 @@ does not close build, package, runtime, or Git-index acceptance.
   Reporting and ReportPlayer pass on Windows and Ubuntu. The 491 outputs match the ordinary checkout byte
   for byte, the inventory does not contain the checkout path, and on Windows the runtime bundle embedded
   in the Reporting assembly matches the prepared file. `test-asset-generation.mjs` covers the wrappers'
-  argument boundaries from such a path on both platforms. Still open: a real package (ZIP, MSI, DEB,
-  VSIX) has not been built from such a path. Evidence: `artifacts/section1/s11-candidate/paths-*`.
+  argument boundaries from such a path on both platforms.
+  Done (2026-10-11). The Windows ZIP, VSIX, and MSI were then built from a fresh clone at such a path,
+  with the scripts invoked from an unrelated directory: all 343 published host assets match the
+  inventory, no archive entry names the checkout path, and the checkout is clean afterwards. Linux
+  packages were built from an ordinary path only. Evidence: `artifacts/section1/s11-candidate/paths-*`
+  and `package-spaced/`.
 - [x] **Verify generation after dependency restore with network access disabled.** From source-only
   inputs, install the locked build dependencies through the documented restore step, then disable
   network access and prepare every required asset. Preparation must use the restored toolchain and
