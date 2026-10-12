@@ -226,6 +226,84 @@ public class SubscriptionDeliverySecurityTests
         }
     }
 
+    /// <summary>
+    /// One subscription, two recipients in different groups: the report runs once for each, under
+    /// that recipient's identity, so each export is produced for that person. That identity filters
+    /// the rows is the engine's part, covered by <c>RowLevelSecurityIdentityTests</c>.
+    /// </summary>
+    [Fact]
+    public async Task RlsReport_DeliveredToTwoRecipients_RunsOncePerRecipientUnderEachIdentity()
+    {
+        using var factory = new PortalWebFactory();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
+        var suffix = Guid.NewGuid().ToString("N");
+
+        var owner = new PortalUser { UserName = $"owner-{suffix}", Email = $"owner-{suffix}@test.local", IsActive = true };
+        db.Users.Add(owner);
+        var ownerGroup = new Group { Name = $"owner-grp-{suffix}" };
+        var northGroup = new Group { Name = $"Region:North {suffix}" };
+        var southGroup = new Group { Name = $"Region:South {suffix}" };
+        db.Groups.AddRange(ownerGroup, northGroup, southGroup);
+        await db.SaveChangesAsync();
+
+        var folder = new Folder { Name = $"F {suffix}", Path = $"/f-{suffix}", OwnerId = owner.Id };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+        db.UserGroups.Add(new UserGroup { UserId = owner.Id, GroupId = ownerGroup.Id });
+        db.FolderAcls.Add(new FolderAcl { FolderId = folder.Id, GroupId = ownerGroup.Id, Permission = FolderPermission.Read });
+
+        PortalUser Recipient(string name) => new()
+        {
+            UserName = $"{name}-{suffix}",
+            Email = $"{name}-{suffix}@test.local",
+            NormalizedEmail = $"{name}-{suffix}@test.local".ToUpperInvariant(),
+            IsActive = true
+        };
+        var north = Recipient("north");
+        var south = Recipient("south");
+        db.Users.AddRange(north, south);
+        await db.SaveChangesAsync();
+        db.UserGroups.AddRange(
+            new UserGroup { UserId = north.Id, GroupId = northGroup.Id },
+            new UserGroup { UserId = south.Id, GroupId = southGroup.Id });
+
+        var scriptPath = Path.Combine(config.ScriptRootPath, $"rls-two-{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, $"SELECT 1 AS Value INTO #data WHERE HAS_GROUP('{northGroup.Name}');");
+        var report = new Report { FolderId = folder.Id, Name = $"R {suffix}", ScriptPath = scriptPath, CreatedBy = owner.Id };
+        db.Reports.Add(report);
+        var smtp = SmtpCatalogSeed.Add(db, $"smtp-{suffix}", username: "u");
+        await db.SaveChangesAsync();
+
+        var subscription = new Subscription
+        {
+            ReportId = report.Id,
+            UserId = owner.Id,
+            Format = SubscriptionFormat.Link,
+            SmtpAlias = smtp.Alias,
+            Recipients = $"{north.Email}; {south.Email}",
+            IsActive = true
+        };
+        db.Subscriptions.Add(subscription);
+        await db.SaveChangesAsync();
+
+        var runner = new RecordingSubscriptionRunner();
+        var service = new SubscriptionDeliveryService(db, config, new PortalConnectionCatalogService(db), new FolderPermissionService(db),
+            new AuditService(db, new Microsoft.AspNetCore.Http.HttpContextAccessor()),
+            runner, NullLogger<SubscriptionDeliveryService>.Instance);
+
+        await service.DeliverAsync(subscription.Id);
+
+        Assert.Equal(2, runner.Identities.Count);
+        Assert.All(runner.Identities, identity => Assert.NotNull(identity));
+        var byUser = runner.Identities.ToDictionary(identity => identity!.EffectiveUser, identity => identity!);
+        Assert.Contains(northGroup.Name, byUser[north.UserName!].Groups);
+        Assert.DoesNotContain(southGroup.Name, byUser[north.UserName!].Groups);
+        Assert.Contains(southGroup.Name, byUser[south.UserName!].Groups);
+        Assert.DoesNotContain(northGroup.Name, byUser[south.UserName!].Groups);
+    }
+
     [Fact]
     public async Task Reconcile_RewritesLegacySecretScriptsAndRemovesOrphans()
     {
@@ -314,7 +392,10 @@ public class SubscriptionDeliverySecurityTests
     {
         public int CallCount { get; private set; }
         public string? Script { get; private set; }
-        public ETL_SQL.Core.Governance.ExecutionIdentity? LastIdentity { get; private set; }
+        public ETL_SQL.Core.Governance.ExecutionIdentity? LastIdentity => Identities.LastOrDefault();
+
+        /// <summary>The identity of every run, in order: one per recipient for a row-level-secured report.</summary>
+        public List<ETL_SQL.Core.Governance.ExecutionIdentity?> Identities { get; } = [];
 
         public Task<(bool Success, string? Error)> RunAsync(
             string scriptText,
@@ -324,7 +405,7 @@ public class SubscriptionDeliverySecurityTests
         {
             CallCount++;
             Script = scriptText;
-            LastIdentity = executionIdentity;
+            Identities.Add(executionIdentity);
             return Task.FromResult<(bool, string?)>((true, null));
         }
     }
