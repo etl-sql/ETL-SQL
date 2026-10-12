@@ -598,7 +598,19 @@ process.exit(process.argv[2] === 'dotnet' ? Number(process.env.ETLSQL_ENTRYPOINT
             assert.notEqual(result.status, 0, 'Reusing binaries from another preparation must fail.');
             assert.match(result.stdout + result.stderr, expectedFailure);
         } else assert.equal(result.status, 0, result.stdout + result.stderr);
+        // A test project is guarded through the hosts it references, when the test run skips the build.
+        const tests = spawnSync('dotnet', ['msbuild', path.join(root, 'Fixture.Tests.proj'), '-nologo',
+            '-target:VerifyBuiltBrowserAssetsForTests', '-p:Configuration=Debug', '-p:VSTestNoBuild=true', '-verbosity:minimal'], { encoding: 'utf8' });
+        if (expectedFailure) {
+            assert.notEqual(tests.status, 0, 'A no-build test run must not use hosts from another preparation.');
+            assert.match(tests.stdout + tests.stderr, /would test a host/);
+        } else assert.equal(tests.status, 0, tests.stdout + tests.stderr);
+        const building = spawnSync('dotnet', ['msbuild', path.join(root, 'Fixture.Tests.proj'), '-nologo',
+            '-target:VerifyBuiltBrowserAssetsForTests', '-p:Configuration=Debug', '-verbosity:minimal'], { encoding: 'utf8' });
+        assert.equal(building.status, 0, 'A test run that builds first is checked by the build itself: ' + building.stdout + building.stderr);
     };
+    write(path.join(root, 'Fixture.Tests.proj'), '<Project><PropertyGroup><IsTestProject>true</IsTestProject></PropertyGroup>' +
+        '<ItemGroup><ProjectReference Include="ETL-SQL.ReportRuntime.proj" /></ItemGroup><Import Project="Directory.Build.targets" /></Project>');
     for (const [index, entry] of testEntries.entries()) {
         const noBuild = process.platform === 'win32' ? { ...entry, parameters: { ...entry.parameters, NoBuild: true } } :
             { ...entry, argv: [...entry.argv, noBuildArgument] };

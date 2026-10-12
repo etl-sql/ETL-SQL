@@ -90,6 +90,34 @@
            Text="$(MSBuildProjectName) was built from an older browser asset preparation. Build without --no-build." />
   </Target>
 
+  <!-- A test project is not an asset consumer itself, but it runs the hosts it references. With
+       dotnet test no-build those hosts are whatever was built last, so each referenced host's build
+       record is compared with the preparation on disk. dotnet test builds inside the VSTest target,
+       after this hook, so the check is limited to runs that skip the build (VSTestNoBuild). -->
+  <Target Name="VerifyBuiltBrowserAssetsForTests" BeforeTargets="VSTest"
+          Condition="'$(IsTestProject)' == 'true' And '$(VSTestNoBuild)' == 'true' And '$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_BrowserHostReference Include="@(ProjectReference->'%(Filename)')"
+                             Condition="'%(Filename)' == 'ETL-SQL.Reporting' Or '%(Filename)' == 'ETL-SQL.ReportRuntime' Or '%(Filename)' == 'ETL-SQL.ReportPlayer' Or '%(Filename)' == 'ETL-SQL.WorkstationEditor' Or '%(Filename)' == 'ETL-SQL.Portal'" />
+      <_BrowserHostStamp Include="@(_BrowserHostReference->'$(BrowserAssetRoot)artifacts/browser-assets-built/%(Identity).$(Configuration).any.sha256')" />
+    </ItemGroup>
+    <Error Condition="'@(_BrowserHostStamp)' != '' And !Exists('$(BrowserAssetManifest)')"
+           Text="Browser assets are not prepared. Run node scripts/sync-assets.js, then build without --no-build." />
+    <Error Condition="'@(_BrowserHostStamp)' != '' And !Exists('%(_BrowserHostStamp.Identity)')"
+           Text="$(MSBuildProjectName) would test a host with no build recorded for the prepared browser assets (%(_BrowserHostStamp.Filename)). Build without --no-build." />
+    <GetFileHash Files="$(BrowserAssetManifest)" Algorithm="SHA256" Condition="'@(_BrowserHostStamp)' != ''">
+      <Output TaskParameter="Items" ItemName="_BrowserTestManifest" />
+    </GetFileHash>
+    <ReadLinesFromFile File="%(_BrowserHostStamp.Identity)" Condition="'@(_BrowserHostStamp)' != ''">
+      <Output TaskParameter="Lines" ItemName="_BrowserHostBuiltHash" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <_BrowserTestManifestHash>@(_BrowserTestManifest->'%(FileHash)')</_BrowserTestManifestHash>
+    </PropertyGroup>
+    <Error Condition="'@(_BrowserHostBuiltHash)' != '' And '%(_BrowserHostBuiltHash.Identity)' != '$(_BrowserTestManifestHash)'"
+           Text="$(MSBuildProjectName) would test a host built from an older browser asset preparation. Build without --no-build." />
+  </Target>
+
   <!-- Records which preparation each build consumed. Entry points that skip the build compare this
        with the current manifest, so assemblies and copied assets from an older preparation cannot
        be tested or accepted as the candidate. See scripts/check-built-browser-assets.mjs. -->

@@ -307,11 +307,14 @@ asset-consuming project therefore writes the manifest hash it built against to
   `dotnet run` or `dotnet watch` launch, and fails if the record is missing or older. It does not
   depend on `NoBuild`, which `dotnet run --no-build` never sets; after a real build the record is
   current and the check passes.
-- `scripts/check-built-browser-assets.mjs` runs in the `-NoBuild` branch of the test and smoke lanes,
-  because a test project is not itself an asset consumer.
+- `VerifyBuiltBrowserAssetsForTests` covers `dotnet test --no-build`. A test project is not an asset
+  consumer, but it runs the hosts it references, so the target checks the record of each referenced
+  host. It runs only when the test run skips the build, because `dotnet test` otherwise builds inside
+  its own target, after any hook.
+- `scripts/check-built-browser-assets.mjs` runs in the `-NoBuild` branch of the test and smoke lanes
+  and reports every stale host at once.
 
-Both say to build without `--no-build`. A direct `dotnet test --no-build` is not guarded; use the lane
-scripts for acceptance runs.
+All of them say to build without `--no-build`.
 
 `scripts/verify-source-only-preparation.mjs` proves the real checkout can rebuild its outputs. It
 checks each output against the inventory, deletes all of them and both manifests, prepares again, and

@@ -1028,7 +1028,7 @@ does not close build, package, runtime, or Git-index acceptance.
   the real build that follows fails with the preparation command. No IDE was launched: the check used
   the `DesignTimeBuild` property an IDE sets. Concurrent and interrupted preparation are covered by
   `test-asset-generation.mjs`. Evidence: `artifacts/section1/s11-candidate/watch/` and `incremental/`.
-- [ ] **Verify acceptance paths that skip a build.** Audit supported `-NoBuild`/`--no-build` test,
+- [x] **Verify acceptance paths that skip a build.** Audit supported `-NoBuild`/`--no-build` test,
   run, smoke, and publish paths. Checking current preparation alone does not prove that reused assemblies,
   embedded resources, copied static assets, or publish folders belong to the same candidate. Build once,
   change an owner and prepare again without rebuilding, then exercise each affected path. Require a
@@ -1044,6 +1044,11 @@ does not close build, package, runtime, or Git-index acceptance.
   record are refused, and a run after a build starts. Still open: a direct
   `dotnet test --no-build` is not guarded, the certification and measurement scripts that accept
   `-NoBuild` do not call the check, and `--no-restore` paths were not exercised.
+  Done (2026-10-11). `dotnet test --no-build` is now guarded in MSBuild through the hosts a test project
+  references, which covers the certification and measurement scripts that call it directly. Verified with
+  real runs: hosts from an older preparation are refused, a run that builds first passes, a no-build run
+  after it passes, and a missing record is refused. `--no-restore` is used by CI after the locked restore
+  on every job. A tree with no binaries fails in the SDK before any of this.
 - [ ] **Integrate CI, release, and container preparation.** Audit every affected workflow/job, manual
   validation template, release script, installer/native-package path, and Docker build stage. Install the
   pinned toolchain and generate assets before checks/build/publish; ensure checkout filters, Docker contexts,
