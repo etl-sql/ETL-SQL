@@ -48,6 +48,7 @@
 | [Studio Authoring Completeness](studio-authoring-completeness.md) | Decision that Studio combines the ReportBuilder and WorkstationEditor foundations into one authoring experience, with the status of the completeness inventories. |
 | [Studio Report-Authoring Completeness Inventory](studio-report-authoring-inventory.md) | Report workflows mapped to Studio in both hosts, with the acceptance fixture each still needs. |
 | [Studio Script and ETL Authoring Completeness Inventory](studio-script-etl-authoring-inventory.md) | Script and ETL workflows mapped to Studio in both hosts, with the acceptance fixture each still needs. |
+| [Studio Private Unpublished Drafts](studio-private-drafts.md) | Decision on where a learner's unpublished work is kept, who may read it, how long it lasts and how it is published. |
 | [Studio Restricted Practice Execution](studio-practice-execution.md) | Decision on how a learner may run the practice failure and repair exercise, and what acceptance requires. |
 | [Studio Beginner Report Journey Evidence](studio-beginner-report-evidence.md) | Recorded run of the beginner report journey in the Portal and desktop hosts. |
 | [Studio Desktop Practice Evidence](studio-desktop-practice-evidence.md) | Recorded run of the desktop failure and repair practice exercise. |

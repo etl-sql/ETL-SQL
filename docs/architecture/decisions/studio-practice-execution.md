@@ -17,8 +17,8 @@ again from the beginning; separate Run actions do not share staged tables.
 Portal follows the accepted [pipeline decision](portal-etl-documents.md): Read/ScriptRead to open,
 Manage/ReportPublish to create, Author/ScriptSave plus lease to save, and document Execute plus the
 Orchestrator run grant to execute. The exercise folder/job is provisioned by an operator. Learners
-receive no deployment administration, shared secrets or unrelated job grants. Private unpublished
-draft execution remains outside this decision and depends on ST12.
+receive no deployment administration, shared secrets or unrelated job grants. A private unpublished
+draft is not executed: the [ST12 decision](studio-private-drafts.md) allows it preview only.
 
 ST21 therefore depends on ST04's saved-revision submission. Portal's interactive designer endpoint
 continues to accept only a read-only query. A missing Orchestrator, denied grant, unavailable sandbox,

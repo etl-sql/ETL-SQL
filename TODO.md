@@ -630,9 +630,14 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
 
 **Horizon:** Next
 
-- [ ] **ST12 — Decide unpublished draft identity and policy.** Define host ownership, tenant/principal isolation,
+- [x] **ST12 — Decide unpublished draft identity and policy.** Define host ownership, tenant/principal isolation,
   retention, allowed practice access, and revision handling before a catalog report ID exists. No browser script
   storage. (Size: D)
+  Decided 2026-10-12 with the owner: [Studio private unpublished drafts](docs/architecture/decisions/studio-private-drafts.md).
+  A draft lives in its own table with its own ID, is readable only by its owner inside their tenant,
+  expires 90 days after its last save, keeps its last 10 saves, allows preview only, and is published
+  through the existing catalog create action. Retention, revisions kept, drafts per user and the
+  on/off switch are `Portal:Studio` settings.
 - [ ] **ST13 — Portal private draft save/reopen.** A learner without folder Manage or ReportPublish creates, edits,
   saves, and reopens one permitted host draft; another principal or tenant cannot read it. (Depends on: ST12; Size: M)
 - [ ] **ST14 — Portal private draft crash recovery.** Recover that unpublished draft after browser restart and
