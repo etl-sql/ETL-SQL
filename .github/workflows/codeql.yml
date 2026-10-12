@@ -38,7 +38,7 @@ jobs:
       run: node scripts/sync-assets.js
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v4.37.9
+      uses: github/codeql-action/init@v4.38.2
       with:
         languages: ${{ matrix.language }}
         config: |
@@ -60,7 +60,7 @@ jobs:
             - '**/src/ETL-SQL.ReportRuntime/Resources/Shared/**'
             - '**/src/ETL-SQL.Portal/wwwroot/designer/**'
             # WiX/Windows Installer custom-action scripts are WSH JScript (e.g. Session.Property(x)=v,
-            # ActiveXObject), not standard ECMAScript — the CodeQL JS extractor cannot parse them.
+            # ActiveXObject), not standard ECMAScript â€” the CodeQL JS extractor cannot parse them.
             - '**/src/ETL-SQL.Installer/*.js'
           query-filters:
             - exclude:
@@ -91,7 +91,7 @@ jobs:
     # JS/TS does not need compilation, so we run a dummy step for non-csharp matrix options
     - name: Autobuild non-compiled languages
       if: matrix.language != 'csharp'
-      uses: github/codeql-action/autobuild@v4.37.9
+      uses: github/codeql-action/autobuild@v4.38.2
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v4.37.9
+      uses: github/codeql-action/analyze@v4.38.2
