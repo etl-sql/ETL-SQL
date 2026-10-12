@@ -1304,6 +1304,15 @@ does not close build, package, runtime, or Git-index acceptance.
   Audit signing, installer assembly, and upload steps for implicit rebuilds or asset regeneration. Compare
   the assets in the final distributed artifact with the accepted candidate; regenerate checksums and
   attestations after any step that changes the artifact bytes.
+  Progress (2026-10-11): the SBOM and third-party inventory generators read lockfiles, project files, and
+  the canonical vendor bundles, all tracked inputs; neither reads a generated file, and the SBOM built
+  from a source-only clone is the same size as the one built before the cutover. In `release.yml` the
+  provenance job downloads the uploaded assets, attests them, and computes `sha256sums.txt` over that
+  final set, after every package including the MSI, DEB, and DMG exists. The native package workflow
+  checks each package against its checksum on all four platforms and now compares the ZIP's browser
+  files with the inventory. `build-msi.ps1` prepares and publishes again; its output was compared with
+  the inventory and matched. Still open: `release.yml` has not run since the cutover, so attestation
+  over real release assets is unverified, and the DMG's contents have not been inspected.
 - [x] **Run behavior checks against the final cutover candidate.** Run the affected Portal and browser
   lanes, UI sandbox stories, report runtime/offline checks, VS Code extension and React UI checks, and
   discovered consumer checks against the same source state used for package acceptance. Include strict
