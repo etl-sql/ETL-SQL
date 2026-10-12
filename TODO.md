@@ -1041,9 +1041,7 @@ does not close build, package, runtime, or Git-index acceptance.
   owner edit, and re-preparation showed the rejection end to end. The first version of the run guard
   did nothing, because `dotnet run --no-build` does not set `NoBuild`; a real `dotnet run` exposed it, and
   the guard now runs on every launch. Verified with the real Player: an older record and a missing
-  record are refused, and a run after a build starts. Still open: a direct
-  `dotnet test --no-build` is not guarded, the certification and measurement scripts that accept
-  `-NoBuild` do not call the check, and `--no-restore` paths were not exercised.
+  record are refused, and a run after a build starts.
   Done (2026-10-11). `dotnet test --no-build` is now guarded in MSBuild through the hosts a test project
   references, which covers the certification and measurement scripts that call it directly. Verified with
   real runs: hosts from an older preparation are refused, a run that builds first passes, a no-build run
