@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import { readViewerReport, readViewerSnapshot, readAcceptedRun, readRunState, renderReportHistory, renderSnapshotView,
-  renderFirstRunView, renderRunFailureView } from '../src/ETL-SQL.Portal/wwwroot/js/report-viewer-view.js';
+  renderFirstRunView, renderLiveView, renderRunFailureView } from '../src/ETL-SQL.Portal/wwwroot/js/report-viewer-view.js';
 import { timeAgo, escapeHtml } from '../src/ETL-SQL.Portal/wwwroot/js/report-format.js';
 
 const report = { id: 7, name: 'Regional sales', description: null, hasSnapshot: true, folderId: 1 };
-assert.deepEqual(readViewerReport(report, 7), { id: 7, name: 'Regional sales', description: null, hasSnapshot: true });
+assert.deepEqual(readViewerReport(report, 7), { id: 7, name: 'Regional sales', description: null, hasSnapshot: true, perViewer: false });
+// A report whose rows depend on the reader says so; anything but true is an ordinary report.
+assert.equal(readViewerReport({ ...report, hasSnapshot: false, perViewer: true }, 7).perViewer, true);
+assert.equal(readViewerReport({ ...report, perViewer: 'true' }, 7).perViewer, false);
 // A response for another report is not this report.
 for (const invalid of [null, [], { ...report, id: 8 }, { ...report, name: '' }, { ...report, hasSnapshot: 'yes' }, { ...report, description: 4 }])
   assert.throws(() => readViewerReport(invalid, 7), /report response is unavailable or incomplete/);
@@ -59,4 +62,12 @@ assert.equal(timeAgo(null, now), 'Never run');
 assert.doesNotMatch(timeAgo('2026-10-11T12:00:00Z', now), /ago/);
 assert.equal(escapeHtml(`<a href="x" onclick='y'>&`), '&lt;a href=&quot;x&quot; onclick=&#39;y&#39;&gt;&amp;');
 
+
+// A per-viewer report is shown live: no first-run gate, no snapshot age, and the reader's own actions.
+const live = renderLiveView({ id: 7, name: 'Regional', description: null, hasSnapshot: false, perViewer: true }, false);
+assert.match(live, /Live · your rows/);
+for (const id of ['refreshBtn', 'exportBtn', 'subBtn', 'structureBtn', 'reportFrame']) assert.match(live, new RegExp(`id="${id}"`));
+assert.doesNotMatch(live, /id="designBtn"|id="execBtn"|Built |Stale/);
+assert.match(renderLiveView({ ...report, perViewer: true }, true), /id="designBtn"/);
+assert.doesNotMatch(renderLiveView({ ...hostile, perViewer: true }, false), /<img|<script/);
 console.log('report viewer checks passed');

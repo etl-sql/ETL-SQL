@@ -6,7 +6,7 @@ import { escapeHtml as esc, formatBuiltAt } from './report-format.js';
 import { readSubscriptionParameters } from './admin-subscriptions-responses.js';
 import { readParameterDraft, renderParameterInputs } from './subscription-parameter-fields.js';
 import type { ParameterInput } from './subscription-parameter-fields.js';
-import { readAcceptedRun, readRunState, readViewerReport, readViewerSnapshot, renderFirstRunView, renderReportHistory,
+import { readAcceptedRun, readRunState, readViewerReport, readViewerSnapshot, renderFirstRunView, renderLiveView, renderReportHistory,
     renderRunFailureView, renderRunningView, renderSnapshotView } from './report-viewer-view.js';
 import type { ViewerReport } from './report-viewer-view.js';
 
@@ -111,6 +111,30 @@ export function createReportViewer(options: ReportViewerOptions) {
         box('reportFrame').replaceChildren(frame);
     }
 
+    /** A report whose rows depend on the reader has no snapshot: the frame asks for it and it runs for them. */
+    function showLive(current: ViewerReport) {
+        main.innerHTML = renderLiveView(current, options.canDesign());
+        const frame = root.createElement('iframe');
+        frame.title = 'Report viewer';
+        frame.style.cssText = 'width:100%;height:100%;border:none;';
+        frame.srcdoc = buildReportFrameDocument(root, current.id, false, activePage);
+        box('reportFrame').replaceChildren(frame);
+    }
+
+    /** Discards this reader's own session, then shows the report again. Nothing is built or stored. */
+    async function refreshLive(current: ViewerReport) {
+        const opened = enter();
+        report = current; runInputs = null;
+        main.innerHTML = '<div class="loading-state"><span class="spinner"></span><span>Loading report…</span></div>';
+        try {
+            const response = await apiFetch(`/api/reports/${current.id}/live/reset`, { method: 'POST', signal: opened.signal });
+            if (response.status !== 204) throw await responseError(response, 'The report could not be refreshed.');
+            if (live(opened)) showLive(current);
+        } catch (failure) {
+            if (live(opened)) main.innerHTML = `<div class="empty-state" role="alert">Failed to refresh report: ${esc(asError(failure).message)}</div>`;
+        }
+    }
+
     /** A report with no snapshot offers its first run; its parameters must be known before it can start. */
     async function showFirstRun(current: ViewerReport, opened: AbortController) {
         let definitions: ReportParameterDto[] = [], preflight: string | null = null;
@@ -136,6 +160,7 @@ export function createReportViewer(options: ReportViewerOptions) {
             const current = readViewerReport(await reportsApi.get(id), id);
             if (!live(opened)) return;
             report = current;
+            if (current.perViewer) { showLive(current); return; }
             const response = await apiFetch(`/api/reports/${id}/snapshot?includeManifest=false`, { signal: opened.signal, cache: 'no-store' });
             if (!live(opened)) return;
             if (response.status === 404) { await showFirstRun(current, opened); return; }
@@ -279,7 +304,8 @@ export function createReportViewer(options: ReportViewerOptions) {
         const name = button.dataset.viewerAction;
         if (name === 'back') { options.back(); return; }
         if (!current) return;
-        if (name === 'refresh' || name === 'retryRun') void run(current, {});
+        if (name === 'refresh' && current.perViewer) void refreshLive(current);
+        else if (name === 'refresh' || name === 'retryRun') void run(current, {});
         else if (name === 'run') {
             if (!runInputs) return;
             const draft = readParameterDraft(runInputs), error = box('runParameterError');

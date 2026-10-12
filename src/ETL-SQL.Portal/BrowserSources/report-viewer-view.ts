@@ -2,7 +2,10 @@ import { isObject } from './http-error.js';
 import { escapeHtml as esc, formatBuiltAt, timeAgo } from './report-format.js';
 
 /** Response readers and markup for the report viewer. Pure, so they can be checked without a browser. */
-export type ViewerReport = Pick<ReportDto, 'id' | 'name' | 'description' | 'hasSnapshot'>;
+export type ViewerReport = Pick<ReportDto, 'id' | 'name' | 'description' | 'hasSnapshot'> & {
+    /** The report's rows depend on who is looking: it is shown live and never has a snapshot. */
+    perViewer: boolean;
+};
 export interface ViewerSnapshot { builtAt: string; isStale: boolean }
 export type RunState = { status: 'Running' } | { status: 'Completed' } | { status: 'Failed' | 'Cancelled'; reason: string };
 
@@ -10,7 +13,7 @@ export function readViewerReport(value: unknown, id: number): ViewerReport {
     if (!isObject(value) || value.id !== id || typeof value.name !== 'string' || !value.name
         || (value.description != null && typeof value.description !== 'string') || typeof value.hasSnapshot !== 'boolean')
         throw new TypeError('The report response is unavailable or incomplete.');
-    return { id, name: value.name, description: value.description, hasSnapshot: value.hasSnapshot };
+    return { id, name: value.name, description: value.description, hasSnapshot: value.hasSnapshot, perViewer: value.perViewer === true };
 }
 
 export function readViewerSnapshot(value: unknown): ViewerSnapshot {
@@ -49,6 +52,15 @@ function frame(kicker: string, report: Pick<ViewerReport, 'name'>, summary: stri
 const action = (name: string, label: string, primary = false) =>
     `<button class="btn ${primary ? 'btn-primary' : 'btn-outline'} btn-sm" type="button" id="${name}Btn" data-viewer-action="${name}">${label}</button>`;
 const design = (canDesign: boolean) => canDesign ? action('design', 'Design') : '';
+
+/** A report whose rows depend on the reader: shown live, with nothing built or stored to report on. */
+export function renderLiveView(report: ViewerReport, canDesign: boolean): string {
+    return frame('Report', report, report.description || 'No description provided.',
+        '<div class="viewer-meta"><span class="viewer-meta-pill viewer-meta-ready" title="This report shows each reader their own rows. Nothing is stored.">Live · your rows</span></div>',
+        action('refresh', 'Refresh', true) + design(canDesign) + action('structure', 'Structure') + action('dependencies', 'Dependencies')
+            + action('history', 'History') + action('export', 'Export') + action('sub', 'Subscribe'),
+        '<div class="viewer-body viewer-frame-shell" id="reportFrame"><div class="loading-state"><span class="spinner"></span><span>Rendering report…</span></div></div>');
+}
 
 export function renderSnapshotView(report: ViewerReport, snapshot: ViewerSnapshot, canDesign: boolean): string {
     const built = formatBuiltAt(snapshot.builtAt), age = timeAgo(snapshot.builtAt);
