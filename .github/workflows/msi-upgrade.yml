@@ -73,7 +73,13 @@ jobs:
             '^scripts/Release\.Helpers\.ps1$',
             '^scripts/build-msi\.ps1$',
             '^\.github/workflows/msi-upgrade\.yml$',
-            '^Directory\.Build\.props$'
+            '^Directory\.Build\.props$',
+            # The installer ships the prepared browser files, which are no longer in Git: a change to
+            # an owner or to preparation changes the package without touching any installer path.
+            '^src/ETL-SQL\.ReportRuntime/Resources/',
+            '^src/ETL-SQL\.Portal/(BrowserSources|wwwroot)/',
+            '^scripts/(sync-assets\.js|compile-browser\.mjs|lib/)',
+            '^types/'
           )
           $relevant = @($changedPaths | Where-Object {
             $path = $_

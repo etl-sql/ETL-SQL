@@ -1065,8 +1065,17 @@ does not close build, package, runtime, or Git-index acceptance.
   and a manifest whose paths or hashes describe another job's working tree.
   Progress (2026-10-11): the Portal, Orchestrator service, and sandbox-worker images build from an archive
   of `e97278ac5` with all 491 outputs deleted. Portal serves its 213 outputs with matching bytes, Node is
-  absent from all three images, and their embedded runtime resources match. The lean-worker Dockerfile,
-  workflow cache and artifact handoffs, and the macOS jobs are not covered.
+  absent from all three images, and their embedded runtime resources match.
+  Further progress (2026-10-11), after the cutover. Every job in every workflow that builds, tests, or
+  packages either prepares first or calls a script that does, and each restores the compiler; a scripted
+  audit of the five workflows found no exception once the MSI upgrade job gained its restore. CI passed
+  on Windows, Linux, and macOS from checkouts with no generated file, and the native package workflow
+  built on all four platforms. No workflow caches prepared assets or manifests, and none hands them from
+  one job to another, so there is no stale-cache or transfer case to test. The lean-worker Dockerfile
+  copied only part of what preparation needs and has been aligned with the sandbox worker's; it builds
+  from a source-only context with no Node in the image. The MSI upgrade workflow now also runs when
+  browser owners or preparation change. Still open: the release workflow itself (`release.yml`,
+  `Master-Release.ps1`) has not run since the cutover, so its macOS DMG and upload steps are unverified.
 - [x] **Make package scripts reproducible and fail fast.** Audit PowerShell and shell versions of
   `build-vsix`, `publish-vsix`, and affected release scripts. Use locked dependency installs for the
   compiler, extension, and React UI, and propagate failures from preparation, builds, publishes, and
