@@ -55,6 +55,12 @@ public class RowLevelSecurityPortalTests : IClassFixture<PortalWebFactory>
 
         Assert.Equal(0, sensitiveSnapshots);
         Assert.True(plainSnapshots >= 1, "A non-identity report should persist a shared snapshot.");
+
+        // Nor is the run's result left in snapshot storage with no row to prune it by: that file
+        // would hold one viewer's filtered rows. The plain report's file shows where it would be.
+        var snapshotDirectory = Path.Combine(_factory.TempDir, "snapshots");
+        Assert.NotEmpty(Directory.GetFiles(snapshotDirectory, $"report_{plainId}_*", SearchOption.AllDirectories));
+        Assert.Empty(Directory.GetFiles(snapshotDirectory, $"report_{sensitiveId}_*", SearchOption.AllDirectories));
     }
 
     [Fact]

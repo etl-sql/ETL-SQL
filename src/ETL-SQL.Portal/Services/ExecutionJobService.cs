@@ -518,6 +518,17 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             if (PortalPathGuard.ToSnapshotKey(_config, manifestKey) != manifestKey)
                 throw new UnauthorizedAccessException("Snapshot path is outside the configured snapshot directory.");
 
+            // Row-level security: an identity-sensitive report must never persist a shared snapshot,
+            // because the view path serves the latest snapshot to any viewer regardless of who built
+            // it — which would leak one user's row-filtered result to another. Its result is not
+            // written to snapshot storage either: with no snapshot row nothing would prune the file,
+            // and it would hold one viewer's rows. A reader sees such a report live, from their own
+            // session. Impersonated runs are per-request previews under a substituted identity and
+            // are treated the same, whether or not the script references identity.
+            // See docs/architecture/decisions/portal-rls-report-viewing.md.
+            var identitySensitive = job.ImpersonatedUserId is not null
+                || await ScriptReferencesIdentityAsync(scriptPath, cts.Token);
+
             // Hash the script file at execution time for integrity tracking
             string? runTimeHash = null;
             bool? hashMatched = null;
@@ -556,7 +567,13 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                             var manifest = System.Text.Json.JsonSerializer.Deserialize<ReportManifest>(
                                 status.ReportManifestJson)
                                 ?? throw new InvalidOperationException("Remote orchestrator returned an invalid report manifest.");
-                            await SaveSnapshotManifestAsync(manifest, manifestKey, job.KeyScope, cts.Token);
+                            if (!identitySensitive)
+                                await SaveSnapshotManifestAsync(manifest, manifestKey, job.KeyScope, cts.Token);
+                        }
+                        else if (identitySensitive)
+                        {
+                            // The Orchestrator may have written the result to the shared volume itself.
+                            await _snapshotPackages.DeleteAsync(manifestKey, cts.Token, job.KeyScope);
                         }
                         else if (!await _snapshotPackages.ExistsAsync(
                             manifestKey, cts.Token, job.KeyScope))
@@ -606,7 +623,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                 job.CpuTimeSeconds = Math.Max(0, process.TotalProcessorTime.TotalSeconds - startCpuSeconds);
                 await PersistReportLineageAsync(job, scriptPath, svc.CurrentLineageTracker);
 
-                await SaveSnapshotManifestAsync(manifest, manifestKey, job.KeyScope, cts.Token);
+                if (!identitySensitive)
+                    await SaveSnapshotManifestAsync(manifest, manifestKey, job.KeyScope, cts.Token);
             }
 
             // Persist to DB
@@ -624,14 +642,6 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                         job.ReportId, report.PublishedScriptHash, runTimeHash);
             }
 
-            // Row-level security: an identity-sensitive report must never persist a shared snapshot,
-            // because the view path serves the latest snapshot to any viewer regardless of who built
-            // it — which would leak one user's row-filtered result to another. The executor still gets
-            // their own result via the per-job manifest artifact. See Docs/Design/RowLevelSecurity.md.
-            // Impersonated runs are always per-request previews under a substituted identity and must
-            // never become a shared snapshot, regardless of whether the script references identity.
-            var identitySensitive = job.ImpersonatedUserId is not null
-                || await ScriptReferencesIdentityAsync(scriptPath, cts.Token);
             if (identitySensitive)
             {
                 _log.LogInformation(
@@ -703,7 +713,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             await _sessions.InvalidateReportAsync(job.ReportId, job.KeyScope);
 
             job.Status = JobStatus.Completed;
-            job.ManifestPath = manifestPath;
+            job.ManifestPath = identitySensitive ? null : manifestPath;
             job.CompletedAt = DateTime.UtcNow;
             await PersistJobAsync(job);
             PortalObservability.CompleteExecutionJobActivity(activity, job, workloadKind: workloadKind.ToString(), scriptHash: runTimeHash);
