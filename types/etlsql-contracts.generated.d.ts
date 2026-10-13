@@ -2072,6 +2072,9 @@ interface RunDesignerRequest {
     parameters?: Record<string, string> | null;
     previewAs?: PreviewAsRequest | null;
     clientRunId?: string | null;
+    helperPreview: boolean;
+    previewContext?: string | null;
+    previewContextLine?: number | null;
 }
 
 interface RunDesignerResponse {
@@ -2384,6 +2387,11 @@ interface StewardshipSummaryDto {
     stewardQueueAssets: number;
 }
 
+interface StudioCatalogPageDto {
+    items: StudioReportDto[];
+    nextAfterId?: number | null;
+}
+
 interface StudioFolderDto {
     id: number;
     path: string;
@@ -2433,6 +2441,7 @@ interface StudioSessionDto {
     sourceControlEnabled: boolean;
     draftRecovery: boolean;
     privateDrafts: boolean;
+    maxScriptCharacters: number;
 }
 
 interface SubmitPipelineRunRequest {

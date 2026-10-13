@@ -496,13 +496,18 @@ entry points is a separate future decision, not the measure of success.
 
 #### Author, reader and beginner practice journeys
 
-ST16/ST17 automated report sequences passed on 2026-10-11; both remain open for learner explanation.
+ST16/ST17 automated report sequences passed on 2026-10-11; the learner's own explanation is ST16b.
 See [beginner report evidence](docs/architecture/decisions/studio-beginner-report-evidence.md).
+
+ST16b is deferred, not scheduled: it waits on a person, not on engineering. Run it when someone new to
+Studio is available — familiarity with SQL or another BI tool is fine. Until then no release claims a
+learner-validated experience.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
 | ST16 | **Portal beginner report journey.** An ordinary scoped author uses sample data, makes a visual change, explains its generated syntax, hand-edits, reopens the helper, saves/reopens and runs one report with real parser/patcher responses. | — | M |
 | ST17 | **Desktop beginner report journey.** Run the same bounded sequence in the self-installed WorkstationEditor host, with external editors unavailable. | — | M |
+| ST16b | **Observed learner walkthrough — deferred until a learner is available.** One learner new to Studio does the report sequence and the ETL exercise in each host while an observer records, per step, what they did unaided and how they explained the generated SQL and the repair. Needs a person; automation cannot close it. [Script and record sheet](docs/architecture/decisions/studio-learner-walkthrough.md), not yet run. | ST16, ST17, ST21, ST22 | S |
 | ST18 | **Dedicated Portal reader journey.** A separate reader opens one permitted report, uses its parameters/interactions and reopens a saved view without receiving author/publish controls. | — | M |
 | ST19 | **Second-identity RLS journey.** Two ordinary identities open the same report and receive their expected disjoint rows, including preview/data/export paths that the chosen report exposes. No new RLS model. | ST18 | M |
 | ST20 | **Complete: decide restricted practice execution.** Specify how a learner may run the MOCKDB failure/repair exercise in each host, including mutating steps, cleanup and permission boundaries. Portal execution uses saved-revision Orchestrator sandbox submission; desktop uses disposable local sessions. [Decision](docs/architecture/decisions/studio-practice-execution.md). | — | D |

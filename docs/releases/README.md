@@ -4,6 +4,9 @@
 
 | Page | Description |
 | :--- | :--- |
+| [v0.21.0 bugs and logic audit](v0.21.0-bug-logic-audit.md) | Defect review and validation evidence. |
+| [v0.21.0 closed TODO audit](v0.21.0-closed-todo-audit.md) | Completed-item review and validation evidence. |
+| [v0.21.0 generated assets progress](v0.21.0-generated-assets-progress.md) | Generated browser asset ownership and preparation progress. |
 | [ETL-SQL vx.y.z](TEMPLATE.md) | ETL-SQL Release Notes Template |
 | [Flaky Test Stability](flaky-test-stability.md) | This is the canonical record and maintenance policy for timing-sensitive tests. It consolidates |
 | [ETL-SQL Release Checklist](release-checklist.md) | A physical, copy-pasteable checklist for cutting a release. It wraps the real scripts under |

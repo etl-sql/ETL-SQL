@@ -14,7 +14,7 @@ public sealed class PortalJourneyFixture : PortalBrowserFixture
 
     public PortalJourneyFixture() : this(new JourneyOrchestratorFactory()) { }
 
-    public PortalJourneyFixture(OrchestratorWebFactory orchestrator)
+    internal PortalJourneyFixture(OrchestratorWebFactory orchestrator)
         : base(new JourneyPortalFactory(orchestrator)) => this.orchestrator = orchestrator;
 
     /// <summary>The Orchestrator behind this Portal, for acting as an operator and reading its store.</summary>

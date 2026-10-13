@@ -60,7 +60,8 @@ public sealed partial class StudioController(
             studioAuthorization.EffectiveCapabilities(User),
             studioAuthorization.Mode == StudioDeploymentMode.SourceControlled && sourceControl.IsEnabled,
             portalConfig.Studio.DraftRecovery,
-            portalConfig.Studio.PrivateDrafts));
+            portalConfig.Studio.PrivateDrafts,
+            Math.Max(1, portalConfig.DesignerLimits.MaxScriptCharacters)));
     }
 
     [HttpGet("reports")]
@@ -86,6 +87,36 @@ public sealed partial class StudioController(
         }
 
         return Ok(visible);
+    }
+
+    [HttpGet("catalog")]
+    [RequireStudioCapability(StudioCapabilities.ScriptRead,
+        StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
+    public async Task<ActionResult<StudioCatalogPageDto>> SearchCatalog(
+        CancellationToken ct, [FromQuery] string? query = null, [FromQuery] int afterId = 0)
+    {
+        query = query?.Trim() ?? string.Empty;
+        if (query.Length > 160 || afterId < 0) return BadRequest(new { error = "Invalid catalog search or cursor." });
+        var candidates = await CatalogScope.Documents.AsNoTracking().Include(report => report.Folder)
+            .Where(report => !report.IsDeleted && report.Id > afterId
+                && (query == "" || report.Name.Contains(query) || report.Folder.Path.Contains(query)))
+            .OrderBy(report => report.Id).Take(51).ToListAsync(ct);
+        var inspected = candidates.Take(50).ToList();
+        var permissions = await folderPermissions.GetEffectiveReportPermissionsAsync(inspected, User, ct);
+        var visible = inspected.Where(report => permissions[report.Id].AtLeast(FolderPermission.Author)).Select(ToDto).ToList();
+        return Ok(new StudioCatalogPageDto(visible, candidates.Count > 50 ? inspected[^1].Id : null));
+    }
+
+    [HttpGet("reports/{id:int}/summary")]
+    [RequireStudioCapability(StudioCapabilities.ScriptRead,
+        StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
+    public async Task<ActionResult<StudioReportDto>> GetReportSummary(int id, CancellationToken ct)
+    {
+        var report = await CatalogScope.Documents.AsNoTracking().Include(report => report.Folder)
+            .FirstOrDefaultAsync(report => report.Id == id && !report.IsDeleted, ct);
+        if (report is null || !(await folderPermissions.GetEffectiveReportPermissionAsync(report, User)).AtLeast(FolderPermission.Author))
+            return NotFound(new { error = "The document is unavailable or outside your catalog permissions. Refresh Studio Home." });
+        return Ok(ToDto(report));
     }
 
     [HttpGet("folders")]

@@ -4,6 +4,13 @@
 
 | Page | Description |
 | :--- | :--- |
+| [Portal RLS report viewing](portal-rls-report-viewing.md) | Reader identity and report row-level security evidence. |
+| [Studio execution scope evidence](studio-execution-scope-evidence.md) | Scope selection, cancellation, and bounded helper preview verification. |
+| [Studio failed recovery evidence](studio-failed-recovery-evidence.md) | Degraded editor, startup, and expired-session recovery verification. |
+| [Studio learner walkthrough](studio-learner-walkthrough.md) | Observed learner walkthrough protocol and recorded participant background. |
+| [Studio Portal practice evidence](studio-portal-practice-evidence.md) | Portal authoring practice verification. |
+| [Studio reader journey evidence](studio-reader-journey-evidence.md) | Reader and report navigation verification. |
+| [Studio sandbox submitter identity](studio-sandbox-submitter-identity.md) | Trusted submitter identity across the sandbox execution boundary. |
 | [Adaptive Execution Controller (v0.15.0 Phase 2) — Design](adaptive-execution-controller.md) | **Status:** Slice A implemented — advice is computed and recorded, and **no execution pipeline |
 | [Alerting and Service Objectives](alerting-service-objectives.md) | This guide defines baseline service indicators, starter objectives, alert routing, and runbook |
 | [Authorship Is Not Permission](authorship-is-not-permission.md) | **Status:** decided and implemented for reports (v0.17.0) and datasets (v0.18.0). |

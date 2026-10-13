@@ -6,6 +6,18 @@ ETL-SQL documentation follows a Single Responsibility Principle (SRP) approach w
 
 ---
 
+## Studio in v0.21.0
+
+Start with the [Studio guide index](studio/README.md) for both Portal and desktop.
+
+| Guide | Description |
+| :--- | :--- |
+| [Your First Studio Report](studio/first-report.md) | Sample data, visual/code round trips, selected query results, and save/reopen. |
+| [Run and Schedule a Studio Pipeline](studio/run-and-schedule.md) | Bounded failure/repair exercise, grants, run status, Stop, and saved-revision scheduling. |
+| [Studio Drafts, Publishing and Recovery](studio/drafts-and-recovery.md) | Private work, catalog permissions, conflicts, retry, and desktop policy limits. |
+
+---
+
 ## 1. Onboarding
 
 Get started with the engine, understand the pipeline mental model, and review version migrations.

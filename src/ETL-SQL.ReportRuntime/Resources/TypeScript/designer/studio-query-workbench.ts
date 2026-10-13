@@ -20,12 +20,12 @@ import { escapeHtml, noteMarkup, sampleGridMarkup } from './studio-authoring-ui.
 import type { SampleGridInput } from './studio-authoring-ui.js';
 import type { STUDIO_ROUTES } from './studio-contracts.js';
 
-export type WorkbenchResult = Partial<Pick<RunDesignerResponse, 'columns' | 'rows' | 'rowCount'>> & {
+export type WorkbenchResult = Partial<Pick<RunDesignerResponse, 'columns' | 'rows' | 'rowCount' | 'capped' | 'message'>> & {
     trace?: { type: string; data?: SampleGridInput | null }[];
 };
 export type WorkbenchResponse = WorkbenchResult & Partial<ParseDesignerResponse>;
 export type WorkbenchRequest = (route: string, options: {
-    body: Pick<RunDesignerRequest, 'script'> & { connectionRef?: RunDesignerRequest['connectionRef'] | null; documentUri?: RunDesignerRequest['documentUri'] | null };
+    body: Pick<RunDesignerRequest, 'script'> & { connectionRef?: RunDesignerRequest['connectionRef'] | null; documentUri?: RunDesignerRequest['documentUri'] | null; helperPreview?: boolean; previewContext?: string; previewContextLine?: number };
     fallbackError: string;
 }) => Promise<WorkbenchResponse>;
 
@@ -39,6 +39,7 @@ export interface QueryWorkbenchOptions {
     editorTransport?: { url: (route: string) => string; authFetch: typeof fetch };
     documentUri?: () => string;
     scriptText?: () => string;
+    previewContextLine?: number;
     label?: string | null;
     runLabel?: string;
     onChange?: ((value: string) => void) | null;
@@ -114,6 +115,7 @@ export async function createQueryWorkbench(host: HTMLElement, {
     editorTransport,
     documentUri = () => 'untitled.rptsql',
     scriptText = () => '',
+    previewContextLine,
     label = null,
     runLabel = 'Run and preview',
     onChange = null,
@@ -123,6 +125,9 @@ export async function createQueryWorkbench(host: HTMLElement, {
         ? `Remote query · ${connection || 'no connection'}`
         : `Query · ${connection || 'no connection'}`;
     host.innerHTML = `
+        ${context === 'engine' ? `<div class="etlsql-studio-task-toggle"><label><input type="checkbox" data-preview-context ${previewContextLine ? 'checked' : ''}> Include declared variables and read-only staging above line</label>
+            <input type="number" min="1" aria-label="Preview context ends before line" data-preview-context-line value="${previewContextLine || String(scriptText()).split('\n').length + 1}"></div>
+            <p class="etlsql-studio-outline-note">Only declarations and read-only #temp staging may be replayed. Other predecessors make context unavailable; they are never run.</p>` : ''}
         <div class="etlsql-studio-workbench-toolbar">
             <span>${escapeHtml(label ?? defaultLabel)}</span>
             <button type="button" class="etlsql-studio-btn" data-workbench-run>${escapeHtml(runLabel)}</button>
@@ -170,20 +175,26 @@ export async function createQueryWorkbench(host: HTMLElement, {
             // its CREATE CONNECTION statement comes along, but preceding variables and staging
             // statements are not silently executed. A remote-context task wraps its body in
             // EXECUTE <connection> BEGIN … END; so native dialects execute faithfully.
-            const preamble = await connectionPreamble(connection, scriptText(), { request, routes });
+            const parent = scriptText();
+            // Portal resolves catalog aliases itself; a SHARED declaration is not a credential.
+            const preamble = await connectionPreamble(connection, parent, { request, routes });
             const script = composeWorkbenchScript(query, preamble, { connection, context });
             const result = await request!(routes!.run, {
-                body: { script, connectionRef: connection || null, documentUri: documentUri() || null },
+                body: { script, connectionRef: connection || null, documentUri: documentUri() || null, helperPreview: true,
+                    ...(context === 'engine' && host.querySelector<HTMLInputElement>('[data-preview-context]')?.checked
+                        ? { previewContext: parent, previewContextLine: Number(host.querySelector<HTMLInputElement>('[data-preview-context-line]')?.value) } : {}) },
                 fallbackError: 'The query could not be run.',
             });
             const sample = firstResultSet(result);
+            if ('success' in result && result.success === false) throw new Error(('message' in result && typeof result.message === 'string') ? result.message : 'The preview failed.');
             if (!sample) {
                 onSample?.(null);
                 setOutput(noteMarkup('The query ran successfully but returned no result set.', 'info'));
                 return;
             }
-            onSample?.(sample);
-            setOutput(sampleGridMarkup(sample));
+            onSample?.(result.capped && !sample.rows?.length ? null : sample);
+            setOutput((result.capped && !sample.rows?.length ? '' : sampleGridMarkup({ ...sample, rowCount: sample.rows?.length || 0 }))
+                + (result.capped ? noteMarkup(result.message || 'The preview result was capped.', 'warning') : ''));
         } catch (error) {
             onSample?.(null);
             setOutput(noteMarkup((error as Error).message || 'The query failed.', 'error'));

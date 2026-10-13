@@ -194,6 +194,15 @@ export function createStudioVisualStage(hostContext: StudioVisualStageContext) {
         const doc = hostContext.getActiveDoc();
         if (!doc) return;
         const content = hostContext.state.editorInstance ? hostContext.state.editorInstance.getValue() : doc.content;
+        if (content.length > (hostContext.opts.maxScriptCharacters ?? 200_000)) {
+            disposeDataModel();
+            hostContext.disposePipelineDag();
+            hostContext.state.designerInstance?.dispose?.();
+            hostContext.state.designerInstance = null;
+            hostContext.renderReportWorkflowChrome(null);
+            hostContext.canvasContainer.textContent = 'Canvas services are paused above the document character limit. All script text is kept and editable. Reduce the document to resume.';
+            return;
+        }
 
         // The model is a projection of the same script, so it is chosen before the file kind: an
         // author asking for the model of a report wants the model of a report, not its canvas.

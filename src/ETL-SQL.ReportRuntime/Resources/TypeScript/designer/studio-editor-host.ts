@@ -28,11 +28,13 @@ export interface StudioEditorHostContext {
     readonly setDocumentDiagnostics: (document: StudioRuntimeDocument, list: RunDiagnostic[]) => void;
     readonly shell: StudioDom;
     readonly state: StudioRuntimeState;
+    readonly opts: import('./studio-context.js').StudioOptions;
     readonly synchronizeCodeToCanvas: (document: StudioRuntimeDocument, script: string, revision: number | string) => Promise<void>;
 }
 
 export function createStudioEditorHost(hostContext: StudioEditorHostContext) {
     let degradedBanner: HTMLElement | null = null;
+    let mounting: Promise<void> | null = null;
 
     function renderDegradedBanner() {
         if (!degradedBanner) {
@@ -67,11 +69,21 @@ export function createStudioEditorHost(hostContext: StudioEditorHostContext) {
     }
 
     async function mountScriptEditor(): Promise<void> {
-        hostContext.editorHost.innerHTML = '';
+        if (mounting) return mounting;
+        mounting = mountEditor().finally(() => { mounting = null; });
+        return mounting;
+    }
+
+    async function mountEditor(): Promise<void> {
+        const retry = degradedBanner?.querySelector<HTMLButtonElement>('[data-action="retry-cm"]');
+        if (retry) retry.disabled = true;
+        const staging = document.createElement('div');
+        staging.style.height = '100%';
         try {
             const activeDoc = hostContext.getActiveDoc();
-            hostContext.state.editorInstance = await createScriptEditor(hostContext.editorHost, {
+            const editor = await createScriptEditor(staging, {
                 value: activeDoc?.content || '',
+                maxScriptCharacters: hostContext.opts.maxScriptCharacters ?? 200_000,
                 analyzeUrl: hostContext.apiBase + STUDIO_ROUTES.analyze,
                 completeUrl: hostContext.apiBase + STUDIO_ROUTES.complete,
                 hoverUrl: hostContext.apiBase + STUDIO_ROUTES.hover,
@@ -97,15 +109,16 @@ export function createStudioEditorHost(hostContext: StudioEditorHostContext) {
                         hostContext.renderTabs();
                         if (!hostContext.isSettingDocumentContent && !hostContext.isSyncingFromDesigner) {
                             clearTimeout(hostContext.codeMirrorDebounce || undefined);
+                            context.syncRevision++;
+                            context.previewAbort?.abort();
+                            hostContext.state.designerInstance?.invalidateScriptApply?.();
+                            if (newContent.length > (hostContext.opts.maxScriptCharacters ?? 200_000)) return;
                             if ((doc.path || '').endsWith('.etlsql')) {
                                 hostContext.codeMirrorDebounce = setTimeout(() => {
                                     if (hostContext.getActiveDoc() === doc && doc.content === newContent) hostContext.renderVisualStage();
                                 }, 400);
                             } else if (hostContext.state.designerInstance) {
-                                context.syncRevision++;
                                 const revision = context.syncRevision;
-                                context.previewAbort?.abort();
-                                hostContext.state.designerInstance.invalidateScriptApply?.();
                                 hostContext.codeMirrorDebounce = setTimeout(() => {
                                     void hostContext.synchronizeCodeToCanvas(doc, newContent, revision);
                                 }, 400);
@@ -114,17 +127,30 @@ export function createStudioEditorHost(hostContext: StudioEditorHostContext) {
                     }
                 }
             });
+            // The author may type or switch tabs while the module loads. Read the current buffer
+            // only when the replacement is ready; keep the fallback usable until that point.
+            hostContext.isSettingDocumentContent = true;
+            try { editor.setValue(hostContext.getActiveDoc()?.content || ''); }
+            finally { hostContext.isSettingDocumentContent = false; }
+            hostContext.state.editorInstance?.dispose?.();
+            hostContext.state.editorInstance = editor;
+            hostContext.editorHost.replaceChildren(staging);
+            for (const doc of hostContext.state.documents) doc.editorState = null;
             hostContext.state.isEditorDegraded = false;
             hideDegradedBanner();
-            if (activeDoc) {
-                activeDoc.editorState = (hostContext.state.editorInstance as StudioDynamic).getState?.();
+            const currentDoc = hostContext.getActiveDoc();
+            if (currentDoc) {
+                currentDoc.editorState = (hostContext.state.editorInstance as StudioDynamic).getState?.();
             }
         } catch (e) {
             console.warn('[Studio] CodeMirror fallback', e);
             hostContext.state.isEditorDegraded = true;
             _feedback.notify?.('Script editor degraded: CodeMirror could not be loaded. Running in basic textarea mode.', { title: 'Editor Degraded', tone: 'warning' });
             renderDegradedBanner();
+            if (hostContext.editorHost.querySelector('textarea')) return;
             const ta = document.createElement('textarea');
+            ta.className = 'etlsql-studio-fallback-editor';
+            ta.setAttribute('aria-label', 'Script editor (basic mode)');
             ta.style.width = '100%';
             ta.style.height = '100%';
             ta.style.background = 'var(--portal-bg,#0d1117)';
@@ -165,6 +191,8 @@ export function createStudioEditorHost(hostContext: StudioEditorHostContext) {
                 getSelection: () => ta.value.slice(ta.selectionStart, ta.selectionEnd),
                 focus: () => ta.focus()
             };
+        } finally {
+            if (retry) retry.disabled = false;
         }
     }
 

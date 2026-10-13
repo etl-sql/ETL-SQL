@@ -18,7 +18,7 @@ public class FolderPermissionService(
 
     public bool IsAdmin(ClaimsPrincipal user) => user.IsInRole("Admin");
 
-    public async Task<ISet<int>> GetUserGroupIdsAsync(ClaimsPrincipal user)
+    public async Task<ISet<int>> GetUserGroupIdsAsync(ClaimsPrincipal user, CancellationToken ct = default)
     {
         var userId = GetUserId(user);
         if (_cachedUserGroupIdsByUser.TryGetValue(userId, out var cached))
@@ -28,7 +28,7 @@ public class FolderPermissionService(
             .Where(ug => ug.UserId == userId
                 && (catalogScope == null || ug.TenantId == catalogScope.TenantId))
             .Select(ug => ug.GroupId)
-            .ToListAsync();
+            .ToListAsync(ct);
 
         var groupIds = new HashSet<int>(ids);
         _cachedUserGroupIdsByUser[userId] = groupIds;
@@ -60,6 +60,31 @@ public class FolderPermissionService(
         await GetEffectiveReportPermissionAsync(
             report, GetUserId(user), await GetUserGroupIdsAsync(user), IsAdmin(user));
 
+    public async Task<IReadOnlyDictionary<int, FolderPermission?>> GetEffectiveReportPermissionsAsync(
+        IReadOnlyCollection<Report> reports, ClaimsPrincipal user, CancellationToken ct = default)
+    {
+        if (IsAdmin(user)) return reports.ToDictionary(report => report.Id, _ => (FolderPermission?)FolderPermission.Manage);
+        var userId = GetUserId(user);
+        var groups = await GetUserGroupIdsAsync(user, ct);
+        var folders = await GetEffectivePermissionsAsync(reports.Select(report => report.FolderId).ToArray(), groups, userId, ct);
+        var ids = reports.Select(report => report.Id).ToArray();
+        var grants = await ReportAcls.Where(acl => ids.Contains(acl.ReportId)
+            && ((acl.UserId.HasValue && acl.UserId == userId) || (acl.GroupId.HasValue && groups.Contains(acl.GroupId.Value))))
+            .Select(acl => new { acl.ReportId, acl.Permission }).ToListAsync(ct);
+        var direct = grants.GroupBy(acl => acl.ReportId).ToDictionary(group => group.Key,
+            group => (FolderPermission?)group.Select(acl => acl.Permission).Aggregate(FolderPermissions.Max));
+        return reports.ToDictionary(report => report.Id, report => CombineReportPermission(report.CreatedBy == userId,
+            folders[report.FolderId], direct.GetValueOrDefault(report.Id)));
+    }
+
+    private static FolderPermission? CombineReportPermission(bool isAuthor, FolderPermission? folderPerm, FolderPermission? directPerm)
+    {
+        if (isAuthor && (folderPerm.HasValue || directPerm.HasValue)) return FolderPermission.Manage;
+        if (!folderPerm.HasValue) return directPerm;
+        if (!directPerm.HasValue) return folderPerm;
+        return FolderPermissions.Max(folderPerm.Value, directPerm.Value);
+    }
+
     /// <summary>
     /// Resolves a report permission for an identity given directly rather than as a principal, so a
     /// caller reasoning about <em>someone else's</em> access — the access simulator — gets its answer
@@ -89,12 +114,7 @@ public class FolderPermissionService(
         // Treating authorship as standing permission would mean revoking a user's group membership
         // (or removing them from the directory) leaves them full access to every report they ever
         // created, so deprovisioning would not actually deprovision.
-        if (report.CreatedBy == userId && (folderPerm.HasValue || directPerm.HasValue))
-            return FolderPermission.Manage;
-
-        if (!folderPerm.HasValue) return directPerm;
-        if (!directPerm.HasValue) return folderPerm;
-        return FolderPermissions.Max(folderPerm.Value, directPerm.Value);
+        return CombineReportPermission(report.CreatedBy == userId, folderPerm, directPerm);
     }
 
     /// <summary>
@@ -151,7 +171,7 @@ public class FolderPermissionService(
     /// (plus one ownership query when the caller is known).
     /// Folders with no matching grant map to null.</summary>
     public async Task<IReadOnlyDictionary<int, FolderPermission?>> GetEffectivePermissionsAsync(
-        IReadOnlyCollection<int> folderIds, ISet<int> groupIds, int? userId = null)
+        IReadOnlyCollection<int> folderIds, ISet<int> groupIds, int? userId = null, CancellationToken ct = default)
     {
         var result = folderIds.Distinct().ToDictionary(id => id, _ => (FolderPermission?)null);
         if (result.Count == 0) return result;
@@ -165,7 +185,7 @@ public class FolderPermissionService(
             var rows = await FolderAcls
                 .Where(a => ids.Contains(a.FolderId) && groupIds.Contains(a.GroupId))
                 .Select(a => new { a.FolderId, a.Permission })
-                .ToListAsync();
+                .ToListAsync(ct);
 
             foreach (var group in rows.GroupBy(r => r.FolderId))
                 result[group.Key] = group.Select(r => r.Permission).Aggregate(FolderPermissions.Max);
@@ -176,7 +196,7 @@ public class FolderPermissionService(
             var owned = await Folders
                 .Where(f => ids.Contains(f.Id) && f.OwnerId == userId)
                 .Select(f => f.Id)
-                .ToListAsync();
+                .ToListAsync(ct);
             foreach (var folderId in owned)
                 result[folderId] = FolderPermission.Manage;
         }

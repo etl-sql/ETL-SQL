@@ -102,12 +102,22 @@ export const _TYPE: Set<string> = new Set([
 
 // Lazy-load the CodeMirror bundle once; subsequent calls reuse the same promise.
 let _cmPromise: Promise<CodeMirrorBundle> | null = null;
+let _cmAttempt = 0;
 /**
  * Lazy-loads the CodeMirror bundle once; subsequent calls reuse the same promise.
  * @returns {Promise<Object>}
  */
 export function _loadCm(): Promise<CodeMirrorBundle> {
-    if (!_cmPromise) _cmPromise = (import('./codemirror/codemirror-bundle.min.js') as unknown) as Promise<CodeMirrorBundle>;
+    if (!_cmPromise) {
+        const attempt = _cmAttempt++;
+        const loaded = attempt === 0
+            ? import('./codemirror/codemirror-bundle.min.js')
+            : import(new URL(`./codemirror/codemirror-bundle.min.js?retry=${attempt}`, import.meta.url).href);
+        _cmPromise = (loaded as Promise<CodeMirrorBundle>).catch(error => {
+            _cmPromise = null;
+            throw error;
+        });
+    }
     return _cmPromise;
 }
 

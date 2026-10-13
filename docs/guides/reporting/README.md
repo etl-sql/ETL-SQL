@@ -10,6 +10,7 @@ Report-SQL extends ETL-SQL with dedicated declarative statements for creating in
 
 | Guide | Description |
 | :--- | :--- |
+| [Your First Studio Report](../studio/first-report.md) | Build and inspect a report in Portal or desktop Studio, keeping hand edits through helpers and save/reopen. |
 | [Authoring Dashboards](authoring-dashboards.md) | Three-tier architecture, pages, containers, layout grid, and complete dashboard examples. |
 | [Report Parameters & Filters](report-parameters-and-filters.md) | Connect INPUT variables, relative date expressions (`RELDATE`), slicers, and sliders. |
 | [Cascading Slicers](cascading-slicers.md) | Configure dependent parent-child filter hierarchies with atomic parameter updates. |

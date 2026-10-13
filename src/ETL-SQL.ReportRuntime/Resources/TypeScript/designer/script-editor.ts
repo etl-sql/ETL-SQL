@@ -22,6 +22,7 @@ export interface ScriptEditorDiagnostic {
 }
 
 export interface ScriptEditorOptions {
+    maxScriptCharacters?: number;
     value?: string;
     readOnly?: boolean;
     onChange?: (value: string) => void;
@@ -270,7 +271,7 @@ export async function createScriptEditor(container: HTMLElement, opts: ScriptEdi
         syntaxHighlighting, bracketMatching,
         searchKeymap, highlightSelectionMatches,
         autocompletion, completionKeymap,
-        linter, lintGutter,
+        linter, lintGutter, setDiagnostics,
     } = cm;
 
     const analyzeUrl = opts.analyzeUrl || null;
@@ -369,6 +370,9 @@ export async function createScriptEditor(container: HTMLElement, opts: ScriptEdi
     if (hasCmLint && typeof lintGutter === 'function') extensions.push(lintGutter());
 
     let analyzeTimer: any = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let analysisRetryAt = 0;
+    const maxScriptCharacters = opts.maxScriptCharacters ?? Number.POSITIVE_INFINITY;
     let analyzeAbort: AbortController | null = null;
     let analyzeRequest: Promise<ScriptEditorDiagnostic[]> | null = null;
     let analyzeRequestScript: string | null = null;
@@ -407,6 +411,7 @@ export async function createScriptEditor(container: HTMLElement, opts: ScriptEdi
     function createCompletionSource(): any {
         if (!completeUrl || typeof autocompletion !== 'function') return null;
         return async (context: any) => {
+            if (context.state.doc.length > maxScriptCharacters) return null;
             let word = context.matchBefore(/[\w@#&$.*]+/);
             const previous: string = context.state.sliceDoc(Math.max(0, context.pos - 1), context.pos);
             if (!word && context.explicit && (previous === '*' || previous === '.')) {
@@ -496,6 +501,7 @@ export async function createScriptEditor(container: HTMLElement, opts: ScriptEdi
 
     async function showHover(evt: MouseEvent): Promise<void> {
         if (!hoverUrl || !view) return;
+        if (view.state.doc.length > maxScriptCharacters) return;
         const pos = view.posAtCoords({ x: evt.clientX, y: evt.clientY });
         if (pos == null) {
             hideHover();
@@ -673,6 +679,12 @@ export async function createScriptEditor(container: HTMLElement, opts: ScriptEdi
 
     async function fetchDiagnostics(script: string): Promise<ScriptEditorDiagnostic[]> {
         if (!analyzeUrl) return [];
+        // COMPAT_BREAK 0.21.0: Studio pauses automatic services above the host character ceiling without truncating the buffer.
+        if (script.length > maxScriptCharacters) {
+            return [{ severity: 'Warning', code: 'DOCUMENT_LIMIT', source: 'Studio editor',
+                message: `Editor services are paused above ${maxScriptCharacters.toLocaleString()} characters. All text is kept and editable. Reduce the document to resume analysis; oversized Portal saves are refused.` }];
+        }
+        if (Date.now() < analysisRetryAt) throw new Error('Analysis is rate limited. Previous diagnostics are stale; analysis will retry after the permitted delay. Your text is kept.');
         if (analyzeRequest && analyzeRequestScript === script) return await analyzeRequest;
 
         analyzeAbort?.abort();
@@ -686,6 +698,16 @@ export async function createScriptEditor(container: HTMLElement, opts: ScriptEdi
                 body: JSON.stringify({ script, documentUri: currentDocumentUri() }),
                 signal: controller.signal,
             });
+            if (res?.status === 429) {
+                const retryAfter = res.headers.get('Retry-After');
+                const seconds = retryAfter === null ? NaN : Number(retryAfter);
+                const delay = Math.max(1_000, Number.isFinite(seconds) ? seconds * 1_000
+                    : retryAfter ? Date.parse(retryAfter) - Date.now() || 1_000 : 1_000);
+                analysisRetryAt = Date.now() + delay;
+                if (retryTimer) clearTimeout(retryTimer);
+                retryTimer = setTimeout(() => { retryTimer = null; void runAnalysis(view.state.doc.toString()); }, delay);
+                throw new Error('Analysis is rate limited. Previous diagnostics are stale; analysis will retry after the permitted delay. Your text is kept.');
+            }
             if (!res?.ok) throw new Error(res?.statusText || 'Analyze request failed');
             const data = await res.json();
             return data?.diagnostics ?? [];
@@ -706,7 +728,11 @@ export async function createScriptEditor(container: HTMLElement, opts: ScriptEdi
         if (!analyzeUrl) return;
         setDiagnosticsStatus('Analyzing...', 'neutral');
         try {
-            renderDiagnostics(await fetchDiagnostics(script));
+            const diagnostics = await fetchDiagnostics(script);
+            if (view.state.doc.toString() !== script) return;
+            renderDiagnostics(diagnostics);
+            if (typeof setDiagnostics === 'function')
+                view.dispatch(setDiagnostics(view.state, diagnostics.map(diagnostic => toCodeMirrorDiagnostic(view.state.doc, diagnostic))));
         } catch (err: any) {
             if (err?.name === 'AbortError') return;
             renderDiagnostics([{
@@ -950,6 +976,7 @@ export async function createScriptEditor(container: HTMLElement, opts: ScriptEdi
         },
         dispose: (): void => {
             clearTimeout(analyzeTimer);
+            if (retryTimer) clearTimeout(retryTimer);
             clearTimeout(hoverTimer);
             clearTimeout(hoverHideTimer);
             analyzeAbort?.abort();

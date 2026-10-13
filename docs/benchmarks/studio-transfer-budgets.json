@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "hosts": {
+    "portal": { "rawBytes": 2625088, "gzipBytes": 653516 },
+    "desktop": { "rawBytes": 2503907, "gzipBytes": 619929 }
+  }
+}

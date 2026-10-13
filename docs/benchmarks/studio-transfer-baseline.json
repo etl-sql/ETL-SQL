@@ -1,0 +1,833 @@
+{
+  "schemaVersion": 1,
+  "compression": "gzip level 9, each unique response independently",
+  "hosts": {
+    "portal": {
+      "rawBytes": 2386443,
+      "gzipBytes": 594105,
+      "assets": [
+        {
+          "url": "/css/portal.css",
+          "rawBytes": 106526,
+          "gzipBytes": 17903
+        },
+        {
+          "url": "/designer/codemirror/codemirror-bundle.min.js",
+          "rawBytes": 380584,
+          "gzipBytes": 122853
+        },
+        {
+          "url": "/designer/connection-wizard.js",
+          "rawBytes": 107209,
+          "gzipBytes": 21291
+        },
+        {
+          "url": "/designer/dag.js",
+          "rawBytes": 49945,
+          "gzipBytes": 13852
+        },
+        {
+          "url": "/designer/data-prep-recipes.js",
+          "rawBytes": 4558,
+          "gzipBytes": 1591
+        },
+        {
+          "url": "/designer/designer-canvas-render.js",
+          "rawBytes": 32154,
+          "gzipBytes": 8629
+        },
+        {
+          "url": "/designer/designer-context.js",
+          "rawBytes": 4418,
+          "gzipBytes": 1756
+        },
+        {
+          "url": "/designer/designer-history.js",
+          "rawBytes": 3331,
+          "gzipBytes": 1015
+        },
+        {
+          "url": "/designer/designer-inspector-format.js",
+          "rawBytes": 32094,
+          "gzipBytes": 5332
+        },
+        {
+          "url": "/designer/designer-inspector.js",
+          "rawBytes": 110170,
+          "gzipBytes": 21998
+        },
+        {
+          "url": "/designer/designer-interactions.js",
+          "rawBytes": 12485,
+          "gzipBytes": 4150
+        },
+        {
+          "url": "/designer/designer-overlays.js",
+          "rawBytes": 25064,
+          "gzipBytes": 6900
+        },
+        {
+          "url": "/designer/designer-persistence.js",
+          "rawBytes": 13268,
+          "gzipBytes": 3457
+        },
+        {
+          "url": "/designer/designer-pointer.js",
+          "rawBytes": 15274,
+          "gzipBytes": 2977
+        },
+        {
+          "url": "/designer/designer-script-sync.js",
+          "rawBytes": 14025,
+          "gzipBytes": 3890
+        },
+        {
+          "url": "/designer/designer-util.js",
+          "rawBytes": 844,
+          "gzipBytes": 523
+        },
+        {
+          "url": "/designer/designer-visual-actions.js",
+          "rawBytes": 17556,
+          "gzipBytes": 4905
+        },
+        {
+          "url": "/designer/designer.css",
+          "rawBytes": 232290,
+          "gzipBytes": 36038
+        },
+        {
+          "url": "/designer/designer.js",
+          "rawBytes": 58477,
+          "gzipBytes": 13288
+        },
+        {
+          "url": "/designer/editor-toolbar.js",
+          "rawBytes": 4180,
+          "gzipBytes": 1843
+        },
+        {
+          "url": "/designer/html-preview.js",
+          "rawBytes": 5899,
+          "gzipBytes": 2411
+        },
+        {
+          "url": "/designer/rptsql-language.js",
+          "rawBytes": 7655,
+          "gzipBytes": 2733
+        },
+        {
+          "url": "/designer/run-results.js",
+          "rawBytes": 30772,
+          "gzipBytes": 9374
+        },
+        {
+          "url": "/designer/script-editor.js",
+          "rawBytes": 40278,
+          "gzipBytes": 10587
+        },
+        {
+          "url": "/designer/script-workbench.js",
+          "rawBytes": 25595,
+          "gzipBytes": 6015
+        },
+        {
+          "url": "/designer/studio-authoring-chart.js",
+          "rawBytes": 27246,
+          "gzipBytes": 7108
+        },
+        {
+          "url": "/designer/studio-authoring-context.js",
+          "rawBytes": 3386,
+          "gzipBytes": 1574
+        },
+        {
+          "url": "/designer/studio-authoring-data.js",
+          "rawBytes": 43221,
+          "gzipBytes": 10740
+        },
+        {
+          "url": "/designer/studio-authoring-dialog.js",
+          "rawBytes": 10813,
+          "gzipBytes": 3280
+        },
+        {
+          "url": "/designer/studio-authoring-pipeline.js",
+          "rawBytes": 43080,
+          "gzipBytes": 10828
+        },
+        {
+          "url": "/designer/studio-authoring-preview.js",
+          "rawBytes": 17893,
+          "gzipBytes": 5289
+        },
+        {
+          "url": "/designer/studio-authoring-report.js",
+          "rawBytes": 38895,
+          "gzipBytes": 8704
+        },
+        {
+          "url": "/designer/studio-authoring-ui.js",
+          "rawBytes": 7052,
+          "gzipBytes": 2773
+        },
+        {
+          "url": "/designer/studio-authoring.js",
+          "rawBytes": 10226,
+          "gzipBytes": 2823
+        },
+        {
+          "url": "/designer/studio-context.js",
+          "rawBytes": 13873,
+          "gzipBytes": 4891
+        },
+        {
+          "url": "/designer/studio-contracts.js",
+          "rawBytes": 5496,
+          "gzipBytes": 2339
+        },
+        {
+          "url": "/designer/studio-data-panel.js",
+          "rawBytes": 18578,
+          "gzipBytes": 4771
+        },
+        {
+          "url": "/designer/studio-data.js",
+          "rawBytes": 6333,
+          "gzipBytes": 2253
+        },
+        {
+          "url": "/designer/studio-document-session.js",
+          "rawBytes": 33918,
+          "gzipBytes": 7513
+        },
+        {
+          "url": "/designer/studio-document-tabs.js",
+          "rawBytes": 14289,
+          "gzipBytes": 3403
+        },
+        {
+          "url": "/designer/studio-editor-host.js",
+          "rawBytes": 9963,
+          "gzipBytes": 2884
+        },
+        {
+          "url": "/designer/studio-engine-panel.js",
+          "rawBytes": 17034,
+          "gzipBytes": 5183
+        },
+        {
+          "url": "/designer/studio-file-commands.js",
+          "rawBytes": 26892,
+          "gzipBytes": 6983
+        },
+        {
+          "url": "/designer/studio-filter-panel.js",
+          "rawBytes": 34711,
+          "gzipBytes": 7466
+        },
+        {
+          "url": "/designer/studio-git-diff.js",
+          "rawBytes": 3924,
+          "gzipBytes": 1104
+        },
+        {
+          "url": "/designer/studio-governance-datasets.js",
+          "rawBytes": 24325,
+          "gzipBytes": 6050
+        },
+        {
+          "url": "/designer/studio-governance-quality.js",
+          "rawBytes": 13176,
+          "gzipBytes": 3387
+        },
+        {
+          "url": "/designer/studio-governance-security.js",
+          "rawBytes": 9048,
+          "gzipBytes": 2662
+        },
+        {
+          "url": "/designer/studio-governance-tags.js",
+          "rawBytes": 16577,
+          "gzipBytes": 4276
+        },
+        {
+          "url": "/designer/studio-host.js",
+          "rawBytes": 1211,
+          "gzipBytes": 621
+        },
+        {
+          "url": "/designer/studio-lifecycle.js",
+          "rawBytes": 10775,
+          "gzipBytes": 3094
+        },
+        {
+          "url": "/designer/studio-navigation.js",
+          "rawBytes": 42424,
+          "gzipBytes": 8285
+        },
+        {
+          "url": "/designer/studio-outline.js",
+          "rawBytes": 15517,
+          "gzipBytes": 4461
+        },
+        {
+          "url": "/designer/studio-pipeline-canvas.js",
+          "rawBytes": 53394,
+          "gzipBytes": 13750
+        },
+        {
+          "url": "/designer/studio-pipeline-view.js",
+          "rawBytes": 21917,
+          "gzipBytes": 6146
+        },
+        {
+          "url": "/designer/studio-query-workbench.js",
+          "rawBytes": 12750,
+          "gzipBytes": 4540
+        },
+        {
+          "url": "/designer/studio-report-workflow.js",
+          "rawBytes": 20633,
+          "gzipBytes": 5902
+        },
+        {
+          "url": "/designer/studio-routes.generated.js",
+          "rawBytes": 1766,
+          "gzipBytes": 720
+        },
+        {
+          "url": "/designer/studio-run-session.js",
+          "rawBytes": 20957,
+          "gzipBytes": 5241
+        },
+        {
+          "url": "/designer/studio-security.js",
+          "rawBytes": 2089,
+          "gzipBytes": 1007
+        },
+        {
+          "url": "/designer/studio-shared-connections.js",
+          "rawBytes": 3049,
+          "gzipBytes": 1348
+        },
+        {
+          "url": "/designer/studio-sql-mutations.js",
+          "rawBytes": 13318,
+          "gzipBytes": 3481
+        },
+        {
+          "url": "/designer/studio-state.js",
+          "rawBytes": 3725,
+          "gzipBytes": 1434
+        },
+        {
+          "url": "/designer/studio-syntax-bridge.js",
+          "rawBytes": 16815,
+          "gzipBytes": 4662
+        },
+        {
+          "url": "/designer/studio-visual-stage.js",
+          "rawBytes": 18149,
+          "gzipBytes": 5018
+        },
+        {
+          "url": "/designer/studio-workspace-explorer.js",
+          "rawBytes": 14476,
+          "gzipBytes": 3180
+        },
+        {
+          "url": "/designer/studio.js",
+          "rawBytes": 51656,
+          "gzipBytes": 10466
+        },
+        {
+          "url": "/designer/visual-format-inspector.js",
+          "rawBytes": 61986,
+          "gzipBytes": 9468
+        },
+        {
+          "url": "/designer/visual-preview.js",
+          "rawBytes": 29552,
+          "gzipBytes": 8993
+        },
+        {
+          "url": "/designer/workbench-context.js",
+          "rawBytes": 1147,
+          "gzipBytes": 496
+        },
+        {
+          "url": "/designer/workbench-execution.js",
+          "rawBytes": 11308,
+          "gzipBytes": 2847
+        },
+        {
+          "url": "/designer/workbench-overlays.js",
+          "rawBytes": 20642,
+          "gzipBytes": 4745
+        },
+        {
+          "url": "/designer/workbench-sidebar.js",
+          "rawBytes": 26309,
+          "gzipBytes": 5607
+        },
+        {
+          "url": "/js/admin-user-directory.js",
+          "rawBytes": 2550,
+          "gzipBytes": 1019
+        },
+        {
+          "url": "/js/api-contracts.generated.js",
+          "rawBytes": 3492,
+          "gzipBytes": 993
+        },
+        {
+          "url": "/js/api.js",
+          "rawBytes": 34120,
+          "gzipBytes": 6331
+        },
+        {
+          "url": "/js/auth-responses.js",
+          "rawBytes": 1357,
+          "gzipBytes": 592
+        },
+        {
+          "url": "/js/authoring-responses.js",
+          "rawBytes": 14032,
+          "gzipBytes": 3158
+        },
+        {
+          "url": "/js/branding.js",
+          "rawBytes": 8681,
+          "gzipBytes": 2490
+        },
+        {
+          "url": "/js/dialog-a11y.js",
+          "rawBytes": 6250,
+          "gzipBytes": 2488
+        },
+        {
+          "url": "/js/feedback.js",
+          "rawBytes": 16351,
+          "gzipBytes": 4519
+        },
+        {
+          "url": "/js/http-error.js",
+          "rawBytes": 525,
+          "gzipBytes": 360
+        },
+        {
+          "url": "/js/pages/studio.js",
+          "rawBytes": 4362,
+          "gzipBytes": 1633
+        },
+        {
+          "url": "/js/portal-authoring.js",
+          "rawBytes": 1987,
+          "gzipBytes": 970
+        },
+        {
+          "url": "/js/portal-header.js",
+          "rawBytes": 2596,
+          "gzipBytes": 1187
+        },
+        {
+          "url": "/js/portal-http.js",
+          "rawBytes": 10721,
+          "gzipBytes": 2977
+        },
+        {
+          "url": "/js/portal-nav.js",
+          "rawBytes": 4787,
+          "gzipBytes": 2134
+        },
+        {
+          "url": "/js/portal-studio-host.js",
+          "rawBytes": 12163,
+          "gzipBytes": 3191
+        },
+        {
+          "url": "/js/session-identity.js",
+          "rawBytes": 2304,
+          "gzipBytes": 956
+        }
+      ]
+    },
+    "desktop": {
+      "rawBytes": 2276279,
+      "gzipBytes": 563571,
+      "assets": [
+        {
+          "url": "/css/portal.css",
+          "rawBytes": 106526,
+          "gzipBytes": 17903
+        },
+        {
+          "url": "/designer/codemirror/codemirror-bundle.min.js",
+          "rawBytes": 380584,
+          "gzipBytes": 122853
+        },
+        {
+          "url": "/designer/connection-wizard.js",
+          "rawBytes": 107209,
+          "gzipBytes": 21291
+        },
+        {
+          "url": "/designer/dag.js",
+          "rawBytes": 49945,
+          "gzipBytes": 13852
+        },
+        {
+          "url": "/designer/data-prep-recipes.js",
+          "rawBytes": 4558,
+          "gzipBytes": 1591
+        },
+        {
+          "url": "/designer/designer-canvas-render.js",
+          "rawBytes": 32154,
+          "gzipBytes": 8629
+        },
+        {
+          "url": "/designer/designer-context.js",
+          "rawBytes": 4418,
+          "gzipBytes": 1756
+        },
+        {
+          "url": "/designer/designer-history.js",
+          "rawBytes": 3331,
+          "gzipBytes": 1015
+        },
+        {
+          "url": "/designer/designer-inspector-format.js",
+          "rawBytes": 32094,
+          "gzipBytes": 5332
+        },
+        {
+          "url": "/designer/designer-inspector.js",
+          "rawBytes": 110170,
+          "gzipBytes": 21998
+        },
+        {
+          "url": "/designer/designer-interactions.js",
+          "rawBytes": 12485,
+          "gzipBytes": 4150
+        },
+        {
+          "url": "/designer/designer-overlays.js",
+          "rawBytes": 25064,
+          "gzipBytes": 6900
+        },
+        {
+          "url": "/designer/designer-persistence.js",
+          "rawBytes": 13268,
+          "gzipBytes": 3457
+        },
+        {
+          "url": "/designer/designer-pointer.js",
+          "rawBytes": 15274,
+          "gzipBytes": 2977
+        },
+        {
+          "url": "/designer/designer-script-sync.js",
+          "rawBytes": 14025,
+          "gzipBytes": 3890
+        },
+        {
+          "url": "/designer/designer-util.js",
+          "rawBytes": 844,
+          "gzipBytes": 523
+        },
+        {
+          "url": "/designer/designer-visual-actions.js",
+          "rawBytes": 17556,
+          "gzipBytes": 4905
+        },
+        {
+          "url": "/designer/designer.css",
+          "rawBytes": 232290,
+          "gzipBytes": 36038
+        },
+        {
+          "url": "/designer/designer.js",
+          "rawBytes": 58477,
+          "gzipBytes": 13288
+        },
+        {
+          "url": "/designer/editor-toolbar.js",
+          "rawBytes": 4180,
+          "gzipBytes": 1843
+        },
+        {
+          "url": "/designer/html-preview.js",
+          "rawBytes": 5899,
+          "gzipBytes": 2411
+        },
+        {
+          "url": "/designer/rptsql-language.js",
+          "rawBytes": 7655,
+          "gzipBytes": 2733
+        },
+        {
+          "url": "/designer/run-results.js",
+          "rawBytes": 30772,
+          "gzipBytes": 9374
+        },
+        {
+          "url": "/designer/script-editor.js",
+          "rawBytes": 40278,
+          "gzipBytes": 10587
+        },
+        {
+          "url": "/designer/script-workbench.js",
+          "rawBytes": 25595,
+          "gzipBytes": 6015
+        },
+        {
+          "url": "/designer/studio-authoring-chart.js",
+          "rawBytes": 27246,
+          "gzipBytes": 7108
+        },
+        {
+          "url": "/designer/studio-authoring-context.js",
+          "rawBytes": 3386,
+          "gzipBytes": 1574
+        },
+        {
+          "url": "/designer/studio-authoring-data.js",
+          "rawBytes": 43221,
+          "gzipBytes": 10740
+        },
+        {
+          "url": "/designer/studio-authoring-dialog.js",
+          "rawBytes": 10813,
+          "gzipBytes": 3280
+        },
+        {
+          "url": "/designer/studio-authoring-pipeline.js",
+          "rawBytes": 43080,
+          "gzipBytes": 10828
+        },
+        {
+          "url": "/designer/studio-authoring-preview.js",
+          "rawBytes": 17893,
+          "gzipBytes": 5289
+        },
+        {
+          "url": "/designer/studio-authoring-report.js",
+          "rawBytes": 38895,
+          "gzipBytes": 8704
+        },
+        {
+          "url": "/designer/studio-authoring-ui.js",
+          "rawBytes": 7052,
+          "gzipBytes": 2773
+        },
+        {
+          "url": "/designer/studio-authoring.js",
+          "rawBytes": 10226,
+          "gzipBytes": 2823
+        },
+        {
+          "url": "/designer/studio-context.js",
+          "rawBytes": 13873,
+          "gzipBytes": 4891
+        },
+        {
+          "url": "/designer/studio-contracts.js",
+          "rawBytes": 5496,
+          "gzipBytes": 2339
+        },
+        {
+          "url": "/designer/studio-data-panel.js",
+          "rawBytes": 18578,
+          "gzipBytes": 4771
+        },
+        {
+          "url": "/designer/studio-data.js",
+          "rawBytes": 6333,
+          "gzipBytes": 2253
+        },
+        {
+          "url": "/designer/studio-document-session.js",
+          "rawBytes": 33918,
+          "gzipBytes": 7513
+        },
+        {
+          "url": "/designer/studio-document-tabs.js",
+          "rawBytes": 14289,
+          "gzipBytes": 3403
+        },
+        {
+          "url": "/designer/studio-editor-host.js",
+          "rawBytes": 9963,
+          "gzipBytes": 2884
+        },
+        {
+          "url": "/designer/studio-engine-panel.js",
+          "rawBytes": 17034,
+          "gzipBytes": 5183
+        },
+        {
+          "url": "/designer/studio-file-commands.js",
+          "rawBytes": 26892,
+          "gzipBytes": 6983
+        },
+        {
+          "url": "/designer/studio-filter-panel.js",
+          "rawBytes": 34711,
+          "gzipBytes": 7466
+        },
+        {
+          "url": "/designer/studio-git-diff.js",
+          "rawBytes": 3924,
+          "gzipBytes": 1104
+        },
+        {
+          "url": "/designer/studio-governance-datasets.js",
+          "rawBytes": 24325,
+          "gzipBytes": 6050
+        },
+        {
+          "url": "/designer/studio-governance-quality.js",
+          "rawBytes": 13176,
+          "gzipBytes": 3387
+        },
+        {
+          "url": "/designer/studio-governance-security.js",
+          "rawBytes": 9048,
+          "gzipBytes": 2662
+        },
+        {
+          "url": "/designer/studio-governance-tags.js",
+          "rawBytes": 16577,
+          "gzipBytes": 4276
+        },
+        {
+          "url": "/designer/studio-host.js",
+          "rawBytes": 1211,
+          "gzipBytes": 621
+        },
+        {
+          "url": "/designer/studio-lifecycle.js",
+          "rawBytes": 10775,
+          "gzipBytes": 3094
+        },
+        {
+          "url": "/designer/studio-navigation.js",
+          "rawBytes": 42424,
+          "gzipBytes": 8285
+        },
+        {
+          "url": "/designer/studio-outline.js",
+          "rawBytes": 15517,
+          "gzipBytes": 4461
+        },
+        {
+          "url": "/designer/studio-pipeline-canvas.js",
+          "rawBytes": 53394,
+          "gzipBytes": 13750
+        },
+        {
+          "url": "/designer/studio-pipeline-view.js",
+          "rawBytes": 21917,
+          "gzipBytes": 6146
+        },
+        {
+          "url": "/designer/studio-query-workbench.js",
+          "rawBytes": 12750,
+          "gzipBytes": 4540
+        },
+        {
+          "url": "/designer/studio-report-workflow.js",
+          "rawBytes": 20633,
+          "gzipBytes": 5902
+        },
+        {
+          "url": "/designer/studio-routes.generated.js",
+          "rawBytes": 1766,
+          "gzipBytes": 720
+        },
+        {
+          "url": "/designer/studio-run-session.js",
+          "rawBytes": 20957,
+          "gzipBytes": 5241
+        },
+        {
+          "url": "/designer/studio-security.js",
+          "rawBytes": 2089,
+          "gzipBytes": 1007
+        },
+        {
+          "url": "/designer/studio-shared-connections.js",
+          "rawBytes": 3049,
+          "gzipBytes": 1348
+        },
+        {
+          "url": "/designer/studio-sql-mutations.js",
+          "rawBytes": 13318,
+          "gzipBytes": 3481
+        },
+        {
+          "url": "/designer/studio-state.js",
+          "rawBytes": 3725,
+          "gzipBytes": 1434
+        },
+        {
+          "url": "/designer/studio-syntax-bridge.js",
+          "rawBytes": 16815,
+          "gzipBytes": 4662
+        },
+        {
+          "url": "/designer/studio-visual-stage.js",
+          "rawBytes": 18149,
+          "gzipBytes": 5018
+        },
+        {
+          "url": "/designer/studio-workspace-explorer.js",
+          "rawBytes": 14476,
+          "gzipBytes": 3180
+        },
+        {
+          "url": "/designer/studio.js",
+          "rawBytes": 51656,
+          "gzipBytes": 10466
+        },
+        {
+          "url": "/designer/visual-format-inspector.js",
+          "rawBytes": 61986,
+          "gzipBytes": 9468
+        },
+        {
+          "url": "/designer/visual-preview.js",
+          "rawBytes": 29552,
+          "gzipBytes": 8993
+        },
+        {
+          "url": "/designer/workbench-context.js",
+          "rawBytes": 1147,
+          "gzipBytes": 496
+        },
+        {
+          "url": "/designer/workbench-execution.js",
+          "rawBytes": 11308,
+          "gzipBytes": 2847
+        },
+        {
+          "url": "/designer/workbench-overlays.js",
+          "rawBytes": 20642,
+          "gzipBytes": 4745
+        },
+        {
+          "url": "/designer/workbench-sidebar.js",
+          "rawBytes": 26309,
+          "gzipBytes": 5607
+        },
+        {
+          "url": "/runtime/feedback.js",
+          "rawBytes": 16114,
+          "gzipBytes": 4464
+        }
+      ]
+    }
+  }
+}

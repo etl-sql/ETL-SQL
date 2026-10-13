@@ -19,7 +19,11 @@ try {
     }] }], datasets: [{ id: 'd1', name: 'data', query: 'SELECT 1;' }] };
     const snapshot = { reportName: 'Report', builtAt: date, sampleRows: { Revenue: [['North', '120'], ['West', null]] },
         columns: { Revenue: ['Region', 'Revenue'] }, metadata: { isSampled: false, rlsEnforced: false, totalRows: 2, returnedRows: 2 } };
-    assert.deepEqual(responses.readStudioSession(session), { ...session, privateDrafts: false });
+    assert.deepEqual(responses.readStudioSession(session), { ...session, privateDrafts: false, maxScriptCharacters: 200_000 });
+    assert.equal(responses.readStudioSession({ ...session, maxScriptCharacters: 10_000 }).maxScriptCharacters, 10_000);
+    assert.deepEqual(responses.readStudioCatalogPage({ items: [report], nextAfterId: 7 }), { items: [report], nextAfterId: 7 });
+    assert.throws(() => responses.readStudioCatalogPage({ items: Array(51).fill(report), nextAfterId: null }), /exceeded/);
+    assert.throws(() => responses.readStudioCatalogPage({ items: [report], nextAfterId: 'bad' }), /Invalid/);
     assert.equal(responses.readStudioSession({ ...session, privateDrafts: true }).privateDrafts, true);
     assert.deepEqual(responses.readStudioReports([report]), [report]);
     assert.deepEqual(responses.readStudioFolders([{ id: 3, path: '/Authors', name: 'Authors' }]), [{ id: 3, path: '/Authors', name: 'Authors' }]);
@@ -50,6 +54,7 @@ try {
     let leaseStatus = 200, savePayload = { version: 5, sourceRevision: 'new-revision' }, releaseStatus = 204;
     const fetch = async (url, options = {}) => {
         requests.push({ url, ...options });
+        if (url.endsWith('/summary')) return Response.json(report);
         if (url.endsWith('/script-content')) return Response.json(script);
         if (url === '/api/designer/lease') return leaseStatus === 200 ? Response.json(lease)
             : Response.json({ error: 'Already leased', owner: 'Another author', expiresAt: date }, { status: leaseStatus });
@@ -89,7 +94,9 @@ try {
     const readOnlyHost = hostModule.module.createPortalStudioHost({ ...session, capabilities: ['ScriptRead'], draftRecovery: false }, fetch, async () => report);
     const before = requests.length;
     assert.equal((await readOnlyHost.onOpenDocument(report)).canSave, false);
-    assert.equal(requests.length, before + 1, 'A read-only author must not request an edit lease.');
+    assert.deepEqual(requests.slice(before).map(request => request.url), ['/api/studio/reports/7/summary', '/api/reports/7/script-content'],
+        'A read-only author validates discovery and reads text without requesting an edit lease.');
+    await assert.rejects(host.onOpenDocument({ ...report, folderId: 99 }), /moved since the catalog was loaded/);
     assert.equal('onLoadDraft' in readOnlyHost, false);
     await assert.rejects(host.onCreateDocument({ folderId: 'bad', name: 'Report', scriptText: '' }), /Invalid/);
     assert.equal((await host.onCreateDocument({ folderId: '3', name: 'New', scriptText: 'SELECT 1;' })).name, 'New');

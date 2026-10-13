@@ -68,6 +68,7 @@ export {
 export {
     linter,
     lintGutter,
+    setDiagnostics,
 } from '@codemirror/lint';
 export { tags } from '@lezer/highlight';
 "@ | Set-Content (Join-Path $TmpDir "entry.js") -Encoding UTF8
@@ -87,7 +88,9 @@ export { tags } from '@lezer/highlight';
         --bundle `
         --minify `
         --format=esm `
+        "--banner:js=// @ts-nocheck — vendored esbuild bundle of the pinned @codemirror/* packages (scripts/codemirror/package.json). Not ours to type; regenerating the bundle must keep this line." `
         "--outfile=$OutFile"
+    if ($LASTEXITCODE -ne 0) { throw "CodeMirror bundle build failed." }
 
     $sizeKb = [math]::Round((Get-Item $OutFile).Length / 1KB, 1)
     Write-Host "`nDone. Bundle written to:" -ForegroundColor Green
@@ -96,6 +99,11 @@ export { tags } from '@lezer/highlight';
 }
 finally {
     if (Test-Path $TmpDir) {
+        $resolvedBuildDirectory = [System.IO.Path]::GetFullPath($TmpDir)
+        $resolvedTempRoot = [System.IO.Path]::GetFullPath($env:TEMP).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+        if (-not $resolvedBuildDirectory.StartsWith($resolvedTempRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "CodeMirror build cleanup target is outside the temporary directory."
+        }
         Remove-Item $TmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 }

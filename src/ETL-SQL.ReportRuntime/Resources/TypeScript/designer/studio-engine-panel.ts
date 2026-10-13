@@ -100,6 +100,11 @@ export function createStudioEnginePanel(hostContext: StudioEnginePanelContext) {
 
     async function renderEnginePanel() {
         hostContext.sidebarTitle.textContent = 'Engine';
+        if (hostContext.state.isEditorDegraded) {
+            hostContext.state.enginePlanScope = null;
+            hostContext.sidebarContent.innerHTML = '<div class="etlsql-studio-capability-state" role="status"><strong>Cursor planning is unavailable in basic editor mode.</strong><p>Retry loading the editor to inspect scope and explain the statement at the cursor. You can still select SQL text to run.</p></div>';
+            return;
+        }
         const doc = hostContext.getActiveDoc();
         if (!doc) {
             hostContext.sidebarContent.innerHTML = '<div class="etlsql-studio-empty-guidance"><strong>Open a script</strong><span>Engine state is read from the script you are editing.</span></div>';
@@ -192,7 +197,7 @@ export function createStudioEnginePanel(hostContext: StudioEnginePanelContext) {
             response = await hostContext.authFetch(hostContext.apiBase + STUDIO_ROUTES.run, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ script: hostContext.activeScriptText(), selection: slice }),
+                body: JSON.stringify({ script: hostContext.activeScriptText(), selection: slice, confirmDestructive: Boolean(allowMutating) }),
             });
         } catch (error) {
             host.innerHTML = `<div class="etlsql-studio-capability-state" role="alert"><strong>No plan</strong><p>${_escapeHtml(errorMessage(error) || String(error))}</p></div>`;
@@ -208,6 +213,10 @@ export function createStudioEnginePanel(hostContext: StudioEnginePanelContext) {
         }
 
         const data = await response.json();
+        if (data.success === false) {
+            host.innerHTML = `<div class="etlsql-studio-capability-state" role="alert"><strong>The engine did not plan this</strong><p>${_escapeHtml(data.message || 'Execution was refused.')}</p></div>`;
+            return;
+        }
         const columns = (data.columns || []).map((column: StudioDynamic) => (typeof column === 'string' ? column : column?.name || ''));
         const rows = data.rows || [];
         if (!rows.length) {

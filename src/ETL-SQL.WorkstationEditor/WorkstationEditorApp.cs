@@ -994,6 +994,10 @@ public static class WorkstationEditorApp
             {
                 return Results.Json(await RunWithLifecycleAsync(request, runner, lifecycle, cancellationToken), JsonOptions);
             }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = SecretRedactor.Redact(ex.Message) });
+            }
             catch (OperationCanceledException)
             {
                 if (cancellationToken.IsCancellationRequested)

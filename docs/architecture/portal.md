@@ -1075,6 +1075,38 @@ In Studio, **Run** on a saved pipeline calls these routes through the `pipelineR
 in `BrowserSources/portal-studio-host.ts`. Unsaved edits are refused before any request. Run
 selection and helper previews stay on the read-only `/api/designer/run` path.
 
+Helper requests set `helperPreview` and may name `previewContext` with a one-based
+`previewContextLine`. The shared validator permits only nonsensitive variable declarations and
+read-only `#temp` staging above that line, rejecting unavailable context before execution. Native
+helpers accept one read-only SELECT on a direct catalog SQLite connection whose target opens with
+`Mode=ReadOnly`; the real caller's connection ACL still applies. Ordinary interactive runs retain
+their existing allow-list. A lost interactive response is displayed as `Unknown`, with its run ID
+kept in the original document and the Portal audit. Bounded host evidence:
+[Studio execution scope](decisions/studio-execution-scope-evidence.md).
+
+Studio Home uses `GET /api/studio/catalog?query=...&afterId=...`. Each request inspects at most 50
+tenant-scoped candidate documents plus one lookahead row. Permissions are resolved in batches with
+the same ownership, authorship, and ranked ACL rules as a single report check. The response returns
+only visible summaries and a cursor past the inspected rows; pages can be empty when candidates
+are inaccessible. Search, Next/Previous, and explicit Refresh update discovery without replacing
+open documents. Direct links and new opens recheck `/api/studio/reports/{id}/summary`; deleted or
+moved selections fail with an explanation. The older report-list endpoint remains available to its
+other callers. This is request-driven discovery, not live catalog synchronization.
+
+The session response advertises `maxScriptCharacters` from the designer configuration. Shared
+Studio editor services pause above that UTF-16 character count while keeping the buffer editable;
+desktop uses 200,000. Analysis 429 responses explain stale diagnostics and schedule the current
+buffer after `Retry-After`, or a one-second delay when that header is absent. Retry timers are
+disposed with the editor. See [delivery and document measurements](../benchmarks/studio-delivery-budgets.md).
+
+Portal Studio session and initial catalog reads share a 15-second AbortSignal deadline. Failed
+startup shows Retry Connection and mounts no workbench with fallback permissions. The user label
+is populated only after session verification and any access-token refresh. A rejected CodeMirror
+import can be retried independently in the shared editor; basic text editing remains available,
+while canonical visual/helper writes refuse until the full editor recovers. Existing draft recovery
+survives re-authentication. Real-host and sandbox evidence:
+[Studio failed recovery](decisions/studio-failed-recovery-evidence.md).
+
 The governance rail's **Run it on a schedule** section uses the `pipelineSchedule` host callbacks
 for a catalog pipeline. It does not write `CREATE JOB` into the script there: a catalog document
 has no path a job statement could name. Desktop Studio keeps the statement-writing form.

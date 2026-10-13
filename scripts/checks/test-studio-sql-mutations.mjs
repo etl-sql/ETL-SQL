@@ -396,4 +396,14 @@ for (const kind of ['designer', 'pipeline']) {
         }
     }
 }
+state.isEditorDegraded = true;
+apiCalls.length = 0;
+notifyCalls.length = 0;
+const keptText = mockActiveDoc.content;
+assert.equal(await service.canonicalDesignerMutation('Unavailable visual edit', () => { throw new Error('Must not run'); }), null);
+assert.equal(await service.canonicalPipelineMutation('Unavailable task edit', { task: 't1' }), null);
+assert.equal(mockActiveDoc.content, keptText);
+assert.equal(apiCalls.length, 0);
+assert.equal(notifyCalls.length, 2);
+assert.match(notifyCalls[0].msg, /basic editor mode/);
 console.log('test-studio-sql-mutations: all checks passed');

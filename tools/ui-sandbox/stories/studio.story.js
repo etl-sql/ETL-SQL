@@ -221,6 +221,10 @@ export default {
     { id: 'pending-save', label: 'Slow Save (type while saving)' },
     { id: 'crlf-pipeline', label: 'CRLF Pipeline (initial projection)' },
     { id: 'pipeline-run', label: 'Saved Pipeline (Run, follow, Stop, schedule)' },
+    { id: 'helper-context', label: 'Helper preview context controls (mock rows)' },
+    { id: 'degraded-editor', label: 'Editor recovery (block CodeMirror to exercise fallback)' },
+    { id: 'large-document', label: 'Large document (editor services pause above 200,000 characters)' },
+    { id: 'catalog-paging', label: 'Catalog search and paging (125 mock documents)' },
   ],
   async mount(stage, fixtureId, ctx) {
     // Import canonical studio module
@@ -251,6 +255,13 @@ export default {
     };
 
     const documents = JSON.parse(JSON.stringify(SAMPLE_DOCS));
+    if (fixtureId === 'large-document') {
+      documents.find(document => document.id === 'doc-etl').content = '--' + 'é'.repeat(199999);
+    }
+    const catalog = Array.from({ length: 125 }, (_, index) => ({
+      id: index + 1, folderId: 1, folderPath: '/Practice', name: `Practice ${String(index + 1).padStart(3, '0')}`,
+      kind: 'Report', version: 1,
+    }));
     if (fixtureId === 'crlf-pipeline') {
       const pipeline = documents.find(document => document.id === 'doc-etl');
       pipeline.content = pipeline.content.replace(/\r?\n/g, '\r\n');
@@ -261,7 +272,20 @@ export default {
     }
     const workbench = await studioMod.createStudioWorkbench(stage, {
       documents,
-      activeDocId: fixtureId === 'crlf-pipeline' || fixtureId === 'pipeline-run' ? 'doc-etl' : undefined,
+      activeDocId: fixtureId === 'catalog-paging' ? '__home__'
+        : ['crlf-pipeline', 'pipeline-run', 'degraded-editor', 'large-document'].includes(fixtureId) ? 'doc-etl' : undefined,
+      catalogReports: fixtureId === 'catalog-paging' ? catalog.slice(0, 50) : undefined,
+      catalogDiscovery: fixtureId === 'catalog-paging' ? {
+        nextAfterId: 50,
+        search: async (query, afterId) => {
+          const matches = catalog.filter(report => report.id > afterId && report.name.includes(query));
+          return { items: matches.slice(0, 50), nextAfterId: matches.length > 50 ? matches[49].id : null };
+        },
+      } : undefined,
+      onOpenDocument: fixtureId === 'catalog-paging' ? async report => ({
+        id: `report-${report.id}`, reportId: report.id, name: `${report.name}.rptsql`,
+        path: `/Practice/${report.name}.rptsql`, content: 'SELECT 1;',
+      }) : undefined,
       pipelineRuns: fixtureId === 'pipeline-run' ? makePipelineRunHost() : undefined,
       pipelineSchedule: fixtureId === 'pipeline-run' ? makePipelineScheduleHost() : undefined,
       workspaceFiles: JSON.parse(JSON.stringify(sandboxWorkspace.files)),
@@ -336,6 +360,22 @@ export default {
       }),
     });
 
+    let helperWorkbench = null;
+    if (fixtureId === 'helper-context') {
+      const { createQueryWorkbench } = await importFresh(STUDIO_JS.replace('studio.js', 'studio-query-workbench.js'));
+      const { STUDIO_ROUTES } = await importFresh(STUDIO_JS.replace('studio.js', 'studio-contracts.js'));
+      const helperHost = document.createElement('section');
+      helperHost.setAttribute('aria-label', 'Helper preview context example');
+      stage.appendChild(helperHost);
+      helperWorkbench = await createQueryWorkbench(helperHost, {
+        context: 'engine', value: 'SELECT Id FROM #stage WHERE Id >= @minimum', previewContextLine: 3,
+        scriptText: () => 'DECLARE @minimum INT = 2;\nSELECT 2 AS Id INTO #stage;\nSELECT 99 AS Later;',
+        routes: STUDIO_ROUTES,
+        request: async (_route, options) => options.body.previewContextLine === 3
+          ? { columns: ['Id'], rows: [{ Id: 2 }], rowCount: 1 }
+          : { success: false, message: 'Preview context is unavailable. Nothing was executed.' },
+      });
+    }
     window.__STUDIO_INSTANCE__ = workbench;
     window.__STUDIO_API_REQUESTS__ = apiRequests;
     // The seed the mock host answers from, exposed so a test can put the host into a state the
@@ -353,6 +393,7 @@ export default {
       window.__STUDIO_PIPELINE_RUN__ = null;
       window.__STUDIO_NO_GIT__ = null;
       workbench?.dispose?.();
+      helperWorkbench?.dispose?.();
     };
   }
 };

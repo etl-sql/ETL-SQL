@@ -349,10 +349,12 @@ export const navigationApi = {
 };
 
 export const studioApi = {
-    session: () => apiJson('/api/studio/session'),
-    reports: () => apiJson('/api/studio/reports'),
-    folders: () => apiJson('/api/studio/folders'),
-    privateDrafts: () => apiJson('/api/studio/private-drafts'),
+    session: (signal?: AbortSignal) => apiJson('/api/studio/session', { signal }),
+    reports: (signal?: AbortSignal) => apiJson('/api/studio/reports', { signal }),
+    catalog: (query = '', afterId = 0, signal?: AbortSignal) => apiJson(`/api/studio/catalog?query=${encodeURIComponent(query)}&afterId=${afterId}`, { signal }),
+    reportSummary: (id: number, signal?: AbortSignal) => apiJson(`/api/studio/reports/${id}/summary`, { signal }),
+    folders: (signal?: AbortSignal) => apiJson('/api/studio/folders', { signal }),
+    privateDrafts: (signal?: AbortSignal) => apiJson('/api/studio/private-drafts', { signal }),
     createReport: (body: CreateStudioReportRequest) => apiJson('/api/studio/reports', { method: 'POST', body })
 };
 

@@ -197,14 +197,12 @@ export function createStudioRunSession(hostContext: StudioRunSessionContext) {
                 }
                 return;
             }
-            // A transport failure is a failed run. This once rendered a green
-            // "In-Memory Run Completed" over stale sample rows, so a script that never executed
-            // looked like it had succeeded.
+            // Losing the response cannot establish whether the server finished the run.
             setDocumentTrace(doc, [
                 { type: 'clear', resetHistory: true },
                 { type: 'status', status: 'failed' },
-                { type: 'message', level: 'error', text: `${errorMessage(error) || 'The run did not complete.'} [Run ID: ${clientRunId}]` },
-                { type: 'done', exitCode: 1, status: 'Failed' },
+                { type: 'message', level: 'warn', text: `The run response was lost: ${errorMessage(error)} Its outcome is unknown; the server may have completed execution. Check the run ID before running again. [Run ID: ${clientRunId}]` },
+                { type: 'done', exitCode: 1, status: 'Unknown' },
             ]);
         } finally {
             context.runActive = false;

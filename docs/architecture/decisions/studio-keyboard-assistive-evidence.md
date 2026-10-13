@@ -138,6 +138,10 @@ Known rough edges, left for the pass to judge:
 
 ## Screen-reader pass sheet (ST28, ST29)
 
+**Readiness checked 2026-10-13:** Windows Narrator is installed at
+`C:\Windows\System32\Narrator.exe` on the current test machine. No spoken journey has been
+observed or recorded. Installation is no longer a prerequisite; the observed passes below remain open.
+
 Closing ST28 and ST29 needs one named screen reader and browser to speak the document journey in
 each host, with what it said kept here.
 

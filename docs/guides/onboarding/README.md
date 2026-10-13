@@ -10,6 +10,7 @@ New to ETL-SQL? These onboarding guides will help you understand the core archit
 
 | Guide | Description |
 | :--- | :--- |
+| [Studio Guides](../studio/README.md) | First report, pipeline execution, and draft/recovery guidance for v0.21.0. |
 | [5-Minute Quickstart](QUICKSTART.md) | Verify installation and run your first zero-dependency pipeline with `MOCKDB`. |
 | [Thinking in Pipelines (User Manual)](getting-started.md) | Transition from single-database SQL to multi-context data orchestration. |
 | [Migration Guide](migration-guide.md) | Release baseline notes and migration checklist for upgrading scripts to v0.18.0. |

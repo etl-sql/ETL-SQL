@@ -312,6 +312,11 @@ export interface StudioPrivateDraftHost {
 }
 
 export interface StudioOptions extends StudioStateOptions {
+    maxScriptCharacters?: number;
+    catalogDiscovery?: {
+        nextAfterId: number | null;
+        search(query: string, afterId: number): Promise<{ items: StudioCatalogReport[]; nextAfterId: number | null }>;
+    };
     initialSnapshot?: any;
     previewUrl?: string;
     onSave?: (content: string, path: string, document?: any) => Promise<any> | any;

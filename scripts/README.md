@@ -126,6 +126,11 @@ and performance claims; they are not part of the default test lanes.
 
 ### Repository guardrails
 
+`node scripts/measure-studio-transfer.mjs <output.json>` inventories the production Studio asset
+closures with the pinned TypeScript parser and records raw/gzip response bytes. The consumer-check
+lane runs `checks/test-studio-transfer-budget.mjs` against the reviewed ceilings and an isolated
+oversized fixture. See [Studio Delivery Budgets](../docs/benchmarks/studio-delivery-budgets.md).
+
 Checks that protect conventions the compiler cannot. Useful to run locally before pushing.
 
 | Script Name | Language | Platform | Description |

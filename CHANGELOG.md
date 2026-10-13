@@ -14,6 +14,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Release-versioned [Studio guides](docs/guides/studio/README.md) for the first report, pipeline
+  Run/Schedule/Stop, and drafts/publishing/recovery in Portal and desktop.
+
+- Studio Home searches and pages the Portal catalog with bounded server responses. Refresh picks up
+  external changes; deleted or moved selections explain why they cannot open, preserving other drafts.
+- Studio production asset transfer budgets and uncached Portal/desktop editor regression checks.
+- Studio pauses automatic editor services above the host's document character limit while keeping
+  every character editable. Portal analysis rate limiting explains stale diagnostics and retries
+  the current buffer after the permitted delay.
+
 - Move and resize a report visual in Studio without a pointer. Tab to a visual on the canvas, then
   use the arrow keys to move it one grid cell and Shift with an arrow key to resize it. Each change
   is announced to assistive technology, and a step off the grid is refused and said so.
@@ -143,6 +153,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Recover Studio's editor after a failed CodeMirror download without losing either tab's edits,
+  including typing during Retry. Explain unavailable helper writes in basic mode. Bound Portal
+  session/catalog startup to 15 seconds, verify identity after refresh, and preserve existing kept
+  drafts through failed refresh, sign-in and startup retry.
+- Keep Studio run IDs and report an unknown outcome when an execution response is lost. Results stay
+  with the document that ran, even after switching tabs. Forward Engine-panel prefix consent to the
+  desktop guard and display server refusals. Helper previews now validate explicit variable/staging
+  context and support bounded native reads through SQLite connections opened read-only. Desktop
+  helpers cap result rows at 1 MiB and display truncation without treating omitted rows as an empty query.
 - Keep a visual where the Studio inspector's **Col**, **Row**, **W** and **H** fields put it. The
   fields moved the card on screen without writing the layout to the script, so the visual went
   back on the next reload. They now write it, stay inside the twelve-column grid, and respect a

@@ -1,47 +1,90 @@
 # ETL-SQL Development TODO List
 
-Use this list as the execution ledger for product and release work. Work top to bottom inside each
-section unless a dependency or release-blocking defect changes the order. When an item is verified,
-record the notable outcome in `CHANGELOG.md` and mark it complete. Remove completed items only during
-a later closed-item audit after their implementation and evidence have been double-checked.
+The execution ledger for v0.21.0. Items are grouped by when they can be done, not by topic:
 
-Active sprint work and release gates are represented below. Deferred initiatives remain in
-`ROADMAP.md` until selected for a sprint.
+| Group | What is in it | Open |
+| :--- | :--- | :---: |
+| [Now](#now--v0210-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 8 |
+| [At release](#v0210-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 11 |
+| [Blocked](#blocked--waiting-on-something-outside-the-repository) | Work waiting on a tool, account or person | 3 |
+| [Studio backlog](#studio-backlog--horizon-next-not-required-for-v0210) | Sized Studio tasks, not required for v0.21.0 | 25 |
+| [Known limits](#known-limits--context-not-tasks) | Limits to state honestly in release notes | — |
 
----
-
-## v0.21.0 open work
-
-v0.21.0 focuses on the next milestone increments from `ROADMAP.md` (code stability, remaining browser
-TypeScript migration, generated browser assets leaving source control, Studio Alpha journey completions,
-and scale baseline recalibration).
-
-| Remaining work | Where |
-| :--- | :--- |
-| Code stability — Browser sources, Studio, test lanes | [§1](#1-code-stability--browser-sources-studio-and-test-lanes) |
-| Generated browser assets — Build preparation & source-control cleanup | [§1.1](#11-generated-browser-assets--build-preparation-and-source-control-cleanup) |
-| Studio — Unified authoring experience & completeness criteria (assessed; gaps routed to §3–§5) | [§2](#2-studio--unified-authoring-experience-and-completeness-criteria) |
-| Studio — Portal pipelines & schedule handoff limits | [§3](#3-studio--portal-pipelines-and-schedule-handoffs) |
-| Studio — Private unpublished draft policy limits | [§4](#4-studio--private-unpublished-drafts-and-publishing) |
-| Studio — Author, reader & beginner practice journeys (ST16–ST19, ST21 complete; ST16b, ST21b open) | [§5](#5-studio--author-reader-and-beginner-practice-journeys) |
-| Studio — Keyboard & assistive technology (ST23–ST27 complete; ST28, ST29 need a screen reader) | [§6](#6-studio--keyboard-and-assistive-technology) |
-| Studio — Execution scope, cancellation & helper previews | [§7](#7-studio--execution-scope-cancellation-and-bounded-helper-previews) |
-| Studio — Degraded editor & failed session recovery | [§8](#8-studio--degraded-editor-and-failed-session-recovery) |
-| Studio — Delivery budgets, catalog scale & large documents | [§9](#9-studio--delivery-budgets-catalog-scale-and-large-documents) |
-| Studio — Release-versioned guidance | [§10](#10-studio--release-versioned-guidance) |
-| Release engineering | [§11](#11-release-engineering-follow-ups) |
-| Codebase audit findings — Bugs, security, performance and telemetry | [§13](#13-codebase-audit-findings--bugs-security-performance-and-telemetry) |
+Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
+completed items only in a closed-item audit, after the implementation and evidence are double-checked.
+Deferred initiatives stay in `ROADMAP.md` until selected. Section numbers (§1.1, §5, §13.1 …) are kept
+because documents and source comments cite them.
 
 ---
 
-## v0.21.0 Release Evidence Gates
+## Now — v0.21.0 work that can be done today
 
-Target release: **v0.21.0**
+### 1.1 Generated browser assets — remaining acceptance
 
-The gates track release proof continuously across all milestone cycles.
+**Parent:** §1 Code stability — Browser sources, Studio, and test lanes. Every Portal and shared module
+now has a TypeScript owner, so §1 has no other open work.
+
+**State:** The cutover is done. The 491 generated outputs left the Git index on 2026-10-11 and are
+ignored by exact rules; a fresh clone prepares them byte-identically. What remains is acceptance of the
+delivery paths that had not been exercised when the cutover was taken.
+
+**Completion rule:** A fresh checkout generates every browser asset before build, test or packaging
+consumes it, and published products need no Node.js to run. A populated manifest, an older snapshot
+or an asset-only archive check does not close a build, package or runtime row.
+
+**References:** [asset standards](docs/architecture/standards/report-runtime-asset-standards.md) ·
+[delivery matrix](docs/releases/v0.21.0-browser-asset-delivery-matrix.md) ·
+[progress record](docs/releases/v0.21.0-generated-assets-progress.md) (full history and original task wording)
+
+- [ ] **Packaged runtime — remaining hosts.** Portal passes from the DEB, the Windows ZIP and the MSI
+  extract. Still to smoke-test outside the source tree, with no Node on the path: ReportPlayer,
+  WorkstationEditor, and the report CLI's offline export (embedded bundle, no network requests).
+  Check prepared bytes, content types, and a 404 for a deliberately missing module.
+- [ ] **VSIX in a real VS Code webview.** Install the packaged VSIX and open the designer and a report.
+  Archive inspection has passed; nothing has been observed in an actual webview.
+- [ ] **Development webview and watch.** Run `npm run watch` beside `npm run watch:assets` in the
+  extension development host. Verify a dependency-only edit, a newly added module, and a compiler
+  failure then recovery all reach the webview.
+- [ ] **Real IDE launch.** Open the solution in an IDE before preparation, prepare, then build and
+  launch; repeat after `git clean -fdX`. Only the `DesignTimeBuild` property has been exercised, and
+  that is not IDE acceptance.
+- [ ] **Installed upgrades.** The workstation MSI upgrade from v0.20.1 passes with asset assertions.
+  Still open: confirm that assertion in CI, a Portal-profile upgrade with served-asset checks, DEB
+  upgrade, VSIX update, existing browser caches, and rollback to the previous version's own assets.
+- [ ] **CodeQL over the newly analysed owners.** 88 TypeScript owners entered analysis when the
+  exclusions were narrowed. Review the first run's alerts. Decide whether `scripts/` stays excluded
+  as build tooling; today the generators are not analysed.
+- [ ] **macOS x64 package comparison.** The byte comparison passed on Windows, Linux and macOS arm64
+  (run 38194696393). The macOS x64 job hit its time limit before that step; the limit is raised and
+  the job has not been re-run.
+
+### 5. Studio — Author, reader and beginner practice journeys
+
+**Horizon:** Next · Prerequisites complete: ST16–ST22 (see
+[practice execution decision](docs/architecture/decisions/studio-practice-execution.md),
+[desktop](docs/architecture/decisions/studio-desktop-practice-evidence.md),
+[report](docs/architecture/decisions/studio-beginner-report-evidence.md),
+[reader](docs/architecture/decisions/studio-reader-journey-evidence.md) and
+[Portal practice](docs/architecture/decisions/studio-portal-practice-evidence.md) evidence).
+
+- [ ] **ST21b — Portal practice exercise in the sandbox.** Carry the submitter's identity in the sandbox request,
+  lift `sandbox_identity_unsupported` for run slots, and repeat ST21 on a real sandbox with its terminal status,
+  egress denial and cleanup recorded. Security-sensitive; needs a written design first. (Depends on: ST21; Size: L)
+
+ST16b, the observed learner walkthrough, is deferred in
+[`ROADMAP.md`](ROADMAP.md#author-reader-and-beginner-practice-journeys) until a person new to Studio is available.
+
+---
+
+## v0.21.0 Release — run on the final candidate
+
+Target release: **v0.21.0**. Nothing here can be closed early: each item is evidence about the
+candidate that ships.
 
 Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.md) and
 [`Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/enterprise-release-evidence-checklist.md).
+
+### Release evidence gates
 
 - [ ] Run the full local pre-release gate required by the release checklist, including the selected
   SLT, Docker integration, scale, packaging, and platform lanes.
@@ -52,640 +95,193 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
   SaaS or hosted-production outcomes into release claims.
 - [ ] Verify third-party notices/inventory, secret scanning, SBOM, checksums, installers, release
   notes, upgrade guidance, and changelog entries for the final shipped scope.
-- [ ] Pass the clean-checkout asset generation and published-host checks in §1.1 before shipping
-  with generated browser JavaScript excluded from source control. Include final-candidate behavior
-  checks and fresh Git checkout verification after the index cleanup.
 - [ ] Reconcile `TODO.md` and `ROADMAP.md` immediately before release: remove verified completed
   work, retain unfinished increments with accurate status, and ensure release notes describe only
   evidence-backed outcomes.
 
----
+### Generated browser assets — final-candidate checks (§1.1)
 
-## 1. Code stability — Browser sources, Studio, and test lanes
+- [ ] **Run the release workflow.** `release.yml` and `Master-Release.ps1` have not run since the
+  cutover. Their macOS DMG and upload steps are unverified.
+- [ ] **Inspect the DMG.** Its contents have not been compared with the prepared inventory on either
+  macOS architecture.
+- [ ] **Verify release metadata on real assets.** Attestation, `sha256sums.txt`, SBOM and third-party
+  notices must be produced after package assembly and cover the generated assets. The generators and
+  job order are verified; attestation over real release assets is not.
+- [ ] **Run every delivery-matrix row on the final candidate.** No package row has been run on the
+  current source state. Earlier snapshots are supporting evidence only.
+- [ ] **Close the cutover.** Reconcile the matrix with the items above, record the source revision and
+  final ownership inventory, and confirm from a fresh clone that repeat preparation leaves Git clean
+  and the ownership gate rejects a re-tracked output. This also closes the "untrack" acceptance item,
+  which is implemented but held open for its packaged-runtime prerequisites.
 
-**Horizon:** v0.21.0  
-**Authoritative design:** [ETL-SQL Studio](docs/architecture/decisions/etl-sql-studio.md)
+### 11. Release engineering follow-ups
 
-Completed browser conversions and their historical progress notes were reviewed in the
-[closed-item audit](docs/releases/v0.21.0-closed-todo-audit.md). Remaining delivery acceptance is below.
-
-### 1.1 Generated browser assets — Build preparation and source-control cleanup
-
-Container preparation checkpoint (2026-10-10): the Portal, Orchestrator service, and sandbox-worker
-images prepare and verify browser assets in a Node.js 22 build stage, then pass the prepared tree to
-.NET. All three image builds pass from an isolated Git-index archive with 380 inventoried generated
-outputs removed before the Docker builds. Portal startup now passes with its full hosted-service
-pipeline and dependency scope validation: the unused direct tenant-store registration is removed,
-and the singleton alert evaluator resolves its Orchestrator client within the existing per-run scope.
-Portal publish preserves prepared host-copy bytes instead of overwriting them with raw canonical
-assets. The isolated Windows lane passes 14 startup, tenant-partition, alert-delivery, and hosted-service
-tests without skips. The Linux Portal serves all 102 inventoried assets with matching hashes; all nine
-embedded runtime resources match their source inputs. Node is absent from all three runtime images,
-and both bundled CLI version checks pass. Source-control cutover and final package/platform acceptance
-remain open. Evidence is under `artifacts/section1/container-source-only-*`,
-`container-startup-before-fix.log`, and `container-publish-before-fix.*`.
-
-**Horizon:** v0.21.0
-
-**Completion rule:** A fresh checkout generates every required browser asset before build, test, or
-packaging consumes it. Published products include the JavaScript they need and require no Node.js
-installation to run. Complete preparation and validation before untracking outputs. Final acceptance
-must use the same candidate source state across the required build and package paths; earlier snapshots
-are supporting evidence and must be refreshed when owners, generators, or packaging change.
-
-**Authoritative workflow:** [Shared Report Runtime Asset Standards](docs/architecture/standards/report-runtime-asset-standards.md).
-Work through the preparation and verification tasks below before the source-control cleanup.
-
-**Scope:** Remove reproducible generated outputs from Git. Keep TypeScript owners, handwritten
-JavaScript, tooling, canonical vendor assets, and generator inputs under source control. JavaScript
-remains part of the published products. Remaining handwritten JavaScript migration is tracked in §1.
-
-**Decision:** Implement this cleanup for v0.21.0. The TypeScript migration makes generated JavaScript
-eligible for removal from source control; the delivery checks below determine when each output is
-ready. Keep outputs tracked until their retained inputs, preparation workflow, and packaged consumers
-have passed acceptance. Published JavaScript must continue to be generated and shipped.
-
-**Ready to start:** Yes. Ownership, preparation, and delivery verification can proceed now. The Git
-cutover is ready only when the required checks below pass against the same candidate. Completing a
-TypeScript conversion does not by itself close that output's build, package, or runtime acceptance.
-
-**Cutover (2026-10-11):** The 491 generated outputs left the Git index and are ignored by exact rules.
-The prepared inventory contains 491 outputs from 88 shared and 112 Portal TypeScript owners, including
-the offline bundle and 290 host copies; 263 retained inputs are tracked and none is ignored. Governance read, mutation, dialog, and native-host acceptance
-have passed. This inventory does not complete source-control acceptance: the earlier
-source-only build and packaged-host evidence covered 380 to 403 outputs and must be refreshed against
-the final candidate. Refresh the inventory and evidence after further source edits.
-Git cleanup remains pending the complete delivery-path checks below. Refresh the earlier snapshot
-evidence against the final source state before untracking; migration of every remaining handwritten Portal module is not a prerequisite
-for removing verified generated outputs.
-
-The v0.21.0 cleanup can proceed through the implementation and verification tasks below. The decision
-to remove outputs from Git depends on their reproducibility and delivery evidence, not just on the
-TypeScript migration milestone. Every Portal page and module now has a TypeScript owner. The only
-JavaScript left as a tracked input under the asset roots is the schema-generated API validator and
-three vendor bundles (Arrow, Tabulator, CodeMirror).
-The separately generated API validator remains a retained input until its own generation path passes
-the ownership and bootstrap checks below.
-
-**Implementation order:**
-
-Ownership preflight now computes compiler emits, the offline bundle, and host copies before mutation.
-The version-2 inventory stores output hashes. Fresh byte-identical outputs can be adopted; replacing
-or deleting other existing bytes requires a matching previous ownership hash. Generated-looking banners do not
-authorize cleanup or exclude retained input changes from watch detection. Windows and Ubuntu compiler,
-bundle, and full generator regressions passed, including local-edit preservation, conflicts, malformed
-paths, junctions, source rename/delete recovery, and watcher recovery. The tooling checkpoint's exact
-staged tree produced 379 byte-identical outputs on both platforms with Node.js 22.23.3; this covers
-the tracked shared owners. The working-tree consumer gate passed all 100 checks, with zero type/lint
-findings. Evidence is under `artifacts/section1/ownership-*.log` and `ownership-index-proof.json`.
-Final candidate build, package, runtime, and source-control acceptance remain open.
-
-Toolchain validation now requires Node.js 22.x, npm 10.x for restore, and the exact locked TypeScript
-compiler. Preparation, standalone compilation, and watcher startup reject unsupported Node or a
-missing, mismatched, or broken local compiler before writing assets. Restore uses strict package
-engines; preparation never downloads a fallback compiler. Actual Node.js 24.14.0 failures preserved
-all 474 prepared files, including the inventory and manifest. The complete preparation-entry-point
-task remains open until its final candidate and delivery evidence is refreshed.
-
-Freshness verification now fingerprints retained Portal markup/styles/images, generator helpers in
-`scripts/lib`, contract schemas and generators, and the host build/package selectors alongside the
-compiler inputs. Before-fix probes showed a changed transitive helper, ReportRuntime project file,
-and Portal style passing both asset and MSBuild checks; all three now fail read-only verification
-without changing prepared files. The full freshness task remains open for contract bootstrap,
-package freshness, and final candidate acceptance. Evidence is under
-`artifacts/section1/freshness-before.log` and `freshness-after.log`.
-
-CI preparation now precedes asset consumers in all 14 audited build/certification job definitions
-across CI, release, native-package, CodeQL, and manual-release workflows. Release-tag validation
-precedes dependency restore. Parsed workflow/order checks pass; this is configuration evidence,
-not a completed GitHub run or container/package certification. See
-`artifacts/section1/workflow-preparation-before.log` and `workflow-preparation-after.log`.
-
-The PowerShell sync wrapper delegates to canonical preparation and propagates missing-tool and
-verification failures. Both debug scripts prepare before invoking .NET, stop on preparation failure,
-and preserve checkout/package path arguments from an unrelated working directory. The local-entry-point
-task remains open for release/publish entry points, direct .NET/IDE workflows, and run/watch/incremental
-build acceptance.
-Focused generator/wrapper checks pass using isolated Windows and Ubuntu source fixtures with spaces,
-non-ASCII characters, and a literal `$`. Downstream build spies verify argument boundaries, preparation
-ordering, and failure propagation. The tracked checkpoint produces 380 byte-identical outputs on both
-platforms; complete build/package certification remains open. Evidence is under
-`artifacts/section1/entrypoints-index-windows.log` and `entrypoints-linux-evidence/`.
-
-Smoke and test-lane scripts now prepare before normal runs and verify read-only in no-build mode.
-Isolated Windows/Ubuntu wrapper checks cover missing Node/compiler, stale added owners, missing host
-outputs, recovery before .NET, checkout paths, and test exit codes. Before-fix probes reached .NET
-without a restored compiler and accepted an added owner in no-build mode. Build/test spies verify
-the invocation contract; final native lanes remain open. Evidence is under
-`artifacts/section1/test-entrypoints-before.log`, `test-entrypoints-no-build-before.log`, and
-`test-entrypoints-linux-evidence/`.
-
-Pre-push preparation now precedes formatting. Pre-release asset preparation and verification always
-execute on resume; failed prerequisites block reuse of earlier successful consumers. Bash source
-fingerprints include tracked diffs and untracked contents, and PowerShell preserves UTF-8 Git paths.
-Focused policy tests cover repeated dirty-source edits, Unicode paths, phase execution, failure
-propagation, and pre-push ordering. Full pre-release and package certification remain open.
-The isolated staged archive passes 40 release-policy checks; the eight new ordering/resume checks
-fail against the old scripts. Ubuntu resume/content-hash probes pass. Evidence is under
-`artifacts/section1/release-entrypoints-index-tests.log`, `release-entrypoints-before.log`, and
-`release-entrypoints-linux-proof.log`.
-
-Contract generation now stages the DTO declarations, registered-host Studio routes, and API-schema
-validator as one set. A stopped Portal host cannot certify routes; the desktop host must start too.
-The isolated bootstrap build omits generated JavaScript resources and cannot be published. Ordinary
-Reporting builds still embed the runtime bundle and feedback module. Failures preserve tracked
-contracts; interrupted promotion blocks preparation, compilation, and MSBuild until guarded recovery.
-Windows and Ubuntu source-only archive checks pass with all 380 delivery outputs and all three
-contracts absent. All 380 generated outputs are byte-identical across platforms. Eight generator
-checks pass without skips on each platform. Real startup-validation and corrupt-database probes fail
-without promoting contracts; interruption, invalid-contract, concurrent-edit, rollback, and recovery
-checks pass. Disposable bootstrap binaries are removed after runs while staged contracts and TRX
-results remain. The working-tree consumer gate passes all 101 checks; browser type/lint gates
-report zero findings. Final candidate bootstrap, delivery, and source-control acceptance remain open.
-Evidence is under `artifacts/section1/contracts-bootstrap-index-*.log` and
-`contracts-bootstrap-linux-evidence/`.
-
-The unsigned VSIX toolchain now has exact dependency pins, restored-lock/license checks, and a
-repository-owned module that rejects signing and signature verification. The proprietary Microsoft
-signer and its platform binaries are absent. The archive reader checks actual identity/target metadata,
-the extension entry point, required payload hashes, unsafe/duplicate paths, and development output.
-Windows and Ubuntu exact-index archives pass fresh offline restore and real fixture-package checks
-for all four target values. Stale/missing payloads, wrong versions/targets, damaged archives, existing
-output replacement, and inconsistent installs are rejected. Dependency license exclusions have been
-removed from the extension file list. NuGet inventory lookup now honors `NUGET_PACKAGES`, keeps the
-declared version when its metadata is absent, and rejects mismatched metadata; a reproduced cached
-9.0.0 entry can no longer certify a project requesting 1.0.0. Complete payload/runtime closure and final
-candidate checks remain open; the public wrapper integration is recorded below.
-Evidence is under `artifacts/section1/vsix-toolchain-index-*.log`, `vsix-toolchain-linux-evidence/`, and
-`nuget-inventory-reproducer/`.
-
-The BCL package inspector now reads actual PE/ELF/Mach-O architecture, single-file bundle entries,
-managed assembly versions, self-contained configuration, and dependency targets. It handles compressed
-metadata and checks that the input hash remains stable. The retained release tools are identified as
-0.20.0 and rejected for the current 0.20.1 request. Windows and Ubuntu exact-index checks pass real SDK
-fixtures for all four RIDs, including wrong versions/names/architectures, renamed executables, changed
-runtime targets, truncation, missing files, and framework-dependent input. Native fixture execution
-passes on Windows and Ubuntu. Native macOS and complete product/VSIX runtime acceptance remain open.
-The consumer gate discovers the focused inspector test. Public packaging now binds these inspections
-and required native bindings to the exact assembled files before promotion.
-Evidence is under `artifacts/section1/package-inspector-index-windows*`,
-`package-inspector-linux-evidence/`, and `package-inspector-release0200-*.json`.
-
-The four public VSIX wrappers now use one locked coordinator. Pre-release packaging uses it too, and
-both pre-release audit variants include the unsigned toolchain. The coordinator restores all four
-lockfiles, prepares assets, rebuilds UI/extension output in temporary folders, publishes the four tools
-separately in build mode, and checks actual versions, architectures, self-contained configuration,
-SQLite bindings, Player asset bytes, and executable ZIP modes. It checks archive payload hashes and
-source/published-input stability before atomically replacing the accepted package. Failed stages keep
-that package and developer `bin`, `out`, and `ui/dist` contents. A workspace lock serializes packaging;
-abandoned-lock/cancellation recovery still needs final acceptance. Version setters and release checks
-no longer maintain a duplicate VSIX-script version. Windows working-tree build and publish both produce
-the complete 320-file product package. Its version is the repository's current 0.20.1 metadata.
-The focused workflow uses real SDK/SQLite bundles, the BCL inspector, and locked VSCE; controlled build
-boundaries exercise restore/preparation/compile/publish failures, stale Player assets, concurrent input
-changes, and final promotion failures. Complete product execution in an actual VS Code webview,
-native Linux/macOS product delivery, and final source-only/index acceptance remain open. Generated
-outputs remain tracked. Windows and Ubuntu exact-index source archives pass fresh locked restore,
-actual SDK/SQLite workflow fixtures, all four archive targets, ZIP64/executable-mode checks, and public
-wrapper failure checks. The working-tree consumer gate passes 104 checks; browser type/lint gates
-remain clean. Evidence is under `artifacts/section1/vsix-coordinator-*`.
-
-Cancellation checks pass. Commands now run in owned process groups/consoles, and CLI
-signals reach command shutdown, hashing, archive inspection, and the final promotion boundary.
-Packaging disables shared .NET build servers. Windows and Ubuntu workflow fixtures cancel 21 stages,
-including partial archive assembly and final asset verification. They preserve the accepted package
-and developer output, and verify lock/staging cleanup. Windows and Ubuntu
-process-tree fixtures verify descendant shutdown and preservation of an unrelated peer. Public CLI
-fixtures pass Unix SIGINT/SIGTERM and native Windows console Ctrl+C: exit 130/143, npm descendants
-stopped, accepted package preserved, and stage/lock removed. Streaming inspection cancellation also
-passes. Fresh exact-index source archives pass locked restore, the workflow matrix, descendant
-shutdown, and all four archive targets on Windows and Ubuntu. The final-stage fixture waits for
-the actual command boundary before starting its child-startup timeout. The working-tree consumer
-gate passes 106 checks; type/lint gates report zero findings. Manual abandoned-lock recovery and
-final product/source-control acceptance remain open below. Evidence is under
-`artifacts/section1/vsix-cancellation-*`.
-
-1. Finish the ownership audit, preparation entry point, generator bootstrap, freshness verification,
-   safe obsolete-output cleanup, and build/gate integration.
-2. Verify every supported delivery path from source-only inputs, including final packages and runtime checks.
-3. Review the exact removal plan, add precise ignore rules, and untrack only the verified outputs.
-   Include every required source input in the same reviewable change.
-4. Repeat acceptance from fresh Git checkouts and source archives of that change. Verify repeat
-   preparation leaves Git clean and the ownership gate rejects re-tracked outputs before closing §1.1.
-
-**Closeout evidence:** Keep the delivery matrix, exact retained-input/output lists, preparation logs,
-package hashes, and runtime results together for the candidate change. Checked tasks need passing
-evidence for their full scope. A populated manifest, an older snapshot, or an asset-only archive check
-does not close build, package, runtime, or Git-index acceptance.
-
-- [ ] **Record acceptance coverage for every delivery path.** Maintain a matrix of consuming hosts,
-  development/test entry points, source archives, containers, release ZIPs, MSI/DEB/DMG installers,
-  and platform-targeted VSIX packages. Derive the required platforms from the release workflows:
-  Windows x64, Linux x64, macOS arm64, and macOS x64 when shipped. For each path, record preparation,
-  build/package commands, runtime checks, candidate source state, owner, blockers, and evidence. A skipped
-  or unavailable platform check remains open unless that artifact is explicitly removed from the release scope.
-  Progress (2026-10-11): the matrix exists and names every path and platform. It records no owner
-  per path, and no package row has been run on the current candidate.
-- [ ] **Integrate local build and publish entry points.** Establish the supported fresh-checkout workflow
-  for CLI and IDE builds, debug scripts, direct project/solution builds, and publish commands. Ensure assets
-  exist before MSBuild discovers static files or embeds resources, including the offline snapshot bundle.
-  Cover direct `dotnet test`, `dotnet run`, and `dotnet watch` entry points, IDE launch, and VS Code tasks;
-  any path that skips preparation must fail clearly when required assets are absent or stale. Verify
-  watch/restart uses newly prepared assets and does not keep serving a previous compilation after an error.
-  Handle incremental and parallel builds without racing shared writes; cover competing preparation/check
-  processes, interrupted-process lock recovery, and source edits during preparation. Fail clearly when
-  preparation is missing or stale instead of producing an incomplete application. Verify missing outputs, changed sources,
-  newly added sources, and stale bundles trigger the expected failure or regeneration. Update the current
-  no-Node-in-.NET-build policy if the chosen integration changes it.
-  With existing `bin/` and `obj/` directories, add, rename, and delete a browser module, prepare again,
-  then rebuild and republish. Verify static-web-asset metadata and embedded resources include the current
-  asset set, removed modules are absent, and unchanged build caches cannot retain an older bundle.
-  Exercise IDE design-time builds separately: `Directory.Build.targets` currently skips verification
-  when `DesignTimeBuild=true`. Verify an IDE opened before preparation discovers newly generated
-  assets on the subsequent real build and launch; design-time success must not certify runtime assets.
-  Done (2026-10-11), exercised on throwaway clones of the source-only layout.
-  `dotnet watch` on the desktop Player: started unprepared it reports the missing preparation and serves
-  nothing; prepared, it serves the module; an owner edit prepared while it runs is served; a type error
-  fails preparation and the last good module stays; the fix is served; no lock is left behind.
-  With existing `bin/` and `obj/`: adding a Portal module publishes it, renaming it publishes the new name
-  and removes the old one from the publish folder, deleting it removes it, and a runtime-part edit
-  appears in and then leaves the bundle embedded in the Reporting assembly.
-  `dotnet build`, `test`, `run`, and `publish` fail or regenerate as intended (see the no-build task for
-  reused binaries). A design-time build in an unprepared tree succeeds without certifying anything, and
-  the real build that follows fails with the preparation command. No IDE was launched: the check used
-  the `DesignTimeBuild` property an IDE sets. Concurrent and interrupted preparation are covered by
-  `test-asset-generation.mjs`. Evidence: `artifacts/section1/s11-candidate/watch/` and `incremental/`.
-  **Audit 2026-10-12:** Real IDE launch remains unverified; MSBuild DesignTimeBuild is not IDE acceptance.
-- [ ] **Integrate CI, release, and container preparation.** Audit every affected workflow/job, manual
-  validation template, release script, installer/native-package path, and Docker build stage. Install the
-  pinned toolchain and generate assets before checks/build/publish; ensure checkout filters, Docker contexts,
-  caches, and artifact handoffs do not omit required inputs or rely on a previous job's working tree.
-  Include CI, release, native-package, MSI-upgrade, and CodeQL workflows; Portal, Orchestrator.Service,
-  sandbox-worker, and lean-worker Dockerfiles; and the debug/release/VSIX script variants.
-  Audit every manual workflow template, including `local-validated-release.yml`, and the
-  `Master-Release` entry point. Ensure workflow path filters include TypeScript owners and asset tooling
-  when those changes affect packaged content. Validate preparation and packaging in the macOS release
-  jobs for each shipped architecture; Windows/Linux evidence does not close those checks.
-  Invalidate cached assets/manifests when sources, generators, configuration, or lockfiles change; test
-  cache hits and misses so a stale manifest cannot certify outputs from a different source state.
-  Exercise artifact transfers between jobs in a different checkout directory. Verify ignored outputs
-  survive the explicit artifact file list and match the producing candidate's hashes. Recreate or
-  validate preparation manifests for the receiving checkout; reject missing assets, changed inputs,
-  and a manifest whose paths or hashes describe another job's working tree.
-  Progress (2026-10-11): the Portal, Orchestrator service, and sandbox-worker images build from an archive
-  of `e97278ac5` with all 491 outputs deleted. Portal serves its 213 outputs with matching bytes, Node is
-  absent from all three images, and their embedded runtime resources match.
-  Further progress (2026-10-11), after the cutover. Every job in every workflow that builds, tests, or
-  packages either prepares first or calls a script that does, and each restores the compiler; a scripted
-  audit of the five workflows found no exception once the MSI upgrade job gained its restore. CI passed
-  on Windows, Linux, and macOS from checkouts with no generated file, and the native package workflow
-  built on all four platforms. No workflow caches prepared assets or manifests, and none hands them from
-  one job to another, so there is no stale-cache or transfer case to test. The lean-worker Dockerfile
-  copied only part of what preparation needs and has been aligned with the sandbox worker's; it builds
-  from a source-only context with no Node in the image. The MSI upgrade workflow now also runs when
-  browser owners or preparation change. Still open: the release workflow itself (`release.yml`,
-  `Master-Release.ps1`) has not run since the cutover, so its macOS DMG and upload steps are unverified.
-- [ ] **Integrate VS Code and UI sandbox workflows.** Ensure extension compile/package and sandbox
-  startup/watch paths work without tracked generated files. Verify the VSIX includes the runtime/designer
-  import closure and development reloads use the latest successful compilation. Exercise added, renamed,
-  and deleted sources in watch mode, failure followed by recovery, and edits made while preparation runs.
-  Confirm watch shutdown releases its preparation lock and leaves no temporary assets in host folders.
-  Cover the extension's `npm run watch` and development-host launch tasks explicitly: the current watch
-  command only watches extension TypeScript. Establish an asset watcher or documented companion process
-  that prepares shared and Portal dependencies before the webview reloads. Verify a dependency-only
-  edit, a newly added module, and compiler failure/recovery through the actual development webview.
-  Progress (2026-10-11): the extension has `npm run watch:assets`, the shared preparation watcher, to run
-  beside `npm run watch`; the standards document says when. `npm run compile` already prepares first.
-  `test-asset-generation.mjs` covers the watcher for an added, renamed and deleted source, failure then
-  recovery, an edit made during preparation, and lock release on shutdown. The sandbox prepares on start
-  from a tree with no outputs. Both VSIX packages built from source-only archives carry the designer
-  import closure. Still open: none of this has been observed in a real development webview.
-- [ ] **Verify recovery after cleaning generated files.** In an isolated checkout, exercise `dotnet clean`
-  and removal of inventoried outputs or preparation manifests, then restore dependencies and prepare again
-  through the documented workflow. Confirm missing files cannot be masked by cached build output and
-  repeat preparation restores the complete asset set without changing tracked inputs. Document how Git
-  cleanup affects ignored assets, dependencies, and manifests, with a preview and targeted cleanup
-  commands; preserve authored files and local source edits. Cover IDE and sandbox startup after cleanup.
-  Progress (2026-10-11): `dotnet clean` leaves all 491 prepared outputs unchanged and now removes the
-  project's build record; deleting every output and both manifests is restored by preparation
-  (`verify-source-only-preparation.mjs`, and the source-only runs on both platforms). The standards
-  document has a recovery table and the `git clean` guidance. Still open: IDE and sandbox start-up
-  after cleanup have not been exercised, and the `git clean` behaviour can only be observed after the
-  cutover.
-  Done (2026-10-11). In a clone of the source-only layout, `git clean -ndX` previews the ignored outputs
-  and `git clean -fdX` removes all 491 while keeping an untracked authored file; the build gate then
-  fails and preparation restores every output with Git clean. The UI sandbox, started in a fresh clone
-  with no outputs, prepares them and serves them, and leaves no lock on stop. An IDE launch was not
-  exercised separately; it goes through the same MSBuild gate as `dotnet build`.
-  **Audit 2026-10-12:** Real IDE startup after cleanup remains unverified.
-- [ ] **Verify source-analysis coverage after untracking outputs.** Audit CodeQL exclusions and tools
-  that discover files through Git or JavaScript-only patterns. Ensure they still inspect retained
-  Portal and shared-runtime TypeScript, remaining handwritten JavaScript, and relevant generator inputs.
-  Replace exclusions that hide an entire source project with exclusions for verified delivery outputs
-  where appropriate. Record the analyzed source set after cleanup; ignored compiled JavaScript must
-  not silently remove its authored implementation from security or source-quality checks.
-  In `.github/workflows/codeql.yml`, audit the whole `ETL-SQL.ReportRuntime` exclusion so its
-  `Resources/TypeScript/` owners are analyzed. Audit the blanket `wwwroot/js` and `scripts` exclusions
-  while handwritten Portal modules and relevant generator inputs remain there.
-  Progress (2026-10-11): the workflow now excludes `Resources/Shared` and Portal `wwwroot/designer`
-  instead of the whole ReportRuntime project, so all 200 TypeScript owners are analysed and all 456
-  generated scripts are excluded; `test-source-analysis-coverage.mjs` enforces both from the inventory,
-  so it holds after untracking. No handwritten module remains under `wwwroot/js`. Still open: `scripts/`
-  is excluded as build tooling, so the generators are not analysed; and the first CodeQL run over the
-  88 newly analysed owners has not happened, so new alerts are possible.
-- [ ] **Verify packaged runtime behavior.** Publish/package from the clean checkout and smoke-test Portal,
-  ReportPlayer, WorkstationEditor, and the VS Code extension outside the source tree. Verify module requests,
-  designer/report rendering, and an offline snapshot opened without network access. Confirm installers and
-  containers carry the required assets and published hosts do not depend on Node.js or checkout fallback paths.
-  Preserve asset URLs, module exports, embedded resource names, CSP behavior, license notices, and payload budgets.
-  Include report generation and offline export through the published report CLI, with its embedded
-  runtime bundle and feedback assets. Exercise the release's actual self-contained/single-file publish
-  settings and combined release folder so standalone host proofs also cover final package assembly.
-  Exercise the complete VSIX with its bundled CLI/LSP/report tools in an actual VS Code webview; an
-  asset-only archive inspection does not establish this. Record the source state, platform/toolchain,
-  commands, package hashes, and test results so each required host and delivery path has reviewable evidence.
-  For HTTP hosts and webviews, verify required asset requests return the expected prepared bytes and
-  usable content types, with no HTML fallback or CSP rejection. Exercise case-sensitive URLs and a
-  deliberately missing module so the runtime check detects a broken import closure, not just a successful
-  host health probe. Confirm the offline viewer loads its embedded runtime without network requests.
-  Progress (2026-10-11): Portal run from the extracted DEB, with no Node on the path, serves its 213
-  outputs with matching bytes and JavaScript content types, and answers 404 for a missing module, a
-  wrong-case URL, and `.ts`/`.map`. That run exposed a start-up failure for accounts with no
-  `~/.local/share`, now fixed. Still open: ReportPlayer, WorkstationEditor, the VSIX in a real webview,
-  the report CLI's offline export, and macOS. Portal also passes this check from the extracted Windows
-  ZIP and from the MSI's administrative extract.
-- [ ] **Verify installed upgrades deliver the current assets.** Extend the release checklist's existing
-  upgrade lanes with browser-asset checks: install v0.20.0, upgrade through each supported delivery path,
-  and verify the installed JavaScript, CSS, and embedded bundle match the candidate package. Cover removed
-  or renamed modules, existing browser caches, and VS Code extension updates; reopen the report/designer
-  journeys and confirm the current import closure loads. Use the documented rollback or reinstall path
-  and verify that revision's own assets. Preserve configuration and user data, and require no Node.js
-  installation or checkout during these runtime checks. Link the upgrade evidence in the delivery matrix.
-  Progress (2026-10-11): the MSI workflow's v0.20.1 to current in-place upgrade passes in CI again after
-  its job gained the compiler restore. It now also asserts, in the package and on disk after the
-  upgrade, that the workstation install holds every Desktop Player asset with the prepared bytes; that
-  assertion found the assets missing from the Workstation feature in the shipped v0.20.1 installer, now
-  fixed. Not yet run in CI. Still open: a Portal-profile upgrade with served-asset checks, DEB upgrade,
-  VSIX update, browser caches, and rollback.
-- [ ] **Verify the published asset boundary.** Inspect the actual publish folders, installers, container
-  images, and VSIX to confirm generated JavaScript and required canonical assets are included even when
-  Git ignores them. Ensure TypeScript sources, declaration files, development source maps, temporary test
-  modules, dependency caches, and preparation manifests are excluded from runtime assets. Verify HTTP
-  hosts do not serve those development files and the generated module import closure is complete.
-  Audit `.vscodeignore`, `.dockerignore`, `.gitattributes` export rules, MSBuild content/embedded-resource
-  discovery, and archive file lists separately from Git ignore rules. Package discovery must include
-  prepared outputs even when they are absent from `git ls-files`. Compare packaged asset bytes with
-  the final prepared inventory so an older but complete asset set cannot satisfy the package check.
-  Preserve the existing no-browser-source-maps policy unless a separate delivery decision changes it.
-  Progress (2026-10-11): the Linux ZIP, DEB, and linux-x64 VSIX built from a source-only archive of
-  `e97278ac5` carry every inventoried output for their hosts with matching bytes (213 Portal, 29
-  ReportPlayer, 101 WorkstationEditor, 59 VS Code media) and no `.ts` or `.map` file. The three
-  container images pass the same comparison over HTTP. The Windows ZIP, win32-x64 VSIX, and an
-  administrative extract of the MSI, built from an archive of `d226e13aa`, pass it too. After the
-  cutover the native package workflow built the ZIP and VSIX on Windows, Linux, macOS arm64, and macOS
-  x64 from checkouts with no generated file. `verify-packaged-browser-assets.mjs` now makes the byte
-  comparison a step of that workflow: 343 files match the prepared inventory on Windows, Linux, and
-  macOS arm64 (run 38194696393). The macOS x64 job was cancelled by its time limit before that step; the
-  limit has been raised. The DMG has not been inspected.
-- [ ] **Verify release metadata after asset generation.** Check checksums, SBOM, provenance, and
-  third-party notices against the final assembled packages containing the generated assets. Audit
-  file-discovery rules so ignored outputs and bundled vendor components remain represented. Generate
-  hashes and attestations after preparation and package assembly; any later asset change must invalidate
-  that evidence. Preserve required license banners and reconcile the third-party inventory with what ships.
-  Audit signing, installer assembly, and upload steps for implicit rebuilds or asset regeneration. Compare
-  the assets in the final distributed artifact with the accepted candidate; regenerate checksums and
-  attestations after any step that changes the artifact bytes.
-  Progress (2026-10-11): the SBOM and third-party inventory generators read lockfiles, project files, and
-  the canonical vendor bundles, all tracked inputs; neither reads a generated file, and the SBOM built
-  from a source-only clone is the same size as the one built before the cutover. In `release.yml` the
-  provenance job downloads the uploaded assets, attests them, and computes `sha256sums.txt` over that
-  final set, after every package including the MSI, DEB, and DMG exists. The native package workflow
-  checks each package against its checksum on all four platforms and now compares the ZIP's browser
-  files with the inventory. `build-msi.ps1` prepares and publishes again; its output was compared with
-  the inventory and matched. Still open: `release.yml` has not run since the cutover, so attestation
-  over real release assets is unverified, and the DMG's contents have not been inspected.
-- [ ] **Untrack only reproducible generated assets.** After the source-only build and packaged-runtime checks
-  pass, add precise ignore rules and remove the identified outputs from the Git index while retaining locally
-  generated files. Preserve canonical CSS, maps, vendor assets, source files, and notices; remove duplicated
-  non-JavaScript host assets only where the ownership inventory and generation checks explicitly cover them.
-  Verify the indexed changes contain only the intended outputs, then repeat preparation and gates from a
-  fresh checkout of the resulting source state. Confirm a second generation leaves Git clean and that the
-  ownership gate rejects accidentally retracked outputs, including outputs from newly migrated modules.
-  Apply the cleanup to the v0.21.0 tree; preserve released tags and repository history.
-  Done (2026-10-11). One commit adds the managed ignore block and removes the 491 inventoried outputs
-  from the index; local files are kept, and no tag or earlier commit is rewritten. From a fresh clone of
-  that commit: no generated file exists, an unprepared build fails with the preparation command,
-  preparation yields 491 outputs byte-identical to the last tracked ones, a second preparation leaves
-  Git clean, and a force-added output is rejected by the ownership check. The decision to cut over
-  before every delivery-matrix row was accepted was taken with the open rows listed there: installs
-  other than the workstation MSI, the VSIX in a webview, and macOS.
-  **Audit 2026-10-12:** Index cleanup is implemented, but its packaged-runtime prerequisites remain open in the delivery matrix. Complete those rows before closing this acceptance item.
-- [ ] **Confirm cleanup completion from the resulting tracked tree.** Reconcile the delivery matrix
-  with every preceding task and link its passing evidence. Record the exact source revision and final
-  ownership inventory, confirm required inputs are tracked and verified outputs are absent from the
-  index, and verify fresh-clone/archive preparation and packaged runtime checks. Close this work only
-  after repeat generation leaves Git clean; keep unfinished handwritten-source conversions open in §1.
+- [ ] **Re-measure the scale certification baselines.** Finish fresh comparisons of the final clean
+  candidate in the full release gate. Do **not** re-bless until the cause of host drift is known;
+  v0.17.0 established why. The corrected harness passed all 520 correctness/memory measurements and
+  all candidate/control and repeat-run comparisons under unchanged bands. Background:
+  [v0.19.0](docs/releases/v0.19.0-performance-results.md) and
+  [v0.20.0](docs/releases/v0.20.0-performance-results.md) performance results.
 
 ---
 
-## 2. Studio — Unified authoring experience and completeness criteria
+## Blocked — waiting on something outside the repository
 
-**Horizon:** Next  
-**Authoritative design:** [ETL-SQL Studio](docs/architecture/decisions/etl-sql-studio.md) and [Portal ETL documents](docs/architecture/decisions/portal-etl-documents.md)
+### 6. Studio — Keyboard and assistive technology
 
-Studio combines ReportBuilder visual authoring and WorkstationEditor code editing into one complete
-authoring experience across desktop and Portal. Users familiar with Power BI, Tableau, SSRS, and SSIS
-should be able to build useful reports and pipelines while learning the generated SQL. SQL remains
-the authoritative artifact; visual helpers preserve hand edits. Host differences follow local files,
-permissions, and execution boundaries. These components are foundations of Studio; retiring their
-entry points is a separate future decision, not the measure of success.
-
-**Working inventory:** [Studio authoring completeness](docs/architecture/decisions/studio-authoring-completeness.md). Completed inventories: [ST01 report workflows](docs/architecture/decisions/studio-report-authoring-inventory.md) and [ST02 script/ETL workflows](docs/architecture/decisions/studio-script-etl-authoring-inventory.md).
-
-The [beginner acceptance assessment](docs/architecture/decisions/studio-beginner-acceptance-assessment.md)
-does not certify the overall experience. Paginated binding/delivery (R15–R18) and the pipeline helper
-round trip (E14) still need sized tasks. Observed learner understanding is tracked in ST16b.
-
----
-
-## 3. Studio — Portal pipelines and schedule handoffs
-
-**Horizon:** Next
-
-Run path decided 2026-10-12: one Orchestrator job per pipeline (`PIPELINE:{id}`) used as a run slot,
-created on first run by an `Admin` or `OrchestratorManager`. Design, routes and what is not yet shown:
-[Portal ETL documents §5](docs/architecture/decisions/portal-etl-documents.md#5-slice-2-as-built-2026-10-12).
-
-Remaining limits: sandbox submission is tracked in ST21b; cancellation signals only the executing
-node, and kill-by-job-name still records `FAILURE`. Pipeline schedules must be recreated at the
-promotion target. Report refresh scheduling joins the Portal link and Orchestrator job by name
-manually, has no Studio control, and the retired `CREATE REFRESH JOB` path names a job no link matches.
-
----
-
-## 4. Studio — Private unpublished drafts and publishing
-
-**Horizon:** Next
-
-The [private draft policy](docs/architecture/decisions/studio-private-drafts.md) owns the completed
-identity and retention contract. Expiry occurs on read/list without a background sweep. Recovery
-does not persist offline edits. Publishing retains earlier saves as audit metadata, not their text;
-catalog version history remains unavailable.
-
----
-
-## 5. Studio — Author, reader and beginner practice journeys
-
-Completed prerequisites: [ST20 practice execution decision](docs/architecture/decisions/studio-practice-execution.md) (amended 2026-10-12) and [ST22 desktop evidence](docs/architecture/decisions/studio-desktop-practice-evidence.md).
-
-Report and practice prerequisites are recorded in the [beginner report evidence](docs/architecture/decisions/studio-beginner-report-evidence.md),
-[reader evidence](docs/architecture/decisions/studio-reader-journey-evidence.md), and
-[Portal practice evidence](docs/architecture/decisions/studio-portal-practice-evidence.md).
-RLS reports still do not appear under Popular or Recently viewed, list responses do not identify
-per-viewer reports, and detection through an included script is unchecked.
-
-**Horizon:** Next
-
-- [ ] **ST16b — Observed learner walkthrough.** One learner new to Studio does the report sequence and the ETL
-  exercise in each host while an observer records, per step, what they did unaided and how they explained the
-  generated SQL and the repair. Needs a person; automation cannot close it. (Depends on: ST16, ST17, ST21, ST22; Size: S)
-  Script and record sheet: [learner walkthrough](docs/architecture/decisions/studio-learner-walkthrough.md). Not yet run.
-
-- [ ] **ST21b — Portal practice exercise in the sandbox.** Carry the submitter's identity in the sandbox request,
-  lift `sandbox_identity_unsupported` for run slots, and repeat ST21 on a real sandbox with its terminal status,
-  egress denial and cleanup recorded. Security-sensitive; needs a written design first. (Depends on: ST21; Size: L)
----
-
-## 6. Studio — Keyboard and assistive technology
-
-**Horizon:** Next
-
-Keyboard prerequisites and declared zoom settings are recorded in the
-[keyboard evidence](docs/architecture/decisions/studio-keyboard-assistive-evidence.md).
-`STRUCTURE` stores proportions, so layouts that do not divide a row evenly reopen at the nearest proportion.
+**Needs:** observed spoken transcripts from a screen reader in both hosts. Windows Narrator is
+installed on the current test machine (verified 2026-10-13), so installation is no longer the blocker.
+No actual spoken pass has been recorded. Groundwork is done: every keyboard stop is named,
+a refused Create says why, and the save is announced. The
+[pass sheet](docs/architecture/decisions/studio-keyboard-assistive-evidence.md#screen-reader-pass-sheet-st28-st29)
+is ready.
 
 - [ ] **ST28 — Portal screen-reader pass.** One named screen reader/browser combination completes the keyboard document
   journey with meaningful labels, errors, and announcements; keep the observed transcript. (Depends on: ST23; Size: M)
-  Not run: no screen reader has spoken the journey. Groundwork done 2026-10-12: every keyboard stop is named, a
-  refused Create says why, and the save is announced, held by `Portal_AssistiveJourney_EveryStopIsNamedAndChangesAreAnnounced`.
-  The recorded accessibility transcript and the [pass sheet](docs/architecture/decisions/studio-keyboard-assistive-evidence.md#screen-reader-pass-sheet-st28-st29) are ready.
+  Automated groundwork: `Portal_AssistiveJourney_EveryStopIsNamedAndChangesAreAnnounced`.
 - [ ] **ST29 — Desktop screen-reader pass.** Record the same bounded journey in one supported desktop/browser combination.
   (Depends on: ST24; Size: M)
-  Not run, on the same terms as ST28. Groundwork: `Desktop_AssistiveJourney_EveryStopIsNamedAndChangesAreAnnounced`.
+  Automated groundwork: `Desktop_AssistiveJourney_EveryStopIsNamedAndChangesAreAnnounced`.
+
+### 13.1 Codebase audit — bugs and logic defects
+
+**Needs:** a transaction-capable Snowflake account. The rest of the 2026-10-12 audit is closed; see the
+[audit evidence](docs/releases/v0.21.0-bug-logic-audit.md).
+
+- [ ] **Verify Snowflake transaction-clone writes against a transaction-capable server.** ODBC is
+  verified against a real SQL Server container, and Snowflake lifecycle tests pass with a recording
+  transaction, but the emulator cannot establish row-level rollback. Remaining acceptance: create a
+  table, begin a transaction, write through `WithTable`, roll back, and query from a separate
+  connection to assert zero rows. Repeat after starting another transaction and verify clone disposal
+  does not end the owner's work.
 
 ---
 
-## 7. Studio — Execution scope, cancellation and bounded helper previews
+## Studio backlog — Horizon: Next, not required for v0.21.0
 
-**Horizon:** Next
+Sized tasks selected from `ROADMAP.md`. Pick by ID; dependencies are listed on each item.
 
-- [ ] **ST30 — Portal execution-scope journey.** Exercise no selection, unresolved statement, and mutating-prefix consent
+### 7. Studio — Execution scope, cancellation and bounded helper previews
+
+Completed 2026-10-13 on real Portal and desktop hosts. [Evidence and bounded fixture contract](docs/architecture/decisions/studio-execution-scope-evidence.md).
+Native previews are certified for direct read-only SQLite only; Portal consent still cannot bypass its interactive allow-list.
+Follow-up review added a 1 MiB desktop helper result-row budget and verified single-value and cumulative truncation warnings.
+
+- [x] **ST30 — Portal execution-scope journey.** Exercise no selection, unresolved statement, and mutating-prefix consent
   refused/accepted; actual statements and displayed scope agree under the permitted execution path. (Depends on: ST04 when pipeline submission is used; Size: M)
-- [ ] **ST31 — Desktop execution-scope journey.** Prove the same cases against the desktop host, using real execution responses. (Size: M)
-- [ ] **ST32 — Portal cancellation and lost response.** Confirm server cancellation and one lost-response case; retain the run ID
+- [x] **ST31 — Desktop execution-scope journey.** Prove the same cases against the desktop host, using real execution responses. (Size: M)
+- [x] **ST32 — Portal cancellation and lost response.** Confirm server cancellation and one lost-response case; retain the run ID
   for support and distinguish unknown outcome from stopped work. (Depends on: ST30; Size: M)
-- [ ] **ST33 — Desktop cancellation and lost response.** Prove the same bounded failure cases and diagnostic ownership on the desktop host. (Depends on: ST31; Size: M)
-- [ ] **ST34 — Portal native-dialect helper preview.** One named connector/dialect fixture executes a bounded read-only native task
+- [x] **ST33 — Desktop cancellation and lost response.** Prove the same bounded failure cases and diagnostic ownership on the desktop host. (Depends on: ST31; Size: M)
+- [x] **ST34 — Portal native-dialect helper preview.** One named connector/dialect fixture executes a bounded read-only native task
   and accepts an empty result without running arbitrary predecessors. (Size: M)
-- [ ] **ST35 — Desktop native-dialect helper preview.** Run that same fixture through the desktop preview path. (Depends on: ST34 fixture contract; Size: M)
-- [ ] **ST36 — Portal staged-context helper preview.** One staged-data task and required variable preview correctly; unavailable
+- [x] **ST35 — Desktop native-dialect helper preview.** Run that same fixture through the desktop preview path. (Depends on: ST34 fixture contract; Size: M)
+- [x] **ST36 — Portal staged-context helper preview.** One staged-data task and required variable preview correctly; unavailable
   predecessor context is explained and never silently executed. (Size: M)
-- [ ] **ST37 — Desktop staged-context helper preview.** Prove the same variable/staging and unavailable-context cases on the desktop host. (Depends on: ST36 fixture contract; Size: M)
+- [x] **ST37 — Desktop staged-context helper preview.** Prove the same variable/staging and unavailable-context cases on the desktop host. (Depends on: ST36 fixture contract; Size: M)
 
----
+### 8. Studio — Degraded editor and failed session recovery
 
-## 8. Studio — Degraded editor and failed session recovery
+Completed 2026-10-13. [Real-host recovery evidence](docs/architecture/decisions/studio-failed-recovery-evidence.md)
+covers both degraded hosts, the 15-second Portal startup deadline, access expiry, failed refresh and kept drafts.
 
-**Horizon:** Next
-
-- [ ] **ST38 — Portal degraded-editor recovery.** Force a module-load failure, type and switch two tabs, then retry successfully;
+- [x] **ST38 — Portal degraded-editor recovery.** Force a module-load failure, type and switch two tabs, then retry successfully;
   buffers survive and unsupported actions are disabled or explained. (Size: M)
-- [ ] **ST39 — Desktop degraded-editor recovery.** Prove the same failure/retry sequence in the desktop host. (Size: M)
-- [ ] **ST40 — Portal session startup timeout/retry.** Bound an unanswered session request and cover HTTP 500/disconnect; display
+- [x] **ST39 — Desktop degraded-editor recovery.** Prove the same failure/retry sequence in the desktop host. (Size: M)
+- [x] **ST40 — Portal session startup timeout/retry.** Bound an unanswered session request and cover HTTP 500/disconnect; display
   an actionable error and recover on Retry without granting fallback capabilities. (Size: M)
-- [ ] **ST41 — Portal expired-session retry.** Cover access-token expiry and failed refresh during startup; re-authentication and retry
+- [x] **ST41 — Portal expired-session retry.** Cover access-token expiry and failed refresh during startup; re-authentication and retry
   restore the correct identity/capabilities and kept drafts. No new draft storage. (Depends on: ST40; Size: M)
 
----
+### 9. Studio — Delivery budgets, catalog scale and large documents
 
-## 9. Studio — Delivery budgets, catalog scale and large documents
+Evidence: [delivery budgets and verification](docs/benchmarks/studio-delivery-budgets.md).
 
-**Horizon:** Next
-
-- [ ] **ST54 — Measure and decide Studio transfer budgets.** Inventory the full production import closure, designer assets,
+- [x] **ST54 — Measure and decide Studio transfer budgets.** Inventory the full production import closure, designer assets,
   and CodeMirror bundle; record raw/gzip baselines, accepted ceilings, and the gate's implementation estimate. No asset
   optimization or gate implementation. (Size: D)
-- [ ] **ST42 — Studio transfer-size gate.** Enforce the accepted raw/gzip ceilings for that import closure, with a negative
+- [x] **ST42 — Studio transfer-size gate.** Enforce the accepted raw/gzip ceilings for that import closure, with a negative
   oversized fixture. Preserve existing timing gates; new optimization work gets separate estimates. (Depends on: ST54; Size: M)
-- [ ] **ST43 — Portal cold-load evidence.** Measure first usable editor on a declared uncached Portal fixture, record the
+- [x] **ST43 — Portal cold-load evidence.** Measure first usable editor on a declared uncached Portal fixture, record the
   environment, and set a defensible regression ceiling. No broad performance optimization. (Depends on: ST42; Size: M)
-- [ ] **ST44 — Desktop cold-load evidence.** Measure the matching desktop fixture with its own host ceiling. (Depends on: ST42; Size: M)
-- [ ] **ST45 — Paged Portal catalog discovery.** One bounded server-side search/paging path feeds Home while preserving folder/tenant
+- [x] **ST44 — Desktop cold-load evidence.** Measure the matching desktop fixture with its own host ceiling. (Depends on: ST42; Size: M)
+- [x] **ST45 — Paged Portal catalog discovery.** One bounded server-side search/paging path feeds Home while preserving folder/tenant
   visibility; verify a declared large-catalog fixture. No real-time synchronization. (Size: M)
-- [ ] **ST46 — Fresh catalog and stale-open recovery.** Refresh the paged list after external create/rename/move/delete; a stale
+- [x] **ST46 — Fresh catalog and stale-open recovery.** Refresh the paged list after external create/rename/move/delete; a stale
   deleted/moved selection fails clearly without disturbing dirty buffers. (Depends on: ST45; Size: M)
-- [ ] **ST53 — Measure and decide the large-document contract.** Pin one several-thousand-line Portal fixture and the existing
-  server byte limit; measure editing/analysis, define client limit/degraded behavior, and estimate implementation. No editor changes. (Size: D)
-- [ ] **ST47 — Portal large-document limits.** Implement the accepted client ceiling/degraded behavior on that fixture and verify
+- [x] **ST53 — Measure and decide the large-document contract.** Pin one several-thousand-line Portal fixture and the existing
+  server character limit (distinct from transport byte limits); measure editing/analysis, define client limit/degraded behavior,
+  and estimate implementation. No editor changes. (Size: D)
+- [x] **ST47 — Portal large-document limits.** Implement the accepted client ceiling/degraded behavior on that fixture and verify
   the server-limit boundary without losing text. No general editor rewrite. (Depends on: ST53; Size: M)
-- [ ] **ST48 — Desktop large-document contract.** Measure the same bounded document in the desktop host and verify its limit/degraded
+- [x] **ST48 — Desktop large-document contract.** Measure the same bounded document in the desktop host and verify its limit/degraded
   behavior. (Depends on: ST47 fixture contract; Size: M)
-- [ ] **ST49 — Portal analysis throttling recovery.** One controlled designer-rate-limit rejection preserves the buffer, explains stale
+- [x] **ST49 — Portal analysis throttling recovery.** One controlled designer-rate-limit rejection preserves the buffer, explains stale
   diagnostics, and resumes analysis after permitted retry; no arbitrary predecessor execution. (Depends on: ST47; Size: M)
 
----
+### 10. Studio — Release-versioned guidance
 
-## 10. Studio — Release-versioned guidance
+Guides: [Studio in v0.21.0](docs/guides/studio/README.md). Validation on 2026-10-13: 12 production-host
+browser journeys, 2 schedule-policy tests, 3 documentation syntax tests, and strict documentation audit
+passed. Human learner observation remains separately open; the guides state that limit.
 
-**Horizon:** Next
-
-- [ ] **ST50 — Beginner report guide.** Document the certified report exercise, code/helper round trips, and both host entry points,
+- [x] **ST50 — Beginner report guide.** Document the certified report exercise, code/helper round trips, and both host entry points,
   referring to release versions. (Depends on: ST16, ST17; Size: S)
-- [ ] **ST51 — Pipeline run/schedule guide.** Document the certified pipeline flow, grants, status/log/Stop, and missing-Orchestrator
+- [x] **ST51 — Pipeline run/schedule guide.** Document the certified pipeline flow, grants, status/log/Stop, and missing-Orchestrator
   behavior. (Depends on: ST07, ST10; Size: S)
-- [ ] **ST52 — Draft, publishing and recovery guide.** Explain kept versus unavailable drafts, private/public permissions, conflicts,
+- [x] **ST52 — Draft, publishing and recovery guide.** Explain kept versus unavailable drafts, private/public permissions, conflicts,
   and retry/support diagnostics; include desktop policy limits. (Depends on: ST14, ST15, ST40, ST41; Size: S)
 
 ---
 
-## 11. Release engineering follow-ups
+## Known limits — context, not tasks
 
-Found while shipping v0.19.0. None blocked that release; all cost time or credibility if left.
+These have no open task here. They describe what the shipped behavior does not do, so release notes
+and guides can say so. Turning one into work means sizing it in `ROADMAP.md` first.
 
-- [ ] Re-measure the scale certification baselines once the host drift is understood. Both v0.18.0
-  and v0.19.0 sit 30–50% above a 2026-08-20 baseline this machine no longer reaches, and the two
-  builds are indistinguishable from each other; see
-  [v0.19.0 Performance Results](docs/releases/v0.19.0-performance-results.md). Do **not** re-bless
-  until the cause is known — v0.17.0 established why.
-  The [v0.20.0 harness investigation](docs/releases/v0.20.0-performance-results.md) identifies
-  output capture and unrelated theory enumeration as measurement dependencies. The corrected
-  fixture now scales its failure input, brackets timed resources, closes providers/watchers/loggers
-  between scenarios and isolates its database. Clean Smoke/Standard calibration passed all 520
-  correctness/memory measurements, all eight candidate/control comparisons and all eight repeat-run
-  comparisons under unchanged bands. Both released-control arms contribute to each replacement
-  reference; the original files are preserved in the historical archive. Finish fresh comparisons
-  of the final clean candidate in the full release gate before closing this item.
+### 2. Studio — Unified authoring experience and completeness criteria
 
----
+**Authoritative design:** [ETL-SQL Studio](docs/architecture/decisions/etl-sql-studio.md) and
+[Portal ETL documents](docs/architecture/decisions/portal-etl-documents.md).
+**Inventory:** [Studio authoring completeness](docs/architecture/decisions/studio-authoring-completeness.md),
+with completed [ST01 report](docs/architecture/decisions/studio-report-authoring-inventory.md) and
+[ST02 script/ETL](docs/architecture/decisions/studio-script-etl-authoring-inventory.md) inventories.
 
-## 13. Codebase audit findings — Bugs, security, performance and telemetry
+Studio combines ReportBuilder visual authoring and WorkstationEditor code editing across desktop and
+Portal. SQL remains the authoritative artifact; visual helpers preserve hand edits.
 
-Comprehensive code review across all solution projects (`src/ETL-SQL.*`). Each finding was checked against source on 2026-10-12: fixed, left open with the reason, or dropped as not a defect.
+- The [beginner acceptance assessment](docs/architecture/decisions/studio-beginner-acceptance-assessment.md)
+  does not certify the overall experience.
+- Paginated binding/delivery (R15–R18) and the pipeline helper round trip (E14) still need sized tasks.
+- Learner understanding has not been observed (ST16b, deferred), so no release claims a
+  learner-validated experience.
 
-### 13.1 Bugs and logic defects
+### 3. Studio — Portal pipelines and schedule handoffs
 
-Reviewed against implementation and behavioral tests on 2026-10-12. Seven verified items were removed;
-see the [audit evidence](docs/releases/v0.21.0-bug-logic-audit.md). The transaction-clone item remains open
-only for the missing Snowflake row-level rollback proof.
+Run path decided 2026-10-12: one Orchestrator job per pipeline (`PIPELINE:{id}`) used as a run slot,
+created on first run by an `Admin` or `OrchestratorManager`. See
+[Portal ETL documents §5](docs/architecture/decisions/portal-etl-documents.md#5-slice-2-as-built-2026-10-12).
 
-- [ ] **Verify Snowflake transaction-clone writes against a transaction-capable server.**
-  - ODBC and Snowflake now share live transaction state, including later commit/rollback changes.
-    Disposing a table view cannot roll back its owner or reuse an already completed transaction.
-  - ODBC is verified through Driver 17 and a real SQL Server container: write through a clone,
-    roll back, assert zero rows, then reuse the clone in a new transaction and commit one row.
-  - Snowflake lifecycle tests pass with a recording transaction. Its existing emulator fixture
-    documents a driver/DDL limitation and cannot establish row-level rollback. No live Snowflake
-    account was supplied for this audit.
-  - Remaining acceptance: on a transaction-capable Snowflake target, create a table, begin a transaction,
-    write through `WithTable`, roll back, and query from a separate connection to assert zero rows.
-    Repeat after starting another transaction and verify clone disposal does not end the owner's work.
+- Sandbox submission is tracked in ST21b.
+- Cancellation signals only the executing node, and kill-by-job-name still records `FAILURE`.
+- Pipeline schedules must be recreated at the promotion target.
+- Report refresh scheduling joins the Portal link and Orchestrator job by name manually and has no
+  Studio control. The retired `CREATE REFRESH JOB` path names a job no link matches.
+
+### 4. Studio — Private unpublished drafts and publishing
+
+The [private draft policy](docs/architecture/decisions/studio-private-drafts.md) owns the completed
+identity and retention contract.
+
+- Expiry occurs on read/list, without a background sweep.
+- Recovery does not persist offline edits.
+- Publishing retains earlier saves as audit metadata, not their text. Catalog version history remains unavailable.
+
+### 5 and 6. Reader journeys and keyboard layout
+
+- RLS reports do not appear under Popular or Recently viewed.
+- List responses do not identify per-viewer reports.
+- RLS detection through an included script is unchecked.
+- `STRUCTURE` stores proportions, so layouts that do not divide a row evenly reopen at the nearest proportion.
+  See the [keyboard evidence](docs/architecture/decisions/studio-keyboard-assistive-evidence.md).

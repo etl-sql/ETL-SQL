@@ -388,6 +388,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
     });
 
     const { mountScriptEditor } = createStudioEditorHost({
+        get opts() { return opts; },
         get apiBase() { return apiBase; },
         get authFetch() { return authFetch; },
         get codeMirrorDebounce() { return codeMirrorDebounce; },

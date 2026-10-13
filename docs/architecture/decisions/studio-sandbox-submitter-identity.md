@@ -58,5 +58,5 @@ parameters, and saved state cannot overwrite them.
 
 - [Practice execution decision](studio-practice-execution.md)
 - [Deployment profiles](../deployment-profiles.md)
-- [Tenant isolation](../tenant-isolation.md)
+- [Tenant isolation](../saas-tenant-isolation.md)
 - [Execution identity](../../../src/ETL-SQL.Core/Governance/ExecutionIdentity.cs)

@@ -36,7 +36,8 @@ export function readStudioSession(value: unknown): StudioSessionDto {
         throw new TypeError('Invalid Studio session response.');
     return { mode: value.mode, capabilities: value.capabilities,
         sourceControlEnabled: value.sourceControlEnabled, draftRecovery: value.draftRecovery,
-        privateDrafts: value.privateDrafts === true };
+        privateDrafts: value.privateDrafts === true,
+        maxScriptCharacters: integer(value.maxScriptCharacters) && value.maxScriptCharacters > 0 ? value.maxScriptCharacters : 200_000 };
 }
 
 function studioPrivateDraftSummary(value: unknown): value is StudioPrivateDraftSummaryDto {
@@ -71,6 +72,12 @@ export function readStudioReports(value: unknown): StudioReportDto[] {
 }
 function studioFolder(value: unknown): value is StudioFolderDto {
     return isObject(value) && integer(value.id) && string(value.path) && string(value.name);
+}
+export function readStudioCatalogPage(value: unknown): StudioCatalogPageDto & { nextAfterId: number | null } {
+    if (!isObject(value) || !nullable(value.nextAfterId, integer)) throw new TypeError('Invalid Studio catalog page response.');
+    const items = readStudioReports(value.items);
+    if (items.length > 50) throw new TypeError('Studio catalog page exceeded its limit.');
+    return { items, nextAfterId: value.nextAfterId ?? null };
 }
 export function readStudioFolders(value: unknown): StudioFolderDto[] {
     if (!array(value, studioFolder)) throw new TypeError('Invalid Studio folder catalog response.');

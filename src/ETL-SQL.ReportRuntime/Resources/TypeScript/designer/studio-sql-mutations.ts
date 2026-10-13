@@ -55,6 +55,7 @@ export interface StudioDesignerInstanceLike {
 }
 
 export interface StudioStateLike {
+    isEditorDegraded?: boolean;
     selectedVisualId?: string | null;
     editorInstance?: StudioEditorInstanceLike | null;
     designerInstance?: StudioDesignerInstanceLike | null;
@@ -227,6 +228,11 @@ export function createStudioSqlMutationService({
     }
 
     function canonicalDesignerMutation<T = unknown>(label: string, mutate: (designState: DesignerStateLike) => Promise<T> | T): Promise<T | null> {
+        // COMPAT_BREAK: 0.21.0 — a helper cannot write a buffer the degraded editor cannot apply safely.
+        if (state.isEditorDegraded) {
+            feedback.notify('Visual and helper edits are unavailable in basic editor mode. You can type in the script, or retry loading the editor.', { title: 'Editor action unavailable', tone: 'warning' });
+            return Promise.resolve(null);
+        }
         const document = getActiveDocument();
         if (!document) return Promise.resolve(null);
         const context = document.studioContext;
@@ -301,6 +307,11 @@ export function createStudioSqlMutationService({
      * is raised rather than absorbed, and an undo offer covering exactly the write that happened.
      */
     function canonicalScriptMutation(label: string, route: string, operation: Record<string, unknown>) {
+        // COMPAT_BREAK: 0.21.0 — use the same write boundary for pipeline and governance helpers.
+        if (state.isEditorDegraded) {
+            feedback.notify('Visual and helper edits are unavailable in basic editor mode. You can type in the script, or retry loading the editor.', { title: 'Editor action unavailable', tone: 'warning' });
+            return Promise.resolve(null);
+        }
         const document = getActiveDocument();
         if (!document) return Promise.resolve(null);
         const context = document.studioContext;

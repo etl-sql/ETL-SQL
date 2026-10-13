@@ -75,7 +75,10 @@ public record RunDesignerRequest(
     string? DocumentUri = null,
     Dictionary<string, string>? Parameters = null,
     PreviewAsRequest? PreviewAs = null,
-    string? ClientRunId = null);
+    string? ClientRunId = null,
+    bool HelperPreview = false,
+    string? PreviewContext = null,
+    int? PreviewContextLine = null);
 
 /// <summary>
 /// The audience to evaluate row-level-security predicates as for this run.

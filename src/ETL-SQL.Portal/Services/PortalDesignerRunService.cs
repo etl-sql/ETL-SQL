@@ -18,7 +18,8 @@ namespace ETL_SQL.Portal.Services;
 
 /// <summary>
 /// Executes portal-designer ad hoc previews under the logged-in user's execution identity.
-/// The endpoint intentionally accepts only one read-only SELECT/set-query statement.
+/// Ordinary runs use the interactive allow-list; helper previews additionally validate explicit
+/// context and a bounded, read-only SQLite native query against an authorized catalog binding.
 /// </summary>
 public sealed class PortalDesignerRunService(
     IServiceProvider services,
@@ -41,10 +42,41 @@ public sealed class PortalDesignerRunService(
         CancellationToken cancellationToken = default)
     {
         var selectedText = string.IsNullOrWhiteSpace(request.Selection) ? request.Script : request.Selection!;
-        var statements = ParseGovernedStatements(selectedText);
+        if (request.HelperPreview)
+            selectedText = HelperPreviewPolicy.Compose(selectedText, request.PreviewContext, request.PreviewContextLine);
+        var statements = ParseGovernedStatements(selectedText, request.HelperPreview);
         var caller = await BuildIdentityAsync(user, cancellationToken);
         if (caller is null)
             throw new UnauthorizedAccessException("The current portal user could not be resolved for execution.");
+
+        if (request.HelperPreview)
+        {
+            foreach (var declaration in statements.OfType<CreateConnectionStatement>().ToArray())
+            {
+                if (string.Equals(declaration.ConnectionType, "MOCKDB", StringComparison.OrdinalIgnoreCase)) continue;
+                if (declaration.TargetExpression is not LiteralExpression { Value: string reference }
+                    || !string.Equals(reference, "SHARED:" + declaration.ConnectionName, StringComparison.OrdinalIgnoreCase)
+                    || declaration.Options is { Count: > 0 }
+                    || !string.Equals(request.ConnectionRef, declaration.ConnectionName, StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("Helper connections must use the selected shared catalog alias.");
+                var definition = await catalog.ResolveAsync(declaration.ConnectionName, caller, cancellationToken);
+                if (!string.Equals(definition.ConnectorType, declaration.ConnectionType, StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("The connection declaration does not match its catalog type.");
+                statements.Remove(declaration);
+            }
+            foreach (var native in statements.OfType<ExecutePushdownStatement>())
+            {
+                if (native.ConnectionName is not IdentifierExpression name)
+                    throw new ArgumentException("Native preview requires a named catalog connection.");
+                if (!string.Equals(name.Name.Trim('[', ']'), request.ConnectionRef, StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("Native preview must use the selected catalog connection.");
+                var definition = await catalog.ResolveAsync(name.Name.Trim('[', ']'), caller, cancellationToken);
+                if (!string.Equals(definition.ConnectorType, "SQLITE", StringComparison.OrdinalIgnoreCase)
+                    || definition.Gateway is not null
+                    || !IsReadOnlySqlite(definition.Target))
+                    throw new ArgumentException("Native helper preview currently requires a direct SQLITE catalog connection with Mode=ReadOnly.");
+            }
+        }
 
         // Preview-as changes what the author's own row-level-security predicates see, and nothing
         // else. The real actor is unchanged, so dataset and connection authority — keyed on the real
@@ -74,7 +106,7 @@ public sealed class PortalDesignerRunService(
         ApplyParameters(sessionContext, request.Parameters);
 
         var start = DateTime.UtcNow;
-        var session = new ExecutionSession(services, sessionContext, logger);
+        await using var session = new ExecutionSession(services, sessionContext, logger);
         var result = await session.ExecuteAsync(script, timeout.Token, "portal-designer-run", executionIdentity: identity);
         var elapsedMs = (long)(DateTime.UtcNow - start).TotalMilliseconds;
         var table = session.LastEvaluator?.LastResult;
@@ -94,7 +126,7 @@ public sealed class PortalDesignerRunService(
                 identity.IsImpersonating ? "AD_HOC_RUN_AS" : "AD_HOC_RUN",
                 "Designer",
                 resourceId,
-                $"Connection={resourceId ?? "(none)"}; Statement[{i + 1}/{statements.Count}]={statements[i].GetType().Name}; "
+                $"RunId={runId}; Connection={resourceId ?? "(none)"}; Statement[{i + 1}/{statements.Count}]={statements[i].GetType().Name}; "
                     + $"QueryHash={FingerprintQuery(statements[i].ToSql())}; Rows={table?.Rows.Count ?? 0}; ElapsedMs={elapsedMs}{previewNote}");
         }
 
@@ -114,7 +146,7 @@ public sealed class PortalDesignerRunService(
     /// Parses the submitted text and enforces <see cref="PortalInteractiveRunPolicy"/> on every
     /// statement. Rejection is all-or-nothing: nothing runs unless the whole script is allowed.
     /// </summary>
-    private static List<Statement> ParseGovernedStatements(string scriptText)
+    private static List<Statement> ParseGovernedStatements(string scriptText, bool helperPreview = false)
     {
         if (string.IsNullOrWhiteSpace(scriptText))
             throw new ArgumentException("Select a query to run.");
@@ -133,11 +165,24 @@ public sealed class PortalDesignerRunService(
 
         for (var i = 0; i < statements.Count; i++)
         {
+            if (helperPreview && statements[i] is DeclareStatement { IsSensitive: false, IsSecret: false }) continue;
+            if (helperPreview && statements[i] is ExecutePushdownStatement) continue;
+            if (helperPreview && statements[i] is CreateConnectionStatement) continue;
             if (PortalInteractiveRunPolicy.Reject(statements[i]) is { } reason)
                 throw new ArgumentException($"Statement {i + 1}: {reason}");
         }
 
         return statements;
+    }
+
+    private static bool IsReadOnlySqlite(string? target)
+    {
+        try
+        {
+            return new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(target ?? "").Mode
+                == Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly;
+        }
+        catch (ArgumentException) { return false; }
     }
 
     private async Task<string> BuildExecutionScriptAsync(

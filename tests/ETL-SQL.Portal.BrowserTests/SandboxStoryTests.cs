@@ -5136,6 +5136,66 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task Studio_HelperContextControlsExplainUnavailableContext()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=studio&fixture=helper-context");
+        var helper = page.GetByRole(AriaRole.Region, new() { Name = "Helper preview context example" });
+        await Expect(helper.Locator("[data-preview-context]")).ToBeCheckedAsync();
+        await helper.Locator("[data-workbench-run]").ClickAsync();
+        await Expect(helper.Locator("[data-workbench-output]")).ToContainTextAsync("1 row sampled");
+        await helper.GetByRole(AriaRole.Spinbutton, new() { Name = "Preview context ends before line" }).FillAsync("4");
+        await helper.Locator("[data-workbench-run]").ClickAsync();
+        await Expect(helper.Locator("[data-workbench-output]")).ToContainTextAsync("Nothing was executed");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_DegradedEditorStoryRetriesWithTheLatestTypedText()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.RouteAsync("**/codemirror-bundle.min.js*", route => route.AbortAsync());
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=studio&fixture=degraded-editor");
+        var textarea = page.GetByRole(AriaRole.Textbox, new() { Name = "Script editor (basic mode)" });
+        await textarea.FillAsync("-- kept in the recovery story\nSELECT 8;");
+        await page.UnrouteAsync("**/codemirror-bundle.min.js*");
+        await page.Locator("[data-action='retry-cm']").ClickAsync();
+        await Expect(page.Locator(".cm-content").First).ToContainTextAsync("kept in the recovery story");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_CatalogPagingStorySearchesAndNavigates()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=studio&fixture=catalog-paging");
+        await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Next page", Exact = true })).ToBeVisibleAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Next page", Exact = true }).ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.catalogReports[0].id === 51");
+        await page.GetByRole(AriaRole.Textbox, new() { Name = "Search catalog", Exact = true }).FillAsync("125");
+        await page.GetByRole(AriaRole.Button, new() { Name = "Search", Exact = true }).ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.catalogReports.length === 1 && window.__STUDIO_INSTANCE__.state.catalogReports[0].id === 125");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_LargeDocumentStoryExplainsPausedServices()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=studio&fixture=large-document");
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state.editorInstance)");
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.editorInstance.analyze()");
+        await page.Locator(".etlsql-script-results [data-tab='messages']").ClickAsync();
+        await Expect(page.Locator(".etlsql-script-results")).ToContainTextAsync("All text is kept and editable");
+        Assert.Equal(200_001, await page.EvaluateAsync<int>("() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue().length"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
     public async Task Studio_ConnectionWizard_OffersMockDbUnderTestData()
     {
         // MOCKDB is the only connector a new author can use with no database, and it backs Studio

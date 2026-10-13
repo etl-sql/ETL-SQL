@@ -10,6 +10,7 @@ ETL-SQL treats data pipelines as plain-text, source-controlled `.etlsql` scripts
 
 | Guide | Description |
 | :--- | :--- |
+| [Run and Schedule a Studio Pipeline](../studio/run-and-schedule.md) | Run/repair a practice pipeline, follow its durable status, request Stop, and schedule a saved Portal revision. |
 | [Staged vs. Streaming Ingestion](staged-vs-streaming-ingestion.md) | When to use in-memory `#temp` staging vs. direct single-pass streams. |
 | [Modular Scripts & Parameters](modular-scripts-and-parameters.md) | Break monolithic jobs into reusable sub-scripts with `RUN SCRIPT` and `INPUT`/`OUTPUT` parameters. |
 | [Parallel Execution](parallel-execution.md) | Execute tasks concurrently across worker threads with `PARALLEL(n)` concurrency limits. |

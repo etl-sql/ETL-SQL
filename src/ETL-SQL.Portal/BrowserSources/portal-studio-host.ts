@@ -35,7 +35,10 @@ export function createPortalStudioHost(session: StudioSessionDto, fetch: Authori
     }));
     return {
         onOpenDocument: async (catalogReport: unknown) => {
-            const report = readStudioReport(catalogReport);
+            const selected = readStudioReport(catalogReport);
+            const report = readStudioReport(await readJson(`/api/studio/reports/${selected.id}/summary`));
+            if (report.folderId !== selected.folderId || report.folderPath !== selected.folderPath)
+                throw new Error('This document moved since the catalog was loaded. Refresh Studio Home and open it again. Your open drafts are unchanged.');
             const script = readScriptContent(await readJson(`/api/reports/${report.id}/script-content`));
             const extension = report.kind.toLowerCase() === 'pipeline' ? '.etlsql' : '.rptsql';
             const filename = /\.(etlsql|rptsql)$/i.test(report.name) ? report.name : report.name + extension;

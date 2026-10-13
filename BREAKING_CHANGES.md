@@ -17,6 +17,27 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.21.0 — Runtime: Studio bounds automatic editor services
+- **What changed**: Desktop automatic editor services previously sent documents of any length. Studio now pauses automatic analysis, completion, hover, and canvas work above 200,000 characters on desktop or the configured Portal character limit. Text remains editable and is never truncated.
+- **Who is affected**: Studio authors editing documents above the host ceiling.
+- **Migration**: Reduce the document below the displayed limit to resume automatic services. Portal continues enforcing its existing save limit.
+- **Diagnostic**: `DOCUMENT_LIMIT` in editor diagnostics; N/A for language lint.
+- **Earliest removal**: N/A
+
+### v0.21.0 — Runtime: Degraded Studio refuses helper writes
+- **What changed**: Visual and helper edits could change a document without updating its basic textarea after CodeMirror failed. Those writes now refuse with an explanation. Retry reloads the failed module and preserves both typed buffers.
+- **Who is affected**: Authors using Studio after an editor module failure.
+- **Migration**: Type directly in basic mode, or retry loading the editor before using visual and helper writes.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.21.0 — Runtime: Studio helper previews require read-only attempts
+- **What changed**: The desktop query helper previously forwarded native bodies without a preview-specific write check. Helpers now validate read-only targets and explicit staging context before execution. Native previews require a direct SQLite connection opened with `Mode=ReadOnly`. Desktop helper result rows also have a 1 MiB serialized byte budget and report truncation.
+- **Who is affected**: Authors previewing writes or other native dialects from a helper.
+- **Migration**: Use the SQLite read-only fixture for native previews. Use the host's normal, authorized pipeline execution path for writes. Select explicit declaration/staging context for engine previews.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.21.0 — Runtime: Arrow spill preserves decimal values
 - **What changed**: Arrow spill previously widened decimal scale and rounded precision to nine places. Row and native-column spill now retain each decimal value and its original scale using invariant text with decimal type metadata. Spilled sorts also stay streaming for percentage limits.
 - **Who is affected**: Queries using disk-backed sorting, aggregation, windows, or percentage replay.

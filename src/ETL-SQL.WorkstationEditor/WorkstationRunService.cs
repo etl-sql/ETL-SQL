@@ -12,6 +12,7 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
     private const int DefaultRowLimit = 100;
     private const int MaxRowLimit = 1000;
     private const int MaxLineageEntries = 500;
+    private const int HelperResultByteLimit = 1024 * 1024;
     private const int OperatorGrantMb = 128;
     private const long SessionCeilingBytes = 256L * 1024 * 1024;
     private static readonly TimeSpan RunTimeout = TimeSpan.FromSeconds(60);
@@ -25,6 +26,23 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
         if (string.IsNullOrWhiteSpace(script))
         {
             return RunResponse.Failed("RUN_EMPTY", "Select or type a script before running.");
+        }
+
+        if (request.HelperPreview)
+        {
+            // COMPAT_BREAK: 0.21.0 — helper previews cannot execute writes or arbitrary predecessors.
+            script = ETL_SQL.Core.Security.HelperPreviewPolicy.Compose(script, request.PreviewContext, request.PreviewContextLine);
+            var statements = ETL_SQL.Core.Security.HelperPreviewPolicy.Parse(script);
+            foreach (var native in statements.OfType<ExecutePushdownStatement>())
+            {
+                var declaration = native.ConnectionName is IdentifierExpression alias
+                    ? statements.OfType<CreateConnectionStatement>().FirstOrDefault(c => string.Equals(c.ConnectionName.Trim('[', ']'), alias.Name.Trim('[', ']'), StringComparison.OrdinalIgnoreCase))
+                    : null;
+                if (declaration?.TargetExpression is not LiteralExpression { Value: string target }
+                    || !string.Equals(declaration.ConnectionType, "SQLITE", StringComparison.OrdinalIgnoreCase)
+                    || new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(target).Mode != Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly)
+                    throw new ArgumentException("Native helper preview currently requires a SQLITE declaration with Mode=ReadOnly.");
+            }
         }
 
         // Destructive statements need an explicit confirmation. The engine's MutationGuardrailPolicy
@@ -75,19 +93,27 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
             : null;
 
         await using var session = new ExecutionSession(services, context, logger);
-        var result = await session.ExecuteAsync(
-            governedScript, timeout.Token, "workstation-editor-run", executionIdentity: identity);
+        var historyUri = request.DocumentUri ?? "(untitled)";
+        ExecutionResult result;
+        try
+        {
+            result = await session.ExecuteAsync(
+                governedScript, timeout.Token, "workstation-editor-run", executionIdentity: identity);
+        }
+        catch (OperationCanceledException)
+        {
+            await AppendHistoryAsync(historyUri, script, runId, success: false, elapsedMs: 0, rowCount: 0);
+            throw;
+        }
         var table = session.LastEvaluator?.LastResult ?? result.ResultsTables.LastOrDefault();
         var diagnostics = ToRunDiagnostics(result);
-
-        var historyUri = request.DocumentUri ?? "(untitled)";
 
         if (!result.Success)
         {
             var message = diagnostics.Count > 0
                 ? diagnostics[0].Message
                 : "Script execution failed.";
-            AppendHistory(historyUri, script, success: false, result.ExecutionTimeMs, rowCount: 0);
+            await AppendHistoryAsync(historyUri, script, runId, success: false, result.ExecutionTimeMs, rowCount: 0);
             return new RunResponse(
                 false,
                 [],
@@ -101,9 +127,11 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
                 result.ExecutionTree?.ToSnapshot());
         }
 
-        var (columns, rows, rowCount, capped) = ToRows(table, rowLimit);
+        var (columns, rows, rowCount, capped) = ToRows(table, rowLimit, request.HelperPreview ? HelperResultByteLimit : null);
         var successMessage = capped
-            ? $"Showing first {rows.Count} rows; result was capped."
+            ? request.HelperPreview
+                ? $"Showing {rows.Count} rows; helper preview was capped at {rowLimit} rows or {HelperResultByteLimit:N0} bytes."
+                : $"Showing first {rows.Count} rows; result was capped."
             : $"Returned {rows.Count} row{(rows.Count == 1 ? string.Empty : "s")}.";
 
         // TransformationExpression and Description carry script text verbatim, so they go through
@@ -126,7 +154,7 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
                 BuildSourceLabels(e.SourceTables, connections)))
             .ToList();
 
-        AppendHistory(historyUri, script, success: true, result.ExecutionTimeMs, rowCount);
+        await AppendHistoryAsync(historyUri, script, runId, success: true, result.ExecutionTimeMs, rowCount);
 
         return new RunResponse(
             true,
@@ -190,7 +218,7 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
     /// script text is redacted and truncated — the point is a trail, not a copy of the work. Never
     /// throws: losing a history line must not fail a run the user asked for.
     /// </remarks>
-    private void AppendHistory(string documentUri, string script, bool success, long elapsedMs, int rowCount)
+    private async Task AppendHistoryAsync(string documentUri, string script, string runId, bool success, long elapsedMs, int rowCount)
     {
         try
         {
@@ -205,6 +233,7 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
             var line = JsonSerializer.Serialize(new
             {
                 timestampUtc = DateTime.UtcNow.ToString("O"),
+                runId,
                 documentUri,
                 success,
                 elapsedMs,
@@ -212,7 +241,8 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
                 script = summary,
             });
 
-            File.AppendAllText(Path.Combine(root, "run-history.jsonl"), line + Environment.NewLine);
+            // The execution token may already be cancelled; retaining its support ID is still required.
+            await File.AppendAllTextAsync(Path.Combine(root, "run-history.jsonl"), line + Environment.NewLine, CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -242,20 +272,29 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
     }
 
     private static (IReadOnlyList<string> Columns, IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows, int RowCount, bool Capped)
-        ToRows(DataTable? table, int rowLimit)
+        ToRows(DataTable? table, int rowLimit, int? resultByteLimit = null)
     {
         if (table is null)
             return ([], [], 0, false);
 
         var columns = table.ColumnNames;
-        var rows = table.Rows
-            .Take(rowLimit)
-            .Select(row => columns.ToDictionary<string, string, object?>(
+        var rows = new List<IReadOnlyDictionary<string, object?>>();
+        long bytes = 2; // JSON array delimiters; the budget applies to result rows.
+        foreach (var row in table.Rows.Take(rowLimit))
+        {
+            var converted = columns.ToDictionary<string, string, object?>(
                 column => column,
                 column => NormalizeValue(row[column]),
-                StringComparer.OrdinalIgnoreCase))
-            .Cast<IReadOnlyDictionary<string, object?>>()
-            .ToList();
+                StringComparer.OrdinalIgnoreCase);
+            if (resultByteLimit is { } limit)
+            {
+                // COMPAT_BREAK: 0.21.0 — a single large value cannot bypass the helper output budget.
+                var rowBytes = JsonSerializer.SerializeToUtf8Bytes(converted).Length + (rows.Count > 0 ? 1 : 0);
+                if (bytes + rowBytes > limit) break;
+                bytes += rowBytes;
+            }
+            rows.Add(converted);
+        }
         var rowCount = table.TotalRowsMatched > 0 ? table.TotalRowsMatched : table.Rows.Count;
         var capped = table.IsCapped || table.Rows.Count > rows.Count || table.TotalRowsMatched > rows.Count;
 
@@ -298,7 +337,10 @@ public sealed record RunRequest(
     Dictionary<string, string>? Parameters = null,
     /// <summary>The audience to evaluate row-level-security predicates as, or null to run as nobody.</summary>
     PreviewAsAuthoringRequest? PreviewAs = null,
-    string? ClientRunId = null);
+    string? ClientRunId = null,
+    bool HelperPreview = false,
+    string? PreviewContext = null,
+    int? PreviewContextLine = null);
 
 /// <param name="Label">What <c>@@CURRENT_USER</c> answers. A description of an audience, not a person.</param>
 public sealed record PreviewAsAuthoringRequest(

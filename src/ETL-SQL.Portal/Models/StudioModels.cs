@@ -5,7 +5,8 @@ public sealed record StudioSessionDto(
     IReadOnlyList<string> Capabilities,
     bool SourceControlEnabled,
     bool DraftRecovery,
-    bool PrivateDrafts = false);
+    bool PrivateDrafts = false,
+    int MaxScriptCharacters = 200_000);
 
 /// <summary>One of the caller's own private drafts, without its text.</summary>
 public sealed record StudioPrivateDraftSummaryDto(
@@ -65,6 +66,9 @@ public sealed record StudioReportDto(
     string Kind = "Report");
 
 public sealed record StudioFolderDto(int Id, string Path, string Name);
+
+/// <summary>A bounded discovery page. NextAfterId advances past the inspected candidate rows.</summary>
+public sealed record StudioCatalogPageDto(IReadOnlyList<StudioReportDto> Items, int? NextAfterId);
 
 /// <summary>Asks the Orchestrator to run one saved pipeline revision.</summary>
 /// <param name="Version">The saved version the author is looking at; a stale one is refused.</param>

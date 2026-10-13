@@ -828,6 +828,8 @@ public class DesignerController : ControllerBase
             return scriptLimit;
         if (ValidateTextLimit(req.Selection, "selection", MaxSelectionCharacters) is { } selectionLimit)
             return selectionLimit;
+        if (ValidateTextLimit(req.PreviewContext, "preview context", MaxScriptCharacters) is { } contextLimit)
+            return contextLimit;
         if (_runService is null)
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Designer run service is not configured." });
 
