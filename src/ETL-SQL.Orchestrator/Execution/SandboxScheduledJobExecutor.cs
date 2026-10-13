@@ -1,10 +1,21 @@
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Multitenancy;
+using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Orchestrator.Execution;
 
 public interface ISandboxScheduledJobExecutor
 {
+    bool SupportsSubmitterIdentity => false;
+
+    Task<ScriptExecutionResult> ExecuteAsync(
+        JobDefinition job, long historyId, int attempt, string sessionId, bool resumeFromCheckpoint,
+        long queueWaitMs, IReadOnlyDictionary<string, string>? variableOverrides,
+        CancellationToken cancellationToken, ExecutionIdentity? executionIdentity) =>
+        executionIdentity is null
+            ? ExecuteAsync(job, historyId, attempt, sessionId, resumeFromCheckpoint, queueWaitMs, variableOverrides, cancellationToken)
+            : throw new InvalidOperationException("This sandbox executor cannot carry a submitter identity.");
+
     Task<ScriptExecutionResult> ExecuteAsync(
         JobDefinition job,
         long historyId,
@@ -60,7 +71,9 @@ public sealed class SandboxScheduledJobExecutor(
     SandboxExecutionCoordinator coordinator,
     ISandboxExecutionProvider provider) : ISandboxScheduledJobExecutor
 {
-    public async Task<ScriptExecutionResult> ExecuteAsync(
+    public bool SupportsSubmitterIdentity => true;
+
+    public Task<ScriptExecutionResult> ExecuteAsync(
         JobDefinition job,
         long historyId,
         int attempt,
@@ -68,7 +81,13 @@ public sealed class SandboxScheduledJobExecutor(
         bool resumeFromCheckpoint,
         long queueWaitMs,
         IReadOnlyDictionary<string, string>? variableOverrides,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) => ExecuteAsync(
+            job, historyId, attempt, sessionId, resumeFromCheckpoint, queueWaitMs, variableOverrides, cancellationToken, null);
+
+    public async Task<ScriptExecutionResult> ExecuteAsync(
+        JobDefinition job, long historyId, int attempt, string sessionId, bool resumeFromCheckpoint,
+        long queueWaitMs, IReadOnlyDictionary<string, string>? variableOverrides,
+        CancellationToken cancellationToken, ExecutionIdentity? executionIdentity)
     {
         ArgumentNullException.ThrowIfNull(job);
         if (attempt <= 0) throw new ArgumentOutOfRangeException(nameof(attempt));
@@ -80,6 +99,12 @@ public sealed class SandboxScheduledJobExecutor(
         var request = new SandboxWorkloadRequest
         {
             Assignment = new SandboxAssignmentIdentity(tenant, runId, $"attempt-{attempt}"),
+            ExecutionIdentity = executionIdentity is null ? null : executionIdentity with
+            {
+                Groups = executionIdentity.Groups.ToArray(),
+                Roles = executionIdentity.Roles.ToArray(),
+                Scopes = executionIdentity.Scopes.ToArray()
+            },
             ArtifactId = artifact.ArtifactId,
             ArtifactHash = artifact.Hash,
             PolicyVersion = options.PolicyVersion,

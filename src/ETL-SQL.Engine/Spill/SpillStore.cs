@@ -28,6 +28,11 @@ namespace ETL_SQL.Engine.Spill;
 /// </summary>
 public partial class SpillStore : ISpillStore
 {
+    private static bool IsDecimalLogicalType(string? logicalType) =>
+        logicalType?.StartsWith("DECIMAL", StringComparison.OrdinalIgnoreCase) == true
+        || logicalType?.StartsWith("NUMERIC", StringComparison.OrdinalIgnoreCase) == true
+        || string.Equals(logicalType, "MONEY", StringComparison.OrdinalIgnoreCase);
+
     private static object? UnwrapJsonValue(JsonElement element) =>
         element.ValueKind switch
         {
@@ -907,7 +912,8 @@ public partial class SpillStore : ISpillStore
         {
             if (elementType == typeof(byte) || elementType == typeof(short)
                 || elementType == typeof(int) || elementType == typeof(long)) return Int64Type.Default;
-            if (elementType == typeof(decimal)) return new Decimal128Type(29, 9);
+            // COMPAT_BREAK: 0.21.0 — preserve per-value decimal precision and scale.
+            if (elementType == typeof(decimal)) return StringType.Default;
             if (elementType == typeof(double) || elementType == typeof(float)) return DoubleType.Default;
             if (elementType == typeof(bool)) return BooleanType.Default;
             if (elementType == typeof(DateTime)) return new TimestampType(TimeUnit.Microsecond, "UTC");
@@ -956,7 +962,7 @@ public partial class SpillStore : ISpillStore
         private static IArrowType GetArrowType(object? value) => value switch
         {
             int or long or short or byte or uint or ulong or ushort or sbyte => Int64Type.Default,
-            decimal => new Decimal128Type(29, 9),
+            decimal => StringType.Default,
             double or float => DoubleType.Default,
             bool => BooleanType.Default,
             DateTime => new TimestampType(TimeUnit.Microsecond, "UTC"),
@@ -967,7 +973,8 @@ public partial class SpillStore : ISpillStore
         {
             var firstRowNumber = _acceptedRowCount - rows.Count + 1;
             var arrays = _schema!.FieldsList
-                .Select(f => BuildArray(f, rows, firstRowNumber))
+                .Select((f, i) => BuildArray(f, rows, firstRowNumber,
+                    _schema.Metadata[$"{LogicalTypeKeyPrefix}{i}.logical_type"]))
                 .ToList();
             return new RecordBatch(_schema, arrays, rows.Count);
         }
@@ -986,10 +993,10 @@ public partial class SpillStore : ISpillStore
             if (column is ColumnBuffer<long> longs) return BuildInt64(longs);
             if (column is ColumnBuffer<decimal> decimals)
             {
-                var type = new Decimal128Type(29, 9);
-                var builder = new Decimal128Array.Builder(type);
+                var builder = new StringArray.Builder();
                 for (var i = 0; i < decimals.Count; i++)
-                    if (decimals.IsNull(i)) builder.AppendNull(); else builder.Append(Math.Round(decimals.Values.Span[i], type.Scale));
+                    if (decimals.IsNull(i)) builder.AppendNull();
+                    else builder.Append(decimals.Values.Span[i].ToString(System.Globalization.CultureInfo.InvariantCulture));
                 return builder.Build();
             }
             if (column is ColumnBuffer<double> doubles)
@@ -1068,8 +1075,20 @@ public partial class SpillStore : ISpillStore
             return builder.Build();
         }
 
-        private IArrowArray BuildArray(Field field, List<Row> rows, long firstRowNumber)
+        private IArrowArray BuildArray(Field field, List<Row> rows, long firstRowNumber, string logicalType)
         {
+            if (IsDecimalLogicalType(logicalType))
+            {
+                var builder = new StringArray.Builder();
+                for (var i = 0; i < rows.Count; i++)
+                {
+                    var value = rows[i].TryGetValue(field.Name, out var found) ? found : null;
+                    if (value is null) builder.AppendNull();
+                    else builder.Append(ConvertSpillValue(field, value, firstRowNumber + i, Convert.ToDecimal)
+                        .ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
+                return builder.Build();
+            }
             switch (field.DataType)
             {
                 case Int64Type:
@@ -1171,7 +1190,7 @@ public partial class SpillStore : ISpillStore
             {
                 throw new ExecutionException(
                     $"Spill persistence failed for chunk '{_chunkName}', column '{field.Name}', row {rowNumber}: " +
-                    $"the inferred schema expects {field.DataType.Name}, but the value has runtime type " +
+                    $"the inferred schema expects {typeof(T).Name}, but the value has runtime type " +
                     $"{value.GetType().Name}. The column contains incompatible heterogeneous values; " +
                     "correct or explicitly widen it in the statement that produced the table before persistence.");
             }
@@ -1390,6 +1409,9 @@ public partial class SpillStore : ISpillStore
             BooleanArray values => CopyFixed<bool>(count, values.IsNull, i => values.GetValue(i) ?? default),
             TimestampArray values => CopyFixed<DateTime>(count, values.IsNull,
                 i => values.GetTimestamp(i)?.UtcDateTime ?? default),
+            StringArray values when IsDecimalLogicalType(logicalType)
+                => CopyFixed<decimal>(count, values.IsNull,
+                    i => decimal.Parse(values.GetString(i)!, System.Globalization.CultureInfo.InvariantCulture)),
             StringArray values when IsDateTimeOffsetLogicalType(logicalType)
                 => CopyFixed<DateTimeOffset>(count, values.IsNull,
                     i => ParseDateTimeOffsetString(values.GetString(i)!)),
@@ -1465,6 +1487,8 @@ public partial class SpillStore : ISpillStore
         {
             if (s == null) return null;
             if (logicalType == "String") return s;
+            if (IsDecimalLogicalType(logicalType))
+                return decimal.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
             if (IsDateTimeOffsetLogicalType(logicalType))
                 return ParseDateTimeOffsetString(s);
             if (s.StartsWith(JsonPrefix, StringComparison.Ordinal))

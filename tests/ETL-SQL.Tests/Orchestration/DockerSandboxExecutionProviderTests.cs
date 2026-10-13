@@ -8,6 +8,37 @@ namespace ETL_SQL.Tests.Orchestration;
 public sealed class DockerSandboxExecutionProviderTests : IDisposable
 {
     private const string Digest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    [Theory]
+    [InlineData("1")]
+    [InlineData("<no value>")]
+    public async Task SubmitterEnvelopeIsPrivateAndUnsupportedWorkerImagesFailClosed(string protocol)
+    {
+        var commands = new RecordingCommands(ImageEvidence(), Ok(protocol), Ok("29.6.2"), RuntimeEvidence(), Ok("container-id"), Ok("created"));
+        var artifacts = ArtifactStore();
+        var artifact = await artifacts.PutScriptAsync("PRINT 'safe';");
+        var workspace = await Workspace().AssignAsync(Identity());
+        var request = Request(artifact) with
+        {
+            AdmissionId = "admission-identity",
+            ExecutionIdentity = new ETL_SQL.Core.Governance.ExecutionIdentity
+            { EffectiveUser = "private-learner", RealUser = "private-actor", TenantId = "tenant-a", IsAdmin = false, Roles = ["Publisher"] }
+        };
+        var provider = new DockerSandboxExecutionProvider(Options(), commands, artifacts);
+        if (protocol != "1")
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => provider.PrepareAsync(request, workspace, default));
+            Assert.DoesNotContain(commands.Calls, call => call.Arguments.FirstOrDefault() == "create");
+            return;
+        }
+        await provider.PrepareAsync(request, workspace, default);
+        var create = commands.Calls.Single(call => call.Arguments.FirstOrDefault() == "create").Arguments;
+        Assert.Contains(create, arg => arg.Contains("target=/run/etl-sql/identity,readonly", StringComparison.Ordinal));
+        Assert.DoesNotContain(create, arg => arg.Contains("private-learner", StringComparison.Ordinal) || arg.Contains("private-actor", StringComparison.Ordinal));
+        Assert.DoesNotContain(create, arg => arg.StartsWith("Security__ApprovedSafeZones", StringComparison.Ordinal) && arg.Contains("identity", StringComparison.Ordinal));
+        var envelope = System.Text.Json.JsonSerializer.Deserialize<ETL_SQL.Core.Governance.SandboxIdentityEnvelope>(
+            await File.ReadAllTextAsync(Path.Combine(workspace.RootPath, "identity", "request.json")))!;
+        Assert.Equal("private-learner", envelope.Validate("tenant-a", request.Assignment.RunId, request.Assignment.AttemptId, request.ArtifactHash).EffectiveUser);
+    }
     private readonly string _root = Path.Combine(
         Path.GetTempPath(), $"etlsql-docker-sandbox-{Guid.NewGuid():N}");
 

@@ -87,6 +87,7 @@ public sealed record SandboxWorkloadRequest
     public required SandboxResourceLimits Limits { get; init; }
     public required ResolvedSandboxAdmissionPolicy AdmissionPolicy { get; init; }
     public IReadOnlyList<string> CapabilityHandles { get; init; } = [];
+    public ETL_SQL.Core.Governance.ExecutionIdentity? ExecutionIdentity { get; init; }
     public string? CheckpointHandle { get; init; }
     public string? SessionId { get; init; }
     public bool ResumeFromCheckpoint { get; init; }
@@ -98,6 +99,13 @@ public sealed record SandboxWorkloadRequest
     internal void Validate()
     {
         ArgumentNullException.ThrowIfNull(Assignment);
+        if (ExecutionIdentity is not null)
+        {
+            new ETL_SQL.Core.Governance.SandboxIdentityEnvelope(
+                ETL_SQL.Core.Governance.SandboxIdentityEnvelope.CurrentVersion,
+                Assignment.Tenant.Tenant.Value, Assignment.RunId, Assignment.AttemptId, ArtifactHash, ExecutionIdentity)
+                .Validate(Assignment.Tenant.Tenant.Value, Assignment.RunId, Assignment.AttemptId, ArtifactHash);
+        }
         ArgumentException.ThrowIfNullOrWhiteSpace(ArtifactId);
         ArgumentException.ThrowIfNullOrWhiteSpace(PolicyVersion);
         ArgumentException.ThrowIfNullOrWhiteSpace(BindingVersion);

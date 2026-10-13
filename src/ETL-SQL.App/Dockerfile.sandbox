@@ -33,6 +33,7 @@ RUN if [ -f /app/publish/ETL-SQL ]; then mv /app/publish/ETL-SQL /app/publish/et
 
 # Final image contains the .NET 10 ASP.NET runtime needed by the CLI
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+LABEL etl-sql.sandbox.identity-version="1"
 WORKDIR /app
 
 # Same native dependencies as service hosts:

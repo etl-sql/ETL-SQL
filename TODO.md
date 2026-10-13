@@ -21,8 +21,8 @@ and scale baseline recalibration).
 | Code stability — Browser sources, Studio, test lanes | [§1](#1-code-stability--browser-sources-studio-and-test-lanes) |
 | Generated browser assets — Build preparation & source-control cleanup | [§1.1](#11-generated-browser-assets--build-preparation-and-source-control-cleanup) |
 | Studio — Unified authoring experience & completeness criteria (assessed; gaps routed to §3–§5) | [§2](#2-studio--unified-authoring-experience-and-completeness-criteria) |
-| Studio — Portal pipelines & schedule handoffs (ST04–ST11 complete; open points recorded per item) | [§3](#3-studio--portal-pipelines-and-schedule-handoffs) |
-| Studio — Private unpublished drafts & publishing (ST12–ST15 complete; open points recorded per item) | [§4](#4-studio--private-unpublished-drafts-and-publishing) |
+| Studio — Portal pipelines & schedule handoff limits | [§3](#3-studio--portal-pipelines-and-schedule-handoffs) |
+| Studio — Private unpublished draft policy limits | [§4](#4-studio--private-unpublished-drafts-and-publishing) |
 | Studio — Author, reader & beginner practice journeys (ST16–ST19, ST21 complete; ST16b, ST21b open) | [§5](#5-studio--author-reader-and-beginner-practice-journeys) |
 | Studio — Keyboard & assistive technology (ST23–ST27 complete; ST28, ST29 need a screen reader) | [§6](#6-studio--keyboard-and-assistive-technology) |
 | Studio — Execution scope, cancellation & helper previews | [§7](#7-studio--execution-scope-cancellation-and-bounded-helper-previews) |
@@ -31,7 +31,6 @@ and scale baseline recalibration).
 | Studio — Release-versioned guidance | [§10](#10-studio--release-versioned-guidance) |
 | Release engineering | [§11](#11-release-engineering-follow-ups) |
 | Codebase audit findings — Bugs, security, performance and telemetry | [§13](#13-codebase-audit-findings--bugs-security-performance-and-telemetry) |
-
 
 ---
 
@@ -503,16 +502,9 @@ entry points is a separate future decision, not the measure of success.
 
 **Working inventory:** [Studio authoring completeness](docs/architecture/decisions/studio-authoring-completeness.md). Completed inventories: [ST01 report workflows](docs/architecture/decisions/studio-report-authoring-inventory.md) and [ST02 script/ETL workflows](docs/architecture/decisions/studio-script-etl-authoring-inventory.md).
 
-- [x] **ST03 — Unified beginner-experience acceptance.** Use both inventories and completed required journeys
-  to assess whether users can complete report and ETL workflows, move between helpers and code without
-  losing work, and explain the SQL they generated. Record remaining gaps and host-specific limits.
-  (Depends on: ST01, ST02, required journey evidence; Size: S)
-  [Assessed 2026-10-12](docs/architecture/decisions/studio-beginner-acceptance-assessment.md): **not yet accepted.**
-  Dashboard passes in both hosts and desktop ETL passes run/repair (15 journey tests green). Portal ETL
-  is blocked on ST04/ST21; paginated passes only as Portal Admin with injected SQL and has no desktop
-  journey; no learner has been observed (ST16/ST17). Closing this item records the assessment, not a
-  certified experience. Paginated binding/delivery (R15–R18) and the pipeline helper round trip (E14)
-  have no ST task and need sizing.
+The [beginner acceptance assessment](docs/architecture/decisions/studio-beginner-acceptance-assessment.md)
+does not certify the overall experience. Paginated binding/delivery (R15–R18) and the pipeline helper
+round trip (E14) still need sized tasks. Observed learner understanding is tracked in ST16b.
 
 ---
 
@@ -524,88 +516,10 @@ Run path decided 2026-10-12: one Orchestrator job per pipeline (`PIPELINE:{id}`)
 created on first run by an `Admin` or `OrchestratorManager`. Design, routes and what is not yet shown:
 [Portal ETL documents §5](docs/architecture/decisions/portal-etl-documents.md#5-slice-2-as-built-2026-10-12).
 
-- [x] **ST04 — Submit one saved pipeline.** One Orchestrator-backed MOCKDB run under federated author identity
-  uses the saved revision, checks run grants, and reports a missing Orchestrator clearly. No scheduling or
-  Portal-process writes. (Size: M)
-  Done 2026-10-12. `POST /api/studio/pipelines/{id}/runs` names a saved version; the Portal reads that
-  revision and submits it to the job under the caller's assertion. Evidence: `StudioPipelineRunTests`
-  (Portal joined to a real federated Orchestrator: run hash equals saved-revision hash, stale version
-  refused, nothing in the Portal's own job store, `orchestrator_not_connected`, `job_not_provisioned`,
-  `run_grant_denied`) and `JobRevisionRunTests` (stored job script unchanged, tenant isolation, no
-  quarantine, never due on its own). Open: an Orchestrator that executes jobs in its sandbox refuses
-  the run (`sandbox_identity_unsupported`), because the sandbox cannot carry the submitter's identity;
-  see the decision doc. Only jobs named `PIPELINE:<id>` accept submitted text (`not_a_run_slot`).
-- [x] **ST05 — Follow one pipeline run.** Studio shows that submitted run's status and bounded log through
-  completion or failure, retaining its run ID; never displays another run's output. (Depends on: ST04; Size: M)
-  Done 2026-10-12. Studio polls the run ID it was given and rejects an answer about any other; the Portal
-  shows a run only under the pipeline whose job the Orchestrator reports it against. The log is the
-  Orchestrator's normalized statement list, capped at 200. A lost status read ends as `Unknown`, not as
-  a result. Evidence: `AFailedRunIsFollowedToItsFailureWithItsOwnBoundedLog`, `AnotherPipelinesRunIsNotShown`,
-  both browser journeys, and the `pipeline-run` sandbox fixture.
-- [x] **ST06 — Cancel one pipeline run.** Stop reaches the submitted Orchestrator run, displays confirmed
-  cancellation or an explicitly unconfirmed outcome, and preserves diagnostics. (Depends on: ST04, ST05; Size: M)
-  Done 2026-10-12. `POST /api/job-runs/{id}/cancel` records `CANCELLED`; the submitter may stop their own
-  run with `EXECUTE`, anyone else needs `MANAGE`. Studio reports "accepted" and "confirmed" separately,
-  says when a stop request never arrived, and says when the run finished first. Evidence:
-  `StopReachesTheSubmittedRunAndTheOrchestratorConfirmsIt`, `AnAuthorStopsTheirOwnRunButNotAColleagues`,
-  `StopReachesTheRunAndStudioSaysOnlyWhatWasConfirmed` (browser, with the stop request aborted in transit).
-  Open: cancel signals only the node executing the run; kill-by-job-name still records `FAILURE`.
-- [x] **ST07 — Schedule one saved pipeline.** Create a governed schedule for the saved revision, advance the
-  controlled clock to one due occurrence, and verify the resulting run and output. No new recurrence vocabulary.
-  (Depends on: ST04, ST05; Size: M)
-  Done 2026-10-12. `PUT /api/studio/pipelines/{id}/schedule` pins the saved revision in the job with a
-  blocking hash and attaches a cron schedule; it needs `MANAGE` on the job. `StudioPipelineScheduleTests`
-  puts the scheduler on a test clock: nothing runs before 02:00, one run at 02:00 with the pinned hash
-  (not the later save), statements readable, link re-armed for the next day, no re-fire, and nothing after
-  unscheduling. Studio's governance rail drives it (`AnAuthorSchedulesTheSavedRevisionThroughTheOrchestrator`).
-  Found on the way: the rail's statement-writing form wrote `CREATE JOB … FOR SCRIPT '<catalog path>'`
-  for Portal pipelines, a job that could never find its script. It is no longer offered there.
-- [x] **ST08 — Pipeline configuration export/import.** Round-trip one pipeline with its declared portable state;
-  exclude secrets and host-owned bindings, and verify report-only surfaces still refuse it. (Size: M)
-  Done 2026-10-12. Owner decision: a `KIND` option on `PUBLISH REPORT`, not a new statement. The export
-  emits `PUBLISH REPORT … WITH (CATALOG_OWNER = …, KIND = 'PIPELINE')` and a `PipelineScript` manifest
-  entry; before this a pipeline was left out of the export and not mentioned. Portable: name, folder,
-  description, kind, catalog owner, script file. Left behind and named in the export summary: the
-  Orchestrator job (its name carries the source document id), grants, owner, schedule and pinned revision.
-  `APipelineRoundTripsAsAPipelineAndLeavesHostOwnedBindingsBehind` replays the export twice into an
-  empty Portal: one pipeline, same folder and owner, script text intact and never inline in the export,
-  reader routes still 404. `NeitherKindCanBePublishedFromTheOthersFile` covers the extension guard.
-  Open: a pipeline's schedule is not exported; it is set again at the target.
-- [x] **ST09 — Pipeline promotion.** Promote that package to one permitted target, verify ownership/bindings,
-  and reject a collision without partial changes. No new promotion topology. (Depends on: ST08; Size: M)
-  Done 2026-10-12. Promotion is the existing export replayed into another Portal; nothing new was added
-  to the topology. `PromotingAPipelineKeepsItsOwnerRebindsItsScriptAndRejectsACollisionUntouched`: the
-  logical owner (a Publisher, not the promoter) owns the pipeline and its folder in prod, the script is
-  bound under prod's root, an account with no rights on the folder is refused, and a target where the
-  name already holds different content gets `409 document_collision` with the existing row, version and
-  script text unchanged. Scope of "no partial changes": the collided document. Statements earlier in the
-  same replay (users, folders) have already applied, as for any bootstrap replay.
-- [x] **ST10 — Ordinary-author pipeline journey.** A Publisher with the required folder and Orchestrator grants
-  creates, saves, reopens, runs, and cancels one pipeline; denied grants fail explicitly. Admin identity cannot
-  satisfy this task. (Depends on: ST04, ST05, ST06; Size: M)
-  Done 2026-10-12. `StudioPipelineRunJourneyTests.AnOrdinaryAuthorRunsASavedPipelineAndFollowsThatRun`
-  drives real Chromium as a Publisher who owns one folder and holds no administrative or Orchestrator
-  role. No administrator signs in: an operator provisions the job and grants `EXECUTE` on the Orchestrator
-  directly. The author is refused with no job, refused with no grant, then runs, fails, repairs, reopens,
-  reruns and stops the same pipeline. Each outcome is checked against the Orchestrator's history.
-- [x] **ST11 — Report schedule handoff.** A Studio-authored report reaches one authorized scheduled execution
-  and produces one verified artifact under the scheduled identity. (Size: M)
-  Done 2026-10-12, as evidence for a path that already existed plus one fix. An earlier note here said
-  nothing ran a report on a schedule outside subscriptions; that was wrong. An administrator links the
-  report to a refresh job (`POST /api/subscriptions/refresh-jobs`, which names
-  `portal-refresh:<alias>:<reportId>`), an operator schedules an Orchestrator job of that name, and the
-  Portal's poller refreshes the report's snapshot when an occurrence succeeds.
-  `ReportScheduleHandoffTests` runs it end to end on the scheduler's test clock with the Portal and
-  Orchestrator sharing one job-history database: a Publisher is refused the link, nothing refreshes
-  before 02:00, one job run at 02:00, one `Refresh` execution with `UserId` 0, a non-empty `.etlsnap`
-  under the snapshot root, and the manifest title and both rows read back.
-  Fix: the report link now skips a completion it already acted on. A poller starting again looks back a
-  minute and used to run the report a second time.
-  Owner decision 2026-10-12: the scheduled identity stays the existing trusted, non-interactive one (no
-  user), and an identity-sensitive report is skipped by design. Running as the schedule's owner instead
-  would change the row-level-security rules for shared snapshots. Open: the two halves
-  are joined by hand on the job name, there is no Studio control for it, and the retired
-  `CREATE REFRESH JOB` connector path still creates a job named `REFRESH:<report>` that no link matches.
+Remaining limits: sandbox submission is tracked in ST21b; cancellation signals only the executing
+node, and kill-by-job-name still records `FAILURE`. Pipeline schedules must be recreated at the
+promotion target. Report refresh scheduling joins the Portal link and Orchestrator job by name
+manually, has no Studio control, and the retired `CREATE REFRESH JOB` path names a job no link matches.
 
 ---
 
@@ -613,50 +527,10 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
 
 **Horizon:** Next
 
-- [x] **ST12 — Decide unpublished draft identity and policy.** Define host ownership, tenant/principal isolation,
-  retention, allowed practice access, and revision handling before a catalog report ID exists. No browser script
-  storage. (Size: D)
-  Decided 2026-10-12 with the owner: [Studio private unpublished drafts](docs/architecture/decisions/studio-private-drafts.md).
-  A draft lives in its own table with its own ID, is readable only by its owner inside their tenant,
-  expires 90 days after its last save, keeps its last 10 saves, allows preview only, and is published
-  through the existing catalog create action. Retention, revisions kept, drafts per user and the
-  on/off switch are `Portal:Studio` settings.
-- [x] **ST13 — Portal private draft save/reopen.** A learner without folder Manage or ReportPublish creates, edits,
-  saves, and reopens one permitted host draft; another principal or tenant cannot read it. (Depends on: ST12; Size: M)
-  Done 2026-10-12. `/api/studio/private-drafts` keeps a draft per owner and tenant; Studio's Save keeps
-  a new document as one and Studio Home reopens it. Evidence: `StudioPrivateDraftTests` (a Viewer with
-  only StudioAccess, ScriptRead and ScriptPreview creates, saves and reopens; a colleague, an
-  administrator and another tenant's partition all get the answer of a missing draft; a stale save is a
-  conflict; a plaintext credential is refused; the configured draft limit, saves kept and retention each
-  take effect; off means nothing is kept) and `StudioPrivateDraftJourneyTests` (real Chromium, the same
-  learner, a second version, a fresh page reopening it, and a colleague who sees nothing).
-  Open: expiry runs when drafts are read or listed; there is no background sweep.
-- [x] **ST14 — Portal private draft crash recovery.** Recover that unpublished draft after browser restart and
-  authentication renewal, with explicit revision-conflict handling and policy refusal. No offline persistence guarantee.
-  (Depends on: ST13; Size: M)
-  Done 2026-10-12. Unsaved edits to a draft are kept beside it (`/api/studio/private-drafts/{id}/unsaved`)
-  under the existing recovery policy, and Studio's existing recovery callbacks address them.
-  `StudioPrivateDraftJourneyTests`, in real Chromium as the learner: the access token is invalidated
-  mid-session, the edit is still kept, the browser context is destroyed, and a new browser and sign-in
-  are offered the edit back and save it as version 2; a draft saved elsewhere refuses the stale tab's
-  save out loud with both texts intact, then states the conflict before restoring; edits holding a
-  plaintext credential are refused and the learner is told. `StudioPrivateDraftTests` covers the same
-  rules at the API, including isolation, expiry on the recovery retention and `DraftRecovery` off.
-  Not claimed: offline persistence. Edits typed while the Portal is unreachable live only in the tab.
-- [x] **ST15 — Publish a private draft.** Promote the saved host draft through the existing catalog publish action
-  without losing text/history; an unauthorized attempt leaves the private draft intact. (Depends on: ST13; Size: M)
-  Done 2026-10-12. `POST /api/studio/private-drafts/{id}/publish` runs the same method as the catalog
-  create and deletes the draft inside its transaction. Evidence: `StudioPrivateDraftTests` (the catalog
-  script equals the draft's last save; the audit entry names all three kept saves by version, time and
-  hash and holds no text; a pipeline draft publishes as a pipeline; a learner, another person's draft,
-  a Publisher without folder Manage, a stale version, a taken name and unsaved edits are each refused
-  with the draft, its saves and the catalog unchanged) and
-  `AnAuthorPublishesAPrivateDraftAndALearnerCannot` (real Chromium, a Publisher who owns one folder:
-  keeps a draft, edits, publishes, then saves and reopens it as a catalog document; a learner's Publish
-  is refused and the draft stays).
-  Limit on "history", for the owner: the catalog keeps no earlier versions of a document, so earlier
-  saves survive as audit metadata (version, time, hash), not as text. Keeping their text would need a
-  catalog version history, which does not exist.
+The [private draft policy](docs/architecture/decisions/studio-private-drafts.md) owns the completed
+identity and retention contract. Expiry occurs on read/list without a background sweep. Recovery
+does not persist offline edits. Publishing retains earlier saves as audit metadata, not their text;
+catalog version history remains unavailable.
 
 ---
 
@@ -664,55 +538,19 @@ created on first run by an `Admin` or `OrchestratorManager`. Design, routes and 
 
 Completed prerequisites: [ST20 practice execution decision](docs/architecture/decisions/studio-practice-execution.md) (amended 2026-10-12) and [ST22 desktop evidence](docs/architecture/decisions/studio-desktop-practice-evidence.md).
 
+Report and practice prerequisites are recorded in the [beginner report evidence](docs/architecture/decisions/studio-beginner-report-evidence.md),
+[reader evidence](docs/architecture/decisions/studio-reader-journey-evidence.md), and
+[Portal practice evidence](docs/architecture/decisions/studio-portal-practice-evidence.md).
+RLS reports still do not appear under Popular or Recently viewed, list responses do not identify
+per-viewer reports, and detection through an included script is unchecked.
+
 **Horizon:** Next
 
-- [x] **ST16 — Portal beginner report journey.** An ordinary scoped author uses sample data, makes a visual change,
-  explains its generated syntax, hand-edits, reopens the helper, saves/reopens, and runs one report with real
-  parser/patcher responses. (Size: M)
-  Done 2026-10-12 for the automated sequence, by owner decision: the Publisher journey passed on 2026-10-11 and
-  again on 2026-10-12 ([evidence](docs/architecture/decisions/studio-beginner-report-evidence.md)). "Explains its
-  generated syntax" is not proven by automation and moved to ST16b.
-- [x] **ST17 — Desktop beginner report journey.** Run the same bounded sequence in the self-installed WorkstationEditor
-  host, with external editors unavailable. (Size: M)
-  Done 2026-10-12 for the automated sequence, on the same terms as ST16. The learner explanation is ST16b.
 - [ ] **ST16b — Observed learner walkthrough.** One learner new to Studio does the report sequence and the ETL
   exercise in each host while an observer records, per step, what they did unaided and how they explained the
   generated SQL and the repair. Needs a person; automation cannot close it. (Depends on: ST16, ST17, ST21, ST22; Size: S)
   Script and record sheet: [learner walkthrough](docs/architecture/decisions/studio-learner-walkthrough.md). Not yet run.
-- [x] **ST18 — Dedicated Portal reader journey.** A separate reader opens one permitted report, uses its parameters/interactions,
-  and reopens a saved view without receiving author/publish controls. (Size: M)
-  Done 2026-10-12. `PortalReaderJourneyTests.AReaderOpensAReportUsesItAndReopensASavedViewWithoutAuthorControls`,
-  real Chromium: a Viewer holding only Execute on the author's folder finds the report in the library, runs it,
-  filters with its slicer, saves a view, clicks a bar, and reopens the saved view from a fresh page. Design and
-  the Studio entry are absent; the script and delete routes answer 403.
-  [Evidence](docs/architecture/decisions/studio-reader-journey-evidence.md).
-  Found on the way: a Portal reader could not save a view at all. The report frame never loaded the feedback
-  module, so *Save current view as…* threw. Fixed.
-- [x] **ST19 — Second-identity RLS journey.** Two ordinary identities open the same report and receive their expected
-  disjoint rows, including preview/data/export paths that the chosen report exposes. No new RLS model.
-  (Depends on: ST18; Size: M)
-  Done 2026-10-12. `PortalReaderJourneyTests.TwoReadersOfOneReportEachSeeOnlyTheirOwnRows`, real Chromium: two
-  Viewers holding only Read, in different groups, each see exactly their rows on opening, after a parameter
-  change, in a reopened saved view, in the exported CSV and after Refresh; a row in neither group reaches
-  neither; one subscribes. `RowLevelSecurityLiveViewTests` covers a reader removed from a group, a reader with no
-  grant, the administrator bypass and nothing stored.
-  [Evidence](docs/architecture/decisions/studio-reader-journey-evidence.md#st19-two-identities-one-report).
-  Found on the way: a row-level-secured report could not be viewed in the Portal UI by anyone. It keeps no
-  shared snapshot (correct) and the viewer, its session and export read only snapshots. Owner decisions
-  2026-10-12: show it live from the reader's own session with nothing stored, Read is enough to open it, and
-  Subscribe is offered ([design and as built](docs/architecture/decisions/portal-rls-report-viewing.md)).
-  A run of such a report also left one reader's rows in snapshot storage with nothing to prune them; fixed.
-  Open: these reports never appear under Popular or Recently viewed, list responses do not say a report is
-  per viewer, and detection through an included script is unchecked.
-- [x] **ST21 — Portal beginner ETL exercise.** Run the deliberate ASSERT failure, repair it, check expected rows and
-  cleanup under the agreed practice identity; use no external service. (Depends on: ST20, ST04; Size: M)
-  Done 2026-10-12 on the Orchestrator's in-process executor, by owner decision (ST20 amended).
-  `StudioPortalPracticeTests`, real Chromium, a Publisher with one folder and EXECUTE on the job: the ASSERT
-  fails the run with its repair message, a fresh run finds no leftover tables, the keyboard repair is saved,
-  and two runs of it assert the exact three rows and a clean catalog. Each run's hash equals the saved revision.
-  [Evidence](docs/architecture/decisions/studio-portal-practice-evidence.md).
-  Found on the way, both in the engine and both fixed: a scalar subquery repeated after an `INSERT` or `DROP`
-  answered from before the change, and a failed run's statement log blamed the statement before the failure.
+
 - [ ] **ST21b — Portal practice exercise in the sandbox.** Carry the submitter's identity in the sandbox request,
   lift `sandbox_identity_unsupported` for run slots, and repeat ST21 on a real sandbox with its terminal status,
   egress denial and cleanup recorded. Security-sensitive; needs a written design first. (Depends on: ST21; Size: L)
@@ -722,27 +560,10 @@ Completed prerequisites: [ST20 practice execution decision](docs/architecture/de
 
 **Horizon:** Next
 
-- [x] **ST23 — Portal keyboard editing journey.** Create, edit, undo, and save one permitted document using only the
-  keyboard; verify modal/tab navigation and focus return. (Size: M)
-- [x] **ST24 — Desktop keyboard editing journey.** Prove the same sequence in the self-installed host. (Size: M)
-  Done 2026-10-12. `StudioKeyboardJourneyTests.Desktop_KeyboardEditingJourney_CreatesEditsUndoesAndSavesDocument`,
-  real Chromium against the WorkstationEditor host. [Evidence](docs/architecture/decisions/studio-keyboard-assistive-evidence.md#st24-desktop-keyboard-editing).
-- [x] **ST25 — Keyboard visual move/resize.** Provide or verify non-drag controls for one visual and persist its resulting
-  layout; cover the shared sandbox and one production host. No canvas redesign. (Size: M)
-  Done 2026-10-12, in the sandbox and in the Portal as a Publisher: arrow keys move a focused card, Shift with an
-  arrow resizes it, the inspector's grid fields place it by number, and the saved report reopens with the same
-  placements. [Evidence](docs/architecture/decisions/studio-keyboard-assistive-evidence.md#st25-keyboard-move-and-resize).
-  Found on the way, all fixed: cards could not take focus, so the existing arrow-key move was unreachable; the
-  inspector's Col/Row/W/H repainted the canvas without writing the script; and inside Studio the canvas and the
-  shell would both have answered Ctrl+S and Ctrl+Z.
-  Open: `STRUCTURE` states proportions, so a layout that does not divide its row evenly reopens at the nearest one.
-- [x] **ST26 — Portal zoom/focus journey.** At declared zoom settings, dialogs and split controls remain usable, preserve
-  focus, and return it to the invoking control. (Depends on: ST23; Size: S)
-  Done 2026-10-12 at the declared 100%, 150% and 200% of a 1440 × 900 window.
-  [Evidence](docs/architecture/decisions/studio-keyboard-assistive-evidence.md#st26-and-st27-zoom-and-focus).
-  Found on the way: creating a document left focus on the hidden Home card. It now lands on the document's tab.
-- [x] **ST27 — Desktop zoom/focus journey.** Repeat the bounded zoom/focus checks in the desktop host. (Depends on: ST24; Size: S)
-  Done 2026-10-12 at the same three settings, with the Save as dialog.
+Keyboard prerequisites and declared zoom settings are recorded in the
+[keyboard evidence](docs/architecture/decisions/studio-keyboard-assistive-evidence.md).
+`STRUCTURE` stores proportions, so layouts that do not divide a row evenly reopen at the nearest proportion.
+
 - [ ] **ST28 — Portal screen-reader pass.** One named screen reader/browser combination completes the keyboard document
   journey with meaningful labels, errors, and announcements; keep the observed transcript. (Depends on: ST23; Size: M)
   Not run: no screen reader has spoken the journey. Groundwork done 2026-10-12: every keyboard stop is named, a
@@ -868,106 +689,3 @@ only for the missing Snowflake row-level rollback proof.
   - Remaining acceptance: on a transaction-capable Snowflake target, create a table, begin a transaction,
     write through `WithTable`, roll back, and query from a separate connection to assert zero rows.
     Repeat after starting another transaction and verify clone disposal does not end the owner's work.
-
-### 13.2 Security and multi-tenancy guardrails
-
-Dropped: `IsTestMode` bypassing ceilings (it is set only by the test host and by the non-script `SystemExecutionContext`), cloud connectors skipping path validation (every caller authorizes the local path through `pathAuthorizer` before the connector sees it; the one ordering slip, a download creating its directory first, is fixed), and VisualBuilder fallback XSS (the fallback text goes to an `aria-label` via `setAttribute`, to PDF and to Markdown, never into HTML).
-
-- [x] **Default machine key uses predictable MachineName:UserName hash.**
-  - *Location:* `src/ETL-SQL.Core/SecurityService.cs:42-46`
-  - *Flaw:* When `ETLSQL_MACHINE_KEY_FILE` is unset, the machine key falls back to `SHA256(MachineName:UserName)`. In container or cloud deployments (Kubernetes pods, AWS ECS, Docker containers), hostnames and usernames are static or predictable, allowing attackers to forge machine-bound encrypted secrets and session checkpoints.
-  - *Remediation:* Require an explicit `ETLSQL_MACHINE_KEY_FILE` in production/SaaS profiles or generate an ephemeral cryptographically random key with a security warning.
-  - *Fixed 2026-10-12:* Owner chose generate-and-persist. The unmounted key is derived from the random `machine.key` the installation already kept for generic protection; There is no fallback to the old digest: nothing was deployed, so values under it are simply unreadable. Key-file creation is now create-new so two starting processes cannot keep different keys. `MachineKeyAndJwtSecretTests`.
-
-- [x] **Plaintext JWT secret emitted directly to execution log.**
-  - *Location:* `src/ETL-SQL.Engine/Handlers/GenerateJwtSecretStatementHandler.cs:38-39`
-  - *Flaw:* Statement handler calls `context.Log(secret, ConsoleColor.Yellow)`, logging the generated raw JWT secret to stdout and persistent script execution logs, violating AGENTS.md §3 zero-trust secret protection rules.
-  - *Remediation:* Return generated secrets via statement result set only; never log secrets to `context.Log()`.
-  - *Fixed 2026-10-12:* Owner chose result set only. One row, `Secret` and `EncryptedConfigValue`; nothing secret reaches `context.Log` or the logger. `GenerateJwtSecretReturnsTheSecretAsARowAndLogsNoneOfIt`.
-
-- [x] **Postgres COPY FROM STDIN unescaped column identifier interpolation.**
-  - *Location:* `src/ETL-SQL.Connectors.Databases/Postgres/PostgresDataSource.cs:185-187`
-  - *Flaw:* Column names in `COPY ... FROM STDIN` are interpolated as `$"\"{c}\""` without escaping embedded double quotes. Column names containing double quotes can inject arbitrary SQL commands into Postgres.
-  - *Remediation:* Escape embedded double quotes (`c.Replace("\"", "\"\"")`) before identifier construction.
-  - *Fixed 2026-10-12:* Embedded `"` doubled in COPY column identifiers.
-
-- [x] **Orchestrator JobEntry lacks TenantId and uses 32-bit truncated Job IDs.**
-  - *Location:* `src/ETL-SQL.Orchestrator.Service/JobApiEndpoints.cs:215, 242, 261, 2302`
-  - *Flaw:* In-memory `JobEntry` objects do not record `TenantId`. Any tenant admin can inspect, trigger, or cancel ad-hoc and scheduled jobs belonging to other tenants. Furthermore, job IDs are truncated to 8 hex characters (`Guid.NewGuid().ToString("N")[..8]`), providing only 32 bits of entropy and enabling ID guessing in multi-tenant environments.
-  - *Remediation:* Store `TenantId` on `JobEntry`, enforce tenant checks on all `/jobs/{id}` routes, and use full GUIDs or cryptographically secure random IDs.
-  - *Fixed 2026-10-12:* Ad-hoc entries record the tenant, another tenant's id answers 404, and ids are full GUIDs. The scheduled-job half of the claim did not hold: those routes already check tenant in `CanAsync`.
-
-- [x] **Scheduled jobs query leaks job metadata across tenants via post-pagination filtering.**
-  - *Location:* `src/ETL-SQL.Orchestrator.Service/JobApiEndpoints.cs:282-297`, `SQLiteJobHistoryStore.cs:1334-1349`
-  - *Flaw:* `GET /api/scheduled-jobs` fetches paginated rows across all tenants from the database without a `WHERE tenant_id = @tenant` clause, filtering by tenant in-memory afterwards. This starves smaller tenants of page results and leaks operational job volume.
-  - *Remediation:* Push `tenant_id` filtering directly into SQL before applying `LIMIT` and `OFFSET`.
-  - *Fixed 2026-10-12:* `GetJobsPageAsync(tenantId, limit, offset)` filters in SQL before paging.
-
-### 13.3 Performance and scalability bottlenecks
-
-Dropped: grouping-set materialization in `AggregateEngine` (it is only handed rows already buffered under the admission threshold; larger inputs go to `ExternalAggregateEngine`), the `/api/scripts/content` directory walk (a deliberate allowlist so the path read never comes from the request), and `DiscoverTempTables` calling `ToSql()` (only for `SELECT … INTO #temp` columns, after a debounce and a full parse).
-
-- [x] **InMemoryTableIndex re-sorts column list on every row.**
-  - *Location:* `src/ETL-SQL.Core/Data/InMemoryTableIndex.cs:112, 126`
-  - *Flaw:* `GetRowKey(columns, row)` executes `columns.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList()` per row. For a 100,000-row batch, this causes 100,000 list allocations and sorts.
-  - *Remediation:* Pre-sort and cache the column order once at the batch level before iterating rows.
-  - *Fixed 2026-10-12:* Batch loops sort the column list once.
-
-- [x] **ExternalSortEngine re-materializes sorted chunks into in-memory list.**
-  - *Location:* `src/ETL-SQL.Engine/Engines/ExternalSortEngine.cs:53-66`
-  - *Flaw:* `SortExternal(List<Row> rows, ...)` converts input to `IAsyncEnumerable`, executes external merge sort, and calls `await sortedStream.ToListAsync()`. Materializing the entire result back into a single list negates disk spilling benefits for large datasets.
-  - *Remediation:* Expose streaming sort APIs that return `IAsyncEnumerable<Row>` directly so downstream operators can consume chunks without full materialization.
-  - *Fixed 2026-10-12:* A spilled ORDER BY now hands `SortStreamAsync` to the stream path through OFFSET / LIMIT and projection. `SpilledOrderByTests` compares it with the in-memory sort. TOP PERCENT keeps the list: the stream path counts rows through `SpillForReplay`, whose file format widens decimal scale (`1` returns as `1.000000000`). That replay defect is live today for TOP PERCENT after an external aggregate or window and is not fixed here.
-
-- [x] **FtpConnector uses synchronous blocking calls on async API paths.**
-  - *Location:* `src/ETL-SQL.Connectors.Remote/FtpConnector.cs:130-263`
-  - *Flaw:* Methods call synchronous FluentFTP APIs (`Connect()`, `UploadFile()`, `DownloadFile()`) and return `Task.CompletedTask`, blocking threadpool worker threads and ignoring cancellation tokens.
-  - *Remediation:* Migrate to FluentFTP async APIs (`ConnectAsync()`, `UploadFileAsync()`, `DownloadFileAsync()`) with `CancellationToken`.
-  - *Fixed 2026-10-12:* Moved to `AsyncFtpClient`; every call awaits and takes the execution context's cancellation token. `FtpIntegrationTests` (23) pass against a real server.
-
-- [x] **AvroDataSource schedules per-row Task.Run micro-tasks.**
-  - *Location:* `src/ETL-SQL.Connectors.Files/Avro/AvroDataSource.cs:101-185`
-  - *Flaw:* Every row read/write invokes `await Task.Run(...)`, scheduling hundreds of thousands of micro-tasks for moderate datasets and causing severe task scheduler churn.
-  - *Remediation:* Process rows synchronously in batches within a single background task.
-  - *Fixed 2026-10-12:* One background task per batch, read and write.
-
-- [x] **File data sources buffer entire datasets in memory before writing.**
-  - *Location:* `src/ETL-SQL.Connectors.Files/Excel/ExcelDataSource.cs:428-470`, `JsonDataSource.cs:103-137`, `XmlDataSource.cs:349-379`
-  - *Flaw:* `WriteBatches` buffers entire datasets in memory before serializing, causing OOM on large datasets instead of streaming chunks.
-  - *Remediation:* Stream rows directly to underlying format streams using buffered chunked writes.
-  - *Fixed 2026-10-12:* JSON and XML write rows as they arrive; Excel passes MiniExcel an async row stream, so only an append holds rows (the sheet it rewrites). The XML writer also enumerated its source twice — once to look for a ready-made document, once for the rows; it now uses one enumerator.
-
-- [x] **N+1 database queries on Orchestrator job endpoints.**
-  - *Location:* `src/ETL-SQL.Orchestrator.Service/JobApiEndpoints.cs:289-295, 2317-2329`
-  - *Flaw:* `/api/scheduled-jobs` and `/api/job-history` execute individual database queries per item in loops checking permissions and schedule metadata.
-  - *Remediation:* Batch permission and schedule lookups into a single SQL query using `IN (...)` or joins.
-  - *Fixed 2026-10-12:* `OrchestratorObjectAuthorizationService.FilterAsync` decides what it can without grants and fetches the rest in one `IN` query; used by the job, schedule and notification lists. `FilteringAPageDecidesEachObjectExactlyAsASingleCheckDoes`. There is no `/api/job-history` route.
-
-### 13.4 Missed logging and error telemetry
-
-- [x] **SpillStore empty catch blocks swallow cleanup and deletion errors.**
-  - *Location:* `src/ETL-SQL.Engine/Spill/SpillStore.cs:427, 1192`
-  - *Flaw:* Empty `catch { }` blocks in `Directory.Delete(_cachedRootPath, true)` and `File.Delete(_filePath)` silently ignore I/O and permission exceptions during spill cleanup, causing silent disk leaks when files are locked.
-  - *Remediation:* Log warnings via `_logger.Warning("Failed to clean up spill path {Path}: {Error}", path, ex.Message)`.
-
-- [x] **SpillStore silently swallows JSON deserialization failures.**
-  - *Location:* `src/ETL-SQL.Engine/Spill/SpillStore.cs:1461`
-  - *Flaw:* When deserializing spilled JSON elements, `catch { }` silently swallows JSON parse errors, falling back to treating corrupt JSON as raw strings without logging or warning.
-  - *Remediation:* Log a diagnostic warning when JSON deserialization of a prefixed payload fails.
-
-- [x] **Sync-over-async blocking call in ColumnQualityValidator.**
-  - *Location:* `src/ETL-SQL.Engine/Services/ColumnQualityValidator.cs:229`
-  - *Flaw:* `FinalizeUniquePrePass()` calls `FinalizeUniquePrePassAsync().GetAwaiter().GetResult()`, blocking calling thread with sync-over-async and risking deadlocks if executed within synchronization contexts.
-  - *Remediation:* Refactor callers to await `FinalizeUniquePrePassAsync()` and deprecate the synchronous blocking wrapper.
-  - *Follow-up 2026-10-12:* The wrapper had no callers, so it is deleted rather than marked obsolete.
-
-- [x] **Gateway dispatcher swallows operation exceptions without local logging.**
-  - *Location:* `src/ETL-SQL.Gateway/GatewayOperationDispatcher.cs:236-254`
-  - *Flaw:* When an operation fails on the Gateway, dispatcher catches `Exception ex`, constructs a generic fault frame, and returns it to the client without logging `ex` locally on the Gateway, hiding failure root causes from server administrators.
-  - *Remediation:* Log `ex` with full stack trace via `_logger.LogError(ex, "Gateway operation {OpId} failed", opId)` before returning fault frame.
-  - *Follow-up 2026-10-12:* The log line now passes the exception and its message through `SecretRedactor`; the comment above it says that text can carry a credential.
-
-- [x] **Portal lineage persistence swallows exception stack traces.**
-  - *Location:* `src/ETL-SQL.Portal/Controllers/ExecutionController.cs:614-618`
-  - *Flaw:* Lineage persistence failure catches `Exception ex` and records only `ex.Message` in audit without stack trace or `ILogger.LogError`, preventing root cause analysis of lineage storage failures.
-  - *Remediation:* Log complete exception details via `_logger.LogError(ex, "Lineage persistence failed for execution {ExecutionId}", executionId)`.

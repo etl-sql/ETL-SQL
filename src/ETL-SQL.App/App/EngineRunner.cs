@@ -441,6 +441,8 @@ namespace ETL_SQL.App
                     evaluator.MasterPassword = ctx.Password;
                     evaluator.SessionId = ctx.SessionId;
                     evaluator.CurrentScriptPath = ctx.ScriptFile.FullName;
+                    evaluator.ExecutionIdentity = await SandboxWorkerIdentityLoader.ReadAsync(
+                        ctx.ScriptFile.FullName, CancellationToken.None);
 
                     if (long.TryParse(Environment.GetEnvironmentVariable("ETLSQL_QUEUE_WAIT_MS"), out var envQueueWait))
                     {

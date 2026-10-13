@@ -2016,6 +2016,7 @@ interface ReportDto {
     isStale: boolean;
     scriptChanged: boolean;
     version: number;
+    perViewer: boolean;
 }
 
 interface ReportParameterDto {

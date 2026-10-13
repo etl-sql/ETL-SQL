@@ -10,6 +10,7 @@ namespace ETL_SQL.Portal.Tests;
 /// between them would show different rows on different paths.
 /// </summary>
 [Trait("Category", "Portal")]
+[Trait("CompatBreak", "0.21.0")]
 public sealed class PortalExecutionIdentityServiceTests : IClassFixture<PortalWebFactory>
 {
     private readonly PortalWebFactory _factory;
@@ -70,6 +71,9 @@ public sealed class PortalExecutionIdentityServiceTests : IClassFixture<PortalWe
     [Theory]
     [InlineData("SELECT 1 AS A WHERE HAS_GROUP('x');", true)]
     [InlineData("SELECT 1 AS A;", false)]
+    [InlineData("RUN SCRIPT 'child.etlsql';", true)]
+    [InlineData("RUN /* dependency */ SCRIPT @path;", true)]
+    [InlineData("SELECT 'RUN SCRIPT child' AS Note;", false)]
     public async Task SensitivityFollowsTheScript(string script, bool expected)
     {
         var path = Path.Combine(_factory.TempDir, "scripts", $"sens_{Guid.NewGuid():N}.rptsql");

@@ -6,6 +6,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Tests;
+using ETL_SQL.TestSupport;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,6 +28,7 @@ namespace ETL_SQL.Portal.BrowserTests;
 [Collection(PortalJourneyCollection.Name)]
 public sealed class StudioPortalPracticeTests(PortalJourneyFixture fixture)
 {
+    public bool RequireSandboxEvidence { get; init; }
     private const string LearnerPassword = "Learner@Journey99!";
     private const string Tables = "'#practice_stage', '#practice_transform', '#practice_load'";
     private const string RepairHint = "Expected three users: repair the transformation filter.";
@@ -72,11 +74,14 @@ public sealed class StudioPortalPracticeTests(PortalJourneyFixture fixture)
 
         // The deliberate failure: the filter drops user 3, the ASSERT stops the run before the load,
         // and Studio shows it as a failure with the message that says what to repair.
-        await TypeScriptAsync(page, pipelineId, Exercise);
+        var exercise = RequireSandboxEvidence
+            ? $"ASSERT @@CURRENT_USER = 'user:{learner.PrincipalKey}', 'Sandbox must carry the learner identity.';\n" + Exercise
+            : Exercise;
+        await TypeScriptAsync(page, pipelineId, exercise);
         await SaveAsync(page, pipelineId);
         var failed = await RunAsync(page, job, pipelineId, "Failed");
         Assert.Equal("FAILURE", failed.Status);
-        Assert.Contains(RepairHint, failed.ErrorMessage);
+        Assert.True(failed.ErrorMessage?.Contains(RepairHint, StringComparison.Ordinal) == true, failed.ErrorMessage);
         Assert.Equal(await SavedHashAsync(page, pipelineId), failed.ScriptHashAtRunTime);
         await Expect(page.Locator(".etlsql-script-results")).ToContainTextAsync(RepairHint);
         // The log points at the validation that failed, not at the statement before it.
@@ -90,7 +95,7 @@ public sealed class StudioPortalPracticeTests(PortalJourneyFixture fixture)
         Assert.Equal("SUCCESS", (await RunAsync(page, job, pipelineId, "Complete")).Status);
 
         // The repair keeps the validation and fixes the filter. Twice, to the same result.
-        var repaired = Exercise.Replace("WHERE UserID < 3", "WHERE UserID <= 3", StringComparison.Ordinal);
+        var repaired = exercise.Replace("WHERE UserID < 3", "WHERE UserID <= 3", StringComparison.Ordinal);
         Assert.Contains(RepairHint, repaired);
         await TypeScriptAsync(page, pipelineId, repaired);
         await SaveAsync(page, pipelineId);
@@ -122,6 +127,18 @@ public sealed class StudioPortalPracticeTests(PortalJourneyFixture fixture)
         // Nothing ran in the Portal's own process, and the job ran only what the learner submitted.
         var history = await HistoryAsync(job);
         Assert.Equal(5, history.Count);
+        if (RequireSandboxEvidence)
+        {
+            // An edited saved revision is still confined: it cannot create an outbound connection.
+            var denied = "CREATE CONNECTION outside AS MSSQL(SERVER = '169.254.169.254', DATABASE = 'practice');\nSELECT * FROM outside.Users;\n";
+            await TypeScriptAsync(page, pipelineId, denied);
+            await SaveAsync(page, pipelineId);
+            var refusal = await RunAsync(page, job, pipelineId, "Failed");
+            Assert.Equal("FAILURE", refusal.Status);
+            Assert.NotNull(refusal.ErrorMessage);
+            await TypeScriptAsync(page, pipelineId, repaired);
+            await SaveAsync(page, pipelineId);
+        }
         Assert.Empty(session.PageErrors);
     }
 
@@ -263,15 +280,16 @@ public sealed class StudioPortalPracticeTests(PortalJourneyFixture fixture)
         using var client = fixture.Orchestrator.CreateClient();
         using var request = OperatorRequest(HttpMethod.Post, $"/api/scheduled-jobs/{Uri.EscapeDataString(job)}/runs",
             new { scriptText = "SELECT 1 AS Provisioned;", provisionIfMissing = true });
-        Assert.Equal(HttpStatusCode.Accepted, (await client.SendAsync(request)).StatusCode);
-        // The job's start guard clears just after its run is recorded.
-        for (var attempt = 0; attempt < 200; attempt++)
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var accepted = await response.Content.ReadFromJsonAsync<System.Text.Json.Nodes.JsonObject>();
+        var runId = accepted!["runId"]!.GetValue<long>();
+        await LoadAwareWait.UntilAsync("provisioning run releases the run-slot guard", async ct =>
         {
-            var history = await HistoryAsync(job);
-            if (history.Count > 0 && history.All(entry => entry.EndTime is not null)) break;
-            await Task.Delay(25);
-        }
-        await Task.Delay(250);
+            using var read = OperatorRequest(HttpMethod.Get, $"/api/job-runs/{runId}", new { });
+            var state = await (await client.SendAsync(read, ct)).Content.ReadFromJsonAsync<System.Text.Json.Nodes.JsonObject>(ct);
+            return state!["isTerminal"]!.GetValue<bool>();
+        }, ready => ready, TimeSpan.FromSeconds(30));
     }
 
     private async Task OperatorGrantsAsync(string job, string principalKey, string permission)

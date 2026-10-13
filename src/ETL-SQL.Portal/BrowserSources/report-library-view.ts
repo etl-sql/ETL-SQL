@@ -5,7 +5,7 @@ import { escapeHtml as esc, timeAgo } from './report-format.js';
 export interface LibraryFolder { id: number; name: string; path: string; children: LibraryFolder[] }
 export interface LibraryReport {
     id: number; folderId: number | null; name: string; description: string; path: string; isFavorite: boolean; isStale: boolean;
-    scriptChanged: boolean; certification: string; category: string; domain: string; snapshotBuiltAt: string | null;
+    scriptChanged: boolean; perViewer: boolean; certification: string; category: string; domain: string; snapshotBuiltAt: string | null;
     lastViewedAt: string | null; lastRefreshStatus: string; lastRefreshError: string; lastRefreshCompletedAt: string | null;
 }
 export interface ConsumerHome { favorites: LibraryReport[]; recent: LibraryReport[]; featured: LibraryReport[]; popular: LibraryReport[] }
@@ -31,7 +31,7 @@ function readReport(item: unknown, failure: Error): LibraryReport {
     return {
         id: item.id, folderId: identifier(item.folderId) ? item.folderId : null, name: item.name, description: text(item.description),
         path: text(item.path), isFavorite: item.isFavorite === true, isStale: item.isStale === true, scriptChanged: item.scriptChanged === true,
-        certification: text(item.certification), category: text(item.category), domain: text(item.domain),
+        perViewer: item.perViewer === true, certification: text(item.certification), category: text(item.category), domain: text(item.domain),
         snapshotBuiltAt: date(item.snapshotBuiltAt), lastViewedAt: date(item.lastViewedAt), lastRefreshStatus: text(item.lastRefreshStatus),
         lastRefreshError: text(item.lastRefreshError), lastRefreshCompletedAt: date(item.lastRefreshCompletedAt)
     };
@@ -80,6 +80,7 @@ export function statusBadge(report: LibraryReport): string {
         return `<span class="badge badge-error" title="${esc(report.lastRefreshError || 'Last refresh failed')}">Failed</span>`;
     if (report.lastRefreshStatus === 'Cancelled') return '<span class="badge badge-warning">Cancelled</span>';
     if (report.lastRefreshStatus === 'Running') return '<span class="badge badge-running">Refreshing</span>';
+    if (report.perViewer) return '<span class="badge" title="Runs with your permissions each time you open it">Live for you</span>';
     return report.isStale ? '<span class="badge badge-stale">Stale</span>' : '';
 }
 
@@ -90,6 +91,7 @@ export function activityLine(report: LibraryReport, now = Date.now()): string {
     if (report.lastRefreshStatus === 'Running') return 'Running now';
     if (report.lastRefreshStatus === 'Cancelled')
         return report.lastRefreshCompletedAt ? `Run cancelled ${timeAgo(report.lastRefreshCompletedAt, now)}` : 'Last run cancelled';
+    if (report.perViewer) return 'Runs with your permissions';
     if (viewed >= built && viewed > 0) return `Viewed ${timeAgo(report.lastViewedAt, now)}`;
     return built > 0 ? `Updated ${timeAgo(report.snapshotBuiltAt, now)}` : 'Ready for first run';
 }

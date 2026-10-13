@@ -140,7 +140,7 @@ public static partial class JobApiEndpoints
 
         app.MapGet("/api/job-runs/{historyId:long}", async (HttpContext ctx, long historyId,
             IJobHistoryStore store, OrchestratorObjectAuthorizationService authorization,
-            IConfiguration cfg) =>
+            IConfiguration cfg, SchedulerService scheduler) =>
         {
             ctx.Response.Headers.CacheControl = "no-store";
             if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
@@ -158,7 +158,7 @@ public static partial class JobApiEndpoints
                 history.Id,
                 job.Name,
                 history.Status,
-                IsTerminalRunStatus(history),
+                IsTerminalRunStatus(history) && !scheduler.IsRevisionRunActive(history.Id),
                 history.StartTime,
                 history.EndTime,
                 history.ErrorMessage,

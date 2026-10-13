@@ -17,6 +17,20 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.21.0 — Runtime: Arrow spill preserves decimal values
+- **What changed**: Arrow spill previously widened decimal scale and rounded precision to nine places. Row and native-column spill now retain each decimal value and its original scale using invariant text with decimal type metadata. Spilled sorts also stay streaming for percentage limits.
+- **Who is affected**: Queries using disk-backed sorting, aggregation, windows, or percentage replay.
+- **Migration**: Remove workarounds for spill rounding. No syntax change is required. Existing Decimal128 spill files remain readable.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.21.0 — Runtime: Reports with script includes run per viewer
+- **What changed**: Reports containing `RUN SCRIPT`, or text whose dependencies cannot be scanned, are treated as identity-sensitive. They execute with the viewer's permissions instead of sharing a cached snapshot.
+- **Who is affected**: Reports that include other scripts, even when the parent has no identity references.
+- **Migration**: Expect live execution for these reports. Keep self-contained reports when shared snapshots are required.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.21.0 — Connector: Ambiguous BigQuery inserts are not replayed
 - **What changed**: Streaming inserts previously retried failures using best-effort insert IDs. Connector and SDK transport retries are now disabled for inserts; errors require reconciliation before another attempt. Engine decimals serialize as invariant numeric strings instead of failing SDK validation.
 - **Who is affected**: BigQuery streaming writes.

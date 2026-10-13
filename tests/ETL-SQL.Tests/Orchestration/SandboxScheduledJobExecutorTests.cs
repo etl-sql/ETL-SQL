@@ -7,6 +7,31 @@ namespace ETL_SQL.Tests.Orchestration;
 
 public sealed class SandboxScheduledJobExecutorTests : IDisposable
 {
+    [Fact]
+    public async Task SubmittedIdentityIsSnapshottedAndBoundToTheTenant()
+    {
+        var provider = new CapturingProvider(new ScriptExecutionResult(true, 0));
+        var executor = CreateExecutor(provider, "tenant-a");
+        var identity = new ETL_SQL.Core.Governance.ExecutionIdentity
+        {
+            EffectiveUser = "learner",
+            RealUser = "user:learner",
+            TenantId = "tenant-a",
+            IsAdmin = false,
+            Roles = ["Publisher"],
+            Groups = ["Learners"],
+            Scopes = ["reports:execute"]
+        };
+        await executor.ExecuteAsync(Job("tenant-a"), 12, 1, "session-identity", false, 0, null, default, identity);
+        var carried = Assert.IsType<ETL_SQL.Core.Governance.ExecutionIdentity>(provider.Request!.ExecutionIdentity);
+        Assert.NotSame(identity, carried);
+        Assert.Equal("learner", carried.EffectiveUser);
+        Assert.True(carried.EffectiveHasRole("Publisher"));
+        Assert.True(carried.EffectiveHasGroup("Learners"));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => executor.ExecuteAsync(
+            Job("tenant-a"), 13, 1, "session-foreign", false, 0, null, default, identity with { TenantId = "tenant-b" }));
+    }
+
     private readonly string _root = Path.Combine(
         Path.GetTempPath(), $"etlsql-scheduled-sandbox-{Guid.NewGuid():N}");
 

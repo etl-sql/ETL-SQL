@@ -646,15 +646,7 @@ public class SelectExecutionEngine
             else
             {
                 await MaterializeEngineStream();
-                if (ShouldSpill(allRows) && stmt.IsTopPercent)
-                {
-                    // A percentage needs the row count, and the stream path gets it by writing the
-                    // rows to a replay file whose format widens decimal scale (1 comes back as
-                    // 1.000000000). Until that file keeps values exact, this case keeps its list.
-                    var externalSort = new ExternalSortEngine(_context, _logger);
-                    allRows = await externalSort.SortExternal(allRows, stmt.OrderBy);
-                }
-                else if (ShouldSpill(allRows))
+                if (ShouldSpill(allRows))
                 {
                     // Stay a stream from here: OFFSET / LIMIT and projection read the merge directly.
                     // Collecting the sorted rows into a list again would hold the whole result in

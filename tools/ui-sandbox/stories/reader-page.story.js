@@ -26,7 +26,7 @@ export function makeReaderPageSandbox(fixtureId = 'healthy') {
     lastRefreshStatus: null, lastRefreshError: null, lastRefreshCompletedAt: null, ...extra });
   const library = () => [listed(7, 1, 'Regional sales', { isStale: true, snapshotBuiltAt: '2026-10-01T05:00:00Z' }),
     listed(8, 1, 'Margin by product', { snapshotBuiltAt: null, lastRefreshStatus: 'Failed', lastRefreshError: 'Timeout', lastRefreshCompletedAt: '2026-10-09T06:00:00Z' }),
-    listed(10, 1, 'Accounts <i>aging</i>', { description: 'Open receivables by age' }), listed(9, 2, 'Inventory aging')];
+    listed(10, 1, 'Accounts <i>aging</i>', { description: 'Open receivables by age', perViewer: true }), listed(9, 2, 'Inventory aging')];
   // Report 7 has a snapshot; report 8 has none until a run completes. Report 9 has no parameters.
   const snapshots = new Set([7, 9]);
   let runState = 'Completed', runs = 0, polls = 0;

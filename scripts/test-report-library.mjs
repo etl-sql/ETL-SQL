@@ -60,6 +60,9 @@ assert.equal(activityLine(state({ lastRefreshStatus: 'Failed' }), now), 'Last ru
 assert.equal(activityLine(state({ lastRefreshStatus: 'Cancelled', lastRefreshCompletedAt: '2026-10-10T11:30:00Z' }), now), 'Run cancelled 30 min ago');
 assert.match(statusBadge(state({ lastRefreshStatus: 'Failed', lastRefreshError: '"><b>boom' })), /title="&quot;&gt;&lt;b&gt;boom"/);
 assert.equal(statusBadge(state({})), '');
+assert.match(statusBadge(state({ perViewer: true })), /Live for you/);
+assert.equal(activityLine(state({ perViewer: true }), now), 'Runs with your permissions');
+assert.equal(readReports([{ ...raw, perViewer: true }])[0].perViewer, true);
 assert.match(statusBadge(state({ isStale: true })), /Stale/);
 
 // Every server-supplied string is text in every card.

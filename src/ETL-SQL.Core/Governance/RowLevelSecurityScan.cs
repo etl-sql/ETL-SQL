@@ -26,10 +26,23 @@ public static class RowLevelSecurityScan
     /// HAS_GROUP" is something an administrator can reason about; "identity-sensitive: true" is not.
     /// Same conservative raw-text scan, so the same over-flagging caveat applies.
     /// </summary>
-    public static IReadOnlyList<string> IdentityReferences(string? scriptText) =>
-        string.IsNullOrEmpty(scriptText)
-            ? []
-            : [.. IdentityTokens
-                .Where(token => scriptText.Contains(token, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(token => token, StringComparer.Ordinal)];
+    public static IReadOnlyList<string> IdentityReferences(string? scriptText)
+    {
+        if (string.IsNullOrEmpty(scriptText)) return [];
+        var references = IdentityTokens.Where(token => scriptText.Contains(token, StringComparison.OrdinalIgnoreCase)).ToList();
+        // COMPAT_BREAK: 0.21.0 — unresolved script dependencies cannot establish shared-cache safety.
+        // Includes can be dynamic or change independently of their parent. Run such reports per
+        // viewer even when no identity token is visible in the parent text.
+        try
+        {
+            var tokens = new Parser.Lexer(scriptText).Tokenize();
+            if (tokens.Zip(tokens.Skip(1)).Any(pair => pair.First.Type == Parser.TokenType.RUN && pair.Second.Type == Parser.TokenType.SCRIPT))
+                references.Add("RUN SCRIPT");
+        }
+        catch (Exception)
+        {
+            references.Add("UNRESOLVED SCRIPT");
+        }
+        return references.OrderBy(token => token, StringComparer.Ordinal).ToArray();
+    }
 }

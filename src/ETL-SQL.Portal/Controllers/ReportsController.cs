@@ -393,7 +393,14 @@ public class ReportsController : ControllerBase
             .Select(f => f.ReportId)
             .ToHashSetAsync();
 
-        return Ok(reports.Select(r => ToDto(r, r.Snapshots.FirstOrDefault(), favoriteIds.Contains(r.Id))));
+        var results = new List<ReportDto>();
+        foreach (var report in reports)
+        {
+            var perViewer = PortalPathGuard.TryResolveScript(portalConfig, datasetScope.TenantId, report.ScriptPath, out var scriptPath)
+                && await ReportIdentitySensitivity.IsRunLiveAsync(scriptPath, HttpContext.RequestAborted);
+            results.Add(ToDto(report, report.Snapshots.FirstOrDefault(), favoriteIds.Contains(report.Id), perViewer));
+        }
+        return Ok(results);
     }
 
     // ── POST /api/reports ─────────────────────────────────────────────────────

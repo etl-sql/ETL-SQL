@@ -21,7 +21,8 @@ public record CatalogSearchResultDto(
     bool? ScriptChanged,
     bool? IsFavorite,
     string? MatchReason = null,
-    double? Score = null);
+    double? Score = null,
+    bool PerViewer = false);
 
 public record CatalogLineageHistoryDto(
     long Id,

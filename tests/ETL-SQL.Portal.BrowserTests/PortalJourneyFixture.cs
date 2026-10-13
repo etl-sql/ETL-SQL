@@ -10,11 +10,11 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// <summary>Portal page journeys with a real, isolated Orchestrator behind the authenticated proxy.</summary>
 public sealed class PortalJourneyFixture : PortalBrowserFixture
 {
-    private readonly JourneyOrchestratorFactory orchestrator;
+    private readonly OrchestratorWebFactory orchestrator;
 
     public PortalJourneyFixture() : this(new JourneyOrchestratorFactory()) { }
 
-    private PortalJourneyFixture(JourneyOrchestratorFactory orchestrator)
+    public PortalJourneyFixture(OrchestratorWebFactory orchestrator)
         : base(new JourneyPortalFactory(orchestrator)) => this.orchestrator = orchestrator;
 
     /// <summary>The Orchestrator behind this Portal, for acting as an operator and reading its store.</summary>

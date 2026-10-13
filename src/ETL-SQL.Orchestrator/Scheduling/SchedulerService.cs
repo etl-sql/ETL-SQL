@@ -93,6 +93,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private readonly System.Collections.Concurrent.ConcurrentDictionary<JobId, byte> _scheduledJobStarts = new();
         private readonly System.Collections.Concurrent.ConcurrentDictionary<long, Task> _jobTasks = new();
         private readonly System.Collections.Concurrent.ConcurrentDictionary<long, string> _runSubmitters = new();
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<long, JobId> _revisionRunJobs = new();
         private readonly System.Collections.Concurrent.ConcurrentDictionary<long, byte> _cancelRequested = new();
         private long _nextJobTaskId;
 
@@ -240,7 +241,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 }
                 finally
                 {
+                    var revisions = _revisionRunJobs.Where(pair => pair.Value == job.Id).Select(pair => pair.Key).ToArray();
                     _scheduledJobStarts.TryRemove(job.Id, out _);
+                    foreach (var run in revisions) _revisionRunJobs.TryRemove(run, out _);
                 }
             }, CancellationToken.None);
             _jobTasks[taskId] = task;
@@ -526,7 +529,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
             // the tenant and past the submitter's row-level security. Refuse rather than widen.
             using (var scope = _serviceProvider.CreateScope())
             {
-                if (scope.ServiceProvider.GetService<ISandboxScheduledJobExecutor>() is not null)
+                if (scope.ServiceProvider.GetService<ISandboxScheduledJobExecutor>() is { } sandbox
+                    && (!sandbox.SupportsSubmitterIdentity || identity is null))
                 {
                     _logger.LogWarning(
                         "Job {JobName}: revision run refused because sandbox execution cannot carry the submitter's identity.",
@@ -568,6 +572,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
         /// <summary>The principal that submitted a still-running revision run, or null.</summary>
         public string? GetRunSubmitter(long historyId) =>
             _runSubmitters.TryGetValue(historyId, out var submitter) ? submitter : null;
+
+        /// <summary>True until revision cleanup and the job's start guard have both been released.</summary>
+        public bool IsRevisionRunActive(long historyId) => _revisionRunJobs.ContainsKey(historyId);
 
         /// <summary>Resumes one failed persistent run from its last completed named checkpoint.</summary>
         public async Task<ResumeTriggerResult> ResumeJobAsync(long historyId)
@@ -852,6 +859,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         if (historyId <= 0) break;
                         if (!string.IsNullOrWhiteSpace(revision.SubmittedBy))
                             _runSubmitters[historyId] = revision.SubmittedBy;
+                        _revisionRunJobs[historyId] = job.Id;
                         revision.Started.TrySetResult(historyId);
                     }
 
@@ -880,14 +888,14 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         {
                             // RunRevisionAsync refuses this up front; submitted text must never
                             // reach an executor that would run it as the tenant.
-                            if (revision is not null)
+                            if (revision is not null && !sandboxExecutor.SupportsSubmitterIdentity)
                                 throw new InvalidOperationException(
                                     "Sandbox execution cannot carry a revision run's submitter identity.");
                             usedSandbox = true;
                             lastResult = await sandboxExecutor.ExecuteAsync(
-                                job,
+                                revision is null ? job : job with { Script = script },
                                 historyId, attempt, sessionId, resumeFromCheckpoint, queueWaitMs,
-                                variableOverrides, cycleCts.Token);
+                                variableOverrides, cycleCts.Token, revision?.Identity);
                         }
                         else
                         {

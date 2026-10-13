@@ -20,7 +20,8 @@ public class CatalogController(
     PortalDbContext db,
     PortalTenantLineageCatalog lineageCatalog,
     DatasetTenantScope tenantScope,
-    PortalTenantCatalogScope catalogScope) : ControllerBase
+    PortalTenantCatalogScope catalogScope,
+    PortalConfig portalConfig) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -103,7 +104,7 @@ public class CatalogController(
             .Select(f => new CatalogSearchResultDto(
                 "Folder", f.Id, f.Name, f.Path, f.Id, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, "matched folder", 1.0))
-            .Concat(reports.Select(r => ToCatalogResult(r.Report, favoriteIds, r.Match.Reason, r.Match.Score)))
+            .Concat(await Task.WhenAll(reports.Select(r => ToCatalogResultAsync(r.Report, favoriteIds, r.Match.Reason, r.Match.Score))))
             .ToList();
 
         return Ok(results);
@@ -130,7 +131,7 @@ public class CatalogController(
         var recentReportIds = await db.AuditLogs.AsNoTracking()
             .Where(log => log.TenantId == tenantScope.TenantId
                 && log.UserId == CurrentUserId
-                && log.Action == "VIEW_SNAPSHOT"
+                && (log.Action == "VIEW_SNAPSHOT" || log.Action == "VIEW_REPORT_LIVE")
                 && log.ResourceType == "Report"
                 && log.ResourceId != null)
             .GroupBy(log => log.ResourceId!)
@@ -169,7 +170,7 @@ public class CatalogController(
 
         var popularReportIds = await db.AuditLogs.AsNoTracking()
             .Where(log => log.TenantId == tenantScope.TenantId
-                && log.Action == "VIEW_SNAPSHOT"
+                && (log.Action == "VIEW_SNAPSHOT" || log.Action == "VIEW_REPORT_LIVE")
                 && log.ResourceType == "Report"
                 && log.ResourceId != null)
             .GroupBy(log => log.ResourceId!)
@@ -207,10 +208,10 @@ public class CatalogController(
                 .ToList();
         }
 
-        var favDtos = favReports.Select(r => ToCatalogResult(r, favoriteIds)).ToList();
-        var recentDtos = recentReports.Select(r => ToCatalogResult(r, favoriteIds)).ToList();
-        var featuredDtos = featuredReports.Select(r => ToCatalogResult(r, favoriteIds)).ToList();
-        var popularDtos = popularReports.Select(r => ToCatalogResult(r, favoriteIds)).ToList();
+        var favDtos = await Task.WhenAll(favReports.Select(r => ToCatalogResultAsync(r, favoriteIds)));
+        var recentDtos = await Task.WhenAll(recentReports.Select(r => ToCatalogResultAsync(r, favoriteIds)));
+        var featuredDtos = await Task.WhenAll(featuredReports.Select(r => ToCatalogResultAsync(r, favoriteIds)));
+        var popularDtos = await Task.WhenAll(popularReports.Select(r => ToCatalogResultAsync(r, favoriteIds)));
 
         return Ok(new ConsumerHomeDto(favDtos, recentDtos, featuredDtos, popularDtos));
     }
@@ -223,7 +224,7 @@ public class CatalogController(
         var recentReportIds = await db.AuditLogs.AsNoTracking()
             .Where(log => log.TenantId == tenantScope.TenantId
                 && log.UserId == CurrentUserId
-                && log.Action == "VIEW_SNAPSHOT"
+                && (log.Action == "VIEW_SNAPSHOT" || log.Action == "VIEW_REPORT_LIVE")
                 && log.ResourceType == "Report"
                 && log.ResourceId != null)
             .GroupBy(log => log.ResourceId!)
@@ -253,7 +254,7 @@ public class CatalogController(
             .ToList();
         var favoriteIds = await GetFavoriteReportIdsAsync();
 
-        return Ok(reports.Select(r => ToCatalogResult(r, favoriteIds)).ToList());
+        return Ok(await Task.WhenAll(reports.Select(r => ToCatalogResultAsync(r, favoriteIds))));
     }
 
     [HttpGet("favorites")]
@@ -275,7 +276,7 @@ public class CatalogController(
             .ToListAsync();
 
         var favoriteIds = reports.Select(r => r.Id).ToHashSet();
-        return Ok(reports.Select(r => ToCatalogResult(r, favoriteIds)).ToList());
+        return Ok(await Task.WhenAll(reports.Select(r => ToCatalogResultAsync(r, favoriteIds))));
     }
 
     [HttpGet("lineage/table")]
@@ -645,11 +646,13 @@ public class CatalogController(
         return int.TryParse(idText, out var id) ? id : null;
     }
 
-    private static CatalogSearchResultDto ToCatalogResult(Report r, ISet<int> favoriteIds, string? matchReason = null, double? score = null)
+    private async Task<CatalogSearchResultDto> ToCatalogResultAsync(Report r, ISet<int> favoriteIds, string? matchReason = null, double? score = null)
     {
         var snapshot = r.Snapshots.OrderByDescending(s => s.BuiltAt).FirstOrDefault();
         var isStale = snapshot is not null && r.ScriptLastModified > snapshot.BuiltAt;
         var scriptChanged = false;
+        var perViewer = PortalPathGuard.TryResolveScript(portalConfig, tenantScope.TenantId, r.ScriptPath, out var scriptPath)
+            && await ReportIdentitySensitivity.IsRunLiveAsync(scriptPath, HttpContext.RequestAborted);
 
         return new CatalogSearchResultDto(
             "Report",
@@ -672,7 +675,8 @@ public class CatalogController(
             scriptChanged,
             favoriteIds.Contains(r.Id),
             matchReason,
-            score);
+            score,
+            perViewer);
     }
 
     private async Task<Dictionary<int, IReadOnlyList<string>>> BuildReportLineageTermsAsync(ISet<int> reportIds)

@@ -202,7 +202,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   rows to disk instead of building the whole file in memory. The XML writer also stops enumerating
   its source twice.
 - Keep a spilled `ORDER BY` as a stream through `OFFSET` / `LIMIT` and projection instead of
-  collecting the sorted rows into memory again. `TOP … PERCENT` keeps the list path.
+  collecting the sorted rows into memory again, including `TOP … PERCENT`. Percentage replay
+  and other Arrow spill paths preserve decimal precision and scale instead of rounding values to
+  nine decimal places, including native column batches.
 - Answer the Orchestrator job, schedule, and notification lists with one grant lookup per page
   instead of one per row.
 - Replace the default machine key, a digest of the host and account name, with a random key

@@ -12,6 +12,7 @@ namespace ETL_SQL.Tests.Statements;
 /// An ORDER BY over more rows than the spill threshold sorts on disk and stays a stream through
 /// OFFSET / LIMIT and projection. The answer must be the one the in-memory sort gives.
 /// </summary>
+[Trait("CompatBreak", "0.21.0")]
 public sealed class SpilledOrderByTests
 {
     private const int Rows = 600;
@@ -20,6 +21,12 @@ public sealed class SpilledOrderByTests
     [InlineData("SELECT n FROM #t ORDER BY n DESC;")]
     [InlineData("SELECT n FROM #t ORDER BY n DESC LIMIT 25 OFFSET 40;")]
     [InlineData("SELECT TOP 10 PERCENT n FROM #t ORDER BY n;")]
+    [InlineData("SELECT TOP 10 PERCENT n, d FROM #t ORDER BY n;")]
+    [InlineData("SELECT TOP 10 PERCENT COUNT(*) AS total FROM #t GROUP BY g ORDER BY g;")]
+    [InlineData("SELECT TOP 10 PERCENT n FROM #t ORDER BY n OFFSET 40 ROWS;")]
+    [InlineData("SELECT TOP 0 PERCENT n FROM #t ORDER BY n;")]
+    [InlineData("SELECT TOP 100 PERCENT n FROM #t ORDER BY n;")]
+    [InlineData("SELECT TOP 10 PERCENT n FROM #t WHERE n < 0 ORDER BY n;")]
     [InlineData("SELECT TOP 5 WITH TIES g, n FROM #t ORDER BY g;")]
     [InlineData("SELECT n * 2 AS doubled FROM #t WHERE n % 3 = 0 ORDER BY n DESC LIMIT 7;")]
     public async Task ASpilledSortReturnsWhatTheInMemorySortReturns(string query)
@@ -27,7 +34,8 @@ public sealed class SpilledOrderByTests
         var inMemory = await RunAsync(query, spillThreshold: 1_000_000);
         var spilled = await RunAsync(query, spillThreshold: 50);
 
-        Assert.NotEmpty(inMemory);
+        if (!query.Contains("TOP 0 ", StringComparison.Ordinal) && !query.Contains("n < 0", StringComparison.Ordinal))
+            Assert.NotEmpty(inMemory);
         Assert.Equal(inMemory, spilled);
     }
 
@@ -38,9 +46,11 @@ public sealed class SpilledOrderByTests
         provider.GetRequiredService<ILogger>().SuppressConsole = true;
         var evaluator = provider.GetRequiredService<Evaluator>();
         evaluator.JoinSpillThreshold = spillThreshold;
+        evaluator.ExternalSortChunkSize = spillThreshold;
 
-        var values = string.Join(", ", Enumerable.Range(1, Rows).Select(n => $"({n}, {n % 4})"));
-        await evaluator.Evaluate(Parse($"CREATE TABLE #t (n INT, g INT); INSERT INTO #t VALUES {values};"));
+        var values = string.Join(", ", Enumerable.Range(1, Rows).Select(n =>
+            $"({n}, {n % 4}, {(n % 3 == 0 ? "NULL" : n % 3 == 1 ? "1.2300" : "0.1234567890123456789012345678")})"));
+        await evaluator.Evaluate(Parse($"CREATE TABLE #t (n INT, g INT, d DECIMAL); INSERT INTO #t VALUES {values};"));
 
         var lines = new List<string>();
         await foreach (var batch in evaluator.ExecuteQuery(Parse(query).Statements[0]))

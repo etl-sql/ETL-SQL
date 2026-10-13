@@ -19,7 +19,8 @@ try {
     }] }], datasets: [{ id: 'd1', name: 'data', query: 'SELECT 1;' }] };
     const snapshot = { reportName: 'Report', builtAt: date, sampleRows: { Revenue: [['North', '120'], ['West', null]] },
         columns: { Revenue: ['Region', 'Revenue'] }, metadata: { isSampled: false, rlsEnforced: false, totalRows: 2, returnedRows: 2 } };
-    assert.deepEqual(responses.readStudioSession(session), session);
+    assert.deepEqual(responses.readStudioSession(session), { ...session, privateDrafts: false });
+    assert.equal(responses.readStudioSession({ ...session, privateDrafts: true }).privateDrafts, true);
     assert.deepEqual(responses.readStudioReports([report]), [report]);
     assert.deepEqual(responses.readStudioFolders([{ id: 3, path: '/Authors', name: 'Authors' }]), [{ id: 3, path: '/Authors', name: 'Authors' }]);
     assert.deepEqual(responses.readScriptContent(script), script);

@@ -19,6 +19,31 @@ public class RowLevelSecurityPortalTests : IClassFixture<PortalWebFactory>
 {
     private readonly HttpClient _client;
     private readonly PortalWebFactory _factory;
+    [Fact]
+    public async Task LiveReportAppearsInRecentPopularAndListMetadataWithoutASharedSnapshot()
+    {
+        var token = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var folder = await CreateFolderAsync(token, "Live Catalog " + suffix);
+        var id = await CreateReportAsync(token, folder, "live_catalog_" + suffix,
+            $"CREATE VISUAL Live_{suffix} AS CARD (SOURCE = (SELECT 42 AS Answer, HAS_ROLE('Admin') AS Allowed), MAPPINGS (VALUE = Answer));");
+        var viewed = await AuthGet(token, $"/api/reports/{id}/manifest");
+        Assert.Equal(HttpStatusCode.OK, viewed.StatusCode);
+        var home = await (await AuthGet(token, "/api/catalog/consumer-home?limit=50")).Content.ReadFromJsonAsync<JsonObject>();
+        foreach (var name in new[] { "recent", "popular" })
+        {
+            var entry = Assert.Single(home![name]!.AsArray().OfType<JsonObject>(), row => row["id"]!.GetValue<int>() == id);
+            Assert.True(entry["perViewer"]!.GetValue<bool>());
+            Assert.False(entry["hasSnapshot"]!.GetValue<bool>());
+        }
+        var rows = await (await AuthGet(token, $"/api/folders/{folder}/reports")).Content.ReadFromJsonAsync<JsonArray>();
+        Assert.True(Assert.Single(rows!.OfType<JsonObject>(), row => row["id"]!.GetValue<int>() == id)["perViewer"]!.GetValue<bool>());
+        var recent = await (await AuthGet(token, "/api/catalog/recent?limit=50")).Content.ReadFromJsonAsync<JsonArray>();
+        Assert.Contains(recent!.OfType<JsonObject>(), row => row["id"]!.GetValue<int>() == id);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.False(await db.ReportSnapshots.AnyAsync(row => row.ReportId == id));
+    }
     private static readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
     private static string? _adminToken;
     private static readonly SemaphoreSlim _tokenLock = new(1, 1);

@@ -218,6 +218,7 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
         var scriptPath = Path.Combine(workspace.InputPath, "job.etlsql");
         await _artifacts.StageAsync(request.ArtifactId, request.ArtifactHash, scriptPath, cancellationToken);
         var capabilityPath = await StageCapabilitiesAsync(request, workspace, cancellationToken);
+        var identityPath = await StageIdentityAsync(request, workspace, cancellationToken);
         var sessionPath = ResolveTenantSessionPath(tenantId);
         var machineKeyPath = ResolveTenantMachineKeyPath(tenantId);
         // The session mount is read-write and the sandbox runs as an unprivileged uid, so this leaf
@@ -230,6 +231,14 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
         RequireDockerMountSource(machineKeyPath);
 
         var image = await InspectImageAsync(cancellationToken);
+        if (request.ExecutionIdentity is not null)
+        {
+            var identityVersion = await RequireSuccessAsync(
+                ["image", "inspect", "--format", "{{index .Config.Labels \"etl-sql.sandbox.identity-version\"}}", _options.Image],
+                "verify sandbox identity protocol", cancellationToken);
+            if (identityVersion.Trim() != "1")
+                throw new InvalidOperationException("The sandbox worker image does not support required submitter identity.");
+        }
         var version = await RequireSuccessAsync(
             ["version", "--format", "{{.Client.Version}}"], "inspect Docker version", cancellationToken);
         await VerifyRuntimeRegisteredAsync(cancellationToken);
@@ -241,7 +250,7 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             var create = await _commands.RunAsync(
                 _options.DockerExecutable,
                 BuildCreateArguments(
-                    containerName, request, workspace, sessionPath, machineKeyPath, capabilityPath),
+                    containerName, request, workspace, sessionPath, machineKeyPath, capabilityPath, identityPath),
                 cancellationToken);
             RequireSuccess(create, "create hardened sandbox");
 
@@ -320,13 +329,38 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
         return root;
     }
 
+    private static async Task<string?> StageIdentityAsync(
+        SandboxWorkloadRequest request, SandboxWorkspaceAssignment workspace, CancellationToken cancellationToken)
+    {
+        if (request.ExecutionIdentity is null) return null;
+        var envelope = new ETL_SQL.Core.Governance.SandboxIdentityEnvelope(
+            ETL_SQL.Core.Governance.SandboxIdentityEnvelope.CurrentVersion,
+            request.Assignment.Tenant.Tenant.Value, request.Assignment.RunId,
+            request.Assignment.AttemptId, request.ArtifactHash, request.ExecutionIdentity);
+        envelope.Validate(request.Assignment.Tenant.Tenant.Value, request.Assignment.RunId,
+            request.Assignment.AttemptId, request.ArtifactHash);
+        var json = JsonSerializer.Serialize(envelope);
+        if (Encoding.UTF8.GetByteCount(json) > ETL_SQL.Core.Governance.SandboxIdentityEnvelope.MaximumBytes)
+            throw new InvalidOperationException("Sandbox execution identity exceeds the worker envelope limit.");
+        var root = Directory.CreateDirectory(Path.Combine(workspace.RootPath, "identity")).FullName;
+        SandboxFilePermissions.RestrictToOwner(root);
+        var file = Path.Combine(root, "request.json");
+        await File.WriteAllTextAsync(file, json, cancellationToken);
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        SandboxFilePermissions.AllowUnprivilegedSandboxReads(root);
+        RequireDockerMountSource(root);
+        return root;
+    }
+
     private IReadOnlyList<string> BuildCreateArguments(
         string containerName,
         SandboxWorkloadRequest request,
         SandboxWorkspaceAssignment workspace,
         string sessionPath,
         string machineKeyPath,
-        string? capabilityPath)
+        string? capabilityPath,
+        string? identityPath)
     {
         var args = new List<string>
         {
@@ -382,6 +416,17 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
                 "--mount", $"type=bind,source={capabilityPath},target=/run/secrets/capabilities,readonly",
                 "--env", "ETLSQL_CAPABILITY_ROOT=/run/secrets/capabilities",
                 "--env", "Security__ApprovedSafeZones__2=/run/secrets/capabilities"
+            ]);
+        }
+        if (identityPath is not null)
+        {
+            args.InsertRange(args.IndexOf("--workdir"),
+            [
+                "--mount", $"type=bind,source={identityPath},target={ETL_SQL.Core.Governance.SandboxIdentityEnvelope.WorkerDirectory},readonly",
+                "--env", "ETLSQL_SANDBOX_IDENTITY_REQUIRED=1",
+                "--env", $"ETLSQL_SANDBOX_TENANT={request.Assignment.Tenant.Tenant.Value}",
+                "--env", $"ETLSQL_SANDBOX_RUN={request.Assignment.RunId}",
+                "--env", $"ETLSQL_SANDBOX_ATTEMPT={request.Assignment.AttemptId}"
             ]);
         }
         if (request.Limits.MaxRows is { } maxRows)

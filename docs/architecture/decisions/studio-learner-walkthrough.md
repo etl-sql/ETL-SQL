@@ -46,6 +46,15 @@ Ask the learner to do each step, then ask the question. Write what they say, not
 
 ## Record
 
+### Scheduled returning-author walkthrough
+
+- **Participant:** Chuck, Studio's creator; expert in Power BI, Tableau, SSRS and SSIS.
+- **Previous Studio use:** has used Studio, but has not reviewed it in over a version.
+- **Host order:** desktop first, then Portal.
+- **Observations:** pending. No steps or understanding answers have been observed yet.
+- **Scope:** returning-author feedback. This participant does not meet the new-to-Studio
+  learner criterion above, so this walkthrough alone cannot close ST16b.
+
 Copy this block once per learner and host.
 
 ```text
