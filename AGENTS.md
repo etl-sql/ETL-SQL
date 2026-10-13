@@ -237,7 +237,6 @@ The repository has three browser/extension surfaces. Follow the conventions and 
   gate (pre-push step 3, and a CI step). `browser-typecheck-baseline.txt` is **empty** — the 822
   findings the sources carried when the gate went in have all been worked off — so any finding at
   all fails the gate. The baseline may shrink and must never grow; do not add a line to it by hand.
-  `scripts/fix-dom-narrowing.mjs` writes the JSDoc casts for the DOM-narrowing class mechanically.
 - **Browser JavaScript is linted.** `eslint.config.mjs` at the repository root points
   `eslint:recommended` at the same sources, and `node scripts/lint-browser.mjs` is the gate (pre-push
   step 4, and a CI step). It answers what a type checker does not ask — a value assigned and never

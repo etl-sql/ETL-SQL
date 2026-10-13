@@ -82,15 +82,15 @@ invoke_dotnet_test() {
 
 invoke_lineage_ui_smoke() {
     # First, because a page whose inline module does not parse renders nothing at all.
-    node "$REPO_ROOT/scripts/test-portal-inline-scripts.mjs"
-    node "$REPO_ROOT/scripts/test-lineage-ui.mjs"
-    node "$REPO_ROOT/scripts/test-publish-folders.mjs"
-    node "$REPO_ROOT/scripts/test-subscription-history-ui.mjs"
-    node "$REPO_ROOT/scripts/test-result-grid-ui.mjs"
-    node "$REPO_ROOT/scripts/test-admin-catalog-ui.mjs"
-    node "$REPO_ROOT/scripts/test-dataset-acl-ui.mjs"
-    node "$REPO_ROOT/scripts/test-orchestrator-acl-ui.mjs"
-    node "$REPO_ROOT/scripts/test-orchestrator-admin-ui.mjs"
+    node "$REPO_ROOT/scripts/checks/test-portal-inline-scripts.mjs"
+    node "$REPO_ROOT/scripts/checks/test-lineage-ui.mjs"
+    node "$REPO_ROOT/scripts/checks/test-publish-folders.mjs"
+    node "$REPO_ROOT/scripts/checks/test-subscription-history-ui.mjs"
+    node "$REPO_ROOT/scripts/checks/test-result-grid-ui.mjs"
+    node "$REPO_ROOT/scripts/checks/test-admin-catalog-ui.mjs"
+    node "$REPO_ROOT/scripts/checks/test-dataset-acl-ui.mjs"
+    node "$REPO_ROOT/scripts/checks/test-orchestrator-acl-ui.mjs"
+    node "$REPO_ROOT/scripts/checks/test-orchestrator-admin-ui.mjs"
 }
 
 invoke_fuzz_lane() {

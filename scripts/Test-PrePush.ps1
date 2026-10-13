@@ -70,7 +70,7 @@ if ($LASTEXITCODE -ne 0) {
 #
 # Was one script — test-page-layout-options.mjs — while its twenty-seven siblings ran nowhere. That
 # is how eight of them came to be red at the same time without anyone noticing. The runner discovers
-# every scripts/test-*.mjs, so a new check is gated the moment it is written rather than when
+# every scripts/checks/test-*.mjs, so a new check is gated the moment it is written rather than when
 # somebody remembers to add a line here.
 Write-Host "[5/13] Running consumer contract checks over the shipped sources..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "check-consumer-contracts.mjs")

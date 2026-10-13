@@ -713,7 +713,7 @@ export function resultRenderWindow(
     return { visible, truncated, label };
 }
 
-// Exported for scripts/test-result-grid-ui.mjs. These carry the result grid's behaviour — what the
+// Exported for scripts/checks/test-result-grid-ui.mjs. These carry the result grid's behaviour — what the
 // filter box matches, how a value becomes display text, what CSV export writes, and how many rows
 // are drawn — and are pure, so they are testable without a DOM. The rendering around them is not.
 export function filterRows(

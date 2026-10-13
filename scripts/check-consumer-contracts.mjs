@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Runs every `scripts/test-*.mjs` consumer-contract check.
+ * Runs every `scripts/checks/test-*.mjs` consumer-contract check.
  *
  * These are the checks that read the shipped browser sources, Portal pages and controllers and
  * assert that a contract still holds — that a formatting picker still exists, that a governance
@@ -23,17 +23,19 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 const scriptRoot = path.dirname(fileURLToPath(import.meta.url));
+const checkRoot = path.join(scriptRoot, 'checks');
 
 /**
- * Scripts that need arguments, or that must not run here at all, with the reason.
+ * Scripts outside `checks/` that the gate still runs, with the arguments that make them a check.
  *
  * `test-service-capacity.mjs` is the only entry: it is not a check, it is the load driver that
- * `test-service-capacity-smoke.mjs` exercises end to end against a stub server. Run bare it dials a
- * live Portal and fails with a login error on any machine that has not got one, which is what made
- * it look like a ninth red check. `--validate-only` asks it the question a gate can answer — is the
- * workload configuration still valid — and leaves the load test to the smoke script beside it.
+ * `checks/test-service-capacity-smoke.mjs` exercises end to end against a stub server, and it stays
+ * in `scripts/` because runbooks and the HA soak service name it there. Run bare it dials a live
+ * Portal and fails with a login error on any machine that has not got one. `--validate-only` asks
+ * it the question a gate can answer — is the workload configuration still valid — and leaves the
+ * load test to the smoke script.
  */
-const SPECIAL_INVOCATION = {
+const OUTSIDE_CHECKS = {
   'test-service-capacity.mjs': ['--validate-only'],
 };
 
@@ -41,10 +43,15 @@ const args = process.argv.slice(2);
 const only = args.includes('--only') ? args[args.indexOf('--only') + 1] : null;
 const listOnly = args.includes('--list');
 
-const checks = readdirSync(scriptRoot)
-  .filter(name => name.startsWith('test-') && name.endsWith('.mjs'))
-  .filter(name => !only || name.includes(only))
-  .sort();
+const checks = [
+  ...readdirSync(checkRoot)
+    .filter(name => name.startsWith('test-') && name.endsWith('.mjs'))
+    .map(name => ({ name, file: path.join(checkRoot, name), label: `scripts/checks/${name}`, extra: [] })),
+  ...Object.entries(OUTSIDE_CHECKS)
+    .map(([name, extra]) => ({ name, file: path.join(scriptRoot, name), label: `scripts/${name}`, extra })),
+]
+  .filter(check => !only || check.name.includes(only))
+  .sort((left, right) => left.name.localeCompare(right.name));
 
 if (checks.length === 0) {
   console.error(only ? `No consumer checks match "${only}".` : 'No consumer checks found.');
@@ -52,16 +59,15 @@ if (checks.length === 0) {
 }
 
 if (listOnly) {
-  for (const name of checks) console.log(name);
+  for (const check of checks) console.log(check.name);
   process.exit(0);
 }
 
 const started = Date.now();
 const failures = [];
 
-for (const name of checks) {
-  const extra = SPECIAL_INVOCATION[name] ?? [];
-  const result = spawnSync(process.execPath, [path.join(scriptRoot, name), ...extra], {
+for (const { name, file, label, extra } of checks) {
+  const result = spawnSync(process.execPath, [file, ...extra], {
     cwd: path.resolve(scriptRoot, '..'),
     encoding: 'utf8',
   });
@@ -70,6 +76,7 @@ for (const name of checks) {
 
   failures.push({
     name,
+    label,
     extra,
     // A check that cannot start reports nothing on stdout, so both streams are kept.
     output: [result.stdout, result.stderr].filter(Boolean).join('\n').trimEnd(),
@@ -86,7 +93,7 @@ if (failures.length === 0) {
 
 console.error(`consumer contract gate: ${failures.length} of ${checks.length} checks failed in ${seconds}s\n`);
 for (const failure of failures) {
-  const invocation = ['node', `scripts/${failure.name}`, ...failure.extra].join(' ');
+  const invocation = ['node', failure.label, ...failure.extra].join(' ');
   console.error(`── ${failure.name} (exit ${failure.status}) — reproduce with: ${invocation}`);
   console.error(failure.output);
   console.error('');

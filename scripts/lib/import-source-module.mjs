@@ -1,5 +1,5 @@
 /**
- * Imports a canonical browser source file as an ES module, for the scripts/test-*.mjs checks.
+ * Imports a canonical browser source file as an ES module, for the scripts/checks/test-*.mjs checks.
  *
  * These sources are served to the browser as plain `.js`, so Node will not import them directly —
  * the checks have always worked around that by copying the file to a temp path with an `.mjs`

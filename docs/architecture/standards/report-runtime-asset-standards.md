@@ -211,7 +211,7 @@ the discovered `.ts` paths, not hand-maintained parallel lists. Reject output co
 attempt to emit outside the corresponding JavaScript root.
 
 The installed TypeScript 6.0.3 resolver supports mixed siblings with `.js` specifiers.
-`scripts/test-browser-compiler.mjs` exercises the compiler host with stale generated files present,
+`scripts/checks/test-browser-compiler.mjs` exercises the compiler host with stale generated files present,
 unmigrated JS imports, strict errors, exact import casing, idempotence, orphan rejection in check
 mode, cleanup in normal mode, and unchanged outputs on failure. Portal imports of shared host URLs
 resolve to the original TypeScript owner before host copies exist.
@@ -294,7 +294,7 @@ added in v0.21.0; the [delivery matrix](../../releases/v0.21.0-browser-asset-del
 records what was verified first and what was still open.
 
 CodeQL excludes generated JavaScript so findings land on the TypeScript that produced it.
-`scripts/test-source-analysis-coverage.mjs` reads the exclusions from `.github/workflows/codeql.yml` and
+`scripts/checks/test-source-analysis-coverage.mjs` reads the exclusions from `.github/workflows/codeql.yml` and
 fails when one hides a TypeScript owner or leaves a generated script analysed. Exclude output folders,
 never a source project. `scripts/` stays excluded: it is build tooling and does not ship.
 
@@ -326,7 +326,7 @@ checks each output against the inventory, deletes all of them and both manifests
 requires the same paths and bytes. If preparation fails, it restores what it removed. CI runs it after
 preparation and uploads the inventory and hashes. Run it locally before proposing the cutover.
 
-`scripts/test-asset-generation.mjs` runs preparation in an isolated source-only tree. It covers
+`scripts/checks/test-asset-generation.mjs` runs preparation in an isolated source-only tree. It covers
 missing directories and outputs, repeat-run stability, rename/delete cleanup, import closure,
 failed compilation, and the MSBuild verifier's missing/stale/new-source failures.
 

@@ -761,7 +761,7 @@ describe('offline snapshot bookmark replay', () => {
 describe('offline snapshot bundle', () => {
     it('rejects drift and unsupported source changes before writing host assets', () => {
         const output = execFileSync(process.execPath,
-            [resolve(__dirname, '../../../../scripts/test-runtime-bundle.mjs')], { encoding: 'utf8' });
+            [resolve(__dirname, '../../../../scripts/checks/test-runtime-bundle.mjs')], { encoding: 'utf8' });
         expect(output).toContain('rejected-input checks passed');
         // Each case is a full preparation in a child process; the default five seconds is not enough.
     }, 180_000);
