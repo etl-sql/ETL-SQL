@@ -112,8 +112,12 @@
                 if (!promptOptions.multiline) /** @type {HTMLInputElement} */ ((input) as HTMLInputElement).type = promptOptions.secret ? 'password' : 'text';
                 input.value = promptOptions.value || ''; input.autocomplete = (promptOptions.autocomplete || 'off') as AutoFill;
                 field.appendChild(input); body.appendChild(field);
-                error = doc.createElement('div'); error.className = 'etlsql-feedback-error'; error.setAttribute('role', 'alert'); body.appendChild(error);
+                error = doc.createElement('div'); error.className = 'etlsql-feedback-error'; error.id = `${id}-error`; error.setAttribute('role', 'alert'); body.appendChild(error);
+                input.addEventListener('input', () => { error!.textContent = ''; input!.removeAttribute('aria-invalid'); input!.removeAttribute('aria-describedby'); });
             }
+            // The message is spoken once as an alert; marking the field keeps it attached, so
+            // coming back to the field says what is wrong with it.
+            const refuse = (message: string) => { error!.textContent = message; input!.setAttribute('aria-invalid', 'true'); input!.setAttribute('aria-describedby', error!.id); input!.focus(); };
             const actions = doc.createElement('div'); actions.className = 'etlsql-feedback-actions';
             const cancel = doc.createElement('button'); cancel.type = 'button'; cancel.className = 'etlsql-feedback-btn'; cancel.textContent = options.cancelLabel || 'Cancel';
             const accept = doc.createElement('button'); accept.type = 'button'; accept.className = `etlsql-feedback-btn ${options.danger ? 'etlsql-feedback-btn-danger' : 'etlsql-feedback-btn-primary'}`; accept.textContent = options.confirmLabel || 'Continue';
@@ -123,9 +127,9 @@
             accept.addEventListener('click', () => {
                 if (!promptOptions) { finish(true); return; }
                 const value = input!.value.trim();
-                if (promptOptions.required && !value) { error!.textContent = promptOptions.requiredMessage || 'This field is required.'; input!.focus(); return; }
-                if (promptOptions.minLength && value.length < promptOptions.minLength) { error!.textContent = `Enter at least ${promptOptions.minLength} characters.`; input!.focus(); return; }
-                if (promptOptions.pattern && !promptOptions.pattern.test(value)) { error!.textContent = promptOptions.patternMessage || 'Enter a valid value.'; input!.focus(); return; }
+                if (promptOptions.required && !value) { refuse(promptOptions.requiredMessage || 'This field is required.'); return; }
+                if (promptOptions.minLength && value.length < promptOptions.minLength) { refuse(`Enter at least ${promptOptions.minLength} characters.`); return; }
+                if (promptOptions.pattern && !promptOptions.pattern.test(value)) { refuse(promptOptions.patternMessage || 'Enter a valid value.'); return; }
                 finish(value);
             });
             backdrop.addEventListener('click', event => { if (event.target === backdrop) finish(promptOptions ? null : false); });

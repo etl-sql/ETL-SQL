@@ -15,7 +15,7 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// </summary>
 [Trait("Category", "Browser")]
 [Collection(StudioAuthoringCollection.Name)]
-public sealed class StudioKeyboardJourneyTests(StudioAuthoringFixture fixture)
+public sealed partial class StudioKeyboardJourneyTests(StudioAuthoringFixture fixture)
 {
     private static string NormalizeEndings(string text) =>
         text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
@@ -409,6 +409,153 @@ public sealed class StudioKeyboardJourneyTests(StudioAuthoringFixture fixture)
 
         Assert.Empty(session.PageErrors);
     }
+
+    /// <summary>
+    /// ST25 — Keyboard visual move/resize, production host half:
+    /// a Publisher moves one visual and resizes another without a pointer, saves from the canvas,
+    /// and the reopened report holds the layout the keyboard made.
+    ///
+    /// <para>The three changes land on grid cells STRUCTURE can state exactly, so the placements
+    /// read back after the reload are compared as equal, not as close.</para>
+    /// </summary>
+    [Fact]
+    public async Task Portal_KeyboardLayout_MovesResizesAndPersistsAVisual()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        var authorId = await SignInAsPublisherAsync(page);
+        var folderId = await CreateWritableFolderAsync(authorId);
+        var report = await page.EvaluateAsync<JsonElement>(
+            """
+            async request => {
+                const { studioApi } = await import('/js/api.js');
+                return studioApi.createReport(request);
+            }
+            """,
+            new
+            {
+                folderId,
+                name = $"Keyboard Layout {Guid.NewGuid():N}",
+                scriptText = """
+                    CREATE CONNECTION sample_data AS MOCKDB();
+
+                    SELECT UserID, UserName INTO #users FROM sample_data.Users;
+
+                    CREATE VISUAL UserCount AS CARD (
+                      SOURCE = #users,
+                      MAPPINGS (VALUE = UserID)
+                    );
+
+                    CREATE VISUAL UsersTable AS TABLE (
+                      SOURCE = #users,
+                      MAPPINGS (USER_ID = UserID, USER_NAME = UserName)
+                    );
+
+                    CREATE PAGE Main AS DASHBOARD (
+                      LAYOUT (STRUCTURE = 'A B', MAP ('A' = UserCount, 'B' = UsersTable))
+                    );
+                    """
+            });
+        var reportId = report.GetProperty("id").GetInt32();
+
+        const string count = ".etlsql-dsgn-visual-card[data-vid*='UserCount']";
+        const string table = ".etlsql-dsgn-visual-card[data-vid*='UsersTable']";
+
+        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await WaitForStudioAsync(session);
+        await page.Locator(table).WaitForAsync(new() { Timeout = 20_000 });
+        Assert.Equal("1/1/6/4", await PlacementAsync(page, "UserCount"));
+        Assert.Equal("7/1/6/4", await PlacementAsync(page, "UsersTable"));
+
+        // ── 1. Move: Tab to the table's card, four rows down ───────────────────
+        var heard = await AssistiveTranscript.StartAsync(page);
+        await page.Locator(".etlsql-studio-tab.active").FocusAsync();
+        await KeyboardWalk.TabToAsync(page, table);
+        var card = await heard.RecordAsync("Tab to the table's card");
+        Assert.Equal("group", card.Role);
+        Assert.Contains("Arrow keys move the visual", card.Detail, StringComparison.Ordinal);
+        await KeyboardWalk.PressAsync(page, "ArrowDown", 4);
+        Assert.Equal("7/5/6/4", await PlacementAsync(page, "UsersTable"));
+        await Expect(page.Locator(table)).ToBeFocusedAsync();
+        await Expect(page.Locator("[data-canvas-status]")).ToContainTextAsync("moved: column 7, row 5");
+        await heard.RecordAsync("Down arrow, four times");
+
+        // ── 2. Resize: Shift+Tab to the card, widened to the full grid ─────────
+        await KeyboardWalk.TabToAsync(page, count, backwards: true);
+        await KeyboardWalk.PressAsync(page, "Shift+ArrowRight", 6);
+        Assert.Equal("1/1/12/4", await PlacementAsync(page, "UserCount"));
+        await Expect(page.Locator(count)).ToBeFocusedAsync();
+        await heard.RecordAsync("Shift+Tab to the card visual, Shift+Right arrow six times");
+
+        // ── 3. Place by number: the inspector's grid column, typed ─────────────
+        await KeyboardWalk.TabToAsync(page, table);
+        await page.Keyboard.PressAsync("Enter");
+        await page.Locator("#pp-col").WaitForAsync(new() { Timeout = 10_000 });
+        await KeyboardWalk.TabToAsync(page, "#pp-col", backwards: true);
+        var column = await heard.RecordAsync("Enter selects the table, Shift+Tab to its grid column");
+        Assert.Equal("Grid column", column.Name);
+        await page.Keyboard.PressAsync("ControlOrMeta+a");
+        await page.Keyboard.TypeAsync("1");
+        await page.Keyboard.PressAsync("Tab");
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO__.state.editorInstance.getValue().includes(\"STRUCTURE = 'A / B .'\")",
+            null, new() { Timeout = 20_000 });
+        Assert.Equal("1/5/6/4", await PlacementAsync(page, "UsersTable"));
+        await heard.RecordAsync("Type 1, Tab to the grid row");
+
+        // ── 4. Save from the canvas: one save, Studio's, and no second dialog ──
+        await KeyboardWalk.TabToAsync(page, table);
+        await page.Keyboard.PressAsync("ControlOrMeta+s");
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO__.state.documents[0].isDirty === false",
+            null, new() { Timeout = 20_000 });
+        await Expect(page.Locator(".etlsql-dsgn-modal-bg:visible")).ToHaveCountAsync(0);
+        await heard.WaitForAnnouncementAsync("Saved");
+        await heard.RecordAsync("Tab to the table's card, Ctrl+S");
+        heard.AssertEveryStopIsNamed();
+        await heard.SaveAsync("portal-keyboard-layout.md");
+
+        // ── 5. The host's copy, and the canvas a reload draws from it ──────────
+        var saved = await page.EvaluateAsync<string>(
+            """
+            async id => {
+                const { auth } = await import('/js/api.js');
+                const response = await fetch(`/api/reports/${id}/script-content`, {
+                    headers: { Authorization: `Bearer ${auth.getToken()}` }
+                });
+                if (!response.ok) throw new Error(`script-content returned ${response.status}`);
+                const payload = await response.json();
+                return payload.scriptText ?? payload.script ?? payload.content ?? '';
+            }
+            """, reportId);
+        Assert.Contains("STRUCTURE = 'A / B .'", saved, StringComparison.Ordinal);
+
+        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await WaitForStudioAsync(session);
+        await page.Locator(table).WaitForAsync(new() { Timeout = 20_000 });
+        Assert.Equal("1/1/12/4", await PlacementAsync(page, "UserCount"));
+        Assert.Equal("1/5/6/4", await PlacementAsync(page, "UsersTable"));
+        Assert.Contains("column 1, row 5, 6 columns wide, 4 rows tall",
+            await page.Locator(table).GetAttributeAsync("aria-label"), StringComparison.Ordinal);
+
+        StudioCertification.Certify(
+            new CertifiedArtifact("keyboard layout", StudioHost.Portal, $"report-{reportId}.rptsql", saved),
+            saved);
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static async Task<string> PlacementAsync(IPage page, string visualName) =>
+        await page.EvaluateAsync<string>(
+            """
+            name => {
+                const visual = window.__STUDIO__.state.designerInstance.getState().pages
+                    .flatMap(page => page.visuals || [])
+                    .find(item => item.name === name);
+                return visual ? `${visual.gridCol}/${visual.gridRow}/${visual.gridColSpan}/${visual.gridRowSpan}` : '';
+            }
+            """, visualName);
 
     private async Task<int> SignInAsPublisherAsync(IPage page)
     {

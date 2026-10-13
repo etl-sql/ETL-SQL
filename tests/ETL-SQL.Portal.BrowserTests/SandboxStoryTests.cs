@@ -7761,6 +7761,100 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         Assert.Empty(session.PageErrors);
     }
 
+    // -- Keyboard move and resize -------------------------------------------------------------------
+
+    /// <summary>
+    /// ST25, shared sandbox half: a visual is moved and resized without a pointer, and the layout
+    /// the keyboard produced is the layout in the script.
+    ///
+    /// <para>Three controls, each the only way one of the three changes is made here: arrow keys on
+    /// the focused card move it, Shift with an arrow resizes it, and the inspector's grid fields
+    /// place it by typed number. Focus is walked to each with Tab rather than set by script.</para>
+    /// </summary>
+    [Fact]
+    public async Task Studio_Canvas_MovesAndResizesAVisualFromTheKeyboardAndWritesTheLayout()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await WaitForStudioAsync(page);
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.designerInstance)");
+        await page.Locator(".etlsql-dsgn-visual-card[data-vid*='SalesByRegion']").WaitForAsync();
+        await DismissToastsAsync(page);
+
+        const string revenue = ".etlsql-dsgn-visual-card[data-vid*='RevenueCard']";
+        const string sales = ".etlsql-dsgn-visual-card[data-vid*='SalesByRegion']";
+        Assert.Contains("STRUCTURE = 'A B'", await ScriptTextAsync(page), StringComparison.Ordinal);
+        Assert.Equal("1/1/6/4", await CardPlacementAsync(page, "RevenueCard"));
+        Assert.Equal("7/1/6/4", await CardPlacementAsync(page, "SalesByRegion"));
+
+        // The card says where it sits, so the result of a move can be read without seeing the grid.
+        await page.Locator(".etlsql-studio-tab.active").FocusAsync();
+        await KeyboardWalk.TabToAsync(page, sales);
+        Assert.Contains("column 7, row 1, 6 columns wide, 4 rows tall",
+            await page.Locator(sales).GetAttributeAsync("aria-label"), StringComparison.Ordinal);
+
+        // Move: four rows down, with nothing selected first. Focus stays on the card through every
+        // repaint, or the second keypress would land on the page instead of the visual.
+        await KeyboardWalk.PressAsync(page, "ArrowDown", 4);
+        Assert.Equal("7/5/6/4", await CardPlacementAsync(page, "SalesByRegion"));
+        await Expect(page.Locator(sales)).ToBeFocusedAsync();
+        await Expect(page.Locator("[data-canvas-status]")).ToContainTextAsync("moved: column 7, row 5");
+        await WaitForStructureAsync(page, "A . / . B");
+
+        // A step off the grid is refused and said so, and costs nothing.
+        await page.Keyboard.PressAsync("ArrowRight");
+        Assert.Equal("7/5/6/4", await CardPlacementAsync(page, "SalesByRegion"));
+        await Expect(page.Locator("[data-canvas-status]")).ToContainTextAsync("cannot move further");
+
+        // Resize: the other card, reached by Shift+Tab, widened to the full grid.
+        await KeyboardWalk.TabToAsync(page, revenue, backwards: true);
+        await KeyboardWalk.PressAsync(page, "Shift+ArrowRight", 6);
+        Assert.Equal("1/1/12/4", await CardPlacementAsync(page, "RevenueCard"));
+        await Expect(page.Locator(revenue)).ToBeFocusedAsync();
+        await Expect(page.Locator("[data-canvas-status]")).ToContainTextAsync("resized: column 1, row 1, 12 columns wide");
+        await WaitForStructureAsync(page, "A / . B");
+
+        // Place by number: the inspector's grid fields, typed and committed with Tab.
+        await KeyboardWalk.TabToAsync(page, sales);
+        await page.Keyboard.PressAsync("Enter");
+        await page.Locator("#pp-col").WaitForAsync();
+        await KeyboardWalk.TabToAsync(page, "#pp-col", backwards: true);
+        await page.Keyboard.PressAsync("ControlOrMeta+a");
+        await page.Keyboard.TypeAsync("1");
+        await page.Keyboard.PressAsync("Tab");
+        await page.WaitForFunctionAsync(
+            """
+            () => {
+                const visual = window.__STUDIO_INSTANCE__.state.designerInstance.getState().pages
+                    .flatMap(page => page.visuals || [])
+                    .find(item => item.name === 'SalesByRegion');
+                return visual?.gridCol === 1;
+            }
+            """);
+        Assert.Equal("1/5/6/4", await CardPlacementAsync(page, "SalesByRegion"));
+        await WaitForStructureAsync(page, "A / B .");
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static async Task WaitForStructureAsync(IPage page, string structure)
+    {
+        try
+        {
+            await page.WaitForFunctionAsync(
+                "structure => window.__STUDIO_INSTANCE__.state.editorInstance.getValue().includes(`STRUCTURE = '${structure}'`)",
+                structure, new PageWaitForFunctionOptions { Timeout = 10_000 });
+        }
+        catch (TimeoutException exception)
+        {
+            throw new Xunit.Sdk.XunitException(
+                $"The script never said STRUCTURE = '{structure}'.{Environment.NewLine}{await ScriptTextAsync(page)}", exception);
+        }
+    }
+
     // -- Data-model (ER) view ----------------------------------------------------------------------
 
     [Fact]

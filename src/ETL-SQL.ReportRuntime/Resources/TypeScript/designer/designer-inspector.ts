@@ -5,9 +5,9 @@
  * Selected visual and report property editors.
  */
 
-import { VTYPES, controlTarget, datasetValue, inspectorGroupKey, queryElement, queryElements } from './designer-context.js';
+import { GRID_COLUMNS, VTYPES, controlTarget, datasetValue, inspectorGroupKey, queryElement, queryElements, visualPlacement } from './designer-context.js';
 
-import type { CascadeMode, CascadeParent, CascadeState, DesignerDom, DesignerEvent, DesignerFormControl, DesignerOptions, DesignerState, DesignerVisual, UnsupportedCascade } from './designer-context.js';
+import type { CascadeMode, CascadeParent, CascadeState, DesignerDom, DesignerEvent, DesignerFormControl, DesignerOptions, DesignerState, DesignerVisual, GridPlacement, UnsupportedCascade } from './designer-context.js';
 import type { ClickAction, ClickActionKind, RowDetailState, Tooltip, TooltipKind } from './designer-interactions.js';
 import { filterSourceOn, filterSourceOnHover, filterSourceOnSeveral, listFilterCondition, hoverContextColumn, parametersRead, readClickAction, readEmitTargets, readRowDetail, readTooltip, selectionKey, splitNames, writeClickAction, writeRowDetail, writeTooltip } from './designer-interactions.js';
 import { esc } from './designer-util.js';
@@ -22,10 +22,12 @@ export interface DesignerInspectorContext {
     readonly curVis: () => DesignerVisual[];
     readonly deleteVisual: (id: string) => void;
     readonly findVis: (id: string) => DesignerVisual | null;
+    readonly isLocked: (v: DesignerVisual | null) => boolean;
     readonly openInspectorGroups: Set<unknown>;
     readonly opts: DesignerOptions;
     readonly propsPanel: DesignerDom;
     readonly pushUndoState: () => void;
+    readonly refuseLocked: (v: DesignerVisual) => void;
     readonly renderCanvas: () => void;
     readonly renderTree: () => void;
     reportName: string;
@@ -221,6 +223,47 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
         const v = context.selVisualId ? context.findVis(context.selVisualId) : null;
         const on = (sel: string, fn: (event: DesignerEvent) => void): void => queryElement(context.propsPanel, sel)?.addEventListener('change', fn as EventListener);
 
+        /**
+         * Col, Row, W and H: the way to place a visual without dragging it.
+         *
+         * A typed value is clamped to the grid and written to the script like a drag is. These used
+         * to repaint the canvas and stop there, so the card moved on screen and the layout in the
+         * script never changed; the next reload put the visual back.
+         */
+        const bindGridPlacement = (visual: DesignerVisual): void => {
+            const fields: Array<[string, keyof GridPlacement]> = [
+                ['#pp-col', 'gridCol'], ['#pp-row', 'gridRow'], ['#pp-cspan', 'gridColSpan'], ['#pp-rspan', 'gridRowSpan'],
+            ];
+            for (const [selector, field] of fields) {
+                on(selector, e => {
+                    const input = controlTarget(e);
+                    const current = visualPlacement(visual);
+                    if (context.isLocked(visual)) {
+                        context.refuseLocked(visual);
+                        input.value = String(current[field]);
+                        return;
+                    }
+                    const typed = Math.trunc(Number(input.value));
+                    const next = { ...current, [field]: Number.isFinite(typed) ? Math.max(1, typed) : current[field] };
+                    // The edited field wins: a column that leaves no room narrows the visual, and a
+                    // width that does not fit stops at the last column.
+                    next.gridCol = Math.min(next.gridCol, GRID_COLUMNS);
+                    next.gridColSpan = Math.min(next.gridColSpan, GRID_COLUMNS - next.gridCol + 1);
+                    input.value = String(next[field]);
+                    if (fields.every(([, key]) => next[key] === current[key])) return;
+                    context.pushUndoState();
+                    Object.assign(visual, next);
+                    for (const [otherSelector, key] of fields) {
+                        const other = queryElement<HTMLInputElement>(context.propsPanel, otherSelector);
+                        if (other) other.value = String(next[key]);
+                    }
+                    context.renderCanvas();
+                    context.renderTree();
+                    context.syncScriptFromGridDebounced();
+                });
+            }
+        };
+
         if (!v) {
             // Reading the inspector must not author anything. Defaulting the theme into the design
             // state here wrote `SET REPORT THEME = 'light';` into every script that had no theme, on
@@ -333,10 +376,10 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
                         <summary>Grid Position & Layout</summary>
                         <div class="etlsql-format-group-body">
                             <div class="etlsql-dsgn-grid4">
-                                <label>Col<input type="number" id="pp-col"   class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
-                                <label>Row<input type="number" id="pp-row"   class="form-control" min="1"          value="${v.gridRow || 1}"></label>
-                                <label>W  <input type="number" id="pp-cspan" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
-                                <label>H  <input type="number" id="pp-rspan" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
+                                <label>Col<input type="number" id="pp-col"   aria-label="Grid column" class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
+                                <label>Row<input type="number" id="pp-row"   aria-label="Grid row" class="form-control" min="1"          value="${v.gridRow || 1}"></label>
+                                <label>W  <input type="number" id="pp-cspan" aria-label="Width in grid columns" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
+                                <label>H  <input type="number" id="pp-rspan" aria-label="Height in grid rows" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
                             </div>
                             <label class="etlsql-dsgn-label" style="margin-top:6px;">Container Name (ID)<input id="pp-name" class="form-control" value="${esc(v.name)}"></label>
                             <button class="btn btn-sm etlsql-dsgn-del-btn" id="pp-delete">Remove Container</button>
@@ -347,10 +390,7 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
             on('#pp-name',  e => { v.name  = controlTarget(e).value; context.renderCanvas(); context.renderTree(); });
             on('#pp-container-type', e => { if(!v.options) v.options = {}; v.options.CONTAINER_TYPE = controlTarget(e).value; });
             on('#pp-title', e => { v.title = controlTarget(e).value; context.renderCanvas(); });
-            on('#pp-col',   e => { v.gridCol     = +controlTarget(e).value || 1;  context.renderCanvas(); });
-            on('#pp-row',   e => { v.gridRow     = +controlTarget(e).value || 1;  context.renderCanvas(); });
-            on('#pp-cspan', e => { v.gridColSpan = +controlTarget(e).value || 12; context.renderCanvas(); });
-            on('#pp-rspan', e => { v.gridRowSpan = +controlTarget(e).value || 4;  context.renderCanvas(); });
+            bindGridPlacement(v);
             context.bindFormattingSection(context.propsPanel, v, context.renderCanvas, context.syncScriptFromGridDebounced);
             context.bindInspectorSearch(context.propsPanel);
             queryElement<DesignerFormControl>(context.propsPanel, '#pp-delete')?.addEventListener('click', () => context.deleteVisual(v.id));
@@ -385,10 +425,10 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
                         <summary>Grid Position & Layout</summary>
                         <div class="etlsql-format-group-body">
                             <div class="etlsql-dsgn-grid4">
-                                <label>Col<input type="number" id="pp-col"   class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
-                                <label>Row<input type="number" id="pp-row"   class="form-control" min="1"          value="${v.gridRow || 1}"></label>
-                                <label>W  <input type="number" id="pp-cspan" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
-                                <label>H  <input type="number" id="pp-rspan" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
+                                <label>Col<input type="number" id="pp-col"   aria-label="Grid column" class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
+                                <label>Row<input type="number" id="pp-row"   aria-label="Grid row" class="form-control" min="1"          value="${v.gridRow || 1}"></label>
+                                <label>W  <input type="number" id="pp-cspan" aria-label="Width in grid columns" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
+                                <label>H  <input type="number" id="pp-rspan" aria-label="Height in grid rows" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
                             </div>
                             <label class="etlsql-dsgn-label" style="margin-top:6px;">Button Name (ID)<input id="pp-name" class="form-control" value="${esc(v.name)}"></label>
                             <button class="btn btn-sm etlsql-dsgn-del-btn" id="pp-delete">Remove Button</button>
@@ -399,10 +439,7 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
             on('#pp-name',  e => { v.name  = controlTarget(e).value; context.renderCanvas(); context.renderTree(); });
             on('#pp-button-type', e => { if(!v.options) v.options = {}; v.options.BUTTON_TYPE = controlTarget(e).value; });
             on('#pp-title', e => { v.title = controlTarget(e).value; context.renderCanvas(); });
-            on('#pp-col',   e => { v.gridCol     = +controlTarget(e).value || 1;  context.renderCanvas(); });
-            on('#pp-row',   e => { v.gridRow     = +controlTarget(e).value || 1;  context.renderCanvas(); });
-            on('#pp-cspan', e => { v.gridColSpan = +controlTarget(e).value || 12; context.renderCanvas(); });
-            on('#pp-rspan', e => { v.gridRowSpan = +controlTarget(e).value || 4;  context.renderCanvas(); });
+            bindGridPlacement(v);
             context.bindFormattingSection(context.propsPanel, v, context.renderCanvas, context.syncScriptFromGridDebounced);
             context.bindInspectorSearch(context.propsPanel);
             queryElement<DesignerFormControl>(context.propsPanel, '#pp-delete')?.addEventListener('click', () => context.deleteVisual(v.id));
@@ -1110,10 +1147,10 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
                     <summary>Grid Position & Layout</summary>
                     <div class="etlsql-format-group-body">
                         <div class="etlsql-dsgn-grid4">
-                            <label>Col<input type="number" id="pp-col"   class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
-                            <label>Row<input type="number" id="pp-row"   class="form-control" min="1"          value="${v.gridRow || 1}"></label>
-                            <label>W  <input type="number" id="pp-cspan" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
-                            <label>H  <input type="number" id="pp-rspan" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
+                            <label>Col<input type="number" id="pp-col"   aria-label="Grid column" class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
+                            <label>Row<input type="number" id="pp-row"   aria-label="Grid row" class="form-control" min="1"          value="${v.gridRow || 1}"></label>
+                            <label>W  <input type="number" id="pp-cspan" aria-label="Width in grid columns" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
+                            <label>H  <input type="number" id="pp-rspan" aria-label="Height in grid rows" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
                         </div>
                         <label class="etlsql-dsgn-label">Container Group
                             <select id="pp-container-id" class="form-control">
@@ -1484,10 +1521,7 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
             editCascade(next => { next.parents[Number(datasetValue(select, 'cascadeColumn'))].column = select.value; })));
         queryElements(context.propsPanel, '[data-cascade-remove]').forEach(button => button.addEventListener('click', () =>
             editCascade(next => { next.parents.splice(Number(/** @type {HTMLElement} */ (button).dataset.cascadeRemove), 1); })));
-        on('#pp-col',          e => { v.gridCol     = +controlTarget(e).value || 1;  context.renderCanvas(); });
-        on('#pp-row',          e => { v.gridRow     = +controlTarget(e).value || 1;  context.renderCanvas(); });
-        on('#pp-cspan',        e => { v.gridColSpan = +controlTarget(e).value || 12; context.renderCanvas(); });
-        on('#pp-rspan',        e => { v.gridRowSpan = +controlTarget(e).value || 4;  context.renderCanvas(); });
+        bindGridPlacement(v);
 
         if (isCustomChart) {
             const chartInput = queryElement<DesignerFormControl>(context.propsPanel, '#pp-chart-code');

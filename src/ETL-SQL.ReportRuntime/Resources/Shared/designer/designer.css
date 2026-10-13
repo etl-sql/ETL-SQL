@@ -2006,6 +2006,23 @@ body.vscode-dark .cm-diagnostic-source {
     border-color: var(--vc, #64748b);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--vc, #64748b) 35%, transparent);
 }
+/* Keyboard focus is drawn apart from selection: a card can hold one without the other. */
+.etlsql-dsgn-visual-card:focus-visible {
+    outline: 2px solid var(--portal-accent, #2563eb);
+    outline-offset: 2px;
+}
+/* Read by assistive technology, never painted: the canvas keyboard hint and its move/resize status. */
+.etlsql-dsgn-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
 
 .etlsql-dsgn-vcard-resize {
     position: absolute;
@@ -5223,6 +5240,15 @@ body.vscode-dark .etlsql-cw-missing-hint {
 
 .etlsql-studio-modal-body {
     padding: 16px;
+}
+
+.etlsql-studio-modal-error {
+    margin: 8px 0 0;
+    font-size: 0.8125rem;
+    color: var(--portal-danger, #f85149);
+}
+.etlsql-studio-modal-error:empty {
+    display: none;
 }
 
 .etlsql-studio-modal-footer {

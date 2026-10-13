@@ -99,6 +99,11 @@ export interface DesignerOptions {
     onAddVisualBlocked?: () => void;
     getDatasetColumns?: (datasetName?: string) => string[];
     isVisualLocked?: (visual: DesignerVisual) => boolean;
+    /**
+     * The host binds save, undo and redo for the whole document. The canvas then leaves those keys
+     * alone, so one keystroke on a focused card is not answered twice.
+     */
+    hostOwnsDocumentShortcuts?: boolean;
 }
 
 export interface DesignerHandle {
@@ -172,6 +177,42 @@ export function closestElement<T extends Element = HTMLElement>(event: Event, se
 
 export function datasetValue(element: Element, key: string): string {
     return (element as HTMLElement).dataset[key] as string;
+}
+
+/** The canvas grid is twelve columns wide; rows are unbounded. */
+export const GRID_COLUMNS = 12;
+
+export interface GridPlacement {
+    gridCol: number;
+    gridRow: number;
+    gridColSpan: number;
+    gridRowSpan: number;
+}
+
+export function visualPlacement(v: DesignerVisual): GridPlacement {
+    return {
+        gridCol: v.gridCol || 1,
+        gridRow: v.gridRow || 1,
+        gridColSpan: v.gridColSpan || GRID_COLUMNS,
+        gridRowSpan: v.gridRowSpan || 4,
+    };
+}
+
+/** Whether a placement fits the grid: inside the twelve columns, at least one cell, from row one. */
+export function placementFits(placement: GridPlacement): boolean {
+    return [placement.gridCol, placement.gridRow, placement.gridColSpan, placement.gridRowSpan].every(Number.isInteger)
+        && placement.gridCol >= 1
+        && placement.gridRow >= 1
+        && placement.gridColSpan >= 1
+        && placement.gridRowSpan >= 1
+        && placement.gridCol + placement.gridColSpan - 1 <= GRID_COLUMNS;
+}
+
+/** A placement in words, for a control's name and for the canvas announcements. */
+export function describePlacement(placement: GridPlacement): string {
+    const columns = placement.gridColSpan === 1 ? '1 column' : `${placement.gridColSpan} columns`;
+    const rows = placement.gridRowSpan === 1 ? '1 row' : `${placement.gridRowSpan} rows`;
+    return `column ${placement.gridCol}, row ${placement.gridRow}, ${columns} wide, ${rows} tall`;
 }
 
 export interface DesignerApiError extends Error {

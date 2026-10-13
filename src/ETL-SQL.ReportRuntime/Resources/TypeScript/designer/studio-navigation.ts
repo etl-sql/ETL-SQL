@@ -73,16 +73,16 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
 
                 <!-- Projection View Toggles -->
                 <div class="etlsql-studio-projection-group" role="group" aria-label="View Projection">
-                    <button type="button" class="etlsql-studio-btn-toggle" data-projection="canvas" title="Canvas View (WYSIWYG Layout)">
+                    <button type="button" class="etlsql-studio-btn-toggle" data-projection="canvas" aria-pressed="false" title="Canvas View (WYSIWYG Layout)">
                         <span class="etlsql-icon">${_studioIcon('canvas', 14)}</span> Canvas
                     </button>
-                    <button type="button" class="etlsql-studio-btn-toggle active" data-projection="split" title="Split View (Visual + Code)">
+                    <button type="button" class="etlsql-studio-btn-toggle active" data-projection="split" aria-pressed="true" title="Split View (Visual + Code)">
                         <span class="etlsql-icon">${_studioIcon('split', 14)}</span> Split
                     </button>
-                    <button type="button" class="etlsql-studio-btn-toggle" data-projection="code" title="Code View (CodeMirror 6)">
+                    <button type="button" class="etlsql-studio-btn-toggle" data-projection="code" aria-pressed="false" title="Code View (CodeMirror 6)">
                         <span class="etlsql-icon">${_studioIcon('code', 14)}</span> Code
                     </button>
-                    <button type="button" class="etlsql-studio-btn-toggle" data-projection="model" title="Data Model View (Connections, Tables, Relationships)">
+                    <button type="button" class="etlsql-studio-btn-toggle" data-projection="model" aria-pressed="false" title="Data Model View (Connections, Tables, Relationships)">
                         <span class="etlsql-icon">${_studioIcon('catalog', 14)}</span> Model
                     </button>
                 </div>
@@ -303,6 +303,8 @@ export function createStudioNavigation(hostContext: StudioNavigationContext) {
 
         queryElements(hostContext.shell, '[data-projection]').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.projection === mode);
+            // The highlight says which view is on to someone who can see it; this says it to the rest.
+            btn.setAttribute('aria-pressed', String(btn.dataset.projection === mode));
         });
 
         if (mode === 'canvas' || mode === 'model') {

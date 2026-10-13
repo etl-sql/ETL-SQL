@@ -468,7 +468,10 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
-  // Arrow navigation through visible stories
+  // Arrow navigation through visible stories. A story that used the key itself — a canvas card
+  // moved by arrows, a splitter — has already called preventDefault, and switching stories under
+  // it would unmount the surface the key was aimed at.
+  if (e.defaultPrevented) return;
   if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && document.activeElement !== $searchInput && !e.target.matches('input, select, textarea, [contenteditable]')) {
     e.preventDefault();
     const visibleStories = filterStories(stories);

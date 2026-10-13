@@ -5,7 +5,7 @@
  * Canvas cards, snapshot previews, page tabs, and layout.
  */
 
-import { VTYPES, closestElement, queryElement, queryElements } from './designer-context.js';
+import { VTYPES, closestElement, describePlacement, queryElement, queryElements, visualPlacement } from './designer-context.js';
 
 import type { DesignerDom, DesignerOptions, DesignerPage, DesignerRow, DesignerSnapshotPackage, DesignerState, DesignerVisual } from './designer-context.js';
 import { esc } from './designer-util.js';
@@ -29,6 +29,11 @@ export interface DesignerCanvasRendererContext {
     readonly state: DesignerState;
     readonly topbar: DesignerDom;
 }
+
+const CARD_SELECTOR = '.etlsql-dsgn-visual-card';
+
+/** The element every card points at for how to move and resize it from the keyboard. */
+export const CANVAS_KEYBOARD_HINT_ID = 'etlsql-dsgn-canvas-keyboard-hint';
 
 export function createDesignerCanvasRenderer(context: DesignerCanvasRendererContext) {
     const snapshotResizeObservers: Set<ResizeObserver> = new Set();
@@ -315,6 +320,12 @@ export function createDesignerCanvasRenderer(context: DesignerCanvasRendererCont
 
     function renderCanvas() {
         disconnectSnapshotResizeObservers();
+        // Every repaint rebuilds the cards, which drops focus to the page. A keyboard move repaints
+        // on each step, so the card that held focus is found again by its visual and given it back.
+        const focused = document.activeElement as HTMLElement | null;
+        const focusedVisualId = focused && context.canvasGrid.contains(focused) && focused.matches(CARD_SELECTOR)
+            ? focused.dataset.vid
+            : null;
         context.canvasGrid.innerHTML = '';
         const visuals = context.curVis();
         if (!visuals.length) {
@@ -341,6 +352,13 @@ export function createDesignerCanvasRenderer(context: DesignerCanvasRendererCont
             card.dataset.vid = v.id;
             card.dataset.visualId = v.id;
             card.classList.add('etlsql-studio-canvas-card');
+            // The card is the keyboard's handle on the visual: Tab reaches it, and its name says
+            // where the visual sits so a move or resize can be checked without seeing the grid.
+            card.tabIndex = 0;
+            card.setAttribute('role', 'group');
+            card.setAttribute('aria-label',
+                `${v.title || v.name}, ${isContainer ? 'container' : `${v.type} visual`}, ${describePlacement(visualPlacement(v))}${context.isLocked(v) ? ', locked' : ''}`);
+            card.setAttribute('aria-describedby', CANVAS_KEYBOARD_HINT_ID);
             card.style.gridColumn = `${v.gridCol || 1} / span ${v.gridColSpan || 12}`;
             card.style.gridRow    = `${v.gridRow || 1} / span ${isFolded ? 1 : (v.gridRowSpan || 4)}`;
             card.style.setProperty('--vc', VCOLOR[v.type] || '#64748b');
@@ -415,10 +433,11 @@ export function createDesignerCanvasRenderer(context: DesignerCanvasRendererCont
 
             const resizeHandle = document.createElement('div');
             resizeHandle.className = 'etlsql-dsgn-vcard-resize';
-            resizeHandle.title = 'Drag to resize';
+            resizeHandle.title = 'Drag to resize, or focus the visual and press Shift with an arrow key';
             card.appendChild(resizeHandle);
 
             context.canvasGrid.appendChild(card);
+            if (v.id === focusedVisualId) card.focus();
         }
     }
 

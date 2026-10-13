@@ -8,14 +8,14 @@
  */
 
 import type { DesignerDom, DesignerFormControl, DesignerHandle, DesignerOptions, DesignerSnapshotPackage, DesignerState, DesignerVisual } from './designer-context.js';
-import { closestElement, controlTarget, datasetValue, eventElement, feedback, inspectorGroupKey, queryElement, queryElements, VCATEGORIES, VTYPES } from './designer-context.js';
+import { closestElement, controlTarget, datasetValue, describePlacement, eventElement, feedback, inspectorGroupKey, placementFits, queryElement, queryElements, VCATEGORIES, visualPlacement, VTYPES } from './designer-context.js';
 export type { CascadeMode, CascadeParent, CascadeState, CompleteVisualFormatting, DesignerApiError, DesignerApplyResult, DesignerBookmark, DesignerCommitResponse, DesignerCreatedReport, DesignerDataset, DesignerDom, DesignerEvent, DesignerFormControl, DesignerGenerateResponse, DesignerHandle, DesignerLeaseResponse, DesignerOptions, DesignerPage, DesignerParseResponse, DesignerRow, DesignerSaveResponse, DesignerSnapshotDataset, DesignerSnapshotPackage, DesignerState, DesignerVisual, DesignerWorkbenchHandle, EditorViewBridge, UnsupportedCascade } from './designer-context.js';
 
 /// <reference path="../../../../../types/etlsql-contracts.generated.d.ts" />
 /// <reference path="../../../../../types/browser-globals.d.ts" />
 
 import { DATA_PREP_RECIPES } from './data-prep-recipes.js';
-import { createDesignerCanvasRenderer } from './designer-canvas-render.js';
+import { CANVAS_KEYBOARD_HINT_ID, createDesignerCanvasRenderer } from './designer-canvas-render.js';
 import { createDesignerHistory } from './designer-history.js';
 import { createDesignerFormatting } from './designer-inspector-format.js';
 import { createDesignerInspector } from './designer-inspector.js';
@@ -123,10 +123,12 @@ export function createDesigner(container: HTMLElement, opts: DesignerOptions = {
         get curVis() { return curVis; },
         get deleteVisual() { return deleteVisual; },
         get findVis() { return findVis; },
+        get isLocked() { return isLocked; },
         get openInspectorGroups() { return openInspectorGroups; },
         get opts() { return opts; },
         get propsPanel() { return propsPanel; },
         get pushUndoState() { return pushUndoState; },
+        get refuseLocked() { return refuseLocked; },
         get renderCanvas() { return renderCanvas; },
         get renderTree() { return renderTree; },
         get reportName() { return reportName; },
@@ -467,6 +469,21 @@ export function createDesigner(container: HTMLElement, opts: DesignerOptions = {
     const canvasGrid = document.createElement('div') as unknown as DesignerDom;
     canvasGrid.className = 'etlsql-dsgn-grid';
     canvasWrap.appendChild(canvasGrid);
+    // Both live outside the grid, which is emptied on every repaint. The hint is what each card is
+    // described by; the status is where a keyboard move or resize says what it did, because the
+    // card that moved is rebuilt and a screen reader would otherwise hear nothing.
+    const canvasKeyboardHint = document.createElement('p');
+    canvasKeyboardHint.id = CANVAS_KEYBOARD_HINT_ID;
+    canvasKeyboardHint.className = 'etlsql-dsgn-sr-only';
+    canvasKeyboardHint.textContent = 'Press Enter to select. Arrow keys move the visual one grid cell. Shift with an arrow key resizes it.';
+    canvasWrap.appendChild(canvasKeyboardHint);
+    const canvasStatus = document.createElement('div');
+    canvasStatus.className = 'etlsql-dsgn-sr-only';
+    canvasStatus.dataset.canvasStatus = '';
+    canvasStatus.setAttribute('role', 'status');
+    canvasStatus.setAttribute('aria-live', 'polite');
+    canvasWrap.appendChild(canvasStatus);
+    const announceCanvas = (message: string): void => { canvasStatus.textContent = message; };
     root.appendChild(canvasWrap);
 
     // Properties panel
@@ -638,19 +655,30 @@ export function createDesigner(container: HTMLElement, opts: DesignerOptions = {
             pasteVisuals();
             return;
         }
-        if (mod && (key === 's' || key === 'S')) {
+        const hostShortcuts = Boolean(opts.hostOwnsDocumentShortcuts);
+        if (!hostShortcuts && mod && (key === 's' || key === 'S')) {
             event.preventDefault();
             saveReport();
             return;
         }
-        if (mod && !event.shiftKey && (key === 'z' || key === 'Z')) {
+        if (!hostShortcuts && mod && !event.shiftKey && (key === 'z' || key === 'Z')) {
             event.preventDefault();
             undoCanvasState();
             return;
         }
-        if (mod && (key === 'y' || key === 'Y' || (event.shiftKey && (key === 'z' || key === 'Z')))) {
+        if (!hostShortcuts && mod && (key === 'y' || key === 'Y' || (event.shiftKey && (key === 'z' || key === 'Z')))) {
             event.preventDefault();
             redoCanvasState();
+            return;
+        }
+        // The card itself, not a button inside it: Enter on the title button renames, as it always has.
+        const focusedCard = eventElement(event).matches('.etlsql-dsgn-visual-card') ? eventElement(event) : null;
+        if (focusedCard && !mod && (key === 'Enter' || key === ' ')) {
+            event.preventDefault();
+            const id = datasetValue(focusedCard, 'vid');
+            selectVisual(id, { toggle: event.shiftKey });
+            const visual = findVis(id);
+            if (visual) announceCanvas(`${visual.title || visual.name} ${selVisualIds.has(id) ? 'selected' : 'removed from the selection'}.`);
             return;
         }
         if (key === 'Escape') {
@@ -663,40 +691,71 @@ export function createDesigner(container: HTMLElement, opts: DesignerOptions = {
             deleteSelectedVisuals();
             return;
         }
-        if (selVisualIds.size > 0 && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
+        if (!mod && !event.altKey && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
+            // Arrows on a focused card act on that card, so Tab then arrows is the whole gesture.
+            if (focusedCard && !selVisualIds.has(datasetValue(focusedCard, 'vid'))) {
+                selectVisual(datasetValue(focusedCard, 'vid'));
+            }
+            if (selVisualIds.size === 0) return;
             event.preventDefault();
-            pushUndoState();
-            const deltaCol = key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1 : 0;
-            const deltaRow = key === 'ArrowUp' ? -1 : key === 'ArrowDown' ? 1 : 0;
-
-            let canMove = true;
-            for (const id of selVisualIds) {
-                const v = findVis(id);
-                if (!v) continue;
-                const newCol = (v.gridCol || 1) + deltaCol;
-                const newRow = (v.gridRow || 1) + deltaRow;
-                if (newCol < 1 || newCol + (v.gridColSpan || 12) - 1 > 12 || newRow < 1) {
-                    canMove = false;
-                    break;
-                }
-            }
-
-            if (canMove) {
-                for (const id of selVisualIds) {
-                    const v = findVis(id);
-                    if (v) {
-                        v.gridCol = (v.gridCol || 1) + deltaCol;
-                        v.gridRow = (v.gridRow || 1) + deltaRow;
-                    }
-                }
-                renderCanvas();
-                renderTree();
-                renderProps();
-                syncScriptFromGridDebounced();
-            }
-            return;
+            nudgeSelection(
+                key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1 : 0,
+                key === 'ArrowUp' ? -1 : key === 'ArrowDown' ? 1 : 0,
+                event.shiftKey);
         }
     });
+
+    /**
+     * Moves the selection one grid cell, or with `resize` grows or shrinks it by one from its right
+     * and bottom edges — the same edges the drag handle works.
+     *
+     * Nothing changes unless every selected visual fits afterwards, and the undo entry is taken only
+     * then: a refused step used to cost one of the twenty undo slots for no change.
+     */
+    function nudgeSelection(deltaCol: number, deltaRow: number, resize: boolean): void {
+        const visuals = [...selVisualIds].map(findVis).filter((v): v is DesignerVisual => v !== null);
+        if (!visuals.length) return;
+        const locked = visuals.find(isLocked);
+        if (locked) {
+            refuseLocked(locked);
+            announceCanvas(`${locked.name} is locked. Unlock it in the outline to ${resize ? 'resize' : 'move'} it.`);
+            return;
+        }
+
+        const next = visuals.map(v => {
+            const from = visualPlacement(v);
+            return resize
+                ? { ...from, gridColSpan: from.gridColSpan + deltaCol, gridRowSpan: from.gridRowSpan + deltaRow }
+                : { ...from, gridCol: from.gridCol + deltaCol, gridRow: from.gridRow + deltaRow };
+        });
+        const subject = visuals.length === 1 ? (visuals[0].title || visuals[0].name) : `${visuals.length} visuals`;
+        if (!next.every(placementFits)) {
+            announceCanvas(resize
+                ? `${subject} cannot be resized further that way.`
+                : `${subject} cannot move further that way.`);
+            return;
+        }
+
+        pushUndoState();
+        const moved = new Set(visuals.map(v => v.id));
+        visuals.forEach((v, index) => {
+            Object.assign(v, next[index]);
+            // A container carries what it holds, as it does when dragged.
+            if (resize || v.type !== 'CONTAINER') return;
+            for (const child of curVis()) {
+                if (child.containerId !== v.id || moved.has(child.id)) continue;
+                child.gridCol = Math.max(1, (child.gridCol || 1) + deltaCol);
+                child.gridRow = Math.max(1, (child.gridRow || 1) + deltaRow);
+            }
+        });
+        renderCanvas();
+        renderTree();
+        renderProps();
+        syncScriptFromGridDebounced();
+        announceCanvas(visuals.length === 1
+            ? `${subject} ${resize ? 'resized' : 'moved'}: ${describePlacement(next[0])}.`
+            : `${subject} ${resize ? 'resized' : 'moved'}.`);
+    }
 
     canvasGrid.addEventListener('click', e => {
         const chooseData = closestElement(e, '[data-empty-data]');

@@ -513,11 +513,11 @@ See [beginner report evidence](docs/architecture/decisions/studio-beginner-repor
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| ST23 | **Portal keyboard editing journey.** Create, edit, undo and save one permitted document using only the keyboard; verify modal/tab navigation and focus return. | — | M |
-| ST24 | **Desktop keyboard editing journey.** Prove the same sequence in the self-installed host. | — | M |
-| ST25 | **Keyboard visual move/resize.** Provide or verify non-drag controls for one visual and persist its resulting layout; cover the shared sandbox and one production host. No canvas redesign. | — | M |
-| ST26 | **Portal zoom/focus journey.** At declared zoom settings, dialogs and split controls remain usable, preserve focus and return it to the invoking control. | ST23 | S |
-| ST27 | **Desktop zoom/focus journey.** Repeat the bounded zoom/focus checks in the desktop host. | ST24 | S |
+| ST23 | **Complete: Portal keyboard editing journey.** Create, edit, undo and save one permitted document using only the keyboard; verify modal/tab navigation and focus return. | — | M |
+| ST24 | **Complete: desktop keyboard editing journey.** Prove the same sequence in the self-installed host. [Evidence](docs/architecture/decisions/studio-keyboard-assistive-evidence.md). | — | M |
+| ST25 | **Complete: keyboard visual move/resize.** Provide or verify non-drag controls for one visual and persist its resulting layout; cover the shared sandbox and one production host. No canvas redesign. | — | M |
+| ST26 | **Complete: Portal zoom/focus journey.** At declared zoom settings, dialogs and split controls remain usable, preserve focus and return it to the invoking control. | ST23 | S |
+| ST27 | **Complete: desktop zoom/focus journey.** Repeat the bounded zoom/focus checks in the desktop host. | ST24 | S |
 | ST28 | **Portal screen-reader pass.** One named screen reader/browser combination completes the keyboard document journey with meaningful labels, errors and announcements; keep the observed transcript. | ST23 | M |
 | ST29 | **Desktop screen-reader pass.** Record the same bounded journey in one supported desktop/browser combination. | ST24 | M |
 

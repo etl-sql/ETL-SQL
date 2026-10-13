@@ -128,12 +128,26 @@ public class PortalBrowserFixture : IAsyncLifetime
     private bool passwordChanged;
 
     /// <summary>Opens an isolated browser context at desktop width and starts recording JS failures.</summary>
-    public async Task<BrowserSession> NewSessionAsync()
+    public Task<BrowserSession> NewSessionAsync() => NewSessionAsync(1.0);
+
+    /// <summary>
+    /// Opens a context that lays the page out as browser zoom does.
+    ///
+    /// <para>Zooming a 1440 × 900 window to 200% leaves the page 720 × 450 CSS pixels to lay out in,
+    /// each drawn across two device pixels. That is a viewport and a device scale factor, which a
+    /// browser context can be given directly; nothing has to press Ctrl and plus.</para>
+    /// </summary>
+    public async Task<BrowserSession> NewSessionAsync(double zoom)
     {
         var context = await (browser ?? throw new InvalidOperationException("Fixture is not initialized."))
             .NewContextAsync(new BrowserNewContextOptions
             {
-                ViewportSize = new ViewportSize { Width = 1440, Height = 900 },
+                ViewportSize = new ViewportSize
+                {
+                    Width = (int)Math.Round(1440 / zoom),
+                    Height = (int)Math.Round(900 / zoom)
+                },
+                DeviceScaleFactor = (float)zoom,
                 BaseURL = BaseUrl
             });
         return await BrowserSession.CreateAsync(context);

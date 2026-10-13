@@ -129,8 +129,20 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
             if (hostContext.state.activeActivity) {
                 hostContext.renderSidebarContent(hostContext.state.activeActivity);
             }
+            focusDocumentTabIfFocusWasLost(docId);
         }
         hostContext.updateRunControls();
+    }
+
+    /**
+     * Opening a document hides the Home card or dialog button that opened it, and focus left on a
+     * hidden control is focus on nothing: the next Tab starts again from the top of the page. When
+     * the open did not put focus in the editor, the document's own tab takes it.
+     */
+    function focusDocumentTabIfFocusWasLost(docId: string) {
+        const current = document.activeElement as HTMLElement | null;
+        const lost = !current || current === document.body || !current.isConnected || current.getClientRects().length === 0;
+        if (lost) document.getElementById(`etlsql-tab-${docId}`)?.focus();
     }
 
     async function closeDoc(docId: string) {
@@ -189,6 +201,7 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
                 <h2 id="${titleId}">Create catalog ${_escapeHtml(noun)}</h2>
                 <label>${_escapeHtml(noun.charAt(0).toUpperCase() + noun.slice(1))} name<input type="text" data-catalog-report-name value="${_escapeHtml(suggestedName || `Untitled ${noun}`)}" autocomplete="off"></label>
                 <label>Folder<select data-catalog-report-folder>${hostContext.state.catalogFolders.map((folder: StudioDynamic) => `<option value="${_escapeHtml(folder.id)}">${_escapeHtml(folder.path || folder.name)}</option>`).join('')}</select></label>
+                <p class="etlsql-studio-modal-error" id="etlsql-catalog-create-error" role="alert" data-catalog-create-error></p>
                 <div class="etlsql-studio-modal-actions">
                     <button type="button" class="etlsql-studio-btn" data-catalog-create-cancel>Cancel</button>
                     <button type="button" class="etlsql-studio-btn btn-primary" data-catalog-create-confirm>Create</button>
@@ -207,12 +220,25 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
             cleanupModal = hostContext.setupModalAccessibility(hostContext.modalBox, hostContext.modalBackdrop, () => finish(null), titleId);
             queryElement(hostContext.modalBox, '[data-catalog-create-cancel]').addEventListener('click', () => finish(null));
             queryElement(hostContext.modalBox, '[data-catalog-create-confirm]').addEventListener('click', () => {
-                const name = queryElement<HTMLInputElement>(hostContext.modalBox, '[data-catalog-report-name]').value.trim();
+                const name = nameInput.value.trim();
                 const folderId = queryElement<HTMLSelectElement>(hostContext.modalBox, '[data-catalog-report-folder]').value || defaultFolder.id;
-                if (!name) return;
+                if (!name) {
+                    // Create used to do nothing here, with nothing on screen or spoken to say why.
+                    createError.textContent = `Enter a name for the ${noun}.`;
+                    nameInput.setAttribute('aria-invalid', 'true');
+                    nameInput.setAttribute('aria-describedby', createError.id);
+                    nameInput.focus();
+                    return;
+                }
                 finish({ name, folderId });
             });
             const nameInput = queryElement<HTMLInputElement>(hostContext.modalBox, '[data-catalog-report-name]');
+            const createError = queryElement(hostContext.modalBox, '[data-catalog-create-error]');
+            nameInput.addEventListener('input', () => {
+                createError.textContent = '';
+                nameInput.removeAttribute('aria-invalid');
+                nameInput.removeAttribute('aria-describedby');
+            });
             nameInput.focus();
             nameInput.select();
         });

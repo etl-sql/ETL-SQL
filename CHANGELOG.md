@@ -14,6 +14,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Move and resize a report visual in Studio without a pointer. Tab to a visual on the canvas, then
+  use the arrow keys to move it one grid cell and Shift with an arrow key to resize it. Each change
+  is announced to assistive technology, and a step off the grid is refused and said so.
 - Keep unpublished work in Portal Studio as a private draft. **Save** on a new document keeps it
   where only its owner can open it, without publish rights or a writable folder, and **My Private
   Drafts** on Studio Home reopens it. A draft is not in the catalog and nothing runs it. Each save
@@ -140,6 +143,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Keep a visual where the Studio inspector's **Col**, **Row**, **W** and **H** fields put it. The
+  fields moved the card on screen without writing the layout to the script, so the visual went
+  back on the next reload. They now write it, stay inside the twelve-column grid, and respect a
+  locked visual.
+- Keep keyboard focus when a new Studio document opens. Focus was left on the hidden Home card, so
+  the next Tab started from the top of the page; it now lands on the document's tab.
+- Give screen readers what Studio was missing: the script editor has a name, the Canvas, Split,
+  Code and Model toggles say which is on, and **Create** with an empty name says why it did nothing.
 - Show a row-level-secured report in the Portal. A report that filters rows by the viewer keeps no
   shared snapshot, and the viewer, its filters and export all read only snapshots, so a reader who
   ran one was returned to "Ready for first run". These reports now open live, labelled

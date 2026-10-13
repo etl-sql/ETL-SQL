@@ -24,7 +24,7 @@ and scale baseline recalibration).
 | Studio — Portal pipelines & schedule handoffs (ST04–ST11 complete; open points recorded per item) | [§3](#3-studio--portal-pipelines-and-schedule-handoffs) |
 | Studio — Private unpublished drafts & publishing (ST12–ST15 complete; open points recorded per item) | [§4](#4-studio--private-unpublished-drafts-and-publishing) |
 | Studio — Author, reader & beginner practice journeys (ST16–ST19, ST21 complete; ST16b, ST21b open) | [§5](#5-studio--author-reader-and-beginner-practice-journeys) |
-| Studio — Keyboard & assistive technology | [§6](#6-studio--keyboard-and-assistive-technology) |
+| Studio — Keyboard & assistive technology (ST23–ST27 complete; ST28, ST29 need a screen reader) | [§6](#6-studio--keyboard-and-assistive-technology) |
 | Studio — Execution scope, cancellation & helper previews | [§7](#7-studio--execution-scope-cancellation-and-bounded-helper-previews) |
 | Studio — Degraded editor & failed session recovery | [§8](#8-studio--degraded-editor-and-failed-session-recovery) |
 | Studio — Delivery budgets, catalog scale & large documents | [§9](#9-studio--delivery-budgets-catalog-scale-and-large-documents) |
@@ -724,16 +724,33 @@ Completed prerequisites: [ST20 practice execution decision](docs/architecture/de
 
 - [x] **ST23 — Portal keyboard editing journey.** Create, edit, undo, and save one permitted document using only the
   keyboard; verify modal/tab navigation and focus return. (Size: M)
-- [ ] **ST24 — Desktop keyboard editing journey.** Prove the same sequence in the self-installed host. (Size: M)
-- [ ] **ST25 — Keyboard visual move/resize.** Provide or verify non-drag controls for one visual and persist its resulting
+- [x] **ST24 — Desktop keyboard editing journey.** Prove the same sequence in the self-installed host. (Size: M)
+  Done 2026-10-12. `StudioKeyboardJourneyTests.Desktop_KeyboardEditingJourney_CreatesEditsUndoesAndSavesDocument`,
+  real Chromium against the WorkstationEditor host. [Evidence](docs/architecture/decisions/studio-keyboard-assistive-evidence.md#st24-desktop-keyboard-editing).
+- [x] **ST25 — Keyboard visual move/resize.** Provide or verify non-drag controls for one visual and persist its resulting
   layout; cover the shared sandbox and one production host. No canvas redesign. (Size: M)
-- [ ] **ST26 — Portal zoom/focus journey.** At declared zoom settings, dialogs and split controls remain usable, preserve
+  Done 2026-10-12, in the sandbox and in the Portal as a Publisher: arrow keys move a focused card, Shift with an
+  arrow resizes it, the inspector's grid fields place it by number, and the saved report reopens with the same
+  placements. [Evidence](docs/architecture/decisions/studio-keyboard-assistive-evidence.md#st25-keyboard-move-and-resize).
+  Found on the way, all fixed: cards could not take focus, so the existing arrow-key move was unreachable; the
+  inspector's Col/Row/W/H repainted the canvas without writing the script; and inside Studio the canvas and the
+  shell would both have answered Ctrl+S and Ctrl+Z.
+  Open: `STRUCTURE` states proportions, so a layout that does not divide its row evenly reopens at the nearest one.
+- [x] **ST26 — Portal zoom/focus journey.** At declared zoom settings, dialogs and split controls remain usable, preserve
   focus, and return it to the invoking control. (Depends on: ST23; Size: S)
-- [ ] **ST27 — Desktop zoom/focus journey.** Repeat the bounded zoom/focus checks in the desktop host. (Depends on: ST24; Size: S)
+  Done 2026-10-12 at the declared 100%, 150% and 200% of a 1440 × 900 window.
+  [Evidence](docs/architecture/decisions/studio-keyboard-assistive-evidence.md#st26-and-st27-zoom-and-focus).
+  Found on the way: creating a document left focus on the hidden Home card. It now lands on the document's tab.
+- [x] **ST27 — Desktop zoom/focus journey.** Repeat the bounded zoom/focus checks in the desktop host. (Depends on: ST24; Size: S)
+  Done 2026-10-12 at the same three settings, with the Save as dialog.
 - [ ] **ST28 — Portal screen-reader pass.** One named screen reader/browser combination completes the keyboard document
   journey with meaningful labels, errors, and announcements; keep the observed transcript. (Depends on: ST23; Size: M)
+  Not run: no screen reader has spoken the journey. Groundwork done 2026-10-12: every keyboard stop is named, a
+  refused Create says why, and the save is announced, held by `Portal_AssistiveJourney_EveryStopIsNamedAndChangesAreAnnounced`.
+  The recorded accessibility transcript and the [pass sheet](docs/architecture/decisions/studio-keyboard-assistive-evidence.md#screen-reader-pass-sheet-st28-st29) are ready.
 - [ ] **ST29 — Desktop screen-reader pass.** Record the same bounded journey in one supported desktop/browser combination.
   (Depends on: ST24; Size: M)
+  Not run, on the same terms as ST28. Groundwork: `Desktop_AssistiveJourney_EveryStopIsNamedAndChangesAreAnnounced`.
 
 ---
 

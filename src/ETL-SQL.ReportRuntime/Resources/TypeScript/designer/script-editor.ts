@@ -32,6 +32,8 @@ export interface ScriptEditorOptions {
     authFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
     onDiagnostics?: (diagnostics: ScriptEditorDiagnostic[]) => void;
     onCursorActivity?: (position: number, text: string) => void;
+    /** What a screen reader calls the editing area. Defaults to "Script editor". */
+    ariaLabel?: string;
     documentUri?: string | (() => string);
     analyzeDebounceMs?: number;
     analyzeOnLoad?: boolean;
@@ -763,6 +765,10 @@ export async function createScriptEditor(container: HTMLElement, opts: ScriptEdi
             if (update.docChanged) scheduleAnalysis(update.state.doc.toString());
         }));
     }
+
+    // CodeMirror's editing area is a textbox with no name of its own; unnamed, a screen reader
+    // announces "edit, multi-line" and nothing about what is being edited.
+    extensions.push(EditorView.contentAttributes.of({ 'aria-label': opts.ariaLabel || 'Script editor' }));
 
     const state = EditorState.create({ doc: opts.value ?? '', extensions });
     view = new EditorView({ state, parent: container });

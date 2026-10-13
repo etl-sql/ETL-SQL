@@ -231,6 +231,8 @@ export function createStudioVisualStage(hostContext: StudioVisualStageContext) {
                     getScript: () => hostContext.activeScriptText(),
                     hideTopbar: true,
                     hideSidebar: true,
+                    // Studio's shell saves the document and routes undo to the editor's history.
+                    hostOwnsDocumentShortcuts: true,
                     propertiesHost: hostContext.propertiesHost,
                     snapshotMode: true,
                     snapshotPackage: hostContext.activeDocumentContext().snapshotPackage as any,
