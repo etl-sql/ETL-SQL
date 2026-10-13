@@ -38,7 +38,7 @@ assert.notEqual(expanded, vocabulary);
 assert.ok(diagnostics(new Map([[normalize(declarations), expanded]]))
     .some(error => error.code === 2344 && normalize(error.file?.fileName || '') === normalize(palette)),
     'Adding a server kind must require a palette entry.');
-const probe = "import { STUDIO_ROUTES } from '../../src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/studio-contracts.js';\nvoid STUDIO_ROUTES.notARegisteredRoute;\n";
+const probe = "import { STUDIO_ROUTES } from '../src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/studio-contracts.js';\nvoid STUDIO_ROUTES.notARegisteredRoute;\n";
 assert.ok(diagnostics(new Map([[normalize(fixture), probe]])).some(error => error.code === 2339),
     'The generated route re-export must reject unknown route keys.');
 
