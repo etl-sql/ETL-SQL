@@ -103,7 +103,7 @@ Checked-in workload templates are available under
 Validate all checked-in workload configurations with:
 
 ```powershell
-node .\scripts\test-capacity-workload-configs.mjs
+node .\scripts\checks\test-capacity-workload-configs.mjs
 ```
 
 Always label jobs/hour figures with the row profile used. A no-op `SELECT 1` job measures scheduler

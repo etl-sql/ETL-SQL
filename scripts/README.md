@@ -32,17 +32,16 @@ than the operator front door.
 | **[`Measure-StudioPerformance.ps1`](./Measure-StudioPerformance.ps1)** | PowerShell | Cross-platform | Measures the canonical Studio browser fixture against OS-specific startup, JavaScript heap, keystroke, 250-row aggregation, and canvas-redraw budgets and writes JSON evidence. |
 | **[`typecheck-browser.mjs`](./typecheck-browser.mjs)** | Node.js | Cross-platform | The browser type gate. Runs `tsc --checkJs` over the canonical browser sources and fails on any finding not in `browser-typecheck-baseline.txt`, and on any baseline entry that no longer reproduces. `--summary` prints what is left by file and code; `--update` rewrites the baseline. Needs `npm ci --prefix scripts/typecheck` once. |
 | **[`lint-browser.mjs`](./lint-browser.mjs)** | Node.js | Cross-platform | The browser lint gate. Runs ESLint (`eslint:recommended`) over the canonical browser sources and fails on any finding not in `browser-lint-baseline.txt`, and on any baseline entry that no longer reproduces. A parse error is never baselined. `--summary` prints what is left by file and rule; `--update` rewrites the baseline. Needs `npm ci --prefix scripts/lint` once. |
-| **[`fix-dom-narrowing.mjs`](./fix-dom-narrowing.mjs)** | Node.js | Cross-platform | Inserts the JSDoc casts that let the type gate narrow a DOM lookup to the element the code actually uses. Comments and parentheses only — it changes nothing that runs. Point it at one or more files to shrink the baseline; `--dry` reports without writing. |
 | **[`lib/portal-page.mjs`](./lib/portal-page.mjs)** | Node.js | Cross-platform | Helper, not a check: reads a Portal page as its markup plus the page module it loads, so a check that asserts over a page's behaviour keeps working now that the behaviour lives in `wwwroot/js/pages/`. |
 | **[`generate-browser-contracts.mjs`](./generate-browser-contracts.mjs)** | Node.js + .NET | Cross-platform | Stages DTO declarations, registered-host Studio routes, and API validators; promotes the complete validated set. `--recover` restores interrupted promotion without overwriting concurrent edits. |
 | **[`generate-portal-browser-contract.mjs`](./generate-portal-browser-contract.mjs)** | Node.js | Cross-platform | Read-only `--check` for critical Portal response validators; generation delegates to the complete contract coordinator. |
-| **[`test-portal-api-contracts.mjs`](./test-portal-api-contracts.mjs)** | Node.js | Cross-platform | Proves the generated validators reject casing/shape drift and pins the Admin Users browser to the canonical `username` field. |
-| **[`test-portal-session-identity.mjs`](./test-portal-session-identity.mjs)** | Node.js | Cross-platform | Pins one JWT session identity model across Reports, Admin, Docs, and Orchestrator and verifies recognizable navigation/audit names win over internal subject IDs. |
-| **[`test-governance-production-boundary.mjs`](./test-governance-production-boundary.mjs)** | Node.js | Cross-platform | Prevents the prototype Governance dashboard or its browser-memory demo routes from being linked in production; only durable Quarantine and Lineage routes remain exposed. |
-| **[`test-portal-report-run-flow.mjs`](./test-portal-report-run-flow.mjs)** | Node.js | Cross-platform | Pins first-run report identity, parameter preflight, one Run action, terminal job polling, and disabled export/subscription prerequisites. |
-| **[`test-portal-responsive-shell.mjs`](./test-portal-responsive-shell.mjs)** | Node.js | Cross-platform | Pins the 390px global navigation drawer, modal semantics, overlay, background inerting, focus loop/restoration, and Escape behavior across Reports, Admin, Docs, and Orchestrator. |
-| **[`test-portal-consumer-home.mjs`](./test-portal-consumer-home.mjs)** | Node.js | Cross-platform | Pins the favorites/recent/featured/popular home, fuzzy global catalog search, intentional report icons, and one concise activity line per report card. |
-| **[`test-portal-studio.mjs`](./test-portal-studio.mjs)** | Node.js | Cross-platform | Pins the capability-aware catalog Studio home, catalog-native report creation, equal Code/Design modes, hidden navigation, and disabled-authoring route fences. |
+| **[`test-portal-api-contracts.mjs`](./checks/test-portal-api-contracts.mjs)** | Node.js | Cross-platform | Proves the generated validators reject casing/shape drift and pins the Admin Users browser to the canonical `username` field. |
+| **[`test-portal-session-identity.mjs`](./checks/test-portal-session-identity.mjs)** | Node.js | Cross-platform | Pins one JWT session identity model across Reports, Admin, Docs, and Orchestrator and verifies recognizable navigation/audit names win over internal subject IDs. |
+| **[`test-governance-production-boundary.mjs`](./checks/test-governance-production-boundary.mjs)** | Node.js | Cross-platform | Prevents the prototype Governance dashboard or its browser-memory demo routes from being linked in production; only durable Quarantine and Lineage routes remain exposed. |
+| **[`test-portal-report-run-flow.mjs`](./checks/test-portal-report-run-flow.mjs)** | Node.js | Cross-platform | Pins first-run report identity, parameter preflight, one Run action, terminal job polling, and disabled export/subscription prerequisites. |
+| **[`test-portal-responsive-shell.mjs`](./checks/test-portal-responsive-shell.mjs)** | Node.js | Cross-platform | Pins the 390px global navigation drawer, modal semantics, overlay, background inerting, focus loop/restoration, and Escape behavior across Reports, Admin, Docs, and Orchestrator. |
+| **[`test-portal-consumer-home.mjs`](./checks/test-portal-consumer-home.mjs)** | Node.js | Cross-platform | Pins the favorites/recent/featured/popular home, fuzzy global catalog search, intentional report icons, and one concise activity line per report card. |
+| **[`test-portal-studio.mjs`](./checks/test-portal-studio.mjs)** | Node.js | Cross-platform | Pins the capability-aware catalog Studio home, catalog-native report creation, equal Code/Design modes, hidden navigation, and disabled-authoring route fences. |
 | **[`Test-ScaleBaseline.ps1`](./Test-ScaleBaseline.ps1)** | PowerShell | Windows / macOS / Linux | Captures resumable 10M or 50M core baselines with one Release/server-GC test host per scenario, avoiding cross-scenario memory contamination. |
 | **[`Test-ScaleCommitComparison.ps1`](./Test-ScaleCommitComparison.ps1)** | PowerShell | Windows / macOS / Linux | Compares two commits in one clean worktree with interleaved A/B arms, a rebuild and discarded warm-up per sample, within-arm spread, and commit-bound JSON/Markdown evidence. |
 | **[`Test-BillionRowCertification.ps1`](./Test-BillionRowCertification.ps1)** | PowerShell | Windows | Runs the resumable 1B operator certification matrix with disk preflight, isolated child logs, heartbeat/status JSON, and per-scenario restart. |
@@ -85,9 +84,9 @@ candidate, and `./scripts/Test-BillionRowEvidence.ps1 -RequiredScenario <scenari
 resulting artifact.
 Candidate artifacts are not product claims until the public certification matrix marks them certified.
 | **[`test-service-capacity.mjs`](./test-service-capacity.mjs)** | Node.js | Cross-platform | Runs stepped Portal-user and Orchestrator-job capacity workloads from a JSON configuration and writes JSON/Markdown reports. |
-| **[`test-capacity-workload-configs.mjs`](./test-capacity-workload-configs.mjs)** | Node.js | Cross-platform | Validates all checked-in capacity workload JSON files with the capacity harness `--validate-only` mode. |
+| **[`test-capacity-workload-configs.mjs`](./checks/test-capacity-workload-configs.mjs)** | Node.js | Cross-platform | Validates all checked-in capacity workload JSON files with the capacity harness `--validate-only` mode. |
 | **[`compare-capacity-results.mjs`](./compare-capacity-results.mjs)** | Node.js | Cross-platform | Compares two service-capacity reports for p95 latency, throughput, and error-rate regressions. |
-| **[`test-service-capacity-smoke.mjs`](./test-service-capacity-smoke.mjs)** | Node.js | Cross-platform | Runs the capacity harness against local mock endpoints to verify report generation without deployed services. |
+| **[`test-service-capacity-smoke.mjs`](./checks/test-service-capacity-smoke.mjs)** | Node.js | Cross-platform | Runs the capacity harness against local mock endpoints to verify report generation without deployed services. |
 | **[`Test-PreRelease.ps1`](./Test-PreRelease.ps1)** / **[`test-pre-release.sh`](./test-pre-release.sh)** | PowerShell / Bash | Cross-platform | Runs the local-first pre-release validation gate with resumable phases, optional Docker/Standard-scale/installer checks, and JSON/Markdown reports under `release-validation/`. |
 | **[`Publish-TenantValidator.ps1`](./Publish-TenantValidator.ps1)** | PowerShell | Windows / Linux / macOS targets | Publishes the offline, self-contained tenant-bundle validator for customer-held signature and recipient keys. |
 | **[`Compile-Changelog.ps1`](./Compile-Changelog.ps1)** | PowerShell | Cross-platform | Compiles `changelog.d/*.md` fragments into `CHANGELOG.md` and fails the release gate when feature-surface changes have no changelog coverage. |
@@ -139,19 +138,21 @@ Checks that protect conventions the compiler cannot. Useful to run locally befor
 
 ### Browser-side unit tests
 
-Node test files covering extracted Portal UI modules without a browser or a running Portal. Run with
-`node scripts/<file>`; they are also included in the `portal` and `full` test lanes.
+Node test files covering extracted Portal UI modules without a browser or a running Portal. They live
+in [`checks/`](./checks/) with the rest of the consumer checks. Run one with
+`node scripts/checks/<file>`, or all of them with `node scripts/check-consumer-contracts.mjs`; the
+ones below are also included in the `portal` and `full` test lanes.
 
 | Script Name | Language | Platform | Description |
 | :--- | :--- | :---: | :--- |
-| **[`test-admin-catalog-ui.mjs`](./test-admin-catalog-ui.mjs)** | JavaScript | Cross-platform | Admin catalog query, selection and pager rendering helpers. |
-| **[`test-dataset-acl-ui.mjs`](./test-dataset-acl-ui.mjs)** | JavaScript | Cross-platform | Dataset permissions table — user and group grants, and the revoke route each one carries. |
-| **[`test-lineage-ui.mjs`](./test-lineage-ui.mjs)** | JavaScript | Cross-platform | Lineage row and dependency rendering from the canonical `designer.js`. |
-| **[`test-orchestrator-acl-ui.mjs`](./test-orchestrator-acl-ui.mjs)** | JavaScript | Cross-platform | Orchestrator Access panel — owner, per-object grants, and the refusal states a table alone would render as empty. |
-| **[`test-portal-inline-scripts.mjs`](./test-portal-inline-scripts.mjs)** | JavaScript | Cross-platform | Parses every inline `<script>` in the Portal and Player pages plus their browser modules — a syntax error in a page's inline module takes the whole page down. |
-| **[`test-publish-folders.mjs`](./test-publish-folders.mjs)** | JavaScript | Cross-platform | Admin publish-form folder helpers — nested folder selection and newly created folders appearing without a reload. |
-| **[`test-result-grid-ui.mjs`](./test-result-grid-ui.mjs)** | JavaScript | Cross-platform | Script workbench result grid — what the filter matches, how a value becomes display text, and what CSV export writes. |
-| **[`test-subscription-history-ui.mjs`](./test-subscription-history-ui.mjs)** | JavaScript | Cross-platform | Subscription delivery-history rendering. |
+| **[`test-admin-catalog-ui.mjs`](./checks/test-admin-catalog-ui.mjs)** | JavaScript | Cross-platform | Admin catalog query, selection and pager rendering helpers. |
+| **[`test-dataset-acl-ui.mjs`](./checks/test-dataset-acl-ui.mjs)** | JavaScript | Cross-platform | Dataset permissions table — user and group grants, and the revoke route each one carries. |
+| **[`test-lineage-ui.mjs`](./checks/test-lineage-ui.mjs)** | JavaScript | Cross-platform | Lineage row and dependency rendering from the canonical `designer.js`. |
+| **[`test-orchestrator-acl-ui.mjs`](./checks/test-orchestrator-acl-ui.mjs)** | JavaScript | Cross-platform | Orchestrator Access panel — owner, per-object grants, and the refusal states a table alone would render as empty. |
+| **[`test-portal-inline-scripts.mjs`](./checks/test-portal-inline-scripts.mjs)** | JavaScript | Cross-platform | Parses every inline `<script>` in the Portal and Player pages plus their browser modules — a syntax error in a page's inline module takes the whole page down. |
+| **[`test-publish-folders.mjs`](./checks/test-publish-folders.mjs)** | JavaScript | Cross-platform | Admin publish-form folder helpers — nested folder selection and newly created folders appearing without a reload. |
+| **[`test-result-grid-ui.mjs`](./checks/test-result-grid-ui.mjs)** | JavaScript | Cross-platform | Script workbench result grid — what the filter matches, how a value becomes display text, and what CSV export writes. |
+| **[`test-subscription-history-ui.mjs`](./checks/test-subscription-history-ui.mjs)** | JavaScript | Cross-platform | Subscription delivery-history rendering. |
 
 ### Asset and documentation tooling
 
@@ -159,17 +160,6 @@ Node test files covering extracted Portal UI modules without a browser or a runn
 | :--- | :--- | :---: | :--- |
 | **[`build-codemirror-bundle.ps1`](./build-codemirror-bundle.ps1)** | PowerShell | Cross-platform | Rebuilds the vendored CodeMirror 6 bundle used by the designer. Run after changing `scripts/codemirror/package.json`. |
 | **[`generate-readmes.js`](./generate-readmes.js)** | JavaScript | Cross-platform | Regenerates the per-folder `README.md` index pages across the documentation tree. |
-
-### One-shot migration helpers
-
-Written for a specific restructure and kept for reference. They are **not** part of any routine
-workflow — check what they rewrite before running one.
-
-| Script Name | Language | Platform | Description |
-| :--- | :--- | :---: | :--- |
-| **[`migrate-all-docs-links.js`](./migrate-all-docs-links.js)** | JavaScript | Cross-platform | Rewrote documentation links when folders were renamed during the docs IA restructure. |
-| **[`migrate-syntax-index.js`](./migrate-syntax-index.js)** | JavaScript | Cross-platform | Migrated `docs/syntax-index.md` to the restructured reference layout. |
-| **[`fix-broken-relative-links.js`](./fix-broken-relative-links.js)** | JavaScript | Cross-platform | Finds and repairs broken relative markdown links left by a move. |
 
 ---
 
@@ -369,7 +359,7 @@ the caller's working directory.
 The smoke and test-lane scripts prepare assets before normal test runs. Their `-NoBuild` / `--no-build`
 mode verifies preparation without repairing it and stops before .NET when sources or outputs are stale.
 These checkout workflows need the restored browser compiler in either mode. Run
-`node scripts/test-asset-generation.mjs --entrypoints-only` for focused build/test wrapper checks.
+`node scripts/checks/test-asset-generation.mjs --entrypoints-only` for focused build/test wrapper checks.
 
 Pre-push prepares before formatting. Both pre-release scripts prepare and verify assets on every resume,
 including quick runs. Node/compiler restoration is still required when VS Code checks are skipped.
@@ -404,7 +394,7 @@ unchanged inputs. The watcher schedules a follow-up for edits made while prepari
 consumer-test modules named `*.__test-*.mjs` never enter the sync inventory or product packages.
 
 Prepare assets before invoking a test-lane or smoke script; `-NoBuild`/`--no-build` requires
-existing preparation. Pre-push and CI run every discovered `scripts/test-*.mjs` consumer check.
+existing preparation. Pre-push and CI run every discovered `scripts/checks/test-*.mjs` consumer check.
 The browser lint gate additionally needs `npm ci --prefix scripts/lint`.
 See [Report Runtime Asset Standards](../docs/architecture/standards/report-runtime-asset-standards.md)
 for ownership, contract regeneration, and the source-control cleanup acceptance checks.

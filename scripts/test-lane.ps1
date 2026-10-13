@@ -318,39 +318,39 @@ function Invoke-FuzzLane {
 function Invoke-LineageUiSmoke {
     # First, because a page whose inline module does not parse renders nothing at all, and every other
     # browser-side assertion below is about code that would never have run.
-    & node (Join-Path $repoRoot "scripts\test-portal-inline-scripts.mjs")
+    & node (Join-Path $repoRoot "scripts\checks\test-portal-inline-scripts.mjs")
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
-    & node (Join-Path $repoRoot "scripts\test-lineage-ui.mjs")
+    & node (Join-Path $repoRoot "scripts\checks\test-lineage-ui.mjs")
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
-    & node (Join-Path $repoRoot "scripts\test-publish-folders.mjs")
+    & node (Join-Path $repoRoot "scripts\checks\test-publish-folders.mjs")
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
-    & node (Join-Path $repoRoot "scripts\test-subscription-history-ui.mjs")
+    & node (Join-Path $repoRoot "scripts\checks\test-subscription-history-ui.mjs")
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
-    & node (Join-Path $repoRoot "scripts\test-result-grid-ui.mjs")
+    & node (Join-Path $repoRoot "scripts\checks\test-result-grid-ui.mjs")
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
-    & node (Join-Path $repoRoot "scripts\test-admin-catalog-ui.mjs")
+    & node (Join-Path $repoRoot "scripts\checks\test-admin-catalog-ui.mjs")
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
-    & node (Join-Path $repoRoot "scripts\test-dataset-acl-ui.mjs")
+    & node (Join-Path $repoRoot "scripts\checks\test-dataset-acl-ui.mjs")
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
-    & node (Join-Path $repoRoot "scripts\test-orchestrator-acl-ui.mjs")
+    & node (Join-Path $repoRoot "scripts\checks\test-orchestrator-acl-ui.mjs")
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
-    & node (Join-Path $repoRoot "scripts\test-orchestrator-admin-ui.mjs")
+    & node (Join-Path $repoRoot "scripts\checks\test-orchestrator-admin-ui.mjs")
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }

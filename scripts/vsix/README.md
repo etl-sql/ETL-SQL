@@ -1,7 +1,7 @@
 # Unsigned VSIX toolchain
 
 Use Node.js 22 and npm 10. Restore from this folder with `npm ci`; the lockfile is
-required. `node scripts/test-vsix-toolchain.mjs` from the repository root checks
+required. `node scripts/checks/test-vsix-toolchain.mjs` from the repository root checks
 the restored toolchain and creates real fixture archives for all four targets.
 The consumer gate runs this check too. Restore this folder before running pre-push.
 
@@ -54,9 +54,9 @@ observe cancellation before promotion. The coordinator exits with 130 for Ctrl+C
 143 for SIGTERM. Commands use separate process groups/consoles, and .NET publishes
 disable shared build servers so shutdown targets this invocation's processes.
 
-`node scripts/test-owned-command.mjs` checks descendant shutdown and an unrelated peer.
-`node scripts/test-vsix-coordinator.mjs` checks cancellation at workflow boundaries.
-`node scripts/test-vsix-cli-cancellation.mjs` checks real Unix signal delivery through
+`node scripts/checks/test-owned-command.mjs` checks descendant shutdown and an unrelated peer.
+`node scripts/checks/test-vsix-coordinator.mjs` checks cancellation at workflow boundaries.
+`node scripts/checks/test-vsix-cli-cancellation.mjs` checks real Unix signal delivery through
 an npm lifecycle. On Windows, run that last check with `--console` in a terminal and
 press Ctrl+C when the fixture reports ready.
 

@@ -21,7 +21,7 @@ entries and oversized metadata, and compares whole-file hashes before and after
 inspection. The result includes the actual binary hash and additional native
 bindings. CoreCLR is statically linked into the SDK single-file host.
 
-`node scripts/test-package-inspector.mjs` builds real SDK fixtures for the current
+`node scripts/checks/test-package-inspector.mjs` builds real SDK fixtures for the current
 host and runs focused rejection checks. The consumer gate discovers this test.
 `--all-platforms` publishes fixtures for all four RIDs and checks their metadata;
 native execution covers the running host. These checks do not replace the complete

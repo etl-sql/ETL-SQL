@@ -181,7 +181,7 @@ filters.
   `designer.js` and `report-runtime.js` delivery entries compose individually importable modules;
   the UI sandbox exercises those modules.
 - A failing `PortalBrowserFixture` names the port, the process holding it, and the inner exception.
-- Every `scripts/test-*.mjs` check passes, and they run in the pre-push gate.
+- Every `scripts/checks/test-*.mjs` check passes, and they run in the pre-push gate.
 - After the TypeScript migration, asset sync, the drift gate and the ui-sandbox all still hold, proven by the
   same checks that guard them today.
 - Generated outputs left source control in v0.21.0, after preparation, source-only builds, and
