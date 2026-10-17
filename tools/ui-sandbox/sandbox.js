@@ -319,9 +319,14 @@ function renderFixtures() {
 // Mounts run one at a time. A story's mount is async, and choosing a fixture while the default one
 // was still mounting started a second mount beside it: the first could finish afterwards and write
 // its visuals into the stage the second had just cleared, so the stage showed the wrong fixture.
+// The stage's data-mounts-pending counts queued and running mounts, so a test can wait for the
+// last requested mount to settle instead of sampling the stage after a fixed delay.
 let mountQueue = Promise.resolve();
+let mountsPending = 0;
 function mount() {
-  mountQueue = mountQueue.then(mountNow, mountNow);
+  $stage.dataset.mountsPending = String(++mountsPending);
+  const settle = () => { $stage.dataset.mountsPending = String(--mountsPending); };
+  mountQueue = mountQueue.then(mountNow, mountNow).then(settle, settle);
   return mountQueue;
 }
 

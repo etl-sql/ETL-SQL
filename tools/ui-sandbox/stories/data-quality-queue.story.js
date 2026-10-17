@@ -360,7 +360,8 @@ export default {
       if (fixtureId === 'rows-replaying') {
         const status = host.querySelector('#dqRowsStatus');
         status.value = 'replaying';
-        status.dispatchEvent(new Event('change'));
+        // The queue listens on its root, so the event must bubble, as a real one does.
+        status.dispatchEvent(new Event('change', { bubbles: true }));
         await rendered(host, '[data-release-row="f6"]');
       }
       ctx.stat(fixtureId === 'rows'

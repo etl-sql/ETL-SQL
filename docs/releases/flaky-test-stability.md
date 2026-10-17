@@ -103,6 +103,15 @@ class load and shared background-service state from its startup/shutdown observa
   Windows runner, the read landed before the text reached the editor and saw `""`. Both now wait
   for the editor to hold text before comparing it exactly. Neither reproduced locally in repeated
   runs.
+- **v0.21.0 — sandbox stories sampled mid-mount:** `SandboxStoryTests.EveryStoryAndFixture_MountsWithoutThrowing`
+  failed once in CI run 39075735144: `policy-authority-admin/unavailable mounted nothing into the
+  stage`. The test slept 150 ms plus 250 ms, then counted the stage's children. That story awaits a
+  module import and an API load before rendering, which outlasted the sleeps on a loaded runner.
+  The sandbox shell now counts pending mounts on `#stage[data-mounts-pending]`, and the test waits
+  with `LoadAwareWait` until it is `0`. Waiting for the mount to finish exposed a real story bug the
+  sleeps had hidden: `data-quality-queue/rows-replaying` dispatched a non-bubbling `change` to a
+  listener on the queue root, so its mount never finished. The event now bubbles. All 264 sandbox
+  story tests pass.
 
 - **v0.19.0 — the browser lane fails as a whole under gate load, and says nothing useful when it
   does.** Inside the release gate, after roughly forty minutes of other lanes, the lane reports

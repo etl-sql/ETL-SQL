@@ -4240,15 +4240,22 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
                 // fixtures only shows up when one is mounted after another.
                 await DismissOpenOverlaysAsync(page);
                 await page.ClickAsync($"button.story-link[data-story-id='{story.Id}']");
-                await page.WaitForTimeoutAsync(150);
 
                 if (story.Fixtures.Length > 1 && story.Fixtures[i].Length > 0)
-                {
                     await page.SelectOptionAsync("#fixtureSel", story.Fixtures[i]);
-                    await page.WaitForTimeoutAsync(250);
-                }
 
                 var label = $"{story.Id}/{(story.Fixtures[i].Length == 0 ? "(default)" : story.Fixtures[i])}";
+
+                // A mount awaits a module import and often a fake API load before it renders; on a
+                // loaded runner that outlasted the old fixed sleeps and the stage read as empty.
+                await ETL_SQL.TestSupport.LoadAwareWait.UntilAsync(
+                    $"{label} to finish mounting",
+                    cancellationToken => page.EvaluateAsync<string?>(
+                        "() => document.getElementById('stage').dataset.mountsPending").WaitAsync(cancellationToken),
+                    pending => pending == "0",
+                    TimeSpan.FromSeconds(10));
+                // Short grace for errors from work a story starts but does not await.
+                await page.WaitForTimeoutAsync(100);
 
                 var thrown = session.PageErrors.Skip(before).ToList();
                 if (thrown.Count > 0)
