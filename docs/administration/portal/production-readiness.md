@@ -4,7 +4,7 @@ Use this checklist before promoting the Portal to a production or customer-facin
 
 ## Security
 
-- [ ] **Required** — Set `Portal__FirstRun__AdminPassword` before first startup, change the initial `admin` password after first login, then remove that bootstrap value from configuration.
+- [ ] **Required** — Set `Portal__FirstRun__AdminPassword` before first startup, change the initial `admin` password after first login, then remove that bootstrap value from configuration. The MSI and DEB generate it on a fresh install; see [first-run setup](deployment.md#first-run-setup).
 - [ ] **Required** — Replace the default JWT secret. Set `Portal__Jwt__Secret` in environment variables or `appsettings.json` to a randomly generated 256-bit value. Run `etl-sql config setup-jwt --update` to generate one.
 - [ ] **Required** — Set `Portal__Jwt__Issuer` and `Portal__Jwt__Audience` to values that match your deployment. Default `ETL-SQL-Portal` values are acceptable but should be documented.
 - [ ] **Required** — Enable HTTPS in production. Configure a reverse proxy (nginx, Caddy, IIS) or supply a TLS certificate via Kestrel. Do not run the portal over plain HTTP with real user data.

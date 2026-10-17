@@ -173,9 +173,35 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   CVE-2026-84008 (high) and CVE-2026-70162 (moderate). Connectors, the Orchestrator, and reporting
   had pulled in 8.0.1, 9.0.13, and 10.0.0 transitively. Builds were refusing to restore once NuGet
   audit reported the advisories.
+- The report runtime removes script-capable content from chart and micro-chart SVG before adding it
+  to the page: script, embedded documents, animation, event handlers and external links. It no
+  longer writes text that fails to parse as SVG as markup; a "safe" helper had fallen back to
+  `innerHTML` for exactly that input. The server already escapes chart text; this protects hosts
+  without the Portal's CSP, such as exported HTML and the desktop Player. Found in the first
+  CodeQL scan of the browser sources.
+- The DEB's maintainer scripts no longer follow links in folders the service account owns. They
+  had rewritten `appsettings.json` as root in a service-owned folder. They now refuse a
+  configuration that is not a regular file, and keep the pre-upgrade copy in a root-only folder.
 
 ### Fixed
 
+- Installed Portal and Orchestrator services start without hand-edited configuration. Since
+  v0.11.0 a fresh Portal refused to start without a dataset at-rest key and a first-run
+  administrator password, and the Orchestrator without an identity signing secret. The installers
+  set none of them. The MSI and DEB now generate the keys and a one-time administrator password,
+  readable only by Administrators and SYSTEM (`first-run-password.txt` in the install folder) or
+  root (`/etc/etl-sql/first-run-password`). The Portal requires a new password at first sign-in.
+- Linux services start. The DEB's service account has no home directory, so both single-file hosts
+  failed before running any code. The units now give it systemd-managed state and cache
+  directories. A DEB upgrade also restarts the services; before, they kept running the replaced
+  executables.
+- Upgrades keep the installed configuration. Both installers replaced `appsettings.json` with the
+  package defaults and generated new secrets, which signed everyone out and dropped operator
+  settings. They now carry the installed values forward and add only keys new in the release.
+  Operator safe zones are kept rather than replaced. A workstation-only MSI upgrade still replaces
+  the file.
+- Packages no longer ship seven stray Portal snapshot files that contained a build machine's path.
+  The DEB build refuses a publish folder that holds runtime state such as a database or key ring.
 - WorkstationEditor serves bundled GeoJSON maps with the correct media type. Published Player,
   editor, and offline-report runtime checks pass without Node on the product path.
 - Packaged VS Code extensions retain dependency UMD entry points needed for activation. Archive

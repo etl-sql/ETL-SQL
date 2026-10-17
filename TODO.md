@@ -40,9 +40,13 @@ or an asset-only archive check does not close a build, package or runtime row.
   that is not IDE acceptance.
 - [ ] **Installed upgrades.** The workstation MSI upgrade from v0.20.0 to v0.20.1 passes with installed
   Player asset assertions in CI run 38194946537. The Windows VSIX update from v0.20.0 to the fixed
-  candidate passes in the same profile. Still open: a Portal-profile upgrade with served-asset checks,
-  DEB upgrade, populated browser caches across versions, and working rollback. The released v0.20.0
-  VSIX cannot activate because its dependency entry point is absent; do not count it as a passing baseline.
+  candidate passes in the same profile. 2026-10-17: `scripts/test-deb-upgrade.sh` passes all 37 checks
+  in WSL Ubuntu: a fresh install, an upgrade from v0.20.0 with populated-cache revalidation (no stale
+  304), and rollback from a pre-upgrade backup. Fixing it took six installer defects; see the
+  [acceptance record](docs/releases/v0.21.0-browser-asset-acceptance.md#installed-upgrades--2026-10-17).
+  Still open: the Portal-profile MSI run (`Test-MsiPortalUpgrade.ps1`, in the MSI workflow). The
+  released v0.20.0 VSIX cannot activate because its dependency entry point is absent; do not count it
+  as a passing baseline.
 - [ ] **CodeQL over the newly analysed owners.** 88 TypeScript owners entered analysis when the
   exclusions were narrowed. Review the first run's alerts. The workflow now includes build generators
   and package tooling, with checks and fixtures excluded; its coverage gate verifies 40 tooling files.

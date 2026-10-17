@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.21.0 — Runtime: Portal and Orchestrator databases use snake_case names
+- **What changed**: Portal and Orchestrator tables and columns were PascalCase (for example `AspNetUsers`). The first v0.21.0 start renames them to snake_case on SQLite and PostgreSQL. Earlier releases cannot open a renamed database.
+- **Who is affected**: Operators who roll back to v0.20.x, and SQL, reports, or tools that query these databases directly.
+- **Migration**: Back up the databases before upgrading; rolling back means restoring that backup with the previous release. Update direct queries to the snake_case names in the [database schema standards](docs/architecture/standards/database-schema-standards.md).
+- **Diagnostic**: N/A — a previous release fails at start with `no such table`.
+- **Earliest removal**: N/A
+
 ### v0.21.0 — Runtime: Studio bounds automatic editor services
 - **What changed**: Desktop automatic editor services previously sent documents of any length. Studio now pauses automatic analysis, completion, hover, and canvas work above 200,000 characters on desktop or the configured Portal character limit. Text remains editable and is never truncated.
 - **Who is affected**: Studio authors editing documents above the host ceiling.
