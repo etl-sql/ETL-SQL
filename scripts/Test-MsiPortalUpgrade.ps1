@@ -261,6 +261,9 @@ try {
         Invoke-Assets @('--revalidate', $cacheCurrent, '--out', (Join-Path $out 'rollback-assets.json'))
     }
 } finally {
+    # The backup holds the test install's databases and generated secrets; it must not reach the
+    # uploaded evidence.
+    if ($backup) { Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue }
     Uninstall-All '04-cleanup-uninstall.log'
     Test-Step 'cleanup: no product remains' { [void](Assert-EntryCount 0 'Cleanup') }
 }

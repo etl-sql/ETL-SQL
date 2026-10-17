@@ -301,6 +301,11 @@ class load and shared background-service state from its startup/shutdown observa
   lane is leaving sockets open. No wait was lengthened and no retry was added. The next step is to
   record failed requests and the process's handle and socket counts when a navigation fails.
 
+  Recurred 2026-10-17 at `512103744`: one of 986 failed after 12 minutes,
+  `SandboxStoryTests.AdminGroups_SupersededMembershipReadCannotRenderUnderAnotherGroup` navigating in
+  72 ms. That was the only socket error in the run; the other 985 passed. Still open, with the same
+  next step.
+
   Two further runs the same day: one passed all 929, and one failed a single test in teardown.
   `OrchestratorWebFactory.DisposeAsync` deleted its temporary directory while `etlsql.db` was still
   open (`ScheduledJobActivityBrowserTests.TriageUsesRealDurableEvidenceAndReportsPartialProxyReruns`).

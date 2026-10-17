@@ -20,22 +20,48 @@ function ConfigureJwt() {
     return 1; // msiDoActionStatusSuccess
 }
 
-// Runs before RemoveExistingProducts on a major upgrade, which deletes the installed appsettings.json
-// before the new one is laid down. The copy stays in the install folder (Administrators and SYSTEM
-// only can write there); configure-portal-jwt.ps1 carries its values forward and deletes it.
-function BackupSettings() {
+// A major upgrade's RemoveExistingProducts deletes the installed appsettings.json before the new one is
+// laid down, and it must run straight after InstallValidate or InstallInitialize (error 2613 otherwise),
+// so no deferred action can copy the file first. This immediate action reads it into the hidden
+// PREVIOUS_SETTINGS property instead; RestoreSettings writes it back after InstallFiles, and
+// configure-portal-jwt.ps1 carries its values forward. UTF-8 through ADODB.Stream: the file is not ANSI.
+function ReadSettings() {
     try {
-        var installDir = Session.Property("CustomActionData");
-        if (!installDir) {
+        var path = Session.Property("INSTALLFOLDER") + "appsettings.json";
+        var fso = new ActiveXObject("Scripting.FileSystemObject");
+        if (!fso.FileExists(path)) {
             return 1;
         }
-        var fso = new ActiveXObject("Scripting.FileSystemObject");
-        var source = installDir + "appsettings.json";
-        if (fso.FileExists(source)) {
-            fso.CopyFile(source, installDir + "appsettings.pre-upgrade.json", true);
-        }
+        var stream = new ActiveXObject("ADODB.Stream");
+        stream.Type = 2; // text
+        stream.Charset = "utf-8";
+        stream.Open();
+        stream.LoadFromFile(path);
+        Session.Property("PREVIOUS_SETTINGS") = stream.ReadText();
+        stream.Close();
     } catch (e) {
         // Non-fatal: without the copy the upgrade still installs, with regenerated secrets.
+    }
+    return 1;
+}
+
+// Deferred: CustomActionData is "<install folder>|<previous appsettings.json text>".
+function RestoreSettings() {
+    try {
+        var data = Session.Property("CustomActionData");
+        var split = data ? data.indexOf("|") : -1;
+        if (split < 0 || split === data.length - 1) {
+            return 1;
+        }
+        var stream = new ActiveXObject("ADODB.Stream");
+        stream.Type = 2;
+        stream.Charset = "utf-8";
+        stream.Open();
+        stream.WriteText(data.substring(split + 1));
+        stream.SaveToFile(data.substring(0, split) + "appsettings.pre-upgrade.json", 2); // overwrite
+        stream.Close();
+    } catch (e) {
+        // Non-fatal, as above.
     }
     return 1;
 }
