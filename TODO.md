@@ -40,7 +40,7 @@ or an asset-only archive check does not close a build, package or runtime row.
   that is not IDE acceptance.
 - [ ] **Installed upgrades.** The workstation MSI upgrade from v0.20.0 to v0.20.1 passes with installed
   Player asset assertions in CI run 38194946537. The Windows VSIX update from v0.20.0 to the fixed
-  candidate passes in the same profile. 2026-10-17: `scripts/test-deb-upgrade.sh` passes all 37 checks
+  candidate passes in the same profile. 2026-10-17: `scripts/test-deb-upgrade.sh` passes all 37 checks (33 before the secrets split)
   in WSL Ubuntu: a fresh install, an upgrade from v0.20.0 with populated-cache revalidation (no stale
   304), and rollback from a pre-upgrade backup. Fixing it took six installer defects; see the
   [acceptance record](docs/releases/v0.21.0-browser-asset-acceptance.md#installed-upgrades--2026-10-17).
