@@ -77,8 +77,10 @@ public sealed class StudioPrivateDraftJourneyTests(PortalJourneyFixture fixture)
             var card = page.Locator($"[data-private-draft='{draftId}']");
             await Expect(card).ToContainTextAsync(name, new() { Timeout = 20_000 });
             await card.Locator("[data-open-private-draft][data-open-proj='code']").ClickAsync();
+            // The draft becomes active before its text reaches the editor; on a slow runner the read
+            // landed in between. Wait for the text itself, then compare it exactly.
             await page.WaitForFunctionAsync(
-                $"id => {ActiveDraft}?.privateDraftId === id && Boolean(window.__STUDIO__.state.editorInstance)",
+                $"id => {ActiveDraft}?.privateDraftId === id && (window.__STUDIO__.state.editorInstance?.getValue?.() ?? '').length > 0",
                 draftId, new() { Timeout = 20_000 });
             Assert.Equal(Normalize(edited), Normalize(await page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()")));
             Assert.Equal(2, await page.EvaluateAsync<int>($"() => {ActiveDraft}.version"));

@@ -92,6 +92,17 @@ class load and shared background-service state from its startup/shutdown observa
   routes the Portal's authenticated client to its HTTP test server. It disables scheduler loops,
   starts the service before the Portal, and disposes the Portal before the service. Console checks
   retain their assertions and use the existing network-idle wait without an extra fixed sleep.
+- **v0.21.0 — FTP fixture readiness:** `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds`
+  was refused once in CI and once in four cold local starts, even after the fixture waited for the
+  mapped control port. An open port only proves Docker's proxy accepts; the daemon, and on a cold
+  start the passive data ports, were not yet forwarding. The fixture now waits with
+  `LoadAwareWait` until it can sign in and list the root over a passive connection. That passed
+  seven cold starts in a row.
+- **v0.21.0 — Studio editor reads after a tab switch:** the keyboard journey and the private-draft
+  journey read `editorInstance.getValue()` right after the document became active. On the slower
+  Windows runner, the read landed before the text reached the editor and saw `""`. Both now wait
+  for the editor to hold text before comparing it exactly. Neither reproduced locally in repeated
+  runs.
 
 - **v0.19.0 — the browser lane fails as a whole under gate load, and says nothing useful when it
   does.** Inside the release gate, after roughly forty minutes of other lanes, the lane reports
