@@ -198,8 +198,10 @@ jobs:
       # Orchestrator: fresh install, upgrade with served-asset and cache checks, and rollback.
       - name: Certify Portal profile install, upgrade and rollback
         if: ${{ !cancelled() }}
-        # The first run lost the runner after 76 minutes with no log. Fail the step first, so the
-        # evidence upload below still runs and shows the last stage reached.
+        # Two runs lost the runner with no log; the second only when this step timeout killed the
+        # stuck step. So the script bounds its own waits (msiexec 10 min, services 3 min, each HTTP
+        # request 30 s), records a hung install's process tree, and aborts to cleanup well inside
+        # this limit, which stays as the last resort.
         timeout-minutes: 45
         shell: pwsh
         env:

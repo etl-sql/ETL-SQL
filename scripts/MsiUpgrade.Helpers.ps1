@@ -225,12 +225,41 @@ function Assert-EntryCount {
 }
 
 function Invoke-MsiExec {
-    param([string[]]$Arguments, [string]$LogPath, [string]$Stage)
+    param([string[]]$Arguments, [string]$LogPath, [string]$Stage, [int]$TimeoutMinutes = 10)
 
     $allArguments = @($Arguments) + @('/qn', '/norestart', '/l*v', $LogPath)
     $process = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" `
-        -ArgumentList $allArguments -Wait -PassThru -WindowStyle Hidden
+        -ArgumentList $allArguments -PassThru -WindowStyle Hidden
+    # An unbounded wait let a stuck install outlast the CI step timeout, and killing the step then
+    # lost the runner and every piece of evidence. Record what was running, then stop the install.
+    if (-not $process.WaitForExit($TimeoutMinutes * 60000)) {
+        $diagnostics = [IO.Path]::ChangeExtension($LogPath, '.hung.txt')
+        Write-HungInstallDiagnostics $LogPath $diagnostics
+        Get-Process -Name msiexec -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        throw [TimeoutException]::new("$Stage did not finish within $TimeoutMinutes minutes. See $diagnostics")
+    }
     if ($process.ExitCode -notin @(0, 1641, 3010)) {
         throw "$Stage failed with msiexec exit code $($process.ExitCode). See $LogPath"
     }
+}
+
+# Process tree (installer, custom-action and service processes), service states and the end of the
+# verbose log: enough to name the action an install is stuck in.
+function Write-HungInstallDiagnostics {
+    param([string]$LogPath, [string]$OutPath)
+
+    $lines = [Collections.Generic.List[string]]::new()
+    $lines.Add("Hung at $((Get-Date).ToString('o'))")
+    $lines.Add('-- processes')
+    Get-CimInstance Win32_Process |
+        Where-Object { $_.Name -match '^(msiexec|powershell|pwsh|cscript|wscript|node|dotnet|ETL-SQL.*)\.exe$' } |
+        ForEach-Object { $lines.Add(("{0,6} parent {1,6}  {2}  {3}" -f $_.ProcessId, $_.ParentProcessId, $_.Name, $_.CommandLine)) }
+    $lines.Add('-- services')
+    Get-CimInstance Win32_Service -Filter "Name LIKE 'ETL-SQL%' OR Name='msiserver'" |
+        ForEach-Object { $lines.Add("$($_.Name) $($_.State) pid $($_.ProcessId)") }
+    $lines.Add('-- last 80 log lines')
+    if (Test-Path -LiteralPath $LogPath) {
+        Get-Content -LiteralPath $LogPath -Tail 80 -ErrorAction SilentlyContinue | ForEach-Object { $lines.Add($_) }
+    }
+    Set-Content -LiteralPath $OutPath -Value $lines
 }

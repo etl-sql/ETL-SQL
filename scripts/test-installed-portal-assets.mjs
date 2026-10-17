@@ -41,8 +41,9 @@ function filesUnder(directory, base = directory) {
 
 const urlFor = (base, relative) => `${base}/${relative.split('/').map(encodeURIComponent).join('/')}`;
 
+// A stalled request fails the check instead of holding the certification past its CI step timeout.
 async function fetchBytes(url, headers = {}) {
-    const response = await fetch(url, { headers, redirect: 'manual' });
+    const response = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(30_000) });
     return { status: response.status, headers: response.headers, bytes: Buffer.from(await response.arrayBuffer()) };
 }
 

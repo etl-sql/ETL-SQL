@@ -75,7 +75,10 @@ function Write-ResourceSnapshot {
     }
 }
 
+# Each step is stamped as it starts, so evidence from a stuck run names the step it stuck in. A
+# timeout aborts the run: later stages would only pile further waits onto a broken machine.
 function Test-Step([string]$Name, [scriptblock]$Body) {
+    Add-Content -LiteralPath $summary -Value "   $((Get-Date).ToString('HH:mm:ss')) start $Name"
     try {
         $result = & $Body
         if ($result -eq $false) { throw 'returned false' }
@@ -83,6 +86,20 @@ function Test-Step([string]$Name, [scriptblock]$Body) {
     } catch {
         Write-Line "FAIL $Name — $($_.Exception.Message)"
         $script:failed = 1
+        if ($_.Exception -is [TimeoutException]) { throw }
+    }
+}
+
+# Stop-Service and Start-Service wait without limit while a service is pending.
+function Set-ServicesState([string]$State) {
+    foreach ($name in $services) {
+        $svc = Get-Service -Name $name
+        if ($State -eq 'Stopped') { Stop-Service -InputObject $svc -Force -NoWait }
+        elseif ($svc.Status -ne 'Running') { $svc.Start() }
+    }
+    foreach ($name in $services) {
+        try { (Get-Service -Name $name).WaitForStatus($State, [TimeSpan]::FromMinutes(3)) }
+        catch { throw [TimeoutException]::new("$name did not reach $State within 3 minutes ($((Get-Service -Name $name).Status)).") }
     }
 }
 
@@ -203,21 +220,22 @@ try {
     $cfg.Portal.Orchestrator | Add-Member NoteProperty IdentitySigningSecret $signing -Force
     $cfg | Add-Member NoteProperty UpgradeSentinel ([pscustomobject]@{ Value = 'kept' }) -Force
     ($cfg | ConvertTo-Json -Depth 64) | Set-Content -LiteralPath $cfgPath -Encoding UTF8
-    Restart-Service -Name $services -Force
+    Set-ServicesState Stopped
+    Set-ServicesState Running
     Test-Step 'previous: Portal healthy' { Wait-Portal 'previous' }
     $secret = Get-Setting 'Portal:Jwt:Secret'; $apiKey = Get-Setting 'Orchestrator:ApiKey'
     $atRest = Get-Setting 'Portal:Dataset:AtRestKey'
     $cachePrevious = Join-Path $out 'cache-previous.json'
     Test-Step 'previous: served assets recorded as a browser cache' { Invoke-Assets @('--record', $cachePrevious, '--out', (Join-Path $out 'previous-assets.json')) }
     $backup = Join-Path $out 'pre-upgrade-backup'
-    Stop-Service -Name $services -Force
+    Set-ServicesState Stopped
     New-Item -ItemType Directory -Force -Path $backup | Out-Null
     $saved = @(Get-DatabaseFiles | ForEach-Object {
         $target = Join-Path $backup ("{0}__{1}" -f ($_.DirectoryName -eq $installDir ? 'install' : 'system'), $_.Name)
         Copy-Item -LiteralPath $_.FullName -Destination $target; $target })
     Copy-Item -LiteralPath $cfgPath -Destination (Join-Path $backup 'appsettings.json')
     Write-Line "NOTE previous: backed up $($saved.Count) database file(s) and the configuration"
-    Start-Service -Name $services
+    Set-ServicesState Running
 
     # 2. Upgrade in place.
     Write-Line "== upgrade to $($contract.CurrentVersion)"
@@ -245,7 +263,7 @@ try {
     Write-Line "== roll back to $($contract.PreviousVersion)"
     Test-Step 'rollback: uninstall the candidate' { Uninstall-All '03-rollback-uninstall.log' }
     Test-Step 'rollback: msiexec install previous' { Install-Msi $previousPath '03-rollback-install.log' }
-    Stop-Service -Name $services -Force -ErrorAction SilentlyContinue
+    Set-ServicesState Stopped
     Get-DatabaseFiles | Remove-Item -Force
     foreach ($file in Get-ChildItem -LiteralPath $backup -File -Filter '*__*') {
         $scope, $name = $file.Name -split '__', 2
@@ -254,12 +272,15 @@ try {
         Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $dir $name)
     }
     Copy-Item -LiteralPath (Join-Path $backup 'appsettings.json') -Destination $cfgPath -Force
-    Start-Service -Name $services
+    Set-ServicesState Running
     Test-Step 'rollback: Portal healthy on the restored database' { Wait-Portal 'rollback' }
     Test-Step 'rollback: ETL-SQL-Portal runs the previous executable' { Assert-ServiceRunsVersion 'ETL-SQL-Portal' $contract.PreviousVersion }
     Test-Step 'rollback: served assets are the previous release''s; cached browser refetches changes' {
         Invoke-Assets @('--revalidate', $cacheCurrent, '--out', (Join-Path $out 'rollback-assets.json'))
     }
+} catch {
+    Write-Line "ABORT — $($_.Exception.Message)"
+    $script:failed = 1
 } finally {
     # The backup holds the test install's databases and generated secrets; it must not reach the
     # uploaded evidence.
