@@ -155,6 +155,17 @@ const mockDoc = {
 };
 
 globalThis.document = mockDoc;
+// The runtime parses micro-chart SVG and imports the sanitized element rather than writing markup;
+// a minimal parser stands in for the browser's. Its sanitizer is proven in RuntimeSvgSanitizationTests.
+globalThis.DOMParser = class {
+    parseFromString(raw) {
+        const svg = new MockElement('svg');
+        svg.nodeName = 'svg';
+        svg._innerHTML = raw;
+        return { documentElement: svg, querySelector: () => null };
+    }
+};
+mockDoc.importNode = node => node;
 
 const dependencies = {
     ...util,
@@ -258,7 +269,8 @@ const { renderTable } = rtTable;
     const sparkTd = trs[0].children[1];
     assert.equal(sparkTd.getAttribute('role'), 'img');
     assert.equal(sparkTd.getAttribute('aria-label'), 'Trend sparkline');
-    assert.match(sparkTd.innerHTML, /<svg>spark<\/svg>/);
+    assert.equal(sparkTd.children[0]?.tagName, 'SVG', 'The sparkline is an imported SVG element, not written markup');
+    assert.match(sparkTd.children[0].innerHTML, /<svg>spark<\/svg>/);
 
     // Data bar cell check
     const barTd = trs[0].children[2];

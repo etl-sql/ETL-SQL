@@ -387,9 +387,31 @@ export function formatValue(value: unknown, format?: string | null) {
     }
 }
 
+// Elements that run script, embed other documents or rewrite attributes over time. The server's
+// chart renderers emit none of them, so removing them never changes a legitimate chart.
+const SVG_ACTIVE_ELEMENTS = new Set(['script', 'foreignobject', 'iframe', 'object', 'embed',
+    'handler', 'listener', 'animate', 'animatemotion', 'animatetransform', 'set']);
+
+/** Removes script-capable content from a parsed SVG: active elements, event handlers, and links. */
+function sanitizeSvgTree(root: Element): void {
+    for (const element of [root, ...Array.from(root.querySelectorAll('*'))]) {
+        if (element !== root && SVG_ACTIVE_ELEMENTS.has(element.localName.toLowerCase())) {
+            element.remove();
+            continue;
+        }
+        for (const attribute of Array.from(element.attributes)) {
+            const name = attribute.name.toLowerCase();
+            const isLink = name === 'href' || name.endsWith(':href');
+            if (name.startsWith('on') || (isLink && !attribute.value.trim().startsWith('#'))) {
+                element.removeAttribute(attribute.name);
+            }
+        }
+    }
+}
+
 /**
- * Safely parses an SVG string by verifying absence of XML DOCTYPE/ENTITY expansions
- * and validating that the root element is an SVG element.
+ * Parses an SVG string with no DOCTYPE or entity expansion, requires an <svg> root, and removes
+ * script-capable content. The returned element is inert and may be imported into the page.
  */
 export function parseSafeSvg(rawSvg: unknown): SVGSVGElement | null {
     const raw = String(rawSvg ?? '').trim();
@@ -401,6 +423,7 @@ export function parseSafeSvg(rawSvg: unknown): SVGSVGElement | null {
         if (!svg || svg.nodeName.toLowerCase() !== 'svg' || parsed.querySelector('parsererror')) {
             return null;
         }
+        sanitizeSvgTree(svg);
         return svg as unknown as SVGSVGElement;
     } catch {
         return null;
@@ -408,18 +431,13 @@ export function parseSafeSvg(rawSvg: unknown): SVGSVGElement | null {
 }
 
 /**
- * Safely renders an SVG string into a target element using imported DOM nodes instead of innerHTML.
- * Falls back to innerHTML in mock test environments that lack DOMParser / importNode.
+ * Renders an SVG string into a target element as imported, sanitized DOM nodes. Text that does not
+ * parse as SVG is never written as markup; the caller shows its own fallback.
  */
 export function renderSafeSvgInto(target: HTMLElement, rawSvg: unknown): boolean {
-    const raw = String(rawSvg ?? '').trim();
-    if (!raw || /<!DOCTYPE|<!ENTITY/i.test(raw)) return false;
-    const svg = parseSafeSvg(raw);
-    if (svg && typeof document !== 'undefined' && typeof document.importNode === 'function') {
-        target.appendChild(document.importNode(svg, true));
-        return true;
-    }
-    target.innerHTML = raw;
+    const svg = parseSafeSvg(rawSvg);
+    if (!svg || typeof document === 'undefined' || typeof document.importNode !== 'function') return false;
+    target.appendChild(document.importNode(svg, true));
     return true;
 }
 

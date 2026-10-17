@@ -130,14 +130,11 @@ export function renderNativeSvg(container: HTMLElement, visual: ChartVisual, man
     const wrapper = document.createElement('div');
     wrapper.className = 'chart-wrapper native-chart-wrapper';
     const svg = parseSafeSvg(visual.nativeSvg);
-    if (svg) {
-        wrapper.appendChild(document.importNode(svg, true));
-    } else if (typeof DOMParser === 'undefined' && visual.nativeSvg) {
-        wrapper.innerHTML = String(visual.nativeSvg);
-    } else {
+    if (!svg) {
         container.appendChild(noDataEl('Invalid native chart payload'));
         return;
     }
+    wrapper.appendChild(document.importNode(svg, true));
     if (visual.layout?.tier) wrapper.dataset.layoutTier = String(visual.layout.tier).toUpperCase();
     container.appendChild(wrapper);
     attachNativeZoomSlider(container, wrapper, visual);
@@ -643,17 +640,12 @@ function updateNativeVisualInPlace(card: HTMLElement, visual: ChartVisual): bool
     if (!wrapper) return false;
 
     const newSvg = parseSafeSvg(visual.nativeSvg);
-    if (newSvg) {
-        const oldSvg = wrapper.querySelector('svg');
-        if (oldSvg) {
-            wrapper.replaceChild(document.importNode(newSvg, true), oldSvg);
-        } else {
-            wrapper.appendChild(document.importNode(newSvg, true));
-        }
-    } else if (typeof DOMParser === 'undefined' && visual.nativeSvg) {
-        wrapper.innerHTML = String(visual.nativeSvg);
+    if (!newSvg) return false;
+    const oldSvg = wrapper.querySelector('svg');
+    if (oldSvg) {
+        wrapper.replaceChild(document.importNode(newSvg, true), oldSvg);
     } else {
-        return false;
+        wrapper.appendChild(document.importNode(newSvg, true));
     }
 
     if (visual.layout?.tier) {
