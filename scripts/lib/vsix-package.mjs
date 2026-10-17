@@ -17,6 +17,24 @@ export function resolveVsixPlatform(requested, host = process.platform, architec
     return { platform, target: vsixTargets[platform] };
 }
 
+// VSCE's file list already applies .vscodeignore, so matching that list cannot prove runtime
+// entry points survived. For example vscode-languageserver-types requires lib/umd/main.js.
+export function dependencyEntryPointProblems(metadata, entries) {
+    const problems = [];
+    for (const [name, content] of metadata) {
+        if (!/^extension\/node_modules\/.*\/package\.json$/.test(name)) continue;
+        const manifest = JSON.parse(content);
+        if (typeof manifest.main !== 'string') continue;
+        const base = path.posix.dirname(name);
+        const entry = path.posix.normalize(path.posix.join(base, manifest.main));
+        const candidates = [entry, `${entry}.js`, `${entry}.json`, `${entry}.node`,
+            `${entry}/index.js`, `${entry}/index.json`, `${entry}/index.node`];
+        if ((entry !== base && !entry.startsWith(base + '/')) || !candidates.some(candidate => entries.has(candidate)))
+            problems.push(`Missing VSIX dependency entry point: ${name} -> ${manifest.main}.`);
+    }
+    return problems;
+}
+
 export async function createUnsignedVsix(root, assembly, output, target, { executables = [], signal } = {}) {
     signal?.throwIfAborted();
     const tools = loadVsixToolchain(root);
@@ -83,7 +101,8 @@ export async function inspectVsix(root, file, { identity, target, expectedFiles,
                 if (/^extension\/(coverage|logs|out\/test|bin\/runtimes|runtimes)\//.test(name) ||
                     /(?:^|\/)test_output\.txt$|\.__test-|\.map$/.test(name))
                     return fail(new Error(`VSIX contains development output: ${name}.`));
-                const isMetadata = name === 'extension/package.json' || name === 'extension.vsixmanifest' || name === '[Content_Types].xml';
+                const isMetadata = name === 'extension/package.json' || name === 'extension.vsixmanifest' || name === '[Content_Types].xml' ||
+                    /^extension\/node_modules\/.*\/package\.json$/.test(name);
                 if (isMetadata && entry.uncompressedSize > 1024 * 1024) return fail(new Error(`Oversized VSIX metadata: ${name}.`));
                 zip.openReadStream(entry, (streamError, stream) => {
                     if (streamError) return fail(streamError);
@@ -110,6 +129,8 @@ export async function inspectVsix(root, file, { identity, target, expectedFiles,
     for (const name of ['extension/package.json', 'extension.vsixmanifest', '[Content_Types].xml'])
         if (!metadata.has(name)) throw new Error(`Missing VSIX metadata: ${name}.`);
     const manifest = JSON.parse(metadata.get('extension/package.json'));
+    const dependencyProblems = dependencyEntryPointProblems(metadata, hashes);
+    if (dependencyProblems.length) throw new Error(dependencyProblems.join('\n'));
     for (const field of ['name', 'publisher', 'version'])
         if (manifest[field] !== identity[field]) throw new Error(`Packaged extension ${field} does not match ${identity[field]}.`);
     const xmlText = metadata.get('extension.vsixmanifest');

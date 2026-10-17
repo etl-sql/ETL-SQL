@@ -69,6 +69,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Run CodeQL on pull requests targeting release branches, so feature changes receive security
+  analysis before merging into the active release. Remote scan acceptance remains pending.
+
+- Remove 29 completed TODO items after checking implementation and acceptance evidence again.
+  Studio verification passed 43 real-browser cases and 116 focused C# checks without skips;
+  remaining IDE, upgrade, accessibility, sandbox-identity and final-release checks stay open.
+  See the [closed-item audit](docs/releases/v0.21.0-closed-todo-audit.md#2026-10-14-follow-up).
+
 - Remove generated browser JavaScript from source control. The 491 compiler emits, host copies, and
   the offline bundle are now ignored by exact rules and rebuilt by `node scripts/sync-assets.js`. A
   fresh clone needs `npm ci --prefix scripts/typecheck` and that command before its first build;
@@ -152,6 +160,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   pagination, and counts limited to readable jobs. Activity loading and polling use strict TypeScript.
 
 ### Fixed
+
+- WorkstationEditor serves bundled GeoJSON maps with the correct media type. Published Player,
+  editor, and offline-report runtime checks pass without Node on the product path.
+- Packaged VS Code extensions retain dependency UMD entry points needed for activation. Archive
+  validation rejects missing dependency entry points; real designer, preview, and asset-watch
+  checks pass. Supporting package and CI results are recorded in the
+  [browser asset acceptance record](docs/releases/v0.21.0-browser-asset-acceptance.md).
 
 - Recover Studio's editor after a failed CodeMirror download without losing either tab's edits,
   including typing during Retry. Explain unavailable helper writes in basic mode. Bound Portal

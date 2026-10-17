@@ -12,6 +12,26 @@ namespace ETL_SQL.Tests.WorkstationEditor;
 
 public sealed class WorkstationEditorTests
 {
+    [Fact]
+    public async Task Runtime_ServesBundledGeoJsonWithItsMediaType()
+    {
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        using var response = await client.GetAsync("/runtime/maps/canada-provinces.geojson", CancellationToken.None);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/geo+json", response.Content.Headers.ContentType?.MediaType);
+        using var geometry = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(CancellationToken.None));
+        Assert.Equal("FeatureCollection", geometry.RootElement.GetProperty("type").GetString());
+        Assert.NotEmpty(geometry.RootElement.GetProperty("features").EnumerateArray());
+
+        using var missing = await client.GetAsync("/runtime/maps/missing.geojson", CancellationToken.None);
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
     [Theory]
     [InlineData("--profile")]
     [InlineData("--wat")]

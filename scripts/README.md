@@ -1,6 +1,38 @@
 # ETL-SQL Utility Scripts
 
-This directory contains build, test, utility, and release packaging scripts for the **ETL-SQL** engine. To support developers across Windows, Linux, and macOS, core developer workflows are provided in both PowerShell (`.ps1`) and Bash (`.sh`) versions.
+Build, test, utility, and release packaging scripts for ETL-SQL. Windows workflows use PowerShell;
+Linux and macOS workflows also have Bash entry points.
+
+## Packaged browser runtime acceptance
+
+`test-packaged-browser-runtime.mjs` checks an extracted Windows release outside its checkout.
+It starts the published Player, WorkstationEditor, and report CLI with Node absent from their
+`PATH`, compares served and embedded assets with preparation, checks media types and missing-file
+responses, and renders an offline report with networking disabled. It uses the Playwright package
+already restored by the .NET browser test project; no new browser dependency is installed.
+
+```powershell
+node scripts\test-packaged-browser-runtime.mjs C:\acceptance\source C:\acceptance\installed\bin C:\acceptance\evidence tests\ETL-SQL.Portal.BrowserTests\bin\Debug\net10.0\.playwright\package
+```
+
+For real VS Code acceptance, install the candidate VSIX into a dedicated `--extensions-dir` and
+`--user-data-dir`. Launch VS Code with `--extensionDevelopmentPath` pointing at that installed
+extension and `--extensionTestsPath` pointing at `scripts/fixtures/vsix-webview-acceptance.cjs`.
+The extension test driver uses the actual bundled LSP, report CLI, and production webviews. Set:
+
+- `ETLSQL_ACCEPTANCE_REPORT`: absolute JSON output path.
+- `ETLSQL_ACCEPTANCE_INVENTORY`: the package source's `artifacts/browser-assets.json`.
+- `ETLSQL_ACCEPTANCE_FIXTURE`: absolute `asset-proof.rptsql` path created by the runtime check above.
+
+Use a Node-free `PATH` for the installed-package run. The watcher variant needs Node 22 and a
+disposable prepared checkout: run the extension's `npm run compile` first, select its source folder
+as `--extensionDevelopmentPath`, and configure `etlsql.server.path` and
+`etlsql.report.executable.path` in the isolated profile to the built LSP and report executables.
+Also set `ETLSQL_ACCEPTANCE_WATCH_SOURCE` to that checkout, `ETLSQL_ACCEPTANCE_NODE` to Node 22,
+and `ETLSQL_ACCEPTANCE_NPM` to its `node_modules/npm/bin/npm-cli.js`. The driver starts both npm
+watchers, edits and restores the disposable browser source, verifies rendered markers, and stops
+its watchers. Do not run watch acceptance against a checkout with unsaved work.
+
 
 ---
 

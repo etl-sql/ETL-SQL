@@ -50,5 +50,22 @@ assert.equal(toRegExp('**/wwwroot/js/**').test('src/ETL-SQL.Portal/BrowserSource
 assert.equal(toRegExp('**/*.bundle.js').test('src/x/report-runtime.bundle.js'), true);
 
 const problems = analysisProblems(owners, generated);
+function toolingFiles(directory) {
+    return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+        if (['node_modules', 'checks', 'fixtures'].includes(entry.name)) return [];
+        const file = path.join(directory, entry.name);
+        assert.equal(entry.isSymbolicLink(), false, `Unexpected tooling symlink: ${file}`);
+        return entry.isDirectory() ? toolingFiles(file) : [file];
+    });
+}
+const tooling = toolingFiles(path.join(root, 'scripts'))
+    .map(file => path.relative(root, file).replaceAll('\\', '/'))
+    .filter(file => /\.(?:cjs|mjs|js)$/.test(file) && !/^scripts\/(?:checks|fixtures)\//.test(file));
+assert.ok(tooling.includes('scripts/sync-assets.js') && tooling.includes('scripts/lib/vsix-package.mjs'),
+    'Production asset and package generators must be discovered.');
+for (const file of tooling) {
+    const rule = ignoredBy(file);
+    if (rule) problems.push(`CodeQL does not analyse production tooling: ${file} (excluded by '${rule}')`);
+}
 assert.deepEqual(problems, [], problems.join('\n'));
-console.log(`source analysis coverage: ${owners.length} owners analysed, ${generated.length} generated scripts excluded`);
+console.log(`source analysis coverage: ${owners.length} owners and ${tooling.length} tooling files analysed, ${generated.length} generated scripts excluded`);

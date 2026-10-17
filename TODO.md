@@ -4,10 +4,9 @@ The execution ledger for v0.21.0. Items are grouped by when they can be done, no
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0210-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 8 |
+| [Now](#now--v0210-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 4 |
 | [At release](#v0210-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 11 |
 | [Blocked](#blocked--waiting-on-something-outside-the-repository) | Work waiting on a tool, account or person | 3 |
-| [Studio backlog](#studio-backlog--horizon-next-not-required-for-v0210) | Sized Studio tasks, not required for v0.21.0 | 25 |
 | [Known limits](#known-limits--context-not-tasks) | Limits to state honestly in release notes | — |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -36,27 +35,18 @@ or an asset-only archive check does not close a build, package or runtime row.
 [delivery matrix](docs/releases/v0.21.0-browser-asset-delivery-matrix.md) ·
 [progress record](docs/releases/v0.21.0-generated-assets-progress.md) (full history and original task wording)
 
-- [ ] **Packaged runtime — remaining hosts.** Portal passes from the DEB, the Windows ZIP and the MSI
-  extract. Still to smoke-test outside the source tree, with no Node on the path: ReportPlayer,
-  WorkstationEditor, and the report CLI's offline export (embedded bundle, no network requests).
-  Check prepared bytes, content types, and a 404 for a deliberately missing module.
-- [ ] **VSIX in a real VS Code webview.** Install the packaged VSIX and open the designer and a report.
-  Archive inspection has passed; nothing has been observed in an actual webview.
-- [ ] **Development webview and watch.** Run `npm run watch` beside `npm run watch:assets` in the
-  extension development host. Verify a dependency-only edit, a newly added module, and a compiler
-  failure then recovery all reach the webview.
 - [ ] **Real IDE launch.** Open the solution in an IDE before preparation, prepare, then build and
   launch; repeat after `git clean -fdX`. Only the `DesignTimeBuild` property has been exercised, and
   that is not IDE acceptance.
-- [ ] **Installed upgrades.** The workstation MSI upgrade from v0.20.1 passes with asset assertions.
-  Still open: confirm that assertion in CI, a Portal-profile upgrade with served-asset checks, DEB
-  upgrade, VSIX update, existing browser caches, and rollback to the previous version's own assets.
+- [ ] **Installed upgrades.** The workstation MSI upgrade from v0.20.0 to v0.20.1 passes with installed
+  Player asset assertions in CI run 38194946537. The Windows VSIX update from v0.20.0 to the fixed
+  candidate passes in the same profile. Still open: a Portal-profile upgrade with served-asset checks,
+  DEB upgrade, populated browser caches across versions, and working rollback. The released v0.20.0
+  VSIX cannot activate because its dependency entry point is absent; do not count it as a passing baseline.
 - [ ] **CodeQL over the newly analysed owners.** 88 TypeScript owners entered analysis when the
-  exclusions were narrowed. Review the first run's alerts. Decide whether `scripts/` stays excluded
-  as build tooling; today the generators are not analysed.
-- [ ] **macOS x64 package comparison.** The byte comparison passed on Windows, Linux and macOS arm64
-  (run 38194696393). The macOS x64 job hit its time limit before that step; the limit is raised and
-  the job has not been re-run.
+  exclusions were narrowed. Review the first run's alerts. The workflow now includes build generators
+  and package tooling, with checks and fixtures excluded; its coverage gate verifies 40 tooling files.
+  This changed workflow still needs a scan.
 
 ### 5. Studio — Author, reader and beginner practice journeys
 
@@ -123,115 +113,6 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
   all candidate/control and repeat-run comparisons under unchanged bands. Background:
   [v0.19.0](docs/releases/v0.19.0-performance-results.md) and
   [v0.20.0](docs/releases/v0.20.0-performance-results.md) performance results.
-
----
-
-## Blocked — waiting on something outside the repository
-
-### 6. Studio — Keyboard and assistive technology
-
-**Needs:** observed spoken transcripts from a screen reader in both hosts. Windows Narrator is
-installed on the current test machine (verified 2026-10-13), so installation is no longer the blocker.
-No actual spoken pass has been recorded. Groundwork is done: every keyboard stop is named,
-a refused Create says why, and the save is announced. The
-[pass sheet](docs/architecture/decisions/studio-keyboard-assistive-evidence.md#screen-reader-pass-sheet-st28-st29)
-is ready.
-
-- [ ] **ST28 — Portal screen-reader pass.** One named screen reader/browser combination completes the keyboard document
-  journey with meaningful labels, errors, and announcements; keep the observed transcript. (Depends on: ST23; Size: M)
-  Automated groundwork: `Portal_AssistiveJourney_EveryStopIsNamedAndChangesAreAnnounced`.
-- [ ] **ST29 — Desktop screen-reader pass.** Record the same bounded journey in one supported desktop/browser combination.
-  (Depends on: ST24; Size: M)
-  Automated groundwork: `Desktop_AssistiveJourney_EveryStopIsNamedAndChangesAreAnnounced`.
-
-### 13.1 Codebase audit — bugs and logic defects
-
-**Needs:** a transaction-capable Snowflake account. The rest of the 2026-10-12 audit is closed; see the
-[audit evidence](docs/releases/v0.21.0-bug-logic-audit.md).
-
-- [ ] **Verify Snowflake transaction-clone writes against a transaction-capable server.** ODBC is
-  verified against a real SQL Server container, and Snowflake lifecycle tests pass with a recording
-  transaction, but the emulator cannot establish row-level rollback. Remaining acceptance: create a
-  table, begin a transaction, write through `WithTable`, roll back, and query from a separate
-  connection to assert zero rows. Repeat after starting another transaction and verify clone disposal
-  does not end the owner's work.
-
----
-
-## Studio backlog — Horizon: Next, not required for v0.21.0
-
-Sized tasks selected from `ROADMAP.md`. Pick by ID; dependencies are listed on each item.
-
-### 7. Studio — Execution scope, cancellation and bounded helper previews
-
-Completed 2026-10-13 on real Portal and desktop hosts. [Evidence and bounded fixture contract](docs/architecture/decisions/studio-execution-scope-evidence.md).
-Native previews are certified for direct read-only SQLite only; Portal consent still cannot bypass its interactive allow-list.
-Follow-up review added a 1 MiB desktop helper result-row budget and verified single-value and cumulative truncation warnings.
-
-- [x] **ST30 — Portal execution-scope journey.** Exercise no selection, unresolved statement, and mutating-prefix consent
-  refused/accepted; actual statements and displayed scope agree under the permitted execution path. (Depends on: ST04 when pipeline submission is used; Size: M)
-- [x] **ST31 — Desktop execution-scope journey.** Prove the same cases against the desktop host, using real execution responses. (Size: M)
-- [x] **ST32 — Portal cancellation and lost response.** Confirm server cancellation and one lost-response case; retain the run ID
-  for support and distinguish unknown outcome from stopped work. (Depends on: ST30; Size: M)
-- [x] **ST33 — Desktop cancellation and lost response.** Prove the same bounded failure cases and diagnostic ownership on the desktop host. (Depends on: ST31; Size: M)
-- [x] **ST34 — Portal native-dialect helper preview.** One named connector/dialect fixture executes a bounded read-only native task
-  and accepts an empty result without running arbitrary predecessors. (Size: M)
-- [x] **ST35 — Desktop native-dialect helper preview.** Run that same fixture through the desktop preview path. (Depends on: ST34 fixture contract; Size: M)
-- [x] **ST36 — Portal staged-context helper preview.** One staged-data task and required variable preview correctly; unavailable
-  predecessor context is explained and never silently executed. (Size: M)
-- [x] **ST37 — Desktop staged-context helper preview.** Prove the same variable/staging and unavailable-context cases on the desktop host. (Depends on: ST36 fixture contract; Size: M)
-
-### 8. Studio — Degraded editor and failed session recovery
-
-Completed 2026-10-13. [Real-host recovery evidence](docs/architecture/decisions/studio-failed-recovery-evidence.md)
-covers both degraded hosts, the 15-second Portal startup deadline, access expiry, failed refresh and kept drafts.
-
-- [x] **ST38 — Portal degraded-editor recovery.** Force a module-load failure, type and switch two tabs, then retry successfully;
-  buffers survive and unsupported actions are disabled or explained. (Size: M)
-- [x] **ST39 — Desktop degraded-editor recovery.** Prove the same failure/retry sequence in the desktop host. (Size: M)
-- [x] **ST40 — Portal session startup timeout/retry.** Bound an unanswered session request and cover HTTP 500/disconnect; display
-  an actionable error and recover on Retry without granting fallback capabilities. (Size: M)
-- [x] **ST41 — Portal expired-session retry.** Cover access-token expiry and failed refresh during startup; re-authentication and retry
-  restore the correct identity/capabilities and kept drafts. No new draft storage. (Depends on: ST40; Size: M)
-
-### 9. Studio — Delivery budgets, catalog scale and large documents
-
-Evidence: [delivery budgets and verification](docs/benchmarks/studio-delivery-budgets.md).
-
-- [x] **ST54 — Measure and decide Studio transfer budgets.** Inventory the full production import closure, designer assets,
-  and CodeMirror bundle; record raw/gzip baselines, accepted ceilings, and the gate's implementation estimate. No asset
-  optimization or gate implementation. (Size: D)
-- [x] **ST42 — Studio transfer-size gate.** Enforce the accepted raw/gzip ceilings for that import closure, with a negative
-  oversized fixture. Preserve existing timing gates; new optimization work gets separate estimates. (Depends on: ST54; Size: M)
-- [x] **ST43 — Portal cold-load evidence.** Measure first usable editor on a declared uncached Portal fixture, record the
-  environment, and set a defensible regression ceiling. No broad performance optimization. (Depends on: ST42; Size: M)
-- [x] **ST44 — Desktop cold-load evidence.** Measure the matching desktop fixture with its own host ceiling. (Depends on: ST42; Size: M)
-- [x] **ST45 — Paged Portal catalog discovery.** One bounded server-side search/paging path feeds Home while preserving folder/tenant
-  visibility; verify a declared large-catalog fixture. No real-time synchronization. (Size: M)
-- [x] **ST46 — Fresh catalog and stale-open recovery.** Refresh the paged list after external create/rename/move/delete; a stale
-  deleted/moved selection fails clearly without disturbing dirty buffers. (Depends on: ST45; Size: M)
-- [x] **ST53 — Measure and decide the large-document contract.** Pin one several-thousand-line Portal fixture and the existing
-  server character limit (distinct from transport byte limits); measure editing/analysis, define client limit/degraded behavior,
-  and estimate implementation. No editor changes. (Size: D)
-- [x] **ST47 — Portal large-document limits.** Implement the accepted client ceiling/degraded behavior on that fixture and verify
-  the server-limit boundary without losing text. No general editor rewrite. (Depends on: ST53; Size: M)
-- [x] **ST48 — Desktop large-document contract.** Measure the same bounded document in the desktop host and verify its limit/degraded
-  behavior. (Depends on: ST47 fixture contract; Size: M)
-- [x] **ST49 — Portal analysis throttling recovery.** One controlled designer-rate-limit rejection preserves the buffer, explains stale
-  diagnostics, and resumes analysis after permitted retry; no arbitrary predecessor execution. (Depends on: ST47; Size: M)
-
-### 10. Studio — Release-versioned guidance
-
-Guides: [Studio in v0.21.0](docs/guides/studio/README.md). Validation on 2026-10-13: 12 production-host
-browser journeys, 2 schedule-policy tests, 3 documentation syntax tests, and strict documentation audit
-passed. Human learner observation remains separately open; the guides state that limit.
-
-- [x] **ST50 — Beginner report guide.** Document the certified report exercise, code/helper round trips, and both host entry points,
-  referring to release versions. (Depends on: ST16, ST17; Size: S)
-- [x] **ST51 — Pipeline run/schedule guide.** Document the certified pipeline flow, grants, status/log/Stop, and missing-Orchestrator
-  behavior. (Depends on: ST07, ST10; Size: S)
-- [x] **ST52 — Draft, publishing and recovery guide.** Explain kept versus unavailable drafts, private/public permissions, conflicts,
-  and retry/support diagnostics; include desktop policy limits. (Depends on: ST14, ST15, ST40, ST41; Size: S)
 
 ---
 

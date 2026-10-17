@@ -124,10 +124,13 @@ public static class WorkstationEditorApp
             // path instead of layering a second provider over /designer: overlapping mounts at one
             // path make it ambiguous which directory answers a request, and would silently publish
             // anything later added beside designer/ under the same URL space.
+            var runtimeContentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+            runtimeContentTypes.Mappings[".geojson"] = "application/geo+json";
             app.UseStaticFiles(new StaticFileOptions
             {
                 RequestPath = "/runtime",
                 FileProvider = new PhysicalFileProvider(sharedRoot),
+                ContentTypeProvider = runtimeContentTypes,
                 OnPrepareResponse = ctx =>
                 {
                     ctx.Context.Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
