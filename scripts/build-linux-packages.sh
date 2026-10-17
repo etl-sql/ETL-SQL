@@ -30,6 +30,15 @@ if [ ! -f "$PUBLISHED_BIN_DIR/ETL-SQL" ]; then
     exit 1
 fi
 
+# A host that was started from the publish folder leaves its runtime state there. Packaged, a key
+# ring or database would be shared by every installation and overwritten on every upgrade.
+for state in portal.db portal.db-wal portal.db-shm etlsql.db .portal-keys logs data Reports Snapshots; do
+    if [ -e "$PUBLISHED_BIN_DIR/$state" ]; then
+        echo "[ERROR] Runtime state in the publish folder: $PUBLISHED_BIN_DIR/$state. Publish again into a clean folder."
+        exit 1
+    fi
+done
+
 echo "Copying published linux-x64 binaries from $PUBLISHED_BIN_DIR..."
 # The single self-contained publish already contains every host executable
 # (CLI, TUI, LSP, Report, Player, Portal, Service). Install it once instead of
@@ -73,19 +82,64 @@ cat <<'POSTINST' > "$BUILD_ROOT/DEBIAN/postinst"
 #!/bin/bash
 set -e
 
-id -u etlsql >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin etlsql
+id -u etlsql >/dev/null 2>&1 || useradd -r -d /var/lib/etl-sql -s /usr/sbin/nologin etlsql
 
 CFG=/usr/lib/etl-sql/bin/appsettings.json
+SAVED=/var/lib/etl-sql-upgrade/appsettings.json
+FIRST_RUN=/etc/etl-sql/first-run-password
 if command -v python3 >/dev/null 2>&1 && [ -f "$CFG" ]; then
-    python3 - "$CFG" <<'PY'
+    python3 - "$CFG" "$SAVED" "$FIRST_RUN" "${2:-}" <<'PY'
 import json, sys, os, base64
-path = sys.argv[1]
-with open(path) as f:
+import stat
+path, saved, first_run_file, previous_version = sys.argv[1:5]
+# Written as root inside a folder the service user owns: never follow a link planted in its place.
+if not stat.S_ISREG(os.lstat(path).st_mode):
+    sys.exit(f"[ETL-SQL] {path} is not a regular file; refusing to rewrite it.")
+with open(path, encoding="utf-8-sig") as f:
     data = json.load(f)
 changed = False
-jwt = data.get("Portal", {}).get("Jwt")
+# An upgrade replaced this file with the package's defaults; preinst kept the installed one. Its
+# values win (the operator's settings and the generated secrets), and keys new in this release are
+# added. Losing the secrets would sign everyone out and make cached datasets unreadable.
+def root_owned_file(p):
+    try:
+        info = os.lstat(p)
+    except FileNotFoundError:
+        return False
+    return stat.S_ISREG(info.st_mode) and info.st_uid == 0
+if root_owned_file(saved):
+    with open(saved, encoding="utf-8-sig") as f:
+        installed = json.load(f)
+    def keep(target, source):
+        for key, value in source.items():
+            if isinstance(value, dict) and isinstance(target.get(key), dict):
+                keep(target[key], value)
+            else:
+                target[key] = value
+    keep(data, installed)
+    changed = True
+portal = data.get("Portal") if isinstance(data.get("Portal"), dict) else {}
+jwt = portal.get("Jwt")
 if isinstance(jwt, dict) and not (jwt.get("Secret") or "").strip():
     jwt["Secret"] = base64.b64encode(os.urandom(32)).decode("ascii")
+    changed = True
+# The Portal refuses to start without a dataset at-rest key. It must survive upgrades (see above):
+# a new key makes every cached dataset unreadable.
+dataset = portal.get("Dataset")
+if isinstance(dataset, dict) and not (dataset.get("AtRestKey") or "").strip():
+    dataset["AtRestKey"] = base64.b64encode(os.urandom(32)).decode("ascii")
+    changed = True
+# A fresh install has no administrator, and the Portal will not create one without a bootstrap
+# password. Generate a one-time password; the Portal forces a change at first sign-in.
+first_run = portal.get("FirstRun")
+if (not previous_version and isinstance(first_run, dict)
+        and not (first_run.get("AdminPassword") or "").strip() and not os.path.exists(first_run_file)):
+    password = base64.urlsafe_b64encode(os.urandom(18)).decode("ascii") + "9!"
+    first_run["AdminPassword"] = password
+    os.makedirs(os.path.dirname(first_run_file), exist_ok=True)
+    fd = os.open(first_run_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(f"{first_run.get('AdminUsername') or 'admin'}\n{password}\n")
     changed = True
 # Portal sub-choices / module enablement via ETLSQL_PORTAL_MODULES env var (e.g. Reporting,Designer,Scheduling,Operations)
 env_modules = os.environ.get("ETLSQL_PORTAL_MODULES")
@@ -117,29 +171,62 @@ if isinstance(orch, dict) and not (orch.get("ApiKey") or "").strip():
 if isinstance(portal_orch, dict) and not (portal_orch.get("ApiKey") or "").strip():
     portal_orch["ApiKey"] = api_key
     changed = True
+# Federated identity: the Portal signs caller assertions that the Orchestrator verifies with the
+# same secret. The Orchestrator refuses to start without it.
+if isinstance(orch, dict) and isinstance(portal_orch, dict):
+    signing = (orch.get("IdentitySigningSecret") or portal_orch.get("IdentitySigningSecret") or "").strip() \
+        or base64.b64encode(os.urandom(32)).decode("ascii")
+    for side in (orch, portal_orch):
+        if not (side.get("IdentitySigningSecret") or "").strip():
+            side["IdentitySigningSecret"] = signing
+            changed = True
 sec = data.get("Security")
-if isinstance(sec, dict) and sec.get("ApprovedSafeZones") != ["/usr/lib/etl-sql/bin"]:
-    sec["ApprovedSafeZones"] = ["/usr/lib/etl-sql/bin"]
+# The install folder must be a safe zone; zones the operator added stay.
+zones = sec.get("ApprovedSafeZones") if isinstance(sec, dict) else None
+if isinstance(sec, dict) and "/usr/lib/etl-sql/bin" not in (zones if isinstance(zones, list) else []):
+    sec["ApprovedSafeZones"] = (zones if isinstance(zones, list) else []) + ["/usr/lib/etl-sql/bin"]
     changed = True
 if changed:
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 PY
+    rm -rf /var/lib/etl-sql-upgrade
 else
-    echo "[ETL-SQL] python3 or appsettings.json missing; set Portal:Jwt:Secret, Orchestrator:ApiKey (and the matching Portal:Orchestrator:ApiKey), and Security:ApprovedSafeZones manually." >&2
+    echo "[ETL-SQL] python3 or appsettings.json missing; set Portal:Jwt:Secret, Portal:Dataset:AtRestKey, Portal:FirstRun:AdminPassword, Orchestrator:ApiKey (and the matching Portal:Orchestrator:ApiKey), and Security:ApprovedSafeZones manually." >&2
     echo "[ETL-SQL] NOTE: the Orchestrator binds to a network address and will NOT start without Orchestrator:ApiKey set." >&2
 fi
 
 chown -R etlsql:etlsql /usr/lib/etl-sql
 systemctl daemon-reload
-systemctl enable --now etl-sql-orchestrator.service etl-sql-portal.service || true
+systemctl enable etl-sql-orchestrator.service etl-sql-portal.service || true
+# restart, not start: on an upgrade the running services still execute the replaced binaries.
+systemctl restart etl-sql-orchestrator.service etl-sql-portal.service || true
 
 echo ""
 echo "ETL-SQL installed. Once the services start:"
 echo "  Portal:    http://localhost:5002"
 echo "  Orchestrator API: http://localhost:5001"
+if [ -z "${2:-}" ] && [ -f "$FIRST_RUN" ]; then
+    echo "  First sign-in: the user name and one-time password are in $FIRST_RUN (root only)."
+    echo "  The Portal requires a new password at that sign-in; then delete the file."
+fi
 POSTINST
 chmod 755 "$BUILD_ROOT/DEBIAN/postinst"
+
+# preinst: an upgrade unpacks the package's appsettings.json over the installed one. Keep the
+# installed file so postinst can carry its values forward.
+cat <<'PREINST' > "$BUILD_ROOT/DEBIAN/preinst"
+#!/bin/bash
+set -e
+# Root-only directory: the service user owns /var/lib/etl-sql and could plant a link there.
+SAVED_DIR=/var/lib/etl-sql-upgrade
+if [ "$1" = "upgrade" ] && [ -f /usr/lib/etl-sql/bin/appsettings.json ]; then
+    rm -rf "$SAVED_DIR"
+    install -d -m 700 -o root -g root "$SAVED_DIR"
+    install -m 600 -o root -g root /usr/lib/etl-sql/bin/appsettings.json "$SAVED_DIR/appsettings.json"
+fi
+PREINST
+chmod 755 "$BUILD_ROOT/DEBIAN/preinst"
 
 # prerm: stop and disable the services before files are removed.
 cat <<'PRERM' > "$BUILD_ROOT/DEBIAN/prerm"
@@ -159,6 +246,10 @@ if [ "$1" = "purge" ]; then
     # are unified to call `etl-sql purge --yes` (tracked under the installer-parity TODO).
     rm -rf /usr/lib/etl-sql/bin/logs /usr/lib/etl-sql/bin/Snapshots /usr/lib/etl-sql/bin/Reports /usr/lib/etl-sql/bin/data
     rm -f /usr/lib/etl-sql/bin/portal.db* /usr/lib/etl-sql/bin/etlsql.db*
+    # The service user's state and extraction directories, and the one-time sign-in file.
+    rm -rf /var/lib/etl-sql /var/lib/etl-sql-upgrade /var/cache/etl-sql
+    rm -f /etc/etl-sql/first-run-password
+    rmdir /etc/etl-sql 2>/dev/null || true
 fi
 POSTRM
 chmod 755 "$BUILD_ROOT/DEBIAN/postrm"

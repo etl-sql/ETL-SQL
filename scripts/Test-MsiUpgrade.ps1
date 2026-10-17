@@ -51,44 +51,6 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'MsiUpgrade.Helpers.ps1')
 
-function Get-EtlSqlUninstallEntries {
-    $roots = @(
-        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
-        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
-    )
-
-    return @($roots | ForEach-Object {
-        Get-ItemProperty -Path $_ -ErrorAction SilentlyContinue
-    } | Where-Object {
-        $null -ne $_.PSObject.Properties['DisplayName'] -and
-        $null -ne $_.PSObject.Properties['Publisher'] -and
-        $_.DisplayName -eq 'ETL-SQL' -and
-        $_.Publisher -eq 'Charles Clemens'
-    } | Sort-Object PSPath -Unique)
-}
-
-function Assert-EntryCount {
-    param([int]$Expected, [string]$Stage)
-
-    $entries = @(Get-EtlSqlUninstallEntries)
-    if ($entries.Count -ne $Expected) {
-        $found = @($entries | ForEach-Object { "$($_.DisplayVersion) [$($_.PSChildName)]" }) -join ', '
-        throw "$Stage expected $Expected ETL-SQL uninstall entry/entries but found $($entries.Count): $found"
-    }
-    return $entries
-}
-
-function Invoke-MsiExec {
-    param([string[]]$Arguments, [string]$LogPath, [string]$Stage)
-
-    $allArguments = @($Arguments) + @('/qn', '/norestart', '/l*v', $LogPath)
-    $process = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" `
-        -ArgumentList $allArguments -Wait -PassThru -WindowStyle Hidden
-    if ($process.ExitCode -notin @(0, 1641, 3010)) {
-        throw "$Stage failed with msiexec exit code $($process.ExitCode). See $LogPath"
-    }
-}
-
 if (-not $IsWindows) { throw 'MSI upgrade certification runs on Windows only.' }
 
 $previousPath = (Resolve-Path -LiteralPath $PreviousMsi).Path

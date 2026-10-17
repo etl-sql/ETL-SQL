@@ -7,6 +7,12 @@ Type=simple
 User=etlsql
 WorkingDirectory=/usr/lib/etl-sql/bin
 ExecStart=/usr/lib/etl-sql/bin/ETL-SQL-Portal
+# The service user is a system account. systemd creates and owns its home (per-user state such
+# as the security event outbox) and the directory single-file hosts extract native libraries to.
+StateDirectory=etl-sql
+CacheDirectory=etl-sql
+Environment=HOME=/var/lib/etl-sql
+Environment=DOTNET_BUNDLE_EXTRACT_BASE_DIR=/var/cache/etl-sql
 Restart=always
 RestartSec=10
 Environment=ASPNETCORE_URLS=http://*:5002

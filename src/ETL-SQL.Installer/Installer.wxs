@@ -11,7 +11,9 @@
         <util:CloseApplication Id="CloseService" Target="ETL-SQL-Service.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
         <util:CloseApplication Id="ClosePortal" Target="ETL-SQL-Portal.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
 
-        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+        <!-- afterInstallInitialize, so BackupSettings (deferred) can save the installed configuration
+             before the previous product's files are removed. -->
+        <MajorUpgrade Schedule="afterInstallInitialize" DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
         <MediaTemplate EmbedCab="yes" />
         <!-- Publish the resolved folder in Add/Remove Programs so upgrade certification and
              operators can locate the installed binaries without assuming Program Files. -->
@@ -320,9 +322,11 @@
              Portal:Surface value in appsettings.json. -->
         <Binary Id="InstallerActionsJs" SourceFile="installer-actions.js" />
         <CustomAction Id="SetWriteJwtData" Property="WriteJwt"
-                      Value="[INSTALLFOLDER]|INSTALL_PORTAL=[INSTALL_ADMIN_PORTAL]|REPORTING=[INSTALL_PORTAL_REPORTING]|DESIGNER=[INSTALL_PORTAL_DESIGNER]|SCHEDULING=[INSTALL_PORTAL_SCHEDULING]|OPERATIONS=[INSTALL_PORTAL_OPERATIONS]|ORCH_SURFACE=[INSTALL_PORTAL_ORCH_SURFACE]|STEWARD_SURFACE=[INSTALL_PORTAL_STEWARD_SURFACE]|REPORT_PORTAL=[INSTALL_REPORT_PORTAL]"
+                      Value="[INSTALLFOLDER]|UPGRADE=[WIX_UPGRADE_DETECTED]|INSTALL_PORTAL=[INSTALL_ADMIN_PORTAL]|REPORTING=[INSTALL_PORTAL_REPORTING]|DESIGNER=[INSTALL_PORTAL_DESIGNER]|SCHEDULING=[INSTALL_PORTAL_SCHEDULING]|OPERATIONS=[INSTALL_PORTAL_OPERATIONS]|ORCH_SURFACE=[INSTALL_PORTAL_ORCH_SURFACE]|STEWARD_SURFACE=[INSTALL_PORTAL_STEWARD_SURFACE]|REPORT_PORTAL=[INSTALL_REPORT_PORTAL]"
                       Execute="immediate" />
         <CustomAction Id="WriteJwt" BinaryKey="InstallerActionsJs" JScriptCall="ConfigureJwt" Execute="deferred" Impersonate="no" Return="ignore" />
+        <CustomAction Id="SetBackupSettingsData" Property="BackupSettings" Value="[INSTALLFOLDER]" Execute="immediate" />
+        <CustomAction Id="BackupSettings" BinaryKey="InstallerActionsJs" JScriptCall="BackupSettings" Execute="deferred" Impersonate="no" Return="ignore" />
         <CustomAction Id="PromptCleanData" BinaryKey="InstallerActionsJs" JScriptCall="PromptCleanData" Execute="immediate" Return="ignore" />
         <CustomAction Id="SetCleanDataDir" Property="CleanData" Value="[INSTALLFOLDER]" Execute="immediate" />
         <CustomAction Id="CleanData" BinaryKey="InstallerActionsJs" JScriptCall="CleanData" Execute="deferred" Impersonate="no" Return="ignore" />
@@ -367,6 +371,10 @@
             <Custom Action="EntReport"             After="EntAdmin"><![CDATA[DEPLOY_PROFILE = "ENTERPRISE"]]></Custom>
             <Custom Action="EntSurface"            After="EntReport"><![CDATA[DEPLOY_PROFILE = "ENTERPRISE"]]></Custom>
 
+            <!-- On a major upgrade: keep the installed configuration before the old files go. Only
+                 where WriteJwt runs to carry it forward (a workstation-only install has no script). -->
+            <Custom Action="SetBackupSettingsData" After="CostFinalize"><![CDATA[WIX_UPGRADE_DETECTED AND (&Feature_AdminPortal=3 OR &Feature_ReportPortal=3 OR &Feature_Orchestrator=3)]]></Custom>
+            <Custom Action="BackupSettings" Before="RemoveExistingProducts"><![CDATA[WIX_UPGRADE_DETECTED AND (&Feature_AdminPortal=3 OR &Feature_ReportPortal=3 OR &Feature_Orchestrator=3)]]></Custom>
             <!-- On install: generate the JWT secret + approve the install folder as a safe zone. -->
             <Custom Action="SetWriteJwtData" After="CostFinalize"><![CDATA[&Feature_AdminPortal=3 OR &Feature_ReportPortal=3 OR &Feature_Orchestrator=3]]></Custom>
             <Custom Action="WriteJwt" After="InstallFiles"><![CDATA[&Feature_AdminPortal=3 OR &Feature_ReportPortal=3 OR &Feature_Orchestrator=3]]></Custom>

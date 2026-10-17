@@ -69,7 +69,12 @@ jobs:
           $upgradePatterns = @(
             '^src/ETL-SQL\.Installer/',
             '^scripts/Test-MsiUpgrade\.ps1$',
+            '^scripts/Test-MsiPortalUpgrade\.ps1$',
+            '^scripts/test-installed-portal-assets\.mjs$',
             '^scripts/MsiUpgrade\.Helpers\.ps1$',
+            # Dependency versions and the shipped configuration change what the MSI installs.
+            '^Directory\.Packages\.props$',
+            '^src/appsettings\.json$',
             '^scripts/Release\.Helpers\.ps1$',
             '^scripts/build-msi\.ps1$',
             '^\.github/workflows/msi-upgrade\.yml$',
@@ -189,12 +194,27 @@ jobs:
           $current = "src/ETL-SQL.Installer/ETL-SQL-v$env:CURRENT_VERSION.msi"
           .\scripts\Test-MsiUpgrade.ps1 -PreviousMsi $previous[0].FullName -CurrentMsi $current
 
+      # The workstation profile above installs no service. This one runs the Portal and
+      # Orchestrator: fresh install, upgrade with served-asset and cache checks, and rollback.
+      - name: Certify Portal profile install, upgrade and rollback
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        env:
+          CURRENT_VERSION: ${{ steps.versions.outputs.current_version }}
+        run: |
+          $previous = @(Get-ChildItem .upgrade-cache -Filter '*-x64-Setup.msi')
+          if ($previous.Count -ne 1) { throw 'Previous MSI cache must contain exactly one MSI.' }
+          $current = "src/ETL-SQL.Installer/ETL-SQL-v$env:CURRENT_VERSION.msi"
+          .\scripts\Test-MsiPortalUpgrade.ps1 -PreviousMsi $previous[0].FullName -CurrentMsi $current
+
       - name: Upload upgrade evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: msi-upgrade-${{ github.run_id }}
-          path: release-validation/msi-upgrade
+          path: |
+            release-validation/msi-upgrade
+            release-validation/msi-portal-upgrade
           if-no-files-found: warn
           retention-days: 30
 

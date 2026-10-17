@@ -1,1 +1,7 @@
 src/ETL-SQL.Portal/wwwroot/maps/*.geojson
+
+# Runtime data a local Portal writes beside the project. Published with the Web SDK if tracked,
+# so it must never be: snapshots, report drops and SQLite files belong to an installation.
+/Snapshots/
+/Reports/
+/portal.db*

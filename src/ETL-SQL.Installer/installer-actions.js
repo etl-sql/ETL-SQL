@@ -20,6 +20,26 @@ function ConfigureJwt() {
     return 1; // msiDoActionStatusSuccess
 }
 
+// Runs before RemoveExistingProducts on a major upgrade, which deletes the installed appsettings.json
+// before the new one is laid down. The copy stays in the install folder (Administrators and SYSTEM
+// only can write there); configure-portal-jwt.ps1 carries its values forward and deletes it.
+function BackupSettings() {
+    try {
+        var installDir = Session.Property("CustomActionData");
+        if (!installDir) {
+            return 1;
+        }
+        var fso = new ActiveXObject("Scripting.FileSystemObject");
+        var source = installDir + "appsettings.json";
+        if (fso.FileExists(source)) {
+            fso.CopyFile(source, installDir + "appsettings.pre-upgrade.json", true);
+        }
+    } catch (e) {
+        // Non-fatal: without the copy the upgrade still installs, with regenerated secrets.
+    }
+    return 1;
+}
+
 // Immediate action run during an interactive uninstall: asks (OS-level Yes/No message box, so it
 // works even when Settings > Apps runs the uninstall in basic UI) whether to also delete runtime
 // data, and records the answer in CLEANDATA. Gated by sequence condition to skip silent uninstalls.
