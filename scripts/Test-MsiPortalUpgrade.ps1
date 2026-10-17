@@ -55,7 +55,25 @@ $checker = Join-Path $repoRoot 'scripts/test-installed-portal-assets.mjs'
 $installDir = 'C:\Program Files\ETL-SQL'
 $systemData = Join-Path $env:SystemRoot 'System32\config\systemprofile\AppData\Local\ETL-SQL'
 
-function Write-Line([string]$Text) { Write-Host $Text; Add-Content -LiteralPath $summary -Value $Text }
+function Write-Line([string]$Text) {
+    Write-Host $Text
+    Add-Content -LiteralPath $summary -Value $Text
+    if ($Text.StartsWith('== ')) { Write-ResourceSnapshot }
+}
+
+# The first CI run lost its runner with no log. Record what was running at each stage, so a
+# starved or crash-looping service shows up in the evidence.
+function Write-ResourceSnapshot {
+    $os = Get-CimInstance Win32_OperatingSystem
+    Add-Content -LiteralPath $summary -Value ("   free memory {0:N0} MB of {1:N0} MB" -f ($os.FreePhysicalMemory / 1KB), ($os.TotalVisibleMemorySize / 1KB))
+    Get-Process | Sort-Object CPU -Descending | Select-Object -First 6 | ForEach-Object {
+        Add-Content -LiteralPath $summary -Value ("   {0,-28} cpu {1,8:N0}s  ws {2,6:N0} MB" -f $_.ProcessName, $_.CPU, ($_.WorkingSet64 / 1MB))
+    }
+    foreach ($name in 'ETL-SQL-Orchestrator', 'ETL-SQL-Portal') {
+        $svc = Get-Service -Name $name -ErrorAction SilentlyContinue
+        if ($svc) { Add-Content -LiteralPath $summary -Value "   service $name $($svc.Status)" }
+    }
+}
 
 function Test-Step([string]$Name, [scriptblock]$Body) {
     try {

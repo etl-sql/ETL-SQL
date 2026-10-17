@@ -198,6 +198,9 @@ jobs:
       # Orchestrator: fresh install, upgrade with served-asset and cache checks, and rollback.
       - name: Certify Portal profile install, upgrade and rollback
         if: ${{ !cancelled() }}
+        # The first run lost the runner after 76 minutes with no log. Fail the step first, so the
+        # evidence upload below still runs and shows the last stage reached.
+        timeout-minutes: 45
         shell: pwsh
         env:
           CURRENT_VERSION: ${{ steps.versions.outputs.current_version }}
