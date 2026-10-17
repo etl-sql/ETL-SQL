@@ -167,6 +167,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Enable the Portal Orchestrator's four metric chips with server filters, search and status criteria,
   pagination, and counts limited to readable jobs. Activity loading and polling use strict TypeScript.
 
+### Security
+
+- Update `System.Security.Cryptography.Pkcs` to 10.0.13 for two .NET denial-of-service advisories,
+  CVE-2026-84008 (high) and CVE-2026-70162 (moderate). Connectors, the Orchestrator, and reporting
+  had pulled in 8.0.1, 9.0.13, and 10.0.0 transitively. Builds were refusing to restore once NuGet
+  audit reported the advisories.
+
 ### Fixed
 
 - WorkstationEditor serves bundled GeoJSON maps with the correct media type. Published Player,
