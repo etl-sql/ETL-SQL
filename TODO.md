@@ -35,9 +35,9 @@ or an asset-only archive check does not close a build, package or runtime row.
 [delivery matrix](docs/releases/v0.21.0-browser-asset-delivery-matrix.md) ·
 [progress record](docs/releases/v0.21.0-generated-assets-progress.md) (full history and original task wording)
 
-- [ ] **Real IDE launch.** Open the solution in an IDE before preparation, prepare, then build and
-  launch; repeat after `git clean -fdX`. Only the `DesignTimeBuild` property has been exercised, and
-  that is not IDE acceptance.
+- [x] **Real IDE launch.** Open the solution in an IDE before preparation, prepare, then build and
+  launch; repeat after `git clean -fdX`. **Done 2026-10-17:** the owner ran it in Visual Studio Code
+  and reported a pass.
 - [ ] **Installed upgrades.** The workstation MSI upgrade from v0.20.0 to v0.20.1 passes with installed
   Player asset assertions in CI run 38194946537. The Windows VSIX update from v0.20.0 to the fixed
   candidate passes in the same profile. 2026-10-17: `scripts/test-deb-upgrade.sh` passes all 37 checks (33 before the secrets split)
