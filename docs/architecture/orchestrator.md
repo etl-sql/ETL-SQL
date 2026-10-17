@@ -358,9 +358,10 @@ execution lease, throttle, history and metering. It differs from a trigger in se
 - Only a run slot, a job named `PIPELINE:<id>`, accepts submitted text. Any other name answers
   `403 not_a_run_slot` before the job is looked up, so `EXECUTE` on an operator's hash-pinned job
   still means "start the pinned script".
-- A node that executes jobs in the sandbox refuses with `501 sandbox_identity_unsupported`. The
-  sandbox request carries the job's tenant and no caller, so the text would run past the submitter's
-  row-level security.
+- On a node that executes jobs in the sandbox, the request carries the caller's identity in a
+  read-only envelope ([design](decisions/studio-sandbox-submitter-identity.md)). A sandbox executor
+  that does not advertise identity support refuses with `501 sandbox_identity_unsupported`, since
+  the text would otherwise run past the submitter's row-level security.
 
 `ProvisionIfMissing` creates the slot when the caller passes
 `OrchestratorObjectAuthorizationService.CanCreate`. The slot is an enabled job with no schedule and

@@ -4,7 +4,7 @@ The execution ledger for v0.21.0. Items are grouped by when they can be done, no
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0210-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 4 |
+| [Now](#now--v0210-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 3 |
 | [At release](#v0210-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 11 |
 | [Blocked](#blocked--waiting-on-something-outside-the-repository) | Work waiting on a tool, account or person | 3 |
 | [Known limits](#known-limits--context-not-tasks) | Limits to state honestly in release notes | — |
@@ -57,9 +57,12 @@ or an asset-only archive check does not close a build, package or runtime row.
 [reader](docs/architecture/decisions/studio-reader-journey-evidence.md) and
 [Portal practice](docs/architecture/decisions/studio-portal-practice-evidence.md) evidence).
 
-- [ ] **ST21b — Portal practice exercise in the sandbox.** Carry the submitter's identity in the sandbox request,
+- [x] **ST21b — Portal practice exercise in the sandbox.** Carry the submitter's identity in the sandbox request,
   lift `sandbox_identity_unsupported` for run slots, and repeat ST21 on a real sandbox with its terminal status,
   egress denial and cleanup recorded. Security-sensitive; needs a written design first. (Depends on: ST21; Size: L)
+  **Done 2026-10-17:** [design and evidence](docs/architecture/decisions/studio-sandbox-submitter-identity.md#acceptance-evidence--2026-10-17).
+  Passed three consecutive runs on Docker Desktop runc (Standard tier), with metadata and external
+  egress refused and no container or workspace left. Not Hardened/gVisor certification.
 
 ST16b, the observed learner walkthrough, is deferred in
 [`ROADMAP.md`](ROADMAP.md#author-reader-and-beginner-practice-journeys) until a person new to Studio is available.
@@ -144,7 +147,7 @@ Run path decided 2026-10-12: one Orchestrator job per pipeline (`PIPELINE:{id}`)
 created on first run by an `Admin` or `OrchestratorManager`. See
 [Portal ETL documents §5](docs/architecture/decisions/portal-etl-documents.md#5-slice-2-as-built-2026-10-12).
 
-- Sandbox submission is tracked in ST21b.
+- Sandbox submission carries the submitter (ST21b). It is evidenced on Standard/runc only.
 - Cancellation signals only the executing node, and kill-by-job-name still records `FAILURE`.
 - Pipeline schedules must be recreated at the promotion target.
 - Report refresh scheduling joins the Portal link and Orchestrator job by name manually and has no

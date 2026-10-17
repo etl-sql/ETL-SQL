@@ -64,8 +64,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   submitted script text once through a job without changing its definition,
   `GET /api/job-runs/{id}` returns status and statements, and `POST /api/job-runs/{id}/cancel` stops
   one run and records it as `CANCELLED`. The existing kill-by-job-name route is unchanged. Only a
-  job named `PIPELINE:<id>` accepts submitted text, and an Orchestrator that executes jobs in its
-  sandbox refuses it, because the sandbox cannot yet run text under the submitter's identity.
+  job named `PIPELINE:<id>` accepts submitted text. A sandbox executor that cannot carry the
+  submitter's identity refuses it with `sandbox_identity_unsupported`.
+
+- Run a Portal pipeline on a sandboxed Orchestrator as the person who submitted it. The Orchestrator
+  builds the identity after verifying the caller and the run-slot grant, and Docker mounts it
+  read-only for the worker, which fails closed when it is missing or does not match the run. The
+  Portal practice exercise passed on a real Standard (runc) sandbox. That run covered the
+  Publisher's identity, the failed check and its repair, refused metadata and external egress,
+  and removal of every container and workspace. Hardened (gVisor) isolation is not part of this
+  evidence. See the [acceptance evidence](docs/architecture/decisions/studio-sandbox-submitter-identity.md#acceptance-evidence--2026-10-17).
 
 ### Changed
 

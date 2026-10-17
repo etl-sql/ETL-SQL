@@ -1,6 +1,7 @@
 # Studio Sandbox Submitter Identity
 
-**Decision:** ST21b, 2026-10-13. This design precedes implementation and acceptance.
+**Decision:** ST21b, 2026-10-13. Implemented 2026-10-13; accepted on a real Standard sandbox
+2026-10-17 ([evidence](#acceptance-evidence--2026-10-17)).
 
 The authenticated Orchestrator constructs the execution identity after verifying the federated
 caller and the run-slot Execute grant. Submitted SQL, document metadata, variables, and report
@@ -53,6 +54,36 @@ parameters, and saved state cannot overwrite them.
   denied external egress, terminal status, and verified container/workspace removal.
 - Keep the observed learner walkthrough separate. Passing automated security or browser tests does
   not record a human's understanding.
+
+## Acceptance evidence — 2026-10-17
+
+Run on Docker Desktop 29.6.2 (Linux engine, runc, Standard tier) with the worker image rebuilt from
+`72b614c21`: local image ID `sha256:c565a9915963cbeb1a9a5ebaffa9517f4a7c4c7df561b626e6bd3ad1605b147a`.
+
+```powershell
+pwsh -File scripts\Test-SandboxWorkerImage.ps1 -Tag etlsql-sandbox-worker-test:local
+dotnet test tests\ETL-SQL.Portal.BrowserTests\ETL-SQL.Portal.BrowserTests.csproj --filter "FullyQualifiedName~StudioSandboxPracticeTests|FullyQualifiedName~StudioPortalPracticeTests"
+```
+
+`StudioSandboxPracticeTests` drives the real Portal browser journey against an Orchestrator whose only
+executor is `DockerSandboxExecutionProvider`. It passed in three consecutive runs with no skips.
+
+| Requirement | Observed |
+| :--- | :--- |
+| Scoped Publisher identity in the sandbox | Every learner attempt carried tenant `portal-host`, role Publisher, not Admin; the script's `ASSERT @@CURRENT_USER` passed inside the container |
+| Saved-revision hash | Each run's `ScriptHashAtRunTime` equals the saved revision's hash |
+| Failed ASSERT before load, repair, repeatability | First run `FAILURE` with the repair hint; clean-state run, then two repaired runs `SUCCESS` with distinct run IDs |
+| Policy egress fence | `169.254.169.254` refused: "cloud instance metadata service) is denied" |
+| Network egress | `1.1.1.1` passes the fence and fails at TCP; every container's `NetworkMode` is `none` |
+| Terminal status | At least two `Failed` and three `Succeeded` provider outcomes recorded per run |
+| Cleanup | Every assignment's workspace directory and `etlsql-<assignment>` container is gone; `docker ps -a` shows no `etlsql-` container afterwards |
+
+Supporting checks: 46 envelope, provider, coordinator and scheduled-executor tests and 19 Portal
+revision-run, execution-identity and pipeline-run tests pass. TRX files are under `artifacts/st21b/`.
+
+Limits: this is Standard/runc on a trusted local host, not Hardened (gVisor) or hostile-tenant
+certification. A local image ID is accepted only in Standard mode. Learner understanding is not
+evidenced (ST16b).
 
 ## References
 

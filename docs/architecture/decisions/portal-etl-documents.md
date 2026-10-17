@@ -122,12 +122,11 @@ used the pinned hash; `AnAuthorSchedulesTheSavedRevisionThroughTheOrchestrator` 
 
 Not yet shown:
 
-- **Sandbox execution.** The tests use the in-process executor. The sandbox request carries no
-  caller identity, so a sandboxed revision run would be the tenant's, not the author's, for
-  row-level security. When `ISandboxScheduledJobExecutor` is registered a revision run is therefore
-  refused with `sandbox_identity_unsupported`: Run does not work on a sandboxed Orchestrator until
-  the sandbox request carries the submitter. A scheduled occurrence of the pinned revision still
-  runs there, as the tenant, like any scheduled job.
+- **Sandbox execution.** Since ST21b (2026-10-13) the sandbox request carries the submitter's
+  identity, so a revision run on the sandbox executor runs as its author. A sandbox executor that
+  does not advertise identity support is still refused with `sandbox_identity_unsupported`. See
+  [sandbox submitter identity](studio-sandbox-submitter-identity.md). A scheduled occurrence of the
+  pinned revision runs as the tenant, like any scheduled job.
 - **More than one Orchestrator node.** Cancel signals only the node that is executing the run.
 - **Orchestrator restart mid-run.** The submitter is remembered in memory, so afterwards only
   `MANAGE` can cancel.

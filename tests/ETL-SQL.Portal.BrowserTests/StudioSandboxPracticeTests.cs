@@ -40,6 +40,15 @@ public sealed class StudioSandboxPracticeTests
             });
             Assert.True(orchestrator.Provider.Attempts.Count(a => a.Status == SandboxTerminalStatus.Failed) >= 2);
             Assert.True(orchestrator.Provider.Attempts.Count(a => a.Status == SandboxTerminalStatus.Succeeded) >= 3);
+            // Teardown must remove every container, not only its workspace directory.
+            var commands = new ProcessSandboxCommandRunner();
+            foreach (var attempt in orchestrator.Provider.Attempts)
+            {
+                var left = await commands.RunAsync("docker",
+                    ["ps", "-a", "-q", "--filter", "name=^etlsql-" + attempt.AssignmentId + "$"]);
+                Assert.Equal(0, left.ExitCode);
+                Assert.Equal("", left.StandardOutput.Trim());
+            }
         }
         finally { await fixture.DisposeAsync(); }
     }
@@ -116,7 +125,7 @@ public sealed class StudioSandboxPracticeTests
         }
     }
 
-    private sealed record AttemptEvidence(SandboxWorkloadRequest Request, string Root, SandboxProviderEvidence Evidence)
+    private sealed record AttemptEvidence(SandboxWorkloadRequest Request, string AssignmentId, string Root, SandboxProviderEvidence Evidence)
     {
         public SandboxTerminalStatus? Status { get; set; }
     }
@@ -130,7 +139,7 @@ public sealed class StudioSandboxPracticeTests
             var network = await commands.RunAsync("docker", ["inspect", "--format", "{{.HostConfig.NetworkMode}}", "etlsql-" + workspace.AssignmentId], cancellationToken);
             Assert.Equal(0, network.ExitCode);
             Assert.Equal("none", network.StandardOutput.Trim());
-            var evidence = new AttemptEvidence(request, workspace.RootPath, attempt.Evidence);
+            var evidence = new AttemptEvidence(request, workspace.AssignmentId, workspace.RootPath, attempt.Evidence);
             Attempts.Add(evidence);
             return new RecordingAttempt(attempt, evidence);
         }

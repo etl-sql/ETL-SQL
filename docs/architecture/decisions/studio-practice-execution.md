@@ -8,6 +8,10 @@
 > produced yet. Wherever this document requires the sandbox for the Portal exercise, read it as the
 > target, not as what ST21 proved. The sandbox run is tracked as ST21b in `TODO.md`.
 > Evidence: [Portal practice evidence](studio-portal-practice-evidence.md).
+>
+> **Amended 2026-10-17.** ST21b produced the real-sandbox evidence: the sandbox request now carries
+> the submitter, and the Portal exercise passed on Standard/runc. See
+> [sandbox submitter identity](studio-sandbox-submitter-identity.md#acceptance-evidence--2026-10-17).
 
 ## Execution and identity
 

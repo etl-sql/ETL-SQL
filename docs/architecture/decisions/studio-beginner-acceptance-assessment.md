@@ -28,8 +28,7 @@ Closing ST03 records this assessment. It does not certify the beginner experienc
 > ([evidence](studio-portal-practice-evidence.md)), so *ETL, Portal* criterion 4 is now met for a
 > scoped Publisher, outside the sandbox. ST18 gave the dashboard a separate reader with a saved view
 > ([evidence](studio-reader-journey-evidence.md)). Still open: a learner has not been observed
-> (ST16b), the sandbox run
-> (ST21b), and both paginated exercises. The verdict stays **not yet accepted**.
+> (ST16b) and both paginated exercises. The sandbox run (ST21b) passed on 2026-10-17. The verdict stays **not yet accepted**.
 >
 > ST19 passed the same day: two readers of one row-level-secured report each see only their own
 > rows, on screen and in export ([evidence](studio-reader-journey-evidence.md#st19-two-identities-one-report)).

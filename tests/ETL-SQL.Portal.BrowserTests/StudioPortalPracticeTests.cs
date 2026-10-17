@@ -135,7 +135,15 @@ public sealed class StudioPortalPracticeTests(PortalJourneyFixture fixture)
             await SaveAsync(page, pipelineId);
             var refusal = await RunAsync(page, job, pipelineId, "Failed");
             Assert.Equal("FAILURE", refusal.Status);
-            Assert.NotNull(refusal.ErrorMessage);
+            Assert.Contains("cloud instance metadata service) is denied", refusal.ErrorMessage);
+            // An ordinary external host passes the policy fence; the container's network must refuse it.
+            var external = "CREATE CONNECTION outside AS MSSQL(SERVER = '1.1.1.1', DATABASE = 'practice');\nSELECT * FROM outside.Users;\n";
+            await TypeScriptAsync(page, pipelineId, external);
+            await SaveAsync(page, pipelineId);
+            var unreachable = await RunAsync(page, job, pipelineId, "Failed");
+            Assert.Equal("FAILURE", unreachable.Status);
+            Assert.Contains("network-related", unreachable.ErrorMessage);
+            Assert.Contains("TCP Provider", unreachable.ErrorMessage);
             await TypeScriptAsync(page, pipelineId, repaired);
             await SaveAsync(page, pipelineId);
         }

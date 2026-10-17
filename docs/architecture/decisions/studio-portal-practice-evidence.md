@@ -58,10 +58,9 @@ Both were engine defects, fixed with their own tests.
 dotnet test tests\ETL-SQL.Portal.BrowserTests\ETL-SQL.Portal.BrowserTests.csproj --filter FullyQualifiedName~StudioPortalPracticeTests
 ```
 
-- **Not a sandbox run.** An Orchestrator that executes jobs in its sandbox refuses a submitted
-  revision with `sandbox_identity_unsupported`, because the sandbox request carries no caller. The
-  owner accepted the in-process executor for ST21 on 2026-10-12. Sandbox cleanup, egress denial and
-  isolation tier are not evidenced here.
+- **Not a sandbox run.** The owner accepted the in-process executor for ST21 on 2026-10-12. The same
+  journey on a real Standard sandbox, with cleanup, egress denial and isolation tier, is ST21b's
+  [evidence](studio-sandbox-submitter-identity.md#acceptance-evidence--2026-10-17).
 - Refusals for a missing job, a missing grant, unsaved edits and a missing Orchestrator are covered
   by `StudioPipelineRunJourneyTests` and `StudioPipelineRunTests`, not repeated here.
 - Cancellation and timeout cleanup are ST06's evidence.
