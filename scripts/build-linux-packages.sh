@@ -118,6 +118,36 @@ if root_owned_file(saved):
                 target[key] = value
     keep(data, installed)
     changed = True
+# Generated service secrets live in a file only root and the service account can read, because
+# appsettings.json is shared with the CLI and readable by every local user. Its values are the ones
+# in use, so they win over anything in appsettings.json and nothing below regenerates them.
+# Keep in sync with configure-portal-jwt.ps1 (InstallerConfigurationScriptTests compares them).
+SECRET_PATHS = ["Portal:Jwt:Secret", "Portal:Jwt:PreviousSecrets", "Portal:Dataset:AtRestKey", "Portal:Dataset:PreviousAtRestKeys", "Portal:FirstRun:AdminPassword", "Orchestrator:ApiKey", "Orchestrator:PreviousApiKeys", "Orchestrator:IdentitySigningSecret", "Portal:Orchestrator:ApiKey", "Portal:Orchestrator:IdentitySigningSecret"]
+secrets_path = os.path.join(os.path.dirname(path), "appsettings.secrets.json")
+def read_secrets(p):
+    try:
+        info = os.lstat(p)
+    except FileNotFoundError:
+        return {}
+    if not stat.S_ISREG(info.st_mode):
+        sys.exit(f"[ETL-SQL] {p} is not a regular file; refusing to read it.")
+    fd = os.open(p, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, encoding="utf-8-sig") as f:
+        loaded = json.load(f)
+    return loaded if isinstance(loaded, dict) else {}
+def lookup(root, dotted):
+    node = root
+    for part in dotted.split(":")[:-1]:
+        node = node.get(part) if isinstance(node, dict) else None
+    return node, dotted.split(":")[-1]
+def empty(value):
+    return value is None or value == "" or value == [] or value == {}
+installed_secrets = read_secrets(secrets_path)
+for dotted in SECRET_PATHS:
+    source, key = lookup(installed_secrets, dotted)
+    target, _ = lookup(data, dotted)
+    if isinstance(source, dict) and isinstance(target, dict) and not empty(source.get(key)):
+        target[key] = source[key]
 portal = data.get("Portal") if isinstance(data.get("Portal"), dict) else {}
 jwt = portal.get("Jwt")
 if isinstance(jwt, dict) and not (jwt.get("Secret") or "").strip():
@@ -186,9 +216,32 @@ zones = sec.get("ApprovedSafeZones") if isinstance(sec, dict) else None
 if isinstance(sec, dict) and "/usr/lib/etl-sql/bin" not in (zones if isinstance(zones, list) else []):
     sec["ApprovedSafeZones"] = (zones if isinstance(zones, list) else []) + ["/usr/lib/etl-sql/bin"]
     changed = True
-if changed:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+# Move every generated secret out of the shared file, leaving its empty default behind.
+secrets = {}
+for dotted in SECRET_PATHS:
+    node, key = lookup(data, dotted)
+    if not isinstance(node, dict) or key not in node:
+        continue
+    value = node[key]
+    if not empty(value):
+        target = secrets
+        for part in dotted.split(":")[:-1]:
+            target = target.setdefault(part, {})
+        target[key] = value
+    node[key] = [] if isinstance(value, list) else {} if isinstance(value, dict) else ""
+def write_json(target, document, mode, gid):
+    # The folder belongs to the service user: create a fresh file that follows no link, set its
+    # owner and mode before any content, then rename it into place.
+    temp = f"{target}.{os.getpid()}.tmp"
+    fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    os.fchown(fd, 0, gid)
+    os.fchmod(fd, mode)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(document, f, indent=2)
+    os.replace(temp, target)
+import grp
+write_json(secrets_path, secrets, 0o640, grp.getgrnam("etlsql").gr_gid)
+write_json(path, data, 0o644, 0)
 PY
     rm -rf /var/lib/etl-sql-upgrade
 else
@@ -197,6 +250,12 @@ else
 fi
 
 chown -R etlsql:etlsql /usr/lib/etl-sql
+# Readable by the services, not writable by them, and closed to every other account.
+SECRETS=/usr/lib/etl-sql/bin/appsettings.secrets.json
+if [ -f "$SECRETS" ] && [ ! -L "$SECRETS" ]; then
+    chown root:etlsql "$SECRETS"
+    chmod 640 "$SECRETS"
+fi
 systemctl daemon-reload
 systemctl enable etl-sql-orchestrator.service etl-sql-portal.service || true
 # restart, not start: on an upgrade the running services still execute the replaced binaries.
@@ -245,7 +304,7 @@ if [ "$1" = "purge" ]; then
     # Keep this list in sync with DataPurgeService / the MSI CleanData action until the installers
     # are unified to call `etl-sql purge --yes` (tracked under the installer-parity TODO).
     rm -rf /usr/lib/etl-sql/bin/logs /usr/lib/etl-sql/bin/Snapshots /usr/lib/etl-sql/bin/Reports /usr/lib/etl-sql/bin/data
-    rm -f /usr/lib/etl-sql/bin/portal.db* /usr/lib/etl-sql/bin/etlsql.db*
+    rm -f /usr/lib/etl-sql/bin/portal.db* /usr/lib/etl-sql/bin/etlsql.db* /usr/lib/etl-sql/bin/appsettings.secrets.json
     # The service user's state and extraction directories, and the one-time sign-in file.
     rm -rf /var/lib/etl-sql /var/lib/etl-sql-upgrade /var/cache/etl-sql
     rm -f /etc/etl-sql/first-run-password

@@ -1743,10 +1743,15 @@ CREATE PAGE Main AS DASHBOARD (
 
             if (updateConfig)
             {
-                // Update appsettings.json
+                // Update the file the Portal reads its secret from: an installed secrets file
+                // overrides appsettings.json, so writing appsettings.json there would change nothing.
                 try
                 {
-                    var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+                    var secretsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
+                        ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName);
+                    var configPath = File.Exists(secretsPath)
+                        ? secretsPath
+                        : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
                     if (File.Exists(configPath))
                     {
                         var json = File.ReadAllText(configPath);
@@ -1758,7 +1763,7 @@ CREATE PAGE Main AS DASHBOARD (
                             jwt["Secret"] = encryptedSecret;
 
                             File.WriteAllText(configPath, doc.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
-                            AnsiConsole.MarkupLine("[green]SUCCESS:[/] Updated Portal:Jwt:Secret in appsettings.json.");
+                            AnsiConsole.MarkupLine($"[green]SUCCESS:[/] Updated Portal:Jwt:Secret in {Markup.Escape(Path.GetFileName(configPath))}.");
                         }
                     }
                     else

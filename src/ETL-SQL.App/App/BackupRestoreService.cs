@@ -179,8 +179,14 @@ namespace ETL_SQL.App
                 files.AddRange(await CopyTreeAsync(Resolve(config["Portal:MapRootPath"] ?? "./data/maps", baseDir), Path.Combine(dataStage, "content", "maps"), dataStage));
 
                 // Config, with secrets split out into the keys archive.
-                var (strippedConfig, secrets) = await SplitConfigSecretsAsync(
-                    appSettingsPath ?? Path.Combine(baseDir, "appsettings.json"));
+                var configPath = appSettingsPath ?? Path.Combine(baseDir, "appsettings.json");
+                var (strippedConfig, secrets) = await SplitConfigSecretsAsync(configPath);
+                // Installed service secrets live beside it in their own file; it overrides
+                // appsettings.json at runtime, so it does here too.
+                await AddInstalledSecretsAsync(
+                    Path.Combine(Path.GetDirectoryName(Path.GetFullPath(configPath)) ?? baseDir,
+                        ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName),
+                    secrets);
                 await File.WriteAllTextAsync(Path.Combine(dataStage, "appsettings.json"), strippedConfig);
                 files.Add(await DescribeAsync(Path.Combine(dataStage, "appsettings.json"), dataStage));
 
@@ -802,6 +808,38 @@ namespace ETL_SQL.App
                     else if (child is JsonObject)
                     {
                         Strip(child, childPath, sink);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Adds every non-empty value of an installed secrets file to <paramref name="sink"/> by
+        /// dotted path. Every value in that file is a secret, whatever its key is called.
+        /// </summary>
+        internal static async Task AddInstalledSecretsAsync(string secretsFilePath, Dictionary<string, JsonNode?> sink)
+        {
+            if (!File.Exists(secretsFilePath)) return;
+            if (JsonNode.Parse(await File.ReadAllTextAsync(secretsFilePath)) is not JsonObject root) return;
+            Collect(root, "");
+
+            void Collect(JsonObject obj, string path)
+            {
+                foreach (var (key, child) in obj)
+                {
+                    var childPath = path.Length == 0 ? key : $"{path}.{key}";
+                    switch (child)
+                    {
+                        case JsonObject nested:
+                            Collect(nested, childPath);
+                            break;
+                        case JsonValue value when value.TryGetValue<string>(out var text) && string.IsNullOrEmpty(text):
+                        case JsonArray { Count: 0 }:
+                        case null:
+                            break;
+                        default:
+                            sink[childPath] = child.DeepClone();
+                            break;
                     }
                 }
             }

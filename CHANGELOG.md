@@ -179,6 +179,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   `innerHTML` for exactly that input. The server already escapes chart text; this protects hosts
   without the Portal's CSP, such as exported HTML and the desktop Player. Found in the first
   CodeQL scan of the browser sources.
+- Installed service secrets are no longer readable by every local user. The JWT signing secret,
+  dataset at-rest key, Orchestrator API key, identity signing secret and first-run password sat in
+  `appsettings.json`. The CLI shares that file, so it is readable by all local users on Linux and by
+  `Users` under Program Files on Windows. Anyone who could read it could forge Portal sign-ins. The
+  installers now move these values to `appsettings.secrets.json`, which only the service account and
+  root (`640 root:etlsql`) or Administrators and SYSTEM can read; upgrades move existing values
+  there. The Portal, Orchestrator and CLI read the file after `appsettings.json` and before
+  environment variables, and skip it when it is unreadable. `etl-sql admin backup` includes it, and
+  `config setup-jwt --update` writes the new secret there.
 - The DEB's maintainer scripts no longer follow links in folders the service account owns. They
   had rewritten `appsettings.json` as root in a service-owned folder. They now refuse a
   configuration that is not a regular file, and keep the pre-upgrade copy in a root-only folder.

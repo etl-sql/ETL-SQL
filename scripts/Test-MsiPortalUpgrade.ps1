@@ -96,10 +96,32 @@ function Assert-ServiceRunsVersion([string]$Service, [string]$Version) {
     if ($product -notmatch [regex]::Escape(([version]$Version).ToString(3))) { throw "$Service runs $product, expected $Version." }
 }
 
+# The effective value, as the services read it: the installed secrets file overrides appsettings.json.
 function Get-Setting([string]$Path) {
-    $node = Get-Content -LiteralPath (Join-Path $installDir 'appsettings.json') -Raw | ConvertFrom-Json
-    foreach ($part in $Path.Split(':')) { if ($null -eq $node) { return '' }; $node = $node.$part }
-    return [string]$node
+    $value = ''
+    foreach ($file in 'appsettings.json', 'appsettings.secrets.json') {
+        $full = Join-Path $installDir $file
+        if (-not (Test-Path -LiteralPath $full)) { continue }
+        $node = Get-Content -LiteralPath $full -Raw | ConvertFrom-Json
+        foreach ($part in $Path.Split(':')) { if ($null -eq $node) { break }; $node = $node.$part }
+        if ($node -is [string] -and $node) { $value = $node }
+    }
+    return $value
+}
+
+$generatedSecrets = 'Portal:Jwt:Secret', 'Portal:Dataset:AtRestKey', 'Orchestrator:ApiKey', 'Orchestrator:IdentitySigningSecret', 'Portal:Orchestrator:ApiKey', 'Portal:Orchestrator:IdentitySigningSecret'
+
+# appsettings.json is readable by every local user; the secrets file only by Administrators and SYSTEM.
+function Assert-SecretsProtected {
+    $secretsFile = Join-Path $installDir 'appsettings.secrets.json'
+    $grantees = (Get-Acl -LiteralPath $secretsFile).Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } | Sort-Object -Unique
+    if (($grantees -join ',') -ne 'S-1-5-18,S-1-5-32-544') { throw "Secrets file grantees: $($grantees -join ', ')" }
+    $shared = Get-Content -LiteralPath (Join-Path $installDir 'appsettings.json') -Raw | ConvertFrom-Json
+    foreach ($path in $generatedSecrets) {
+        $node = $shared
+        foreach ($part in $path.Split(':')) { if ($null -eq $node) { break }; $node = $node.$part }
+        if ($node -is [string] -and $node) { throw "appsettings.json still holds $path." }
+    }
 }
 
 function Assert-Setting([string]$Path, [string]$Expected) {
@@ -145,6 +167,7 @@ try {
         if (($grantees -join ',') -ne 'S-1-5-18,S-1-5-32-544') { throw "Grantees: $($grantees -join ', ')" }
     }
     Test-Step 'fresh: dataset at-rest key generated' { -not [string]::IsNullOrWhiteSpace((Get-Setting 'Portal:Dataset:AtRestKey')) }
+    Test-Step 'fresh: secrets only in the Administrators and SYSTEM file' { Assert-SecretsProtected }
     Test-Step 'fresh: served assets match the candidate' { Invoke-Assets @('--inventory-root', $repoRoot, '--out', (Join-Path $out 'fresh-assets.json')) }
     Uninstall-All '00-fresh-uninstall.log'
     Remove-Item -LiteralPath $installDir, $systemData -Recurse -Force -ErrorAction SilentlyContinue
@@ -191,6 +214,7 @@ try {
     Test-Step 'upgrade: dataset at-rest key preserved' { Assert-Setting 'Portal:Dataset:AtRestKey' $atRest }
     Test-Step 'upgrade: identity signing secret preserved' { Assert-Setting 'Orchestrator:IdentitySigningSecret' $signing }
     Test-Step 'upgrade: operator setting preserved' { Assert-Setting 'UpgradeSentinel:Value' 'kept' }
+    Test-Step 'upgrade: secrets moved to the Administrators and SYSTEM file' { Assert-SecretsProtected }
     Test-Step 'upgrade: no one-time sign-in for an existing Portal' { -not (Test-Path -LiteralPath (Join-Path $installDir 'first-run-password.txt')) }
     Test-Step 'upgrade: no configuration backup left behind' { -not (Test-Path -LiteralPath (Join-Path $installDir 'appsettings.pre-upgrade.json')) }
     $cacheCurrent = Join-Path $out 'cache-current.json'

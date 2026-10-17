@@ -8,6 +8,66 @@ namespace ETL_SQL.Common;
 public static class ConfigurationExtensions
 {
     /// <summary>
+    /// File beside appsettings.json that holds the service secrets the installers generate.
+    /// appsettings.json is shared with the CLI and readable by every local user, so the JWT signing
+    /// secret, dataset at-rest key, API keys and identity signing secret live here instead, readable
+    /// only by the service account and administrators.
+    /// </summary>
+    public const string InstalledSecretsFileName = "appsettings.secrets.json";
+
+    /// <summary>
+    /// Layers <see cref="InstalledSecretsFileName"/> from <paramref name="directory"/> directly above
+    /// the appsettings*.json sources, so it overrides them and environment variables and the command
+    /// line still override it. A caller who cannot read the file (an ordinary user running the CLI)
+    /// simply does not see it. Call before <see cref="AddSecureConfiguration"/>, which snapshots the
+    /// sources present when it is added.
+    /// </summary>
+    public static IConfigurationBuilder AddInstalledSecrets(this IConfigurationBuilder builder, string directory)
+    {
+        var path = System.IO.Path.Combine(directory, InstalledSecretsFileName);
+        if (!CanRead(path)) return builder;
+
+        var source = new Microsoft.Extensions.Configuration.Json.JsonConfigurationSource
+        {
+            Path = System.IO.Path.GetFullPath(path),
+            Optional = true,
+            ReloadOnChange = true,
+        };
+        source.ResolveFileProvider();
+        var sources = builder.Sources;
+        var lastAppSettings = -1;
+        for (var i = 0; i < sources.Count; i++)
+        {
+            if (sources[i] is Microsoft.Extensions.Configuration.Json.JsonConfigurationSource json
+                && IsAppSettingsFile(json.Path))
+                lastAppSettings = i;
+        }
+        sources.Insert(lastAppSettings + 1, source);
+        return builder;
+    }
+
+    private static bool IsAppSettingsFile(string? path)
+    {
+        var name = System.IO.Path.GetFileName(path ?? string.Empty);
+        return name.StartsWith("appsettings", StringComparison.OrdinalIgnoreCase)
+            && name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(name, InstalledSecretsFileName, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool CanRead(string path)
+    {
+        try
+        {
+            using var stream = System.IO.File.Open(path, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite);
+            return true;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.IO.IOException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Adds a secure configuration layer that automatically decrypts any values starting with 'ENC:'.
     /// Decryption is performed using the machine-bound key by default.
     /// </summary>

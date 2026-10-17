@@ -39,6 +39,24 @@ function Merge-InstalledSettings {
     }
 }
 
+function Get-JsonParent {
+    param($Root, [string]$Dotted)
+    $node = $Root
+    foreach ($part in $Dotted.Split(':') | Select-Object -SkipLast 1) {
+        if ($null -eq $node -or $null -eq $node.PSObject.Properties[$part]) { return $null }
+        $node = $node.$part
+    }
+    return $node
+}
+
+function Test-EmptySetting($Value) {
+    if ($null -eq $Value) { return $true }
+    if ($Value -is [string]) { return [string]::IsNullOrWhiteSpace($Value) }
+    if ($Value -is [array]) { return $Value.Count -eq 0 }
+    if ($Value -is [System.Management.Automation.PSCustomObject]) { return @($Value.PSObject.Properties).Count -eq 0 }
+    return $false
+}
+
 try {
     $parts = $CustomData.Split('|')
     $installDir = if ($parts.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($parts[0])) { $parts[0] } else { $PSScriptRoot }
@@ -67,6 +85,25 @@ try {
         $installed = Get-Content -LiteralPath $savedPath -Raw | ConvertFrom-Json
         Merge-InstalledSettings -Target $json -Source $installed
         $changed = $true
+    }
+
+    # Generated service secrets live in a file only Administrators and SYSTEM can read, because
+    # appsettings.json is shared with the CLI and readable by every local user. Its values are the
+    # ones in use, so they win over anything in appsettings.json and nothing below regenerates them.
+    # Keep in sync with build-linux-packages.sh (InstallerConfigurationScriptTests compares them).
+    $secretPaths = @('Portal:Jwt:Secret', 'Portal:Jwt:PreviousSecrets', 'Portal:Dataset:AtRestKey', 'Portal:Dataset:PreviousAtRestKeys', 'Portal:FirstRun:AdminPassword', 'Orchestrator:ApiKey', 'Orchestrator:PreviousApiKeys', 'Orchestrator:IdentitySigningSecret', 'Portal:Orchestrator:ApiKey', 'Portal:Orchestrator:IdentitySigningSecret')
+    $secretsPath = Join-Path $installDir 'appsettings.secrets.json'
+    if (Test-Path -LiteralPath $secretsPath -PathType Leaf) {
+        $existingSecrets = Get-Content -LiteralPath $secretsPath -Raw | ConvertFrom-Json
+        foreach ($dotted in $secretPaths) {
+            $source = Get-JsonParent -Root $existingSecrets -Dotted $dotted
+            $target = Get-JsonParent -Root $json -Dotted $dotted
+            $key = $dotted.Split(':')[-1]
+            if ($null -ne $source -and $null -ne $target -and -not (Test-EmptySetting $source.$key)) {
+                $target | Add-Member -MemberType NoteProperty -Name $key -Value $source.$key -Force
+                $changed = $true
+            }
+        }
     }
 
     if ($null -ne $json.Portal -and $null -ne $json.Portal.Jwt -and `
@@ -222,6 +259,53 @@ try {
             $json.Security.ApprovedSafeZones = @($zones + $installRoot)
             $changed = $true
         }
+    }
+
+    # Move every generated secret out of the shared file, leaving its empty default behind.
+    $secrets = [pscustomobject]@{}
+    foreach ($dotted in $secretPaths) {
+        $node = Get-JsonParent -Root $json -Dotted $dotted
+        $key = $dotted.Split(':')[-1]
+        if ($null -eq $node -or $null -eq $node.PSObject.Properties[$key]) { continue }
+        $value = $node.$key
+        if (-not (Test-EmptySetting $value)) {
+            $target = $secrets
+            foreach ($part in $dotted.Split(':') | Select-Object -SkipLast 1) {
+                if ($null -eq $target.PSObject.Properties[$part]) {
+                    $target | Add-Member -MemberType NoteProperty -Name $part -Value ([pscustomobject]@{})
+                }
+                $target = $target.$part
+            }
+            $target | Add-Member -MemberType NoteProperty -Name $key -Value $value -Force
+        }
+        # Assigned per branch: an if expression would unroll an empty array to $null.
+        if ($value -is [array]) {
+            $node | Add-Member -MemberType NoteProperty -Name $key -Value @() -Force
+        } elseif ($value -is [System.Management.Automation.PSCustomObject]) {
+            $node | Add-Member -MemberType NoteProperty -Name $key -Value ([pscustomobject]@{}) -Force
+        } else {
+            $node | Add-Member -MemberType NoteProperty -Name $key -Value '' -Force
+        }
+        $changed = $true
+    }
+
+    # Written through a handle opened with the final ACL (SYSTEM and Administrators, nothing
+    # inherited from Program Files), so the secrets are never readable by another account.
+    $secretsAcl = New-Object System.Security.AccessControl.FileSecurity
+    $secretsAcl.SetAccessRuleProtection($true, $false)
+    foreach ($sid in 'S-1-5-18', 'S-1-5-32-544') {
+        $secretsAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            (New-Object System.Security.Principal.SecurityIdentifier $sid), 'FullControl', 'Allow')))
+    }
+    # Recreated rather than rewritten, so an existing file cannot keep a wider ACL. This step runs
+    # before the services start, so nothing reads the file while it is briefly absent.
+    if (Test-Path -LiteralPath $secretsPath) { Remove-Item -LiteralPath $secretsPath -Force }
+    $stream = [System.IO.File]::Create($secretsPath, 4096, [System.IO.FileOptions]::None, $secretsAcl)
+    try {
+        $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes(($secrets | ConvertTo-Json -Depth 64))
+        $stream.Write($bytes, 0, $bytes.Length)
+    } finally {
+        $stream.Dispose()
     }
 
     if ($changed) {

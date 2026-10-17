@@ -78,7 +78,8 @@ function CleanData() {
             }
         }
         var files = ["portal.db", "portal.db-wal", "portal.db-shm",
-                     "etlsql.db", "etlsql.db-wal", "etlsql.db-shm"];
+                     "etlsql.db", "etlsql.db-wal", "etlsql.db-shm",
+                     "appsettings.secrets.json", "first-run-password.txt"];
         for (var j = 0; j < files.length; j++) {
             var file = installDir + files[j];
             if (fso.FileExists(file)) {

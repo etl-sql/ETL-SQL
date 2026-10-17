@@ -30,7 +30,44 @@ FAILED=0
 log() { echo "$*" | tee -a "$OUT/summary.txt"; }
 check() { local name=$1; shift; if "$@" >> "$OUT/checks.log" 2>&1; then log "PASS $name"; else log "FAIL $name"; FAILED=1; fi; }
 package_version() { dpkg-deb -f "$1" Version; }
-setting() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8-sig")); [d:=d.get(k,{}) for k in sys.argv[2].split(":")]; print(d if isinstance(d,str) else "")' "$CFG" "$1"; }
+SECRETS=$INSTALL/appsettings.secrets.json
+# The effective value, as the hosts read it: the installed secrets file overrides appsettings.json.
+setting() { python3 - "$CFG" "$SECRETS" "$1" <<'PY'
+import json, os, sys
+value = ""
+for path in sys.argv[1:3]:
+    if not os.path.isfile(path):
+        continue
+    node = json.load(open(path, encoding="utf-8-sig"))
+    for key in sys.argv[3].split(":"):
+        node = node.get(key, {}) if isinstance(node, dict) else {}
+    if isinstance(node, str) and node:
+        value = node
+print(value)
+PY
+}
+# appsettings.json is readable by every local user, so it must hold none of the generated secrets.
+shared_config_holds_no_secrets() {
+    python3 - "$CFG" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8-sig"))
+found = []
+for dotted in ["Portal:Jwt:Secret", "Portal:Jwt:PreviousSecrets", "Portal:Dataset:AtRestKey", "Portal:Dataset:PreviousAtRestKeys", "Portal:FirstRun:AdminPassword", "Orchestrator:ApiKey", "Orchestrator:PreviousApiKeys", "Orchestrator:IdentitySigningSecret", "Portal:Orchestrator:ApiKey", "Portal:Orchestrator:IdentitySigningSecret"]:
+    node = data
+    for key in dotted.split(":"):
+        node = node.get(key) if isinstance(node, dict) else None
+    if node not in (None, "", [], {}):
+        found.append(dotted)
+print("secrets in appsettings.json:", found)
+sys.exit(1 if found else 0)
+PY
+}
+secrets_file_protected() {
+    local mode; mode=$(stat -c '%a %U %G' "$SECRETS" 2>&1); echo "$SECRETS: $mode"
+    [ "$mode" = "640 root etlsql" ] || return 1
+    # An ordinary account can read appsettings.json but not the secrets.
+    su -s /bin/sh nobody -c "cat '$CFG' > /dev/null" && ! su -s /bin/sh nobody -c "cat '$SECRETS'" > /dev/null 2>&1
+}
 
 wait_portal() {
     for _ in $(seq 1 90); do
@@ -113,6 +150,8 @@ check "fresh: Portal runs the installed executable" service_runs_installed_binar
 check "fresh: Orchestrator runs the installed executable" service_runs_installed_binary etl-sql-orchestrator.service
 check "fresh: one-time sign-in written for root only" root_only_file "$FIRST_RUN"
 check "fresh: dataset at-rest key generated" setting_present Portal:Dataset:AtRestKey
+check "fresh: secrets readable by the service account only" secrets_file_protected
+check "fresh: shared appsettings.json holds no generated secret" shared_config_holds_no_secrets
 check "fresh: served assets match the candidate" assets --inventory-root "$CHECKOUT" --out "$OUT/fresh-assets.json"
 check "fresh: dpkg purge" dpkg --purge etl-sql
 check "fresh: purge removed state, cache and sign-in file" \
@@ -155,6 +194,8 @@ check "upgrade: Portal JWT secret preserved" setting_is Portal:Jwt:Secret "$SECR
 check "upgrade: Orchestrator API key preserved" setting_is Orchestrator:ApiKey "$API_KEY"
 check "upgrade: dataset at-rest key preserved" setting_is Portal:Dataset:AtRestKey "$AT_REST"
 check "upgrade: operator setting preserved" setting_is UpgradeSentinel:Value kept
+check "upgrade: secrets moved to the service-only file" secrets_file_protected
+check "upgrade: shared appsettings.json holds no generated secret" shared_config_holds_no_secrets
 check "upgrade: no one-time sign-in for an existing Portal" test ! -e "$FIRST_RUN"
 check "upgrade: runtime data preserved" grep -qx kept "$INSTALL/data-upgrade-sentinel.txt"
 check "upgrade: served assets match the candidate; cached browser refetches changes" \

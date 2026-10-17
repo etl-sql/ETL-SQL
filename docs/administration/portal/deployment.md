@@ -66,8 +66,15 @@ On first start the portal:
 From v0.21.0 the MSI and DEB set it for you on a fresh install, together with the dataset at-rest key and
 the Orchestrator identity signing secret. The one-time sign-in is in `first-run-password.txt` in the
 install folder (Administrators and SYSTEM only) or `/etc/etl-sql/first-run-password` (root only). Delete
-the file after the first sign-in. Upgrades keep the installed `appsettings.json` values, so back that file
-up with the databases: it holds the at-rest key, and losing it makes every cached dataset unreadable.
+the file after the first sign-in. Upgrades keep the installed `appsettings.json` values.
+
+The generated secrets are not in `appsettings.json`, which the CLI shares and every local user can read.
+They are in `appsettings.secrets.json` beside it: root and the `etlsql` service account only on Linux
+(`640 root:etlsql`); Administrators and SYSTEM only on Windows. The services read it after
+`appsettings.json` and before environment variables, so an environment variable still overrides it.
+Keep your own service secrets, such as SMTP or database passwords, in that file too. Back it up with
+the databases (`etl-sql admin backup` includes it). It holds the at-rest key, and losing that key
+makes every cached dataset unreadable.
 
 **You must log in as `admin` immediately and change the password.** The portal enforces this by default — no API calls will succeed until the password has been changed. `Portal:FirstRun:MustChangePassword=false` is intended only for disposable automation environments that generate a strong per-run admin password.
 
