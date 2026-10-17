@@ -75,9 +75,12 @@ public sealed class AuthorshipPermissionBoundaryTests
                 "Catalog visibility follows the same folder-ownership rule.",
 
             // ── Guarded: authorship upgrades an existing grant ────────────────────────
-            ["FolderPermissionService.cs|if (report.CreatedBy == userId && (folderPerm.HasValue || directPerm.HasValue))"] =
-                "The rule itself: report authorship lifts a surviving grant to Manage, and yields "
-                + "nothing when every grant is gone.",
+            ["FolderPermissionService.cs|return CombineReportPermission(report.CreatedBy == userId, folderPerm, directPerm);"] =
+                "One report's permission. CombineReportPermission holds the rule: authorship lifts a "
+                + "surviving folder or direct grant to Manage, and yields nothing when every grant is gone.",
+            ["FolderPermissionService.cs|return reports.ToDictionary(report => report.Id, report => CombineReportPermission(report.CreatedBy == userId,"] =
+                "The bounded catalog's batch of the same answer, through the same CombineReportPermission "
+                + "rule, so a page of reports cannot resolve authorship differently from one report.",
             ["FolderPermissionService.cs|if (report.CreatedBy == userId)"] =
                 "DescribeReportGrantsAsync — names the grants behind an answer for the access "
                 + "simulator. Explains a permission, never resolves one; the permission itself comes "

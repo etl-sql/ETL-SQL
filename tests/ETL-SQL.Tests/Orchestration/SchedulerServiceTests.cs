@@ -535,7 +535,7 @@ namespace ETL_SQL.Tests.Orchestration
             var sandbox = new Mock<ISandboxScheduledJobExecutor>();
             sandbox.Setup(executor => executor.ExecuteAsync(
                     job, It.IsAny<long>(), It.IsAny<int>(), It.IsAny<string>(), false,
-                    It.IsAny<long>(), null, It.IsAny<CancellationToken>()))
+                    It.IsAny<long>(), null, It.IsAny<CancellationToken>(), null))
                 .ReturnsAsync(new ScriptExecutionResult(true, 3));
             var (service, _, processExecutor) = Build(
                 [job], new ScriptExecutionResult(true, 0), sandboxExecutor: sandbox);
@@ -546,7 +546,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             sandbox.Verify(executor => executor.ExecuteAsync(
                 job, It.IsAny<long>(), 1, It.IsAny<string>(), false,
-                It.IsAny<long>(), null, It.IsAny<CancellationToken>()), Times.AtLeastOnce());
+                It.IsAny<long>(), null, It.IsAny<CancellationToken>(), null), Times.AtLeastOnce());
             processExecutor.Verify(executor => executor.ExecuteTextAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(),
                 It.IsAny<string>(), It.IsAny<long>()), Times.Never());
@@ -595,7 +595,7 @@ namespace ETL_SQL.Tests.Orchestration
             var sandbox = new Mock<ISandboxScheduledJobExecutor>();
             sandbox.Setup(executor => executor.ExecuteAsync(
                     job, It.IsAny<long>(), It.IsAny<int>(), It.IsAny<string>(), false,
-                    It.IsAny<long>(), null, It.IsAny<CancellationToken>()))
+                    It.IsAny<long>(), null, It.IsAny<CancellationToken>(), null))
                 .ReturnsAsync(result);
             var metering = new Mock<ITenantMeteringLedger>();
             metering.Setup(ledger => ledger.AppendAsync(

@@ -100,7 +100,9 @@ public sealed class StudioPortalPracticeTests(PortalJourneyFixture fixture)
         await TypeScriptAsync(page, pipelineId, repaired);
         await SaveAsync(page, pipelineId);
         var savedHash = await SavedHashAsync(page, pipelineId);
-        Assert.Equal(Sha(repaired), savedHash);
+        // The editor saves LF; this file's raw strings carry CRLF in a Windows (autocrlf) checkout,
+        // which is how CI's Windows runner saw sha256:e85f… expected against the saved LF text.
+        Assert.Equal(Sha(Normalize(repaired)), savedHash);
         var first = await RunAsync(page, job, pipelineId, "Complete");
         var second = await RunAsync(page, job, pipelineId, "Complete");
         Assert.NotEqual(first.Id, second.Id);

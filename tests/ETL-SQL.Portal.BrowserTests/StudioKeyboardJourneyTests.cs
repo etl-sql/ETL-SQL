@@ -398,6 +398,11 @@ public sealed partial class StudioKeyboardJourneyTests(StudioAuthoringFixture fi
         await page.WaitForFunctionAsync(
             "() => window.__STUDIO__.state.documents.length > 0 && window.__STUDIO__.state.activeDocId !== '__home__'",
             null, new() { Timeout = 20_000 });
+        // The tab switches before the opened file reaches the editor; on a slow runner the read below
+        // landed in between and saw an empty buffer.
+        await page.WaitForFunctionAsync(
+            "() => (window.__STUDIO__.state.editorInstance?.getValue?.() ?? '').length > 0",
+            null, new() { Timeout = 20_000 });
 
         var reloadedScript = await page.EvaluateAsync<string>(
             "() => window.__STUDIO__.state.editorInstance?.getValue?.() ?? ''");
