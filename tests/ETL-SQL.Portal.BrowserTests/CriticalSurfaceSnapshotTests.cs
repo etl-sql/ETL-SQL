@@ -66,6 +66,10 @@ public sealed class CriticalSurfaceSnapshotTests(PortalJourneyFixture fixture)
                 }
                 """
             }));
+        // The same holds for the data-quality jobs listed below the tiles: another test in the lane
+        // may have created an Orchestrator job, which would add a table this state does not have.
+        await page.RouteAsync("**/api/data-quality/jobs", route => route.FulfillAsync(
+            new RouteFulfillOptions { Status = 200, ContentType = "application/json", Body = "[]" }));
 
         await page.GotoAsync("/index.html#governance/overview");
         await page.ReloadAsync();

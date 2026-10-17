@@ -465,6 +465,19 @@ jobs:
             sudo ln -s "$LDAP_SO" /usr/lib/libldap-2.5.so.0 || true
           fi
 
+      # OdbcTransactionCloneTests drives a real SQL Server through Microsoft's ODBC driver.
+      - name: Install Microsoft ODBC Driver 18 for SQL Server
+        run: |
+          if ! dpkg -s msodbcsql18 >/dev/null 2>&1; then
+            if [ ! -f /etc/apt/sources.list.d/microsoft-prod.list ]; then
+              curl -sSL -o /tmp/packages-microsoft-prod.deb "https://packages.microsoft.com/config/ubuntu/$(. /etc/os-release && echo "$VERSION_ID")/packages-microsoft-prod.deb"
+              sudo dpkg -i /tmp/packages-microsoft-prod.deb
+            fi
+            sudo apt-get update
+            sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+          fi
+          odbcinst -q -d -n "ODBC Driver 18 for SQL Server"
+
       - name: Pre-pull base Docker images
         shell: pwsh
         run: |

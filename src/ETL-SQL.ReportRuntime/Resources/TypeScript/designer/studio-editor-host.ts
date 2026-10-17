@@ -29,6 +29,7 @@ export interface StudioEditorHostContext {
     readonly shell: StudioDom;
     readonly state: StudioRuntimeState;
     readonly opts: import('./studio-context.js').StudioOptions;
+    readonly rememberLineEnding: (document: StudioRuntimeDocument) => void;
     readonly synchronizeCodeToCanvas: (document: StudioRuntimeDocument, script: string, revision: number | string) => Promise<void>;
 }
 
@@ -129,9 +130,16 @@ export function createStudioEditorHost(hostContext: StudioEditorHostContext) {
             });
             // The author may type or switch tabs while the module loads. Read the current buffer
             // only when the replacement is ready; keep the fallback usable until that point.
-            hostContext.isSettingDocumentContent = true;
-            try { editor.setValue(hostContext.getActiveDoc()?.content || ''); }
-            finally { hostContext.isSettingDocumentContent = false; }
+            // setValue reports CodeMirror's LF-normalised text back through onChange, which replaces
+            // the document's own text (a CRLF file's bytes) with it. Only replace a buffer that
+            // actually changed, and record every document's endings first so a save keeps them.
+            for (const doc of hostContext.state.documents) hostContext.rememberLineEnding(doc);
+            const latest = hostContext.getActiveDoc()?.content || '';
+            if (editor.getValue() !== latest.replace(/\r\n/g, '\n')) {
+                hostContext.isSettingDocumentContent = true;
+                try { editor.setValue(latest); }
+                finally { hostContext.isSettingDocumentContent = false; }
+            }
             hostContext.state.editorInstance?.dispose?.();
             hostContext.state.editorInstance = editor;
             hostContext.editorHost.replaceChildren(staging);

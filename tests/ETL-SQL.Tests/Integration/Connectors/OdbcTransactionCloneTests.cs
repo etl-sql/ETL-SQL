@@ -14,13 +14,15 @@ public sealed class OdbcTransactionCloneTests
     [Fact]
     public async Task WriteThroughTableCloneRollsBackWithItsOwner()
     {
-        // This opt-in lane requires Microsoft's ODBC Driver 17 and a Docker runtime.
+        // Requires Microsoft's ODBC Driver 18 for SQL Server (CI installs it) and a Docker runtime.
+        // ETLSQL_ODBC_SQLSERVER_DRIVER names another installed driver, such as Driver 17.
+        var driver = Environment.GetEnvironmentVariable("ETLSQL_ODBC_SQLSERVER_DRIVER") ?? "ODBC Driver 18 for SQL Server";
         await using var server = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-latest").Build();
         await server.StartAsync();
         var sql = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(server.GetConnectionString());
         var connection = new System.Data.Odbc.OdbcConnectionStringBuilder
         {
-            ["Driver"] = "ODBC Driver 17 for SQL Server",
+            ["Driver"] = driver,
             ["Server"] = sql.DataSource,
             ["Database"] = sql.InitialCatalog,
             ["UID"] = sql.UserID,

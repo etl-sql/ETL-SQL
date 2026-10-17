@@ -128,14 +128,19 @@ public sealed class PortalAuthoringPageTests(StudioSurfaceFixture fixture)
 
     [Theory]
     [InlineData("session")]
-    [InlineData("reports")]
+    [InlineData("catalog")]
     public async Task Studio_MalformedCatalogResponse_OffersRetryWithoutMountingTheWorkbench(string endpoint)
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        var pattern = $"**/api/studio/{endpoint}";
-        await page.RouteAsync(pattern, route => route.FulfillAsync(new() { ContentType = "application/json", Body = endpoint == "reports" ? "[{}]" : "{}" }));
+        // Startup reads the first bounded catalog page, /api/studio/catalog?query=&afterId=0.
+        var pattern = endpoint == "catalog" ? "**/api/studio/catalog?*" : $"**/api/studio/{endpoint}";
+        await page.RouteAsync(pattern, route => route.FulfillAsync(new()
+        {
+            ContentType = "application/json",
+            Body = endpoint == "catalog" ? """{"items":[{}],"nextAfterId":null}""" : "{}"
+        }));
         await page.GotoAsync("/studio.html");
         await Expect(page.Locator("#studioHost [role=alert]")).ToContainTextAsync("Invalid Studio");
         Assert.False(await page.EvaluateAsync<bool>("() => Boolean(window.__STUDIO__)"));
