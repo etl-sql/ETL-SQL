@@ -179,6 +179,14 @@ Update-File "docs/architecture/README.md" `
     '(\*\*Applies to ETL-SQL )\d+\.\d+\.\d+(\*\*)' `
     "`${1}$Version`${2}"
 
+# Portal page cache-busting query strings ("?v=X.Y.Z"). A stale value lets an upgraded browser keep
+# the previous release's scripts; v0.20.1 bumped these by hand and v0.21.0's first run missed them.
+foreach ($page in Get-ChildItem (Join-Path $Root "src/ETL-SQL.Portal/wwwroot") -Filter *.html) {
+    Update-File "src/ETL-SQL.Portal/wwwroot/$($page.Name)" `
+        '(\?v=)\d+\.\d+\.\d+' `
+        "`${1}$Version"
+}
+
 Write-Host ""
 Write-Host "Done." -ForegroundColor Cyan
 Write-Host ""

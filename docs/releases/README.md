@@ -35,6 +35,7 @@
 | [v0.20.0 Performance Results — Scale Harness Investigation](v0.20.0-performance-results.md) | Output capture and theory-discovery measurements; clean-candidate calibration remains open. |
 | [ETL-SQL v0.20.0 — Candidate](v0.20.0.md) | Code stability, Studio authoring and native chart semantics; release certification is pending. |
 | [ETL-SQL v0.20.1](v0.20.1.md) | Security and quality hardening patch release resolving CodeQL scanning alerts. |
+| [ETL-SQL v0.21.0 — Candidate](v0.21.0.md) | Portal pipelines, private drafts, live row-level-secured reports, and installed services that start and keep secrets private; certification is in progress. |
 | [v0.20.0 Code Review — Working Record](v0.20.0-code-review.md) | Risk-based source review and required candidate validation. |
 | [ETL-SQL v0.2.0 *(Unofficial)*](v0.2.0.md) | **Released:** 2026-03-23 |
 | [ETL-SQL v0.3.0 *(Unofficial)*](v0.3.0.md) | **Released:** 2026-04-06 |

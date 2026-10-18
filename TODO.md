@@ -4,9 +4,9 @@ The execution ledger for v0.21.0. Items are grouped by when they can be done, no
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0210-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 3 |
+| [Now](#now--v0210-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 2 |
 | [At release](#v0210-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 11 |
-| [Blocked](#blocked--waiting-on-something-outside-the-repository) | Work waiting on a tool, account or person | 3 |
+| [Blocked](#blocked--waiting-on-something-outside-the-repository) | Work waiting on a tool, account or person | 1 |
 | [Known limits](#known-limits--context-not-tasks) | Limits to state honestly in release notes | — |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -50,7 +50,10 @@ or an asset-only archive check does not close a build, package or runtime row.
 - [ ] **CodeQL over the newly analysed owners.** 88 TypeScript owners entered analysis when the
   exclusions were narrowed. Review the first run's alerts. The workflow now includes build generators
   and package tooling, with checks and fixtures excluded; its coverage gate verifies 40 tooling files.
-  This changed workflow still needs a scan.
+  2026-10-17: scanned and triaged. Six alerts were fixed; 14 remain open on the release branch, all
+  false positives or won't-fix, and need the repository owner to dismiss them. See the
+  [triage table](docs/releases/v0.21.0-browser-asset-acceptance.md). The release checklist requires
+  zero open alerts on `main` before tagging.
 
 ### 5. Studio — Author, reader and beginner practice journeys
 
@@ -70,6 +73,16 @@ or an asset-only archive check does not close a build, package or runtime row.
 
 ST16b, the observed learner walkthrough, is deferred in
 [`ROADMAP.md`](ROADMAP.md#author-reader-and-beginner-practice-journeys) until a person new to Studio is available.
+
+---
+
+## Blocked — waiting on something outside the repository
+
+- [ ] **Live Snowflake row rollback.** The shared-transaction fix for Snowflake table views passes
+  its lifecycle test with a recording transaction. The Snowflake emulator cannot create tables, so it
+  cannot show a row rolled back. Needs a Snowflake account. See the
+  [bugs and logic audit](docs/releases/v0.21.0-bug-logic-audit.md). Not a v0.21.0 release blocker;
+  stated in the release notes' known issues.
 
 ---
 

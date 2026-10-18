@@ -12,6 +12,32 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-10-17
+
+For complete release details, highlights, and migration notes, see [Release Notes v0.21.0](docs/releases/v0.21.0.md).
+
+### Breaking Changes
+
+Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
+
+- Portal and Orchestrator databases use snake_case table and column names after the first v0.21.0
+  start. v0.20.x cannot open a renamed database: back up before upgrading, and roll back by
+  restoring that backup.
+- The default machine key is random per installation; `ENC:` values written under the old
+  host-derived key can no longer be read.
+- `GENERATE JWT_SECRET` returns the secret as a result row instead of logging it.
+- Reports that include `RUN SCRIPT`, or whose dependencies cannot be scanned, run per viewer instead
+  of sharing a snapshot.
+- BigQuery streaming inserts are not replayed after an ambiguous failure.
+- ODBC and Snowflake table views share their owner's transaction; disposing a view no longer rolls
+  the owner back.
+- Repeated NULL keys no longer collide in the uniqueness fallback scan.
+- Arrow spill keeps each decimal's value and scale instead of rounding to nine places.
+- Numeric dataset filters exclude null cells, and dataset text serializes as strings.
+- Studio pauses automatic editor services above the host's document limit, refuses helper writes
+  after an editor load failure, and requires read-only targets for helper previews.
+- Scheduled starts use the immutable job ID and recheck the lease after waiting for capacity.
+
 ### Added
 
 - Release-versioned [Studio guides](docs/guides/studio/README.md) for the first report, pipeline

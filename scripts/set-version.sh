@@ -208,6 +208,14 @@ update_file "docs/architecture/README.md" \
     "(\*\*Applies to ETL-SQL )[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
     "\1${VERSION}\2"
 
+# Portal page cache-busting query strings ("?v=X.Y.Z"); a stale value lets an upgraded browser
+# keep the previous release's scripts.
+for page in "$ROOT"/src/ETL-SQL.Portal/wwwroot/*.html; do
+    update_file "src/ETL-SQL.Portal/wwwroot/$(basename "$page")" \
+        "(\?v=)[0-9]+\.[0-9]+\.[0-9]+" \
+        "\1${VERSION}"
+done
+
 echo ""
 echo "Done."
 echo ""

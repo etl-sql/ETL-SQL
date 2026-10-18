@@ -4,7 +4,7 @@
 $ErrorActionPreference = "Stop"
 & node (Join-Path $PSScriptRoot 'sync-assets.js')
 if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed. Run npm ci --prefix scripts/typecheck first.' }
-$Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.20.1" }
+$Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.21.0" }
 $BuildDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer\publish\win-x64\bin"
 $InstallerDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer"
 
