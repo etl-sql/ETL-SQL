@@ -4,7 +4,7 @@ The execution ledger for v0.21.0. Items are grouped by when they can be done, no
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0210-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 2 |
+| [Now](#now--v0210-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 1 |
 | [At release](#v0210-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 11 |
 | [Blocked](#blocked--waiting-on-something-outside-the-repository) | Work waiting on a tool, account or person | 1 |
 | [Known limits](#known-limits--context-not-tasks) | Limits to state honestly in release notes | — |
@@ -47,13 +47,13 @@ or an asset-only archive check does not close a build, package or runtime row.
   Still open: the Portal-profile MSI run (`Test-MsiPortalUpgrade.ps1`, in the MSI workflow). The
   released v0.20.0 VSIX cannot activate because its dependency entry point is absent; do not count it
   as a passing baseline.
-- [ ] **CodeQL over the newly analysed owners.** 88 TypeScript owners entered analysis when the
+- [x] **CodeQL over the newly analysed owners.** 88 TypeScript owners entered analysis when the
   exclusions were narrowed. Review the first run's alerts. The workflow now includes build generators
   and package tooling, with checks and fixtures excluded; its coverage gate verifies 40 tooling files.
   2026-10-17: scanned and triaged. Six alerts were fixed; 14 remain open on the release branch, all
   false positives or won't-fix, and need the repository owner to dismiss them. See the
-  [triage table](docs/releases/v0.21.0-browser-asset-acceptance.md). The release checklist requires
-  zero open alerts on `main` before tagging.
+  [triage table](docs/releases/v0.21.0-browser-asset-acceptance.md). **Done 2026-10-18:** the owner
+  dismissed all 14; zero open alerts on `release/v0.21.0` and on `main`.
 
 ### 5. Studio — Author, reader and beginner practice journeys
 

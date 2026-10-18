@@ -325,6 +325,11 @@ class load and shared background-service state from its startup/shutdown observa
   `net::ERR_NO_BUFFER_SPACE` navigating in 70 ms. The other 985 passed. Still open; deferred to the
   next release's dedicated flaky-test work.
 
+  The next run (`7141a5df3`, run 39131831664) failed a different single test, 21 minutes in:
+  `DesktopStudioJourneyTests.AuthenticatedDesktopHosts_AuthoringShutdownRelaunchAndProjectWindows`
+  waited 10 s for the first host's `ApplicationStopping` after "Exit Without Saving" and timed out.
+  It passed 3 of 3 locally the same day (9–11 s each). New, not yet diagnosed; same deferral.
+
   The teardown failure has a cause. That journey is the only one in its class that triggers a real
   run through the Orchestrator, and a triggered run is a detached task. In the service,
   `OrchestratorHostedService` waits for such tasks at shutdown. The fixture removes every hosted
