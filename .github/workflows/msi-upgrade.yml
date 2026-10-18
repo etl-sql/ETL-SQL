@@ -198,10 +198,12 @@ jobs:
       # Orchestrator: fresh install, upgrade with served-asset and cache checks, and rollback.
       - name: Certify Portal profile install, upgrade and rollback
         if: ${{ !cancelled() }}
-        # Two runs lost the runner with no log; the second only when this step timeout killed the
-        # stuck step. So the script bounds its own waits (msiexec 10 min, services 3 min, each HTTP
-        # request 30 s), records a hung install's process tree, and aborts to cleanup well inside
-        # this limit, which stays as the last resort.
+        # A step-timeout kill loses the runner and every log. The script bounds its own waits
+        # (msiexec 10 min, services 3 min, admin backup 5 min, each HTTP request 30 s), yet runs
+        # 39131831623 and 39137736713 still reached this limit with nothing uploaded. So a watchdog
+        # runs the script as a child, stops it at 35 minutes with the process tree and recent
+        # events, and ends the step itself, leaving the upload step to run. The limit stays as the
+        # last resort.
         timeout-minutes: 45
         shell: pwsh
         env:
@@ -210,7 +212,25 @@ jobs:
           $previous = @(Get-ChildItem .upgrade-cache -Filter '*-x64-Setup.msi')
           if ($previous.Count -ne 1) { throw 'Previous MSI cache must contain exactly one MSI.' }
           $current = "src/ETL-SQL.Installer/ETL-SQL-v$env:CURRENT_VERSION.msi"
-          .\scripts\Test-MsiPortalUpgrade.ps1 -PreviousMsi $previous[0].FullName -CurrentMsi $current
+          $evidence = 'release-validation/msi-upgrade'
+          New-Item -ItemType Directory -Force -Path $evidence | Out-Null
+          $console = Join-Path $evidence 'portal-certification-console.log'
+          $cert = Start-Process pwsh -PassThru -NoNewWindow `
+            -ArgumentList @('-NoProfile', '-File', 'scripts/Test-MsiPortalUpgrade.ps1', '-PreviousMsi', "`"$($previous[0].FullName)`"", '-CurrentMsi', $current) `
+            -RedirectStandardOutput $console -RedirectStandardError "$console.err"
+          if (-not $cert.WaitForExit(35 * 60 * 1000)) {
+            $report = Join-Path $evidence 'watchdog.txt'
+            "Watchdog stopped the Portal certification at $((Get-Date).ToString('o'))" | Set-Content $report
+            Get-CimInstance Win32_Process | Sort-Object ProcessId |
+              ForEach-Object { '{0,6} parent {1,6} {2,-28} {3}' -f $_.ProcessId, $_.ParentProcessId, $_.Name, $_.CommandLine } |
+              Add-Content $report
+            Get-Service 'ETL-SQL*', msiserver -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Name) $($_.Status)" } | Add-Content $report
+            Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = (Get-Date).AddMinutes(-20) } -MaxEvents 40 -ErrorAction SilentlyContinue |
+              ForEach-Object { "$($_.TimeCreated.ToString('o')) $($_.ProviderName): $($_.Message)" } | Add-Content $report
+            & taskkill.exe /T /F /PID $cert.Id | Add-Content $report
+            throw 'Portal certification exceeded 35 minutes; see watchdog.txt, the console log and summary.txt.'
+          }
+          exit $cert.ExitCode
 
       - name: Upload upgrade evidence
         if: always()
