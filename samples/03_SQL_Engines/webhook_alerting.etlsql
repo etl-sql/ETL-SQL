@@ -21,7 +21,7 @@ UNION ALL SELECT 'INFO', 'Batch Job Succeeded', 'Nightly partition aggregation c
 -- Note: WEBHOOK is write-only. Reading (SELECT) from a webhook connection returns no rows.
 BEGIN TRY
     CREATE CONNECTION slack_ops_sink AS WEBHOOK(
-        URL             = 'https://hooks.slack.com/services/T00000000/B00000000/mock_secret_token',
+        URL             = 'https://hooks.slack.com/services/T00000000/B00000000/mock_secret_token', -- placeholder; pragma: allowlist secret
         FORMAT          = 'slack',
         TIMEOUT_SECONDS = 5,
         RETRY_COUNT     = 2

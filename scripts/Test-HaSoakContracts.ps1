@@ -62,11 +62,11 @@ try {
     }
 
     Invoke-Step 'Capacity workload schemas' {
-        & node (Join-Path $ScriptRoot 'test-capacity-workload-configs.mjs')
+        & node (Join-Path $ScriptRoot 'checks\test-capacity-workload-configs.mjs')
     }
 
     Invoke-Step 'Capacity caller identity exchange' {
-        & node (Join-Path $ScriptRoot 'test-service-capacity-smoke.mjs')
+        & node (Join-Path $ScriptRoot 'checks\test-service-capacity-smoke.mjs')
     }
 
     if (-not $NoDotNet) {

@@ -84,6 +84,8 @@ StewardshipAssetBadge / StewardshipAssetReview / StewardshipScan
 
 Authoring workflow:
 ReportScriptDraft ──< ReportScriptDraftDecision   (draft → review → publish; opt-in)
+StudioPrivateDraft ──< StudioPrivateDraftRevision (an owner's unpublished Studio document and its saves)
+StudioPrivateDraft ──> PortalUser                  (owner; no one else can read it)
 ```
 
 ### Key Design Decisions
