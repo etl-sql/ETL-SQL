@@ -130,7 +130,11 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 - [ ] **Re-measure the scale certification baselines.** Finish fresh comparisons of the final clean
   candidate in the full release gate. Do **not** re-bless until the cause of host drift is known;
   v0.17.0 established why. The corrected harness passed all 520 correctness/memory measurements and
-  all candidate/control and repeat-run comparisons under unchanged bands. Background:
+  all candidate/control and repeat-run comparisons under unchanged bands. 2026-10-18: Standard and
+  the 10M spill budget pass on the candidate; Smoke fails on two Parquet scenarios whose baselines
+  held run-order-dependent warm timings (bisected to `be3175f3e`; run alone, v0.20.1 measures the
+  same). Owner accepted it as an explained deviation with no re-bless; harness fix in `ROADMAP.md`.
+  See the [v0.21.0 performance results](docs/releases/v0.21.0-performance-results.md). Background:
   [v0.19.0](docs/releases/v0.19.0-performance-results.md) and
   [v0.20.0](docs/releases/v0.20.0-performance-results.md) performance results.
 

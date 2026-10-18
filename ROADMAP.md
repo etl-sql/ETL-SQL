@@ -188,6 +188,31 @@ filters.
   packaged-runtime checks on Windows and Linux passed. The delivery paths still to verify are listed in
   `TODO.md` §1.1 and the v0.21.0 delivery matrix.
 
+### Release Engineering — Order-Independent Scale Certification
+
+**Status:** Accepted  
+**Horizon:** Next (v0.22.0)  
+**Authoritative design:** [v0.21.0 performance results](docs/releases/v0.21.0-performance-results.md)
+
+**Problem and Intended Outcome:** A scenario's timing depends on which scenarios ran before it in
+the same host. v0.21.0 showed it: two Smoke baselines held warm timings that a spill-format change
+(`be3175f3e`) stopped earlier scenarios from providing, and they now fail with no change in their own
+code. Each scenario should measure the same whether it runs alone or in the tier.
+
+**Boundaries:** Change the harness, not the bands. Recalibrate only from clean candidate/control runs
+on one host, as v0.20.0 did.
+
+**Dependencies:** None.
+
+**Vertical Delivery Slices:**
+
+1. Warm each scenario's own code path (one untimed operation) before its timed samples.
+2. Prove order independence: each Smoke scenario alone and in the tier agree within the band.
+3. Recalibrate the Smoke and Standard baselines from clean candidate/control runs and record them.
+
+**Acceptance Evidence:** the order-independence check passes, and the v0.21.0 deviation's two
+scenarios pass against the recalibrated baseline.
+
 
 ## Later Reporting and Presentation Work
 
