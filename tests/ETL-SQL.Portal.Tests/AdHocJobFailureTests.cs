@@ -26,7 +26,7 @@ public sealed class AdHocJobFailureTests
         var entryType = api.GetNestedType("JobEntry", BindingFlags.NonPublic)!;
         using var cts = new CancellationTokenSource();
         var id = Guid.NewGuid().ToString("N");
-        var entry = Activator.CreateInstance(entryType, id, cts, "test-correlation", "test-owner")!;
+        var entry = Activator.CreateInstance(entryType, id, cts, "test-correlation", "test-owner", null)!;
         var factory = new FailingScopeFactory(failCreatingScope);
         var logger = new CapturingLogger();
         var run = api.GetMethod("RunJobAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
@@ -66,7 +66,7 @@ public sealed class AdHocJobFailureTests
         var ids = new List<string>();
         using var activeCts = new CancellationTokenSource();
         var activeId = Guid.NewGuid().ToString("N");
-        jobs.Add(activeId, Activator.CreateInstance(entryType, activeId, activeCts, null, "test-owner")!);
+        jobs.Add(activeId, Activator.CreateInstance(entryType, activeId, activeCts, null, "test-owner", null)!);
         try
         {
             for (var i = 0; i < 1001; i++)
@@ -74,7 +74,7 @@ public sealed class AdHocJobFailureTests
                 var id = Guid.NewGuid().ToString("N");
                 ids.Add(id);
                 using var cts = new CancellationTokenSource();
-                var entry = Activator.CreateInstance(entryType, id, cts, null, "test-owner")!;
+                var entry = Activator.CreateInstance(entryType, id, cts, null, "test-owner", null)!;
                 entryType.GetProperty("CompletedAt")!.SetValue(entry, DateTimeOffset.UtcNow.AddMinutes(-30).AddMilliseconds(i));
                 jobs.Add(id, entry);
             }
