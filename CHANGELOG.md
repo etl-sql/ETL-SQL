@@ -12,7 +12,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.21.0] — 2026-10-17
+## [0.21.0] — 2026-10-18
 
 For complete release details, highlights, and migration notes, see [Release Notes v0.21.0](docs/releases/v0.21.0.md).
 

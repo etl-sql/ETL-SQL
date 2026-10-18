@@ -330,6 +330,9 @@ class load and shared background-service state from its startup/shutdown observa
   waited 10 s for the first host's `ApplicationStopping` after "Exit Without Saving" and timed out.
   It passed 3 of 3 locally the same day (9–11 s each). New, not yet diagnosed; same deferral.
 
+  The release candidate's first CI attempt (`cd1770eac`, run 39143534977) failed single browser
+  tests on timeouts; the rerun of the failed jobs passed. Same deferral.
+
   The teardown failure has a cause. That journey is the only one in its class that triggers a real
   run through the Orchestrator, and a triggered run is a detached task. In the service,
   `OrchestratorHostedService` waits for such tasks at shutdown. The fixture removes every hosted

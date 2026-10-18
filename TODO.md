@@ -38,13 +38,15 @@ or an asset-only archive check does not close a build, package or runtime row.
 - [x] **Real IDE launch.** Open the solution in an IDE before preparation, prepare, then build and
   launch; repeat after `git clean -fdX`. **Done 2026-10-17:** the owner ran it in Visual Studio Code
   and reported a pass.
-- [ ] **Installed upgrades.** The workstation MSI upgrade from v0.20.0 to v0.20.1 passes with installed
+- [x] **Installed upgrades.** The workstation MSI upgrade from v0.20.0 to v0.20.1 passes with installed
   Player asset assertions in CI run 38194946537. The Windows VSIX update from v0.20.0 to the fixed
   candidate passes in the same profile. 2026-10-17: `scripts/test-deb-upgrade.sh` passes all 37 checks (33 before the secrets split)
   in WSL Ubuntu: a fresh install, an upgrade from v0.20.0 with populated-cache revalidation (no stale
   304), and rollback from a pre-upgrade backup. Fixing it took six installer defects; see the
   [acceptance record](docs/releases/v0.21.0-browser-asset-acceptance.md#installed-upgrades--2026-10-17).
-  Still open: the Portal-profile MSI run (`Test-MsiPortalUpgrade.ps1`, in the MSI workflow). The
+  **Done 2026-10-18:** after the admin backup fix, the DEB script passes 38/38 at `70c2056a5` and the
+  Portal-profile MSI run (`Test-MsiPortalUpgrade.ps1`) passes 32/32 in CI run 39143535029, both
+  including a check that `admin backup` captures the job history the service writes. The
   released v0.20.0 VSIX cannot activate because its dependency entry point is absent; do not count it
   as a passing baseline.
 - [x] **CodeQL over the newly analysed owners.** 88 TypeScript owners entered analysis when the
@@ -96,13 +98,18 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 
 ### Release evidence gates
 
-- [ ] Run the full local pre-release gate required by the release checklist, including the selected
-  SLT, Docker integration, scale, packaging, and platform lanes.
-- [ ] Pass the Enterprise Release Evidence Checklist, `test-lane.ps1`, `Test-PreRelease.ps1`,
+- [x] Run the full local pre-release gate required by the release checklist, including the selected
+  SLT, Docker integration, scale, packaging, and platform lanes. **Done 2026-10-18** at `cd1770eac`:
+  green CI, CodeQL and MSI workflows stand in for the lanes they run (owner decision); the CI-gap
+  lanes (Portal shards, Docker integration, HA soak contracts, scale tiers) ran locally.
+- [x] Pass the Enterprise Release Evidence Checklist, `test-lane.ps1`, `Test-PreRelease.ps1`,
   `Test-EnterpriseHardeningCertification.ps1`, `admin restore --validate`, `ha-soak validate`, and
-  `SecurityBoundaryDocTests` as applicable to the shipped v0.21.0 claims.
-- [ ] Build the deployment-profile claim matrix from evidence and do not promote unfinished Shared
-  SaaS or hosted-production outcomes into release claims.
+  `SecurityBoundaryDocTests` as applicable to the shipped v0.21.0 claims. **Done 2026-10-18:** the
+  recovery drill (`admin restore --validate`) and deployment-profile transitions pass. Production
+  canaries and HA fault evidence are not certified for v0.21.0.
+- [x] Build the deployment-profile claim matrix from evidence and do not promote unfinished Shared
+  SaaS or hosted-production outcomes into release claims. **Done 2026-10-18:** profiles passed and
+  are release eligible; no Shared SaaS or hosted-production claim is made.
 - [ ] Verify third-party notices/inventory, secret scanning, SBOM, checksums, installers, release
   notes, upgrade guidance, and changelog entries for the final shipped scope.
 - [ ] Reconcile `TODO.md` and `ROADMAP.md` immediately before release: remove verified completed
