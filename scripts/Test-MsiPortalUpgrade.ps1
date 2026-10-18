@@ -90,8 +90,11 @@ function Test-Step([string]$Name, [scriptblock]$Body) {
     }
 }
 
-# Stop-Service and Start-Service wait without limit while a service is pending.
+# Stop-Service and Start-Service wait without limit while a service is pending. A stop also waits
+# for the processes to exit: the SCM reports Stopped while SQLite is still closing, and the close
+# deletes portal.db-shm under a backup that has just listed it.
 function Set-ServicesState([string]$State) {
+    $processIds = @(Get-CimInstance Win32_Service -Filter "Name LIKE 'ETL-SQL-%'" | Where-Object ProcessId -ne 0 | ForEach-Object ProcessId)
     foreach ($name in $services) {
         $svc = Get-Service -Name $name
         if ($State -eq 'Stopped') { Stop-Service -InputObject $svc -Force -NoWait }
@@ -100,6 +103,10 @@ function Set-ServicesState([string]$State) {
     foreach ($name in $services) {
         try { (Get-Service -Name $name).WaitForStatus($State, [TimeSpan]::FromMinutes(3)) }
         catch { throw [TimeoutException]::new("$name did not reach $State within 3 minutes ($((Get-Service -Name $name).Status)).") }
+    }
+    if ($State -ne 'Stopped' -or $processIds.Count -eq 0) { return }
+    foreach ($process in @(Get-Process -Id $processIds -ErrorAction SilentlyContinue)) {
+        if (-not $process.WaitForExit(60000)) { throw [TimeoutException]::new("$($process.ProcessName) ($($process.Id)) did not exit within 60 s of stopping.") }
     }
 }
 
