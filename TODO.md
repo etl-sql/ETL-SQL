@@ -1,80 +1,82 @@
 # ETL-SQL Development TODO List
 
-The execution ledger for v0.21.0. Items are grouped by when they can be done, not by topic:
+The execution ledger for v0.22.0. v0.21.0's ledger closed on 2026-10-18 with the release; its
+evidence is in the [v0.21.0 release notes](docs/releases/v0.21.0.md), the
+[delivery matrix](docs/releases/v0.21.0-browser-asset-delivery-matrix.md) and Git history.
+
+Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0210-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 1 |
-| [At release](#v0210-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 11 |
-| [Blocked](#blocked--waiting-on-something-outside-the-repository) | Work waiting on a tool, account or person | 1 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 17 |
+| [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
+| [Blocked](#blocked--waiting-on-something-outside-the-repository) | Work waiting on a tool, account or person | 2 |
 | [Known limits](#known-limits--context-not-tasks) | Limits to state honestly in release notes | — |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
 completed items only in a closed-item audit, after the implementation and evidence are double-checked.
-Deferred initiatives stay in `ROADMAP.md` until selected. Section numbers (§1.1, §5, §13.1 …) are kept
-because documents and source comments cite them.
+Deferred initiatives stay in `ROADMAP.md` until selected.
 
 ---
 
-## Now — v0.21.0 work that can be done today
+## Now — v0.22.0 work that can be done today
 
-### 1.1 Generated browser assets — remaining acceptance
+### 1. Faster release certification
 
-**Parent:** §1 Code stability — Browser sources, Studio, and test lanes. Every Portal and shared module
-now has a TypeScript owner, so §1 has no other open work.
+**Design:** [`ROADMAP.md`](ROADMAP.md#release-engineering--faster-release-certification), which also
+records the v0.21.0 lessons. **Goal:** tag-ready within 8 hours of wall-clock time from candidate cut,
+with no more than two full CI rounds on the final candidate and the same evidence as v0.21.0.
 
-**State:** The cutover is done. The 491 generated outputs left the Git index on 2026-10-11 and are
-ignored by exact rules; a fresh clone prepares them byte-identically. What remains is acceptance of the
-delivery paths that had not been exercised when the cutover was taken.
+- [ ] **Release timeline.** Record the v0.22.0 candidate cut, each CI/MSI round, its cause and the
+  tag time as the release runs, so the goal is measured rather than remembered.
+- [ ] **Find why the MSI runner is lost.** Both of the tag's MSI attempts lost their hosted runner
+  about 10 minutes after the Portal-profile step's 35-minute watchdog was due. The step passes in
+  about 5 minutes. Determine whether the script hangs or the watchdog's `taskkill /T` takes the runner
+  down: shorten the watchdog, stop only named processes, and get the evidence uploaded.
+- [ ] **Nightly release-branch lanes.** Run the installed-upgrade checks (DEB and the MSI Portal
+  profile) and the Portal shards nightly from the day the release branch is cut.
+- [ ] **Path-filtered fix rounds.** A fix commit runs only the lanes its paths touch, using a manifest
+  of which lanes cover which paths. The final round still runs everything.
+- [ ] **Split the Portal browser lane** across parallel jobs, so the longest CI job falls from about 60
+  minutes to about 20.
+- [ ] **Watchdogs and log streaming** on every long CI step, with the console streamed to an artifact
+  and diagnostics uploaded on failure.
+- [ ] **One-command release metadata.** One step flips the CHANGELOG date, release-notes status and
+  releases index together.
+- [ ] **Evidence manifest.** A script gathers run IDs, lane results and certification outcomes for
+  the candidate commit into one committed file. The release gates below point at it.
+- [ ] **Move the local-only lanes into CI.** That covers Docker integration, the Portal shards, the HA
+  soak contracts, the recovery drill and the final-candidate package checks. Then trim the release
+  checklist to match.
 
-**Completion rule:** A fresh checkout generates every browser asset before build, test or packaging
-consumes it, and published products need no Node.js to run. A populated manifest, an older snapshot
-or an asset-only archive check does not close a build, package or runtime row.
+### 2. Order-independent scale certification
 
-**References:** [asset standards](docs/architecture/standards/report-runtime-asset-standards.md) ·
-[delivery matrix](docs/releases/v0.21.0-browser-asset-delivery-matrix.md) ·
-[progress record](docs/releases/v0.21.0-generated-assets-progress.md) (full history and original task wording)
+**Design:** [`ROADMAP.md`](ROADMAP.md#release-engineering--order-independent-scale-certification)
+and the [v0.21.0 performance results](docs/releases/v0.21.0-performance-results.md).
 
-- [x] **Real IDE launch.** Open the solution in an IDE before preparation, prepare, then build and
-  launch; repeat after `git clean -fdX`. **Done 2026-10-17:** the owner ran it in Visual Studio Code
-  and reported a pass.
-- [x] **Installed upgrades.** The workstation MSI upgrade from v0.20.0 to v0.20.1 passes with installed
-  Player asset assertions in CI run 38194946537. The Windows VSIX update from v0.20.0 to the fixed
-  candidate passes in the same profile. 2026-10-17: `scripts/test-deb-upgrade.sh` passes all 37 checks (33 before the secrets split)
-  in WSL Ubuntu: a fresh install, an upgrade from v0.20.0 with populated-cache revalidation (no stale
-  304), and rollback from a pre-upgrade backup. Fixing it took six installer defects; see the
-  [acceptance record](docs/releases/v0.21.0-browser-asset-acceptance.md#installed-upgrades--2026-10-17).
-  **Done 2026-10-18:** after the admin backup fix, the DEB script passes 38/38 at `70c2056a5` and the
-  Portal-profile MSI run (`Test-MsiPortalUpgrade.ps1`) passes 32/32 in CI run 39143535029, both
-  including a check that `admin backup` captures the job history the service writes. The
-  released v0.20.0 VSIX cannot activate because its dependency entry point is absent; do not count it
-  as a passing baseline.
-- [x] **CodeQL over the newly analysed owners.** 88 TypeScript owners entered analysis when the
-  exclusions were narrowed. Review the first run's alerts. The workflow now includes build generators
-  and package tooling, with checks and fixtures excluded; its coverage gate verifies 40 tooling files.
-  2026-10-17: scanned and triaged. Six alerts were fixed; 14 remain open on the release branch, all
-  false positives or won't-fix, and need the repository owner to dismiss them. See the
-  [triage table](docs/releases/v0.21.0-browser-asset-acceptance.md). **Done 2026-10-18:** the owner
-  dismissed all 14; zero open alerts on `release/v0.21.0` and on `main`.
+- [ ] Warm each scenario's own code path (one untimed operation) before its timed samples.
+- [ ] Prove order independence: each Smoke scenario alone and in the tier agree within the band.
+- [ ] Recalibrate the Smoke and Standard baselines from clean candidate/control runs and record them.
 
-### 5. Studio — Author, reader and beginner practice journeys
+### 3. Flaky tests — the dedicated fix
 
-**Horizon:** Next · Prerequisites complete: ST16–ST22 (see
-[practice execution decision](docs/architecture/decisions/studio-practice-execution.md),
-[desktop](docs/architecture/decisions/studio-desktop-practice-evidence.md),
-[report](docs/architecture/decisions/studio-beginner-report-evidence.md),
-[reader](docs/architecture/decisions/studio-reader-journey-evidence.md) and
-[Portal practice](docs/architecture/decisions/studio-portal-practice-evidence.md) evidence).
+**Record:** [flaky-test stability](docs/releases/flaky-test-stability.md). v0.21.0 deferred these
+here; each one failed a single test per run and passed on rerun.
 
-- [x] **ST21b — Portal practice exercise in the sandbox.** Carry the submitter's identity in the sandbox request,
-  lift `sandbox_identity_unsupported` for run slots, and repeat ST21 on a real sandbox with its terminal status,
-  egress denial and cleanup recorded. Security-sensitive; needs a written design first. (Depends on: ST21; Size: L)
-  **Done 2026-10-17:** [design and evidence](docs/architecture/decisions/studio-sandbox-submitter-identity.md#acceptance-evidence--2026-10-17).
-  Passed three consecutive runs on Docker Desktop runc (Standard tier), with metadata and external
-  egress refused and no container or workspace left. Not Hardened/gVisor certification.
+- [ ] **Browser lane on the Windows CI runner:** `net::ERR_NO_BUFFER_SPACE` and 30 s navigation
+  timeouts, one test per run. The recorded next step is to capture failed requests and the process's
+  handle and socket counts when a navigation fails.
+- [ ] **`DesktopStudioJourneyTests` exit timeout:** waited 10 s for `ApplicationStopping` after "Exit
+  Without Saving" on CI; passes 3 of 3 locally in 9–11 s.
+- [ ] **Docker lane:** confirm the FTP mapped-port wait and the scheduled-job `lastRun` race fixes hold
+  across consecutive CI runs, then close them in the record.
 
-ST16b, the observed learner walkthrough, is deferred in
-[`ROADMAP.md`](ROADMAP.md#author-reader-and-beginner-practice-journeys) until a person new to Studio is available.
+### 4. Carried from the v0.21.0 delivery matrix
+
+- [ ] **Launch the macOS packages.** The v0.21.0 DMG and both macOS zips were checked by content
+  only. Mount and launch the DMG and run both zips on macOS (a CI macOS job is enough).
+- [ ] **VSIX webviews on Linux and macOS.** Run `vsix-webview-acceptance.cjs` against the
+  linux-x64 and darwin packages; v0.21.0 ran it on win32-x64 only.
 
 ---
 
@@ -83,72 +85,28 @@ ST16b, the observed learner walkthrough, is deferred in
 - [ ] **Live Snowflake row rollback.** The shared-transaction fix for Snowflake table views passes
   its lifecycle test with a recording transaction. The Snowflake emulator cannot create tables, so it
   cannot show a row rolled back. Needs a Snowflake account. See the
-  [bugs and logic audit](docs/releases/v0.21.0-bug-logic-audit.md). Not a v0.21.0 release blocker;
-  stated in the release notes' known issues.
+  [bugs and logic audit](docs/releases/v0.21.0-bug-logic-audit.md).
+- [ ] **Observed learner walkthrough (ST16b) and screen-reader passes (ST28/ST29).** They need a person
+  new to Studio and a real screen reader; deferred in
+  [`ROADMAP.md`](ROADMAP.md#author-reader-and-beginner-practice-journeys).
 
 ---
 
-## v0.21.0 Release — run on the final candidate
+## v0.22.0 Release — run on the final candidate
 
-Target release: **v0.21.0**. Nothing here can be closed early: each item is evidence about the
-candidate that ships.
-
+Nothing here can be closed early: each item is evidence about the candidate that ships.
 Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.md) and
 [`Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/enterprise-release-evidence-checklist.md).
 
-### Release evidence gates
-
-- [x] Run the full local pre-release gate required by the release checklist, including the selected
-  SLT, Docker integration, scale, packaging, and platform lanes. **Done 2026-10-18** at `cd1770eac`:
-  green CI, CodeQL and MSI workflows stand in for the lanes they run (owner decision); the CI-gap
-  lanes (Portal shards, Docker integration, HA soak contracts, scale tiers) ran locally.
-- [x] Pass the Enterprise Release Evidence Checklist, `test-lane.ps1`, `Test-PreRelease.ps1`,
-  `Test-EnterpriseHardeningCertification.ps1`, `admin restore --validate`, `ha-soak validate`, and
-  `SecurityBoundaryDocTests` as applicable to the shipped v0.21.0 claims. **Done 2026-10-18:** the
-  recovery drill (`admin restore --validate`) and deployment-profile transitions pass. Production
-  canaries and HA fault evidence are not certified for v0.21.0.
-- [x] Build the deployment-profile claim matrix from evidence and do not promote unfinished Shared
-  SaaS or hosted-production outcomes into release claims. **Done 2026-10-18:** profiles passed and
-  are release eligible; no Shared SaaS or hosted-production claim is made.
-- [ ] Verify third-party notices/inventory, secret scanning, SBOM, checksums, installers, release
-  notes, upgrade guidance, and changelog entries for the final shipped scope.
-- [ ] Reconcile `TODO.md` and `ROADMAP.md` immediately before release: remove verified completed
-  work, retain unfinished increments with accurate status, and ensure release notes describe only
-  evidence-backed outcomes.
-
-### Generated browser assets — final-candidate checks (§1.1)
-
-- [x] **Run the release workflow.** `release.yml` and `Master-Release.ps1` have not run since the
-  cutover. Their macOS DMG and upload steps are unverified. **Done 2026-10-18:** `release.yml` run
-  39156284505 built and published all 11 binaries, the SBOM and `sha256sums.txt` for `v0.21.0`.
-- [x] **Inspect the DMG.** Its contents have not been compared with the prepared inventory on either
-  macOS architecture. **Done 2026-10-18:** the published DMG (built from osx-x64) and both macOS zips
-  pass `verify-packaged-browser-assets.mjs`, 343 of 343 files each. The DMG holds the same files as
-  the osx-x64 zip. There is no arm64 DMG; arm64 ships as a zip.
-- [x] **Verify release metadata on real assets.** Attestation, `sha256sums.txt`, SBOM and third-party
-  notices must be produced after package assembly and cover the generated assets. The generators and
-  job order are verified; attestation over real release assets is not. **Done 2026-10-18:** all 11
-  binaries match `sha256sums.txt` and GitHub's asset digests, each has one build-provenance
-  attestation, and `sbom.json` is CycloneDX with 125 components.
-- [ ] **Run every delivery-matrix row on the final candidate.** No package row has been run on the
-  current source state. Earlier snapshots are supporting evidence only.
-- [ ] **Close the cutover.** Reconcile the matrix with the items above, record the source revision and
-  final ownership inventory, and confirm from a fresh clone that repeat preparation leaves Git clean
-  and the ownership gate rejects a re-tracked output. This also closes the "untrack" acceptance item,
-  which is implemented but held open for its packaged-runtime prerequisites.
-
-### 11. Release engineering follow-ups
-
-- [ ] **Re-measure the scale certification baselines.** Finish fresh comparisons of the final clean
-  candidate in the full release gate. Do **not** re-bless until the cause of host drift is known;
-  v0.17.0 established why. The corrected harness passed all 520 correctness/memory measurements and
-  all candidate/control and repeat-run comparisons under unchanged bands. 2026-10-18: Standard and
-  the 10M spill budget pass on the candidate; Smoke fails on two Parquet scenarios whose baselines
-  held run-order-dependent warm timings (bisected to `be3175f3e`; run alone, v0.20.1 measures the
-  same). Owner accepted it as an explained deviation with no re-bless; harness fix in `ROADMAP.md`.
-  See the [v0.21.0 performance results](docs/releases/v0.21.0-performance-results.md). Background:
-  [v0.19.0](docs/releases/v0.19.0-performance-results.md) and
-  [v0.20.0](docs/releases/v0.20.0-performance-results.md) performance results.
+- [ ] Run the release gates the checklist requires. Green CI, CodeQL and MSI count for the lanes they
+  run; run the CI-gap lanes and the operator certifications locally.
+- [ ] Run every delivery path on the final candidate, as the v0.21.0 delivery matrix did.
+- [ ] Build the deployment-profile claim matrix from evidence; promote no unfinished Shared SaaS or
+  hosted-production outcome.
+- [ ] Verify third-party notices and inventory, secret scanning, SBOM, checksums, attestation,
+  installers, release notes, upgrade guidance and changelog for the shipped scope.
+- [ ] Reconcile `TODO.md` and `ROADMAP.md` before the tag, and record the release timeline against
+  the §1 goal.
 
 ---
 
