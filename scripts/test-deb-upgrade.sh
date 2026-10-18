@@ -23,6 +23,8 @@ CHECKER=$CHECKOUT/scripts/test-installed-portal-assets.mjs
 
 [ "$(id -u)" -eq 0 ] || { echo "Run as root." >&2; exit 2; }
 dpkg -s etl-sql >/dev/null 2>&1 && { echo "etl-sql is already installed; use a clean host." >&2; exit 2; }
+# A stale secrets file makes the "fresh" install adopt old secrets and skip the one-time sign-in.
+[ -e /usr/lib/etl-sql ] && { echo "/usr/lib/etl-sql exists (an earlier run's leftovers?); use a clean host." >&2; exit 2; }
 [ "$(systemctl is-system-running 2>/dev/null)" != "offline" ] || { echo "systemd is required." >&2; exit 2; }
 mkdir -p "$OUT"; OUT=$(realpath "$OUT"); : > "$OUT/summary.txt"
 FAILED=0
@@ -240,6 +242,10 @@ check "rollback: served assets are the previous release's; cached browser refetc
 log "== purge"
 check "purge: dpkg purge" dpkg --purge etl-sql
 rm -rf $DROPIN_DIRS; systemctl daemon-reload; rm -rf /var/cache/etl-sql /var/lib/etl-sql /etc/etl-sql
+# The purge runs the previous package's scripts, which predate these v0.21.0 files: record them,
+# then remove them so the next run starts clean.
+find "$INSTALL" -maxdepth 2 \( -name appsettings.secrets.json -o -name .portal-keys \) > "$OUT/left-by-previous-purge.txt" 2>/dev/null
+rm -rf "$INSTALL/appsettings.secrets.json" "$INSTALL/.portal-keys"
 rm -f "$INSTALL/data-upgrade-sentinel.txt"; rmdir --ignore-fail-on-non-empty "$INSTALL" /usr/lib/etl-sql 2>/dev/null
 check "purge: services removed" bash -c '! systemctl is-active --quiet etl-sql-portal.service && ! systemctl is-active --quiet etl-sql-orchestrator.service'
 journalctl -u etl-sql-portal.service --no-pager --since "-40 min" > "$OUT/portal-journal.txt" 2>&1
