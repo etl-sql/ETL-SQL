@@ -333,6 +333,10 @@ class load and shared background-service state from its startup/shutdown observa
   The release candidate's first CI attempt (`cd1770eac`, run 39143534977) failed single browser
   tests on timeouts; the rerun of the failed jobs passed. Same deferral.
 
+  The release push to `main` (`53a3343d4`, run 39156281594) failed one of 986:
+  `ScheduledJobActivityBrowserTests.ReadGrantsLimitRowsAndCountsAndRevocationClearsThePage` timed
+  out after 30 s waiting for navigation to `**/index.html`. The rerun of the job passed. Same deferral.
+
   The teardown failure has a cause. That journey is the only one in its class that triggers a real
   run through the Orchestrator, and a triggered run is a detached task. In the service,
   `OrchestratorHostedService` waits for such tasks at shutdown. The fixture removes every hosted

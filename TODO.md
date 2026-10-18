@@ -118,13 +118,18 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 
 ### Generated browser assets — final-candidate checks (§1.1)
 
-- [ ] **Run the release workflow.** `release.yml` and `Master-Release.ps1` have not run since the
-  cutover. Their macOS DMG and upload steps are unverified.
-- [ ] **Inspect the DMG.** Its contents have not been compared with the prepared inventory on either
-  macOS architecture.
-- [ ] **Verify release metadata on real assets.** Attestation, `sha256sums.txt`, SBOM and third-party
+- [x] **Run the release workflow.** `release.yml` and `Master-Release.ps1` have not run since the
+  cutover. Their macOS DMG and upload steps are unverified. **Done 2026-10-18:** `release.yml` run
+  39156284505 built and published all 11 binaries, the SBOM and `sha256sums.txt` for `v0.21.0`.
+- [x] **Inspect the DMG.** Its contents have not been compared with the prepared inventory on either
+  macOS architecture. **Done 2026-10-18:** the published DMG (built from osx-x64) and both macOS zips
+  pass `verify-packaged-browser-assets.mjs`, 343 of 343 files each. The DMG holds the same files as
+  the osx-x64 zip. There is no arm64 DMG; arm64 ships as a zip.
+- [x] **Verify release metadata on real assets.** Attestation, `sha256sums.txt`, SBOM and third-party
   notices must be produced after package assembly and cover the generated assets. The generators and
-  job order are verified; attestation over real release assets is not.
+  job order are verified; attestation over real release assets is not. **Done 2026-10-18:** all 11
+  binaries match `sha256sums.txt` and GitHub's asset digests, each has one build-provenance
+  attestation, and `sbom.json` is CycloneDX with 125 components.
 - [ ] **Run every delivery-matrix row on the final candidate.** No package row has been run on the
   current source state. Earlier snapshots are supporting evidence only.
 - [ ] **Close the cutover.** Reconcile the matrix with the items above, record the source revision and

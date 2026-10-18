@@ -213,6 +213,102 @@ on one host, as v0.20.0 did.
 **Acceptance Evidence:** the order-independence check passes, and the v0.21.0 deviation's two
 scenarios pass against the recalibrated baseline.
 
+### Release Engineering — Faster Release Certification
+
+**Status:** Accepted  
+**Horizon:** Next (v0.22.0)  
+**Authoritative design:** [release checklist](docs/releases/release-checklist.md) (to be revised by this work)
+
+**Problem and Intended Outcome:** Certifying v0.21.0 took more than 24 hours of active work, spread over two days.
+The release branch ran 14 CI rounds (8 failed), 14 MSI upgrade rounds (10 failed) and 14 CodeQL
+rounds. Most of that time went on waiting for a full round to finish after a one-line fix. The
+outcome: the same evidence, with tag-ready in one working day (8 hours or less of wall-clock time from
+candidate cut) and no more than two full CI rounds on the final candidate.
+
+**Lessons from v0.21.0:**
+
+1. **Defects surfaced at the end.** The installed-upgrade checks found the `admin backup` gap: it
+   missed the Orchestrator database the services write. They also found six installer defects, a
+   stale secrets file left by an earlier purge, and an MSI custom action that resolved the
+   installing user's profile instead of LocalSystem's. The Portal shards found a test broken by a
+   constructor change (`JobEntry` tenant id). The HA soak contracts found a moved module path. All of
+   these existed for weeks before certification ran.
+2. **Every fix cost a full round.** The longest CI job ran 39–61 minutes and the MSI certification
+   about 25 minutes. A fix to one script re-ran every lane.
+3. **Flaky browser tests cost reruns.** Each run failed a different single test: 1 of about 986, from
+   `net::ERR_NO_BUFFER_SPACE`, navigation timeouts or a host exit timeout. All passed locally and
+   on rerun. The final `main` push hit another one.
+4. **Lost runners left no evidence.** Hosted runners "lost communication": four times in the MSI
+   Portal-profile step (both of the tag's attempts) and once in the in-place step. A step timeout
+   discards the whole log. The Portal step passes in about 5 minutes. On both tag attempts, the
+   runner was lost about 10 minutes after the 35-minute watchdog was due, so the watchdog fired
+   but its evidence never uploaded. Either the script hangs, or the watchdog's `taskkill /T` takes
+   the runner down. Find out which before trusting that step. Diagnosis was blind until the MSI step got its own watchdog that
+   writes evidence before killing.
+5. **The local machine is a bottleneck.** The Portal lane runs out of memory as a single test host
+   (it had to be sharded by class name). Concurrent background lanes were killed under memory
+   pressure, so everything ran serially.
+6. **Performance drift was found too late to fix.** The Smoke deviation took a candidate/control
+   worktree pair and a bisect, and the control needed `NuGetAudit=false` to build.
+7. **The process is manual and scattered.** The checklist is 588 lines. Evidence lives in
+   gitignored folders under `artifacts/`. Status and date edits span four files (CHANGELOG, release
+   notes, releases index, TODO). The `TODO.md` gates were reconciled by hand.
+8. **Tooling traps cost retries.** A double-encoded em dash in `codeql.yml`, PowerShell here-strings
+   that do not pipe to `git commit`, and line-ending rewrites by Git Bash `sed`.
+9. **Branch policy and Dependabot got in the way.** Dependabot PR #35 could not merge into the old
+   `main` because of an unrelated package advisory, and had to be superseded by the release merge.
+
+**Ideas for getting the same evidence faster:**
+
+- **Shift left.** Run the installed-upgrade (DEB in a container, MSI Portal profile) and Portal-shard
+  lanes nightly on the release branch from the day it is cut, not at the end. A defect then costs a
+  normal fix, not a certification round.
+- **Rerun, don't re-push.** Treat a red job as "rerun failed jobs" first. Make a fix commit run only
+  the lanes its paths touch, using path filters and a manifest of which lanes cover which paths. The
+  final full round runs once.
+- **Shorten the longest job.** Split the Portal browser lane across parallel jobs, so the critical path
+  falls from about 60 minutes to about 20.
+- **Contain flakes.** Retry a browser test once, and record every retry in the flaky-test record as
+  evidence. Fix the recurring flakes in the v0.22.0 flaky-test work so retries trend to zero.
+- **Never lose a log.** Give every long step a watchdog with a timeout below the GitHub step timeout.
+  Stream its console to an artifact, and upload diagnostics on failure, as `msi-upgrade.yml` now
+  does.
+- **Move local-only lanes into CI.** That covers Docker integration, the Portal shards, HA soak
+  contracts and the recovery drill, so nothing needs the workstation's memory. The local gate shrinks
+  to the operator certifications that need a real host.
+- **Track performance continuously.** A nightly scale comparison against the last release catches
+  drift when it lands. It also depends on the order-independence fix above.
+- **One-command release metadata.** `Set-Version.ps1` (or a release step) flips the CHANGELOG
+  date, the release-notes status and the releases index together.
+- **An evidence manifest instead of hand reconciliation.** A script collects the run IDs, lane results
+  and certification outcomes for the candidate commit into one committed file. The `TODO.md` gates
+  and the checklist then point at it.
+- **Trim the checklist.** Turn every automated step into a single line that names its job, and keep
+  prose only for the judgement calls.
+- **Keep `main` releasable.** Pause Dependabot automatically during the release window, and keep
+  `main` green between releases so a release merge never inherits unrelated failures.
+
+**Boundaries:** Keep the evidence the same. Do not drop a lane, loosen a band or count a skipped
+check as passed; faster means less waiting and fewer repeats. Larger or self-hosted runners are an
+option only if the changes above leave the critical path too long.
+
+**Dependencies:** Order-Independent Scale Certification, for continuous performance tracking. The
+v0.22.0 flaky-test work, for flake containment.
+
+**Vertical Delivery Slices:**
+
+1. Measure the baseline: a release timeline (candidate cut, each round, its cause, tag) recorded for
+   v0.22.0 as it runs.
+2. Nightly release-branch lanes: installed upgrades and Portal shards.
+3. Path-filtered fix rounds, plus the Portal browser lane split into parallel jobs.
+4. Watchdogs and log streaming on every long step.
+5. A one-command metadata flip and the evidence manifest.
+6. Move the local-only lanes into CI, then trim the checklist to match.
+
+**Acceptance Evidence:** v0.22.0 reaches tag-ready within 8 hours of wall-clock time from candidate
+cut, with no more than two full CI rounds on the final candidate. Its evidence manifest covers every
+gate the v0.21.0 release covered.
+
 
 ## Later Reporting and Presentation Work
 
