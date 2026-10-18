@@ -228,8 +228,20 @@ try {
         Set-ServicesState 'Stopped'
         $backupDir = Join-Path $out 'fresh-backup'
         New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
-        & (Join-Path $installDir 'ETL-SQL.exe') admin backup --output-dir $backupDir *>&1 | Out-File (Join-Path $out 'fresh-backup.log')
-        if ($LASTEXITCODE -ne 0) { throw "admin backup exited $LASTEXITCODE." }
+        # Bounded like msiexec: run 39131831623 lost its runner at the step timeout once this call was
+        # reached. No console input exists here, so stdin is empty rather than inherited.
+        $backupLog = Join-Path $out 'fresh-backup.log'
+        $noInput = Join-Path $out 'empty-stdin.txt'
+        Set-Content -LiteralPath $noInput -Value $null
+        $backup = Start-Process -FilePath (Join-Path $installDir 'ETL-SQL.exe') -ArgumentList @('admin', 'backup', '--output-dir', "`"$backupDir`"") `
+            -WorkingDirectory $out -PassThru -NoNewWindow -RedirectStandardInput $noInput `
+            -RedirectStandardOutput $backupLog -RedirectStandardError (Join-Path $out 'fresh-backup.err.log')
+        if (-not $backup.WaitForExit(300000)) {
+            Write-HungInstallDiagnostics -LogPath $backupLog -OutPath (Join-Path $out 'fresh-backup.hung.txt')
+            Stop-Process -Id $backup.Id -Force -ErrorAction SilentlyContinue
+            throw [TimeoutException]::new('admin backup did not finish within 5 minutes; see fresh-backup.hung.txt.')
+        }
+        if ($backup.ExitCode -ne 0) { throw "admin backup exited $($backup.ExitCode)." }
         $archive = Get-ChildItem -LiteralPath $backupDir -Filter 'etl-sql-backup-*.zip' | Select-Object -First 1
         if ($null -eq $archive) { throw 'admin backup wrote no data archive.' }
         Add-Type -AssemblyName System.IO.Compression.FileSystem
