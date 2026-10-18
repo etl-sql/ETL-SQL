@@ -171,6 +171,11 @@ namespace ETL_SQL.App
                 // Databases (copy the .db plus -wal/-shm sidecars so a cold copy is consistent).
                 files.AddRange(await CopySqliteSetAsync(portalDb, Path.Combine(dataStage, "db"), "portal.db", dataStage));
                 files.AddRange(await CopySqliteSetAsync(orchDb, Path.Combine(dataStage, "db"), "etlsql.db", dataStage));
+                // The service may keep it under its own account's local app data, which this process cannot infer.
+                if (!File.Exists(orchDb))
+                    logger.WriteLine(
+                        $"Warning: no Orchestrator database at {orchDb}; set Portal:Orchestrator:DatabasePath if the service keeps it elsewhere.",
+                        ConsoleColor.Yellow);
 
                 // Content directories.
                 files.AddRange(await CopyTreeAsync(Resolve(config["Portal:SnapshotDirectory"] ?? "./Snapshots", baseDir), Path.Combine(dataStage, "content", "snapshots"), dataStage));

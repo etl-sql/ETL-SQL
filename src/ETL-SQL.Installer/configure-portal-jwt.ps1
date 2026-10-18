@@ -250,6 +250,16 @@ try {
         }
     }
 
+    # Record the job-history file the Orchestrator service writes: its default, in the service
+    # account's local app data. `admin backup` and `migrate-database` run as the operator and would
+    # otherwise look beside the binaries. This step runs as LocalSystem, as the service does, so it
+    # resolves the same folder. An operator's path is kept.
+    if ($null -ne $portalOrch -and [string]::IsNullOrWhiteSpace([string]$portalOrch.DatabasePath)) {
+        $orchDb = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'etlsql-data\etlsql.db'
+        $portalOrch | Add-Member -MemberType NoteProperty -Name 'DatabasePath' -Value $orchDb -Force
+        $changed = $true
+    }
+
     $installRoot = $PSScriptRoot.TrimEnd('\')
     if ($null -ne $json.Security) {
         # The install folder must be a safe zone; zones the operator added stay. Force an array shape

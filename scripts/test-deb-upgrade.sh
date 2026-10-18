@@ -135,6 +135,22 @@ json.dump(data, open(path, "w", encoding="utf-8"), indent=2)
 CONFIG
     systemctl restart etl-sql-portal.service
 }
+# `admin backup` runs as root, not the service user, so it must be told where the service's job
+# history is. Before v0.21.0 it silently backed up no Orchestrator database.
+backup_has_job_history() {
+    local db=/var/lib/etl-sql/.local/share/etlsql-data/etlsql.db dir="$OUT/fresh-backup"
+    setting_is Portal:Orchestrator:DatabasePath "$db" || return 1
+    [ -f "$db" ] || { echo "The Orchestrator wrote no $db."; return 1; }
+    systemctl stop etl-sql-portal.service etl-sql-orchestrator.service
+    mkdir -p "$dir"
+    (cd /tmp && etl-sql admin backup --output-dir "$dir") || return 1
+    python3 - "$dir" <<'PY'
+import glob, sys, zipfile
+names = set(zipfile.ZipFile(glob.glob(sys.argv[1] + "/etl-sql-backup-*.zip")[0]).namelist())
+print(sorted(names))
+sys.exit(0 if {"db/portal.db", "db/etlsql.db"} <= names else 1)
+PY
+}
 assets() { "$NODE" "$CHECKER" --url "$URL" --install "$INSTALL" --dump "$OUT/served-mismatch" "$@"; }
 
 PREV_V=$(package_version "$PREVIOUS_DEB"); CUR_V=$(package_version "$CURRENT_DEB")
@@ -153,6 +169,7 @@ check "fresh: dataset at-rest key generated" setting_present Portal:Dataset:AtRe
 check "fresh: secrets readable by the service account only" secrets_file_protected
 check "fresh: shared appsettings.json holds no generated secret" shared_config_holds_no_secrets
 check "fresh: served assets match the candidate" assets --inventory-root "$CHECKOUT" --out "$OUT/fresh-assets.json"
+check "fresh: admin backup includes the job history the service writes" backup_has_job_history
 check "fresh: dpkg purge" dpkg --purge etl-sql
 check "fresh: purge removed state, cache and sign-in file" \
     bash -c '[ ! -e /var/lib/etl-sql ] && [ ! -e /var/cache/etl-sql ] && [ ! -e /etc/etl-sql ]'

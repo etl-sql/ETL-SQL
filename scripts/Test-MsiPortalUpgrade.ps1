@@ -53,7 +53,8 @@ $script:failed = 0
 $url = 'http://localhost:5002'
 $checker = Join-Path $repoRoot 'scripts/test-installed-portal-assets.mjs'
 $installDir = 'C:\Program Files\ETL-SQL'
-$systemData = Join-Path $env:SystemRoot 'System32\config\systemprofile\AppData\Local\ETL-SQL'
+# The Orchestrator's job history: SQLiteJobHistoryStore.DefaultDbPath() for LocalSystem.
+$systemData = Join-Path $env:SystemRoot 'System32\config\systemprofile\AppData\Local\etlsql-data'
 
 function Write-Line([string]$Text) {
     Write-Host $Text
@@ -145,7 +146,11 @@ function Get-Setting([string]$Path) {
         $full = Join-Path $installDir $file
         if (-not (Test-Path -LiteralPath $full)) { continue }
         $node = Get-Content -LiteralPath $full -Raw | ConvertFrom-Json
-        foreach ($part in $Path.Split(':')) { if ($null -eq $node) { break }; $node = $node.$part }
+        # Strict mode: a key missing from one of the two files is absent, not an error.
+        foreach ($part in $Path.Split(':')) {
+            if ($null -eq $node -or $null -eq $node.PSObject.Properties[$part]) { $node = $null; break }
+            $node = $node.$part
+        }
         if ($node -is [string] -and $node) { $value = $node }
     }
     return $value
@@ -161,7 +166,10 @@ function Assert-SecretsProtected {
     $shared = Get-Content -LiteralPath (Join-Path $installDir 'appsettings.json') -Raw | ConvertFrom-Json
     foreach ($path in $generatedSecrets) {
         $node = $shared
-        foreach ($part in $path.Split(':')) { if ($null -eq $node) { break }; $node = $node.$part }
+        foreach ($part in $path.Split(':')) {
+            if ($null -eq $node -or $null -eq $node.PSObject.Properties[$part]) { $node = $null; break }
+            $node = $node.$part
+        }
         if ($node -is [string] -and $node) { throw "appsettings.json still holds $path." }
     }
 }
@@ -211,6 +219,26 @@ try {
     Test-Step 'fresh: dataset at-rest key generated' { -not [string]::IsNullOrWhiteSpace((Get-Setting 'Portal:Dataset:AtRestKey')) }
     Test-Step 'fresh: secrets only in the Administrators and SYSTEM file' { Assert-SecretsProtected }
     Test-Step 'fresh: served assets match the candidate' { Invoke-Assets @('--inventory-root', $repoRoot, '--out', (Join-Path $out 'fresh-assets.json')) }
+    # `admin backup` runs as the operator, not LocalSystem, so it must be told where the service's
+    # job history is. Before v0.21.0 it silently backed up no Orchestrator database.
+    Test-Step 'fresh: admin backup includes the job history the service writes' {
+        $jobHistory = Join-Path $systemData 'etlsql.db'
+        if ((Get-Setting 'Portal:Orchestrator:DatabasePath') -ne $jobHistory) { throw "Portal:Orchestrator:DatabasePath is '$(Get-Setting 'Portal:Orchestrator:DatabasePath')', expected $jobHistory." }
+        if (-not (Test-Path -LiteralPath $jobHistory)) { throw "The Orchestrator wrote no $jobHistory." }
+        Set-ServicesState 'Stopped'
+        $backupDir = Join-Path $out 'fresh-backup'
+        New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+        & (Join-Path $installDir 'ETL-SQL.exe') admin backup --output-dir $backupDir *>&1 | Out-File (Join-Path $out 'fresh-backup.log')
+        if ($LASTEXITCODE -ne 0) { throw "admin backup exited $LASTEXITCODE." }
+        $archive = Get-ChildItem -LiteralPath $backupDir -Filter 'etl-sql-backup-*.zip' | Select-Object -First 1
+        if ($null -eq $archive) { throw 'admin backup wrote no data archive.' }
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $zip = [IO.Compression.ZipFile]::OpenRead($archive.FullName)
+        try { $entries = @($zip.Entries | ForEach-Object { $_.FullName -replace '\\', '/' }) } finally { $zip.Dispose() }
+        foreach ($name in 'db/portal.db', 'db/etlsql.db') {
+            if ($entries -notcontains $name) { throw "The backup has no $name ($($entries -join ', '))." }
+        }
+    }
     Uninstall-All '00-fresh-uninstall.log'
     Remove-Item -LiteralPath $installDir, $systemData -Recurse -Force -ErrorAction SilentlyContinue
 

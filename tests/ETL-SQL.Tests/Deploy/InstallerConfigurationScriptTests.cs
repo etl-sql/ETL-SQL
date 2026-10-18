@@ -40,6 +40,12 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
         Assert.Equal((string?)secrets["Orchestrator"]!["ApiKey"], (string?)secrets["Portal"]!["Orchestrator"]!["ApiKey"]);
         AssertNoSecretsIn(config);
         Assert.Contains(_install, config["Security"]!["ApprovedSafeZones"]!.AsArray().Select(zone => (string?)zone));
+        // The service's own default job-history file, recorded so `admin backup` (run as the operator,
+        // not the service account) copies the database the services use. The step runs as the service
+        // account, so its local app data is the service's.
+        Assert.Equal(
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "etlsql-data", "etlsql.db"),
+            (string?)config["Portal"]!["Orchestrator"]!["DatabasePath"]);
 
         var signIn = Path.Combine(_install, "first-run-password.txt");
         // SYSTEM and Administrators only; nothing inherited from Program Files' Users read.
@@ -64,6 +70,7 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
         installed["Orchestrator"]!["ApiKey"] = "installed-api-key";
         installed["Portal"]!["Orchestrator"]!["ApiKey"] = "installed-api-key";
         installed["Security"]!["ApprovedSafeZones"] = new JsonArray(@"D:\operator\data");
+        installed["Portal"]!["Orchestrator"]!["DatabasePath"] = @"D:\operator\etlsql.db";
         installed["UpgradeSentinel"] = new JsonObject { ["Value"] = "kept" };
         installed["Portal"]!.AsObject().Remove("Studio");
         File.WriteAllText(Path.Combine(_install, "appsettings.pre-upgrade.json"), installed.ToJsonString());
@@ -79,6 +86,7 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
         AssertNoSecretsIn(config);
         Assert.Empty(config["Portal"]!["Jwt"]!["PreviousSecrets"]!.AsArray());
         Assert.Equal("kept", (string?)config["UpgradeSentinel"]!["Value"]);
+        Assert.Equal(@"D:\operator\etlsql.db", (string?)config["Portal"]!["Orchestrator"]!["DatabasePath"]);
         Assert.NotNull(config["Portal"]!["Studio"]);
         Assert.Equal(new[] { @"D:\operator\data", _install },
             config["Security"]!["ApprovedSafeZones"]!.AsArray().Select(zone => (string?)zone).ToArray());
@@ -122,6 +130,18 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
             Assert.True(node is JsonObject, $"{dotted} is not in a shipped settings section.");
             Assert.True(SupportBundleRedactor.IsSecretKey(parts[^1]), $"{dotted} is not classified as a secret.");
         }
+    }
+
+    [Fact]
+    public void DebPackage_RecordsTheJobHistoryFileTheServiceUserWrites()
+    {
+        // .NET resolves LocalApplicationData to $HOME/.local/share on Linux, and both units set HOME.
+        var root = FindRepoRoot();
+        var linux = Path.Combine(root, "src", "ETL-SQL.Installer", "linux");
+        foreach (var unit in new[] { "etl-sql-orchestrator.service", "etl-sql-portal.service" })
+            Assert.Contains("Environment=HOME=/var/lib/etl-sql", File.ReadAllText(Path.Combine(linux, unit)));
+        Assert.Contains("\"/var/lib/etl-sql/.local/share/etlsql-data/etlsql.db\"",
+            File.ReadAllText(Path.Combine(root, "scripts", "build-linux-packages.sh")));
     }
 
     private static string[] Paths(string text, string pattern) =>

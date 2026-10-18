@@ -210,6 +210,12 @@ if isinstance(orch, dict) and isinstance(portal_orch, dict):
         if not (side.get("IdentitySigningSecret") or "").strip():
             side["IdentitySigningSecret"] = signing
             changed = True
+# Record the job-history file the Orchestrator service writes: its default, LocalApplicationData
+# under the units' HOME. `admin backup` and `migrate-database` run as root from the install folder
+# and would otherwise look beside the binaries. An operator's path is kept.
+if isinstance(portal_orch, dict) and not (portal_orch.get("DatabasePath") or "").strip():
+    portal_orch["DatabasePath"] = "/var/lib/etl-sql/.local/share/etlsql-data/etlsql.db"
+    changed = True
 sec = data.get("Security")
 # The install folder must be a safe zone; zones the operator added stay.
 zones = sec.get("ApprovedSafeZones") if isinstance(sec, dict) else None

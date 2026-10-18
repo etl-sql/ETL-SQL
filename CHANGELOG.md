@@ -220,6 +220,12 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 
 ### Fixed
 
+- `admin backup` on an installed system includes the Orchestrator database. The service keeps it
+  under its own account's local application data, but the CLI looked for `etlsql.db` beside the
+  binaries and silently left it out. The MSI and DEB now record the service's path in
+  `Portal:Orchestrator:DatabasePath`, which `admin backup` and `migrate-database` already read, and
+  `admin backup` warns when the file is absent. Both installer certifications back up a fresh
+  install and check the archive.
 - Installed Portal and Orchestrator services start without hand-edited configuration. Since
   v0.11.0 a fresh Portal refused to start without a dataset at-rest key and a first-run
   administrator password, and the Orchestrator without an identity signing secret. The installers
