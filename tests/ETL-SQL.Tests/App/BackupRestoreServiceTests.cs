@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
@@ -278,6 +279,25 @@ namespace ETL_SQL.Tests.CliCommands
 
             // The escaping manifest path must be rejected, not followed.
             Assert.Equal(1, await BackupRestoreService.RestoreAsync(ctx, NullLogger.Instance));
+        }
+
+        [Fact]
+        public async Task Outcome_IsRecordedInTheConfiguredOrchestratorDatabase()
+        {
+            // An installed CLI runs as the operator; the Portal reads the services' database, which
+            // the installer records as Portal:Orchestrator:DatabasePath. The outcome must land there.
+            var services = Path.Combine(_root, "services");
+            Directory.CreateDirectory(services);
+            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Portal:Orchestrator:DatabasePath"] = "../services/etlsql.db",
+            }).Build();
+
+            await BackupRestoreService.RecordBackupOutcomeAsync(0, config, _source, NullLogger.Instance);
+
+            var store = new ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore(Path.Combine(services, "etlsql.db"));
+            await store.InitializeAsync();
+            Assert.Equal("success", await store.GetHostStateAsync("backup", "last_backup_status"));
         }
 
         [Fact]

@@ -225,7 +225,9 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
   binaries and silently left it out. The MSI and DEB now record the service's path in
   `Portal:Orchestrator:DatabasePath`, which `admin backup` and `migrate-database` already read, and
   `admin backup` warns when the file is absent. Both installer certifications back up a fresh
-  install and check the archive.
+  install and check the archive. `admin backup` and `admin restore` also record their outcome in
+  that database, so the Portal's backup report and operations posture see them; they wrote it to
+  the operator's own job history, which the services never read.
 - Installed Portal and Orchestrator services start without hand-edited configuration. Since
   v0.11.0 a fresh Portal refused to start without a dataset at-rest key and a first-run
   administrator password, and the Orchestrator without an identity signing secret. The installers

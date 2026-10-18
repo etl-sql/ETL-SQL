@@ -67,12 +67,25 @@ namespace ETL_SQL.App
             }
             catch
             {
-                await RecordBackupOutcomeAsync(exitCode: 1, logger);
+                await RecordBackupOutcomeAsync(exitCode: 1, config, baseDirectory, logger);
                 throw;
             }
 
-            await RecordBackupOutcomeAsync(exitCode, logger);
+            await RecordBackupOutcomeAsync(exitCode, config, baseDirectory, logger);
             return exitCode;
+        }
+
+        /// <summary>
+        /// The job-history store the Portal reads. An installed CLI runs as the operator, whose
+        /// default store is not the services' (they run as LocalSystem or the etlsql user), so the
+        /// database the installer recorded as Portal:Orchestrator:DatabasePath is used when set.
+        /// </summary>
+        private static ETL_SQL.Core.Data.IJobHistoryStore? OutcomeStore(IConfiguration? config, string baseDir)
+        {
+            var configured = config?["Portal:Orchestrator:DatabasePath"];
+            if (config is not null && !string.IsNullOrWhiteSpace(configured))
+                return new ETL_SQL.Orchestrator.Storage.OrchestratorStoreFactory(config).Create(Resolve(configured, baseDir));
+            return Program.ServiceProvider?.GetService<ETL_SQL.Core.Data.IJobHistoryStore>();
         }
 
         /// <summary>
@@ -81,11 +94,11 @@ namespace ETL_SQL.App
         /// two-step scheduler wiring the samples used. Best-effort: recording never changes the
         /// backup's exit code.
         /// </summary>
-        private static async Task RecordBackupOutcomeAsync(int exitCode, ILogger logger)
+        internal static async Task RecordBackupOutcomeAsync(int exitCode, IConfiguration? config, string baseDir, ILogger logger)
         {
             try
             {
-                var store = Program.ServiceProvider?.GetService<ETL_SQL.Core.Data.IJobHistoryStore>();
+                var store = OutcomeStore(config, baseDir);
                 if (store == null) return;
                 await store.InitializeAsync();
                 await store.SetHostStateAsync("backup", "last_backup_status", exitCode == 0 ? "success" : "failed");
@@ -112,7 +125,7 @@ namespace ETL_SQL.App
         {
             try
             {
-                var store = Program.ServiceProvider?.GetService<ETL_SQL.Core.Data.IJobHistoryStore>();
+                var store = OutcomeStore(Program.ServiceProvider?.GetService<IConfiguration>(), AppContext.BaseDirectory);
                 if (store == null) return;
                 await store.InitializeAsync();
                 await store.SetHostStateAsync("restore", "last_restore_mode", validateOnly ? "validate" : "restore");
