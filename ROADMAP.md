@@ -523,8 +523,8 @@ learner-validated experience.
 | ST25 | **Complete: keyboard visual move/resize.** Provide or verify non-drag controls for one visual and persist its resulting layout; cover the shared sandbox and one production host. No canvas redesign. | — | M |
 | ST26 | **Complete: Portal zoom/focus journey.** At declared zoom settings, dialogs and split controls remain usable, preserve focus and return it to the invoking control. | ST23 | S |
 | ST27 | **Complete: desktop zoom/focus journey.** Repeat the bounded zoom/focus checks in the desktop host. | ST24 | S |
-| ST28 | **Portal screen-reader pass.** One named screen reader/browser combination completes the keyboard document journey with meaningful labels, errors and announcements; keep the observed transcript. | ST23 | M |
-| ST29 | **Desktop screen-reader pass.** Record the same bounded journey in one supported desktop/browser combination. | ST24 | M |
+| ST28 | **Portal screen-reader pass — deferred until needed (owner, 2026-10-17).** Needs a real screen reader; none is installed. [Groundwork and pass sheet](docs/architecture/decisions/studio-keyboard-assistive-evidence.md#screen-reader-pass-sheet-st28-st29). One named screen reader/browser combination completes the keyboard document journey with meaningful labels, errors and announcements; keep the observed transcript. | ST23 | M |
+| ST29 | **Desktop screen-reader pass — deferred until needed (owner, 2026-10-17).** Record the same bounded journey in one supported desktop/browser combination. | ST24 | M |
 
 #### Execution scope, cancellation and bounded helper previews
 

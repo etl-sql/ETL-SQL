@@ -3,6 +3,7 @@
 **Tasks:** ST24, ST25, ST26, ST27, and the groundwork for ST28 and ST29.
 **Run:** 2026-10-12, Windows, Chromium, the Portal and the self-installed desktop host.
 **Result:** ST24–ST27 pass. ST28 and ST29 are **not run**: no screen reader has spoken these journeys yet.
+On 2026-10-17 the owner deferred both until needed; they are not v0.21.0 release work.
 
 Tests: [StudioKeyboardJourneyTests](../../../tests/ETL-SQL.Portal.BrowserTests/StudioKeyboardJourneyTests.cs)
 (with its `.Zoom.cs` and `.Assistive.cs` parts) and
