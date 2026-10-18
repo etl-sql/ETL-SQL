@@ -41,10 +41,11 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
         AssertNoSecretsIn(config);
         Assert.Contains(_install, config["Security"]!["ApprovedSafeZones"]!.AsArray().Select(zone => (string?)zone));
         // The service's own default job-history file, recorded so `admin backup` (run as the operator,
-        // not the service account) copies the database the services use. The step runs as the service
-        // account, so its local app data is the service's.
+        // not the service account) copies the database the services use. The services run as
+        // LocalSystem whoever installs, so the path must not be the installing user's local app data.
         Assert.Equal(
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "etlsql-data", "etlsql.db"),
+            Path.Combine(Environment.GetEnvironmentVariable("SystemRoot")!, "System32", "config", "systemprofile",
+                "AppData", "Local", "etlsql-data", "etlsql.db"),
             (string?)config["Portal"]!["Orchestrator"]!["DatabasePath"]);
 
         var signIn = Path.Combine(_install, "first-run-password.txt");

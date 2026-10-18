@@ -320,6 +320,11 @@ class load and shared background-service state from its startup/shutdown observa
   open (`ScheduledJobActivityBrowserTests.TriageUsesRealDurableEvidenceAndReportsPartialProxyReruns`).
   Five runs, four different outcomes, none reproduced locally.
 
+  Recurred 2026-10-18 at `b825b8667` (run 39129348670): one of 986,
+  `SandboxStoryTests.LineageCatalog_MalformedRowsClearExportAndEditedFiltersInvalidatePendingHistory`,
+  `net::ERR_NO_BUFFER_SPACE` navigating in 70 ms. The other 985 passed. Still open; deferred to the
+  next release's dedicated flaky-test work.
+
   The teardown failure has a cause. That journey is the only one in its class that triggers a real
   run through the Orchestrator, and a triggered run is a detached task. In the service,
   `OrchestratorHostedService` waits for such tasks at shutdown. The fixture removes every hosted

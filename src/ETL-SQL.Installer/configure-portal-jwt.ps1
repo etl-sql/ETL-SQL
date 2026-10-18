@@ -252,10 +252,11 @@ try {
 
     # Record the job-history file the Orchestrator service writes: its default, in the service
     # account's local app data. `admin backup` and `migrate-database` run as the operator and would
-    # otherwise look beside the binaries. This step runs as LocalSystem, as the service does, so it
-    # resolves the same folder. An operator's path is kept.
+    # otherwise look beside the binaries. The services run as LocalSystem (Installer.wxs); this step
+    # resolved the installing user's folder in CI, so the LocalSystem profile is named, not looked up.
+    # An operator's path is kept.
     if ($null -ne $portalOrch -and [string]::IsNullOrWhiteSpace([string]$portalOrch.DatabasePath)) {
-        $orchDb = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'etlsql-data\etlsql.db'
+        $orchDb = Join-Path $env:SystemRoot 'System32\config\systemprofile\AppData\Local\etlsql-data\etlsql.db'
         $portalOrch | Add-Member -MemberType NoteProperty -Name 'DatabasePath' -Value $orchDb -Force
         $changed = $true
     }
