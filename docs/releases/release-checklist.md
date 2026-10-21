@@ -9,22 +9,101 @@ A physical, copy-pasteable checklist for cutting a release. It wraps the real sc
 > (POSIX: `scripts/test-pre-release.sh`). Version bumping is `scripts/Set-Version.ps1`. Cross-platform
 > packaging is `scripts/Master-Release.ps1`, which calls `scripts/publish-release.ps1`
 > (checksums + SBOM) and `scripts/build-msi.ps1`. The mechanical Phases 3–5 below (gate check →
-> version consistency → notes → push/CI → tag → watch `release.yml` → attach `sha256sums`/`sbom`)
+> version consistency → notes → push/CI → tag → watch `release.yml` → verify published assets)
 > are driven by `scripts/Invoke-Release.ps1` (POSIX: `scripts/invoke-release.sh`); run it with
-> `-DryRun` first, and `-Force` to continue a partial release.
+> `-DryRun` first. Existing local/remote tags must resolve to the exact candidate; matching tags
+> allow a partial release to resume without `-Force`. Conflicting tags or failed lookups block it.
+> A branch with the same name is preserved; release operations address the tag by its full ref.
 >
 > `Test-PreRelease.ps1` does not yet execute or validate every certification listed below, and
-> `Invoke-Release.ps1` currently checks only that its latest state passed for the current source
-> fingerprint. It does not distinguish a full release run from `-Quick`, omitted optional lanes, or
-> external CI/operator evidence. Complete every applicable checkbox in this document before tagging;
+> Both release drivers check saved scope and planned phase results as well as the source fingerprint.
+> They reject legacy states without scope, `-Quick`, skipped Node/scale checks, omitted SLT/Docker
+> lanes, forced-resume evidence and incomplete phase results. Standard scale and every mandatory
+> phase are required independently of the saved plan, so a shortened plan cannot pass. Run
+> `Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale` in Release configuration. A normal
+> resume cannot reuse a legacy or forced-resume state; start a fresh run. Explicit gate-skip and
+> fingerprint-override switches remain operator overrides, not certification evidence.
+> CI/CodeQL job evidence is enforced by Release; the complete local/operator evidence manifest is
+> not yet enforced. Complete every applicable checkbox before tagging;
 > a green local gate alone is necessary but not sufficient.
 
-Replace `x.y.z` with the target version (current target: **0.21.0**) throughout.
+Replace `x.y.z` with the target version (current target: **0.22.0**) throughout.
 
 ---
 
 ## Phase 0 — Pre-flight
 
+Before freezing a stable candidate, run `node scripts/check-release-metadata.mjs vx.y.z`.
+It requires the tag version to match `VersionPrefix`, one dated changelog heading, finalized
+`docs/releases/vx.y.z.md` notes with the same date, and one release-index link. If the index carries
+a release date, that date must also match. Both release drivers enforce this before pushing/tagging;
+the Release workflow adds it to source preflight through `ETLSQL_RELEASE_TAG`. Ordinary branch
+preflight allows draft notes. This check reads metadata; it does not change dates or mark work shipped.
+
+After authoring the release notes and changelog, finalize their metadata together:
+
+```powershell
+node scripts/finalize-release-metadata.mjs vx.y.z YYYY-MM-DD
+node scripts/finalize-release-metadata.mjs vx.y.z YYYY-MM-DD --write
+```
+
+The first command previews the files to change. The second updates the dated changelog heading,
+notes status/date and release-index entry after validating all proposed contents. A missing version
+heading uses the current Unreleased section and leaves a fresh Unreleased heading above it. Author
+`docs/releases/vx.y.z.md` first, with one `**Status:** Draft` or `**Released:** YYYY-MM-DD` field.
+The command preserves authored prose and line endings, refuses a different finalized date, and
+attempts to restore original contents if any write fails. Review the diff and commit it before
+selecting the candidate SHA. It does not bump source versions, tag or publish a release.
+
+The release drivers wait up to 120 minutes each for CI and Release by default. Run selection checks
+the workflow, candidate SHA and branch/tag, using push runs for regular CI, manual runs for full
+CI certification and push/manual runs for Release.
+API errors stop the wait immediately. A failed run prints `gh run view` and failed-job rerun commands;
+a local wait timeout does not cancel the GitHub run or require a rebuild. Inspect the run and resume
+the driver with the existing candidate. Explicit timeout options remain available.
+
+A new CI push or PR revision cancels obsolete CI for that same event and full ref. Other branches
+and push/PR runs remain independent. This capacity rule does not cancel Release or MSI certification;
+wait for the final candidate's full CI coverage before tagging, as required below. Explicit full
+certification has a separate concurrency identity and is not cancelled by ordinary pushes.
+
+Record hosted timings after each CI/MSI round. Supply the candidate commit and the actual run IDs
+from that round (replace the example IDs):
+
+```powershell
+$candidateSha = git rev-parse HEAD
+node scripts/collect-release-timeline.mjs etl-sql/ETL-SQL $candidateSha "12345,12346"
+```
+
+The collector uses authenticated `gh` read-only API calls and writes `timeline.json` plus
+`timeline.md` under a unique `release-validation/timelines/` directory. It retains every attempt,
+job and step, with conclusions and measured durations. Keep these reports with the candidate's
+external evidence; do not create an evidence-only candidate commit. Collect different candidate
+SHAs separately. Start delay is not an exact queue measurement, job spans do not include every
+operator pause, and summed job time includes parallel work. Missing timestamps are unknown.
+Still record candidate-cut/tag times and the reason for each rerun in the release ledger.
+API details: [workflow runs](https://docs.github.com/en/rest/actions/workflow-runs) and
+[workflow jobs](https://docs.github.com/en/rest/actions/workflow-jobs).
+
+- [ ] **Collect source findings before restore/build.** Run `node scripts/release-preflight.mjs`.
+      This runs syntax-index synchronization, syntax links, documentation, flaky-delay policy,
+      shell line endings, comment policy, test inventory and release source versions (.NET,
+      VS Code manifest/lock and Portal cache URLs), plus installer XML, static source-file
+      references and installer PowerShell/JavaScript syntax. The installer check parses scripts
+      without executing them; it also runs at the start of `build-msi.ps1`. Published binaries,
+      generated WiX assets and WiX compilation still require the packaging lane.
+      Fourteen release-automation fixtures also run here: MSI artifact/reuse/impact policy, process
+      supervision, preflight failure aggregation, version and installer checks, evidence scope,
+      driver/resume gates, GitHub run selection, tag identity, timeline collection, CI impact and
+      browser-shard coverage/retry checks, hosted release evidence selection and certification
+      dispatch/resume protection. They use temporary local inputs,
+      not GitHub or an installed product. The standalone consumer gate retains these checks too.
+      Up to three checks run together; each
+      has a 60-second deadline. All checks finish or time out before the aggregate exit status is
+      returned. Inspect the printed report directory under `release-validation/preflight/` for
+      per-check logs and `summary.json`. Pre-push and pre-release drivers run this automatically;
+      CI, Release and MSI workflows retain its logs even on failure. This source check does not
+      replace build, dependency, security, package or certification evidence.
 - [ ] **Prepare browser assets in every checkout used for the release.** Generated browser
       JavaScript is not in Git. A fresh clone, a source archive, and a checkout that has just
       switched from a release that tracked those files all start without them.
@@ -143,6 +222,128 @@ Replace `x.y.z` with the target version (current target: **0.21.0**) throughout.
       responsibility, out of scope. See open question 1 in [`RowLevelSecurity.md`](../architecture/decisions/row-level-security.md).
 
 ## Phase 3 — Validation and certification evidence
+
+### Hosted CI and CodeQL publication evidence
+
+Release checks `scripts/hosted-release-policy.json` before packaging and again immediately before
+publication. Every named job must have passed for the exact candidate on `main` or `release/**`
+in this repository. Explicit full CI uses `release-certification.yml`, which calls the same CI
+implementation with all lanes enabled and an exact candidate-SHA check. If no explicit certification
+run exists, a regular CI push may supply evidence only when every required job passed.
+CodeQL also accepts manual dispatch. Diagnostic manual `ci.yml` runs cannot certify a release.
+The CI build job includes the complete smoke pass against its existing Release binaries. Tag
+validation consumes that passed job evidence and no longer builds the solution just to repeat smoke.
+PR/fork runs cannot satisfy this gate. The newest eligible run owns the verdict, including when
+it failed, was cancelled or is still running; an older success cannot hide it. Runs older than
+seven days cannot certify a candidate.
+
+Both release drivers wait for regular CI, reuse its complete coverage when available, or request
+and wait for explicit full certification. A targeted green run cannot substitute for full coverage.
+To request or resume manually after regular CI passes:
+
+```powershell
+$candidateSha = git rev-parse HEAD
+node scripts/ensure-release-certification.mjs $candidateSha release/vx.y.z
+```
+
+The request journal prevents duplicate dispatch after a lost network response. An existing failed
+run is retained for inspection and failed-job recovery. If a recorded request never appears,
+inspect GitHub before deliberately removing its request record under
+`release-validation/certification-requests/`. Deploy the new dispatch workflow to the default
+branch before hosted rollout. Regular CI uses impact selection; local pre-push skips build/runtime
+checks for explicitly classified documentation-only changes. Full local/operator requirements
+below remain in force.
+
+```powershell
+$candidateSha = git rev-parse HEAD
+node scripts/collect-hosted-release-evidence.mjs etl-sql/ETL-SQL $candidateSha release-validation/hosted-release-evidence.json
+```
+
+The collector reads each run attempt and retains the latest result for each job, so failed-job
+retries preserve successful work from earlier attempts. It checks pagination and rechecks run
+identity after collection to reject a concurrent retry. Failures print inspection and retry commands.
+Release retains the JSON as an artifact, attaches it to the draft and includes it in attestation
+and checksums. This is CI/CodeQL execution evidence, not proof of alert triage or completion of
+operator, local and delivery certifications. Full checklist enforcement remains unfinished.
+API contract: [workflow run attempts and jobs](https://docs.github.com/en/rest/actions/workflow-jobs).
+
+### Recovering a failed MSI certification
+
+The MSI workflow saves the current and previous installers together after the static upgrade
+contract passes. Workstation and Portal certification consume that same artifact on separate clean
+runners. `candidate.json` records the source SHA and both file hashes; each job verifies it before
+installation and includes it with its evidence. This manifest binds certification inputs; it does
+not replace release provenance or the full release evidence checklist.
+
+- For a transient failure on unchanged source, use **Re-run failed jobs** on the existing run.
+  The successful build's artifact ID is retained, so certification downloads the existing installer
+  pair. Do not choose **Re-run all jobs** unless a rebuild is intended.
+- For a source or workflow fix, push a new candidate and run certification again. A retry of an old
+  run tests the old commit, even after the branch advances.
+- Inputs and per-profile evidence are retained for 30 days. If inputs expire or hash verification
+  fails, rebuild and recertify; never substitute another run's installer under the old evidence.
+- Require the final **MSI In-Place Upgrade** gate to pass. A successful build alone is insufficient.
+- Each profile runs under `Invoke-CertificationProcess.ps1`: a 20-minute child deadline within a
+  25-minute step limit, leaving time for evidence upload. `release-validation/msi-supervisor/<profile>`
+  contains stdout/stderr, heartbeats, `result.json` and (on timeout) `watchdog.json`. A timeout exits
+  124 and stops only the tracked certification process; it does not kill a process tree or every
+  installer on the machine. These install tests still require disposable runners. Service/custom
+  action processes may survive the child timeout until runner teardown.
+- Inspect the last streamed stage and heartbeat before retrying. The supervisor prevents its
+  Windows standard handles from being inherited by the child and bounds draining after child exit,
+  so a descendant retaining output handles cannot hold the supervisor open indefinitely. The local
+  regression covers this mechanism; it does not establish the cause of earlier hosted runner loss.
+- Before closing the resumable-MSI TODO, rehearse a failed Portal job and verify the retry keeps
+  the original artifact ID and hashes without repeating the successful build/workstation check.
+
+`release.yml` first looks for a completed, successful MSI run on the exact candidate SHA in this
+repository, from a `release/**` push or manual dispatch within the past seven days. PR runs and
+forks are excluded. Its successful gate must have saved a `certification.json` receipt for the
+current run attempt. That receipt binds both successful profiles, the original installer artifact
+ID and the previous stable release; the predecessor must still match release policy. Reusing an
+artifact from an earlier build attempt in that same run is allowed when a later certification
+attempt passed. Missing, expired or mismatched referenced inputs block reuse.
+
+If no eligible run/receipt exists, Release calls MSI certification for its resolved candidate SHA.
+If an eligible candidate run is still running or failed, discovery stops instead of starting a
+duplicate build. Complete/retry that run, then rerun the failed Release jobs. GitHub API errors or
+invalid receipts also stop discovery. A green path-skipped workflow has no receipt and cannot
+certify an MSI.
+
+MSI branch/PR runs skip certification only for the documentation paths explicitly listed in
+`scripts/MsiImpact.Helpers.ps1`. Shipped runtime, service, build and unknown paths require it.
+Missing comparison bases require full certification; renames include both old and new paths.
+
+To certify before tagging when the branch push skipped MSI checks, run this on the frozen candidate:
+
+```powershell
+gh workflow run msi-upgrade.yml --ref release/vx.y.z
+```
+
+Wait for its **MSI In-Place Upgrade** gate and workflow to succeed before tagging. Do not commit
+metadata changes after certification: a new commit requires new evidence. The release attaches
+`msi-certification.json` with the original run/attempt/artifact identity and
+`msi-certification-inputs.json` with the file hashes. These files are release evidence, not source
+commits. Inspect the discovery job's selection log to confirm the pre-tag run was reused.
+
+Release promotes the selected installer artifact ID. There is no separate MSI build in Windows ZIP/VSIX packaging and no second
+standalone tag-triggered MSI run. Linux, macOS and Windows ZIP/VSIX packaging can run while MSI
+certification proceeds. Promotion uploads `msi-certification-inputs.json` alongside the MSI; the
+attestation job downloads the draft MSI and checks its bytes against that manifest before it can
+attest and publish. A failed or skipped required certification blocks promotion and publication.
+
+Manual release dispatches resolve the requested tag to one SHA used by all packaging jobs. The tag
+must match `VersionPrefix`, and the dispatch's workflow ref must resolve to that same SHA. Select
+the release tag when dispatching, so build provenance identifies the candidate being packaged.
+Failed-job recovery retains the selected artifact IDs. Full checklist evidence enforcement and hosted
+runner-loss diagnosis/recovery evidence remain open in `TODO.md`.
+
+Both `Invoke-Release.ps1` and `invoke-release.sh` require the MSI input manifest, certification receipt,
+checksums and SBOM among published assets,
+treats a remaining draft as incomplete, and allows 120 minutes for release completion by default
+(`-ReleaseTimeoutMinutes` / `--release-timeout-minutes` overrides it). Neither regenerates verification assets after publication.
+
+GitHub documents the retry controls in [Re-running workflows and jobs](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
 
 The local gate is the authoritative local validation run. It is one required part of the release
 decision, not the whole decision. Green CI is not a substitute because CI does not run the
@@ -582,7 +783,7 @@ Stop the bleeding, then fix forward.
 | Scale certification | `scripts/Test-ScaleCertification.ps1` | Smoke + Standard every release; Stress/Provider conditional; Huge periodic/claim-driven |
 | Billion-row certification | `scripts/Test-BillionRowCertification.ps1` + `Test-BillionRowEvidence.ps1` | Controlled host; changed certified paths or billion-row claims |
 | HA contract/evidence | `scripts/Test-HaSoakContracts.ps1`; native `etl-sql admin ha-soak ...` | Contracts every release; measured fault/recovery evidence validated separately |
-| MSI upgrade certification | `.github/workflows/msi-upgrade.yml` / `scripts/Test-MsiUpgrade.ps1` | Full run for every tag; path-aware on PRs |
+| MSI upgrade certification | `.github/workflows/msi-upgrade.yml` / `scripts/Test-MsiUpgrade.ps1` | Required reusable call from Release; path-aware on branch pushes/PRs; full manual run |
 | Package all platforms | `scripts/Master-Release.ps1 -Version x.y.z` | Calls publish + MSI; `-SkipTests`, `-SkipUI`, `-IncludeSampleValidation` |
 | Publish artifacts | `scripts/publish-release.ps1` | Emits `release/`, `sha256sums.txt`, `sbom.json` |
 | Windows MSI | `scripts/build-msi.ps1` | WiX 3.14 |

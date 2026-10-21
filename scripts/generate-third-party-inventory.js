@@ -307,6 +307,14 @@ This file is an inventory aid for release review. Use it to update
 \`THIRD-PARTY-NOTICES.md\`, installer notices, container notices, and product
 About screens. It is not legal advice.
 
+## Build and Test Tools
+
+| Component | Version | License | Project |
+| --- | --- | --- | --- |
+| actionlint | ${JSON.parse(readText(path.join(repoRoot, "scripts/actionlint-lock.json"))).version} | MIT | https://github.com/rhysd/actionlint |
+
+Downloaded for workflow validation only; not redistributed with the application. Archive checksums are pinned in scripts/actionlint-lock.json.
+
 ## Bundled Browser Assets
 
 | Component | Files | License | Project |

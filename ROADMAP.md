@@ -119,8 +119,25 @@ scenarios pass against the recalibrated baseline.
 **Problem and Intended Outcome:** Certifying v0.21.0 took more than 24 hours of active work, spread over two days.
 The release branch ran 14 CI rounds (8 failed), 14 MSI upgrade rounds (10 failed) and 14 CodeQL
 rounds. Most of that time went on waiting for a full round to finish after a one-line fix. The
-outcome: the same evidence, with tag-ready in one working day (8 hours or less of wall-clock time from
-candidate cut) and no more than two full CI rounds on the final candidate.
+outcome: the same evidence, with roughly two hours from candidate cut to tag-ready on a clean run.
+Eight hours is the recovery ceiling. Aim for one full certification on the frozen candidate,
+with no more than two full rounds.
+
+**First priority — separate regular CI from release certification:**
+
+- Share a tested impact manifest between focused local pre-push and regular push/PR CI. Run cheap
+  checks plus affected builds, tests and dependent consumers; target 10–20 minutes for ordinary
+  scoped changes. Unknown paths, missing diff bases and shared inputs expand coverage conservatively.
+- Run explicit full pre-tag certification on a frozen candidate, with independent resumable jobs
+  and retained artifacts. Nightly broad checks catch integration defects before release day.
+- Tag publication verifies full certification and hashes and promotes the certified bytes without
+  repeating the build/test cycle. Regular CI success alone cannot authorize publication.
+- Reuse successful jobs only for unchanged candidate and inputs. A source fix receives targeted
+  diagnostic validation, then full certification of the new candidate.
+
+Implement selection and tests first, and establish the full release gate before trimming existing
+lanes or local requirements. Migrate drivers, required checks and checklist policy together.
+Measure clean-run, recovery and publication times; the targets still require hosted evidence.
 
 **Lessons from v0.21.0:**
 
@@ -160,7 +177,8 @@ candidate cut) and no more than two full CI rounds on the final candidate.
 - **Shift left.** Run the installed-upgrade (DEB in a container, MSI Portal profile) and Portal-shard
   lanes nightly on the release branch from the day it is cut, not at the end. A defect then costs a
   normal fix, not a certification round.
-- **Rerun, don't re-push.** Treat a red job as "rerun failed jobs" first. Make a fix commit run only
+- **Rerun, don't re-push.** Diagnose the failure and preserve its evidence; retry only the failed
+  job when unchanged inputs justify a retry. Make a fix commit run only
   the lanes its paths touch, using path filters and a manifest of which lanes cover which paths. The
   final full round runs once.
 - **Shorten the longest job.** Split the Portal browser lane across parallel jobs, so the critical path
@@ -178,8 +196,8 @@ candidate cut) and no more than two full CI rounds on the final candidate.
 - **One-command release metadata.** `Set-Version.ps1` (or a release step) flips the CHANGELOG
   date, the release-notes status and the releases index together.
 - **An evidence manifest instead of hand reconciliation.** A script collects the run IDs, lane results
-  and certification outcomes for the candidate commit into one committed file. The `TODO.md` gates
-  and the checklist then point at it.
+  and certification outcomes into a retained candidate artifact/release attachment outside the
+  frozen commit. The checklist points at it; commit a historical reference later.
 - **Trim the checklist.** Turn every automated step into a single line that names its job, and keep
   prose only for the judgement calls.
 - **Keep `main` releasable.** Pause Dependabot automatically during the release window, and keep
@@ -194,17 +212,18 @@ v0.22.0 flaky-test work, for flake containment.
 
 **Vertical Delivery Slices:**
 
-1. Measure the baseline: a release timeline (candidate cut, each round, its cause, tag) recorded for
-   v0.22.0 as it runs.
+1. Separate regular CI from full release certification with tested impact selection and enforced
+   publication gates. Record the release timeline throughout this work.
 2. Nightly release-branch lanes: installed upgrades and Portal shards.
 3. Path-filtered fix rounds, plus the Portal browser lane split into parallel jobs.
 4. Watchdogs and log streaming on every long step.
 5. A one-command metadata flip and the evidence manifest.
 6. Move the local-only lanes into CI, then trim the checklist to match.
 
-**Acceptance Evidence:** v0.22.0 reaches tag-ready within 8 hours of wall-clock time from candidate
-cut, with no more than two full CI rounds on the final candidate. Its evidence manifest covers every
-gate the v0.21.0 release covered.
+**Acceptance Evidence:** measure a clean run against the roughly two-hour tag-ready target and
+recovery against the eight-hour ceiling, with no more than two full CI rounds on the final candidate.
+Demonstrate affected-lane selection, conservative fallback, failed-job-only recovery and publication
+without rebuilding certified packages. Its evidence manifest covers every gate v0.21.0 covered.
 
 
 ## Later Reporting and Presentation Work

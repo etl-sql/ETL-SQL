@@ -3,6 +3,82 @@
 Build, test, utility, and release packaging scripts for ETL-SQL. Windows workflows use PowerShell;
 Linux and macOS workflows also have Bash entry points.
 
+## CI impact selection
+
+`ci-impact.json` owns the initial change-to-lane mapping. `select-ci-lanes.mjs` reports affected
+lanes and the reason for each path. Regular CI uses the report to select jobs. Local pre-push stops
+after source checks for explicitly classified documentation-only changes; other local changes
+retain the broader checks for now. A selection report is never release certification.
+
+```powershell
+# Changes since the tracked upstream, including staged, unstaged and untracked local files.
+node scripts\select-ci-lanes.mjs --base '@{upstream}' --working-tree
+
+# Review a branch against its merge base with main.
+node scripts\select-ci-lanes.mjs --base origin/main --head HEAD --comparison merge-base
+
+# Explicit full selection, including documentation-only changes.
+node scripts\select-ci-lanes.mjs --base HEAD --full
+
+# Explicit diagnostic selection (never release evidence).
+node scripts\select-ci-lanes.mjs --base HEAD --lanes build-vscode
+```
+
+Push comparisons use the before/after commits directly; PR comparisons use their merge base.
+Renames include both old and new paths. Missing history selects all lanes. Unknown paths and
+shared runtime, UI, build, dependency or workflow changes select all lanes. Only explicitly
+classified surfaces narrow the selection; runtime help under `docs/reference` is not exempt.
+Local reports include working-tree changes only when `--working-tree` is specified.
+Use `--output <path>` to save JSON. Run `node scripts\checks\test-ci-impact.mjs` to exercise the
+mapping and Git comparisons without a build or network access.
+
+`release-certification.yml` calls the same CI implementation with full selection and verifies that
+the requested SHA matches the dispatched branch. Certification runs are not cancelled by newer
+regular CI pushes. The release drivers first wait for regular CI, then reuse it if every required
+job passed; otherwise they start or resume the explicit full workflow. The publication gate checks
+the complete job inventory, not merely a green workflow badge. Diagnostic manual runs of `ci.yml`
+cannot qualify.
+
+For manual use:
+
+```powershell
+$candidateSha = git rev-parse HEAD
+node scripts\ensure-release-certification.mjs $candidateSha release/v0.22.0
+gh workflow run ci.yml --ref release/v0.22.0 -f lanes=build-vscode
+```
+
+The first command may dispatch certification and prints the workflow to watch. It preserves a
+request journal under `release-validation/certification-requests/` before sending the dispatch.
+After an uncertain network response, resume waiting rather than dispatching twice. If no run ever
+registers, inspect GitHub and the request failure before deliberately removing that candidate's
+request record and trying again. A failed existing run requires diagnosis and an explicit failed-job
+retry, not a new dispatch. The new dispatch workflow must be available on the repository's default
+branch before hosted rollout; see [GitHub's dispatch requirements](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch).
+MSI diagnostics use `msi-upgrade.yml` directly, not the regular CI lane selector.
+Full local/operator and package certification requirements remain.
+
+## Browser CI shards
+
+CI discovers the `Category=Browser` inventory and assigns whole classes to three runners by
+discovered case count. Exact method filters prevent overlapping class-name matches. Each runner
+retains discovery, its complete partition manifest, TRX, supervisor logs and a successful coverage
+receipt. The `Portal Browser Journey` aggregate check requires all three jobs and matching,
+complete, nonoverlapping evidence. It retains the original required-check name.
+
+To reproduce one shard after preparing assets and building the browser project:
+
+```powershell
+.\scripts\Test-BrowserShard.ps1 -Shard 2 -ShardCount 3 -Configuration Release -NoBuild -EvidenceDirectory artifacts/browser-shard-local
+```
+
+Omit `-NoBuild` to prepare and build first. CI runs the script through
+`Invoke-CertificationProcess.ps1` with a 30-minute timeout inside a 35-minute step limit. A timeout
+or failed test never produces a passing receipt. A failed-job rerun retains previous shard
+artifacts; the aggregate gate chooses the newest attempt for each shard and rejects incomplete
+latest evidence. Do not rerun successful shards just to retry a failed shard on unchanged code.
+Hosted timing and retry behavior still need a rehearsal; case-count balancing is not a duration
+measurement.
+
 ## Packaged browser runtime acceptance
 
 `test-packaged-browser-runtime.mjs` checks an extracted Windows release outside its checkout.
@@ -435,3 +511,16 @@ existing preparation. Pre-push and CI run every discovered `scripts/checks/test-
 The browser lint gate additionally needs `npm ci --prefix scripts/lint`.
 See [Report Runtime Asset Standards](../docs/architecture/standards/report-runtime-asset-standards.md)
 for ownership, contract regeneration, and the source-control cleanup acceptance checks.
+
+### Workflow preflight setup
+
+Run `node scripts/setup-actionlint.mjs` once before calling `node scripts/release-preflight.mjs` directly.
+Pre-push, pre-release and hosted workflows prepare it automatically. Setup downloads the pinned
+MIT-licensed actionlint archive, verifies its SHA-256, and extracts it under ignored `scratch/`.
+Later setup calls reuse the verified archive. The check runs offline and validates workflow YAML,
+expressions and reusable-workflow contracts. External ShellCheck and Pyflakes integration is disabled;
+those optional executables are not prerequisites of this gate.
+
+After shared preflight passes for the same sources, `node scripts/check-consumer-contracts.mjs --exclude-preflight`
+skips its already-passed fixtures. CI and pre-push use this mode; standalone consumer checks retain
+the full default inventory and need the workflow checker prepared first.

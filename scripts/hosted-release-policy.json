@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "maximumAgeHours": 168,
+  "workflows": [
+    {
+      "file": "release-certification.yml",
+      "events": ["workflow_dispatch"],
+      "jobPrefix": "Full CI / ",
+      "fallback": {
+        "file": "ci.yml",
+        "events": ["push"],
+        "jobPrefix": ""
+      },
+      "jobs": [
+        "Source preflight",
+        "Build & Test",
+        "Build VS Code Extension",
+        "Sample Scripts (windows)",
+        "Sample Scripts (linux)",
+        "Portal Browser Journey (1/3)",
+        "Portal Browser Journey (2/3)",
+        "Portal Browser Journey (3/3)",
+        "Portal Browser Journey",
+        "Studio Performance Budgets (windows)",
+        "Studio Performance Budgets (linux)",
+        "Studio Performance Budgets (macos)",
+        "Enterprise Certification (windows)",
+        "Enterprise Certification (linux)",
+        "Docker Integration Tests"
+      ]
+    },
+    {
+      "file": "codeql.yml",
+      "events": ["push", "workflow_dispatch"],
+      "jobs": ["Analyze (csharp)", "Analyze (javascript-typescript)"]
+    }
+  ]
+}

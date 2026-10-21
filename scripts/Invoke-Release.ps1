@@ -14,7 +14,7 @@
       2. Pre-release gate: release-validation/latest/state.json is Passed for the current commit.
       3. Version consistency across the six version sources.
       4. Resolve release notes (-NotesFile, Docs/ReleaseNotes/vX.Y.Z.md, release-notes-vX.Y.Z.md, or the CHANGELOG section).
-      5. Stale ref guard: no remote/local tag vX.Y.Z; delete a fully-merged stale local branch.
+      5. Tag identity guard: existing local/remote tags must resolve to the candidate commit.
       6. Push the branch; wait for CI to go green for the pushed commit.
       7. Create + push the release tag (full ref to avoid ambiguity). Signed (-s) when -SignTag is
          passed; annotated (-a) otherwise.
@@ -56,8 +56,8 @@ param(
     [switch]$SkipCiWait,
     [switch]$PruneMergedBranches,
     [switch]$SignTag,
-    [int]$CiTimeoutMinutes = 30,
-    [int]$ReleaseTimeoutMinutes = 45
+    [int]$CiTimeoutMinutes = 120,
+    [int]$ReleaseTimeoutMinutes = 120
 )
 
 $ErrorActionPreference = "Stop"
@@ -101,17 +101,11 @@ function Invoke-Native {
     return $out
 }
 
-# Replicates Test-PreRelease.ps1 Get-SourceFingerprint exactly so the gate compares like-for-like.
+. (Join-Path $ScriptRoot 'Release.Helpers.ps1')
+
+# Use the same content fingerprint as validation and resume.
 function Get-SourceFingerprint {
-    $head = (& git rev-parse HEAD 2>$null) -join "`n"
-    $status = (& git status --short 2>$null) -join "`n"
-    $text = "$head`n$status"
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        $bytes = [System.Text.Encoding]::UTF8.GetBytes($text)
-        return -join ($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString("x2") })
-    }
-    finally { $sha.Dispose() }
+    return Get-ReleaseSourceFingerprint -RepoRoot $RepoRoot
 }
 
 # ---- 1. pre-flight guards -------------------------------------------------
@@ -146,6 +140,9 @@ if ($LASTEXITCODE -eq 0 -and $remoteSha) {
     }
 }
 Write-Ok "release commit $($localSha.Substring(0,8))"
+Test-Tool node
+& node (Join-Path $ScriptRoot 'check-release-metadata.mjs') $Tag
+if ($LASTEXITCODE -ne 0) { Fail 'Finalize release metadata before tagging.' }
 
 # ---- 2. pre-release validation gate --------------------------------------
 Write-Step "Pre-release validation gate"
@@ -154,9 +151,12 @@ if ($SkipPreReleaseGate) {
     Write-WarnLine "skipped (-SkipPreReleaseGate)"
 }
 elseif (-not (Test-Path $statePath)) {
-    Fail "No pre-release state at $statePath. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration first (or -SkipPreReleaseGate)."
+    Fail "No pre-release state at $statePath. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale first (or -SkipPreReleaseGate)."
 }
 else {
+    Test-Tool node
+    & node (Join-Path $ScriptRoot 'check-release-evidence.mjs') $statePath
+    if ($LASTEXITCODE -ne 0) { Fail 'Local evidence is incomplete. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale without quick/skip/forced-resume options.' }
     $state = Get-Content $statePath -Raw | ConvertFrom-Json
     if ($state.status -ne "Passed") {
         Fail "Latest pre-release run status is '$($state.status)', not 'Passed'. Fix and re-run Test-PreRelease.ps1."
@@ -234,73 +234,41 @@ else {
 }
 
 # ---- 5. stale ref guard ---------------------------------------------------
-Write-Step "Tag/branch guard for $Tag"
-$remoteTag = (& git ls-remote --tags $Remote "refs/tags/$Tag" 2>$null)
-if ($remoteTag) {
-    if (-not $Force) { Fail "Tag $Tag already exists on $Remote (already released?). Re-run with -Force to continue a partial release." }
-    Write-WarnLine "tag $Tag already on $Remote [continuing under -Force]"
-}
-$localBranchSameName = (& git branch --list $Tag)
-if ($localBranchSameName) {
-    $unmerged = (& git rev-list --count "$Branch..refs/heads/$Tag" 2>$null)
-    if (([int]$unmerged) -eq 0) {
-        Invoke-Native { git branch -D $Tag } "delete fully-merged stale branch '$Tag'" -Mutating | Out-Null
-        Write-Ok "deleted stale local branch '$Tag' (fully merged into $Branch)"
-    }
-    else {
-        Fail "A local branch named '$Tag' has $unmerged unmerged commit(s); it collides with the tag. Resolve it manually."
-    }
-}
-$localTag = (& git tag --list $Tag)
-if ($localTag) {
-    if (-not $Force) { Fail "Local tag $Tag already exists. Delete it or use -Force." }
-    Write-WarnLine "local tag $Tag already exists [continuing under -Force]"
-}
-if (-not $remoteTag -and -not $localTag) { Write-Ok "no conflicting refs" }
-
+Write-Step "Tag identity guard for $Tag"
+Test-Tool node
+& node (Join-Path $ScriptRoot 'check-release-tag.mjs') $Tag $localSha $Remote
+if ($LASTEXITCODE -ne 0) { Fail 'Release tag identity check failed.' }
 # ---- 6. push branch + wait for CI ----------------------------------------
-Write-Step "Push '$Branch' and wait for CI"
+Write-Step "Push '$Branch' and certify the release candidate"
 Invoke-Native { git push $Remote $Branch } "git push $Remote $Branch" -Mutating | Out-Null
 if (-not $DryRun) { Write-Ok "pushed $Branch" }
 
 function Wait-ForRun {
     param([string]$Workflow, [string]$Sha, [int]$TimeoutMinutes, [string]$Label)
-    $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
-    $runId = $null
-    while ((Get-Date) -lt $deadline) {
-        $runs = gh run list --workflow $Workflow --json databaseId,headSha,status,conclusion,event -L 30 2>$null | ConvertFrom-Json
-        $run = $runs | Where-Object { $_.headSha -eq $Sha } | Select-Object -First 1
-        if ($run) {
-            $runId = $run.databaseId
-            if ($run.status -eq "completed") {
-                if ($run.conclusion -eq "success") { return @{ Id = $runId; Ok = $true } }
-                return @{ Id = $runId; Ok = $false; Conclusion = $run.conclusion }
-            }
-            Write-Info "$Label run $runId : $($run.status)..."
-        }
-        else {
-            Write-Info "$Label run not registered yet..."
-        }
-        Start-Sleep -Seconds 30
-    }
-    return @{ Id = $runId; Ok = $false; Conclusion = "timeout" }
+    Test-Tool node
+    $runRef = if ($Workflow -in @('ci.yml', 'release-certification.yml')) { $Branch } else { $Tag }
+    $runId = & node (Join-Path $ScriptRoot 'wait-release-run.mjs') $Workflow $Sha $runRef $TimeoutMinutes
+    return @{ Id = ($runId -join '').Trim(); Ok = $LASTEXITCODE -eq 0; Conclusion = 'see run diagnostics above' }
 }
-
 if ($SkipCiWait) {
     Write-WarnLine "CI wait skipped (-SkipCiWait)"
 }
 elseif ($DryRun) {
-    Write-Info "[dry-run] would wait for CI on $($localSha.Substring(0,8))"
+    Write-Info "[dry-run] would start/resume full release certification on $($localSha.Substring(0,8))"
 }
 else {
-    $ci = Wait-ForRun -Workflow "ci.yml" -Sha $localSha -TimeoutMinutes $CiTimeoutMinutes -Label "CI"
-    if (-not $ci.Ok) { Fail "CI did not pass (conclusion: $($ci.Conclusion), run $($ci.Id)). Aborting before tag." }
-    Write-Ok "CI green (run $($ci.Id))"
+    $regular = Wait-ForRun -Workflow 'ci.yml' -Sha $localSha -TimeoutMinutes $CiTimeoutMinutes -Label 'Regular CI'
+    if (-not $regular.Ok) { Fail 'Regular CI did not pass; resolve its failures before full certification.' }
+    $certificationWorkflow = & node (Join-Path $ScriptRoot 'ensure-release-certification.mjs') $localSha $Branch
+    if ($LASTEXITCODE -ne 0) { Fail 'Cannot request full release certification.' }
+    $ci = Wait-ForRun -Workflow ($certificationWorkflow -join '').Trim() -Sha $localSha -TimeoutMinutes $CiTimeoutMinutes -Label "Release certification"
+    if (-not $ci.Ok) { Fail "Release certification did not pass (conclusion: $($ci.Conclusion), run $($ci.Id)). Aborting before tag." }
+    Write-Ok "Full CI certification green (run $($ci.Id))"
 }
 
 # ---- 7. tag + push tag (idempotent for re-runs) --------------------------
 Write-Step "Tag $Tag"
-$existingTagSha = (& git rev-list -n 1 $Tag 2>$null)
+$existingTagSha = (& git rev-list -n 1 "refs/tags/$Tag" 2>$null)
 if ($LASTEXITCODE -eq 0 -and $existingTagSha) {
     if ($existingTagSha.Trim() -eq $localSha) { Write-Info "tag $Tag already at release commit; not recreating" }
     else { Fail "tag $Tag exists at a different commit ($($existingTagSha.Substring(0,8))). Delete it before releasing." }
@@ -353,14 +321,19 @@ Write-Step "Verify published release"
 if (-not $DryRun) {
     $rv = gh release view $Tag --json isDraft,assets 2>$null | ConvertFrom-Json
     $assetNames = @($rv.assets | ForEach-Object { $_.name })
-    if ($rv.isDraft) { Write-WarnLine "release is still a DRAFT." } else { Write-Ok "release is published" }
+    if ($LASTEXITCODE -ne 0 -or $null -eq $rv) { Fail 'Cannot inspect published release.' }
+    if ($rv.isDraft) { Write-WarnLine "release is still a DRAFT."; $releaseOk = $false } else { Write-Ok "release is published" }
 
     $required = @(
         "ETL-SQL-$Tag-win-x64.zip",
         "ETL-SQL-$Tag-x64-Setup.msi",
         "ETL-SQL-$Tag-linux-x64.zip",
         "etl-sql_${Version}_amd64.deb",
-        "ETL-SQL-$Tag-osx-arm64.zip"
+        "ETL-SQL-$Tag-osx-arm64.zip",
+        'msi-certification-inputs.json',
+        'msi-certification.json',
+        'sha256sums.txt',
+        'sbom.json'
     )
     $missing = $required | Where-Object { $assetNames -notcontains $_ }
     $hasVsix = ($assetNames | Where-Object { $_ -like "*.vsix" }).Count -gt 0
@@ -376,46 +349,8 @@ if (-not $DryRun) {
     }
 }
 
-# ---- 9b. Attach verification assets (sha256sums + sbom) -------------------
-# release.yml uploads only the platform binaries; the CycloneDX SBOM and the checksum manifest
-# are attached here so the published release carries both verification assets (Release_Checklist
-# Phase 5). The SBOM is version-stamped locally from Directory.Build.props; the checksums must
-# cover the cloud-built published assets, so those are downloaded and hashed.
-Write-Step "Attach sha256sums + sbom"
-if ($DryRun) {
-    Write-Info "[dry-run] would generate sbom.json + sha256sums.txt and upload them to $Tag"
-}
-elseif (-not $releaseOk) {
-    Write-WarnLine "release not verified; skipping checksum/sbom attach"
-}
-else {
-    Invoke-Native { node scripts/generate-sbom.js } "node scripts/generate-sbom.js" | Out-Null
-    $sbom = Join-Path $RepoRoot "release/sbom.json"
-    if (-not (Test-Path $sbom)) { Fail "generate-sbom.js did not produce release/sbom.json." }
-
-    $work = Join-Path ([System.IO.Path]::GetTempPath()) "etlsql-relassets-$Tag"
-    if (Test-Path $work) { Remove-Item $work -Recurse -Force }
-    New-Item -ItemType Directory -Path $work | Out-Null
-    try {
-        Invoke-Native {
-            gh release download $Tag --dir $work --pattern '*.zip' --pattern '*.msi' `
-                --pattern '*.deb' --pattern '*.dmg' --pattern '*.vsix'
-        } "download published $Tag assets" | Out-Null
-
-        $sumsPath = Join-Path $work "sha256sums.txt"
-        Get-ChildItem $work -File |
-            Where-Object { $_.Name -notin @("sha256sums.txt", "sbom.json") } |
-            Sort-Object Name |
-            ForEach-Object { "$((Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLower())  $($_.Name)" } |
-            Set-Content -Path $sumsPath -Encoding ASCII
-
-        Invoke-Native { gh release upload $Tag $sumsPath $sbom --clobber } "gh release upload sha256sums.txt + sbom.json" | Out-Null
-        Write-Ok "attached sha256sums.txt + sbom.json"
-    }
-    finally {
-        Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
-    }
-}
+# Verification assets are generated and attached by release.yml before publication.
+# Do not regenerate or overwrite them from a local checkout after publication.
 
 # ---- 9c. optional: prune merged branches (opt-in) ------------------------
 # Sweep up the sprint's branches so they don't pile up release over release. Non-destructive by

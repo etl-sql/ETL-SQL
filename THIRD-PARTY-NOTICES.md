@@ -163,3 +163,9 @@ Before shipping a public release:
    Docker.DotNet, and OmniSharp.Extensions.LanguageServer.
 6. Add an About or Third-Party Notices link in the Portal, Report Player,
    TUI, CLI, and VS Code extension where practical.
+
+## actionlint (build/test tool)
+
+Version 1.7.12. Copyright (c) 2021 rhysd. MIT license.
+Used only for GitHub Actions workflow validation; not redistributed in application packages.
+Source and license: https://github.com/rhysd/actionlint/blob/v1.7.12/LICENSE.txt

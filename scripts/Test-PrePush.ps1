@@ -21,13 +21,30 @@ Write-Host " ETL-SQL FAST PRE-PUSH VALIDATION" -ForegroundColor Cyan
 Write-Host " Validates current sources before pushing" -ForegroundColor Cyan
 Write-Host "=======================================================" -ForegroundColor Cyan
 
+Write-Host "Selecting affected validation lanes..."
+& node (Join-Path $ScriptRoot "select-ci-lanes.mjs") --base '@{upstream}' --working-tree `
+    --output (Join-Path $RepoRoot "release-validation/preflight/local-ci-impact.json")
+if ($LASTEXITCODE -ne 0) { throw 'CI impact selection failed.' }
+
+Write-Host "[1/7] Collecting source preflight findings..."
+& node (Join-Path $ScriptRoot "setup-actionlint.mjs")
+if ($LASTEXITCODE -ne 0) { throw "Workflow checker setup failed." }
+& node (Join-Path $ScriptRoot "release-preflight.mjs")
+if ($LASTEXITCODE -ne 0) { throw 'Source preflight failed. See all findings in the report above.' }
+
+$impact = Get-Content (Join-Path $RepoRoot 'release-validation/preflight/local-ci-impact.json') -Raw | ConvertFrom-Json
+if (@($impact.lanes).Count -eq 1 -and $impact.lanes[0] -eq 'source-preflight') {
+    Write-Host "Documentation-only pre-push passed. Full release certification remains required before tagging." -ForegroundColor Green
+    exit 0
+}
+
 Write-Host "Preparing browser assets..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "sync-assets.js")
 if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed. Run npm ci --prefix scripts/typecheck first.' }
 
 # 1. Code Formatting
 if (-not $SkipFormat) {
-    Write-Host "[1/13] Verifying code formatting..." -ForegroundColor White
+    Write-Host "[2/7] Verifying code formatting..." -ForegroundColor White
     & dotnet format (Join-Path $RepoRoot "ETL-SQL.slnx") --verify-no-changes --no-restore
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Formatting check failed. Run 'dotnet format' to fix."
@@ -36,7 +53,7 @@ if (-not $SkipFormat) {
 }
 
 # 2. Shared Report Assets
-Write-Host "[2/13] Checking shared report runtime assets..." -ForegroundColor White
+Write-Host "[3/7] Checking shared report runtime assets..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "sync-assets.js") -Check
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Shared report runtime assets are out of sync. Edit canonical files in 'src/ETL-SQL.ReportRuntime/Resources/Shared/' and run 'node .\scripts\sync-assets.js'."
@@ -51,7 +68,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # 3. Browser Type Gate
-Write-Host "[3/13] Checking browser-side types..." -ForegroundColor White
+Write-Host "[4/7] Checking browser-side types..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "typecheck-browser.mjs")
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Browser type gate failed. See the findings above; run 'node scripts/typecheck-browser.mjs --summary' for the current picture. If the toolchain is missing, run 'npm ci --prefix scripts/typecheck'."
@@ -59,7 +76,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # 4. Browser Lint Gate
-Write-Host "[4/13] Linting the browser sources..." -ForegroundColor White
+Write-Host "[5/7] Linting the browser sources..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "lint-browser.mjs")
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Browser lint gate failed. See the findings above; run 'node scripts/lint-browser.mjs --summary' for the current picture. If the toolchain is missing, run 'npm ci --prefix scripts/lint'."
@@ -72,8 +89,8 @@ if ($LASTEXITCODE -ne 0) {
 # is how eight of them came to be red at the same time without anyone noticing. The runner discovers
 # every scripts/checks/test-*.mjs, so a new check is gated the moment it is written rather than when
 # somebody remembers to add a line here.
-Write-Host "[5/13] Running consumer contract checks over the shipped sources..." -ForegroundColor White
-& node (Join-Path $ScriptRoot "check-consumer-contracts.mjs")
+Write-Host "[6/7] Running consumer contract checks over the shipped sources..." -ForegroundColor White
+& node (Join-Path $ScriptRoot "check-consumer-contracts.mjs") --exclude-preflight
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Consumer contract checks failed. Each failure above names the script and how to rerun it on its own."
     exit $LASTEXITCODE
@@ -85,65 +102,9 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-# 6. Syntax Index Sync
-Write-Host "[6/13] Checking syntax index synchronization..." -ForegroundColor White
-& node (Join-Path $ScriptRoot "generate-syntax-index.js") --check
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "docs/syntax-index.md is out of sync with LanguageMetadata.cs. Run 'node scripts/generate-syntax-index.js'."
-    exit $LASTEXITCODE
-}
-
-# 7. Syntax Index Links & Doc Reference Coverage
-Write-Host "[7/13] Auditing syntax index links and reference page coverage..." -ForegroundColor White
-& node (Join-Path $ScriptRoot "audit-syntax-index.js") --strict
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Syntax index audit failed with broken links or unreferenced reference pages."
-    exit $LASTEXITCODE
-}
-
-# 8. Broad Documentation Audit (links, filenames, hub membership, template conformance)
-Write-Host "[8/13] Auditing documentation links, filenames, hub membership, and template conformance..." -ForegroundColor White
-& node (Join-Path $ScriptRoot "audit-docs.js") --strict
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Docs audit failed. Run 'node scripts/audit-docs.js' for details, or '--verbose' for the full file list."
-    exit $LASTEXITCODE
-}
-
-# 9. Flaky Sleep Delays
-Write-Host "[9/13] Checking for flaky sleep-then-assert test patterns..." -ForegroundColor White
-& node (Join-Path $ScriptRoot "check-flaky-test-delays.mjs")
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Found raw sleep delays in tests. Use LoadAwareWait.UntilAsync instead."
-    exit $LASTEXITCODE
-}
-
-# 10. Shell Script Line Endings (LF enforcement)
-Write-Host "[10/13] Checking shell script line endings (LF)..." -ForegroundColor White
-& node (Join-Path $ScriptRoot "check-shell-line-endings.js")
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Shell scripts contain CRLF line endings. Run 'node scripts/check-shell-line-endings.js --fix' to normalize."
-    exit $LASTEXITCODE
-}
-
-# 11. AI Slop & Prohibited Comments Gate
-Write-Host "[11/13] Checking for AI slop and prohibited comments..." -ForegroundColor White
-& node (Join-Path $ScriptRoot "check-ai-slop-comments.mjs")
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "AI slop or prohibited comments detected in src/. Clean them up or annotate with '// comment-ok: <reason>'."
-    exit $LASTEXITCODE
-}
-
-# 12. Test Lane Inventory & Categories
-Write-Host "[12/13] Auditing test lane inventory & category structure..." -ForegroundColor White
-& (Join-Path $ScriptRoot "Get-TestLaneInventory.ps1") -FailOnIssues
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Test lane inventory audit failed."
-    exit $LASTEXITCODE
-}
-
 # 13. Fast Contract & Smoke Suite
 if (-not $SkipSmoke) {
-    Write-Host "[13/13] Building and running generated browser contracts and fast smoke tests..." -ForegroundColor White
+    Write-Host "[7/7] Building and running generated browser contracts and fast smoke tests..." -ForegroundColor White
     & dotnet test (Join-Path $RepoRoot "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj") `
         -m:1 `
         -nr:false `

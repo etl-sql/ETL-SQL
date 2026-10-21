@@ -5,12 +5,83 @@ on:
     branches: [ main, 'release/**' ]
   pull_request:
     branches: [ main, 'release/**' ]
+  workflow_dispatch:
+    inputs:
+      lanes:
+        description: Comma-separated diagnostic lane IDs; blank selects all. Never release evidence.
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      release_certification:
+        type: boolean
+        default: false
+      candidate_sha:
+        type: string
+        required: true
 
 permissions:
   contents: read
 
+# New branch/PR revisions replace obsolete validation. Event and full ref keep independent
+# branches and push/PR runs separate; immutable Release/MSI certification uses other workflows.
+concurrency:
+  group: ci-execution-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ !inputs.release_certification }}
+
 jobs:
+  source-preflight:
+    name: Source preflight
+    runs-on: ubuntu-latest
+    outputs:
+      lanes: ${{ steps.impact.outputs.lanes }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Event values are passed as data, never interpolated into shell source.
+      - name: Select affected lanes or full certification
+        id: impact
+        shell: pwsh
+        env:
+          IMPACT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          IMPACT_COMPARISON: ${{ github.event_name == 'pull_request' && 'merge-base' || 'direct' }}
+          FULL_CERTIFICATION: ${{ inputs.release_certification }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          DIAGNOSTIC_LANES: ${{ inputs.lanes }}
+        run: |
+          $arguments = @('--head', $env:GITHUB_SHA, '--output', 'release-validation/preflight/ci-impact.json')
+          if ($env:FULL_CERTIFICATION -eq 'true') {
+            if ($env:CANDIDATE_SHA -cne $env:GITHUB_SHA) { throw 'Release branch moved away from the requested candidate.' }
+            $arguments += @('--base', $env:GITHUB_SHA, '--full')
+          } elseif ($env:DIAGNOSTIC_LANES) {
+            $arguments += @('--base', $env:GITHUB_SHA, '--lanes', $env:DIAGNOSTIC_LANES)
+          } elseif ($env:IMPACT_BASE) {
+            $arguments += @('--base', $env:IMPACT_BASE, '--comparison', $env:IMPACT_COMPARISON)
+          }
+          node scripts/select-ci-lanes.mjs @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $selection = Get-Content release-validation/preflight/ci-impact.json -Raw | ConvertFrom-Json
+          "lanes=$($selection.lanes | ConvertTo-Json -Compress -AsArray)" >> $env:GITHUB_OUTPUT
+      - name: Prepare pinned workflow checker
+        run: node scripts/setup-actionlint.mjs
+      - name: Collect source findings
+        run: node scripts/release-preflight.mjs
+      - name: Upload preflight logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: source-preflight-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/preflight/
+          if-no-files-found: error
+          retention-days: 30
+
   build-and-test:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
     name: Build & Test
     runs-on: windows-latest
 
@@ -92,22 +163,35 @@ jobs:
         run: node scripts/lint-browser.mjs
 
       - name: Run browser and consumer contract checks
-        run: node scripts/check-consumer-contracts.mjs
+        run: node scripts/check-consumer-contracts.mjs --exclude-preflight
+
+      - name: Retain consumer contract diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: consumer-contracts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/consumer-contracts/
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Verify prepared assets after consumer checks
         run: node scripts/sync-assets.js -Check
 
-      - name: Check syntax index is up to date with LanguageMetadata.cs
-        run: node scripts/generate-syntax-index.js --check
+      # The engine coverage lane below already executes the HA manifest and CLI .NET tests.
+      - name: Validate HA soak harness contracts
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-HaSoakContracts.ps1 -ScriptArguments @('-NoDotNet') -EvidenceDirectory release-validation/ha-contracts -TimeoutSeconds 600
 
-      - name: Audit syntax index links and reference page coverage
-        run: node scripts/audit-syntax-index.js --strict
-
-      - name: Check for flaky sleep-then-assert test delays
-        run: node scripts/check-flaky-test-delays.mjs
-
-      - name: Check for AI slop and prohibited comments
-        run: node scripts/check-ai-slop-comments.mjs
+      - name: Retain HA contract diagnostics
+        if: always() && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ha-contracts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/ha-contracts/
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Build
         run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
@@ -115,14 +199,15 @@ jobs:
       - name: Verify generated browser contracts against registered hosts
         run: dotnet test tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj --no-restore --no-build --configuration Release --filter FullyQualifiedName~BrowserContractsGeneratorTests
 
-      - name: Audit test lanes and structure
-        shell: pwsh
-        run: .\scripts\Get-TestLaneInventory.ps1 -FailOnIssues
-
       - name: Run fast test lanes (Pull Requests)
         if: github.event_name == 'pull_request'
         shell: pwsh
         run: .\scripts\test-lane.ps1 -Lane fast -Configuration Release -NoRestore -NoBuild
+
+      - name: Run release smoke tests using the existing build
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        run: .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
 
       - name: Run engine tests and enforce coverage (Main & Release Push)
         if: github.event_name != 'pull_request'
@@ -135,6 +220,8 @@ jobs:
         shell: bash
 
   build-vscode:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-vscode')
     name: Build VS Code Extension
     runs-on: ubuntu-latest
 
@@ -203,6 +290,8 @@ jobs:
         run: npm run test:unit
 
   sample-scripts:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'sample-scripts')
     name: Sample Scripts (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -253,7 +342,14 @@ jobs:
           bash ./scripts/test-all-samples.sh "$PASSES"
 
   portal-browser-journey:
-    name: Portal Browser Journey
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'portal-browser-journey')
+    name: Portal Browser Journey (${{ matrix.shard }}/3)
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     # windows-latest matches the platform the lane is developed and validated on, and the Portal's
     # own build-and-test job. Kept separate from that job so a browser flake never blocks the
     # coverage gate, and so the ~113 MB Chromium download is cached independently.
@@ -305,10 +401,48 @@ jobs:
         run: dotnet build tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj --configuration Release
 
       - name: Run browser lane
+        timeout-minutes: 35
         shell: pwsh
-        run: .\scripts\test-lane.ps1 -Lane browser -Configuration Release -NoRestore -NoBuild
+        run: |
+          ./scripts/Invoke-CertificationProcess.ps1 `
+            -ScriptPath ./scripts/Test-BrowserShard.ps1 `
+            -ScriptArguments @('-Shard', '${{ matrix.shard }}', '-ShardCount', '3', '-Configuration', 'Release', '-NoBuild', '-EvidenceDirectory', 'artifacts/browser-shard') `
+            -EvidenceDirectory artifacts/browser-shard/supervisor `
+            -TimeoutSeconds 1800
+
+      - name: Retain browser shard diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/browser-shard/
+          if-no-files-found: error
+          retention-days: 30
+
+  portal-browser-gate:
+    name: Portal Browser Journey
+    needs: [source-preflight, portal-browser-journey]
+    if: always() && needs.source-preflight.result == 'success' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'portal-browser-journey')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require all browser jobs to pass
+        env:
+          SHARD_RESULT: ${{ needs.portal-browser-journey.result }}
+        run: test "$SHARD_RESULT" = success
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: browser-shard-*-${{ github.run_id }}-*
+          path: browser-evidence
+      - name: Verify complete nonoverlapping browser coverage
+        run: node scripts/verify-browser-shards.mjs browser-evidence "$GITHUB_RUN_ID" 3
 
   studio-performance-budgets:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'studio-performance-budgets')
     name: Studio Performance Budgets (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -370,8 +504,9 @@ jobs:
           if-no-files-found: error
 
   enterprise-certification:
+    needs: source-preflight
     name: Enterprise Certification (${{ matrix.platform }})
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'enterprise-certification')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -419,8 +554,9 @@ jobs:
           retention-days: 30
 
   docker-integration-tests:
+    needs: source-preflight
     name: Docker Integration Tests
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'docker-integration-tests')
     runs-on: ubuntu-latest
 
     steps:

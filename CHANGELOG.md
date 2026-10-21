@@ -12,6 +12,94 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Failed Windows process-tree shutdown now rejects promptly and terminates the direct child,
+  instead of leaving certification waiting indefinitely for the child's output streams.
+
+- Consumer-contract validation now reports the active check, streams output with heartbeats,
+  retains per-check logs, and applies independent deadlines while preserving serial execution.
+
+- CI now runs HA soak harness contracts without repeating their engine tests. DEB certification
+  validates a backup produced by the installed candidate and retains its recovery report.
+
+- Added nightly release-branch orchestration for broad CI, Portal browser shards and installed
+  MSI/DEB upgrade checks. DEB certification retains the built package pair for installation retries.
+
+- Source preflight validates workflow syntax, expressions and reusable-workflow contracts with pinned MIT-licensed actionlint.
+
+- Regular CI now selects affected jobs from the shared impact map. Explicit full CI certification
+  uses the same workflow implementation and preserves successful candidate runs. Release drivers
+  reuse complete regular CI coverage when available, or request/resume full certification with
+  duplicate-dispatch protection. Classified documentation-only local pushes stop after source checks.
+- Release smoke tests now use CI's existing Release build. Tag validation consumes that evidence
+  instead of rebuilding the solution for a second smoke pass.
+- Release now checks candidate-bound CI and CodeQL job evidence before packaging and again before
+  publication. It retains successful jobs across failed-job retries, rejects stale or incomplete
+  evidence, and attaches the selected run/job identities and retry history to the release.
+- Local release evidence now requires Standard scale and the full mandatory phase inventory.
+  Removing a required phase from both the saved plan and results no longer bypasses validation.
+- Split browser CI into three independent jobs with deterministic discovery-based partitions,
+  exact method filters, per-attempt diagnostics and a gate checking complete, nonoverlapping
+  results. Browser execution now uses the bounded streaming supervisor. Hosted timing and
+  recovery evidence remain pending.
+- Added a shared advisory CI impact manifest and selector. Regular CI and local pre-push record
+  proposed affected lanes without changing existing coverage. Unknown paths and missing history
+  select all lanes; Git fixtures cover renames, merge bases and local changes.
+- Added a read-only release timeline collector for exact-candidate GitHub runs, all retry attempts,
+  jobs and steps. Reports distinguish elapsed spans from parallel job totals and preserve missing
+  timestamps as unknown, with JSON/Markdown stored outside the candidate commit. Partial parallel
+  runs and invalid timestamp ranges leave the elapsed span unknown; regressions run in preflight.
+- Added one-command release metadata finalization with preview by default and explicit `--write`.
+  It validates the changelog, notes and index together, protects finalized dates and restores
+  original contents on write failure when possible.
+- New CI revisions cancel obsolete runs for the same event and full branch/PR ref, freeing runner
+  capacity. Independent branches, push/PR runs and Release/MSI workflows remain separate.
+- Stable release drivers and tag preflight now require finalized, consistent version/date metadata
+  across the changelog, release notes and index. Draft branch work remains allowed; all metadata
+  findings are reported together before packaging.
+- Shared preflight now runs the fourteen release-automation regression fixtures before restore/build,
+  with independent deadlines and logs. MSI no longer repeats its two separate policy-test steps.
+- Release recovery preserves branches named like a version tag. All tag lookups use explicit tag
+  refs, removing the old automatic branch deletion and its unsafe merge-lookup failure fallback.
+- Release drivers can resume when existing local/remote tags resolve to the exact candidate,
+  including annotated tags, without a Force override. Conflicting tags and failed lookups stop
+  the release before pushing; tags are never moved by this recovery path.
+- Both release drivers now share workflow-run waiting keyed by workflow, commit and branch/tag.
+  API errors fail promptly; failed runs print inspection/retry commands, and pending runs cannot
+  fall back to older successes. The CI wait default is now 120 minutes.
+- MSI impact selection now requires certification for shipped service/runtime changes and unknown
+  paths. Only explicitly listed documentation paths skip it; an unavailable comparison base runs
+  certification instead of silently checking only the final commit.
+- Release drivers now agree with the validator's content fingerprint for clean candidates,
+  avoiding false stale-evidence failures. Actual driver-gate and resume-guard regressions cover
+  valid candidates and rejection of incomplete, legacy, forced-resume and stale evidence.
+- Local release drivers now require explicit validation scope and successful planned phases;
+  quick, omitted-lane, forced-resume and legacy states cannot pass the normal local gate.
+- Installer source validation now runs before packaging, checking WiX XML, static source-file
+  references and installer script syntax without executing the scripts or publishing applications.
+- Source preflight now detects partial version bumps across .NET, the VS Code manifest and lock
+  file, and Portal cache URLs before packaging. It reports all version mismatches together.
+- Release and CI automation now collect independent source-check failures in one bounded preflight
+  before expensive builds, with separate logs and a JSON summary. Local pre-push/pre-release drivers
+  use the same check list. Fixed the release-note changelog anchor and performance-report index link
+  found by the documentation check.
+- MSI certification now streams output and heartbeats under a bounded supervisor. Timeout cleanup
+  targets only the tracked child, and Windows handle inheritance is restricted to avoid a descendant
+  keeping the runner output pipe open. Local process regressions pass; hosted runner-loss diagnosis
+  and timeout recovery remain pending.
+- MSI upgrade automation saves one installer pair for independent workstation and Portal checks,
+  verifies its source commit and hashes before installation, and retains evidence separately for
+  each retry. Added release-branch PR coverage and documented failed-job recovery. Release publication
+  now requires both profiles, promotes that MSI without rebuilding, and verifies its draft asset
+  hash before attestation. Removed the duplicate standalone MSI tag run. Hosted recovery rehearsal
+  remains pending. Exact-commit pre-tag release-branch certification can now supply the MSI using
+  a successful gate receipt and retained artifact ID, avoiding another build at tag time. Discovery
+  checks freshness and the previous stable release, and stops on unfinished/failed candidate runs
+  or invalid receipts. Cross-run reuse still needs hosted rehearsal.
+- The release driver requires the MSI input manifest, checksums and SBOM, treats a draft as
+  incomplete, and no longer downloads all binaries to overwrite verification assets after publication.
+
 ## [0.21.0] — 2026-10-18
 
 For complete release details, highlights, and migration notes, see [Release Notes v0.21.0](docs/releases/v0.21.0.md).
