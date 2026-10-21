@@ -90,6 +90,10 @@ try {
   file('prepush-fixture.ps1', `
 $ErrorActionPreference = 'Stop'
 function node {
+    if ($env:IMPACT_EXTENSION -eq '1' -and $args[0].EndsWith('sync-assets.js')) {
+        $global:LASTEXITCODE = 0
+        return
+    }
     if ($args[0].EndsWith('select-ci-lanes.mjs')) {
         $output = Join-Path $env:IMPACT_FIXTURE_ROOT 'release-validation/preflight/local-ci-impact.json'
         New-Item -ItemType Directory -Force (Split-Path -Parent $output) | Out-Null
@@ -98,6 +102,15 @@ function node {
         throw 'EXPENSIVE_VALIDATION_REACHED'
     }
     $global:LASTEXITCODE = 0
+}
+function dotnet {
+    if ($env:IMPACT_EXTENSION -ne '1' -or $args[0] -ne 'build' -or -not $args[1].EndsWith('ETL-SQL.App.csproj')) { throw 'UNEXPECTED_DOTNET' }
+    'engine' | Add-Content (Join-Path $env:IMPACT_FIXTURE_ROOT 'commands.txt')
+    $global:LASTEXITCODE = 0
+}
+function npm {
+    "$($args[1]) / $($args[3])" | Add-Content (Join-Path $env:IMPACT_FIXTURE_ROOT 'commands.txt')
+    $global:LASTEXITCODE = if ($env:IMPACT_FAIL_TASK -eq $args[3]) { 1 } else { 0 }
 }
 & (Join-Path $env:IMPACT_FIXTURE_ROOT 'scripts/Test-PrePush.ps1')
 `);
@@ -108,6 +121,23 @@ function node {
     });
     assert.equal(local.status, expected, local.stdout + local.stderr);
     if (expected) assert.match(local.stderr, /EXPENSIVE_VALIDATION_REACHED/);
+  }
+  for (const failure of ['', 'compile', 'test:unit']) {
+    file('commands.txt', '');
+    const local = spawnSync('pwsh', ['-NoProfile', '-File', path.join(fixture, 'prepush-fixture.ps1')], {
+      encoding: 'utf8', windowsHide: true, cwd: fixture,
+      env: { ...process.env, IMPACT_FIXTURE_ROOT: fixture, IMPACT_FIXTURE_LANES: 'source-preflight,build-vscode',
+        IMPACT_EXTENSION: '1', IMPACT_FAIL_TASK: failure },
+    });
+    assert.equal(local.status, failure ? 1 : 0, local.stdout + local.stderr);
+    if (failure) assert.match(local.stderr, /Extension validation failed/);
+    else {
+      const commands = readFileSync(path.join(fixture, 'commands.txt'), 'utf8').trim().split(/\r?\n/);
+      assert.equal(commands[0], 'engine');
+      assert.deepEqual(commands.slice(1).map(line => line.split(' / ')[1]),
+        ['compile', 'lint', 'test:unit', 'lint', 'build', 'test:unit']);
+      assert.match(commands[4], /etl-sql-vscode[/\\]ui/);
+    }
   }
   console.log('CI impact: narrow changes, shared consumers, unknown paths, full override, real Git comparisons, renames, local changes and missing bases passed.');
 } finally {

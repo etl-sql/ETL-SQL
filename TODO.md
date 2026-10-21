@@ -51,7 +51,10 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   guard. Publication requires all full-CI jobs. Drivers reuse a full regular push when it already
   passed every required lane, otherwise request/resume explicit certification; a persisted request
   journal prevents redispatch after an uncertain network response. Manual diagnostic selections
-  cannot satisfy the gate. Full local/operator requirements remain; other local lanes still need
+  cannot satisfy the gate. Extension-only local pre-push now runs its engine integration build,
+  extension compile/lint/tests and UI lint/build/tests without broad engine smoke or consumer checks.
+  Routing fixtures verify both packages run and a failed compile/test stops validation.
+  Full local/operator requirements remain; other local lanes still need
   targeted selection, and hosted timing/recovery/rollout evidence is outstanding.
   Release smoke checks now run against CI's existing Release build; tag validation no longer
   rebuilds the solution for smoke tests.
@@ -124,6 +127,13 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   Native-command fixtures cover literal paths, successful/failed exits and timeout. The consumer
   limit was raised to 30 minutes per child after observing the prior successful 22.4-minute stage;
   its overall CI job remains capped at 60 minutes.
+  Sample restore/build/validation and enterprise certification now use the same supervisor,
+  with larger enclosing step/job limits and per-attempt diagnostic uploads on failure.
+  Workflow validation passes locally; hosted timing and timeout/upload behavior remain unverified.
+  Docker restore/build, individual image-pull attempts, worker/hardened setup and integration
+  tests now retain supervised logs too. Package-manager steps have explicit step deadlines.
+  Actionlint and parsing of all changed PowerShell workflow commands pass; Linux execution,
+  timeout recovery and artifact upload still require hosted verification.
 - [ ] **One-command release metadata.** One step flips the CHANGELOG date, release-notes status and
   releases index together.
   **In progress:** `finalize-release-metadata.mjs` previews or writes the three surfaces after

@@ -332,6 +332,7 @@ jobs:
     needs: source-preflight
     if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'sample-scripts')
     name: Sample Scripts (${{ matrix.platform }})
+    timeout-minutes: 65
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -363,22 +364,36 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore application
-        run: dotnet restore src/ETL-SQL.App/ETL-SQL.App.csproj
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('restore', 'src/ETL-SQL.App/ETL-SQL.App.csproj') -EvidenceDirectory release-validation/samples/restore -TimeoutSeconds 600
 
       - name: Build application
-        run: dotnet build src/ETL-SQL.App/ETL-SQL.App.csproj --configuration Debug --no-restore
+        shell: pwsh
+        timeout-minutes: 17
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'src/ETL-SQL.App/ETL-SQL.App.csproj', '--configuration', 'Debug', '--no-restore') -EvidenceDirectory release-validation/samples/build -TimeoutSeconds 900
 
       - name: Validate samples (Windows)
         if: runner.os == 'Windows' && github.event_name != 'pull_request'
         shell: pwsh
-        run: .\scripts\Test-AllSamples.ps1 -Passes 2
+        timeout-minutes: 27
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-AllSamples.ps1 -ScriptArguments @('-Passes', '2') -EvidenceDirectory release-validation/samples/validation -TimeoutSeconds 1500
 
       - name: Validate samples (Linux)
         if: runner.os == 'Linux'
-        shell: bash
+        shell: pwsh
+        timeout-minutes: 27
         run: |
-          PASSES="${{ github.event_name == 'pull_request' && '1' || '2' }}"
-          bash ./scripts/test-all-samples.sh "$PASSES"
+          ./scripts/Invoke-CertificationProcess.ps1 -Command bash -CommandArguments @('./scripts/test-all-samples.sh', '${{ github.event_name == 'pull_request' && '1' || '2' }}') -EvidenceDirectory release-validation/samples/validation -TimeoutSeconds 1500
+
+      - name: Retain sample diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sample-diagnostics-${{ matrix.platform }}-${{ github.run_attempt }}
+          path: release-validation/samples
+          if-no-files-found: warn
+          retention-days: 30
 
   portal-browser-journey:
     needs: source-preflight
@@ -545,6 +560,7 @@ jobs:
   enterprise-certification:
     needs: source-preflight
     name: Enterprise Certification (${{ matrix.platform }})
+    timeout-minutes: 75
     if: github.event_name != 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'enterprise-certification')
     runs-on: ${{ matrix.os }}
     strategy:
@@ -578,10 +594,21 @@ jobs:
 
       - name: Run enterprise certification
         shell: pwsh
+        timeout-minutes: 62
         run: >
-          ./scripts/Test-EnterpriseHardeningCertification.ps1
-          -RunId "ci-${{ github.run_id }}-${{ github.run_attempt }}"
-          -Platform "${{ matrix.platform }}"
+          ./scripts/Invoke-CertificationProcess.ps1
+          -ScriptPath scripts/Test-EnterpriseHardeningCertification.ps1
+          -ScriptArguments @('-RunId', 'ci-${{ github.run_id }}-${{ github.run_attempt }}', '-Platform', '${{ matrix.platform }}')
+          -EvidenceDirectory release-validation/enterprise -TimeoutSeconds 3600
+
+      - name: Retain enterprise process diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: enterprise-diagnostics-${{ matrix.platform }}-${{ github.run_attempt }}
+          path: release-validation/enterprise
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Retain enterprise certification evidence
         if: always()
@@ -595,6 +622,7 @@ jobs:
   docker-integration-tests:
     needs: source-preflight
     name: Docker Integration Tests
+    timeout-minutes: 150
     if: github.event_name != 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'docker-integration-tests')
     runs-on: ubuntu-latest
 
@@ -625,12 +653,17 @@ jobs:
         run: docker info
 
       - name: Restore dependencies
-        run: dotnet restore ETL-SQL.slnx
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('restore', 'ETL-SQL.slnx') -EvidenceDirectory release-validation/integration/restore -TimeoutSeconds 600
 
       - name: Build
-        run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
+        shell: pwsh
+        timeout-minutes: 17
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'ETL-SQL.slnx', '--no-restore', '--configuration', 'Release') -EvidenceDirectory release-validation/integration/build -TimeoutSeconds 900
 
       - name: Install LDAP client library (Linux only)
+        timeout-minutes: 10
         run: |
           sudo apt-get update || true
           sudo apt-get install -y libldap-dev || sudo apt-get install -y libldap2-dev || true
@@ -642,6 +675,7 @@ jobs:
 
       # OdbcTransactionCloneTests drives a real SQL Server through Microsoft's ODBC driver.
       - name: Install Microsoft ODBC Driver 18 for SQL Server
+        timeout-minutes: 10
         run: |
           if ! dpkg -s msodbcsql18 >/dev/null 2>&1; then
             if [ ! -f /etc/apt/sources.list.d/microsoft-prod.list ]; then
@@ -655,6 +689,7 @@ jobs:
 
       - name: Pre-pull base Docker images
         shell: pwsh
+        timeout-minutes: 33
         run: |
           $images = @(
             'mcr.microsoft.com/dotnet/sdk:10.0',
@@ -666,7 +701,8 @@ jobs:
             $pulled = $false
             for ($attempt = 1; $attempt -le 5; $attempt++) {
               Write-Host "Pulling $img (attempt $attempt/5)..."
-              docker pull $img
+              $imageName = $img -replace '[^a-zA-Z0-9.-]', '_'
+              ./scripts/Invoke-CertificationProcess.ps1 -Command docker -CommandArguments @('pull', $img) -EvidenceDirectory "release-validation/integration/pulls/$imageName/$attempt" -TimeoutSeconds 90
               if ($LASTEXITCODE -eq 0) {
                 $pulled = $true
                 break
@@ -680,13 +716,27 @@ jobs:
 
       - name: Build sandbox worker image
         shell: pwsh
-        run: .\scripts\Test-SandboxWorkerImage.ps1 -Tag etlsql-sandbox-worker-test:local -Keep
+        timeout-minutes: 22
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-SandboxWorkerImage.ps1 -ScriptArguments @('-Tag', 'etlsql-sandbox-worker-test:local', '-Keep') -EvidenceDirectory release-validation/integration/worker -TimeoutSeconds 1200
 
       - name: Enable hardened sandbox runtime (gVisor & local registry)
+        shell: pwsh
+        timeout-minutes: 12
         run: |
-          sudo bash ./scripts/enable-hardened-sandbox-lane.sh etlsql-sandbox-worker-test:local
-          echo "ETLSQL_SANDBOX_WORKER_DIGEST_IMAGE=$(cat /tmp/etlsql-pinned-worker-image)" >> $GITHUB_ENV
+          ./scripts/Invoke-CertificationProcess.ps1 -Command sudo -CommandArguments @('bash', './scripts/enable-hardened-sandbox-lane.sh', 'etlsql-sandbox-worker-test:local') -EvidenceDirectory release-validation/integration/hardened -TimeoutSeconds 600
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "ETLSQL_SANDBOX_WORKER_DIGEST_IMAGE=$((Get-Content /tmp/etlsql-pinned-worker-image -Raw).Trim())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Run Docker Integration Tests
         shell: pwsh
-        run: .\scripts\test-lane.ps1 -Lane integration -Configuration Release -NoRestore -NoBuild
+        timeout-minutes: 42
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'integration', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/integration/tests -TimeoutSeconds 2400
+
+      - name: Retain Docker integration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-diagnostics-${{ github.run_attempt }}
+          path: release-validation/integration
+          if-no-files-found: warn
+          retention-days: 30

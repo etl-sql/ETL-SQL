@@ -42,6 +42,24 @@ Write-Host "Preparing browser assets..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "sync-assets.js")
 if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed. Run npm ci --prefix scripts/typecheck first.' }
 
+# Extension-only changes retain their engine integration prerequisite and both UI consumers.
+# Other selections continue through the conservative validation below.
+if (@($impact.lanes).Count -eq 2 -and $impact.lanes -contains 'source-preflight' -and $impact.lanes -contains 'build-vscode') {
+    & dotnet build (Join-Path $RepoRoot 'src/ETL-SQL.App/ETL-SQL.App.csproj') --configuration Debug
+    if ($LASTEXITCODE -ne 0) { throw 'Extension integration prerequisite build failed.' }
+    foreach ($package in @('src/etl-sql-vscode', 'src/etl-sql-vscode/ui')) {
+        $tasks = if ($package.EndsWith('/ui')) { @('lint', 'build', 'test:unit') } else { @('compile', 'lint', 'test:unit') }
+        foreach ($task in $tasks) {
+            & npm --prefix (Join-Path $RepoRoot $package) run $task
+            if ($LASTEXITCODE -ne 0) { throw "Extension validation failed: $package / $task" }
+        }
+    }
+    & node (Join-Path $ScriptRoot 'sync-assets.js') -Check
+    if ($LASTEXITCODE -ne 0) { throw 'Extension validation left prepared browser assets changed.' }
+    Write-Host 'Extension pre-push passed. Full release certification remains required before tagging.' -ForegroundColor Green
+    exit 0
+}
+
 # 1. Code Formatting
 if (-not $SkipFormat) {
     Write-Host "[2/7] Verifying code formatting..." -ForegroundColor White

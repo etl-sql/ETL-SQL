@@ -14,6 +14,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Docker integration CI now bounds restore/build, image pulls, sandbox setup and tests, retaining
+  per-attempt process logs. Package installation steps also have explicit time limits.
+
+- Sample and enterprise CI lanes now supervise long-running commands with deadlines, streamed
+  logs and per-attempt diagnostics retained after failure.
+
+- Extension-only local pre-push follows the shared CI selection, checking the extension and UI
+  with their engine integration build instead of repeating unrelated engine validation.
+
 - Release drivers no longer offer a force override for stale source fingerprints. Certification
   must match the exact candidate; successful evidence for another source state is rejected.
 
