@@ -84,6 +84,7 @@ jobs:
     if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
     name: Build & Test
     runs-on: windows-latest
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
@@ -97,6 +98,88 @@ jobs:
       - name: Install browser compiler
         run: npm ci --prefix scripts/typecheck
 
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
+
+      - name: Verify .NET
+        run: dotnet --info
+
+      - name: Verify Node.js
+        run: node --version
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Restore dependencies
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('restore', 'ETL-SQL.slnx') -EvidenceDirectory release-validation/build/restore -TimeoutSeconds 600
+
+      - name: Audit NuGet packages for known vulnerabilities
+        shell: pwsh
+        run: .\scripts\Test-VulnerablePackages.ps1
+
+      - name: Verify formatting
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('format', 'ETL-SQL.slnx', '--verify-no-changes', '--no-restore') -EvidenceDirectory release-validation/build/format -TimeoutSeconds 600
+
+      - name: Build
+        shell: pwsh
+        timeout-minutes: 17
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'ETL-SQL.slnx', '--no-restore', '--configuration', 'Release') -EvidenceDirectory release-validation/build/compile -TimeoutSeconds 900
+
+      - name: Verify generated browser contracts against registered hosts
+        run: dotnet test tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj --no-restore --no-build --configuration Release --filter FullyQualifiedName~BrowserContractsGeneratorTests
+
+      - name: Run fast test lanes (Pull Requests)
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        run: .\scripts\test-lane.ps1 -Lane fast -Configuration Release -NoRestore -NoBuild
+
+      - name: Run release smoke tests using the existing build
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        run: .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
+
+      - name: Run engine tests and enforce coverage (Main & Release Push)
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        timeout-minutes: 42
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-CoverageGate.ps1 -ScriptArguments @('-RunEngineLane', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-CoverageDirectory', 'coverage', '-MinimumLineCoverage', '70') -EvidenceDirectory release-validation/build/coverage -TimeoutSeconds 2400
+
+      - name: Print coverage summary
+        if: github.event_name != 'pull_request'
+        run: cat ./coverage/report/Summary.txt
+        shell: bash
+
+      - name: Retain build and coverage diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release-validation/build/
+            coverage/
+          if-no-files-found: warn
+          retention-days: 30
+
+  browser-consumer-contracts:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
+    name: Browser and Consumer Contracts
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
       - name: Prepare browser assets
         run: node scripts/sync-assets.js
 
@@ -114,25 +197,6 @@ jobs:
             artifacts/browser-assets-source-only.json
           if-no-files-found: error
           retention-days: 30
-
-      - name: Verify .NET
-        run: dotnet --info
-
-      - name: Verify Node.js
-        run: node --version
-
-      - name: Restore tools
-        run: dotnet tool restore
-
-      - name: Restore dependencies
-        run: dotnet restore ETL-SQL.slnx
-
-      - name: Audit NuGet packages for known vulnerabilities
-        shell: pwsh
-        run: .\scripts\Test-VulnerablePackages.ps1
-
-      - name: Verify formatting
-        run: dotnet format ETL-SQL.slnx --verify-no-changes --no-restore
 
       - name: Check shared report runtime assets
         shell: pwsh
@@ -177,7 +241,7 @@ jobs:
       - name: Verify prepared assets after consumer checks
         run: node scripts/sync-assets.js -Check
 
-      # The engine coverage lane below already executes the HA manifest and CLI .NET tests.
+      # The independent engine coverage lane already executes the HA manifest and CLI .NET tests.
       - name: Validate HA soak harness contracts
         if: github.event_name != 'pull_request'
         shell: pwsh
@@ -193,31 +257,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Build
-        run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
-
-      - name: Verify generated browser contracts against registered hosts
-        run: dotnet test tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj --no-restore --no-build --configuration Release --filter FullyQualifiedName~BrowserContractsGeneratorTests
-
-      - name: Run fast test lanes (Pull Requests)
-        if: github.event_name == 'pull_request'
-        shell: pwsh
-        run: .\scripts\test-lane.ps1 -Lane fast -Configuration Release -NoRestore -NoBuild
-
-      - name: Run release smoke tests using the existing build
-        if: github.event_name != 'pull_request'
-        shell: pwsh
-        run: .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
-
-      - name: Run engine tests and enforce coverage (Main & Release Push)
-        if: github.event_name != 'pull_request'
-        shell: pwsh
-        run: .\scripts\Test-CoverageGate.ps1 -RunEngineLane -Configuration Release -NoRestore -NoBuild -CoverageDirectory coverage -MinimumLineCoverage 70
-
-      - name: Print coverage summary
-        if: github.event_name != 'pull_request'
-        run: cat ./coverage/report/Summary.txt
-        shell: bash
 
   build-vscode:
     needs: source-preflight

@@ -4,16 +4,21 @@
   "workflows": [
     {
       "file": "release-certification.yml",
-      "events": ["workflow_dispatch"],
+      "events": [
+        "workflow_dispatch"
+      ],
       "jobPrefix": "Full CI / ",
       "fallback": {
         "file": "ci.yml",
-        "events": ["push"],
+        "events": [
+          "push"
+        ],
         "jobPrefix": ""
       },
       "jobs": [
         "Source preflight",
         "Build & Test",
+        "Browser and Consumer Contracts",
         "Build VS Code Extension",
         "Sample Scripts (windows)",
         "Sample Scripts (linux)",
@@ -31,8 +36,14 @@
     },
     {
       "file": "codeql.yml",
-      "events": ["push", "workflow_dispatch"],
-      "jobs": ["Analyze (csharp)", "Analyze (javascript-typescript)"]
+      "events": [
+        "push",
+        "workflow_dispatch"
+      ],
+      "jobs": [
+        "Analyze (csharp)",
+        "Analyze (javascript-typescript)"
+      ]
     }
   ]
 }

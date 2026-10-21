@@ -6,6 +6,7 @@ const now = Date.parse('2026-10-20T12:00:00Z');
 const policy = { schemaVersion: 1, maximumAgeHours: 168,
   workflows: [{ file: 'ci.yml', events: ['push'], jobs: ['Build', 'Browser'] }] };
 assert.ok(hostedPolicy.workflows.find(workflow => workflow.file === 'release-certification.yml').jobs.includes('Portal Browser Journey (3/3)'));
+assert.ok(hostedPolicy.workflows[0].jobs.includes('Browser and Consumer Contracts'));
 assert.equal(hostedPolicy.workflows[0].fallback.file, 'ci.yml');
 assert.deepEqual(hostedPolicy.workflows[0].fallback.events, ['push'], 'Manual diagnostic runs must never satisfy publication.');
 assert.deepEqual(hostedPolicy.workflows.find(workflow => workflow.file === 'codeql.yml').jobs,
@@ -34,6 +35,12 @@ assert.equal(passed.fullReleaseCertification, false);
 assert.equal(passed.scope, 'hosted-ci-and-codeql');
 assert.deepEqual(passed.workflows[0].jobs.map(item => [item.id, item.attempt]), [[1, 1], [3, 2]]);
 assert.equal(passed.workflows[0].history[0].jobs[1].conclusion, 'failure');
+const copied = structuredClone(fixture);
+copied[jobsEndpoint(1)][0].jobs[0].started_at = '2026-10-20T09:05:00Z';
+copied[jobsEndpoint(2)][0] = { total_count: 2, jobs: [
+  { ...copied[jobsEndpoint(1)][0].jobs[0], id: 999 }, job(3, 'Browser'),
+] };
+assert.deepEqual((await collect(copied)).workflows[0].jobs.map(item => [item.id, item.attempt]), [[999, 1], [3, 2]]);
 for (const mutate of [
   data => { data[runsEndpoint][0].workflow_runs[0].status = 'in_progress'; },
   data => { data[runsEndpoint][0].workflow_runs[0].conclusion = 'failure'; },

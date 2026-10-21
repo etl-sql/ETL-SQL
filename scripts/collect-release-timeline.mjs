@@ -34,26 +34,35 @@ export async function collectTimeline(repository, sha, runIds, query = api) {
       if (pages.some(p => p.total_count !== rawJobs.length) || new Set(rawJobs.map(j => j.id)).size !== rawJobs.length) throw new Error('Incomplete or duplicate job pages. Retry collection after the run settles.');
       const jobs = rawJobs.map(job => {
         if (String(job.run_id) !== String(id) || job.head_sha !== sha) throw new Error('Job belongs to another candidate or run.');
+        // GitHub can assign a new job ID when carrying a prior success into a retry response.
+        // Match execution timestamps and name, not the copied API record's identity.
+        const previous = attempts.flatMap(a => a.jobs).find(j => j.name === job.name &&
+          j.startedAt === job.started_at && j.completedAt === job.completed_at &&
+          j.conclusion === job.conclusion && j.durationSeconds !== null);
+        const executionAttempt = previous?.executionAttempt ?? number;
         return { id: job.id, name: job.name, status: job.status, conclusion: job.conclusion,
+          executionAttempt, carriedForward: executionAttempt !== number,
           startedAt: job.started_at ?? null, completedAt: job.completed_at ?? null,
           durationSeconds: seconds(job.started_at, job.completed_at),
           steps: (job.steps ?? []).map(step => ({ number: step.number, name: step.name, status: step.status,
             conclusion: step.conclusion, startedAt: step.started_at ?? null, completedAt: step.completed_at ?? null,
             durationSeconds: seconds(step.started_at, step.completed_at) })) };
       });
-      const starts = jobs.map(j => timestamp(j.startedAt)).filter(n => n !== null);
-      const ends = jobs.map(j => timestamp(j.completedAt)).filter(n => n !== null);
+      const executed = jobs.filter(j => !j.carriedForward);
+      const starts = executed.map(j => timestamp(j.startedAt)).filter(n => n !== null);
+      const ends = executed.map(j => timestamp(j.completedAt)).filter(n => n !== null);
       const first = starts.length ? new Date(Math.min(...starts)).toISOString() : null;
       const last = ends.length ? new Date(Math.max(...ends)).toISOString() : null;
       const complete = attempt.status === 'completed' && jobs.length > 0 && jobs.every(j => j.status === 'completed');
-      const fullyMeasured = complete && jobs.every(j => j.durationSeconds !== null);
+      const fullyMeasured = complete && executed.length > 0 && executed.every(j => j.durationSeconds !== null);
       attempts.push({ number, status: attempt.status, conclusion: attempt.conclusion,
         startedAt: attempt.run_started_at ?? null, firstJobAt: first, lastCompletedJobAt: last,
         startDelaySeconds: seconds(attempt.run_started_at, first),
         observedJobSpanSeconds: fullyMeasured ? seconds(first, last) : null,
         complete,
-        measuredJobSeconds: jobs.reduce((sum, j) => sum + (j.durationSeconds ?? 0), 0),
-        unmeasuredJobs: jobs.filter(j => j.durationSeconds === null).length, jobs });
+        measuredJobSeconds: executed.reduce((sum, j) => sum + (j.durationSeconds ?? 0), 0),
+        carriedForwardJobs: jobs.length - executed.length,
+        unmeasuredJobs: executed.filter(j => j.durationSeconds === null).length, jobs });
     }
     runs.push({ id: String(id), workflow: run.path, createdAt: run.created_at, attempts });
   }
@@ -63,16 +72,16 @@ export function timelineMarkdown(timeline) {
   const cell = value => String(value ?? 'unknown').replaceAll('|', '\\|').replace(/[\r\n]/g, ' ');
   const minutes = value => value === null ? 'unknown' : (value / 60).toFixed(2);
   const lines = ['# Release run timeline', '', `Candidate: ${timeline.sourceSha}`, '',
-    'Job spans are observed elapsed time; summed job durations include parallel work. Start delay is from attempt start to first job start, not an exact runner-queue measurement. Missing timestamps remain unknown. This report is timing evidence, not certification.', '',
+    'Job spans are observed elapsed time; summed job durations include parallel work. Both exclude executions carried forward from previous attempts, identified by matching job name and execution timestamps even when GitHub changes their IDs. Start delay is from attempt start to first new job start, not an exact runner-queue measurement. Missing timestamps remain unknown. This report is timing evidence, not certification.', '',
     '| Run / attempt | Result | Complete | Start delay (min) | Job span (min) | Summed jobs (min) | Unmeasured jobs |',
     '| :--- | :--- | :--- | ---: | ---: | ---: | ---: |'];
   for (const run of timeline.runs) for (const a of run.attempts) {
     lines.push(`| ${run.id} / ${a.number} | ${cell(a.conclusion ?? a.status)} | ${a.complete} | ${minutes(a.startDelaySeconds)} | ${minutes(a.observedJobSpanSeconds)} | ${minutes(a.measuredJobSeconds)} | ${a.unmeasuredJobs} |`);
   }
-  lines.push('', '## Jobs and steps', '', '| Run / attempt | Job or step | Result | Minutes |', '| :--- | :--- | :--- | ---: |');
+  lines.push('', '## Jobs and steps', '', '| Run / attempt | Job or step | Result | Minutes | Executed in attempt |', '| :--- | :--- | :--- | ---: | ---: |');
   for (const run of timeline.runs) for (const a of run.attempts) for (const job of a.jobs) {
-    lines.push(`| ${run.id} / ${a.number} | ${cell(job.name)} | ${cell(job.conclusion ?? job.status)} | ${minutes(job.durationSeconds)} |`);
-    for (const step of job.steps) lines.push(`| ${run.id} / ${a.number} | ${cell(job.name)}: ${cell(step.name)} | ${cell(step.conclusion ?? step.status)} | ${minutes(step.durationSeconds)} |`);
+    lines.push(`| ${run.id} / ${a.number} | ${cell(job.name)} | ${cell(job.conclusion ?? job.status)} | ${minutes(job.durationSeconds)} | ${job.executionAttempt} |`);
+    for (const step of job.steps) lines.push(`| ${run.id} / ${a.number} | ${cell(job.name)}: ${cell(step.name)} | ${cell(step.conclusion ?? step.status)} | ${minutes(step.durationSeconds)} | ${job.executionAttempt} |`);
   }
   return lines.join('\n') + '\n';
 }

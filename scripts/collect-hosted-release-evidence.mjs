@@ -82,8 +82,11 @@ export async function collectHostedEvidence(repository, sha, {
       for (const job of attemptJobs) {
         if (job.run_id !== run.id || job.head_sha !== sha) throw new Error('Job belongs to another candidate or run.');
         const previous = latestJobs.get(job.name);
-        // Some responses may carry forward the same job; retain its original attempt identity.
-        const originAttempt = previous?.id === job.id ? previous.originAttempt : attempt;
+        // Carried successes can receive new API IDs while retaining execution timestamps.
+        const copiedExecution = previous && job.started_at && job.completed_at &&
+          previous.started_at === job.started_at && previous.completed_at === job.completed_at &&
+          previous.conclusion === job.conclusion;
+        const originAttempt = previous && (previous.id === job.id || copiedExecution) ? previous.originAttempt : attempt;
         latestJobs.set(job.name, { ...job, originAttempt });
       }
       history.push({ attempt, jobs: attemptJobs.map(job => ({ id: job.id, name: job.name, conclusion: job.conclusion })) });

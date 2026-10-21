@@ -73,7 +73,9 @@ const summary = await runChecks(checks.map(({ name, file, extra }) => ({
 })), {
   outputDirectory: path.resolve(scriptRoot, '..', 'release-validation', 'consumer-contracts', `${started}-${process.pid}`),
   // Some fixtures mutate prepared assets. Preserve serial execution and bound each independently.
-  concurrency: 1, timeoutMs: 15 * 60 * 1000, streamLogs: true,
+  // The successful hosted consumer stage took 22.4 minutes; allow a slow individual fixture
+  // that budget plus margin while the enclosing CI job still has its 60-minute ceiling.
+  concurrency: 1, timeoutMs: 30 * 60 * 1000, streamLogs: true,
 });
 const failures = summary.results.filter(result => !result.passed);
 

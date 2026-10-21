@@ -51,7 +51,9 @@ its certified MSI artifact ID when no eligible pre-tag certification exists. A s
 run for the same commit may supply its retained artifact, bound by a gate receipt to both passed
 profiles and the current previous-release version. Discovery rejects failed/in-progress candidate
 runs and invalid receipts. Attestation verifies the downloaded draft MSI against the input
-manifest before publication. Packaging for other targets proceeds independently. Enforcing all
+manifest before publication. Packaging for other targets proceeds independently. macOS Intel and
+Apple Silicon ZIP/VSIX builds run on separate native runners, with neither cancelled when the other
+fails. Both gate publication; the existing optional Intel DMG is separate. Enforcing all
 checklist evidence and the hosted reuse/retry rehearsal remain future work.
 Release also requires the exact candidate's CI and CodeQL jobs before packaging and rechecks them
 before publication. Their retained manifest includes original job attempts and failed-attempt

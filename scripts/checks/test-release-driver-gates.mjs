@@ -70,6 +70,24 @@ echo GATE_ACCEPTED
     scope: { quick: false, forceResume: false, skipNode: false, skipScale: false, includeSlt: true, includeDockerIntegration: true, includeStandardScale: true },
     plannedPhases: names, phases: names.map(name => ({ name, status: 'Passed' })) };
   const bash = process.platform === 'win32' && existsSync('C:/Program Files/Git/bin/bash.exe') ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
+  writeFileSync(path.join(root, 'status-failure.ps1'), `
+function git { $global:LASTEXITCODE = 128 }
+function Fail($message) { throw $message }
+${section(psSource, '$dirty = (& git status --porcelain)', 'Write-Ok "clean working tree')}
+throw 'Status failure was accepted.'
+`);
+  const failedStatus = execute('pwsh', ['-NoProfile', '-File', 'status-failure.ps1']);
+  assert.notEqual(failedStatus.status, 0);
+  assert.match(failedStatus.stderr, /Cannot inspect working-tree status/);
+  for (const [name, body, expected] of [
+    ['status', section(bashSource, 'DIRTY="$(git status --porcelain)"', 'ok "clean working tree'), /Cannot inspect working-tree status/],
+    ['fetch', bashSource.split(/\r?\n/).find(line => line.startsWith('git fetch "$REMOTE" --tags')), /Cannot refresh remote refs/],
+  ]) {
+    writeFileSync(path.join(root, `failed-${name}.sh`), `set -euo pipefail\nREMOTE=origin\ngit() { return 128; }\ndie() { echo "$*" >&2; exit 1; }\n${body}\nexit 0\n`);
+    const failed = execute(bash, [`failed-${name}.sh`]);
+    assert.notEqual(failed.status, 0);
+    assert.match(failed.stderr, expected);
+  }
   for (const [command, args] of [['pwsh', ['-NoProfile', '-File', 'gate.ps1']], [bash, ['gate.sh']]]) {
     for (const [label, mutate, force, accepted] of [
       ['full', () => {}, false, true],
@@ -81,6 +99,7 @@ echo GATE_ACCEPTED
       ['forced-resume', s => { s.scope.forceResume = true; }, false, false],
       ['legacy', s => { delete s.evidenceSchemaVersion; }, false, false],
       ['stale', s => { s.sourceFingerprint = 'stale'; }, false, false],
+      ['stale-force', s => { s.sourceFingerprint = 'stale'; }, true, false],
     ]) {
       const state = structuredClone(full);
       mutate(state);

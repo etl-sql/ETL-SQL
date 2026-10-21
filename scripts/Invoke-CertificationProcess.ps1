@@ -1,24 +1,32 @@
 # Bound a certification child without killing its process tree or waiting on inherited pipes.
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'Script')]
 param(
-    [Parameter(Mandatory)] [string]$ScriptPath,
-    [string[]]$ScriptArguments = @(),
+    [Parameter(Mandatory, ParameterSetName = 'Script')] [string]$ScriptPath,
+    [Parameter(ParameterSetName = 'Script')] [string[]]$ScriptArguments = @(),
+    [Parameter(Mandatory, ParameterSetName = 'Command')] [string]$Command,
+    [Parameter(ParameterSetName = 'Command')] [string[]]$CommandArguments = @(),
     [Parameter(Mandatory)] [string]$EvidenceDirectory,
     [ValidateRange(1, 7200)] [int]$TimeoutSeconds = 1200,
     [ValidateRange(1, 60)] [int]$HeartbeatSeconds = 15
 )
 $ErrorActionPreference = 'Stop'
-$scriptFile = (Resolve-Path -LiteralPath $ScriptPath).Path
 $evidence = [IO.Path]::GetFullPath($EvidenceDirectory)
 New-Item -ItemType Directory -Force -Path $evidence | Out-Null
 $startInfo = [Diagnostics.ProcessStartInfo]::new()
-$startInfo.FileName = (Get-Command pwsh -CommandType Application).Source
+if ($PSCmdlet.ParameterSetName -eq 'Script') {
+    $scriptFile = (Resolve-Path -LiteralPath $ScriptPath).Path
+    $startInfo.FileName = (Get-Command pwsh -CommandType Application | Select-Object -First 1).Source
+    $childArguments = @('-NoProfile', '-NonInteractive', '-File', $scriptFile) + $ScriptArguments
+} else {
+    $startInfo.FileName = (Get-Command $Command -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    $childArguments = $CommandArguments
+}
 $startInfo.UseShellExecute = $false
 $startInfo.CreateNoWindow = $true
 $startInfo.RedirectStandardOutput = $true
 $startInfo.RedirectStandardError = $true
 $startInfo.RedirectStandardInput = $true
-foreach ($argument in @('-NoProfile', '-NonInteractive', '-File', $scriptFile) + $ScriptArguments) {
+foreach ($argument in $childArguments) {
     $startInfo.ArgumentList.Add($argument)
 }
 $child = [Diagnostics.Process]::new()

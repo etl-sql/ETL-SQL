@@ -400,9 +400,11 @@ Native Linux/macOS packaging and cross-platform certifications still require the
       # Standard resume (reuses passed phases if source fingerprint matches):
       .\scripts\Test-PreRelease.ps1 -Resume -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
 
-      # Force resume (skips previously passed phases even after git commits/edits during fix iteration):
+      # Diagnostic-only forced resume; this result cannot satisfy the release gate:
       .\scripts\Test-PreRelease.ps1 -Resume -ForceResume -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
+      After changing candidate sources, run full validation without `-ForceResume`. Release drivers
+      reject a mismatched source fingerprint and no longer accept a force override for it.
 - [ ] Run the gate detached to avoid terminal interruption during long runs (PowerShell on Windows):
       ```powershell
       New-Item -ItemType Directory -Force -Path release-validation | Out-Null
@@ -644,7 +646,7 @@ the assertion that it is wired up in the same change.
 v0.16.0's blockers were Windows-vs-Linux divergences (shell globbing, dev-absolute paths, a spawn-path
 that only breaks under `--artifacts-path`) that a green Windows gate cannot see. A green local gate is
 **necessary but not sufficient**: after pushing the release branch, confirm **every** CI job on **both**
-OSes — `Build & Test`, `Enterprise Certification (windows)` + `(linux)`, `Build VS Code Extension`, and
+OSes — `Build & Test`, `Browser and Consumer Contracts`, `Enterprise Certification (windows)` + `(linux)`, `Build VS Code Extension`, and
 both CodeQL `Analyze` jobs — is green **before** tagging. Consider running the lint/fast lanes under
 Linux (WSL/Docker) as part of the gate.
 

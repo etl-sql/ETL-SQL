@@ -7,7 +7,7 @@ $processes = [Collections.Generic.List[Diagnostics.Process]]::new()
 
 function Start-TestProcess([string[]]$Arguments) {
     $info = [Diagnostics.ProcessStartInfo]::new()
-    $info.FileName = (Get-Command pwsh -CommandType Application).Source
+    $info.FileName = (Get-Command pwsh -CommandType Application | Select-Object -First 1).Source
     $info.UseShellExecute = $false
     $info.CreateNoWindow = $true
     $info.RedirectStandardOutput = $true
@@ -36,6 +36,24 @@ function Invoke-Fixture([string]$Name, [string]$Body, [int]$TimeoutSeconds, [int
 }
 
 try {
+    foreach ($case in @(@{ Name = 'native success'; Body = 'console.log("literal argument path");'; Exit = 0; Timeout = 10 },
+        @{ Name = 'native failure'; Body = 'process.exit(7);'; Exit = 7; Timeout = 10 },
+        @{ Name = 'native timeout'; Body = 'setInterval(()=>{}, 1000);'; Exit = 124; Timeout = 1 })) {
+        $nativeScript = Join-Path $fixture "$($case.Name) `$ literal.mjs"
+        Set-Content -LiteralPath $nativeScript -Value $case.Body
+        $nativeEvidence = Join-Path $fixture $case.Name
+        $native = Start-TestProcess @('-NoProfile', '-File', $supervisor, '-Command', (Get-Command node -CommandType Application | Select-Object -First 1).Source,
+            '-CommandArguments', $nativeScript, '-EvidenceDirectory', $nativeEvidence, '-TimeoutSeconds', [string]$case.Timeout)
+        $nativeOut = $native.StandardOutput.ReadToEndAsync()
+        $nativeError = $native.StandardError.ReadToEndAsync()
+        if (-not $native.WaitForExit(10000)) { $native.Kill(); throw 'Native supervision exceeded its test deadline.' }
+        if (-not $nativeOut.Wait(2000) -or -not $nativeError.Wait(2000) -or $native.ExitCode -ne $case.Exit) {
+            throw "Native supervision failed: $($case.Name). $($nativeError.Result)"
+        }
+        $nativeResult = Get-Content (Join-Path $nativeEvidence 'result.json') -Raw | ConvertFrom-Json
+        if ($nativeResult.exitCode -ne $case.Exit) { throw 'Native command evidence lost its exit code.' }
+        if ($case.Exit -eq 0 -and $nativeOut.Result -notlike '*literal argument path*') { throw 'Native output or literal argument path was lost.' }
+    }
     $normal = Invoke-Fixture 'normal' '1..300 | ForEach-Object { [Console]::Out.WriteLine("out-$_"); [Console]::Error.WriteLine("err-$_") }; exit 0' 10 0
     if (@(Get-Content (Join-Path $normal.Evidence 'stdout.log')).Count -ne 300 -or
         @(Get-Content (Join-Path $normal.Evidence 'stderr.log')).Count -ne 300) { throw 'Output was lost during draining.' }
@@ -56,7 +74,7 @@ try {
     $escapedPidFile = $pidFile.Replace("'", "''")
     $body = @'
 $info = [Diagnostics.ProcessStartInfo]::new()
-$info.FileName = (Get-Command pwsh -CommandType Application).Source
+$info.FileName = (Get-Command pwsh -CommandType Application | Select-Object -First 1).Source
 $info.UseShellExecute = $false
 $info.CreateNoWindow = $true
 foreach ($argument in @('-NoProfile', '-Command', 'Start-Sleep -Seconds 30')) { $info.ArgumentList.Add($argument) }

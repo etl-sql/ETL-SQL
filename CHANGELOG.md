@@ -14,6 +14,24 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Release drivers no longer offer a force override for stale source fingerprints. Certification
+  must match the exact candidate; successful evidence for another source state is rejected.
+
+- Release drivers now stop when Git cannot inspect the working tree; the POSIX driver also
+  stops on failed remote refresh instead of proceeding with stale refs.
+
+- CI restore, formatting, compilation and engine coverage now use bounded process supervision,
+  streamed logs and retained diagnostics. Consumer-check deadlines allow the measured hosted baseline.
+
+- Browser and consumer contracts now run independently of engine build/coverage in CI. Full
+  release evidence requires both jobs, and failed-job recovery can preserve either success.
+
+- macOS ZIP/VSIX release packaging now runs independently on native Intel and Apple Silicon
+  runners. Both are required for publication, with per-architecture retries and retained logs.
+
+- Release timing and evidence collection now preserve the original execution attempt when GitHub
+  copies successful jobs into a retry with new job IDs, avoiding double-counted retry work.
+
 - Failed Windows process-tree shutdown now rejects promptly and terminates the direct child,
   instead of leaving certification waiting indefinitely for the child's output streams.
 

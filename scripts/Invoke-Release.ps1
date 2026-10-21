@@ -51,7 +51,6 @@ param(
     [string]$Branch = "main",
 
     [switch]$DryRun,
-    [switch]$Force,
     [switch]$SkipPreReleaseGate,
     [switch]$SkipCiWait,
     [switch]$PruneMergedBranches,
@@ -124,6 +123,7 @@ if ($currentBranch -ne $Branch) {
 }
 
 $dirty = (& git status --porcelain)
+if ($LASTEXITCODE -ne 0) { Fail 'Cannot inspect working-tree status; refusing release.' }
 if ($dirty) {
     Write-Host ($dirty | Out-String) -ForegroundColor DarkGray
     Fail "Working tree is not clean. Commit or stash before releasing."
@@ -164,8 +164,7 @@ else {
     $fp = Get-SourceFingerprint
     if ($state.sourceFingerprint -ne $fp) {
         $msg = "Pre-release state was recorded for a different source state (fingerprint mismatch). Re-validate this exact commit."
-        if ($Force) { Write-WarnLine "$msg [overridden by -Force]" }
-        else { Fail "$msg Use -Force to override." }
+        Fail $msg
     }
     else {
         Write-Ok "validation Passed for this commit (run $($state.runId))"

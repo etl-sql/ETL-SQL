@@ -16,7 +16,6 @@
 #   --remote NAME              git remote (default: origin)
 #   --branch NAME              release branch (default: main)
 #   --dry-run                  print mutating actions without performing them
-#   --force                    override fingerprint mismatch (never tag identity)
 #   --skip-prerelease-gate     do not require a Passed Test-PreRelease state
 #   --skip-ci-wait             do not wait for CI before tagging
 #   --prune-merged-branches    after a verified release: prune stale remote-tracking refs,
@@ -34,7 +33,6 @@ NOTES_FILE=""
 REMOTE="origin"
 BRANCH="main"
 DRY_RUN=0
-FORCE=0
 SKIP_GATE=0
 SKIP_CI=0
 PRUNE=0
@@ -51,7 +49,6 @@ while [ $# -gt 0 ]; do
     --remote) REMOTE="$2"; shift 2 ;;
     --branch) BRANCH="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
-    --force) FORCE=1; shift ;;
     --skip-prerelease-gate) SKIP_GATE=1; shift ;;
     --skip-ci-wait) SKIP_CI=1; shift ;;
     --prune-merged-branches) PRUNE=1; shift ;;
@@ -104,10 +101,11 @@ ok "git + gh present (gh user: $GH_USER)"
 
 CUR_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 [ "$CUR_BRANCH" = "$BRANCH" ] || die "On branch '$CUR_BRANCH' but release branch is '$BRANCH'."
-[ -z "$(git status --porcelain)" ] || die "Working tree is not clean. Commit or stash first."
+DIRTY="$(git status --porcelain)" || die "Cannot inspect working-tree status; refusing release."
+[ -z "$DIRTY" ] || die "Working tree is not clean. Commit or stash first."
 ok "clean working tree on '$BRANCH'"
 
-git fetch "$REMOTE" --tags >/dev/null 2>&1 || true
+git fetch "$REMOTE" --tags >/dev/null 2>&1 || die "Cannot refresh remote refs; refusing release."
 LOCAL_SHA="$(git rev-parse HEAD)"
 if git rev-parse "$REMOTE/$BRANCH" >/dev/null 2>&1; then
   BEHIND="$(git rev-list --count "HEAD..$REMOTE/$BRANCH")"
@@ -141,8 +139,7 @@ else
   # Get-ReleaseSourceFingerprint hashes only HEAD for a clean tree (no trailing newline).
   CUR_FP="$(printf '%s' "$HEAD_LINE" | sha256_hex)"
   if [ "$SAVED_FP" != "$CUR_FP" ]; then
-    if [ "$FORCE" -eq 1 ]; then warn "fingerprint mismatch [overridden by --force]"
-    else die "Pre-release state was recorded for a different source state. Re-validate this commit, or use --force."; fi
+    die "Pre-release state was recorded for a different source state. Re-validate this exact commit."
   else
     ok "validation Passed for this commit"
   fi

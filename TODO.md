@@ -10,8 +10,6 @@ Items are grouped by when they can be done, not by topic:
 | :--- | :--- | :---: |
 | [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 25 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
-| [Blocked](#blocked--waiting-on-something-outside-the-repository) | Work waiting on a tool, account or person | 2 |
-| [Known limits](#known-limits--context-not-tasks) | Limits to state honestly in release notes | — |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
 completed items only in a closed-item audit, after the implementation and evidence are double-checked.
@@ -65,7 +63,15 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   Tests distinguish parallel elapsed time from summed job time and preserve unknown timestamps.
   Mixed finished/unfinished jobs and invalid timestamp ranges now leave the elapsed span unknown;
   timeline regressions run in the shared preflight.
-  Hosted baseline collection, candidate-cut/tag timestamps and rerun reasons remain required.
+  Read-only v0.21.0 final-SHA collection is retained under
+  `release-validation/timelines/1792576485810-29956/`. CI's first attempt spanned 59.4 minutes;
+  its retry ran only the browser job for 30.5 minutes, carrying ten successful executions forward.
+  The collector now recognizes carried executions even when GitHub assigns new job IDs.
+  Release spanned 96.0 minutes, with the sequential macOS job taking 73.1 minutes. MSI attempts
+  each ran about 74 minutes and each rebuilt the installer for about 27 minutes before the
+  Portal step stopped reporting. Evidence upload remained pending. These measurements cover the
+  final SHA only, not the full two-day release. Candidate-cut/tag timestamps, earlier candidates,
+  step/queue attribution and the new workflow's hosted measurements remain required.
 - [ ] **Find why the MSI runner is lost.** Both of the tag's MSI attempts lost their hosted runner
   about 10 minutes after the Portal-profile step's 35-minute watchdog was due. The step passes in
   about 5 minutes. Determine whether the script hangs or the watchdog's `taskkill /T` takes the runner
@@ -106,13 +112,18 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   and diagnostics uploaded on failure.
   **In progress:** MSI workstation and Portal jobs use the shared bounded supervisor. Other long
   CI steps still need coverage. Consumer-contract checks now retain per-check logs and summaries,
-  stream bounded output chunks with heartbeats, and fail each child after 15 minutes while
+  stream bounded output chunks with heartbeats, and fail each child after 30 minutes while
   continuing independent checks. Their serial ordering is preserved because fixtures can mutate
   prepared assets. A runner that disappears cannot be relied on to upload artifacts;
   heartbeat and certification output also stream directly to the Actions console.
   A local pre-push run exposed an unbounded wait after Windows tree shutdown failed in the
   VSIX command helper. That failure now rejects promptly with a direct-child cleanup fallback;
   the cancellation fixture and an injected missing-terminator regression pass.
+  The shared supervisor also accepts native commands. CI restore, formatting, build and engine
+  coverage now have process deadlines inside larger step/job limits and retained diagnostics.
+  Native-command fixtures cover literal paths, successful/failed exits and timeout. The consumer
+  limit was raised to 30 minutes per child after observing the prior successful 22.4-minute stage;
+  its overall CI job remains capped at 60 minutes.
 - [ ] **One-command release metadata.** One step flips the CHANGELOG date, release-notes status and
   releases index together.
   **In progress:** `finalize-release-metadata.mjs` previews or writes the three surfaces after
@@ -235,12 +246,29 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   full ref. Push/PR runs, other branches and Release/MSI workflows have separate identities.
   Local group-isolation checks pass; hosted cancellation evidence, equivalent-run deduplication
   and queue/critical-path measurements remain open.
+  The final-SHA baseline identified sequential macOS publication as a 73.1-minute job. Release now
+  uses independent native Intel and Apple Silicon jobs with fail-fast disabled. Both ZIP/VSIX
+  builds gate publication; the Intel DMG remains optional. Each publish has a bounded supervisor
+  and per-attempt diagnostics. Workflow validation passes; hosted timing and failed-architecture
+  recovery remain unverified.
+  CI's 58.1-minute Build & Test baseline included 22.4 minutes of consumer checks before 24.3
+  minutes of engine coverage. Browser/consumer contracts now run in a separate job with the same
+  impact selection, and full release policy requires both jobs. All 25 original build/validation
+  commands remain present; workflow, impact and evidence-gate checks pass. Hosted elapsed-time
+  improvement remains unmeasured.
 - [ ] **Freeze metadata before certification; keep evidence outside the candidate commit.** Finish
   version/date/notes changes before selecting the candidate SHA. The proposed committed evidence
   file would itself create another SHA after certification; store the authoritative manifest as a
   retained candidate artifact/release attachment, and commit only a later historical reference.
   Update the checklist to avoid an evidence-only commit restarting certification. Verify every
   published package and result resolves to the frozen candidate, with no tag movement.
+  **In progress:** both drivers stop on failed working-tree inspection, and POSIX remote refresh
+  errors no longer fall through to stale refs. Executed failure-injection fixtures verify these
+  guards. Metadata finalization and exact-tag checks remain in place; complete package/evidence
+  identity and hosted promotion proof are still outstanding.
+  Stale local fingerprints can no longer be overridden with the release driver's force flag.
+  Both drivers reject stale evidence even when the former override variable is supplied by the
+  regression harness. Forced pre-release resumes remain diagnostic-only.
 - [ ] **Rehearse failure recovery before the next release.** On a disposable candidate, exercise a
   failed test shard, interrupted MSI certification, missing artifact and failed publication upload.
   Require useful diagnostics, rejection of incomplete evidence, and recovery without repeating
@@ -280,18 +308,6 @@ here; each one failed a single test per run and passed on rerun.
 
 ---
 
-## Blocked — waiting on something outside the repository
-
-- [ ] **Live Snowflake row rollback.** The shared-transaction fix for Snowflake table views passes
-  its lifecycle test with a recording transaction. The Snowflake emulator cannot create tables, so it
-  cannot show a row rolled back. Needs a Snowflake account. See the
-  [bugs and logic audit](docs/releases/v0.21.0-bug-logic-audit.md).
-- [ ] **Observed learner walkthrough (ST16b) and screen-reader passes (ST28/ST29).** They need a person
-  new to Studio and a real screen reader; deferred in
-  [`ROADMAP.md`](ROADMAP.md#author-reader-and-beginner-practice-journeys).
-
----
-
 ## v0.22.0 Release — run on the final candidate
 
 Nothing here can be closed early: each item is evidence about the candidate that ships.
@@ -309,54 +325,3 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
   the §1 goal.
 
 ---
-
-## Known limits — context, not tasks
-
-These have no open task here. They describe what the shipped behavior does not do, so release notes
-and guides can say so. Turning one into work means sizing it in `ROADMAP.md` first.
-
-### 2. Studio — Unified authoring experience and completeness criteria
-
-**Authoritative design:** [ETL-SQL Studio](docs/architecture/decisions/etl-sql-studio.md) and
-[Portal ETL documents](docs/architecture/decisions/portal-etl-documents.md).
-**Inventory:** [Studio authoring completeness](docs/architecture/decisions/studio-authoring-completeness.md),
-with completed [ST01 report](docs/architecture/decisions/studio-report-authoring-inventory.md) and
-[ST02 script/ETL](docs/architecture/decisions/studio-script-etl-authoring-inventory.md) inventories.
-
-Studio combines ReportBuilder visual authoring and WorkstationEditor code editing across desktop and
-Portal. SQL remains the authoritative artifact; visual helpers preserve hand edits.
-
-- The [beginner acceptance assessment](docs/architecture/decisions/studio-beginner-acceptance-assessment.md)
-  does not certify the overall experience.
-- Paginated binding/delivery (R15–R18) and the pipeline helper round trip (E14) still need sized tasks.
-- Learner understanding has not been observed (ST16b, deferred), so no release claims a
-  learner-validated experience.
-
-### 3. Studio — Portal pipelines and schedule handoffs
-
-Run path decided 2026-10-12: one Orchestrator job per pipeline (`PIPELINE:{id}`) used as a run slot,
-created on first run by an `Admin` or `OrchestratorManager`. See
-[Portal ETL documents §5](docs/architecture/decisions/portal-etl-documents.md#5-slice-2-as-built-2026-10-12).
-
-- Sandbox submission carries the submitter (ST21b). It is evidenced on Standard/runc only.
-- Cancellation signals only the executing node, and kill-by-job-name still records `FAILURE`.
-- Pipeline schedules must be recreated at the promotion target.
-- Report refresh scheduling joins the Portal link and Orchestrator job by name manually and has no
-  Studio control. The retired `CREATE REFRESH JOB` path names a job no link matches.
-
-### 4. Studio — Private unpublished drafts and publishing
-
-The [private draft policy](docs/architecture/decisions/studio-private-drafts.md) owns the completed
-identity and retention contract.
-
-- Expiry occurs on read/list, without a background sweep.
-- Recovery does not persist offline edits.
-- Publishing retains earlier saves as audit metadata, not their text. Catalog version history remains unavailable.
-
-### 5 and 6. Reader journeys and keyboard layout
-
-- RLS reports do not appear under Popular or Recently viewed.
-- List responses do not identify per-viewer reports.
-- RLS detection through an included script is unchecked.
-- `STRUCTURE` stores proportions, so layouts that do not divide a row evenly reopen at the nearest proportion.
-  See the [keyboard evidence](docs/architecture/decisions/studio-keyboard-assistive-evidence.md).
