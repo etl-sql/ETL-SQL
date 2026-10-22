@@ -67,7 +67,12 @@ param(
 
     # Skips the discarded warm-up run. Only for throwaway smoke checks where the numbers are not
     # being compared against a baseline — a cold first run is not a measurement.
-    [switch]$NoWarmUp
+    [switch]$NoWarmUp,
+
+    # Skips each scenario's untimed in-process run of its own path. Diagnostic only: the measured
+    # timing then depends on which scenarios ran earlier in the host, and the recorded config
+    # keeps such a report from being compared with a warmed baseline.
+    [switch]$NoScenarioWarmUp
 )
 
 $ErrorActionPreference = 'Stop'
@@ -383,6 +388,7 @@ $config = [ordered]@{
     preEnumerateTheories = $false
     testFixture = 'isolated-scale-v1'
     resourceScope = 'timed-operations-lifecycle-peaks-v1'
+    scenarioWarmUp = if ($NoScenarioWarmUp) { 'none' } else { 'own-path-untimed-v1' }
     fixtureDefinitionSha256 = $fixtureHash
 }
 $sourceMetadata = Get-SourceMetadata $config
@@ -402,6 +408,8 @@ Write-Host "Running certification tests (filter: $filterExpr)..." -ForegroundCol
 $env:CERT_ROW_SCALE = $RowCountScale
 $env:CERT_CERTIFICATION_TIER = if ($Tier -eq 'All') { '' } else { $Tier }
 $env:DOTNET_gcServer = '1'
+# Always set explicitly so an inherited value cannot change the method the config records.
+$env:CERT_SCENARIO_WARMUP = if ($NoScenarioWarmUp) { '0' } else { '1' }
 
 if ($Tier -eq 'Standard') {
     $env:CERT_STANDARD_ROW_SCALE = $RowCountScale
@@ -690,6 +698,7 @@ $mdLines += "- Runtime: $($hardware.runtimeVersion), $($hardware.processArchitec
 $mdLines += "- Engine memory grant: $($hardware.memoryGrantMB) MB"
 $mdLines += "- Output capture: $($config.outputCapture); full formatted result output retained"
 $mdLines += "- Temporary storage: $($config.temporaryStorage)"
+$mdLines += "- Scenario warm-up: $($config.scenarioWarmUp)"
 $mdLines += "- Theory data pre-enumeration: $($config.preEnumerateTheories) (selected theories still execute all their rows)"
 $mdLines += "- Commit: $($sourceMetadata.commit.sha) ($($sourceMetadata.commit.branch)); dirty: $($sourceMetadata.commit.isDirty)"
 $mdLines += "- Source fingerprint: $($sourceMetadata.sourceFingerprint)"

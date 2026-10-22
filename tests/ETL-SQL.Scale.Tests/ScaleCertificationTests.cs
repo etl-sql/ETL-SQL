@@ -48,6 +48,7 @@ namespace ETL_SQL.Tests.Scale
         private readonly ITestOutputHelper _out;
         private readonly ScenarioResourceSampler _resourceSampler;
         private readonly Dictionary<Evaluator, FixtureRoot> _roots = new();
+        private bool _ownPathWarmUpRunning;
 
         public ScaleCertificationTests(ITestOutputHelper output)
         {
@@ -291,6 +292,50 @@ namespace ETL_SQL.Tests.Scale
             }
         }
 
+        /// <summary>
+        /// Runs the scenario once, untimed, before the measured run in the same host. Timings used to
+        /// depend on which scenarios ran first: in v0.21.0 two Smoke baselines held warm Parquet
+        /// Decimal128 timings that earlier scenarios stopped providing (see
+        /// docs/releases/v0.21.0-performance-results.md). Warming each scenario's own path makes its
+        /// measurement the same alone or in a tier. The warm-up uses the Smoke row count (or the
+        /// configured scale when smaller), still asserts correctness, and emits no metrics.
+        /// CERT_SCENARIO_WARMUP=0 disables it for diagnostics; the runner records the mode.
+        /// </summary>
+        private async Task MeasureAfterOwnPathWarmUp(Func<Task> scenario)
+        {
+            if (OwnPathWarmUpEnabled())
+            {
+                var previous = Environment.GetEnvironmentVariable("CERT_ROW_SCALE");
+                var warmUpScale = Math.Min(RowScale(), 1.0);
+                Environment.SetEnvironmentVariable("CERT_ROW_SCALE", warmUpScale.ToString(CultureInfo.InvariantCulture));
+                _ownPathWarmUpRunning = true;
+                try { await scenario(); }
+                finally
+                {
+                    _ownPathWarmUpRunning = false;
+                    Environment.SetEnvironmentVariable("CERT_ROW_SCALE", previous);
+                    await DisposeFixtureRootsAsync();
+                    GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+                }
+            }
+
+            await scenario();
+        }
+
+        private static bool OwnPathWarmUpEnabled()
+        {
+            var raw = Environment.GetEnvironmentVariable("CERT_SCENARIO_WARMUP");
+            if (string.IsNullOrWhiteSpace(raw)) return true;
+            return raw.Trim().ToLowerInvariant() switch
+            {
+                "1" or "true" or "on" => true,
+                "0" or "false" or "off" => false,
+                _ => throw new InvalidOperationException("CERT_SCENARIO_WARMUP must be 1 or 0.")
+            };
+        }
+
         private static string MemoryTier(double rowScale)
         {
             if (rowScale <= 1.0)
@@ -325,6 +370,9 @@ namespace ETL_SQL.Tests.Scale
             long spillBytes, long resultRows, decimal checksum, bool passed,
             ScenarioResourceMetrics measuredResources, ITelemetryContext? telemetry = null)
         {
+            // The untimed warm-up asserts correctness only; its timing and resources are discarded.
+            if (_ownPathWarmUpRunning) return;
+
             var rowScale = RowScale();
             var memoryTier = MemoryTier(rowScale);
             var certificationTier = Environment.GetEnvironmentVariable("CERT_CERTIFICATION_TIER");
@@ -468,7 +516,10 @@ namespace ETL_SQL.Tests.Scale
 
         [Fact]
         [Trait("Tier", "Smoke")]
-        public async Task Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized()
+        public Task Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized()
+            => MeasureAfterOwnPathWarmUp(Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized_Scenario);
+
+        private async Task Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized_Scenario()
         {
             _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
@@ -512,7 +563,10 @@ namespace ETL_SQL.Tests.Scale
 
         [Fact]
         [Trait("Tier", "Smoke")]
-        public async Task Cert_Smoke_ExternalAggregate_100kRows_CorrectSums()
+        public Task Cert_Smoke_ExternalAggregate_100kRows_CorrectSums()
+            => MeasureAfterOwnPathWarmUp(Cert_Smoke_ExternalAggregate_100kRows_CorrectSums_Scenario);
+
+        private async Task Cert_Smoke_ExternalAggregate_100kRows_CorrectSums_Scenario()
         {
             _resourceSampler.StartScenario();
             var Rows = ScaleRows(100_000);
@@ -548,7 +602,10 @@ namespace ETL_SQL.Tests.Scale
 
         [Fact]
         [Trait("Tier", "Smoke")]
-        public async Task Cert_Smoke_ExternalJoin_50kRows_CorrectResults()
+        public Task Cert_Smoke_ExternalJoin_50kRows_CorrectResults()
+            => MeasureAfterOwnPathWarmUp(Cert_Smoke_ExternalJoin_50kRows_CorrectResults_Scenario);
+
+        private async Task Cert_Smoke_ExternalJoin_50kRows_CorrectResults_Scenario()
         {
             _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
@@ -600,7 +657,10 @@ namespace ETL_SQL.Tests.Scale
 
         [Fact]
         [Trait("Tier", "Smoke")]
-        public async Task Cert_Smoke_TempTableSpill_50kRows_CorrectCount()
+        public Task Cert_Smoke_TempTableSpill_50kRows_CorrectCount()
+            => MeasureAfterOwnPathWarmUp(Cert_Smoke_TempTableSpill_50kRows_CorrectCount_Scenario);
+
+        private async Task Cert_Smoke_TempTableSpill_50kRows_CorrectCount_Scenario()
         {
             _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
@@ -632,7 +692,10 @@ namespace ETL_SQL.Tests.Scale
 
         [Fact]
         [Trait("Tier", "Smoke")]
-        public async Task Cert_Smoke_StreamingSelect_ResultCapEnforced()
+        public Task Cert_Smoke_StreamingSelect_ResultCapEnforced()
+            => MeasureAfterOwnPathWarmUp(Cert_Smoke_StreamingSelect_ResultCapEnforced_Scenario);
+
+        private async Task Cert_Smoke_StreamingSelect_ResultCapEnforced_Scenario()
         {
             _resourceSampler.StartScenario();
             var Rows = ScaleRows(100_000);
@@ -723,7 +786,10 @@ namespace ETL_SQL.Tests.Scale
 
         [Fact]
         [Trait("Tier", "Smoke")]
-        public async Task Cert_Smoke_WindowFunction_50kRows_CorrectRankValues()
+        public Task Cert_Smoke_WindowFunction_50kRows_CorrectRankValues()
+            => MeasureAfterOwnPathWarmUp(Cert_Smoke_WindowFunction_50kRows_CorrectRankValues_Scenario);
+
+        private async Task Cert_Smoke_WindowFunction_50kRows_CorrectRankValues_Scenario()
         {
             _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
@@ -767,7 +833,10 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Tier", "Smoke")]
         [Trait("CertificationClass", "LocalReal")]
         [Trait("Connector", "CSV")]
-        public async Task Cert_Smoke_CsvIngest_50kRows_CorrectChecksum()
+        public Task Cert_Smoke_CsvIngest_50kRows_CorrectChecksum()
+            => MeasureAfterOwnPathWarmUp(Cert_Smoke_CsvIngest_50kRows_CorrectChecksum_Scenario);
+
+        private async Task Cert_Smoke_CsvIngest_50kRows_CorrectChecksum_Scenario()
         {
             _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
@@ -807,7 +876,10 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Tier", "Smoke")]
         [Trait("CertificationClass", "LocalReal")]
         [Trait("Connector", "PARQUET")]
-        public async Task Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum()
+        public Task Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum()
+            => MeasureAfterOwnPathWarmUp(Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum_Scenario);
+
+        private async Task Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum_Scenario()
         {
             _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
@@ -845,7 +917,10 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Tier", "Smoke")]
         [Trait("CertificationClass", "LocalReal")]
         [Trait("Connector", "PARQUET")]
-        public async Task Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum()
+        public Task Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum()
+            => MeasureAfterOwnPathWarmUp(Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum_Scenario);
+
+        private async Task Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum_Scenario()
         {
             _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
@@ -910,7 +985,10 @@ namespace ETL_SQL.Tests.Scale
 
         [Fact]
         [Trait("Tier", "Smoke")]
-        public async Task Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum()
+        public Task Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum()
+            => MeasureAfterOwnPathWarmUp(Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum_Scenario);
+
+        private async Task Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum_Scenario()
         {
             _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
@@ -952,7 +1030,10 @@ namespace ETL_SQL.Tests.Scale
 
         [Fact]
         [Trait("Tier", "Smoke")]
-        public async Task Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys()
+        public Task Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys()
+            => MeasureAfterOwnPathWarmUp(Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys_Scenario);
+
+        private async Task Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys_Scenario()
         {
             _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
@@ -1021,7 +1102,10 @@ namespace ETL_SQL.Tests.Scale
 
         [Fact]
         [Trait("Tier", "Smoke")]
-        public async Task Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles()
+        public Task Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles()
+            => MeasureAfterOwnPathWarmUp(Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles_Scenario);
+
+        private async Task Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles_Scenario()
         {
             _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
@@ -1052,7 +1136,10 @@ namespace ETL_SQL.Tests.Scale
 
         [Fact]
         [Trait("Tier", "Smoke")]
-        public async Task Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles()
+        public Task Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles()
+            => MeasureAfterOwnPathWarmUp(Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles_Scenario);
+
+        private async Task Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles_Scenario()
         {
             _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);

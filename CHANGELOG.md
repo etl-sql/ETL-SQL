@@ -14,6 +14,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Cross-platform native package certification now mounts and launches the macOS DMG package,
+  verifying its CLI version and packaged browser assets before unmounting. Packaged VSIX webview
+  acceptance (scripts/test-vsix-acceptance.mjs) now exercises designer and preview webviews inside
+  real VS Code on Windows, Linux (via xvfb), and macOS matrix runners, recording verified webview
+  outcomes in package certification manifests.
+
+- Scale certification now warms each scenario's own code path with an untimed run before
+  measuring samples, eliminating run-order dependencies. Reports record the warm-up method,
+  and baseline comparison requires matching warm-up configurations.
+
 - Linux release publication reuses the candidate ZIP and VSIX alongside the installed-tested DEB,
   removing a duplicate Linux build. All three package hashes are checked before attestation.
   Attestation and publication explicitly handle certification jobs skipped by artifact reuse,

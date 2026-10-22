@@ -93,6 +93,14 @@ function Assert-ScaleCaptureCompatibility {
     if ($baselineStorage -ne $currentStorage) {
         throw 'Temporary-storage fixtures differ. Calibrate matching measurement fixtures before regression decisions.'
     }
+    # Reports from before per-scenario warm-up measured whatever earlier scenarios left warm.
+    $baselineWarmUp = $BaselineReport.config.scenarioWarmUp
+    $currentWarmUp = $CurrentReport.config.scenarioWarmUp
+    if (-not $baselineWarmUp) { $baselineWarmUp = 'none' }
+    if (-not $currentWarmUp) { $currentWarmUp = 'none' }
+    if ($baselineWarmUp -ne $currentWarmUp) {
+        throw "Scenario warm-up methods differ ($baselineWarmUp vs $currentWarmUp). Recalibrate the baseline with the same warm-up before regression decisions."
+    }
     $baselineFixture = $BaselineReport.config.testFixture
     $currentFixture = $CurrentReport.config.testFixture
     if (-not $baselineFixture) { $baselineFixture = 'full-test-assembly-v1' }

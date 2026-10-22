@@ -36,6 +36,7 @@ video/
 *.vspx
 *.vspscc
 .vscode/
+.vscode-test/
 trouble/
 brain/
 

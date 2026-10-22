@@ -90,6 +90,25 @@ public sealed class ScaleCertificationProcessTests
     }
 
     [Theory]
+    [InlineData("", "", true)]
+    [InlineData("own-path-untimed-v1", "own-path-untimed-v1", true)]
+    [InlineData("none", "", true)]
+    [InlineData("", "own-path-untimed-v1", false)]
+    [InlineData("own-path-untimed-v1", "none", false)]
+    public async Task BaselineComparison_RequiresMatchingScenarioWarmUp(string baseline, string current, bool compatible)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $baselineConfig = @{scenarioWarmUp='{{baseline}}'}
+            $currentConfig = @{scenarioWarmUp='{{current}}'}
+            Assert-ScaleCaptureCompatibility -BaselineReport @{config=$baselineConfig} `
+                -CurrentReport @{config=$currentConfig}
+            'Compatible'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.Equal(compatible, result.ExitCode == 0);
+        Assert.Contains(compatible ? "Compatible" : "Scenario warm-up methods differ", result.Output);
+    }
+
+    [Theory]
     [InlineData(true, true, true)]
     [InlineData(false, false, true)]
     [InlineData(true, false, false)]

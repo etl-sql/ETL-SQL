@@ -79,9 +79,9 @@ jobs:
             runUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
             startedAt = [DateTime]::UtcNow.ToString('o')
             status = 'Incomplete'
-            scope = 'Native ZIP and VSIX packaging, checksum verification, extracted CLI launch'
+            scope = 'Native ZIP, DMG, and VSIX packaging, checksum verification, extracted CLI launch, webview acceptance'
             uncovered = @('MSI in-place upgrade and deployment-profile certification use their separate evidence lanes.',
-              'DEB/DMG installation and live service startup are not established by this package check.')
+              'DEB installation and live service startup are not established by this package check.')
           } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $outDir 'certification.json')
           dotnet --info | Tee-Object -FilePath (Join-Path $outDir 'dotnet-info.log')
           if ($LASTEXITCODE -ne 0) { throw '.NET host inspection failed.' }
@@ -146,6 +146,95 @@ jobs:
             $summary | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $summaryPath
           }
 
+      - name: Build, mount and launch macOS DMG package
+        if: runner.os == 'macOS' && matrix.rid == 'osx-x64'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$props = Get-Content -LiteralPath 'Directory.Build.props'
+          $version = [string]$props.Project.PropertyGroup.VersionPrefix
+          $outDir = Join-Path $PWD "artifacts/native-packages/$env:PACKAGE_RID"
+          $dmgLog = Join-Path $outDir 'dmg-acceptance.log'
+
+          Write-Host "Building DMG for $version..."
+          & bash -euo pipefail scripts/build-mac-dmg.sh $version "release/$env:PACKAGE_RID/bin" *>&1 |
+            Tee-Object -FilePath $dmgLog
+          if ($LASTEXITCODE -ne 0) { throw 'macOS DMG build failed.' }
+
+          $dmgFile = "ETL-SQL_v${version}.dmg"
+          if (-not (Test-Path -LiteralPath $dmgFile)) { throw "Expected DMG not found: $dmgFile" }
+
+          $dmgDest = Join-Path 'release' $dmgFile
+          Move-Item -LiteralPath $dmgFile -Destination $dmgDest -Force
+
+          Write-Host "Mounting DMG at /Volumes/ETL-SQL..."
+          & hdiutil attach $dmgDest -mountpoint /Volumes/ETL-SQL -nobrowse *>&1 |
+            Tee-Object -FilePath $dmgLog -Append
+          if ($LASTEXITCODE -ne 0) { throw 'hdiutil attach failed.' }
+
+          try {
+            $dmgAppCli = '/Volumes/ETL-SQL/ETL-SQL.app/Contents/Resources/bin/ETL-SQL'
+            if (-not (Test-Path -LiteralPath $dmgAppCli)) {
+              throw "Mounted DMG is missing the CLI binary at $dmgAppCli"
+            }
+            $output = @(& $dmgAppCli --version *>&1)
+            $exitCode = $LASTEXITCODE
+            $output | Tee-Object -FilePath $dmgLog -Append
+            if ($exitCode -ne 0) { throw "Mounted DMG CLI --version failed with exit code $exitCode." }
+            Write-Host "Mounted DMG CLI launched successfully: $($output -join ' ')"
+
+            & node scripts/verify-packaged-browser-assets.mjs '/Volumes/ETL-SQL/ETL-SQL.app/Contents/Resources/bin' *>&1 |
+              Tee-Object -FilePath $dmgLog -Append
+            if ($LASTEXITCODE -ne 0) { throw 'Packaged browser assets inside mounted DMG do not match inventory.' }
+          } finally {
+            Write-Host "Detaching DMG mountpoint..."
+            & hdiutil detach /Volumes/ETL-SQL *>&1 | Tee-Object -FilePath $dmgLog -Append
+          }
+
+          $summaryPath = Join-Path $outDir 'certification.json'
+          $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+          $summary | Add-Member -NotePropertyName dmgSha256 -NotePropertyValue (Get-FileHash -LiteralPath $dmgDest).Hash.ToLowerInvariant()
+          $summary | Add-Member -NotePropertyName dmgMountedAndLaunched -NotePropertyValue $true
+          $summary | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $summaryPath
+
+      - name: Verify VSIX webviews inside VS Code
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          [xml]$props = Get-Content -LiteralPath 'Directory.Build.props'
+          $version = [string]$props.Project.PropertyGroup.VersionPrefix
+          $target = switch ($env:PACKAGE_RID) {
+            'win-x64' { 'win32-x64' }
+            'linux-x64' { 'linux-x64' }
+            'osx-x64' { 'darwin-x64' }
+            'osx-arm64' { 'darwin-arm64' }
+            Default { throw "Unknown RID: $env:PACKAGE_RID" }
+          }
+          $vsix = Join-Path 'release' "etl-sql-vscode-$version-$target.vsix"
+          if (-not (Test-Path -LiteralPath $vsix)) { throw "Expected VSIX not found: $vsix" }
+          $outDir = Join-Path $PWD "artifacts/native-packages/$env:PACKAGE_RID"
+          $vsixLog = Join-Path $outDir 'vsix-acceptance.log'
+
+          if ($IsLinux) {
+            & xvfb-run -a node scripts/test-vsix-acceptance.mjs --vsix $vsix --out $outDir *>&1 |
+              Tee-Object -FilePath $vsixLog
+          } else {
+            & node scripts/test-vsix-acceptance.mjs --vsix $vsix --out $outDir *>&1 |
+              Tee-Object -FilePath $vsixLog
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'VSIX webview acceptance failed.' }
+
+          $reportFile = Join-Path $outDir 'packaged-webview.json'
+          if (-not (Test-Path -LiteralPath $reportFile)) { throw 'Missing packaged-webview.json report.' }
+          $report = Get-Content -LiteralPath $reportFile -Raw | ConvertFrom-Json
+          if (-not $report.passed) { throw 'VSIX webview acceptance report indicated failure.' }
+
+          $summaryPath = Join-Path $outDir 'certification.json'
+          $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+          $summary | Add-Member -NotePropertyName vsixWebviewsVerified -NotePropertyValue $true
+          $summary | Add-Member -NotePropertyName vsixInstalledAssets -NotePropertyValue $report.installedAssets
+          $summary | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $summaryPath
+
       - name: Retain native package evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -155,6 +244,7 @@ jobs:
             artifacts/native-packages/${{ matrix.rid }}/
             release/*.zip
             release/*.vsix
+            release/*.dmg
             release/sha256sums.txt
             release/sbom.json
           if-no-files-found: error

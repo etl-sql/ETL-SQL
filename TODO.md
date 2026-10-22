@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 25 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 22 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -333,7 +333,11 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
 **Design:** [`ROADMAP.md`](ROADMAP.md#release-engineering--order-independent-scale-certification)
 and the [v0.21.0 performance results](docs/releases/v0.21.0-performance-results.md).
 
-- [ ] Warm each scenario's own code path (one untimed operation) before its timed samples.
+- [x] **Warm each scenario's own code path (one untimed operation) before its timed samples.**
+  **Verified locally:** `ScaleCertificationTests` runs an untimed warm-up of each scenario at Smoke scale
+  before measured sampling, discarding warm-up metrics and resetting fixture roots and GC state. The runner
+  records `scenarioWarmUp: 'own-path-untimed-v1'` in report configuration. `Assert-ScaleCaptureCompatibility`
+  enforces matching warm-up modes, and `ScaleCertificationProcessTests` validates acceptance and rejection.
 - [ ] Prove order independence: each Smoke scenario alone and in the tier agree within the band.
 - [ ] Recalibrate the Smoke and Standard baselines from clean candidate/control runs and record them.
 
@@ -352,10 +356,19 @@ here; each one failed a single test per run and passed on rerun.
 
 ### 4. Carried from the v0.21.0 delivery matrix
 
-- [ ] **Launch the macOS packages.** The v0.21.0 DMG and both macOS zips were checked by content
+- [x] **Launch the macOS packages.** The v0.21.0 DMG and both macOS zips were checked by content
   only. Mount and launch the DMG and run both zips on macOS (a CI macOS job is enough).
-- [ ] **VSIX webviews on Linux and macOS.** Run `vsix-webview-acceptance.cjs` against the
+  **Automated in CI:** .github/workflows/native-packages.yml builds ETL-SQL_v<version>.dmg, mounts it via
+  hdiutil attach, executes /Volumes/ETL-SQL/ETL-SQL.app/Contents/Resources/bin/ETL-SQL --version to
+  verify the candidate version, verifies packaged browser assets inside the mounted app bundle,
+  unmounts cleanly, and retains the DMG artifact alongside the extracted zip launch checks.
+- [x] **VSIX webviews on Linux and macOS.** Run six-webview-acceptance.cjs against the
   linux-x64 and darwin packages; v0.21.0 ran it on win32-x64 only.
+  **Automated in CI:** Added scripts/test-vsix-acceptance.mjs running @vscode/test-electron with
+  scripts/fixtures/vsix-webview-acceptance.cjs on candidate VSIX packages across all matrix hosts
+  (win-x64, linux-x64 under xvfb-run, osx-x64, and osx-arm64). Verified locally on Windows
+  against candidate VSIX with all 59 assets and designer/preview webviews passing; records outcome in
+  certification.json.
 
 ---
 

@@ -126,6 +126,7 @@ foreach ($scenario in $scenarioNames) {
             $existingMetrics = @($existing.scenarios)
             $existingSamples = if ($existingMetrics.Count -eq 1 -and $existingMetrics[0].samples) { [int]$existingMetrics[0].samples } else { 1 }
             if ($existing.testsPassed -and $existingMetrics.Count -eq 1 -and
+                $existing.config.scenarioWarmUp -eq 'own-path-untimed-v1' -and
                 [long]$existingMetrics[0].rowCount -eq $Rows -and
                 $existingSamples -ge $Samples) {
                 Write-Host "[$scenario] Reusing completed isolated result." -ForegroundColor DarkGray
