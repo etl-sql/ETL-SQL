@@ -75,6 +75,11 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   Portal step stopped reporting. Evidence upload remained pending. These measurements cover the
   final SHA only, not the full two-day release. Candidate-cut/tag timestamps, earlier candidates,
   step/queue attribution and the new workflow's hosted measurements remain required.
+  Timeline reports now sum measured setup/build/test/upload/other step time for new executions
+  only. Categories are explicitly inferred from names; ambiguous names stay other. JSON also
+  records per-job time outside steps only when all intervals are complete, ordered and bounded.
+  Tests cover carried retries, gaps, overlaps and missing timestamps. Exact runner queue time
+  and cold/warm hosted measurements remain outstanding.
 - [ ] **Find why the MSI runner is lost.** Both of the tag's MSI attempts lost their hosted runner
   about 10 minutes after the Portal-profile step's 35-minute watchdog was due. The step passes in
   about 5 minutes. Determine whether the script hangs or the watchdog's `taskkill /T` takes the runner
@@ -147,6 +152,11 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   job against `hosted-release-policy.json`, retaining original job attempts and failed-attempt
   history. Release saves the manifest as an artifact and attaches/attests it with the draft files.
   It is explicitly scoped to hosted CI/CodeQL; operator and complete package evidence are still open.
+  `local-release-bundle.mjs` now retains candidate-bound local state, nonempty phase logs and
+  declared artifacts in a new directory, with hashes and directory inventories. Verification
+  rejects wrong/stale candidates, changed/missing/unlisted files and incomplete inventories.
+  Portable-bundle regression fixtures pass and run in shared preflight. Hosted ingestion,
+  trusted provenance and the complete operator/package gate remain open.
 - [ ] **Move the local-only lanes into CI.** That covers Docker integration, the Portal shards, the HA
   soak contracts, the recovery drill and the final-candidate package checks. Then trim the release
   checklist to match.

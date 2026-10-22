@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { runChecks, sourceChecks, releaseAutomationChecks } from '../release-preflight.mjs';
 
-assert.equal(releaseAutomationChecks.length, 16);
+assert.equal(releaseAutomationChecks.length, 17);
 for (const check of releaseAutomationChecks) {
   assert.equal(sourceChecks.filter(candidate => candidate.id === check.id).length, 1);
 }

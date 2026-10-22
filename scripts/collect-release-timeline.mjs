@@ -8,6 +8,27 @@ function seconds(start, end) {
   const a = timestamp(start), b = timestamp(end);
   return a === null || b === null || b < a ? null : (b - a) / 1000;
 }
+export function stepCategory(name) {
+  const matches = [
+    ['upload', /\b(upload|attest|retain)\b/i],
+    ['setup', /\b(checkout|set up|setup|install|restore|download|prepare)\b/i],
+    ['build', /\b(build|compile|package|packaging|publish)\b/i],
+    ['test', /\b(test|tests|validate|validation|certification|coverage|lint|audit|verify|check|checks)\b/i],
+  ].filter(([, pattern]) => pattern.test(name ?? ''));
+  // Ambiguous names remain other; these are labels inferred from names, not runner telemetry.
+  return matches.length === 1 ? matches[0][0] : 'other';
+}
+
+export function jobStepTiming(job) {
+  const totals = { setup: 0, build: 0, test: 0, upload: 0, other: 0 };
+  for (const step of job.steps) if (step.durationSeconds !== null) totals[step.category] += step.durationSeconds;
+  const intervals = job.steps.map(step => [timestamp(step.startedAt), timestamp(step.completedAt)]).sort((a, b) => a[0] - b[0]);
+  const start = timestamp(job.startedAt), end = timestamp(job.completedAt);
+  const measured = job.durationSeconds !== null && intervals.length > 0 && intervals.every(([a, b], i) =>
+    a !== null && b !== null && b >= a && a >= start && b <= end && (i === 0 || a >= intervals[i - 1][1]));
+  return { inferredStepSeconds: totals, unmeasuredSteps: job.steps.filter(step => step.durationSeconds === null).length,
+    unattributedSeconds: measured ? job.durationSeconds - Object.values(totals).reduce((sum, value) => sum + value, 0) : null };
+}
 function api(endpoint, paginate = false) {
   const result = spawnSync('gh', ['api', ...(paginate ? ['--paginate', '--slurp'] : []), endpoint], {
     encoding: 'utf8', timeout: 60000, maxBuffer: 32 * 1024 * 1024, windowsHide: true,
@@ -40,13 +61,14 @@ export async function collectTimeline(repository, sha, runIds, query = api) {
           j.startedAt === job.started_at && j.completedAt === job.completed_at &&
           j.conclusion === job.conclusion && j.durationSeconds !== null);
         const executionAttempt = previous?.executionAttempt ?? number;
-        return { id: job.id, name: job.name, status: job.status, conclusion: job.conclusion,
+        const result = { id: job.id, name: job.name, status: job.status, conclusion: job.conclusion,
           executionAttempt, carriedForward: executionAttempt !== number,
           startedAt: job.started_at ?? null, completedAt: job.completed_at ?? null,
           durationSeconds: seconds(job.started_at, job.completed_at),
-          steps: (job.steps ?? []).map(step => ({ number: step.number, name: step.name, status: step.status,
+          steps: (job.steps ?? []).map(step => ({ number: step.number, name: step.name, category: stepCategory(step.name), status: step.status,
             conclusion: step.conclusion, startedAt: step.started_at ?? null, completedAt: step.completed_at ?? null,
             durationSeconds: seconds(step.started_at, step.completed_at) })) };
+        return { ...result, ...jobStepTiming(result) };
       });
       const executed = jobs.filter(j => !j.carriedForward);
       const starts = executed.map(j => timestamp(j.startedAt)).filter(n => n !== null);
@@ -61,6 +83,8 @@ export async function collectTimeline(repository, sha, runIds, query = api) {
         observedJobSpanSeconds: fullyMeasured ? seconds(first, last) : null,
         complete,
         measuredJobSeconds: executed.reduce((sum, j) => sum + (j.durationSeconds ?? 0), 0),
+        inferredStepSeconds: Object.fromEntries(['setup', 'build', 'test', 'upload', 'other'].map(category =>
+          [category, executed.reduce((sum, job) => sum + job.inferredStepSeconds[category], 0)])),
         carriedForwardJobs: jobs.length - executed.length,
         unmeasuredJobs: executed.filter(j => j.durationSeconds === null).length, jobs });
     }
@@ -77,6 +101,13 @@ export function timelineMarkdown(timeline) {
     '| :--- | :--- | :--- | ---: | ---: | ---: | ---: |'];
   for (const run of timeline.runs) for (const a of run.attempts) {
     lines.push(`| ${run.id} / ${a.number} | ${cell(a.conclusion ?? a.status)} | ${a.complete} | ${minutes(a.startDelaySeconds)} | ${minutes(a.observedJobSpanSeconds)} | ${minutes(a.measuredJobSeconds)} | ${a.unmeasuredJobs} |`);
+  }
+  lines.push('', '## Step time by inferred category', '',
+    'Categories are inferred from step names; ambiguous names remain other. Values sum measured step durations across new executions, including parallel work. They are not elapsed critical-path time. Unattributed time includes gaps outside steps, not a proven runner-queue delay.', '',
+    '| Run / attempt | Setup (min) | Build (min) | Test (min) | Upload (min) | Other (min) |',
+    '| :--- | ---: | ---: | ---: | ---: | ---: |');
+  for (const run of timeline.runs) for (const a of run.attempts) {
+    lines.push(`| ${run.id} / ${a.number} | ${['setup', 'build', 'test', 'upload', 'other'].map(category => minutes(a.inferredStepSeconds[category])).join(' | ')} |`);
   }
   lines.push('', '## Jobs and steps', '', '| Run / attempt | Job or step | Result | Minutes | Executed in attempt |', '| :--- | :--- | :--- | ---: | ---: |');
   for (const run of timeline.runs) for (const a of run.attempts) for (const job of a.jobs) {

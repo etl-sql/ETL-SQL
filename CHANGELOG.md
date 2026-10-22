@@ -14,6 +14,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Release timelines now break down measured step time by inferred setup/build/test/upload
+  categories without counting carried retry results again. Incomplete timing stays unknown.
+
+- Local certification evidence can now be retained and verified as a portable bundle with
+  candidate identity, original phase times, logs, artifact inventories and file hashes.
+
 - Release drivers no longer accept local-certification or CI-wait bypass flags. Both gates
   are mandatory before a driver can push a release tag.
 

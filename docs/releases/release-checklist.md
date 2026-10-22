@@ -473,6 +473,21 @@ Native Linux/macOS packaging and cross-platform certifications still require the
 - [ ] Final report shows **Status: Passed** — `release-validation/latest/state.json` and the run's
       `pre-release-report.md`.
 
+Retain a portable copy of the local phase evidence outside the candidate commit:
+
+```powershell
+$candidateSha = (git rev-parse HEAD).Trim()
+$bundlePath = "release-validation/local-evidence-$candidateSha-$(Get-Date -Format yyyyMMddHHmmss)"
+node scripts/local-release-bundle.mjs create release-validation/latest/state.json $candidateSha $bundlePath
+node scripts/local-release-bundle.mjs verify $bundlePath $candidateSha
+```
+
+The destination must be new. The bundle contains candidate-bound state, nonempty phase logs and
+declared artifacts, with file hashes and directory inventories. Verification rejects changed,
+missing or unlisted files and symbolic links. Hashes detect changed contents; trusted hosting or
+attestation must establish provenance. This bundle covers local phases only. It does not replace
+the operator/package evidence below or authorize publication, and hosted ingestion is still pending.
+
 ### Certification schedule and evidence ledger
 
 Use this schedule on every release. “Separate workflow” means the work may run in CI or on a

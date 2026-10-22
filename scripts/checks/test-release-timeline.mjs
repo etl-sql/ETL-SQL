@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { collectTimeline, timelineMarkdown } from '../collect-release-timeline.mjs';
+import { collectTimeline, timelineMarkdown, stepCategory, jobStepTiming } from '../collect-release-timeline.mjs';
 
 const sha = 'a'.repeat(40);
 const t = seconds => new Date(Date.UTC(2026, 9, 19) + seconds * 1000).toISOString();
@@ -38,6 +38,26 @@ assert.equal(retryWithCopy.jobs[0].executionAttempt, 1);
 assert.equal(retryWithCopy.observedJobSpanSeconds, 5);
 assert.equal(retryWithCopy.measuredJobSeconds, 5);
 assert.equal(retryWithCopy.startDelaySeconds, 5);
+assert.equal(retryWithCopy.inferredStepSeconds.other, 5, 'Carried steps must not inflate retry totals.');
+for (const [name, category] of [['Checkout', 'setup'], ['Compile extension', 'build'],
+  ['Run tests', 'test'], ['Upload diagnostics', 'upload'], ['Build and test', 'other'], ['Mystery command', 'other']]) {
+  assert.equal(stepCategory(name), category);
+}
+const timedJob = { startedAt: t(0), completedAt: t(30), durationSeconds: 30,
+  steps: [{ category: 'setup', startedAt: t(2), completedAt: t(5), durationSeconds: 3 },
+    { category: 'test', startedAt: t(8), completedAt: t(20), durationSeconds: 12 }] };
+assert.equal(jobStepTiming(timedJob).unattributedSeconds, 15);
+assert.equal(jobStepTiming(timedJob).inferredStepSeconds.test, 12);
+for (const mutate of [
+  j => { j.steps[1].startedAt = t(4); },
+  j => { j.steps[1].completedAt = t(35); },
+  j => { j.steps[1].completedAt = null; j.steps[1].durationSeconds = null; },
+  j => { j.steps = []; },
+]) {
+  const changed = structuredClone(timedJob); mutate(changed);
+  assert.equal(jobStepTiming(changed).unattributedSeconds, null);
+}
+assert.match(timelineMarkdown(report), /inferred from step names/);
 const incomplete = structuredClone(fixture);
 incomplete['repos/owner/repo/actions/runs/123/attempts/2'].status = 'in_progress';
 incomplete['repos/owner/repo/actions/runs/123/attempts/2/jobs?per_page=100'][0].jobs = [job(3, 105, null)];

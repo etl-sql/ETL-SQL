@@ -22,7 +22,7 @@ sourceChecks.push({ id: 'installer-sources', command: 'pwsh', args: ['-NoProfile
 // process so a failing policy test cannot hide the other source or recovery findings.
 export const releaseAutomationChecks = [
   'nightly-release', 'workflows', 'msi-candidate', 'certification-process', 'release-preflight', 'release-versions',
-  'installer-sources', 'release-evidence', 'release-driver-gates', 'release-run-wait', 'release-tag', 'release-timeline', 'ci-impact', 'browser-shards', 'hosted-release-evidence', 'release-certification',
+  'installer-sources', 'release-evidence', 'local-release-bundle', 'release-driver-gates', 'release-run-wait', 'release-tag', 'release-timeline', 'ci-impact', 'browser-shards', 'hosted-release-evidence', 'release-certification',
 ].map(name => ({ id: `test-${name}`, command: process.execPath, args: [`scripts/checks/test-${name}.mjs`] }));
 sourceChecks.push(...releaseAutomationChecks);
 // Ordinary branch work may keep draft notes. Tag publication must use finalized metadata.
