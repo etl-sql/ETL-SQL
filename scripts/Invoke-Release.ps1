@@ -51,8 +51,6 @@ param(
     [string]$Branch = "main",
 
     [switch]$DryRun,
-    [switch]$SkipPreReleaseGate,
-    [switch]$SkipCiWait,
     [switch]$PruneMergedBranches,
     [switch]$SignTag,
     [int]$CiTimeoutMinutes = 120,
@@ -147,15 +145,12 @@ if ($LASTEXITCODE -ne 0) { Fail 'Finalize release metadata before tagging.' }
 # ---- 2. pre-release validation gate --------------------------------------
 Write-Step "Pre-release validation gate"
 $statePath = Join-Path $RepoRoot "release-validation/latest/state.json"
-if ($SkipPreReleaseGate) {
-    Write-WarnLine "skipped (-SkipPreReleaseGate)"
-}
-elseif (-not (Test-Path $statePath)) {
-    Fail "No pre-release state at $statePath. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale first (or -SkipPreReleaseGate)."
+if (-not (Test-Path $statePath)) {
+    Fail "No pre-release state at $statePath. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale first."
 }
 else {
     Test-Tool node
-    & node (Join-Path $ScriptRoot 'check-release-evidence.mjs') $statePath
+    & node (Join-Path $ScriptRoot 'check-release-evidence.mjs') $statePath $localSha
     if ($LASTEXITCODE -ne 0) { Fail 'Local evidence is incomplete. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale without quick/skip/forced-resume options.' }
     $state = Get-Content $statePath -Raw | ConvertFrom-Json
     if ($state.status -ne "Passed") {
@@ -249,10 +244,7 @@ function Wait-ForRun {
     $runId = & node (Join-Path $ScriptRoot 'wait-release-run.mjs') $Workflow $Sha $runRef $TimeoutMinutes
     return @{ Id = ($runId -join '').Trim(); Ok = $LASTEXITCODE -eq 0; Conclusion = 'see run diagnostics above' }
 }
-if ($SkipCiWait) {
-    Write-WarnLine "CI wait skipped (-SkipCiWait)"
-}
-elseif ($DryRun) {
+if ($DryRun) {
     Write-Info "[dry-run] would start/resume full release certification on $($localSha.Substring(0,8))"
 }
 else {

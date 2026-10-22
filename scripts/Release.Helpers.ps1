@@ -26,6 +26,10 @@ function Test-PreReleasePhaseReusable {
         -not [string]::IsNullOrWhiteSpace($PreviousPhase.log) -and
         (Test-Path -LiteralPath $PreviousPhase.log -PathType Leaf)
     if (-not $eligible -or (Get-Item -LiteralPath $PreviousPhase.log).Length -eq 0) { return $false }
+    $completed = [datetimeoffset]::MinValue
+    if (-not [datetimeoffset]::TryParse([string]$PreviousPhase.completedAt, [ref]$completed)) { return $false }
+    $now = [datetimeoffset]::UtcNow
+    if ($completed -gt $now -or $completed -lt $now.AddDays(-7)) { return $false }
     foreach ($artifact in $PreviousPhase.artifacts) {
         if (-not (Test-Path -LiteralPath $artifact)) { return $false }
     }

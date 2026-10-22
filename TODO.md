@@ -205,6 +205,9 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
     Local evidence now explicitly requires Standard scale and all 44 mandatory phases, even when
     a saved plan omits one. Tests compare policy with the producer's actual full plan and remove
     each required phase in turn; both release drivers reject truncated plans.
+    Both release drivers now reject local-gate and CI-wait bypass flags at argument parsing.
+    Executed CLI fixtures verify rejection before driver work; direct tag publication still needs
+    the complete hosted operator/package gate.
 - [x] **Report all cheap failures in one preflight.** Move independent syntax, metadata, workflow,
   path-map and static installer-source checks into a shared local/CI preflight that collects all
   failures before exiting. Run it before expensive packaging and installation. Keep checks requiring
@@ -279,6 +282,15 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   Stale local fingerprints can no longer be overridden with the release driver's force flag.
   Both drivers reject stale evidence even when the former override variable is supplied by the
   regression harness. Forced pre-release resumes remain diagnostic-only.
+  The pre-release state writer now rechecks the source fingerprint before recording success.
+  Source drift or a failed fingerprint lookup persists a failed state and stops certification;
+  executed state-writer fixtures cover unchanged, changed and unavailable identities.
+  Both drivers also require the saved commit and clean-tree fingerprint to match the candidate,
+  with a result timestamp in the past seven days. Wrong-commit, stale/future/missing timestamp
+  and dirty-fingerprint regressions pass. Phase records now retain their original completion time
+  across resumes. Reuse and the release gate both reject phases older than seven days or with
+  missing/future times; an executed resume fixture verifies success is reused without refreshing
+  its timestamp or replacing its log.
 - [ ] **Rehearse failure recovery before the next release.** On a disposable candidate, exercise a
   failed test shard, interrupted MSI certification, missing artifact and failed publication upload.
   Require useful diagnostics, rejection of incomplete evidence, and recovery without repeating

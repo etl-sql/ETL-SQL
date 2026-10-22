@@ -39,6 +39,7 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = $env:FIXTURE_ROOT
 $ScriptRoot = $env:SOURCE_SCRIPTS
 $Force = $env:TEST_FORCE -eq '1'
+$localSha = (& git rev-parse HEAD).Trim()
 function Write-Step($m) {}
 function Write-Ok($m) {}
 function Write-WarnLine($m) {}
@@ -52,6 +53,7 @@ Write-Output 'GATE_ACCEPTED'
   const bashHarness = `set -euo pipefail
 FORCE="$TEST_FORCE"
 SKIP_GATE=0
+LOCAL_SHA="$(git rev-parse HEAD)"
 step() { :; }
 ok() { :; }
 warn() { :; }
@@ -67,9 +69,20 @@ echo GATE_ACCEPTED
   assert.equal(producer, createHash('sha256').update(head).digest('hex'));
   const names = requiredLocalPhases;
   const full = { status: 'Passed', configuration: 'Release', evidenceSchemaVersion: 1, sourceFingerprint: producer,
+    commitHash: head, generatedAt: new Date().toISOString(),
     scope: { quick: false, forceResume: false, skipNode: false, skipScale: false, includeSlt: true, includeDockerIntegration: true, includeStandardScale: true },
-    plannedPhases: names, phases: names.map(name => ({ name, status: 'Passed' })) };
+    plannedPhases: names, phases: names.map(name => ({ name, status: 'Passed', completedAt: new Date(Date.now() - 1000).toISOString() })) };
   const bash = process.platform === 'win32' && existsSync('C:/Program Files/Git/bin/bash.exe') ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
+  for (const flag of ['-SkipPreReleaseGate', '-SkipCiWait']) {
+    const rejected = execute('pwsh', ['-NoProfile', '-File', path.join(scripts, 'Invoke-Release.ps1'), '-Version', '0.22.0', flag]);
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stderr, /parameter cannot be found/);
+  }
+  for (const flag of ['--skip-prerelease-gate', '--skip-ci-wait']) {
+    const rejected = execute(bash, [path.join(scripts, 'invoke-release.sh').replaceAll('\\', '/'), '--version', '0.22.0', flag]);
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stderr, /Unknown argument/);
+  }
   writeFileSync(path.join(root, 'status-failure.ps1'), `
 function git { $global:LASTEXITCODE = 128 }
 function Fail($message) { throw $message }
@@ -91,6 +104,9 @@ throw 'Status failure was accepted.'
   for (const [command, args] of [['pwsh', ['-NoProfile', '-File', 'gate.ps1']], [bash, ['gate.sh']]]) {
     for (const [label, mutate, force, accepted] of [
       ['full', () => {}, false, true],
+      ['wrong-commit', s => { s.commitHash = 'b'.repeat(40); }, false, false],
+      ['expired', s => { s.generatedAt = '2020-01-01T00:00:00Z'; }, false, false],
+      ['expired-phase', s => { s.phases[0].completedAt = '2020-01-01T00:00:00Z'; }, false, false],
       ['quick', s => { s.scope.quick = true; }, false, false],
       ['standard-scale-omitted', s => { delete s.scope.includeStandardScale; }, false, false],
       ['shortened-plan', s => { s.plannedPhases = s.plannedPhases.filter(name => name !== 'Coverage gate'); s.phases = s.phases.filter(phase => phase.name !== 'Coverage gate'); }, false, false],

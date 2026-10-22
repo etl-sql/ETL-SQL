@@ -16,13 +16,17 @@ A physical, copy-pasteable checklist for cutting a release. It wraps the real sc
 > A branch with the same name is preserved; release operations address the tag by its full ref.
 >
 > `Test-PreRelease.ps1` does not yet execute or validate every certification listed below, and
-> Both release drivers check saved scope and planned phase results as well as the source fingerprint.
+> both release drivers check saved scope and planned phase results as well as the source fingerprint.
+> Evidence must name the exact candidate commit, describe its clean checkout and have a result
+> timestamp within the past seven days. Future or missing timestamps fail the gate.
+> Every phase also needs its original completion timestamp within that window. Resume preserves
+> completion times and reruns expired phases or older records without timestamps.
 > They reject legacy states without scope, `-Quick`, skipped Node/scale checks, omitted SLT/Docker
 > lanes, forced-resume evidence and incomplete phase results. Standard scale and every mandatory
 > phase are required independently of the saved plan, so a shortened plan cannot pass. Run
 > `Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale` in Release configuration. A normal
-> resume cannot reuse a legacy or forced-resume state; start a fresh run. Explicit gate-skip and
-> fingerprint-override switches remain operator overrides, not certification evidence.
+> resume cannot reuse a legacy or forced-resume state; start a fresh run. Release drivers provide
+> no local-gate or CI-wait bypass. Source fingerprints cannot be overridden.
 > CI/CodeQL job evidence is enforced by Release; the complete local/operator evidence manifest is
 > not yet enforced. Complete every applicable checkbox before tagging;
 > a green local gate alone is necessary but not sufficient.

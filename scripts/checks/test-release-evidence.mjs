@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { evidenceFindings, requiredLocalPhases } from '../check-release-evidence.mjs';
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { evidenceFindings, candidateFindings, requiredLocalPhases } from '../check-release-evidence.mjs';
+import { createHash } from 'node:crypto';
 
 const names = requiredLocalPhases;
 const full = {
@@ -10,6 +14,28 @@ const full = {
   plannedPhases: names, phases: names.map(name => ({ name, status: 'Passed' })),
 };
 assert.deepEqual(evidenceFindings(full), []);
+const sha = 'a'.repeat(40);
+const now = Date.parse('2026-10-21T12:00:00Z');
+const candidate = { ...full, commitHash: sha, sourceFingerprint: createHash('sha256').update(sha).digest('hex'),
+  phases: full.phases.map(phase => ({ ...phase, completedAt: new Date(now).toISOString() })),
+  generatedAt: new Date(now).toISOString() };
+assert.deepEqual(candidateFindings(candidate, sha, now), []);
+for (const mutate of [
+  s => { s.commitHash = 'b'.repeat(40); },
+  s => { s.sourceFingerprint = 'dirty'; },
+  s => { delete s.generatedAt; },
+  s => { s.generatedAt = 'invalid'; },
+  s => { s.generatedAt = new Date(now + 1).toISOString(); },
+  s => { s.generatedAt = new Date(now - 7 * 24 * 60 * 60 * 1000 - 1).toISOString(); },
+  s => { delete s.phases[0].completedAt; },
+  s => { s.phases[0].completedAt = new Date(now - 8 * 24 * 60 * 60 * 1000).toISOString(); },
+  s => { s.phases[0].completedAt = new Date(now + 1).toISOString(); },
+]) {
+  const state = structuredClone(candidate);
+  mutate(state);
+  assert.ok(candidateFindings(state, sha, now).length);
+}
+assert.ok(candidateFindings(candidate, 'short', now).length);
 // Evaluate only the pure plan function from the producer; never run its validation/build body.
 const plan = spawnSync('pwsh', ['-NoProfile', '-Command', `
 $ErrorActionPreference = 'Stop'
@@ -60,4 +86,50 @@ for (const mutate of [
   assert.ok(evidenceFindings(state).length);
 }
 assert.ok(evidenceFindings(null).length);
+// Execute the real state writer in isolation: changing sources or failed identity lookup
+// must persist Failed before throwing, even when every phase was successful.
+const fixture = mkdtempSync(path.join(os.tmpdir(), 'release-state-'));
+try {
+  const saved = spawnSync('pwsh', ['-NoProfile', '-Command', `
+$ErrorActionPreference = 'Stop'
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($env:PLAN_SCRIPT, [ref]$null, [ref]$null)
+$writer = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Save-State' }, $true)
+. ([scriptblock]::Create($writer.Extent.Text))
+$LatestDir = $env:STATE_FIXTURE
+$StatePath = Join-Path $LatestDir 'state.json'
+function git { $global:LASTEXITCODE = 0; return ('a' * 40) }
+function Get-PlannedPreReleasePhases { [pscustomobject]@{ Phase = 'fixture' } }
+function Get-SourceFingerprint {
+    if ($script:identityCase -eq 'unavailable') { throw 'Cannot fingerprint candidate.' }
+    return $script:identityCase
+}
+foreach ($case in @('original', 'changed', 'unavailable')) {
+    $script:identityCase = $case
+    $rejected = $false
+    try { Save-State -Results @(@{ name = 'fixture'; status = 'Passed' }) -Status Passed -Fingerprint original }
+    catch { $rejected = $true }
+    $saved = Get-Content $StatePath -Raw | ConvertFrom-Json
+    $expected = if ($case -eq 'original') { 'Passed' } else { 'Failed' }
+    if ($saved.status -ne $expected -or $rejected -ne ($expected -eq 'Failed')) { throw "Identity case $case did not persist and report $expected." }
+    if ($saved.sourceFingerprint -ne 'original') { throw 'Original candidate identity was overwritten.' }
+}
+. (Join-Path (Split-Path -Parent $env:PLAN_SCRIPT) 'Release.Helpers.ps1')
+$phaseRunner = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-LoggedPhase' }, $true)
+. ([scriptblock]::Create($phaseRunner.Extent.Text))
+function Save-State {}
+function Get-FailedPreReleasePrerequisites {}
+$Resume = $true
+$log = Join-Path $LatestDir 'original.log'
+'original output' | Set-Content $log
+$completed = [datetimeoffset]::UtcNow.AddDays(-1).ToString('o')
+$previous = @{ name='fixture'; command='same'; status='Passed'; completedAt=$completed; log=$log; artifacts=@() }
+$results = [System.Collections.Generic.List[object]]::new()
+Invoke-LoggedPhase -Name fixture -Command same -Action { throw 'Successful phase was rerun.' } -PreviousPhaseMap @{fixture=$previous} -Fingerprint original -Results $results
+if ($results.Count -ne 1 -or $results[0].completedAt -cne $completed -or $results[0].log -ne $log) { throw 'Resume changed original execution evidence.' }
+`], { encoding: 'utf8', windowsHide: true, env: { ...process.env, STATE_FIXTURE: fixture,
+    PLAN_SCRIPT: fileURLToPath(new URL('../Test-PreRelease.ps1', import.meta.url)) } });
+  assert.equal(saved.status, 0, saved.stdout + saved.stderr);
+} finally {
+  rmSync(fixture, { recursive: true, force: true });
+}
 console.log('Local evidence scope: full results pass; partial, legacy, forced, missing and unsuccessful evidence fails.');

@@ -409,6 +409,18 @@ function Save-State {
     )
 
     New-Item -ItemType Directory -Force -Path $LatestDir | Out-Null
+
+    $identityError = $null
+    if ($Status -eq 'Passed') {
+        try {
+            if ((Get-SourceFingerprint) -cne $Fingerprint) {
+                throw 'Candidate sources changed during validation. Rerun certification on the frozen candidate.'
+            }
+        } catch {
+            $identityError = $_.Exception.Message
+            $Status = 'Failed'
+        }
+    }
     
     $commitHash = ""
     try { $commitHash = (& git rev-parse HEAD 2>$null) -join "" } catch { }
@@ -439,6 +451,7 @@ function Save-State {
     }
 
     $state | ConvertTo-Json -Depth 8 | Set-Content -Path $StatePath -Encoding UTF8
+    if ($identityError) { throw $identityError }
 }
 
 function Get-PreReleasePhaseDependencies {
@@ -626,9 +639,10 @@ function Invoke-LoggedPhase {
                 command = $Command
                 status = "Passed"
                 elapsedSeconds = 0
+                completedAt = $previous.completedAt
                 log = $previous.log
                 artifacts = @($previous.artifacts)
-                note = "Reused by -Resume; matching command passed for this source fingerprint and its log exists."
+                note = "Reused by -Resume; matching command passed within seven days for this source fingerprint and its log exists."
             })
             $hasAnyFailure = $Results | Where-Object { $_.status -eq "Failed" }
             Save-State -Results $Results.ToArray() -Status $(if ($hasAnyFailure) { "Failed" } else { "Running" }) -Fingerprint $Fingerprint
@@ -702,6 +716,7 @@ function Invoke-LoggedPhase {
         command = $Command
         status = $status
         elapsedSeconds = [Math]::Round($timer.Elapsed.TotalSeconds, 2)
+        completedAt = [datetimeoffset]::UtcNow.ToString('o')
         log = $phaseLog
         artifacts = @($Artifacts)
         note = $note

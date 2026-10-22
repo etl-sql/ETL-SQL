@@ -14,6 +14,18 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Release drivers no longer accept local-certification or CI-wait bypass flags. Both gates
+  are mandatory before a driver can push a release tag.
+
+- Pre-release resume preserves original phase completion times and reuses only results from
+  the past seven days. The release gate rejects missing, future or expired phase timestamps.
+
+- Release drivers validate the saved evidence commit, clean-tree fingerprint and result age
+  against the candidate, rejecting results older than seven days or dated in the future.
+
+- Pre-release validation rechecks candidate sources before saving success. Source drift or an
+  unavailable fingerprint now saves a failed result and rejects certification.
+
 - Docker integration CI now bounds restore/build, image pulls, sandbox setup and tests, retaining
   per-attempt process logs. Package installation steps also have explicit time limits.
 

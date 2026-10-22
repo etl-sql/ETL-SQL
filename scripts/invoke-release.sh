@@ -16,8 +16,6 @@
 #   --remote NAME              git remote (default: origin)
 #   --branch NAME              release branch (default: main)
 #   --dry-run                  print mutating actions without performing them
-#   --skip-prerelease-gate     do not require a Passed Test-PreRelease state
-#   --skip-ci-wait             do not wait for CI before tagging
 #   --prune-merged-branches    after a verified release: prune stale remote-tracking refs,
 #                              safe-delete LOCAL branches merged into --branch, list merged remote
 #                              branches (never touches main / dev / release/*)
@@ -33,8 +31,6 @@ NOTES_FILE=""
 REMOTE="origin"
 BRANCH="main"
 DRY_RUN=0
-SKIP_GATE=0
-SKIP_CI=0
 PRUNE=0
 SIGN_TAG=0
 CI_TIMEOUT=120
@@ -49,8 +45,6 @@ while [ $# -gt 0 ]; do
     --remote) REMOTE="$2"; shift 2 ;;
     --branch) BRANCH="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
-    --skip-prerelease-gate) SKIP_GATE=1; shift ;;
-    --skip-ci-wait) SKIP_CI=1; shift ;;
     --prune-merged-branches) PRUNE=1; shift ;;
     --sign-tag) SIGN_TAG=1; shift ;;
     --ci-timeout-minutes) CI_TIMEOUT="$2"; shift 2 ;;
@@ -118,13 +112,11 @@ node scripts/check-release-metadata.mjs "$TAG" || die "Finalize release metadata
 # ---- 2. pre-release gate --------------------------------------------------
 step "Pre-release validation gate"
 STATE="release-validation/latest/state.json"
-if [ "$SKIP_GATE" -eq 1 ]; then
-  warn "skipped (--skip-prerelease-gate)"
-elif [ ! -f "$STATE" ]; then
-  die "No pre-release state at $STATE. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale first (or --skip-prerelease-gate)."
+if [ ! -f "$STATE" ]; then
+  die "No pre-release state at $STATE. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale first."
 else
   command -v node >/dev/null 2>&1 || die "Node is required to validate local release evidence."
-  node scripts/check-release-evidence.mjs "$STATE" || die "Local evidence is incomplete. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale without quick/skip/forced-resume options."
+  node scripts/check-release-evidence.mjs "$STATE" "$LOCAL_SHA" || die "Local evidence is incomplete. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale without quick/skip/forced-resume options."
   if command -v jq >/dev/null 2>&1; then
     STATUS="$(jq -r '.status' "$STATE")"
     SAVED_FP="$(jq -r '.sourceFingerprint' "$STATE")"
@@ -205,9 +197,7 @@ wait_for_run() { # workflow sha timeout_min label -> run ID on stdout, diagnosti
   if [ "$1" = 'ci.yml' ] || [ "$1" = 'release-certification.yml' ]; then run_ref="$BRANCH"; fi
   node scripts/wait-release-run.mjs "$1" "$2" "$run_ref" "$3"
 }
-if [ "$SKIP_CI" -eq 1 ]; then
-  warn "CI wait skipped (--skip-ci-wait)"
-elif [ "$DRY_RUN" -eq 1 ]; then
+if [ "$DRY_RUN" -eq 1 ]; then
   info "[dry-run] would start/resume full release certification on ${LOCAL_SHA:0:8}"
 else
   wait_for_run ci.yml "$LOCAL_SHA" "$CI_TIMEOUT" CI >/dev/null || die "Regular CI did not pass; resolve its failures before full certification."

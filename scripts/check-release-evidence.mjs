@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 // Required release scope, checked against the producer's full plan by the regression fixture.
 // Additional planned phases (such as installer builds) must pass too.
@@ -50,13 +51,35 @@ export function evidenceFindings(state) {
   return errors;
 }
 
+export function candidateFindings(state, candidateSha, now = Date.now()) {
+  const errors = evidenceFindings(state);
+  if (!/^[a-f0-9]{40}$/.test(candidateSha ?? '')) errors.push('Expected candidate must be a full Git SHA.');
+  else {
+    if (state?.commitHash !== candidateSha) errors.push('Local evidence commit does not match the candidate.');
+    const expected = createHash('sha256').update(candidateSha).digest('hex');
+    if (state?.sourceFingerprint !== expected) errors.push('Local evidence must describe the clean candidate checkout.');
+  }
+  const generated = Date.parse(state?.generatedAt);
+  if (typeof state?.generatedAt !== 'string' || !Number.isFinite(generated) || generated > now || now - generated > 7 * 24 * 60 * 60 * 1000) {
+    errors.push('Local evidence must have a valid timestamp within the past seven days.');
+  }
+  for (const phase of Array.isArray(state?.phases) ? state.phases : []) {
+    const completed = Date.parse(phase?.completedAt);
+    if (typeof phase?.completedAt !== 'string' || !Number.isFinite(completed) || completed > now ||
+        completed > generated || now - completed > 7 * 24 * 60 * 60 * 1000) {
+      errors.push(`Phase needs its original completion timestamp within the past seven days: ${phase?.name}`);
+    }
+  }
+  return errors;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    if (process.argv.length !== 3) throw new Error('Usage: node scripts/check-release-evidence.mjs <state.json>');
+    if (process.argv.length !== 4) throw new Error('Usage: node scripts/check-release-evidence.mjs <state.json> <candidate-sha>');
     const state = JSON.parse(readFileSync(process.argv[2], 'utf8').replace(/^\uFEFF/, ''));
-    const findings = evidenceFindings(state);
+    const findings = candidateFindings(state, process.argv[3]);
     for (const finding of findings) console.error(`FAIL ${finding}`);
     process.exitCode = findings.length ? 1 : 0;
-    if (!findings.length) console.log('Local evidence scope passed. Candidate identity and external certifications require their own gates.');
+    if (!findings.length) console.log('Local evidence scope, clean candidate identity and freshness passed. External certifications require their own gates.');
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
