@@ -31,6 +31,19 @@ A physical, copy-pasteable checklist for cutting a release. It wraps the real sc
 > not yet enforced. Complete every applicable checkbox before tagging;
 > a green local gate alone is necessary but not sufficient.
 
+Release now requires the DEB installed-upgrade workflow and promotes its retained package by
+artifact ID. Candidate SHA, version, input hashes, successful receipt and package bytes must match;
+the downloaded draft DEB is checked again before attestation. Keep the manual installed-package
+checks below until hosted acceptance is recorded. Discovery can reuse successful dedicated or
+nightly DEB certification for the same SHA and current predecessor within seven days. It verifies
+the installed job and its receipt, including successful executions carried into retries.
+The same candidate artifact retains the Linux ZIP and VSIX. Their hashes are recorded before
+installed DEB certification, bound into its receipt, and checked at promotion and before attestation.
+Release uploads those retained bytes without a separate Linux publish build. The installed tests
+certify the DEB; ZIP/VSIX hash checks prove artifact identity, not installed-package coverage.
+MSI discovery also considers nightly certification for the same candidate and predecessor. It
+requires complete run/artifact inventories and rechecks the selected run for concurrent retries.
+
 Replace `x.y.z` with the target version (current target: **0.22.0**) throughout.
 
 ---
@@ -331,7 +344,7 @@ metadata changes after certification: a new commit requires new evidence. The re
 commits. Inspect the discovery job's selection log to confirm the pre-tag run was reused.
 
 Release promotes the selected installer artifact ID. There is no separate MSI build in Windows ZIP/VSIX packaging and no second
-standalone tag-triggered MSI run. Linux, macOS and Windows ZIP/VSIX packaging can run while MSI
+standalone tag-triggered MSI run. Linux candidate certification and macOS/Windows ZIP/VSIX packaging can run while MSI
 certification proceeds. Promotion uploads `msi-certification-inputs.json` alongside the MSI; the
 attestation job downloads the draft MSI and checks its bytes against that manifest before it can
 attest and publish. A failed or skipped required certification blocks promotion and publication.

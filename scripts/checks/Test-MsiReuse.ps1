@@ -22,6 +22,12 @@ function Assert-ReceiptRejected($Receipt, $Artifacts) {
     if (-not $rejected) { throw 'Invalid certification receipt/artifact was accepted.' }
 }
 if (-not (Test-MsiReusableRun -Run (New-Run) -SourceSha $sha -Repository $repo -Now $now)) { throw 'Valid run rejected.' }
+$nightly = New-Run
+$nightly.path = '.github/workflows/nightly-release.yml'
+$nightly.event = 'workflow_dispatch'
+if (-not (Test-MsiReusableRun -Run $nightly -SourceSha $sha -Repository $repo -Now $now)) { throw 'Valid nightly run rejected.' }
+$nightly.event = 'push'
+if (Test-MsiReusableRun -Run $nightly -SourceSha $sha -Repository $repo -Now $now) { throw 'Unexpected nightly trigger accepted.' }
 $cases = @(
     @{ head_sha = ('b' * 40) }, @{ path = '.github/workflows/other.yml' },
     @{ head_repository = @{ full_name = 'fork/etl-sql' } }, @{ head_branch = 'feature/test' },

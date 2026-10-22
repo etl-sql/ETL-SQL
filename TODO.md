@@ -187,6 +187,25 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   current predecessor and retained artifact ID, with a seven-day freshness limit. PR/fork evidence,
   stale attempts and incomplete receipts cannot satisfy reuse. Hosted cross-run/retry evidence
   remains required before closure.
+  Release now also calls DEB installed-upgrade certification and promotes its retained candidate
+  instead of rebuilding the DEB in the Linux ZIP job. A shared verifier binds candidate SHA,
+  version, input hashes, artifact ID and fresh successful receipt to the published bytes; Release
+  rechecks the downloaded draft before attestation. Actionlint and rejection fixtures pass.
+  Discovery now selects same-repository, exact-SHA dedicated or nightly DEB certification within
+  seven days, requiring the current predecessor, retained artifact and successful installed job.
+  Carried success can retain its original receipt across retries when its timestamp matches the
+  successful execution window. Newer failed runs, missing artifacts, skipped jobs and concurrent
+  retries are rejected. Fixtures pass; other package promotion and hosted recovery proof remain open.
+  Linux candidate builds now retain ZIP and VSIX alongside the DEB. Their hashes are bound into
+  the installation receipt and checked during promotion and again against the downloaded draft.
+  The separate Linux publication build is removed. Executed CLI fixtures reject changed or missing
+  packages; hosted timing and Windows/macOS package promotion remain open.
+  Attestation/publication explicitly allow deliberately skipped certification ancestors after
+  successful promotion. Regression fixtures evaluate the workflow's actual conditions for fresh
+  certification, reuse, failed/skipped prerequisites and cancellation; hosted proof remains open.
+  MSI discovery now also reuses exact-candidate nightly certification, checking complete run/artifact
+  inventories and rechecking the run before selection to reject concurrent retries. Executed fake-CLI
+  fixtures cover nightly reuse, empty inventories, incomplete pagination and changed attempts.
 - [ ] **Split MSI build and certification into resumable jobs.** Persist the built MSI before any
   install test. Run workstation and Portal certification on separate clean runners against that
   artifact and one pinned previous-release MSI. A Portal failure should allow only that job to
@@ -223,7 +242,7 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   failures before exiting. Run it before expensive packaging and installation. Keep checks requiring
   a built MSI immediately after the build. Inject two independent errors and require both in the
   same report; measure a target of under five minutes for the source-only checks.
-  **Verified locally:** `node scripts/release-preflight.mjs` collects ten source checks and sixteen
+  **Verified locally:** `node scripts/release-preflight.mjs` collects ten source checks and nineteen
   release-automation fixtures before restore/build. Each fixture has its own log and deadline,
   covering artifact reuse, timeout/recovery and release gates without a hosted run. It runs
   with at most three child processes, per-check deadlines and individual logs plus `summary.json`.

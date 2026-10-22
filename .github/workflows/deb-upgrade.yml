@@ -7,6 +7,11 @@ on:
       source_sha:
         required: true
         type: string
+    outputs:
+      artifact_id:
+        value: ${{ jobs.installed-upgrade.outputs.artifact_id }}
+      receipt_id:
+        value: ${{ jobs.installed-upgrade.outputs.receipt_id }}
 
 permissions:
   contents: read
@@ -48,7 +53,7 @@ jobs:
         shell: pwsh
         timeout-minutes: 45
         run: |
-          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/publish-release.ps1 -ScriptArguments @('-Platforms', 'linux-x64', '-SkipVsix') -EvidenceDirectory release-validation/deb/publish -TimeoutSeconds 2400
+          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/publish-release.ps1 -ScriptArguments @('-Platforms', 'linux-x64') -EvidenceDirectory release-validation/deb/publish -TimeoutSeconds 2400
       - name: Build package and resolve predecessor
         shell: pwsh
         timeout-minutes: 15
@@ -72,12 +77,18 @@ jobs:
           bash -euo pipefail scripts/build-linux-packages.sh $version release/linux-x64/bin
           if ($LASTEXITCODE -ne 0) { throw 'DEB build failed.' }
           Move-Item "etl-sql_${version}_amd64.deb" candidate/current.deb
+          Copy-Item "release/ETL-SQL-v$version-linux-x64.zip" candidate/current.zip
+          $vsix = @(Get-ChildItem release -Filter '*-linux-x64.vsix' -File)
+          if ($vsix.Count -ne 1) { throw 'Expected exactly one Linux VSIX.' }
+          Copy-Item -LiteralPath $vsix[0].FullName -Destination candidate/current.vsix
           $sha = (git rev-parse HEAD).Trim()
           if ($LASTEXITCODE -ne 0 -or $sha -cne $env:CANDIDATE_SHA) { throw 'Candidate SHA mismatch.' }
           @{
             schemaVersion = 1; sourceSha = $sha; version = $version; previousTag = $previous
             currentSha256 = (Get-FileHash candidate/current.deb -Algorithm SHA256).Hash
             previousSha256 = (Get-FileHash candidate/previous.deb -Algorithm SHA256).Hash
+            linuxZipSha256 = (Get-FileHash candidate/current.zip -Algorithm SHA256).Hash
+            linuxVsixSha256 = (Get-FileHash candidate/current.vsix -Algorithm SHA256).Hash
           } | ConvertTo-Json | Set-Content candidate/candidate.json
       - name: Retain immutable candidate pair
         id: artifact
@@ -100,6 +111,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    outputs:
+      artifact_id: ${{ needs.build.outputs.artifact_id }}
+      receipt_id: ${{ steps.receipt.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -120,6 +134,10 @@ jobs:
           foreach ($name in @('current', 'previous')) {
             if ((Get-FileHash "candidate/$name.deb" -Algorithm SHA256).Hash -cne $receipt."${name}Sha256") { throw "Candidate hash mismatch: $name" }
           }
+          foreach ($extension in @('zip', 'vsix')) {
+            $key = if ($extension -eq 'zip') { 'linuxZipSha256' } else { 'linuxVsixSha256' }
+            if ((Get-FileHash "candidate/current.$extension" -Algorithm SHA256).Hash -cne $receipt.$key) { throw "Candidate hash mismatch: $extension" }
+          }
       - name: Prepare asset comparison sources
         run: |
           npm ci --prefix scripts/typecheck
@@ -138,14 +156,19 @@ jobs:
             "$PWD/release-validation/deb/installed" 2>&1 | tee release-validation/deb/console.log
       - name: Record successful certification
         shell: pwsh
+        env:
+          CANDIDATE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
         run: |
           $receipt = Get-Content candidate/candidate.json -Raw | ConvertFrom-Json
           $receipt | Add-Member status Passed
           $receipt | Add-Member scope 'DEB fresh install, installed upgrade, rollback and purge'
           $receipt | Add-Member runId $env:GITHUB_RUN_ID
           $receipt | Add-Member runAttempt $env:GITHUB_RUN_ATTEMPT
+          $receipt | Add-Member artifactId $env:CANDIDATE_ARTIFACT_ID
+          $receipt | Add-Member completedAt ([datetimeoffset]::UtcNow.ToString('o'))
           $receipt | ConvertTo-Json | Set-Content release-validation/deb/certification.json
       - name: Retain installation evidence
+        id: receipt
         if: always()
         uses: actions/upload-artifact@v7
         with:

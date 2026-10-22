@@ -14,15 +14,32 @@ function Read-GitHubPages([string]$Endpoint) {
     return $json | ConvertFrom-Json
 }
 
-$pages = Read-GitHubPages "repos/$Repository/actions/workflows/msi-upgrade.yml/runs?head_sha=$SourceSha&per_page=100"
-$runs = @($pages | ForEach-Object { $_.workflow_runs } | Sort-Object id -Descending)
+function Read-CompleteInventory($Pages, [string]$Property) {
+    $items = @($Pages | ForEach-Object { $_.$Property })
+    if (@($Pages).Count -eq 0) { throw 'Missing GitHub inventory pages.' }
+    foreach ($page in $Pages) {
+        if ($null -eq $page.$Property -or $null -eq $page.total_count -or $page.total_count -ne $items.Count) {
+            throw 'Incomplete GitHub inventory.'
+        }
+    }
+    $ids = [Collections.Generic.HashSet[string]]::new()
+    foreach ($item in $items) {
+        if ([string]$item.id -notmatch '^[1-9][0-9]*$' -or -not $ids.Add([string]$item.id)) {
+            throw 'Invalid or duplicate GitHub inventory identity.'
+        }
+    }
+    return $items
+}
+
+$pages = Read-GitHubPages "repos/$Repository/actions/runs?head_sha=$SourceSha&per_page=100"
+$runs = @(Read-CompleteInventory -Pages $pages -Property workflow_runs | Sort-Object id -Descending)
 foreach ($run in $runs) {
     if (-not (Test-MsiCandidateRun -Run $run -SourceSha $SourceSha -Repository $Repository)) { continue }
     if (-not (Test-MsiReusableRun -Run $run -SourceSha $SourceSha -Repository $Repository)) {
         throw "Candidate MSI run $($run.id) is $($run.status)/$($run.conclusion). Complete or retry that run before release; no duplicate build was started."
     }
     $artifactPages = Read-GitHubPages "repos/$Repository/actions/runs/$($run.id)/artifacts?per_page=100"
-    $artifacts = @($artifactPages | ForEach-Object { $_.artifacts })
+    $artifacts = @(Read-CompleteInventory -Pages $artifactPages -Property artifacts)
     $receiptName = "msi-certified-$($run.id)-$($run.run_attempt)"
     $receipts = @($artifacts | Where-Object { $_.name -ceq $receiptName -and $_.expired -eq $false })
     # Path-skipped and older workflows have no successful certification receipt.
@@ -34,6 +51,13 @@ foreach ($run in $runs) {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot download MSI certification receipt.' }
     $receipt = Get-Content -LiteralPath (Join-Path $directory 'certification.json') -Raw | ConvertFrom-Json
     $artifactId = Get-MsiReusableArtifact -Receipt $receipt -Run $run -Artifacts $artifacts -SourceSha $SourceSha -Repository $Repository -PreviousTag $PreviousTag
+    $currentJson = & gh api "repos/$Repository/actions/runs/$($run.id)"
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot recheck MSI certification run.' }
+    $current = $currentJson | ConvertFrom-Json
+    if ([string]$current.id -cne [string]$run.id -or $current.run_attempt -ne $run.run_attempt -or
+        -not (Test-MsiReusableRun -Run $current -SourceSha $SourceSha -Repository $Repository)) {
+        throw 'MSI certification changed during selection.'
+    }
     "artifact_id=$artifactId" >> $env:GITHUB_OUTPUT
     "run_id=$($run.id)" >> $env:GITHUB_OUTPUT
     "receipt_id=$($receipts[0].id)" >> $env:GITHUB_OUTPUT

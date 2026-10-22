@@ -14,6 +14,20 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Linux release publication reuses the candidate ZIP and VSIX alongside the installed-tested DEB,
+  removing a duplicate Linux build. All three package hashes are checked before attestation.
+  Attestation and publication explicitly handle certification jobs skipped by artifact reuse,
+  while still requiring successful promotion and build gates.
+
+- MSI publication can reuse nightly certification for the exact candidate and predecessor.
+  Discovery rejects incomplete GitHub inventories and runs retried during selection.
+
+- Release can reuse a retained DEB from exact-candidate nightly or dedicated certification,
+  preserving successful build/install evidence across retries and rejecting incomplete selections.
+
+- Release now gates DEB publication on installed-upgrade certification and promotes the tested
+  package. Candidate identity, receipt and package hashes are checked again before attestation.
+
 - Release timelines now break down measured step time by inferred setup/build/test/upload
   categories without counting carried retry results again. Incomplete timing stays unknown.
 

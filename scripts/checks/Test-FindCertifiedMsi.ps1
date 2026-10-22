@@ -13,7 +13,7 @@ function gh {
     if ($global:MsiDiscoveryScenario -eq 'api-failure') { $global:LASTEXITCODE = 1; return '' }
     if ($args[0] -eq 'api') {
         $endpoint = $args[-1]
-        if ($endpoint -like '*workflows/*') {
+        if ($endpoint -like '*actions/runs*' -and $endpoint -notlike '*/artifacts*') {
             $run = @{
                 id = 123; run_attempt = 2; head_sha = $sha; path = '.github/workflows/msi-upgrade.yml'
                 head_repository = @{ full_name = 'example/etl-sql' }; head_branch = 'release/v1.2.3'
@@ -23,14 +23,25 @@ function gh {
             if ($global:MsiDiscoveryScenario -eq 'wrong-sha') { $run.head_sha = 'b' * 40 }
             if ($global:MsiDiscoveryScenario -eq 'pending') { $run.status = 'in_progress'; $run.conclusion = $null }
             if ($global:MsiDiscoveryScenario -eq 'failed') { $run.conclusion = 'failure' }
+            if ($global:MsiDiscoveryScenario -eq 'nightly') { $run.path = '.github/workflows/nightly-release.yml'; $run.event = 'workflow_dispatch' }
+            if ($endpoint -notlike '*?head_sha=*') {
+                if ($global:MsiDiscoveryScenario -eq 'concurrent-retry') { $run.run_attempt = 3 }
+                return ConvertTo-Json -InputObject $run -Depth 8
+            }
             # The useful run is on page two.
-            return ConvertTo-Json -InputObject @(@{workflow_runs=@()}, @{workflow_runs=@($run)}) -Depth 8
+            if ($global:MsiDiscoveryScenario -eq 'empty-runs') {
+                return ConvertTo-Json -InputObject @(@{total_count=0; workflow_runs=@()}) -Depth 8
+            }
+            $count = if ($global:MsiDiscoveryScenario -eq 'incomplete-runs') { 2 } else { 1 }
+            return ConvertTo-Json -InputObject @(@{total_count=$count; workflow_runs=@()}, @{total_count=$count; workflow_runs=@($run)}) -Depth 8
         }
         $artifacts = @(@{ id = 456; name = 'msi-inputs-123-1'; expired = ($global:MsiDiscoveryScenario -eq 'expired') })
         if ($global:MsiDiscoveryScenario -ne 'no-receipt') {
             $artifacts += @{ id = 789; name = 'msi-certified-123-2'; expired = $false }
         }
-        return ConvertTo-Json -InputObject @(@{artifacts=@()}, @{artifacts=$artifacts}) -Depth 8
+        $count = $artifacts.Count
+        if ($global:MsiDiscoveryScenario -eq 'incomplete-artifacts') { $count++ }
+        return ConvertTo-Json -InputObject @(@{total_count=$count; artifacts=@()}, @{total_count=$count; artifacts=$artifacts}) -Depth 8
     }
     if ($args[0] -ne 'run' -or $args[1] -ne 'download') { throw 'Unexpected CLI command.' }
     $dirIndex = [array]::IndexOf($args, '--dir')
@@ -43,16 +54,16 @@ function gh {
 }
 
 try {
-    foreach ($global:MsiDiscoveryScenario in @('valid', 'wrong-sha', 'no-receipt', 'pending', 'failed', 'expired', 'incomplete', 'api-failure')) {
+    foreach ($global:MsiDiscoveryScenario in @('valid', 'nightly', 'empty-runs', 'wrong-sha', 'no-receipt', 'pending', 'failed', 'expired', 'incomplete', 'api-failure', 'incomplete-runs', 'incomplete-artifacts', 'concurrent-retry')) {
         Set-Content -LiteralPath $env:GITHUB_OUTPUT -Value ''
         $rejected = $false
         try {
             & $selector -SourceSha $sha -Repository 'example/etl-sql' -PreviousTag 'v1.2.2' -OutputDirectory $fixture
         } catch { $rejected = $true }
-        $shouldReject = $global:MsiDiscoveryScenario -in @('pending', 'failed', 'expired', 'incomplete', 'api-failure')
+        $shouldReject = $global:MsiDiscoveryScenario -in @('pending', 'failed', 'expired', 'incomplete', 'api-failure', 'incomplete-runs', 'incomplete-artifacts', 'concurrent-retry')
         if ($rejected -ne $shouldReject) { throw "Wrong discovery outcome: $global:MsiDiscoveryScenario" }
         $output = Get-Content -LiteralPath $env:GITHUB_OUTPUT -Raw
-        if ($global:MsiDiscoveryScenario -eq 'valid') {
+        if ($global:MsiDiscoveryScenario -in @('valid', 'nightly')) {
             foreach ($line in @('artifact_id=456', 'run_id=123', 'receipt_id=789')) {
                 if ($output -notmatch [regex]::Escape($line)) { throw "Missing selection output: $line" }
             }

@@ -203,6 +203,102 @@ jobs:
           gh release upload $env:TAG_NAME $destination candidate/msi-certification-inputs.json candidate/msi-certification.json --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Cannot upload certified MSI.' }
 
+  find-deb:
+    name: Find certified candidate DEB
+    needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ steps.find.outputs.artifact_id }}
+      run_id: ${{ steps.find.outputs.run_id }}
+      receipt_id: ${{ steps.find.outputs.receipt_id }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Select exact-candidate DEB certification
+        id: find
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: |
+          . ./scripts/Release.Helpers.ps1
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.VersionPrefix
+          $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve previous stable release.' }
+          $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ } | ForEach-Object { $_ })
+          $previous = Select-PreviousStableRelease -CurrentVersion $version -Releases $releases
+          node scripts/find-certified-deb.mjs $env:GITHUB_REPOSITORY $env:SOURCE_SHA $version $previous deb-selection
+
+  certify-deb:
+    name: Certify release DEB
+    needs: [validate, find-deb]
+    if: needs.find-deb.outputs.artifact_id == ''
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deb-upgrade.yml
+    with:
+      source_sha: ${{ needs.validate.outputs.source_sha }}
+
+  promote-deb:
+    name: Promote Linux candidate packages
+    needs: [validate, prepare-release, find-deb, certify-deb]
+    if: >-
+      ${{ !cancelled() && needs.validate.result == 'success' && needs.prepare-release.result == 'success' &&
+          needs.find-deb.result == 'success' &&
+          ((needs.find-deb.outputs.artifact_id != '' && needs.certify-deb.result == 'skipped') ||
+           (needs.find-deb.outputs.artifact_id == '' && needs.certify-deb.result == 'success')) }}
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require DEB candidate and receipt IDs
+        env:
+          ARTIFACT_ID: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
+          RECEIPT_ID: ${{ needs.find-deb.outputs.receipt_id || needs.certify-deb.outputs.receipt_id }}
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] && [[ "$RECEIPT_ID" =~ ^[1-9][0-9]*$ ]]
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
+          run-id: ${{ needs.find-deb.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: candidate
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.find-deb.outputs.receipt_id || needs.certify-deb.outputs.receipt_id }}
+          run-id: ${{ needs.find-deb.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: certification
+          merge-multiple: true
+      - name: Verify and upload Linux candidate packages
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          ARTIFACT_ID: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
+        run: |
+          set -euo pipefail
+          version="${TAG_NAME#v}"
+          node scripts/check-deb-candidate.mjs candidate/candidate.json certification/certification.json "$SOURCE_SHA" "$version" "$ARTIFACT_ID" candidate/current.deb candidate/current.zip candidate/current.vsix
+          cp candidate/current.deb "candidate/etl-sql_${version}_amd64.deb"
+          cp candidate/current.zip "candidate/ETL-SQL-v${version}-linux-x64.zip"
+          cp candidate/current.vsix "candidate/etl-sql-vscode-${version}-linux-x64.vsix"
+          cp candidate/candidate.json candidate/deb-certification-inputs.json
+          cp certification/certification.json candidate/deb-certification.json
+          gh release upload "$TAG_NAME" "candidate/etl-sql_${version}_amd64.deb" "candidate/ETL-SQL-v${version}-linux-x64.zip" "candidate/etl-sql-vscode-${version}-linux-x64.vsix" candidate/deb-certification-inputs.json candidate/deb-certification.json --clobber
+
   # Windows ZIP/VSIX packaging runs independently of MSI certification.
   build-windows:
     name: Build Windows (ZIP & VSIX)
@@ -247,54 +343,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload $env:TAG_NAME release/*.zip release/*.vsix --clobber
-
-  # 3. Linux Build (ZIP + DEB)
-  build-linux:
-    name: Build Linux (DEB & ZIP)
-    needs: [validate, prepare-release]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.validate.outputs.source_sha }}
-
-      - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
-
-      - name: Prepare browser assets
-        run: node scripts/sync-assets.js
-      - name: Verify .NET
-        run: dotnet --info
-      - name: Verify Node.js
-        run: node --version
-
-      - name: Build extension UI
-        working-directory: src/etl-sql-vscode/ui
-        run: |
-          npm ci
-          npm run build
-
-      - name: Publish Binaries
-        shell: pwsh
-        run: |
-          $Version = $env:TAG_NAME.TrimStart('v')
-          $env:ETL_SQL_VERSION = $Version
-          ./scripts/publish-release.ps1 -Platforms linux-x64
-          chmod +x scripts/build-linux-packages.sh
-          ./scripts/build-linux-packages.sh $Version release/linux-x64/bin
-          mv "etl-sql_${Version}_amd64.deb" release/
-
-      - name: Upload Linux release assets
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG_NAME" release/*.zip release/*.deb release/*.vsix --clobber
 
   # 4. macOS Build (ZIP + DMG)
   build-macos:
@@ -377,7 +425,12 @@ jobs:
   # (SBOM = contents, sha256sums = integrity, provenance = authenticity.)
   attest-provenance:
     name: Attest build provenance
-    needs: [validate, build-windows, build-linux, build-macos, promote-msi]
+    needs: [validate, build-windows, build-macos, promote-msi, promote-deb]
+    # Reuse intentionally skips certification ancestors. Require every direct gate to pass.
+    if: >-
+      ${{ !cancelled() && needs.validate.result == 'success' && needs.build-windows.result == 'success' &&
+          needs.build-macos.result == 'success' && needs.promote-msi.result == 'success' &&
+          needs.promote-deb.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write       # mint the OIDC token that signs the attestation
@@ -396,7 +449,16 @@ jobs:
           mkdir -p dist
           gh release download "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --dir dist \
             --pattern '*.zip' --pattern '*.msi' --pattern '*.deb' \
-            --pattern '*.dmg' --pattern '*.vsix' --pattern 'msi-certification-inputs.json' --pattern 'msi-certification.json'
+            --pattern '*.dmg' --pattern '*.vsix' --pattern 'msi-certification-inputs.json' --pattern 'msi-certification.json' \
+            --pattern 'deb-certification-inputs.json' --pattern 'deb-certification.json'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Verify draft Linux packages against candidate
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          ARTIFACT_ID: ${{ needs.promote-deb.outputs.artifact_id }}
+        run: node scripts/check-deb-candidate.mjs dist/deb-certification-inputs.json dist/deb-certification.json "$SOURCE_SHA" "${TAG_NAME#v}" "$ARTIFACT_ID" "dist/etl-sql_${TAG_NAME#v}_amd64.deb" "dist/ETL-SQL-${TAG_NAME}-linux-x64.zip" "dist/etl-sql-vscode-${TAG_NAME#v}-linux-x64.vsix"
       - name: Verify draft MSI against certification
         shell: pwsh
         env:
@@ -438,6 +500,7 @@ jobs:
   publish-release:
     name: Publish GitHub Release
     needs: [validate, attest-provenance]
+    if: ${{ !cancelled() && needs.validate.result == 'success' && needs.attest-provenance.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

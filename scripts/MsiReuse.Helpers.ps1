@@ -3,10 +3,10 @@ function Test-MsiCandidateRun {
     param($Run, [string]$SourceSha, [string]$Repository, [datetimeoffset]$Now = [datetimeoffset]::UtcNow)
     $created = [datetimeoffset]::MinValue
     return $Run.head_sha -ceq $SourceSha -and
-        $Run.path -ceq '.github/workflows/msi-upgrade.yml' -and
+        (($Run.path -ceq '.github/workflows/msi-upgrade.yml' -and $Run.event -in @('push', 'workflow_dispatch')) -or
+         ($Run.path -ceq '.github/workflows/nightly-release.yml' -and $Run.event -ceq 'workflow_dispatch')) -and
         $Run.head_repository.full_name -ieq $Repository -and
         $Run.head_branch -clike 'release/*' -and
-        $Run.event -in @('push', 'workflow_dispatch') -and
         [datetimeoffset]::TryParse([string]$Run.created_at, [ref]$created) -and
         $created -le $Now -and $created -ge $Now.AddDays(-7)
 }
