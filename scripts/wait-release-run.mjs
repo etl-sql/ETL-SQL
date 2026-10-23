@@ -12,7 +12,7 @@ export async function waitForRun({ workflow, sha, ref, timeoutMinutes }, {
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
   report = message => console.error(message),
 } = {}) {
-  if (!['ci.yml', 'release-certification.yml', 'release.yml'].includes(workflow) || !/^[a-f0-9]{40}$/i.test(sha) || !ref || !Number.isFinite(timeoutMinutes) || timeoutMinutes <= 0) throw new Error('Invalid workflow, candidate SHA, ref or wait timeout.');
+  if (!['ci.yml', 'release-certification.yml', 'nightly-release.yml', 'release.yml'].includes(workflow) || !/^[a-f0-9]{40}$/i.test(sha) || !ref || !Number.isFinite(timeoutMinutes) || timeoutMinutes <= 0) throw new Error('Invalid workflow, candidate SHA, ref or wait timeout.');
   const deadline = now() + timeoutMinutes * 60000;
   let id = '';
   while (now() < deadline) {
@@ -20,7 +20,7 @@ export async function waitForRun({ workflow, sha, ref, timeoutMinutes }, {
       '--limit', '100', '--json', 'databaseId,headSha,headBranch,status,conclusion,event']);
     if (!Array.isArray(runs)) throw new Error('GitHub returned an invalid workflow-run list.');
     const eligible = runs.filter(r => r?.headSha === sha && r.headBranch === ref &&
-      (workflow === 'release-certification.yml' ? r.event === 'workflow_dispatch' :
+      (['release-certification.yml', 'nightly-release.yml'].includes(workflow) ? r.event === 'workflow_dispatch' :
         (r.event === 'push' || (workflow === 'release.yml' && r.event === 'workflow_dispatch'))));
     if (eligible.some(r => !Number.isSafeInteger(r.databaseId) || r.databaseId <= 0)) throw new Error('GitHub returned an invalid run ID.');
     // A newer failure/pending run must not fall back to an older successful run.

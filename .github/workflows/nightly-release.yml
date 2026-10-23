@@ -27,6 +27,7 @@ jobs:
           [[ "$GITHUB_REF" == refs/heads/release/v* ]]
           [[ "$REQUESTED_SHA" == "$GITHUB_SHA" ]]
   broad-ci:
+    name: Full CI
     needs: candidate
     uses: ./.github/workflows/ci.yml
     with:

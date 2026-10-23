@@ -11,6 +11,11 @@ on:
         description: Comma-separated diagnostic lane IDs; blank selects all. Never release evidence.
         type: string
         default: ''
+      browser_shard:
+        description: Browser diagnostic shard; requires lanes to include portal-browser-journey. Never release evidence.
+        type: choice
+        options: ['all', '1', '2', '3']
+        default: 'all'
   workflow_call:
     inputs:
       release_certification:
@@ -35,6 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       lanes: ${{ steps.impact.outputs.lanes }}
+      browser_shards: ${{ steps.impact.outputs.browser_shards }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -52,6 +58,7 @@ jobs:
           FULL_CERTIFICATION: ${{ inputs.release_certification }}
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           DIAGNOSTIC_LANES: ${{ inputs.lanes }}
+          DIAGNOSTIC_BROWSER_SHARD: ${{ inputs.browser_shard }}
         run: |
           $arguments = @('--head', $env:GITHUB_SHA, '--output', 'release-validation/preflight/ci-impact.json')
           if ($env:FULL_CERTIFICATION -eq 'true') {
@@ -62,10 +69,15 @@ jobs:
           } elseif ($env:IMPACT_BASE) {
             $arguments += @('--base', $env:IMPACT_BASE, '--comparison', $env:IMPACT_COMPARISON)
           }
+          if ($env:DIAGNOSTIC_BROWSER_SHARD -and $env:DIAGNOSTIC_BROWSER_SHARD -cne 'all') {
+            if ($env:GITHUB_EVENT_NAME -cne 'workflow_dispatch' -or $env:FULL_CERTIFICATION -eq 'true') { throw 'Browser shard selection is diagnostic-only.' }
+            $arguments += @('--browser-shard', $env:DIAGNOSTIC_BROWSER_SHARD)
+          }
           node scripts/select-ci-lanes.mjs @arguments
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $selection = Get-Content release-validation/preflight/ci-impact.json -Raw | ConvertFrom-Json
           "lanes=$($selection.lanes | ConvertTo-Json -Compress -AsArray)" >> $env:GITHUB_OUTPUT
+          "browser_shards=$($selection.browserShards | ConvertTo-Json -Compress -AsArray)" >> $env:GITHUB_OUTPUT
       - name: Prepare pinned workflow checker
         run: node scripts/setup-actionlint.mjs
       - name: Collect source findings
@@ -166,7 +178,7 @@ jobs:
 
   browser-consumer-contracts:
     needs: source-preflight
-    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'browser-consumer-contracts')
     name: Browser and Consumer Contracts
     runs-on: windows-latest
     timeout-minutes: 60
@@ -191,7 +203,7 @@ jobs:
       - name: Upload browser asset ownership and hashes
         uses: actions/upload-artifact@v7
         with:
-          name: browser-asset-ownership
+          name: browser-asset-ownership-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             artifacts/browser-assets.json
             artifacts/browser-assets-source-only.json
@@ -263,6 +275,7 @@ jobs:
     if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-vscode')
     name: Build VS Code Extension
     runs-on: ubuntu-latest
+    timeout-minutes: 75
 
     steps:
       - name: Checkout
@@ -274,59 +287,95 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          mkdir -p release-validation/vscode
+          npm ci --prefix scripts/typecheck 2>&1 | tee release-validation/vscode/restore-compiler.log
 
       - name: Prepare browser assets
+        timeout-minutes: 8
         run: node scripts/sync-assets.js
 
       - name: Verify .NET
         run: dotnet --info
 
       - name: Build engine for integration tests
-        run: dotnet build src/ETL-SQL.App/ETL-SQL.App.csproj --configuration Debug
+        timeout-minutes: 17
+        shell: pwsh
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'src/ETL-SQL.App/ETL-SQL.App.csproj', '--configuration', 'Debug') -EvidenceDirectory release-validation/vscode/engine -TimeoutSeconds 900
 
       - name: Verify Node.js
         run: node --version
 
       - name: Install dependencies
         working-directory: src/etl-sql-vscode
-        run: npm ci
+        timeout-minutes: 8
+        shell: bash
+        run: npm ci 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/restore-extension.log"
 
       - name: Install UI dependencies
         working-directory: src/etl-sql-vscode/ui
-        run: npm ci
+        timeout-minutes: 8
+        shell: bash
+        run: npm ci 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/restore-ui.log"
 
       - name: Audit npm packages for known vulnerabilities
         working-directory: src/etl-sql-vscode
-        run: npm audit
+        timeout-minutes: 6
+        shell: bash
+        run: npm audit 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/audit-extension.log"
 
       - name: Audit UI npm packages for known vulnerabilities
         working-directory: src/etl-sql-vscode/ui
-        run: npm audit
+        timeout-minutes: 6
+        shell: bash
+        run: npm audit 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/audit-ui.log"
 
       - name: Compile extension
         working-directory: src/etl-sql-vscode
-        run: npm run compile
+        timeout-minutes: 10
+        shell: bash
+        run: npm run compile 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/compile-extension.log"
 
       - name: Lint extension
         working-directory: src/etl-sql-vscode
-        run: npm run lint
+        timeout-minutes: 10
+        shell: bash
+        run: npm run lint 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/lint-extension.log"
 
       - name: Lint UI package
         working-directory: src/etl-sql-vscode/ui
-        run: npm run lint
+        timeout-minutes: 10
+        shell: bash
+        run: npm run lint 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/lint-ui.log"
 
       - name: Build UI package
         working-directory: src/etl-sql-vscode/ui
-        run: npm run build
+        timeout-minutes: 10
+        shell: bash
+        run: npm run build 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/build-ui.log"
 
       - name: Run UI vitest
         working-directory: src/etl-sql-vscode/ui
-        run: npm run test:unit
+        timeout-minutes: 15
+        shell: bash
+        run: npm run test:unit 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/test-ui.log"
 
       - name: Run vitest
         working-directory: src/etl-sql-vscode
-        run: npm run test:unit
+        timeout-minutes: 15
+        shell: bash
+        run: npm run test:unit 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/vscode/test-extension.log"
+
+      - name: Retain extension CI diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: vscode-checks-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/vscode/
+          if-no-files-found: warn
+          retention-days: 30
 
   sample-scripts:
     needs: source-preflight
@@ -403,7 +452,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: ${{ fromJSON(needs.source-preflight.outputs.browser_shards || '[1,2,3]') }}
     # windows-latest matches the platform the lane is developed and validated on, and the Portal's
     # own build-and-test job. Kept separate from that job so a browser flake never blocks the
     # coverage gate, and so the ~113 MB Chromium download is cached independently.
@@ -419,28 +468,33 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          mkdir -p artifacts/browser-shard
+          npm ci --prefix scripts/typecheck 2>&1 | tee artifacts/browser-shard/restore-compiler.log
 
       - name: Prepare browser assets
-        run: node scripts/sync-assets.js
+        timeout-minutes: 8
+        shell: pwsh
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/sync-assets.js') -EvidenceDirectory artifacts/browser-shard/preparation -TimeoutSeconds 360
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
       - name: Restore VS Code UI dependencies
         working-directory: src/etl-sql-vscode/ui
-        run: npm ci
+        timeout-minutes: 8
+        shell: bash
+        run: npm ci 2>&1 | tee "$GITHUB_WORKSPACE/artifacts/browser-shard/restore-ui.log"
 
       - name: Build VS Code UI package
         working-directory: src/etl-sql-vscode/ui
-        run: npm run build
+        timeout-minutes: 10
+        shell: bash
+        run: npm run build 2>&1 | tee "$GITHUB_WORKSPACE/artifacts/browser-shard/build-ui.log"
 
       # Keyed on the Microsoft.Playwright version in Directory.Packages.props: bumping the package
       # must fetch a matching browser build rather than reuse the previous one.
@@ -452,7 +506,9 @@ jobs:
           restore-keys: playwright-windows-
 
       - name: Build browser lane
-        run: dotnet build tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj --configuration Release
+        timeout-minutes: 17
+        shell: pwsh
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj', '--configuration', 'Release') -EvidenceDirectory artifacts/browser-shard/build -TimeoutSeconds 900
 
       - name: Run browser lane
         timeout-minutes: 35
@@ -463,6 +519,13 @@ jobs:
             -ScriptArguments @('-Shard', '${{ matrix.shard }}', '-ShardCount', '3', '-Configuration', 'Release', '-NoBuild', '-EvidenceDirectory', 'artifacts/browser-shard') `
             -EvidenceDirectory artifacts/browser-shard/supervisor `
             -TimeoutSeconds 1800
+
+      - name: Report browser shard recovery
+        if: failure()
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          BROWSER_SHARD: ${{ matrix.shard }}
+        run: node scripts/report-browser-shard-recovery.mjs
 
       - name: Retain browser shard diagnostics
         if: always()
@@ -476,7 +539,7 @@ jobs:
   portal-browser-gate:
     name: Portal Browser Journey
     needs: [source-preflight, portal-browser-journey]
-    if: always() && needs.source-preflight.result == 'success' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'portal-browser-journey')
+    if: always() && needs.source-preflight.result == 'success' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'portal-browser-journey') && needs.source-preflight.outputs.browser_shards == '[1,2,3]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -499,6 +562,9 @@ jobs:
     if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'studio-performance-budgets')
     name: Studio Performance Budgets (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      STUDIO_PLATFORM: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
@@ -519,10 +585,16 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          mkdir -p release-validation/studio-performance
+          npm ci --prefix scripts/typecheck 2>&1 | tee release-validation/studio-performance/restore-compiler.log
 
       - name: Prepare browser assets
-        run: node scripts/sync-assets.js
+        timeout-minutes: 8
+        shell: pwsh
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/sync-assets.js') -EvidenceDirectory "release-validation/studio-performance/$env:STUDIO_PLATFORM/preparation" -TimeoutSeconds 360
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
@@ -537,23 +609,30 @@ jobs:
           restore-keys: playwright-chromium-${{ matrix.platform }}-
 
       - name: Build Studio performance gate
-        run: dotnet build tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj --configuration Release
+        timeout-minutes: 17
+        shell: pwsh
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj', '--configuration', 'Release') -EvidenceDirectory "release-validation/studio-performance/$env:STUDIO_PLATFORM/build" -TimeoutSeconds 900
 
       - name: Measure Studio performance
+        timeout-minutes: 17
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
         shell: pwsh
-        run: >-
-          ./scripts/Measure-StudioPerformance.ps1
-          -Configuration Release
-          -NoBuild
-          -OutputPath "artifacts/studio-performance/${{ matrix.platform }}.json"
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Measure-StudioPerformance.ps1 -ScriptArguments @('-Configuration', 'Release', '-NoBuild', '-OutputPath', "artifacts/studio-performance/$env:STUDIO_PLATFORM.json") -EvidenceDirectory "release-validation/studio-performance/$env:STUDIO_PLATFORM/measurement" -TimeoutSeconds 900
+
+      - name: Retain Studio performance diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: studio-performance-diagnostics-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/studio-performance/
+          if-no-files-found: warn
 
       - name: Upload Studio performance evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: studio-performance-${{ matrix.platform }}
+          name: studio-performance-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/studio-performance/${{ matrix.platform }}.json
           if-no-files-found: error
 
@@ -614,7 +693,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: enterprise-certification-${{ matrix.platform }}
+          name: enterprise-certification-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: certification-results/enterprise-hardening/ci-${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.platform }}
           if-no-files-found: error
           retention-days: 30

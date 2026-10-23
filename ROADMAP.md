@@ -107,6 +107,11 @@ on one host, as v0.20.0 did.
 2. Prove order independence: each Smoke scenario alone and in the tier agree within the band.
 3. Recalibrate the Smoke and Standard baselines from clean candidate/control runs and record them.
 
+**Progress (2026-10-23):** Smoke and Standard capture now isolate each scenario per process.
+The [complete Smoke comparison](docs/benchmarks/scale-order-independence-2026-10-22.md#process-isolation-follow-up--2026-10-23)
+passes all 78 directional checks against existing failure bands. Clean baseline calibration and
+the historical Parquet/dataset baseline acceptance remain open.
+
 **Acceptance Evidence:** the order-independence check passes, and the v0.21.0 deviation's two
 scenarios pass against the recalibrated baseline.
 

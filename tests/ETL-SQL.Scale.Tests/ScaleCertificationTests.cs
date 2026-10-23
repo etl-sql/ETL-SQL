@@ -296,8 +296,9 @@ namespace ETL_SQL.Tests.Scale
         /// Runs the scenario once, untimed, before the measured run in the same host. Timings used to
         /// depend on which scenarios ran first: in v0.21.0 two Smoke baselines held warm Parquet
         /// Decimal128 timings that earlier scenarios stopped providing (see
-        /// docs/releases/v0.21.0-performance-results.md). Warming each scenario's own path makes its
-        /// measurement the same alone or in a tier. The warm-up uses the Smoke row count (or the
+        /// docs/releases/v0.21.0-performance-results.md). This reduces first-use effects but does not
+        /// establish order independence; the 2026-10-22 comparison still fails existing bands.
+        /// The warm-up uses the Smoke row count (or the
         /// configured scale when smaller), still asserts correctness, and emits no metrics.
         /// CERT_SCENARIO_WARMUP=0 disables it for diagnostics; the runner records the mode.
         /// </summary>

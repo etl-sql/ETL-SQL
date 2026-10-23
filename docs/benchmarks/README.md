@@ -10,6 +10,7 @@ This directory contains execution baseline reports and test result datasets for 
 
 | Document | Description |
 | :--- | :--- |
+| [Smoke Scale Order Independence](scale-order-independence-2026-10-22.md) | Full-tier and isolated measurements showing the remaining warm-up dependence, with unchanged comparison bands. |
 | [Studio Performance Budgets](studio-performance-budgets.md) | Cross-platform browser fixture, checked-in regression ceilings, and measurement workflow for Studio startup, heap, editing, aggregation, and canvas redraw. |
 | [Studio Delivery Budgets](studio-delivery-budgets.md) | Production asset inventory and transfer ceilings, uncached Portal/desktop editor measurements, and the large-document character contract. |
 | [Reporting Phase 2 Baselines](reporting-phase2-baselines.md) | Initial baseline timings for core reporting components. |

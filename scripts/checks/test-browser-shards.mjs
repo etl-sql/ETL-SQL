@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -44,6 +44,46 @@ for (const mutate of [
 }
 const fixture = mkdtempSync(path.join(os.tmpdir(), 'browser-shards-'));
 try {
+  const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  const job = workflow.split(/^  portal-browser-journey:\r?\n/m)[1].split(/^  [\w-]+:\r?\n/m)[0];
+  const recovery = job.split('      - name: Report browser shard recovery')[1].split('      - name:')[0];
+  assert.match(recovery, /^        if: failure\(\)/m);
+  assert.ok(recovery.includes('SOURCE_SHA: ${{ github.sha }}'));
+  assert.ok(recovery.includes('BROWSER_SHARD: ${{ matrix.shard }}'));
+  assert.match(recovery, /run: node scripts\/report-browser-shard-recovery\.mjs/);
+  assert.ok(job.indexOf('Report browser shard recovery') < job.indexOf('Retain browser shard diagnostics'));
+  const reporter = fileURLToPath(new URL('../report-browser-shard-recovery.mjs', import.meta.url));
+  const identity = { GITHUB_REPOSITORY: 'fixture/local', GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '2',
+    SOURCE_SHA: 'a'.repeat(40), BROWSER_SHARD: '1', GH_TOKEN: 'fixture-token-not-for-output' };
+  const summary = path.join(fixture, 'summary.md');
+  function report(overrides = {}) {
+    const result = spawnSync(process.execPath, [reporter], { cwd: fixture, encoding: 'utf8', windowsHide: true, timeout: 10000,
+      env: { ...process.env, ...identity, GITHUB_STEP_SUMMARY: summary, ...overrides } });
+    assert.equal(result.error, undefined);
+    assert.ok(!(result.stdout + result.stderr).includes(identity.GH_TOKEN));
+    return result;
+  }
+  for (const shard of ['1', '2', '3']) {
+    writeFileSync(summary, 'earlier diagnostics\n');
+    const result = report({ BROWSER_SHARD: shard });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(summary, 'utf8'), `earlier diagnostics\n${result.stdout}`);
+    assert.equal(readFileSync(path.join(fixture, 'artifacts/browser-shard/recovery.md'), 'utf8'), result.stdout);
+    assert.ok(result.stdout.includes(`browser-shard-${shard}-123-2`));
+    assert.ok(result.stdout.includes(identity.SOURCE_SHA));
+    assert.match(result.stdout, /gh run view 123 --repo fixture\/local --log-failed/);
+    assert.match(result.stdout, /gh run rerun 123 --repo fixture\/local --failed/);
+    assert.ok(!result.stdout.includes('--all') && !result.stdout.includes('workflow run'));
+  }
+  const previous = readFileSync(summary, 'utf8');
+  for (const overrides of [{ GITHUB_RUN_ID: '' }, { GITHUB_RUN_ATTEMPT: '0' }, { SOURCE_SHA: '' },
+    { GITHUB_REPOSITORY: 'owner/repo;command' }, { BROWSER_SHARD: '0' }, { BROWSER_SHARD: '4' }, { BROWSER_SHARD: '1;command' }]) {
+    assert.equal(report(overrides).status, 1);
+    assert.equal(readFileSync(summary, 'utf8'), previous);
+  }
+  assert.equal(report({ GITHUB_STEP_SUMMARY: '' }).status, 0);
+  rmSync(path.join(fixture, 'artifacts'), { recursive: true, force: true });
+  rmSync(summary);
   for (const record of records) {
     const directory = path.join(fixture, `browser-shard-${record.receipt.shard}-123-1`);
     mkdirSync(directory);
@@ -76,7 +116,7 @@ try {
   for (const invalid of [{ outcome: 'Failed' }, { outcome: 'NotExecuted' }, { method: 'Other' }, { results: false }]) {
     assert.notEqual(validate(invalid).status, 0);
   }
-  console.log('Browser shards: deterministic partition, theories, exact filters, complete results, missing/skipped evidence and failed-job retry selection passed.');
+  console.log('Browser shards: deterministic partition, theories, exact filters, complete results, failed-job retry selection and candidate-bound recovery reports passed.');
 } finally {
   // Remove only this private fixture.
   rmSync(fixture, { recursive: true, force: true });

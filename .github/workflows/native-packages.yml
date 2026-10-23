@@ -8,8 +8,60 @@ on:
 permissions:
   contents: read
 
+# Superseded PR revisions release runner capacity; manual candidate certification is preserved.
+concurrency:
+  group: native-packages-${{ github.event_name }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && 'validation' || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  package-impact:
+    name: Native package impact
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.impact.outputs.should_run }}
+    env:
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Select package consumers
+        id: impact
+        shell: pwsh
+        env:
+          IMPACT_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          $arguments = @('--head', $env:CANDIDATE_SHA, '--output', 'release-validation/preflight/native-impact.json')
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            if ($env:IMPACT_BASE) { $arguments += @('--base', $env:IMPACT_BASE, '--comparison', 'merge-base') }
+          } else {
+            $arguments += @('--base', $env:CANDIDATE_SHA, '--full')
+          }
+          node scripts/select-ci-lanes.mjs @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Native package impact selection failed.' }
+          $selection = Get-Content release-validation/preflight/native-impact.json -Raw | ConvertFrom-Json
+          if ($selection.nativePackages -isnot [bool]) { throw 'Native package impact is missing.' }
+          "should_run=$($selection.nativePackages.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+      - name: Prepare pinned workflow checker
+        run: node scripts/setup-actionlint.mjs
+      - name: Collect source preflight findings
+        run: node scripts/release-preflight.mjs
+      - name: Retain package selection and preflight logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-package-preflight-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/preflight/
+          if-no-files-found: error
+          retention-days: 30
+
   native-package:
+    needs: package-impact
+    if: needs.package-impact.outputs.should_run == 'true'
     name: Native package (${{ matrix.rid }})
     runs-on: ${{ matrix.os }}
     # The Intel macOS runner takes about twice as long per publish as the others: 52 minutes for the
@@ -249,3 +301,21 @@ jobs:
             release/sbom.json
           if-no-files-found: error
           retention-days: 30
+
+  native-package-gate:
+    name: Native Package Certification
+    needs: [package-impact, native-package]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require package coverage or an explicit no-impact selection
+        env:
+          IMPACT_RESULT: ${{ needs.package-impact.result }}
+          PACKAGES_REQUIRED: ${{ needs.package-impact.outputs.should_run }}
+          PACKAGE_RESULT: ${{ needs.native-package.result }}
+        run: |
+          [[ "$IMPACT_RESULT" == success ]]
+          case "$PACKAGES_REQUIRED:$PACKAGE_RESULT" in
+            true:success|false:skipped) ;;
+            *) echo 'Native package coverage is missing or unsuccessful.' >&2; exit 1 ;;
+          esac

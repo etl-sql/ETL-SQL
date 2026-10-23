@@ -1,8 +1,8 @@
 name: MSI In-Place Upgrade
 
 # This job downloads a ~900 MB previous release, installs WiX and builds an installer before it can
-# assert anything — roughly 26 minutes. Running that for a documentation change buys nothing, so the
-# expensive job is scoped inside the workflow to files that can actually change upgrade behaviour.
+# assert anything — roughly 26 minutes. Shared package-impact rules select changes that can affect
+# the payload; classified documentation and browser-test-only edits skip the expensive jobs.
 # The workflow itself always runs for pull requests so the final gate reports success when the
 # certification is intentionally skipped. Release calls and manual dispatches run it in full.
 on:
@@ -117,7 +117,7 @@ jobs:
             Write-Host 'MSI-impacting paths:'
             $relevant | ForEach-Object { Write-Host "  $_" }
           } else {
-            Write-Host 'No MSI-impacting paths changed; the expensive certification will be skipped.'
+            Write-Host 'Shared package-impact rules found no payload changes; MSI certification will be skipped.'
           }
 
   build-msi:

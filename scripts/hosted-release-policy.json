@@ -15,6 +15,12 @@
         ],
         "jobPrefix": ""
       },
+      "nightlyFallback": {
+        "file": "nightly-release.yml",
+        "events": ["workflow_dispatch"],
+        "jobPrefix": "Full CI / ",
+        "releaseBranchesOnly": true
+      },
       "jobs": [
         "Source preflight",
         "Build & Test",

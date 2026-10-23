@@ -10,7 +10,12 @@ const run = (values = {}) => ({ databaseId: 1, headSha: sha, headBranch: branch,
 async function exercise(name, { runs = [], branchSha = sha, reuse = null, dispatchError = false } = {}) {
   const calls = [];
   const result = await ensureCertification({ sha, branch, directory: path.join(fixture, name) }, {
-    reusable: async () => reuse,
+    reusable: async (repository, sourceSha, options) => {
+      assert.equal(repository, 'owner/repo');
+      assert.equal(sourceSha, sha);
+      assert.deepEqual(options, { branch });
+      return reuse;
+    },
     report: () => {},
     execute: async args => {
       calls.push(args);
@@ -35,10 +40,15 @@ try {
     assert.equal(existing.dispatches, 0);
     assert.equal(existing.result.runId, 1);
   }
-  const reuse = await exercise('reused-ci', { reuse: 123 });
+  const reuse = await exercise('reused-ci', { reuse: { workflow: 'ci.yml', runId: 123 } });
   assert.equal(reuse.dispatches, 0);
   assert.equal(reuse.result.workflow, 'ci.yml');
   assert.equal(reuse.result.runId, 123);
+  const nightly = await exercise('reused-nightly', { reuse: { workflow: 'nightly-release.yml', runId: 456 } });
+  assert.equal(nightly.dispatches, 0);
+  assert.equal(nightly.result.workflow, 'nightly-release.yml');
+  assert.equal(nightly.result.runId, 456);
+  await assert.rejects(exercise('bad-reuse', { reuse: { workflow: 'other.yml', runId: 1 } }), /Invalid reusable/);
   await assert.rejects(exercise('moved', { branchSha: 'b'.repeat(40) }), /no longer points/);
   assert.equal(readdirSync(fixture).includes('moved'), false);
   await assert.rejects(exercise('uncertain', { dispatchError: true }), /Response lost/);

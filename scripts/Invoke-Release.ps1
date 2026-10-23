@@ -240,7 +240,7 @@ if (-not $DryRun) { Write-Ok "pushed $Branch" }
 function Wait-ForRun {
     param([string]$Workflow, [string]$Sha, [int]$TimeoutMinutes, [string]$Label)
     Test-Tool node
-    $runRef = if ($Workflow -in @('ci.yml', 'release-certification.yml')) { $Branch } else { $Tag }
+    $runRef = if ($Workflow -in @('ci.yml', 'release-certification.yml', 'nightly-release.yml')) { $Branch } else { $Tag }
     $runId = & node (Join-Path $ScriptRoot 'wait-release-run.mjs') $Workflow $Sha $runRef $TimeoutMinutes
     return @{ Id = ($runId -join '').Trim(); Ok = $LASTEXITCODE -eq 0; Conclusion = 'see run diagnostics above' }
 }

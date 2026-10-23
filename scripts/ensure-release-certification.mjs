@@ -11,20 +11,21 @@ function gh(args) {
   return result.stdout;
 }
 
-async function reuseRegularCi(repository, sha) {
-  const full = hostedPolicy.workflows[0];
+export async function reuseFullCi(repository, sha, { query, now, policy = hostedPolicy, branch } = {}) {
+  const full = policy.workflows[0];
   try {
-    const evidence = await collectHostedEvidence(repository, sha, { policy: {
-      ...hostedPolicy, workflows: [{ ...full, ...full.fallback, fallback: undefined }],
+    const evidence = await collectHostedEvidence(repository, sha, { query, now, branch, policy: {
+      ...policy, workflows: [full],
     } });
-    return evidence.workflows[0].id;
+    return { workflow: evidence.workflows[0].workflow, runId: evidence.workflows[0].id };
   } catch (error) {
-    if (error.code === 'INCOMPLETE_COVERAGE') return null;
+    if (error.code === 'MISSING_WORKFLOW_EVIDENCE' ||
+        (error.code === 'INCOMPLETE_COVERAGE' && error.workflow === 'ci.yml')) return null;
     throw error;
   }
 }
 
-export async function ensureCertification({ sha, branch, directory }, { execute = gh, report = console.error, reusable = reuseRegularCi } = {}) {
+export async function ensureCertification({ sha, branch, directory }, { execute = gh, report = console.error, reusable = reuseFullCi } = {}) {
   if (!/^[a-f0-9]{40}$/.test(sha) || !(branch === 'main' || /^release\/[\w./-]+$/.test(branch)) || !directory) {
     throw new Error('Expected exact candidate SHA, main/release branch and request directory.');
   }
@@ -41,10 +42,12 @@ export async function ensureCertification({ sha, branch, directory }, { execute 
     report(`Using existing full certification ${existing.databaseId}: ${existing.status}/${existing.conclusion ?? 'pending'}.`);
     return { dispatched: false, workflow: 'release-certification.yml', runId: existing.databaseId };
   }
-  const reusableId = await reusable(repository, sha);
-  if (reusableId) {
-    report(`Regular CI ${reusableId} already passed every required lane for this candidate; reusing it.`);
-    return { dispatched: false, workflow: 'ci.yml', runId: reusableId };
+  const reused = await reusable(repository, sha, { branch });
+  if (reused) {
+    if (!['ci.yml', 'nightly-release.yml', 'release-certification.yml'].includes(reused.workflow) ||
+        !Number.isSafeInteger(reused.runId) || reused.runId < 1) throw new Error('Invalid reusable CI identity.');
+    report(`${reused.workflow} run ${reused.runId} already passed every required CI lane for this candidate; reusing it.`);
+    return { dispatched: false, ...reused };
   }
   const branchSha = (await execute(['api', `repos/${repository}/commits/${encodeURIComponent(branch)}`, '--jq', '.sha'])).trim();
   if (branchSha !== sha) throw new Error('Remote branch no longer points to the candidate; no certification was dispatched.');

@@ -73,6 +73,29 @@ echo GATE_ACCEPTED
     scope: { quick: false, forceResume: false, skipNode: false, skipScale: false, includeSlt: true, includeDockerIntegration: true, includeStandardScale: true },
     plannedPhases: names, phases: names.map(name => ({ name, status: 'Passed', completedAt: new Date(Date.now() - 1000).toISOString() })) };
   const bash = process.platform === 'win32' && existsSync('C:/Program Files/Git/bin/bash.exe') ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
+  writeFileSync(path.join(root, 'nightly-wait.ps1'), `
+$Branch = 'release/v0.22.0'
+$Tag = 'v0.22.0'
+$ScriptRoot = $env:SOURCE_SCRIPTS
+function Test-Tool($name) {}
+function node {
+    if ($args[1] -ne 'nightly-release.yml' -or $args[3] -ne $Branch) { throw 'Wrong nightly workflow/ref.' }
+    $global:LASTEXITCODE = 0
+    '123'
+}
+${section(psSource, 'function Wait-ForRun {', 'if ($DryRun) {')}
+$result = Wait-ForRun -Workflow 'nightly-release.yml' -Sha ('a' * 40) -TimeoutMinutes 1 -Label 'Nightly'
+if (-not $result.Ok -or $result.Id -ne '123') { throw 'Nightly wait failed.' }
+`);
+  checked('pwsh', ['-NoProfile', '-File', 'nightly-wait.ps1']);
+  writeFileSync(path.join(root, 'nightly-wait.sh'), `set -euo pipefail
+BRANCH=release/v0.22.0
+TAG=v0.22.0
+node() { test "$2" = nightly-release.yml; test "$4" = "$BRANCH"; printf 123; }
+${bashSource.slice(bashSource.indexOf('wait_for_run() {')).split('if [ "$DRY_RUN" -eq 1 ]; then')[0]}
+wait_for_run nightly-release.yml aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1 Nightly
+`);
+  assert.equal(checked(bash, ['nightly-wait.sh']), '123');
   for (const flag of ['-SkipPreReleaseGate', '-SkipCiWait']) {
     const rejected = execute('pwsh', ['-NoProfile', '-File', path.join(scripts, 'Invoke-Release.ps1'), '-Version', '0.22.0', flag]);
     assert.notEqual(rejected.status, 0);

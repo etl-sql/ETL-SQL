@@ -1,3 +1,50 @@
+function Get-ScaleCapturePlan {
+    param([Parameter(Mandatory)][string]$Tier, [string]$Scenario = '')
+
+    $methods = [ordered]@{
+        ExternalSort = 'Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized'
+        ExternalAggregate = 'Cert_Smoke_ExternalAggregate_100kRows_CorrectSums'
+        ExternalJoin = 'Cert_Smoke_ExternalJoin_50kRows_CorrectResults'
+        TempTableSpill = 'Cert_Smoke_TempTableSpill_50kRows_CorrectCount'
+        StreamingSelect = 'Cert_Smoke_StreamingSelect_ResultCapEnforced'
+        WindowFunction = 'Cert_Smoke_WindowFunction_50kRows_CorrectRankValues'
+        CsvIngest = 'Cert_Smoke_CsvIngest_50kRows_CorrectChecksum'
+        ParquetRoundTrip = 'Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum'
+        ReportDatasetSnapshotReload = 'Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum'
+        CubeGroupingSets = 'Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum'
+        ScalarSubqueryCache = 'Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys'
+        SpillCleanupSuccess = 'Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles'
+        SpillCleanupFailure = 'Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles'
+    }
+    if ($Tier -notin @('Smoke','Standard','Stress','Huge','Provider','All') -or
+        ($Scenario -and -not $methods.Contains($Scenario))) { throw 'Unknown scale tier or scenario.' }
+    if ($Scenario -or $Tier -in @('Smoke','Standard')) {
+        $names = if ($Scenario) { @($methods.Keys | Where-Object { $_ -ieq $Scenario }) } else { @($methods.Keys) }
+        foreach ($name in $names) {
+            [pscustomobject]@{
+                Name = $name
+                Filter = "FullyQualifiedName=ETL_SQL.Tests.Scale.ScaleCertificationTests.$($methods[$name])"
+                MetricPrefix = "${name}_"
+            }
+        }
+    } else {
+        [pscustomobject]@{
+            Name = $Tier
+            Filter = if ($Tier -eq 'All') { 'Category=ScaleCertification' } else { "Category=ScaleCertification&Tier=$Tier" }
+            MetricPrefix = $null
+        }
+    }
+}
+
+function Assert-ScaleChildMetrics {
+    param([Parameter(Mandatory)][object]$Plan, [AllowEmptyCollection()][object[]]$Metrics)
+
+    if (@($Metrics).Count -eq 0 -or ($Plan.MetricPrefix -and
+        (@($Metrics).Count -ne 1 -or -not ([string]$Metrics[0].scenario).StartsWith($Plan.MetricPrefix, [StringComparison]::Ordinal)))) {
+        throw "Scale child $($Plan.Name) did not emit exactly its expected scenario metric."
+    }
+}
+
 # Scale measurements include result formatting and output. Capture bytes without write-through
 # file handles or per-line flushes, so the runner does not inject physical-disk latency into them.
 function Start-ScaleCapturedProcess {
@@ -100,6 +147,22 @@ function Assert-ScaleCaptureCompatibility {
     if (-not $currentWarmUp) { $currentWarmUp = 'none' }
     if ($baselineWarmUp -ne $currentWarmUp) {
         throw "Scenario warm-up methods differ ($baselineWarmUp vs $currentWarmUp). Recalibrate the baseline with the same warm-up before regression decisions."
+    }
+    $baselineDiscardedWarmUp = $BaselineReport.config.discardedProcessWarmUp
+    $currentDiscardedWarmUp = $CurrentReport.config.discardedProcessWarmUp
+    if ($null -ne $baselineDiscardedWarmUp -or $null -ne $currentDiscardedWarmUp) {
+        if ($baselineDiscardedWarmUp -isnot [bool] -or $currentDiscardedWarmUp -isnot [bool] -or
+            -not $baselineDiscardedWarmUp -or -not $currentDiscardedWarmUp -or
+            $baselineWarmUp -cne 'own-path-untimed-v1' -or $currentWarmUp -cne 'own-path-untimed-v1') {
+            throw 'Baseline comparisons require recorded discarded-process and own-path warm-up; diagnostic or incomplete captures cannot qualify.'
+        }
+    }
+    $baselineIsolation = $BaselineReport.config.processIsolation
+    $currentIsolation = $CurrentReport.config.processIsolation
+    if (-not $baselineIsolation) { $baselineIsolation = 'shared-testhost-v1' }
+    if (-not $currentIsolation) { $currentIsolation = 'shared-testhost-v1' }
+    if ($baselineIsolation -cne $currentIsolation) {
+        throw 'Scale process isolation differs. Recalibrate matching per-scenario captures before regression decisions.'
     }
     $baselineFixture = $BaselineReport.config.testFixture
     $currentFixture = $CurrentReport.config.testFixture

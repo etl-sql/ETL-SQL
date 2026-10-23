@@ -7,8 +7,44 @@ Linux and macOS workflows also have Bash entry points.
 
 `ci-impact.json` owns the initial change-to-lane mapping. `select-ci-lanes.mjs` reports affected
 lanes and the reason for each path. Regular CI uses the report to select jobs. Local pre-push stops
-after source checks for explicitly classified documentation-only changes; other local changes
-retain the broader checks for now. A selection report is never release certification.
+after source checks for explicitly classified documentation-only changes. Extension-only edits
+run the engine integration build and both extension/UI package checks. Browser-test-only edits
+build and format the browser test project, then run its complete browser inventory in one shard.
+That run also captures the Studio performance result for the local platform under a unique
+`release-validation/pre-push-browser/` directory. Other local selections retain broader checks.
+A selection report is never release certification.
+
+VS Code UI files under `src/etl-sql-vscode/ui/src/` select extension checks, browser/consumer
+contracts, browser journeys and Studio performance in regular CI, plus native packaging. The
+`browser-consumer-contracts` lane can also be requested directly for diagnostic CI. UI dependency
+manifests, lockfiles, Vite/TypeScript configuration, public assets and unknown paths keep full
+selection. This mixed UI selection still uses broad local pre-push validation.
+
+The extension CI job has a 75-minute ceiling and explicit command-step deadlines. Its engine build
+runs through the shared supervisor; npm commands stream stdout/stderr to individual logs under
+`release-validation/vscode/`. The workflow retains that directory as
+`vscode-checks-<run-id>-<attempt>` even after a failed step. Inspect those logs and the failed Actions
+step before retrying unchanged inputs. Hosted timeout and diagnostic-upload acceptance remain open.
+
+Every CI artifact upload uses an attempt-specific name, including browser ownership, Studio
+performance and enterprise certification results. Rerunning failed jobs preserves earlier evidence
+and creates new artifacts. Select the intended attempt when inspecting results; an older artifact
+does not describe a later test execution. See the upload action's
+[artifact naming rules](https://github.com/actions/upload-artifact#not-uploading-to-the-same-artifact).
+
+The report's `nativePackages` field also controls native package PR builds. Every manifest rule
+declares package impact explicitly. Classified planning/release documentation and browser-test-only
+changes do not require native builds; extension, shipped/runtime and unknown inputs do. Full/manual
+selection and missing comparison history always require packaging. Native checks collect source
+preflight before builds, retain their selection report, and reject missing or invalid gate outcomes.
+Superseded native-package PR runs are cancelled within the same PR ref. Manual candidate runs use
+separate SHA identities and are preserved. A no-impact PR skip does not certify release packages.
+
+`MsiImpact.Helpers.ps1` reads the same manifest rules for regular MSI selection. The same classified
+documentation and browser-test-only paths can skip installer certification; shipped/shared and
+unknown inputs require it. Missing comparison history requires certification. Manual dispatch and
+release workflow calls always run full MSI certification. Invalid or missing impact policy fails
+detection and cannot satisfy the MSI gate.
 
 ```powershell
 # Changes since the tracked upstream, including staged, unstaged and untracked local files.
@@ -35,7 +71,12 @@ mapping and Git comparisons without a build or network access.
 `release-certification.yml` calls the same CI implementation with full selection and verifies that
 the requested SHA matches the dispatched branch. Certification runs are not cancelled by newer
 regular CI pushes. The release drivers first wait for regular CI, then reuse it if every required
-job passed; otherwise they start or resume the explicit full workflow. The publication gate checks
+job passed. A green targeted push can instead reuse complete nightly CI for the same candidate
+on a release branch within seven days. Existing explicit certification takes precedence; failed
+explicit or regular runs cannot fall back to nightly success. The entire selected nightly run
+must have succeeded, and every required CI job must have run successfully. Otherwise the drivers
+start or resume explicit certification when evidence is absent; failed or invalid evidence stops
+the driver. The publication gate checks
 the complete job inventory, not merely a green workflow badge. Diagnostic manual runs of `ci.yml`
 cannot qualify.
 
@@ -45,7 +86,16 @@ For manual use:
 $candidateSha = git rev-parse HEAD
 node scripts\ensure-release-certification.mjs $candidateSha release/v0.22.0
 gh workflow run ci.yml --ref release/v0.22.0 -f lanes=build-vscode
+
+# Diagnose one browser shard without starting the other two.
+gh workflow run ci.yml --ref release/v0.22.0 -f lanes=portal-browser-journey -f browser_shard=2
 ```
+
+`browser_shard` accepts `all` (the default), `1`, `2` or `3`. A single shard requires explicit
+`portal-browser-journey` diagnostic lane selection. It keeps the normal three-way test partition
+and retains that shard's logs and results. Partial runs skip the full browser coverage gate;
+manual CI diagnostics cannot satisfy release certification. Regular CI and full certification
+always use all three shards.
 
 The first command may dispatch certification and prints the workflow to watch. It preserves a
 request journal under `release-validation/certification-requests/` before sending the dispatch.
@@ -76,6 +126,10 @@ Omit `-NoBuild` to prepare and build first. CI runs the script through
 or failed test never produces a passing receipt. A failed-job rerun retains previous shard
 artifacts; the aggregate gate chooses the newest attempt for each shard and rejects incomplete
 latest evidence. Do not rerun successful shards just to retry a failed shard on unchanged code.
+Failed shards print candidate/run/shard identity and `gh run view --log-failed` plus
+`gh run rerun --failed` commands. The same report is appended to the job summary and retained as
+`recovery.md` in the shard artifact, including preparation and build failures. These commands are
+instructions for inspection and recovery; the workflow does not retry tests automatically.
 Hosted timing and retry behavior still need a rehearsal; case-count balancing is not a duration
 measurement.
 
@@ -132,7 +186,7 @@ than the operator front door.
 | **[`Parse-SltResults.ps1`](./Parse-SltResults.ps1)** | PowerShell | Windows / macOS / Linux | Parses TRX files from an SLT run to output a clean color-coded summary of passes, skips, and failed stack traces. |
 | **[`Test-AllSamples.ps1`](./Test-AllSamples.ps1)** / **[`test-all-samples.sh`](./test-all-samples.sh)** | PowerShell / Bash | Cross-platform | Discovers and executes all samples (`*.etlsql` and `*.rptsql`) in the `samples/` folder to validate engine runtime backward compatibility. |
 | **[`Compare-Benchmarks.ps1`](./Compare-Benchmarks.ps1)** / **[`compare-benchmarks.sh`](./compare-benchmarks.sh)** | PowerShell / Bash | Cross-platform | Compares BenchmarkDotNet JSON results against a checked-in baseline file and returns an exit code of 1 if regression exceeds a given threshold. |
-| **[`Test-ScaleCertification.ps1`](./Test-ScaleCertification.ps1)** / **[`test-scale-certification.sh`](./test-scale-certification.sh)** | PowerShell / Bash | Cross-platform | Runs the dedicated scale fixture (Smoke/Standard/Stress/Huge/Provider tiers) with repeated samples and a fixture-definition hash. Bash delegates to the canonical PowerShell runner. Huge (~50M+, 1000x) is opt-in and needs a capable host. |
+| **[`Test-ScaleCertification.ps1`](./Test-ScaleCertification.ps1)** / **[`test-scale-certification.sh`](./test-scale-certification.sh)** | PowerShell / Bash | Cross-platform | Runs the dedicated scale fixture with repeated samples and a fixture-definition hash. Smoke and Standard isolate each scenario in its own test host; other complete tiers retain their entry points. Bash delegates to the canonical PowerShell runner. Huge (~50M+, 1000x) is opt-in and needs a capable host. |
 | **[`Test-DeploymentProfileCertification.ps1`](./Test-DeploymentProfileCertification.ps1)** | PowerShell | Cross-platform | Composes Solo, Team, Enterprise, SaaS, transition, and upgrade proof from focused suites; fails closed and writes commit-bound JSON/Markdown evidence with phase logs. |
 | **[`Test-ProviderNeutralFaultCertification.ps1`](./Test-ProviderNeutralFaultCertification.ps1)** | PowerShell | Cross-platform | Repeats the provider-neutral failure matrix through local, Docker, and cloud adapters and writes invariant/checkpoint evidence for each supported profile. |
 | **[`Test-ProductionCanaryCertification.ps1`](./Test-ProductionCanaryCertification.ps1)** | PowerShell | Cross-platform | Certifies all hosted canary journeys, SLO coverage, isolation, alert attribution, credential lifecycle, and fault-drill evidence. |
@@ -222,6 +276,17 @@ Candidate artifacts are not product claims until the public certification matrix
 
 Release-gate helpers that produce evidence JSON under `certification-results/`. These back the scale
 and performance claims; they are not part of the default test lanes.
+
+Smoke and Standard captures run thirteen exact method filters, one per process per sample.
+An explicit `-Scenario` uses the same process and filter. Each child retains its own raw output,
+and the JSON report keeps its filter, exit code and metrics under `sampleReports[].children`.
+Missing, duplicate or wrong-scenario child metrics fail certification, as does a source change
+during capture. Reports record `processIsolation: single-scenario-process-v1`; baseline comparison
+rejects older shared-host captures. Keep old baselines until matching clean captures are reviewed.
+Reports also record `discardedProcessWarmUp`. New baseline comparisons require that flag to be
+true in both reports and retain own-path warm-up. `-NoWarmUp` and `-NoScenarioWarmUp` captures are
+diagnostic; matching skipped-warm-up flags do not make them valid baseline references. Historical
+reports without the new field can be compared with each other, but cannot qualify a new capture.
 
 | Script Name | Language | Platform | Description |
 | :--- | :--- | :---: | :--- |

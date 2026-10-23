@@ -42,6 +42,44 @@ Write-Host "Preparing browser assets..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "sync-assets.js")
 if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed. Run npm ci --prefix scripts/typecheck first.' }
 
+# Browser-test-only edits use the same consumers as regular CI. One complete shard also runs
+# StudioPerformanceBudgetTests, so capture that result without a second test invocation.
+if ((@($impact.lanes | Sort-Object) -join ',') -ceq 'portal-browser-journey,source-preflight,studio-performance-budgets') {
+    $browserProject = Join-Path $RepoRoot 'tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj'
+    & dotnet build $browserProject --configuration $Configuration
+    if ($LASTEXITCODE -ne 0) { throw 'Browser pre-push build failed.' }
+    if (-not $SkipFormat) {
+        & dotnet format $browserProject --verify-no-changes --no-restore
+        if ($LASTEXITCODE -ne 0) { throw 'Browser pre-push formatting failed.' }
+    }
+    $browserEvidence = Join-Path $RepoRoot ('release-validation/pre-push-browser/' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $browserEvidence | Out-Null
+    $performancePath = Join-Path $browserEvidence 'studio-performance.json'
+    $previousPerformanceOutput = $env:ETLSQL_STUDIO_PERF_OUTPUT
+    try {
+        $env:ETLSQL_STUDIO_PERF_OUTPUT = $performancePath
+        & pwsh -NoProfile -File (Join-Path $ScriptRoot 'Test-BrowserShard.ps1') `
+            -Shard 1 -ShardCount 1 -Configuration $Configuration -NoBuild -EvidenceDirectory $browserEvidence
+        if ($LASTEXITCODE -ne 0) { throw "Browser pre-push tests failed. Evidence: $browserEvidence" }
+    } finally {
+        $env:ETLSQL_STUDIO_PERF_OUTPUT = $previousPerformanceOutput
+    }
+    $browserManifest = Get-Content (Join-Path $browserEvidence 'manifest.json') -Raw | ConvertFrom-Json
+    $performanceMethod = 'ETL_SQL.Portal.BrowserTests.StudioPerformanceBudgetTests.CanonicalStudioFixture_StaysWithinPlatformBudgets'
+    if ($browserManifest.shardCount -ne 1 -or $performanceMethod -cnotin @($browserManifest.shards[0].methods)) {
+        throw 'Browser pre-push inventory omitted Studio performance coverage.'
+    }
+    $performance = Get-Content -LiteralPath $performancePath -Raw | ConvertFrom-Json
+    $platform = if ($IsWindows) { 'windows' } elseif ($IsLinux) { 'linux' } else { 'macos' }
+    if ($performance.SchemaVersion -ne 1 -or $performance.Platform -cne $platform) {
+        throw 'Browser pre-push Studio performance evidence is invalid.'
+    }
+    & node (Join-Path $ScriptRoot 'sync-assets.js') -Check
+    if ($LASTEXITCODE -ne 0) { throw 'Browser pre-push left prepared browser assets changed.' }
+    Write-Host "Browser pre-push passed. Evidence: $browserEvidence. Full release certification remains required before tagging." -ForegroundColor Green
+    exit 0
+}
+
 # Extension-only changes retain their engine integration prerequisite and both UI consumers.
 # Other selections continue through the conservative validation below.
 if (@($impact.lanes).Count -eq 2 -and $impact.lanes -contains 'source-preflight' -and $impact.lanes -contains 'build-vscode') {

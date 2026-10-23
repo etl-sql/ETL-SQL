@@ -44,6 +44,39 @@ certify the DEB; ZIP/VSIX hash checks prove artifact identity, not installed-pac
 MSI discovery also considers nightly certification for the same candidate and predecessor. It
 requires complete run/artifact inventories and rechecks the selected run for concurrent retries.
 
+The CI evidence gate also accepts complete nightly CI for the same frozen SHA and release branch
+within seven days. Explicit certification takes precedence. With no explicit run, complete regular
+push CI is reused first; a green targeted push may use a successful nightly. Failed explicit or
+regular runs block fallback. The selected nightly must be successful as a whole, with every required
+CI job present and successful. Job history retains earlier successful attempts, and rechecking the
+run rejects concurrent retries. Both release drivers wait on the selected nightly's branch ref
+without dispatching another full certification. CodeQL and the other release requirements still
+need their own evidence. Hosted reuse and timing acceptance remain open.
+
+Windows ZIP/VSIX packaging retains both files and a candidate hash manifest before uploading to
+the draft release in a separate job. If upload fails after a successful build, rerun failed jobs
+in the same Release run to reuse its retained artifact ID. Missing artifacts, changed bytes or
+candidate identities block upload. Before attestation, the downloaded draft manifest must match
+the original build's manifest digest, and both package hashes must match. This supports upload
+recovery within one Release run; pre-tag Windows package certification and hosted retry acceptance
+remain outstanding. Packaging streams through a 90-minute watchdog inside a 95-minute step and
+110-minute job, with per-attempt diagnostics retained even on failure.
+
+macOS Intel and Apple Silicon builds also retain packages by independent artifact IDs before a
+separate Linux upload job. Rerun failed jobs in the same Release run after a build or upload failure;
+successful architecture builds keep their original outputs. Both native manifests and package hashes
+must pass before upload, and the downloaded draft must match the original build digests before
+attestation. The optional Intel DMG is recorded only when its build succeeds; a recorded DMG must
+remain present and unchanged. An unrecorded DMG in the draft blocks attestation. This provides
+same-run recovery; pre-tag macOS package certification and hosted retry/timing evidence remain open.
+
+If either package-upload job fails, its console and Actions job summary include the candidate SHA,
+retained artifact IDs and exact `gh run view --log-failed` / `gh run rerun --failed` commands.
+Wait for the run to finish, inspect the failure and fix the upload issue before rerunning failed
+jobs in that same run. Successful builds retain their outputs. Changed source requires a new
+candidate; missing artifacts or changed package bytes must pass verification before uploading.
+Each upload step has a ten-minute deadline inside its fifteen-minute job.
+
 Replace `x.y.z` with the target version (current target: **0.22.0**) throughout.
 
 ---
@@ -271,6 +304,25 @@ branch before hosted rollout. Regular CI uses impact selection; local pre-push s
 checks for explicitly classified documentation-only changes. Full local/operator requirements
 below remain in force.
 
+Native package PR checks also use the shared manifest's package-impact field. Classified planning
+and release documentation or browser-test-only edits can skip platform builds after source preflight.
+Shipped changes, unknown paths and missing comparison bases require packaging. Manual Native Package
+Certification always selects all four platforms. Its aggregate check rejects failed selection,
+failed/cancelled required builds and unexpected skips. Superseded PR revisions can cancel obsolete
+package work; manual candidate runs are preserved. A no-impact PR result does not replace the
+final-candidate package certification required below.
+
+CI evidence uploads use distinct names for each run attempt and matrix execution. A failed-job
+retry retains earlier artifacts and adds its own evidence. Inspect the artifact for the intended
+job execution; do not substitute an older successful artifact for a failed retry. The evidence
+collector tracks original successful job attempts when GitHub carries them into a retry.
+
+Regular CI selects extension, browser/consumer-contract, browser-journey and Studio-performance
+checks for VS Code UI source edits, with native packaging retained. Consumer contracts have an
+independent diagnostic lane, `browser-consumer-contracts`. Shared inputs, dependency manifests,
+build configuration and unknown files still select full coverage. These targeted results do not
+satisfy full candidate certification; local pre-push remains broad for mixed UI changes.
+
 ```powershell
 $candidateSha = git rev-parse HEAD
 node scripts/collect-hosted-release-evidence.mjs etl-sql/ETL-SQL $candidateSha release-validation/hosted-release-evidence.json
@@ -327,9 +379,11 @@ duplicate build. Complete/retry that run, then rerun the failed Release jobs. Gi
 invalid receipts also stop discovery. A green path-skipped workflow has no receipt and cannot
 certify an MSI.
 
-MSI branch/PR runs skip certification only for the documentation paths explicitly listed in
-`scripts/MsiImpact.Helpers.ps1`. Shipped runtime, service, build and unknown paths require it.
-Missing comparison bases require full certification; renames include both old and new paths.
+MSI branch/PR runs use the shared package-impact rules in `scripts/ci-impact.json`. Classified
+planning/release documentation and browser-test-only edits can skip installer certification.
+Shipped runtime, service, installer, build and unknown paths require it. Invalid impact policy
+fails detection. Missing comparison bases require full certification; renames include both old
+and new paths. Manual dispatch and release workflow calls always run full MSI certification.
 
 To certify before tagging when the branch push skipped MSI checks, run this on the frozen candidate:
 

@@ -14,6 +14,71 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Scale reports now record discarded process warm-up. New baseline comparisons reject diagnostic
+  skipped-warm-up captures and incomplete warm-up provenance, including matching diagnostic flags.
+
+- Smoke and Standard scale capture now runs every scenario in its own test host, matching isolated
+  scenario capture. Reports retain each child invocation and reject incomplete metrics, source
+  drift and baseline comparisons across different process-isolation models.
+
+- Verified Smoke order independence with five samples of all thirteen scenarios alone between
+  two full-tier captures. All 78 directional comparisons pass existing failure bands after
+  process isolation; earlier failed experiments remain documented. Baseline calibration is pending.
+
+- Failed Portal browser shards now print failed-job-only recovery commands with candidate and
+  artifact identities, retaining the report in diagnostic artifacts and the job summary.
+
+- Manual CI diagnostics can select one Portal browser shard while preserving the normal test
+  partition. Partial runs skip the full-coverage gate and cannot satisfy release certification;
+  regular CI and full certification still select every shard.
+
+- Portal browser shards now bound preparation and build steps, retain their logs in shard
+  diagnostics, and avoid a duplicate Node setup before UI compilation.
+
+- Studio performance CI now bounds asset preparation, build and measurement on every platform,
+  retaining streamed logs and per-attempt diagnostics when a step fails or times out.
+
+- Browser ownership, Studio performance and enterprise certification CI artifacts now include
+  run and attempt IDs. Failed-job retries can retain new evidence without colliding with or
+  replacing earlier artifacts. Regression checks cover every CI upload and its matrix dimensions.
+
+- Extension CI now bounds its engine build and npm commands, streams npm output into retained logs,
+  and saves per-attempt diagnostics on failure. Pipeline logging preserves failing command exits.
+
+- Regular MSI checks now share the package-impact manifest with native package checks, allowing
+  browser-test-only fixes to skip installer rebuilds and installation tests. Shipped, shared and
+  unknown inputs still require MSI certification; manual and release calls always run it in full.
+
+- VS Code UI source edits now select extension checks, browser/consumer contracts, browser journeys
+  and Studio performance in regular CI, retaining native packaging. The consumer job has its own
+  lane selector. Dependency, build configuration, shared and unknown changes still select full CI.
+
+- Native package PR checks use shared impact selection to skip platform builds for classified
+  documentation and browser-test-only edits. Manual certification and shipped or unknown inputs
+  still select all platforms. Source preflight and an aggregate coverage gate guard selection;
+  newer PR revisions cancel obsolete package work while manual candidate runs are preserved.
+
+- Release certification can reuse complete nightly CI results for the unchanged candidate after
+  a green targeted push. Both release drivers and the publication gate retain exact-SHA,
+  seven-day freshness, job coverage and retry checks; failed explicit or regular CI blocks reuse.
+
+- Browser-test-only local pre-push now builds the browser test project once and validates its
+  complete test inventory, including Studio performance, without broad engine and consumer checks.
+  It retains local browser evidence and rejects missing performance coverage or results.
+
+- Failed Windows and macOS package uploads now print candidate/artifact identities and commands
+  to inspect and rerun failed jobs in the same Release run. Upload steps have explicit deadlines;
+  local rehearsals verify recovery after partial uploads without changing retained package bytes.
+
+- macOS release builds retain Intel and Apple Silicon packages independently before upload.
+  Failed uploads can reuse both builds; a failed architecture can resume while preserving the
+  successful one. Package hashes, including a successfully built optional Intel DMG, are checked
+  before upload and again before attestation against the original build manifest digests.
+
+- Windows ZIP/VSIX release builds retain their packages before a separate upload job, allowing
+  failed uploads to resume without rebuilding. Candidate identity and hashes are verified before
+  upload and attestation. A packaging watchdog streams and retains diagnostic logs.
+
 - Cross-platform native package certification now mounts and launches the macOS DMG package,
   verifying its CLI version and packaged browser assets before unmounting. Packaged VSIX webview
   acceptance (scripts/test-vsix-acceptance.mjs) now exercises designer and preview webviews inside

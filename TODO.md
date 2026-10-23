@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 22 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 21 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -54,6 +54,22 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   cannot satisfy the gate. Extension-only local pre-push now runs its engine integration build,
   extension compile/lint/tests and UI lint/build/tests without broad engine smoke or consumer checks.
   Routing fixtures verify both packages run and a failed compile/test stops validation.
+  Browser-test-only local pre-push now builds/formats only the browser test project and runs its
+  full discovered browser inventory as one shard, retaining the local Studio performance result
+  from the same run. Routing fixtures reject build/format/test failures, missing performance
+  coverage, missing/invalid/wrong-platform results and changed prepared assets; mixed selections
+  retain broad validation. Full-browser elapsed-time improvement remains unmeasured.
+  Full CI evidence can now reuse a successful exact-candidate nightly after a green targeted push,
+  avoiding a duplicate full certification dispatch. Both drivers wait on the selected nightly's
+  branch ref. Gate fixtures retain original job attempts and reject stale/fork/PR/main-branch,
+  incomplete, failed and concurrently retried nightly evidence. Failed explicit or regular CI
+  still blocks reuse. Executed driver fixtures verify branch selection and no dispatch on reuse;
+  hosted reuse and elapsed-time proof remain open.
+  VS Code UI source changes now select extension, consumer-contract, browser and Studio performance
+  jobs in regular CI, with native package checks retained. Consumer contracts have an independent
+  lane selector; full certification still selects them. Fixtures evaluate actual CI conditions for
+  push/PR/manual events and cover UI renames plus shared/configuration fallback. Local mixed-lane
+  pre-push remains broad; hosted selection and timing proof remain open.
   Full local/operator requirements remain; other local lanes still need
   targeted selection, and hosted timing/recovery/rollout evidence is outstanding.
   Release smoke checks now run against CI's existing Release build; tag validation no longer
@@ -103,6 +119,19 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   of which lanes cover which paths. The final round still runs everything.
   **In progress:** regular CI consumes the shared impact selection. Unknown/shared changes expand
   to all lanes. Full certification ignores the diff. Hosted path-selection proof remains required.
+  Native package PR checks now consume the same manifest's explicit package-impact metadata.
+  Classified planning/release documentation and browser-test-only edits skip native builds;
+  shipped extension/runtime inputs, unknown paths, missing bases and manual certification select
+  packaging. Source preflight precedes builds, and an aggregate gate accepts only successful
+  required builds or an explicit no-impact skip. PR revisions cancel superseded package work;
+  manual candidate identities remain separate. Executed selection/gate/concurrency fixtures and
+  actionlint pass; hosted skip/cancellation/timing proof remains open.
+  MSI selection now reads the same package-impact rules instead of a separate documentation
+  allowlist. Browser-test-only fixes can skip regular installer builds and installation tests;
+  runtime, service, installer, shared and unknown inputs still certify. Cross-runtime fixtures
+  verify JavaScript/PowerShell parity, invalid-policy rejection and mixed changes. Executed
+  workflow guards prove missing bases, manual dispatch and release calls still require full MSI
+  certification. Hosted selection and elapsed-time proof remain open.
 - [ ] **Split the Portal browser lane** across parallel jobs, so the longest CI job falls from about 60
   minutes to about 20.
   **In progress:** CI now defines three independent browser jobs plus a coverage gate retaining
@@ -139,6 +168,23 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   tests now retain supervised logs too. Package-manager steps have explicit step deadlines.
   Actionlint and parsing of all changed PowerShell workflow commands pass; Linux execution,
   timeout recovery and artifact upload still require hosted verification.
+  The extension CI job now has a 75-minute ceiling. Its engine build uses a 15-minute supervisor
+  inside a 17-minute step; restores, audits, compilation, lint, UI build and both test suites have
+  explicit step deadlines. All eleven npm commands stream both output channels into individual
+  logs retained alongside engine diagnostics per attempt. Executed workflow pipelines preserve
+  original failing exits; supervisor timeout and unrelated-process survival fixtures pass.
+  Linux hosted execution, timing and failure-upload evidence remain open.
+  Studio performance CI now caps each platform job at 60 minutes. Asset preparation has a
+  six-minute supervisor; build and measurement each have 15-minute supervisors, with larger
+  step limits to leave diagnostic time. Compiler restore streams both output channels to a log;
+  diagnostics upload on failure with platform/run/attempt identities. Executed workflow fixtures
+  preserve command arguments, failure exits and all three platform paths. Hosted execution and
+  timeout/upload evidence remain open.
+  Browser shards now also bound compiler/UI restores, asset preparation, UI compilation and
+  the browser-test build before test execution. Their streamed preparation/build logs use the
+  existing per-attempt shard artifact; the 50-minute job ceiling and test coverage gate remain.
+  A duplicate Node setup is removed. Executed workflow fixtures verify original arguments,
+  failing exits and both log channels. Hosted timing and failure uploads remain unverified.
 - [ ] **One-command release metadata.** One step flips the CHANGELOG date, release-notes status and
   releases index together.
   **In progress:** `finalize-release-metadata.mjs` previews or writes the three surfaces after
@@ -206,6 +252,20 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   MSI discovery now also reuses exact-candidate nightly certification, checking complete run/artifact
   inventories and rechecking the run before selection to reject concurrent retries. Executed fake-CLI
   fixtures cover nightly reuse, empty inventories, incomplete pagination and changed attempts.
+  Windows ZIP/VSIX publication now retains build outputs by artifact ID before a separate upload
+  job. Failed-upload retries can reuse the successful build. Candidate SHA, version and package
+  hashes are checked before upload and against the downloaded draft using the original manifest
+  digest. Packaging has a 90-minute supervisor with streamed logs retained on failure. Executed
+  fixtures reject missing, empty, changed and wrong-candidate inputs; workflow gates pass locally.
+  Hosted failed-upload recovery and pre-tag Windows package certification remain open.
+  macOS Intel and Apple Silicon builds now retain separate artifacts and manifest digests through
+  independent reusable-workflow calls. A Linux upload job verifies both before publication;
+  attestation checks the downloaded draft against their original digests. A successful optional
+  Intel DMG is retained and hash-bound too; missing or changed recorded DMGs block promotion.
+  Local CLI and workflow fixtures pass for both architectures and reject unrecorded optional DMGs.
+  The workflow's actual upload commands also pass a local mock-GitHub failure/retry rehearsal:
+  unchanged retained bytes survive the retry, and tampering stops before any upload command runs.
+  Hosted architecture-only retry, failed-upload recovery and elapsed-time evidence remain open.
 - [ ] **Split MSI build and certification into resumable jobs.** Persist the built MSI before any
   install test. Run workstation and Portal certification on separate clean runners against that
   artifact and one pinned previous-release MSI. A Portal failure should allow only that job to
@@ -242,7 +302,7 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   failures before exiting. Run it before expensive packaging and installation. Keep checks requiring
   a built MSI immediately after the build. Inject two independent errors and require both in the
   same report; measure a target of under five minutes for the source-only checks.
-  **Verified locally:** `node scripts/release-preflight.mjs` collects ten source checks and nineteen
+  **Verified locally:** `node scripts/release-preflight.mjs` collects ten source checks and twenty-two
   release-automation fixtures before restore/build. Each fixture has its own log and deadline,
   covering artifact reuse, timeout/recovery and release gates without a hosted run. It runs
   with at most three child processes, per-check deadlines and individual logs plus `summary.json`.
@@ -271,6 +331,16 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
     Local tests cover path policy and the workflow's unavailable-base branches. Manual `ci.yml`
     dispatch accepts an explicit diagnostic lane list; browser shards also have a direct local
     command. Hosted selection/retry evidence remains open.
+    Manual CI now also accepts a single browser shard with explicit browser-lane selection,
+    preserving the three-way partition while avoiding the other runners. Partial diagnostics skip
+    the full browser coverage gate; regular CI and full certification retain all three shards.
+    Executed workflow fixtures reject invalid indices, missing browser-lane selection and attempts
+    to narrow full certification. Hosted dispatch and elapsed-time evidence remain open.
+    Failed browser shards now print candidate/run/attempt/shard identity and failed-job-only
+    inspection/rerun commands before uploading diagnostics. The report is also retained in the
+    shard artifact and job summary, including preparation/build failures. Local fixtures verify
+    all shards, summary append behavior, missing-summary support, invalid-identity rejection and
+    token omission. No automatic test retries are added; hosted recovery proof remains open.
     Release drivers now share exact workflow/SHA/ref/event run selection, reject API errors promptly,
     and print failed-job recovery commands. Local simulated polling covers delayed registration,
     pending runs, newer failures, wrong refs/events and timeout without rebuilding.
@@ -327,6 +397,17 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   green through unlimited retries. Record time to first actionable failure and time to recover,
   separately from the full certification time. This rehearsal is the acceptance test for the new
   release process, before v0.22.0 release day.
+  **In progress:** executed the actual Windows and macOS upload commands against a local mock
+  that fails after uploading the first package. Failed-only recovery preserves retained inputs;
+  missing or changed packages/manifests stop before the upload command runs. Both upload jobs
+  print candidate/artifact identities and inspection/rerun commands to the console and job summary
+  on failure, with explicit upload step deadlines. Hosted recovery, timing and the other failure
+  scenarios above remain required before closure.
+  CI artifact uploads now all use attempt-specific names. Browser ownership, Studio performance
+  and enterprise certification previously reused fixed names within a run, which could conflict
+  after a failed job had already uploaded evidence. Workflow fixtures expand the actual names
+  across attempts and matrix executions, reject collisions and prohibit overwriting earlier
+  artifacts. Hosted failed-job retry acceptance remains open.
 
 ### 2. Order-independent scale certification
 
@@ -338,8 +419,23 @@ and the [v0.21.0 performance results](docs/releases/v0.21.0-performance-results.
   before measured sampling, discarding warm-up metrics and resetting fixture roots and GC state. The runner
   records `scenarioWarmUp: 'own-path-untimed-v1'` in report configuration. `Assert-ScaleCaptureCompatibility`
   enforces matching warm-up modes, and `ScaleCertificationProcessTests` validates acceptance and rejection.
-- [ ] Prove order independence: each Smoke scenario alone and in the tier agree within the band.
+- [x] Prove order independence: each Smoke scenario alone and in the tier agree within the band.
+  **Verified 2026-10-23:** [measurement record](docs/benchmarks/scale-order-independence-2026-10-22.md#process-isolation-follow-up--2026-10-23)
+  captures five samples of every Smoke scenario alone between two full-tier captures on unchanged
+  sources. All 195 measured correctness/resource checks and all 78 directional timing comparisons
+  pass the existing failure bands. Five latency comparisons cross warning bands; none is suppressed
+  by hardware mismatch. VSTest discovery matches all thirteen captured methods. Evidence is retained
+  at `release-validation/scale-isolation-20261023/`; baseline files and bands are unchanged.
+  Smoke and Standard now use one exact scenario method per process per sample, recording child
+  filters, exits and metrics. Old shared-host baselines are rejected. All 55 focused process tests
+  pass, including full runner fixtures for Standard row scale, incomplete metrics, child failures,
+  source drift and case-insensitive scenario selection. Clean baseline calibration remains below.
+  A real Standard capture also passes all thirteen scenarios with two samples at 10x row scale
+  (26 measured correctness/resource checks); its evidence is retained beside the Smoke proof.
 - [ ] Recalibrate the Smoke and Standard baselines from clean candidate/control runs and record them.
+  **Preparation:** reports now record whether the discarded process warm-up ran. Comparisons reject
+  diagnostic captures that skipped either warm-up, invalid flags and missing warm-up provenance
+  when paired with a new capture. Baseline files remain unchanged until clean calibration passes.
 
 ### 3. Flaky tests — the dedicated fix
 

@@ -194,7 +194,7 @@ mut "git push $REMOTE $BRANCH" git push "$REMOTE" "$BRANCH"
 wait_for_run() { # workflow sha timeout_min label -> run ID on stdout, diagnostics on stderr
   command -v node >/dev/null 2>&1 || { echo "Node is required to watch release runs." >&2; return 1; }
   local run_ref="$TAG"
-  if [ "$1" = 'ci.yml' ] || [ "$1" = 'release-certification.yml' ]; then run_ref="$BRANCH"; fi
+  if [ "$1" = 'ci.yml' ] || [ "$1" = 'release-certification.yml' ] || [ "$1" = 'nightly-release.yml' ]; then run_ref="$BRANCH"; fi
   node scripts/wait-release-run.mjs "$1" "$2" "$run_ref" "$3"
 }
 if [ "$DRY_RUN" -eq 1 ]; then

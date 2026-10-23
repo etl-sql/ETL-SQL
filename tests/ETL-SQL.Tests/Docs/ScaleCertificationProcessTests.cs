@@ -4,6 +4,149 @@ namespace ETL_SQL.Tests.Docs;
 
 public sealed class ScaleCertificationProcessTests
 {
+    [Fact]
+    public async Task Runner_RecordsDiagnosticSkippedProcessWarmUp()
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper(
+            "Test-ScaleRunnerFixture -Tier Smoke -Mode success -NoWarmUp", helperName: "checks/fixtures/scale-capture-runner.ps1");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains("Validated Smoke/success", result.Output);
+    }
+
+    [Theory]
+    [InlineData("missing", "missing", true)]
+    [InlineData("true", "true", true)]
+    [InlineData("true", "missing", false)]
+    [InlineData("missing", "true", false)]
+    [InlineData("false", "false", false)]
+    [InlineData("false", "true", false)]
+    [InlineData("true", "false", false)]
+    [InlineData("string", "true", false)]
+    [InlineData("true", "disabled-own", false)]
+    [InlineData("disabled-own", "disabled-own", false)]
+    public async Task BaselineComparison_RejectsDiagnosticOrUnrecordedWarmUpScope(string baseline, string current, bool accepted)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            function Config($kind) {
+                $config = @{scenarioWarmUp='own-path-untimed-v1'}
+                if ($kind -ne 'missing') { $config.discardedProcessWarmUp = $kind -notin @('false','string') }
+                if ($kind -eq 'string') { $config.discardedProcessWarmUp = 'true' }
+                if ($kind -eq 'disabled-own') { $config.scenarioWarmUp='none' }
+                $config
+            }
+            Assert-ScaleCaptureCompatibility -BaselineReport @{config=(Config '{{baseline}}')} -CurrentReport @{config=(Config '{{current}}')}
+            'Compatible'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.Equal(accepted, result.ExitCode == 0);
+        Assert.Contains(accepted ? "Compatible" : "warm-up", result.Output);
+    }
+
+    [Theory]
+    [InlineData("Smoke", "success")]
+    [InlineData("Standard", "success")]
+    [InlineData("Smoke", "missing")]
+    [InlineData("Smoke", "wrong")]
+    [InlineData("Smoke", "duplicate")]
+    [InlineData("Smoke", "failed")]
+    [InlineData("Smoke", "drift")]
+    public async Task Runner_RetainsCompleteIsolatedSamplesAndRejectsIncompleteEvidence(string tier, string mode)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper(
+            $"Test-ScaleRunnerFixture -Tier {tier} -Mode {mode}", helperName: "checks/fixtures/scale-capture-runner.ps1");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains($"Validated {tier}/{mode}", result.Output);
+    }
+
+    [Theory]
+    [InlineData("Smoke")]
+    [InlineData("Standard")]
+    public async Task CapturePlan_IsolatesEveryScenarioWithTheSameFilterAsAnIndividualRun(string tier)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $plan = @(Get-ScaleCapturePlan -Tier '{{tier}}')
+            if ($plan.Count -ne 13 -or @($plan.Name | Select-Object -Unique).Count -ne 13) { throw 'Incomplete tier.' }
+            foreach ($child in $plan) {
+                $single = @(Get-ScaleCapturePlan -Tier '{{tier}}' -Scenario $child.Name)
+                if ($single.Count -ne 1 -or $single[0].Filter -cne $child.Filter -or
+                    $child.Filter -notlike 'FullyQualifiedName=ETL_SQL.Tests.Scale.ScaleCertificationTests.*') { throw 'Different capture paths.' }
+                Assert-ScaleChildMetrics -Plan $child -Metrics @(@{scenario=$child.MetricPrefix + 'rows'})
+            }
+            'Complete isolated tier'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains("Complete isolated tier", result.Output);
+    }
+
+    [Fact]
+    public async Task CapturePlan_NormalizesCaseInsensitiveScenarioInputBeforeCheckingMetrics()
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper("""
+            foreach ($expected in @(Get-ScaleCapturePlan -Tier Smoke)) {
+                $actual = @(Get-ScaleCapturePlan -Tier smoke -Scenario $expected.Name.ToLowerInvariant())[0]
+                if ($actual.Name -cne $expected.Name -or $actual.Filter -cne $expected.Filter -or
+                    $actual.MetricPrefix -cne $expected.MetricPrefix) { throw 'Scenario identity changed.' }
+                Assert-ScaleChildMetrics -Plan $actual -Metrics @(@{scenario=$expected.MetricPrefix + 'rows'})
+            }
+            'Canonical scenario identity'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains("Canonical scenario identity", result.Output);
+    }
+
+    [Theory]
+    [InlineData("Stress")]
+    [InlineData("Huge")]
+    [InlineData("Provider")]
+    [InlineData("All")]
+    public async Task CapturePlan_PreservesTheOtherTierEntryPoints(string tier)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $plan = @(Get-ScaleCapturePlan -Tier '{{tier}}')
+            if ($plan.Count -ne 1 -or $plan[0].MetricPrefix) { throw 'Unexpected isolation.' }
+            $plan[0].Filter
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains(tier == "All" ? "Category=ScaleCertification" : $"Tier={tier}", result.Output);
+    }
+
+    [Theory]
+    [InlineData("empty")]
+    [InlineData("duplicate")]
+    [InlineData("wrong-scenario")]
+    public async Task CapturePlan_RejectsMissingDuplicateOrDifferentChildMetrics(string fixture)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $plan = @(Get-ScaleCapturePlan -Tier Smoke -Scenario ExternalSort)[0]
+            $metrics = @(@{scenario='ExternalSort_50000_DESC'})
+            switch ('{{fixture}}') {
+                'empty' { $metrics=@() }
+                'duplicate' { $metrics += $metrics[0] }
+                'wrong-scenario' { $metrics[0].scenario='ExternalJoin_50000_equality' }
+            }
+            Assert-ScaleChildMetrics -Plan $plan -Metrics $metrics
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("expected scenario metric", result.Output);
+    }
+
+    [Theory]
+    [InlineData("", "", true)]
+    [InlineData("shared-testhost-v1", "shared-testhost-v1", true)]
+    [InlineData("single-scenario-process-v1", "single-scenario-process-v1", true)]
+    [InlineData("", "single-scenario-process-v1", false)]
+    [InlineData("single-scenario-process-v1", "shared-testhost-v1", false)]
+    public async Task BaselineComparison_RequiresMatchingProcessIsolation(string baseline, string current, bool compatible)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $baselineConfig = @{processIsolation='{{baseline}}'}
+            $currentConfig = @{processIsolation='{{current}}'}
+            Assert-ScaleCaptureCompatibility -BaselineReport @{config=$baselineConfig} -CurrentReport @{config=$currentConfig}
+            'Compatible'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.Equal(compatible, result.ExitCode == 0);
+        Assert.Contains(compatible ? "Compatible" : "Scale process isolation differs", result.Output);
+    }
+
     [Theory]
     [InlineData("", "", true)]
     [InlineData("", "current", false)]

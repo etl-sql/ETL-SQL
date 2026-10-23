@@ -5,6 +5,8 @@
 .DESCRIPTION
     Executes tests tagged [Trait("Category", "ScaleCertification")] and collects the
     CERT_METRIC JSON lines emitted by each test into a summary artifact.
+    Smoke and Standard run each scenario in a separate test host for each sample, using the
+    same exact method filter as -Scenario. Other complete tiers keep their existing entry points.
 
     Output:
       ./certification-results/cert-report.json     — machine-readable metrics
@@ -346,29 +348,8 @@ if (Test-Path $testDll) {
 }
 
 # ── 2. Run tests ──────────────────────────────────────────────────────────────
-$scenarioMethods = @{
-    ExternalSort = 'Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized'
-    ExternalAggregate = 'Cert_Smoke_ExternalAggregate_100kRows_CorrectSums'
-    ExternalJoin = 'Cert_Smoke_ExternalJoin_50kRows_CorrectResults'
-    TempTableSpill = 'Cert_Smoke_TempTableSpill_50kRows_CorrectCount'
-    StreamingSelect = 'Cert_Smoke_StreamingSelect_ResultCapEnforced'
-    WindowFunction = 'Cert_Smoke_WindowFunction_50kRows_CorrectRankValues'
-    CsvIngest = 'Cert_Smoke_CsvIngest_50kRows_CorrectChecksum'
-    ParquetRoundTrip = 'Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum'
-    ReportDatasetSnapshotReload = 'Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum'
-    CubeGroupingSets = 'Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum'
-    ScalarSubqueryCache = 'Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys'
-    SpillCleanupSuccess = 'Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles'
-    SpillCleanupFailure = 'Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles'
-}
-
-$filterExpr = if ($Scenario) {
-    "FullyQualifiedName=ETL_SQL.Tests.Scale.ScaleCertificationTests.$($scenarioMethods[$Scenario])"
-} elseif ($Tier -eq 'All') {
-    "Category=ScaleCertification"
-} else {
-    "Category=ScaleCertification&Tier=$Tier"
-}
+$capturePlans = @(Get-ScaleCapturePlan -Tier $Tier -Scenario $Scenario)
+$filterExpr = if ($capturePlans.Count -eq 1) { $capturePlans[0].Filter } else { 'One exact scenario method per process' }
 
 $config = [ordered]@{
     tier = $Tier
@@ -377,6 +358,8 @@ $config = [ordered]@{
     samples = $Samples
     scenario = if ($Scenario) { $Scenario } else { $null }
     filter = $filterExpr
+    filters = @($capturePlans.Filter)
+    processIsolation = if ($Scenario -or $Tier -in @('Smoke','Standard')) { 'single-scenario-process-v1' } else { 'shared-testhost-v1' }
     buildConfiguration = 'Release'
     serverGcRequested = $true
     memoryGrantMB = if ($env:CERT_MEMORY_GRANT_MB) { [int]$env:CERT_MEMORY_GRANT_MB } else { 2048 }
@@ -389,6 +372,7 @@ $config = [ordered]@{
     testFixture = 'isolated-scale-v1'
     resourceScope = 'timed-operations-lifecycle-peaks-v1'
     scenarioWarmUp = if ($NoScenarioWarmUp) { 'none' } else { 'own-path-untimed-v1' }
+    discardedProcessWarmUp = -not $NoWarmUp
     fixtureDefinitionSha256 = $fixtureHash
 }
 $sourceMetadata = Get-SourceMetadata $config
@@ -440,7 +424,7 @@ function Clear-ScaleSpill {
         Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop
     }
 }
-$dotnetArgs = @('test', $testProject, '--filter', $filterExpr,
+$dotnetArgs = @('test', $testProject,
     '--logger', 'console;verbosity=detailed', '--settings', $scaleSettingsPath, '--no-build', '--no-restore', '-c', 'Release') + $fixtureProperties
 
 $allSampleMetrics = @()
@@ -457,139 +441,150 @@ $testExitCode = 0
 # alarm that cost most of a release day. See
 # docs/architecture/decisions/v0.17.0-performance-results.md.
 if (-not $NoWarmUp) {
-    Write-Host "Discarded run (primes file caches; measured processes retain their own JIT startup)..." -ForegroundColor Yellow
-    $warmLog = Join-Path $OutDir 'raw-output-warmup.txt'
-    Remove-Item $warmLog -ErrorAction SilentlyContinue
-    $env:CERT_PROGRESS_FILE = [System.IO.Path]::GetFullPath((Join-Path $OutDir 'progress-warmup.txt'))
-    $warm = Start-ScaleCapturedProcess -FileName 'dotnet' -Arguments $dotnetArgs `
-        -StandardOutputPath $warmLog -StandardErrorPath "$warmLog.err" -ChildEnvironment $captureEnvironment
-    $warmExit = Complete-ScaleCapturedProcess $warm
-    if ($warmExit -ne 0) { throw "Discarded scale run failed with exit code $warmExit; inspect $warmLog." }
-    Write-Host "  discarded run passed — measuring now" -ForegroundColor Gray
+    foreach ($plan in $capturePlans) {
+        Write-Host "Discarded run (primes file caches; measured processes retain their own JIT startup)..." -ForegroundColor Yellow
+        $warmLog = Join-Path $OutDir "raw-output-warmup-$($plan.Name).txt"
+        Remove-Item $warmLog -ErrorAction SilentlyContinue
+        $env:CERT_PROGRESS_FILE = [System.IO.Path]::GetFullPath((Join-Path $OutDir "progress-warmup-$($plan.Name).txt"))
+        $warm = Start-ScaleCapturedProcess -FileName 'dotnet' -Arguments ($dotnetArgs + @('--filter', $plan.Filter)) `
+            -StandardOutputPath $warmLog -StandardErrorPath "$warmLog.err" -ChildEnvironment $captureEnvironment
+        $warmExit = Complete-ScaleCapturedProcess $warm
+        if ($warmExit -ne 0) { throw "Discarded scale run failed with exit code $warmExit; inspect $warmLog." }
+        Write-Host "  discarded run passed — measuring now" -ForegroundColor Gray
+    }
 }
 
 for ($sampleIndex = 1; $sampleIndex -le $Samples; $sampleIndex++) {
-    $sampleRawLog = if ($Samples -eq 1) { $rawLog } else { Join-Path $OutDir ("raw-output-sample{0}.txt" -f $sampleIndex) }
-    $errLog = "$sampleRawLog.err"
-    Remove-Item $sampleRawLog -ErrorAction SilentlyContinue
-    Remove-Item $errLog -ErrorAction SilentlyContinue
+    $sampleMetrics = @()
+    $childReports = @()
+    $sampleExitCode = 0
+    foreach ($plan in $capturePlans) {
+        $sampleRawLog = Join-Path $OutDir "raw-output-sample$sampleIndex-$($plan.Name).txt"
+        $errLog = "$sampleRawLog.err"
+        Remove-Item $sampleRawLog -ErrorAction SilentlyContinue
+        Remove-Item $errLog -ErrorAction SilentlyContinue
 
-    # Clean orphaned non-persistent spill from any prior killed run so it doesn't bloat disk or
-    # inflate the live spill gauge. (Killed runs don't clean their own %TEMP%\ETL-SQL-Spill\<guid>.)
-    Clear-ScaleSpill
+        # Clean orphaned non-persistent spill from any prior killed run so it doesn't bloat disk or
+        # inflate the live spill gauge. (Killed runs don't clean their own %TEMP%\ETL-SQL-Spill\<guid>.)
+        Clear-ScaleSpill
 
-    # Live progress side-channel (the test writes the current scenario here immediately, since
-    # ITestOutputHelper buffers until the whole [Fact] finishes). Must be an ABSOLUTE path — the test
-    # host runs with a different working directory than this script.
-    $progressFile = [System.IO.Path]::GetFullPath((Join-Path $OutDir ("progress-sample{0}.txt" -f $sampleIndex)))
-    Remove-Item $progressFile -ErrorAction SilentlyContinue
-    $env:CERT_PROGRESS_FILE = $progressFile
+        # Live progress side-channel (the test writes the current scenario here immediately, since
+        # ITestOutputHelper buffers until the whole [Fact] finishes). Must be an ABSOLUTE path — the test
+        # host runs with a different working directory than this script.
+        $progressFile = [System.IO.Path]::GetFullPath((Join-Path $OutDir "progress-sample$sampleIndex-$($plan.Name).txt"))
+        Remove-Item $progressFile -ErrorAction SilentlyContinue
+        $env:CERT_PROGRESS_FILE = $progressFile
 
-    Write-Host "Live status sample $sampleIndex/$Samples (full output -> $sampleRawLog):" -ForegroundColor Gray
-    $capture = Start-ScaleCapturedProcess -FileName 'dotnet' -Arguments $dotnetArgs `
-        -StandardOutputPath $sampleRawLog -StandardErrorPath $errLog -ChildEnvironment $captureEnvironment
-    $proc = $capture.Process
-    $runStart = Get-Date
+        Write-Host "Live status $($plan.Name), sample $sampleIndex/$Samples (full output -> $sampleRawLog):" -ForegroundColor Gray
+        $capture = Start-ScaleCapturedProcess -FileName 'dotnet' -Arguments ($dotnetArgs + @('--filter', $plan.Filter)) `
+            -StandardOutputPath $sampleRawLog -StandardErrorPath $errLog -ChildEnvironment $captureEnvironment
+        $proc = $capture.Process
+        $runStart = Get-Date
 
-    while (-not $proc.HasExited) {
-        Start-Sleep -Seconds 4
+        while (-not $proc.WaitForExit(4000)) {
 
-        try {
-            $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
-            $freeGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
-        } catch {
-            $freeGB = $null
-        }
-
-        $tp = Get-Process -Name testhost -ErrorAction SilentlyContinue |
-            Sort-Object WorkingSet64 -Descending | Select-Object -First 1
-        $procGB = if ($tp) { [math]::Round($tp.WorkingSet64 / 1GB, 2) } else { 0 }
-
-        $spillGB = 0
-        if (Test-Path $spillRoot) {
-            $spillGB = [math]::Round((((Get-ChildItem $spillRoot -Recurse -File -ErrorAction SilentlyContinue) |
-                Measure-Object Length -Sum).Sum / 1GB), 2)
-        }
-
-        $idx = 0; $tot = 0; $scn = ''
-        if (Test-Path $progressFile) {
-            $parts = ((Get-Content $progressFile -Raw -ErrorAction SilentlyContinue) -split '\|')
-            if ($parts.Count -ge 4) { $idx = [int]$parts[1]; $tot = [int]$parts[2]; $scn = $parts[3] }
-        }
-
-        # Live engine/test activity: the side-channel only updates at scenario boundaries, so within a
-        # long-running scenario (e.g. 50M data generation or a spilling operator) this tail shows what's
-        # actually happening — and keeps the HUD informative even if the side-channel never updates.
-        $act = ''
-        if (Test-Path $sampleRawLog) {
-            $last = Get-Content $sampleRawLog -Tail 6 -ErrorAction SilentlyContinue |
-                Where-Object { $_ -match '\S' } | Select-Object -Last 1
-            if ($last) {
-                # Strip ANSI escape sequences, Spectre.Console markup tags, and non-printable bytes that
-                # leak into the redirected (non-TTY) output, then collapse whitespace and truncate.
-                $act = ($last -replace '\x1b\[[0-9;]*[A-Za-z]', '' `
-                              -replace '\[[a-zA-Z/][a-zA-Z0-9 ]*\]', '' `
-                              -replace '[^\x20-\x7E]', ' ' -replace '\s+', ' ').Trim()
-                if ($act.Length -gt 46) { $act = $act.Substring(0, 46) }
-            }
-        }
-
-        $elapsed = (Get-Date) - $runStart
-        $eta = '~--'
-        if ($idx -gt 1 -and $tot -gt 0) {
-            $perScn = $elapsed.TotalSeconds / ($idx - 1)
-            $eta = '~' + ('{0:hh\:mm\:ss}' -f [TimeSpan]::FromSeconds($perScn * ($tot - ($idx - 1))))
-        }
-
-        # Show the scenario X/N once the side-channel reports it; until then show "init" (build/discovery
-        # or first-scenario data generation) so a slow start never reads as a stuck "0/0".
-        $phase = if ($idx -gt 0) { '{0}/{1} {2}' -f $idx, $tot, $scn } else { 'init' }
-        $freeDisplay = if ($null -eq $freeGB) { 'n/a' } else { "$freeGB" }
-        $warn = if ($null -ne $freeGB -and $freeGB -lt 1.0) { ' !!LOW-RAM' } else { '' }
-        $line = ('[{0:hh\:mm\:ss}] sample {1}/{2} {3,-26} | RAM {4}GB free {5}GB | spill {6}GB | ETA {7} | {8}{9}' `
-            -f $elapsed, $sampleIndex, $Samples, $phase, $procGB, $freeDisplay, $spillGB, $eta, $act, $warn)
-        Write-Host ("`r" + $line.PadRight(170)) -NoNewline
-    }
-    $sampleExitCode = Complete-ScaleCapturedProcess $capture
-    Write-Host ""  # finish the in-place status line
-    if (Test-Path $errLog) { Get-Content $errLog | Add-Content $sampleRawLog }
-
-    if ($Samples -gt 1) {
-        "===== SAMPLE $sampleIndex/$Samples =====" | Add-Content $rawLog
-        Get-Content $sampleRawLog | Add-Content $rawLog
-    }
-
-    if ($sampleExitCode -ne 0 -and $testExitCode -eq 0) { $testExitCode = $sampleExitCode }
-    if (-not (Test-ReleaseTestOutputExecuted -Output (Get-Content -LiteralPath $sampleRawLog -Raw))) {
-        Write-Warning "Sample $sampleIndex has no executed passing test result."
-        $testExitCode = 1
-    }
-
-    $sampleMetrics = Get-Content $sampleRawLog |
-        Where-Object { $_ -match 'CERT_METRIC:(.+)$' } |
-        ForEach-Object {
-            $json = ($_ -replace '^.*CERT_METRIC:', '').Trim()
             try {
-                $metric = $json | ConvertFrom-Json
-                $metric | Add-Member -NotePropertyName sampleIndex -NotePropertyValue $sampleIndex -Force
-                $metric
+                $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+                $freeGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
             } catch {
-                $null
+                $freeGB = $null
             }
-        } |
-        Where-Object { $_ -ne $null }
+
+            $tp = Get-Process -Name testhost -ErrorAction SilentlyContinue |
+                Sort-Object WorkingSet64 -Descending | Select-Object -First 1
+            $procGB = if ($tp) { [math]::Round($tp.WorkingSet64 / 1GB, 2) } else { 0 }
+
+            $spillGB = 0
+            if (Test-Path $spillRoot) {
+                $spillGB = [math]::Round((((Get-ChildItem $spillRoot -Recurse -File -ErrorAction SilentlyContinue) |
+                    Measure-Object Length -Sum).Sum / 1GB), 2)
+            }
+
+            $idx = 0; $tot = 0; $scn = ''
+            if (Test-Path $progressFile) {
+                $parts = ((Get-Content $progressFile -Raw -ErrorAction SilentlyContinue) -split '\|')
+                if ($parts.Count -ge 4) { $idx = [int]$parts[1]; $tot = [int]$parts[2]; $scn = $parts[3] }
+            }
+
+            # Live engine/test activity: the side-channel only updates at scenario boundaries, so within a
+            # long-running scenario (e.g. 50M data generation or a spilling operator) this tail shows what's
+            # actually happening — and keeps the HUD informative even if the side-channel never updates.
+            $act = ''
+            if (Test-Path $sampleRawLog) {
+                $last = Get-Content $sampleRawLog -Tail 6 -ErrorAction SilentlyContinue |
+                    Where-Object { $_ -match '\S' } | Select-Object -Last 1
+                if ($last) {
+                    # Strip ANSI escape sequences, Spectre.Console markup tags, and non-printable bytes that
+                    # leak into the redirected (non-TTY) output, then collapse whitespace and truncate.
+                    $act = ($last -replace '\x1b\[[0-9;]*[A-Za-z]', '' `
+                                  -replace '\[[a-zA-Z/][a-zA-Z0-9 ]*\]', '' `
+                                  -replace '[^\x20-\x7E]', ' ' -replace '\s+', ' ').Trim()
+                    if ($act.Length -gt 46) { $act = $act.Substring(0, 46) }
+                }
+            }
+
+            $elapsed = (Get-Date) - $runStart
+            $eta = '~--'
+            if ($idx -gt 1 -and $tot -gt 0) {
+                $perScn = $elapsed.TotalSeconds / ($idx - 1)
+                $eta = '~' + ('{0:hh\:mm\:ss}' -f [TimeSpan]::FromSeconds($perScn * ($tot - ($idx - 1))))
+            }
+
+            # Show the scenario X/N once the side-channel reports it; until then show "init" (build/discovery
+            # or first-scenario data generation) so a slow start never reads as a stuck "0/0".
+            $phase = if ($idx -gt 0) { '{0}/{1} {2}' -f $idx, $tot, $scn } else { 'init' }
+            $freeDisplay = if ($null -eq $freeGB) { 'n/a' } else { "$freeGB" }
+            $warn = if ($null -ne $freeGB -and $freeGB -lt 1.0) { ' !!LOW-RAM' } else { '' }
+            $line = ('[{0:hh\:mm\:ss}] sample {1}/{2} {3,-26} | RAM {4}GB free {5}GB | spill {6}GB | ETA {7} | {8}{9}' `
+                -f $elapsed, $sampleIndex, $Samples, $phase, $procGB, $freeDisplay, $spillGB, $eta, $act, $warn)
+            Write-Host ("`r" + $line.PadRight(170)) -NoNewline
+        }
+        $childExitCode = Complete-ScaleCapturedProcess $capture
+        Write-Host ""  # finish the in-place status line
+        if (Test-Path $errLog) { Get-Content $errLog | Add-Content $sampleRawLog }
+
+        "===== SAMPLE $sampleIndex/$Samples, $($plan.Name) =====" | Add-Content $rawLog
+        Get-Content $sampleRawLog | Add-Content $rawLog
+
+        if ($childExitCode -ne 0) {
+            if ($testExitCode -eq 0) { $testExitCode = $childExitCode }
+            if ($sampleExitCode -eq 0) { $sampleExitCode = $childExitCode }
+        }
+        if (-not (Test-ReleaseTestOutputExecuted -Output (Get-Content -LiteralPath $sampleRawLog -Raw))) {
+            Write-Warning "Sample $sampleIndex has no executed passing test result."
+            $testExitCode = 1
+            $sampleExitCode = 1
+        }
+
+        $childMetrics = @(Get-Content $sampleRawLog |
+            Where-Object { $_ -match 'CERT_METRIC:(.+)$' } |
+            ForEach-Object {
+                $json = ($_ -replace '^.*CERT_METRIC:', '').Trim()
+                try {
+                    $metric = $json | ConvertFrom-Json
+                    $metric | Add-Member -NotePropertyName sampleIndex -NotePropertyValue $sampleIndex -Force
+                    $metric
+                } catch {
+                    $null
+                }
+            } |
+            Where-Object { $_ -ne $null })
+        try { Assert-ScaleChildMetrics -Plan $plan -Metrics $childMetrics }
+        catch { Write-Warning $_; $testExitCode = 1; $sampleExitCode = 1 }
+        $sampleMetrics += $childMetrics
+        $childReports += [ordered]@{ name=$plan.Name; filter=$plan.Filter; exitCode=$childExitCode; rawLog=$sampleRawLog; metrics=$childMetrics }
+        Clear-ScaleSpill
+    }
 
     $allSampleMetrics += @($sampleMetrics)
     $sampleReports += [ordered]@{
         sample = $sampleIndex
         exitCode = $sampleExitCode
-        rawLog = $sampleRawLog
+        rawLog = $rawLog
+        children = @($childReports)
         metrics = @($sampleMetrics)
     }
 
-    # The certification evaluator is explicitly non-persistent. A force-killed test host cannot run its
-    # disposer, so the runner owns final cleanup after the child exits as a second line of defense.
-    Clear-ScaleSpill
 }
 
 try { $computer = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop } catch { $computer = $null }
@@ -643,6 +638,10 @@ if ($measuredRuntimes.Count -eq 1) {
 }
 
 # ── 4. Write JSON report ──────────────────────────────────────────────────────
+if ((Get-SourceMetadata $config).sourceFingerprint -cne $sourceMetadata.sourceFingerprint) {
+    Write-Warning 'Source changed during scale capture; this report cannot certify the initial candidate.'
+    $testExitCode = 1
+}
 $report = [ordered]@{
     schemaVersion = 2
     generatedAt = (Get-Date -Format 'o')
@@ -699,6 +698,8 @@ $mdLines += "- Engine memory grant: $($hardware.memoryGrantMB) MB"
 $mdLines += "- Output capture: $($config.outputCapture); full formatted result output retained"
 $mdLines += "- Temporary storage: $($config.temporaryStorage)"
 $mdLines += "- Scenario warm-up: $($config.scenarioWarmUp)"
+$mdLines += "- Discarded process warm-up: $($config.discardedProcessWarmUp)"
+$mdLines += "- Process isolation: $($config.processIsolation)"
 $mdLines += "- Theory data pre-enumeration: $($config.preEnumerateTheories) (selected theories still execute all their rows)"
 $mdLines += "- Commit: $($sourceMetadata.commit.sha) ($($sourceMetadata.commit.branch)); dirty: $($sourceMetadata.commit.isDirty)"
 $mdLines += "- Source fingerprint: $($sourceMetadata.sourceFingerprint)"

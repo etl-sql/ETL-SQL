@@ -31,12 +31,12 @@ function sameRepository(run, repository) {
     run.head_repository?.full_name?.toLowerCase() === repository.toLowerCase();
 }
 
-function missingCoverage(message) {
-  return Object.assign(new Error(message), { code: 'INCOMPLETE_COVERAGE' });
+function missingCoverage(message, workflow) {
+  return Object.assign(new Error(message), { code: 'INCOMPLETE_COVERAGE', workflow });
 }
 
-export async function collectHostedEvidence(repository, sha, {
-  query = ghApi, now = Date.now(), policy = hostedPolicy,
+async function collectRequiredEvidence(repository, sha, {
+  query = ghApi, now = Date.now(), policy = hostedPolicy, branch,
 } = {}) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !/^[a-f0-9]{40}$/.test(sha)) {
     throw new Error('Supply a repository and exact lowercase candidate SHA.');
@@ -45,7 +45,7 @@ export async function collectHostedEvidence(repository, sha, {
       !Array.isArray(policy.workflows) || !policy.workflows.length) throw new Error('Invalid hosted evidence policy.');
   const workflows = [];
   for (const configuredRequirement of policy.workflows) {
-    let requirement = configuredRequirement;
+    const requirement = configuredRequirement;
     if (!/^[\w-]+\.yml$/.test(requirement.file) || !Array.isArray(requirement.jobs) || !requirement.jobs.length ||
         new Set(requirement.jobs).size !== requirement.jobs.length ||
         !Array.isArray(requirement.events) || !requirement.events.length) throw new Error('Invalid workflow requirement.');
@@ -53,18 +53,13 @@ export async function collectHostedEvidence(repository, sha, {
       const endpoint = `repos/${repository}/actions/workflows/${requirement.file}/runs?head_sha=${sha}&per_page=100`;
       const runs = paged(await query(endpoint), 'workflow_runs');
       const eligible = runs.filter(run => run.head_sha === sha && sameRepository(run, repository) &&
+        (branch === undefined || run.head_branch === branch) &&
         run.path === `.github/workflows/${requirement.file}` && requirement.events.includes(run.event) &&
-        (run.head_branch === 'main' || /^release\/.+/.test(run.head_branch ?? '')));
+        ((!requirement.releaseBranchesOnly && run.head_branch === 'main') || /^release\/.+/.test(run.head_branch ?? '')));
       return eligible.sort((a, b) => b.id - a.id)[0];
     }
-    let run = await findRun(requirement);
-    // A full regular push may already have paid for every lane. A requested certification run
-    // takes precedence even if red; fallback is allowed only when no such run exists.
-    if (!run && requirement.fallback) {
-      requirement = { ...configuredRequirement, ...configuredRequirement.fallback, fallback: undefined };
-      run = await findRun(requirement);
-    }
-    if (!run) throw new Error(`Missing exact-candidate ${requirement.file} evidence on main or release/**.`);
+    const run = await findRun(requirement);
+    if (!run) throw Object.assign(new Error(`Missing exact-candidate ${requirement.file} evidence on main or release/**.`), { code: 'MISSING_WORKFLOW_EVIDENCE' });
     // The latest candidate run owns the verdict. An older green run cannot conceal a newer failure.
     if (run.status !== 'completed' || run.conclusion !== 'success') {
       throw new Error(`${requirement.file} run ${run.id} is ${run.status}/${run.conclusion}. Inspect: gh run view ${run.id} --repo ${repository} --log-failed. Retry unchanged inputs: gh run rerun ${run.id} --repo ${repository} --failed`);
@@ -93,10 +88,12 @@ export async function collectHostedEvidence(repository, sha, {
     }
     const jobs = [...latestJobs.values()];
     const retained = [];
+    let omittedCoverage;
     for (const name of requirement.jobs) {
       const matches = jobs.filter(job => job.name === `${requirement.jobPrefix ?? ''}${name}`);
       if (matches.length === 0 || (matches.length === 1 && matches[0].conclusion === 'skipped')) {
-        throw missingCoverage(`Required job did not run: ${requirement.file} / ${name}`);
+        omittedCoverage ??= missingCoverage(`Required job did not run: ${requirement.file} / ${name}`, requirement.file);
+        continue;
       }
       if (matches.length !== 1) throw new Error(`Required job must appear once: ${requirement.file} / ${name}`);
       const job = matches[0];
@@ -108,8 +105,8 @@ export async function collectHostedEvidence(repository, sha, {
       retained.push({ id: job.id, name, attempt: job.originAttempt, conclusion: job.conclusion,
         completedAt: job.completed_at, url: job.html_url });
     }
-    if (jobs.some(job => job.status !== 'completed' || job.conclusion !== 'success')) {
-      throw new Error(`${requirement.file} contains an unsuccessful or skipped job.`);
+    if (jobs.some(job => job.status !== 'completed' || !['success', 'skipped'].includes(job.conclusion))) {
+      throw new Error(`${requirement.file} contains an unsuccessful job.`);
     }
     // Recheck after fetching jobs so a concurrent retry cannot mix run-attempt snapshots.
     const refreshedPages = await query(`repos/${repository}/actions/runs/${run.id}`);
@@ -120,8 +117,47 @@ export async function collectHostedEvidence(repository, sha, {
         refreshed.path !== run.path || !sameRepository(refreshed, repository)) {
       throw new Error('Run changed during evidence collection; inspect and collect again.');
     }
+    if (omittedCoverage) throw omittedCoverage;
+    if (jobs.some(job => job.conclusion !== 'success')) throw new Error(`${requirement.file} contains a skipped job.`);
     workflows.push({ workflow: requirement.file, id: run.id, attempt: run.run_attempt, event: run.event,
       branch: run.head_branch, createdAt: run.created_at, url: run.html_url, jobs: retained, history });
+  }
+  return { schemaVersion: 1, scope: 'hosted-ci-and-codeql', fullReleaseCertification: false,
+    repository, sourceSha: sha, collectedAt: new Date(now).toISOString(), workflows };
+}
+
+export async function collectHostedEvidence(repository, sha, {
+  query = ghApi, now = Date.now(), policy = hostedPolicy, branch,
+} = {}) {
+  if (policy.schemaVersion !== 1 || !Number.isFinite(policy.maximumAgeHours) || policy.maximumAgeHours <= 0 ||
+      !Array.isArray(policy.workflows) || !policy.workflows.length) throw new Error('Invalid hosted evidence policy.');
+  const workflows = [];
+  for (const configured of policy.workflows) {
+    const primary = { ...configured, fallback: undefined, nightlyFallback: undefined };
+    const sources = [primary,
+      ...(configured.fallback ? [{ ...primary, ...configured.fallback }] : []),
+      ...(configured.nightlyFallback ? [{ ...primary, ...configured.nightlyFallback }] : [])];
+    let selected;
+    let missing;
+    let incomplete;
+    for (let index = 0; index < sources.length; index++) {
+      const requirement = sources[index];
+      try {
+        selected = await collectRequiredEvidence(repository, sha, { query, now, branch, policy: { ...policy, workflows: [requirement] } });
+        break;
+      } catch (error) {
+        if (error.code === 'MISSING_WORKFLOW_EVIDENCE') { missing = error; continue; }
+        // A green targeted push may omit required lanes. Only that case may use nightly CI.
+        // Existing explicit certification, API errors, failed runs and invalid evidence still stop.
+        if (index === 1 && configured.fallback?.file === 'ci.yml' && error.code === 'INCOMPLETE_COVERAGE') {
+          incomplete = error;
+          continue;
+        }
+        throw error;
+      }
+    }
+    if (!selected) throw incomplete ?? missing;
+    workflows.push(...selected.workflows);
   }
   return { schemaVersion: 1, scope: 'hosted-ci-and-codeql', fullReleaseCertification: false,
     repository, sourceSha: sha, collectedAt: new Date(now).toISOString(), workflows };

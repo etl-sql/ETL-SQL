@@ -42,6 +42,11 @@ assert.ok(pending.reports.some(message => message.includes('does not require a r
 assert.equal((await exercise([[run({ event: 'workflow_dispatch', headBranch: 'v1.2.3' })]], { ...candidate, workflow: 'release.yml', ref: 'v1.2.3' })).ok, true);
 assert.equal((await exercise([[run({ event: 'workflow_dispatch' })]], { ...candidate, workflow: 'release-certification.yml' })).ok, true);
 assert.equal((await exercise([[run()]], { ...candidate, workflow: 'release-certification.yml' })).conclusion, 'timeout');
+assert.equal((await exercise([[run({ event: 'workflow_dispatch' })]], { ...candidate, workflow: 'nightly-release.yml' })).ok, true);
+for (const event of ['push', 'pull_request']) {
+  assert.equal((await exercise([[run({ event })]], { ...candidate, workflow: 'nightly-release.yml' })).conclusion, 'timeout');
+}
+assert.equal((await exercise([[run({ event: 'workflow_dispatch', conclusion: 'failure' })]], { ...candidate, workflow: 'nightly-release.yml' })).ok, false);
 await assert.rejects(exercise([new Error('API unavailable')]), /API unavailable/);
 await assert.rejects(exercise([{}]), /invalid workflow-run list/);
 await assert.rejects(exercise([[run({ databaseId: null })]]), /invalid run ID/);
