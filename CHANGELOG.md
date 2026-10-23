@@ -70,6 +70,16 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 - The operation ledger refuses a session id that leaves the session root.
 - LDAP refuses an empty password before binding.
 - The shipped `appsettings.json` no longer lists a developer's folder as an approved safe zone.
+- Streaming decryption of encrypted files (password, SSH key and machine-bound) checks the file's
+  authentication tag before returning any data; a tampered file is refused instead of decrypting
+  to garbage rows.
+- The Gateway broker refuses a result beyond the operation's row or size limit and drops rows for
+  an operation nobody is waiting on, so a Gateway cannot make the Portal buffer without bound.
+- A Gateway node id held by a live session with a different workload key is refused; the same node
+  reconnecting replaces its stale session.
+- The Linux package keeps shipped binaries and configuration owned by root. The bin folder stays
+  writable for the services' databases and data, with the sticky bit so they cannot replace root's
+  files, and the `.deb` is built with root ownership.
 
 ### Fixed
 

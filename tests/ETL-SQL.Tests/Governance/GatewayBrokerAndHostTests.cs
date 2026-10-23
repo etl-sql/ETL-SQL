@@ -278,6 +278,48 @@ public sealed class GatewayBrokerAndHostTests
     }
 
     [Fact]
+    public async Task Session_RefusesAResultBeyondTheOperationsBounds()
+    {
+        var enrollmentStore = new InMemoryGatewayEnrollmentStore();
+        await enrollmentStore.IssueAsync(TenantA, GatewayId, "token-32-chars-long-minimum-length-req", DateTimeOffset.UtcNow.AddHours(1));
+        await enrollmentStore.ConsumeAsync(TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
+        var registry = new GatewaySessionRegistry();
+        var broker = new GatewayBroker(enrollmentStore, registry, allowUnprovenTestIdentities: true);
+        await using var server = await LoopbackWebSocketServer.StartAsync(broker.HandleInboundConnectionAsync);
+
+        using var gateway = new ClientWebSocket();
+        await gateway.ConnectAsync(server.Uri, CancellationToken.None);
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.Hello,
+            TenantId = TenantA,
+            GatewayId = GatewayId,
+            WorkloadPublicKeyThumbprint = Thumbprint
+        });
+        Assert.Equal(GatewayFrameKind.HelloAck, (await ReceiveFrameAsync(gateway))!.Kind);
+        Assert.True(registry.TryGet(TenantA, GatewayId, out var session));
+
+        var bounds = GatewayOperationBounds.Default with { MaxRows = 2 };
+        var running = session!.ExecuteAsync(
+            new GatewayOperation("op-flood", TenantA, GatewayId, "orders", GatewayOperationClass.Read,
+                GatewayOperationEffect.ReadOnly, bounds, "op-flood"),
+            "SELECT *", null, CancellationToken.None);
+        Assert.Equal("op-flood", (await ReceiveFrameAsync(gateway))!.OperationId);
+
+        // A Gateway that ignores the bounds it was sent.
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.RowBatch,
+            OperationId = "op-flood",
+            Columns = ["v"],
+            Rows = [["1"], ["2"], ["3"]]
+        });
+
+        await Assert.ThrowsAsync<GatewayProtocolException>(() => running);
+        await gateway.CloseAsync(WebSocketCloseStatus.NormalClosure, "Test done", CancellationToken.None);
+    }
+
+    [Fact]
     public async Task Session_ReturnsAResultLargerThanOneFrame()
     {
         var enrollmentStore = new InMemoryGatewayEnrollmentStore();
@@ -317,6 +359,40 @@ public sealed class GatewayBrokerAndHostTests
         Assert.False(clientTask.IsFaulted);
         run.Cancel();
         try { await clientTask; } catch (OperationCanceledException) { }
+    }
+
+    [Fact]
+    public void Registry_RefusesANodeIdHeldByAnotherKey_AndReplacesItsOwnStaleSession()
+    {
+        var registry = new GatewaySessionRegistry();
+        var original = new FakeSession("node-1", "key-a");
+        Assert.True(registry.TryRegister(original, out var displaced));
+        Assert.Null(displaced);
+
+        // Another node claiming the same id is refused while the original is live.
+        Assert.False(registry.TryRegister(new FakeSession("node-1", "key-b"), out _));
+        Assert.True(registry.TryGet(TenantA, GatewayId, out var routed));
+        Assert.Same(original, routed);
+
+        // The same key reconnecting replaces its own session, and the old one is handed back.
+        var reconnect = new FakeSession("node-1", "key-a");
+        Assert.True(registry.TryRegister(reconnect, out displaced));
+        Assert.Same(original, displaced);
+        Assert.True(registry.TryGet(TenantA, GatewayId, out routed));
+        Assert.Same(reconnect, routed);
+    }
+
+    private sealed class FakeSession(string nodeId, string thumbprint) : IGatewaySession
+    {
+        public string TenantId => TenantA;
+        public string GatewayId => GatewayBrokerAndHostTests.GatewayId;
+        public string NodeId => nodeId;
+        public string WorkloadPublicKeyThumbprint => thumbprint;
+        public DateTimeOffset ConnectedUtc { get; } = DateTimeOffset.UtcNow;
+        public bool IsActive => true;
+        public Task<GatewayExecutionResult> ExecuteAsync(GatewayOperation operation, string? request,
+            IReadOnlyList<string>? parameters, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private sealed class FixedResultExecutor(IReadOnlyList<string> columns, IReadOnlyList<IReadOnlyList<string?>> rows)

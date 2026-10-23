@@ -249,6 +249,7 @@ public static class CryptoUtils
                 throw new ExecutionException("Invalid encrypted file format.");
 
             var (encryptionKey, hmacKey) = DeriveFileKeys(password, salt, hashAlgo);
+            VerifyStreamTag(fsIn, hmacKey, cipherStart, cipherLength, FileMagicV2, salt, iv);
             var limited = new LimitedReadStream(fsIn, cipherLength);
             var aes = Aes.Create();
             aes.Key = encryptionKey;
@@ -295,11 +296,13 @@ public static class CryptoUtils
                 throw new ExecutionException("Invalid SSH encrypted file key material.");
 
             byte[] aesKey = keyMaterial.AsSpan(0, 32).ToArray();
+            byte[] hmacKey = keyMaterial.AsSpan(32, 32).ToArray();
             var cipherStart = fsIn.Position;
             var cipherLength = fsIn.Length - cipherStart - FileTagSize;
             if (cipherLength < 0)
                 throw new ExecutionException("Invalid SSH encrypted file format.");
 
+            VerifyStreamTag(fsIn, hmacKey, cipherStart, cipherLength, SshFileMagicV2, lenBytes, encryptedKey, iv);
             var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
             var aes = Aes.Create();
             var decryptor = aes.CreateDecryptor(aesKey, iv);
@@ -369,6 +372,37 @@ public static class CryptoUtils
         fsIn.ReadExactly(expectedTag, 0, expectedTag.Length);
         if (!CryptographicOperations.FixedTimeEquals(hmac.Hash!, expectedTag))
             throw new CryptographicException("Encrypted file authentication failed.");
+    }
+
+    /// <summary>
+    /// Checks the HMAC-SHA256 tag that follows the ciphertext before any of it is decrypted, then
+    /// leaves <paramref name="stream"/> at the start of the ciphertext. The streaming decryptors
+    /// used to return plaintext from a file nobody had authenticated.
+    /// </summary>
+    internal static void VerifyStreamTag(Stream stream, byte[] hmacKey, long cipherStart, long cipherLength, params byte[][] header)
+    {
+        using var hmac = new HMACSHA256(hmacKey);
+        foreach (var part in header)
+            hmac.TransformBlock(part, 0, part.Length, null, 0);
+
+        stream.Position = cipherStart;
+        var buffer = new byte[81920];
+        var remaining = cipherLength;
+        while (remaining > 0)
+        {
+            var read = stream.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+            if (read <= 0)
+                throw new CryptographicException("Encrypted stream is truncated.");
+            hmac.TransformBlock(buffer, 0, read, null, 0);
+            remaining -= read;
+        }
+        hmac.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+
+        var expectedTag = new byte[FileTagSize];
+        stream.ReadExactly(expectedTag, 0, expectedTag.Length);
+        if (!CryptographicOperations.FixedTimeEquals(hmac.Hash!, expectedTag))
+            throw new CryptographicException("Encrypted stream authentication failed.");
+        stream.Position = cipherStart;
     }
 
     private static void WriteAndHash(Stream stream, HMAC hmac, byte[] bytes)

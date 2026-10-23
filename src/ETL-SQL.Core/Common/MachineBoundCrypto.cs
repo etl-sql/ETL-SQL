@@ -387,7 +387,7 @@ public static class MachineBoundCrypto
                 throw new CryptographicException("Ciphertext is too short.");
 
             var fileKey = FileKeyFor(magic);
-            fsIn.Position = cipherStart;
+            ETL_SQL.Common.CryptoUtils.VerifyStreamTag(fsIn, fileKey, cipherStart, cipherLength, magic, iv);
             var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
             var aes = Aes.Create();
             var decryptor = aes.CreateDecryptor(fileKey, iv);

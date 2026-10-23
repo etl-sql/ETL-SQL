@@ -125,13 +125,17 @@ public sealed class GatewayBroker(
             _meteringLedger,
             helloFrame.PublishedResources ?? []);
 
-        if (!sessionRegistry.TryRegister(session))
+        if (!sessionRegistry.TryRegister(session, out var displaced))
         {
             await SendFrameAsync(socket, GatewayFrame.Fault(null, "Another session is already active for this Gateway node."), cancellationToken).ConfigureAwait(false);
             await CloseSocketAsync(socket, "Conflict.", cancellationToken).ConfigureAwait(false);
             await session.DisposeAsync().ConfigureAwait(false);
             return;
         }
+        // The same node reconnected before its old connection was noticed as dropped. Closing a
+        // half-open socket can wait a long time, so the new session does not wait for it.
+        if (displaced is not null)
+            _ = Task.Run(async () => { try { await displaced.DisposeAsync().ConfigureAwait(false); } catch { } }, CancellationToken.None);
 
         try
         {
@@ -246,6 +250,9 @@ internal sealed class ActiveGatewaySession : IGatewaySession
     private readonly Task _pumpTask;
     private readonly ITenantMeteringLedger? _meteringLedger;
     private long _lastSeenUtcTicks;
+    // The operation a caller is waiting on. Row frames for any other operation are dropped as they
+    // arrive, so a caller that gave up cannot leave an unbounded backlog in the inbound channel.
+    private string? _activeOperationId;
 
     public string TenantId { get; }
     public string GatewayId { get; }
@@ -323,12 +330,14 @@ internal sealed class ActiveGatewaySession : IGatewaySession
 
             var serialized = opFrame.Serialize();
             egressBytes = Encoding.UTF8.GetByteCount(serialized);
+            Volatile.Write(ref _activeOperationId, operation.OperationId);
             dispatchAttempted = true;
             await SendFrameInternalAsync(opFrame, cancellationToken).ConfigureAwait(false);
 
             var columns = new List<string>();
             var rows = new List<IReadOnlyList<string?>>();
             var truncated = false;
+            long resultBytes = 0;
 
             while (true)
             {
@@ -353,7 +362,19 @@ internal sealed class ActiveGatewaySession : IGatewaySession
                         columns.AddRange(frame.Columns);
 
                     if (frame.Rows is not null)
+                    {
                         rows.AddRange(frame.Rows);
+                        // Measured the way the Gateway measures it, so a result it stopped at the
+                        // limit is accepted here. A Gateway that ignores the bounds cannot make the
+                        // broker buffer more than they allow.
+                        foreach (var row in frame.Rows)
+                            foreach (var value in row)
+                                resultBytes += (value?.Length ?? 0) * sizeof(char);
+                        if (rows.Count > operation.Bounds.MaxRows || resultBytes > operation.Bounds.MaxResponseBytes)
+                            throw new GatewayProtocolException(
+                                "The Gateway returned more than the operation's row or size limit.",
+                                operationId: operation.OperationId);
+                    }
                 }
                 else if (frame.Kind == GatewayFrameKind.Complete)
                 {
@@ -380,6 +401,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
         finally
         {
             sw.Stop();
+            Volatile.Write(ref _activeOperationId, null);
             _executeGate.Release();
 
             if (_meteringLedger is not null)
@@ -449,7 +471,10 @@ internal sealed class ActiveGatewaySession : IGatewaySession
                 if (stream.Length > 0)
                 {
                     var frame = GatewayFrame.Deserialize(Encoding.UTF8.GetString(stream.ToArray()));
-                    if (frame != null)
+                    if (frame != null
+                        && !(frame.Kind is GatewayFrameKind.RowBatch or GatewayFrameKind.Complete
+                             && frame.OperationId is not null
+                             && !string.Equals(frame.OperationId, Volatile.Read(ref _activeOperationId), StringComparison.Ordinal)))
                     {
                         _inboundChannel.Writer.TryWrite(frame);
                     }

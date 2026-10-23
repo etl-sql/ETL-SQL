@@ -69,9 +69,22 @@ public sealed class GatewayClusterPool
         GatewayId = gatewayId;
     }
 
-    public bool TryAddNode(IGatewaySession session)
+    /// <summary>
+    /// Adds a node. A node id already held by a live session with a different workload key is
+    /// refused: replacing it silently let one node take another's traffic and orphaned the
+    /// original. The same key reconnecting replaces its stale session, returned in
+    /// <paramref name="displaced"/> for the caller to close.
+    /// </summary>
+    public bool TryAddNode(IGatewaySession session, out IGatewaySession? displaced)
     {
         ArgumentNullException.ThrowIfNull(session);
+        displaced = null;
+        if (_nodes.TryGetValue(session.NodeId, out var existing) && !ReferenceEquals(existing, session))
+        {
+            var sameKey = string.Equals(existing.WorkloadPublicKeyThumbprint, session.WorkloadPublicKeyThumbprint, StringComparison.Ordinal);
+            if (existing.IsActive && !sameKey) return false;
+            displaced = existing;
+        }
         _nodes[session.NodeId] = session;
         return true;
     }
@@ -125,14 +138,17 @@ public sealed class GatewaySessionRegistry
     // a register added a live node to it, and that Gateway would read as offline while connected.
     private readonly Lock _membershipGate = new();
 
-    public bool TryRegister(IGatewaySession session)
+    public bool TryRegister(IGatewaySession session) => TryRegister(session, out _);
+
+    /// <summary>Registers a session; <paramref name="displaced"/> is a stale session it replaced.</summary>
+    public bool TryRegister(IGatewaySession session, out IGatewaySession? displaced)
     {
         ArgumentNullException.ThrowIfNull(session);
         var key = (session.TenantId, session.GatewayId);
         lock (_membershipGate)
         {
             var pool = _clusters.GetOrAdd(key, k => new GatewayClusterPool(k.TenantId, k.GatewayId));
-            return pool.TryAddNode(session);
+            return pool.TryAddNode(session, out displaced);
         }
     }
 

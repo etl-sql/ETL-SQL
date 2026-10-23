@@ -147,6 +147,18 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
             File.ReadAllText(Path.Combine(root, "scripts", "build-linux-packages.sh")));
     }
 
+    [Fact]
+    public void DebPackage_KeepsShippedFilesOutOfTheServiceAccountsHands()
+    {
+        var script = File.ReadAllText(Path.Combine(FindRepoRoot(), "scripts", "build-linux-packages.sh")).Replace("\r\n", "\n");
+
+        // The service account must not own the install tree: it could rewrite its own binaries.
+        Assert.DoesNotContain("chown -R etlsql:etlsql /usr/lib/etl-sql", script);
+        // The bin folder stays writable for runtime state, with the sticky bit protecting root's files.
+        Assert.Contains("chmod 1775 \"$BIN\"", script);
+        Assert.Contains("dpkg-deb --root-owner-group --build", script);
+    }
+
     private static string[] Paths(string text, string pattern) =>
         Regex.Matches(Regex.Match(text, pattern).Groups["list"].Value, "[\"']([^\"']+)[\"']")
             .Select(match => match.Groups[1].Value).ToArray();
