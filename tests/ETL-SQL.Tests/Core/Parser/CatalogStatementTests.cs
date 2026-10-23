@@ -279,22 +279,14 @@ namespace ETL_SQL.Tests.Core.Parsing
             Assert.Equal(ifExists, stmt.IfExists);
         }
 
-        /// <summary>
-        /// <c>DROP</c> dispatch used to test the legacy CHART alias with
-        /// <c>Match(TokenType.IDENTIFIER) &amp;&amp; value == "CHART"</c>, where the Match consumed *any*
-        /// identifier before the value check rejected it. Every identifier-dispatched DROP after that
-        /// branch therefore failed with an error pointing past the word already eaten. CHART itself
-        /// must keep working, and so must the kinds that follow it.
-        /// </summary>
         [Fact]
-        public void Drop_DoesNotConsumeAnIdentifierWhileTestingTheChartAlias()
+        public void Drop_Visual_AndIdentifierDispatchedKindsResolve()
         {
-            var chart = Assert.IsType<DropReportObjectStatement>(
-                Assert.Single(Parse("DROP CHART RevenueChart;").Statements));
-            Assert.Equal(ReportObjectType.Visual, chart.ObjectType);
-            Assert.Equal("RevenueChart", chart.Name);
+            var visual = Assert.IsType<DropReportObjectStatement>(
+                Assert.Single(Parse("DROP VISUAL RevenueChart;").Statements));
+            Assert.Equal(ReportObjectType.Visual, visual.ObjectType);
+            Assert.Equal("RevenueChart", visual.Name);
 
-            // The kind dispatched by identifier further down the chain still resolves.
             Assert.IsType<DropCatalogObjectStatement>(
                 Assert.Single(Parse("DROP NOTIFICATION OpsAlert;").Statements));
         }

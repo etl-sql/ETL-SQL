@@ -149,7 +149,6 @@ namespace ETL_SQL.Tests.Reporting
         [InlineData("TOOLTIP ('Details', FIELDS (Revenue FORMAT 'C0'), VISUALS (DetailChart))")]
         [InlineData("TOOLTIP ('Details', VISUALS (DetailChart), FIELDS (Revenue FORMAT 'C0'))")]
         [InlineData("TOOLTIP (FIELDS (Revenue FORMAT 'C0'), VISUALS (DetailChart))")]
-        [InlineData("TOOLTIP ('Details', VISUALS (DetailChart) FIELDS (Revenue FORMAT 'C0'))")]
         public void InlineForm_FieldsAndVisualsParseInEitherOrderAndRoundTrip(string clause)
         {
             var (first, second, _) = RoundTrip(clause);
@@ -160,6 +159,12 @@ namespace ETL_SQL.Tests.Reporting
                 var field = Assert.Single(tooltip.Fields!);
                 Assert.Equal(("Revenue", "C0"), (field.Name, field.Format));
             }
+        }
+
+        [Fact]
+        public void InlineForm_RequiresACommaBetweenParts()
+        {
+            Assert.ThrowsAny<Exception>(() => Parse(Visual("TOOLTIP ('Details', VISUALS (DetailChart) FIELDS (Revenue FORMAT 'C0'))")));
         }
 
         [Theory]

@@ -82,6 +82,10 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 - Report formats from earlier releases are no longer read: the pre-v0.19 `interactions` map,
   version-one chart contracts, Studio's pre-v0.20 single-value filter upgrade, and counts-only
   data-quality rows.
+- Deprecated syntax is removed: the `FILE` connection type (use `FLATFILE`), `DROP CHART`
+  (use `DROP VISUAL`), `DOCKER STOP|CLOSE|...` (use `STOP DOCKER`), `LINEAGE EXPORT AS
+  OPENLINEAGE` (use `EXPORT LINEAGE`), the `@sensitivity` tag alias (use `@classification`), the
+  missing comma between `TOOLTIP` parts, and the `etl-sql ui old` command.
 - Only authenticated encryption formats are read. `ENC:` values, encrypted files, SSH-encrypted
   files and machine-bound payloads in the old unauthenticated AES-CBC formats are refused instead
   of decrypted.

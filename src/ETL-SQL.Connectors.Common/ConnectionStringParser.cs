@@ -222,7 +222,7 @@ public static class ConnectionStringParser
             _ => scheme.ToUpperInvariant()
         };
 
-        if (detectedProvider is "FLATFILE" or "FILE")
+        if (detectedProvider is "FLATFILE")
         {
             options["PATH"] = uri.LocalPath;
             return new ParsedConnectionStringResult("FLATFILE", options, null, null);

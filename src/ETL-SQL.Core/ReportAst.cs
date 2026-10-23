@@ -779,7 +779,7 @@ public record PublishDatasetStatement : Statement
 }
 
 /// <summary>
-/// DROP CHART|PAGE|CONTAINER|STYLE|NAVIGATION|DATASET <name>
+/// DROP VISUAL|PAGE|CONTAINER|STYLE|NAVIGATION|DATASET <name>
 /// </summary>
 public record DropReportObjectStatement : Statement
 {

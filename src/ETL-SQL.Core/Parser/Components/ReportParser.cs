@@ -3716,8 +3716,8 @@ public class ReportParser : ParserComponent
                 {
                     throw new SyntaxException("Expected VISUALS or FIELDS in TOOLTIP", _parser.Current.Line, _parser.Current.Column);
                 }
-                // The comma is optional: before v0.20.0 VISUALS (...) FIELDS (...) was written without one.
-                Match(TokenType.COMMA);
+                if (!ReportCheck(TokenType.RPAREN))
+                    Consume(TokenType.COMMA, "Expected ',' between TOOLTIP parts");
             }
 
             Consume(TokenType.RPAREN, "Expected ')' to close TOOLTIP inline block");
