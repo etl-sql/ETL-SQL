@@ -60,6 +60,27 @@ public static class CryptoUtils
     /// <summary>
     /// Decrypts a string that was encrypted using <see cref="Encrypt"/>.
     /// </summary>
+    /// <summary>
+    /// Receives a note when a value or file in a legacy, unauthenticated format is decrypted. The
+    /// logging service sets it, so operators can find and re-encrypt such data before read support
+    /// for it is removed. Reported once per format per process.
+    /// </summary>
+    public static Action<string>? LegacyFormatSink { get; set; }
+    private static int _legacyValueReported;
+    private static int _legacyFileReported;
+
+    internal static void ResetLegacyReports()
+    {
+        Interlocked.Exchange(ref _legacyValueReported, 0);
+        Interlocked.Exchange(ref _legacyFileReported, 0);
+    }
+
+    private static void ReportLegacy(ref int reported, string what)
+    {
+        if (Interlocked.Exchange(ref reported, 1) == 0)
+            LegacyFormatSink?.Invoke(what);
+    }
+
     public static string Decrypt(string cipherText, string password, HashAlgorithmName? algo = null)
     {
         if (string.IsNullOrWhiteSpace(password)) throw new ArgumentException("Password cannot be null or empty.", nameof(password));
@@ -95,6 +116,8 @@ public static class CryptoUtils
             }
 
             // Legacy AES-CBC payloads used version 1. Keep read compatibility.
+            ReportLegacy(ref _legacyValueReported,
+                "An ENC: value in the legacy unauthenticated format was decrypted. Re-encrypt it with 'etl-sql encrypt' so it is protected against tampering; read support for this format will be removed.");
             if (fullBytes.Length > 0 && fullBytes[0] == 1)
             {
                 offset = 1;
@@ -207,6 +230,8 @@ public static class CryptoUtils
             }
 
             fsIn.Position = 0;
+            ReportLegacy(ref _legacyFileReported,
+                "A file in the legacy unauthenticated encryption format was decrypted. Encrypt it again so it is protected against tampering; read support for this format will be removed.");
             byte[] salt = new byte[SaltSize];
             byte[] iv = new byte[IvSize];
             fsIn.ReadExactly(salt, 0, SaltSize);
@@ -259,6 +284,8 @@ public static class CryptoUtils
         }
 
         fsIn.Position = 0;
+        ReportLegacy(ref _legacyFileReported,
+            "A file in the legacy unauthenticated encryption format was decrypted. Encrypt it again so it is protected against tampering; read support for this format will be removed.");
         byte[] saltV1 = new byte[SaltSize];
         byte[] ivV1 = new byte[IvSize];
         fsIn.ReadExactly(saltV1, 0, SaltSize);

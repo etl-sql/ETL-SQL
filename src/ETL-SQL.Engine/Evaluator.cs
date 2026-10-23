@@ -1460,7 +1460,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         }
 
         _variableScopeManager.LoadGlobalState(state.GlobalVariables, state.GlobalMetadata);
-        DockerManager.LoadState(state.DockerConnectionStrings, state.LastDockerConnectionString);
+        DockerManager.LoadState(DockerScope.For(this), state.DockerConnectionStrings, state.LastDockerConnectionString);
 
         var connectionAuthorizer = new ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer(_securityService);
         foreach (var conn in state.Connections)

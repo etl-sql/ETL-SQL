@@ -41,4 +41,25 @@ public class DockerContainerManagerTests
     [Fact]
     public void Reattach_WithoutRecoverableCredentials_ReturnsNull() =>
         Assert.Null(CredentialsFromEnvironment("mcr.microsoft.com/mssql/server:2022-latest", null, ["PATH=/usr/bin"]));
+
+    [Fact]
+    public void ScopedState_IsInvisibleToAnotherTenant()
+    {
+        var manager = new DockerContainerManager(new Moq.Mock<ETL_SQL.Common.ILogger>().Object);
+        manager.LoadState("tenant-a", new Dictionary<string, string> { ["pg"] = "Host=a" }, "Host=a");
+
+        Assert.Equal("Host=a", manager.GetConnectionString("tenant-a", "pg"));
+        Assert.Null(manager.GetConnectionString("tenant-b", "pg"));
+        Assert.Null(manager.GetLastConnectionString("tenant-b"));
+        Assert.Empty(manager.GetState("tenant-b"));
+        Assert.Equal("Host=a", Assert.Single(manager.GetState("tenant-a")).Value);
+    }
+
+    [Fact]
+    public void ContainerNames_DifferBetweenTenants_AndStayUnchangedWithoutOne()
+    {
+        Assert.Equal("etlsql_pg", ContainerName("", "pg"));
+        Assert.NotEqual(ContainerName("tenant-a", "pg"), ContainerName("tenant-b", "pg"));
+        Assert.Matches("^etlsql_[0-9a-f]{12}_pg$", ContainerName("tenant-a", "pg"));
+    }
 }

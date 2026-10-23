@@ -11,12 +11,11 @@ namespace ETL_SQL.Core.Common;
 /// Machine-bound symmetric encryption.
 /// Windows: in-memory payloads use DPAPI <see cref="DataProtectionScope.LocalMachine"/> so data
 /// is unreadable if moved to another machine.
-/// Linux/macOS, and encrypted files everywhere: keys are derived from a random 256-bit key file
-/// created on first use (<see cref="KeyFileName"/> under the account's local application data, or
-/// <c>ETLSQL_MACHINE_KEY_PATH</c>), readable only by its owner. Payloads written before that key
-/// existed were keyed from <c>/etc/machine-id</c> or the host name, which anyone with a copy of the
-/// image can read; they still decrypt, and are rewritten under the key file the next time they are
-/// saved.
+/// Linux/macOS, and encrypted files everywhere: keys are derived from the engine's machine key
+/// (<see cref="ETL_SQL.Common.CryptoUtils.GetMachineKey"/>: a random key file readable only by its
+/// owner, or a server-mounted <c>ETLSQL_MACHINE_KEY_FILE</c>). Payloads written before were keyed from
+/// <c>/etc/machine-id</c> or the host name, which anyone with a copy of the image can read; they
+/// still decrypt, and are rewritten under the machine key the next time they are saved.
 /// </summary>
 public static class MachineBoundCrypto
 {
@@ -25,11 +24,7 @@ public static class MachineBoundCrypto
     private static readonly byte[] FileMagicV2 = Encoding.ASCII.GetBytes("ETLSQLMF2");
     private static readonly byte[] FileMagicV3 = Encoding.ASCII.GetBytes("ETLSQLMF3");
 
-    /// <summary>The key file's name. The application-file guard refuses it to scripts anywhere.</summary>
-    public const string KeyFileName = ".etlsql-machine-key";
-    private const string KeyPathVariable = "ETLSQL_MACHINE_KEY_PATH";
-    private const int KeyFileSecretLength = 32;
-    private static readonly Lazy<byte[]> KeyFileSecret = new(LoadOrCreateKeyFileSecret, LazyThreadSafetyMode.ExecutionAndPublication);
+    private static readonly Lazy<byte[]> KeyFileSecret = new(() => ETL_SQL.Common.CryptoUtils.GetMachineKey(null), LazyThreadSafetyMode.ExecutionAndPublication);
     private const int AesIvLength = 16;
     private const int AesGcmNonceLength = 12;
     private const int AesGcmTagLength = 16;
@@ -149,73 +144,6 @@ public static class MachineBoundCrypto
             Encoding.UTF8.GetBytes($"{Environment.MachineName}:{Environment.UserName}:{ReadMachineSecret()}"),
             32,
             info: "etl-sql-machine-bound-file-stream"u8.ToArray());
-    }
-
-    /// <summary>Where the key file lives: <c>ETLSQL_MACHINE_KEY_PATH</c>, else local application data.</summary>
-    internal static string KeyFilePath()
-    {
-        var configured = Environment.GetEnvironmentVariable(KeyPathVariable);
-        if (!string.IsNullOrWhiteSpace(configured)) return Path.GetFullPath(configured);
-        var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify);
-        if (string.IsNullOrEmpty(root)) root = Path.Combine(Path.GetTempPath(), "etl-sql-" + Environment.UserName);
-        return Path.Combine(root, "etl-sql", KeyFileName);
-    }
-
-    private static byte[] LoadOrCreateKeyFileSecret()
-    {
-        var path = KeyFilePath();
-        for (int attempt = 0; attempt < 2; attempt++)
-        {
-            if (File.Exists(path))
-                return ReadKeyFile(path);
-            try
-            {
-                CreateKeyFile(path);
-            }
-            catch (IOException) when (File.Exists(path))
-            {
-                // Another process created it first; read theirs.
-            }
-        }
-        return ReadKeyFile(path);
-    }
-
-    private static void CreateKeyFile(string path)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var secret = RandomNumberGenerator.GetBytes(KeyFileSecretLength);
-        var stored = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? ProtectedData.Protect(secret, null, DataProtectionScope.CurrentUser)
-            : secret;
-        var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-        var temp = path + ".tmp-" + Guid.NewGuid().ToString("N");
-        try
-        {
-            using (var stream = new FileStream(temp, options))
-            {
-                stream.Write(stored);
-                stream.Flush(flushToDisk: true);
-            }
-            // Never replace an existing key: payloads written under it would become unreadable.
-            File.Move(temp, path, overwrite: false);
-        }
-        finally
-        {
-            TryDeleteFile(temp);
-        }
-    }
-
-    private static byte[] ReadKeyFile(string path)
-    {
-        var stored = File.ReadAllBytes(path);
-        var secret = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? ProtectedData.Unprotect(stored, null, DataProtectionScope.CurrentUser)
-            : stored;
-        if (secret.Length != KeyFileSecretLength)
-            throw new CryptographicException($"The machine key file '{path}' is not a {KeyFileSecretLength}-byte key.");
-        return secret;
     }
 
     private static string ReadMachineSecret()

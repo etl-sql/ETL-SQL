@@ -1888,9 +1888,18 @@ CREATE VISUAL {visualName} AS CARD (
         var listRes = await AuthGet(token, $"/api/reports/{reportId}/share-links");
         Assert.Equal(HttpStatusCode.OK, listRes.StatusCode);
         var links = await listRes.Content.ReadFromJsonAsync<JsonArray>(_json);
-        Assert.Contains(links!, l => l!["token"]!.GetValue<string>() == shareToken);
+        // The catalog keeps only a hash: a listed link carries its id, never the token.
+        var listed = Assert.Single(links!, l => l!["id"]!.GetValue<int>() == share["id"]!.GetValue<int>())!;
+        Assert.Null(listed["token"]);
+        Assert.Null(listed["url"]);
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var stored = await db.ReportShareLinks.SingleAsync(l => l.Id == share["id"]!.GetValue<int>());
+            Assert.Equal(ETL_SQL.Portal.Services.AnonymousReportTokens.Hash(shareToken), stored.Token);
+        }
 
-        var revokeRes = await AuthDelete(token, $"/api/reports/{reportId}/share-links/{shareToken}");
+        var revokeRes = await AuthDelete(token, $"/api/reports/{reportId}/share-links/by-id/{share["id"]!.GetValue<int>()}");
         Assert.Equal(HttpStatusCode.NoContent, revokeRes.StatusCode);
 
         var revokedResolve = await _client.GetAsync($"/api/share/{shareToken}");

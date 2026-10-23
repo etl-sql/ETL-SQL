@@ -1145,12 +1145,12 @@ public class ExpressionEvaluator
         if (id.Name.Contains(".CONNECTION_STRING", StringComparison.OrdinalIgnoreCase))
         {
             var alias = id.Name.Replace(".CONNECTION_STRING", "", StringComparison.OrdinalIgnoreCase);
-            var connStr = _context.DockerManager.GetConnectionString(alias);
+            var connStr = _context.DockerManager.GetConnectionString(DockerScope.For(_context), alias);
             if (connStr != null) return connStr;
 
             // Direct fallback for plain DOCKER.CONNECTION_STRING
             if (alias.Equals("DOCKER", StringComparison.OrdinalIgnoreCase))
-                return _context.DockerManager.LastConnectionString;
+                return _context.DockerManager.GetLastConnectionString(DockerScope.For(_context));
         }
 
         // Existing connections

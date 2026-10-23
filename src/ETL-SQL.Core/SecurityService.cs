@@ -504,13 +504,25 @@ public partial class SecurityService
         var protectedFile =
             string.Equals(fileName, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName, StringComparison.OrdinalIgnoreCase)
             || segments.Any(segment => string.Equals(segment, ".portal-keys", StringComparison.OrdinalIgnoreCase))
-            || string.Equals(fileName, ETL_SQL.Core.Common.MachineBoundCrypto.KeyFileName, StringComparison.OrdinalIgnoreCase)
+            || IsMachineKeyFile(fullPath, fileName)
             || (IsDirectlyInApplicationDirectory(fullPath) && IsApplicationFileName(fileName));
         if (protectedFile)
         {
             throw new SecurityException(
                 $"Unauthorized access to an ETL-SQL application file: {fileName}. Scripts cannot read or write the application's configuration, keys, databases or binaries.");
         }
+    }
+
+    // The engine's machine key: <LocalApplicationData>/etl-sql/machine.key, or a mounted key file.
+    private static bool IsMachineKeyFile(string fullPath, string fileName)
+    {
+        if (string.Equals(fileName, "machine.key", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Path.GetFileName(Path.GetDirectoryName(fullPath)), "etl-sql", StringComparison.OrdinalIgnoreCase))
+            return true;
+        var mounted = Environment.GetEnvironmentVariable("ETLSQL_MACHINE_KEY_FILE");
+        return !string.IsNullOrWhiteSpace(mounted)
+            && Path.IsPathFullyQualified(mounted)
+            && string.Equals(Path.GetFullPath(mounted), fullPath, PathComparison);
     }
 
     private static bool IsDirectlyInApplicationDirectory(string fullPath)

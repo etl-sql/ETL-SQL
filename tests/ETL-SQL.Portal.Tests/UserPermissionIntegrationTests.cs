@@ -334,7 +334,7 @@ namespace ETL_SQL.Portal.Tests
                     {
                         ReportId = rRevenue.Id,
                         CreatedBy = uFinPub.Id,
-                        Token = "fin-share-token-xyz123",
+                        Token = AnonymousReportTokens.Hash("fin-share-token-xyz123"),
                         ExpiresAt = DateTime.UtcNow.AddDays(7)
                     });
 
@@ -344,7 +344,7 @@ namespace ETL_SQL.Portal.Tests
                         ReportId = rRevenue.Id,
                         CreatedBy = uFinPub.Id,
                         Name = "Intranet Embed",
-                        Token = "fin-embed-token-abc987",
+                        Token = AnonymousReportTokens.Hash("fin-embed-token-abc987"),
                         ExpiresAt = DateTime.UtcNow.AddDays(30)
                     });
 

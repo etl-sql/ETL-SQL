@@ -32,6 +32,8 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 - `USE DOCKER` accepts the official database repositories only, gives every container a generated
   password (Oracle included) and publishes its ports on loopback.
 - LDAP sign-in refuses a name qualified with a domain other than `Identity:Ldap:Domain`.
+- Share links and embed tokens are stored as hashes and shown once, when created. Listings return
+  the id instead of the token, and `DELETE .../share-links/by-id/{id}` revokes by id.
 
 ### Security
 
@@ -59,9 +61,9 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 - The VS Code report preview writes unsaved scripts and the built manifest into a private temporary
   directory instead of predictable names in the shared temp folder.
 - Machine-bound encryption on Linux and macOS, and machine-bound encrypted files everywhere, is
-  keyed from a random key file readable only by its owner (`ETLSQL_MACHINE_KEY_PATH` moves it). It
-  was keyed from `/etc/machine-id` or the host name, which a cloned image shares. Existing payloads
-  still decrypt.
+  keyed from the engine's machine key (the owner-only `etl-sql/machine.key`, or a mounted
+  `ETLSQL_MACHINE_KEY_FILE`). It was keyed from `/etc/machine-id` or the host name, which a cloned
+  image shares. Existing payloads still decrypt. Scripts cannot open the machine key file.
 - ODBC connection values with `;`, `{`, `}` or `=` are brace-quoted, so a value cannot add keywords;
   an option name with those characters is refused.
 - SharePoint list titles and BigQuery identifiers are escaped (a quote, and a trailing backslash).
@@ -70,6 +72,11 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 - The operation ledger refuses a session id that leaves the session root.
 - LDAP refuses an empty password before binding.
 - The shipped `appsettings.json` no longer lists a developer's folder as an approved safe zone.
+- `USE DOCKER` state is scoped by tenant: an alias, `DOCKER.CONNECTION_STRING` and the container
+  itself are no longer shared between tenants on one Orchestrator. Single-tenant hosts keep their
+  container names.
+- Decrypting an `ENC:` value or file in the legacy unauthenticated format logs a warning, once per
+  process, so it can be re-encrypted before read support is removed.
 - Streaming decryption of encrypted files (password, SSH key and machine-bound) checks the file's
   authentication tag before returning any data; a tampered file is refused instead of decrypting
   to garbage rows.
@@ -97,6 +104,8 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
   used to hand out a new password the container never had.
 - Importing a connection string keeps a password that reads `True` or `False` as typed.
 - SMTP docs give the default port as 587, which the connector uses.
+- Security tests that used Windows paths now build OS-neutral paths, so the safe-zone, temp-folder,
+  runaway-protection and credential-folder rules are checked on Linux and macOS too.
 - `admin restore` writes the installer-managed secrets (JWT secret, dataset at-rest keys,
   Orchestrator API keys and identity signing secret, first-run password) to
   `appsettings.secrets.json` again. Restored only into `appsettings.json`, they were shadowed by an

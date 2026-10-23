@@ -54,9 +54,6 @@ namespace ETL_SQL.Tests.Reporting
 
             var protected_ = MachineBoundCrypto.Protect("new payload"u8.ToArray());
             Assert.Equal("ETLSQLM3", System.Text.Encoding.ASCII.GetString(protected_, 0, 8));
-            var keyFile = MachineBoundCrypto.KeyFilePath();
-            Assert.True(File.Exists(keyFile));
-            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(keyFile));
 
             // A payload written before the key file existed: AES-GCM keyed from the machine id.
             var machineSecret = File.Exists("/etc/machine-id") ? File.ReadAllText("/etc/machine-id").Trim() : Environment.MachineName;

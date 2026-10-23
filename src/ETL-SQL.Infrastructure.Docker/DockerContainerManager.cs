@@ -22,11 +22,34 @@ namespace ETL_SQL.Core;
 
 public class DockerContainerManager : IDockerManager
 {
+    // Keyed by scope and alias (see ScopedKey). One manager serves a whole host process, so an
+    // alias, the last container and the container itself belong to one tenant's scope.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, IContainer> _activeContainers = new(StringComparer.OrdinalIgnoreCase);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _connectionStrings = new(StringComparer.OrdinalIgnoreCase);
-    public string? LastConnectionString { get; private set; }
-    public string? LastAlias { get; private set; }
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string? Alias, string? ConnectionString)> _last = new(StringComparer.Ordinal);
     public bool HasActiveContainers => !_activeContainers.IsEmpty;
+    private const char ScopeSeparator = '\u001f';
+
+    public string? GetLastConnectionString(string scope) => _last.TryGetValue(scope, out var last) ? last.ConnectionString : null;
+    public string? GetLastAlias(string scope) => _last.TryGetValue(scope, out var last) ? last.Alias : null;
+
+    private static string ScopedKey(string scope, string key) => scope + ScopeSeparator + key;
+    private static string ScopePrefix(string scope) => scope + ScopeSeparator;
+
+    private void Remember(string scope, string? alias, string connectionString) =>
+        _last.AddOrUpdate(scope, (alias, connectionString), (_, previous) => (alias ?? previous.Alias, connectionString));
+
+    /// <summary>
+    /// The Docker container name for an alias. A tenant's containers carry a tag derived from its
+    /// id, so two tenants using the same alias never share, or re-attach to, one container.
+    /// </summary>
+    internal static string ContainerName(string scope, string alias)
+    {
+        var tag = scope.Length == 0
+            ? ""
+            : Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(scope)))[..12].ToLowerInvariant() + "_";
+        return "etlsql_" + tag + alias.Replace(".", "_").Replace(":", "_");
+    }
 
     private readonly ILoggerFactory _loggerFactory;
     private readonly ETL_SQL.Common.ILogger _logger;
@@ -43,12 +66,15 @@ public class DockerContainerManager : IDockerManager
     /// </summary>
     /// <param name="alias">The alias or image name to look up.</param>
     /// <returns>The connection string if found, otherwise null.</returns>
-    public string? GetConnectionString(string alias)
+    public string? GetConnectionString(string scope, string alias)
     {
-        if (_connectionStrings.TryGetValue(alias, out var connStr)) return connStr;
+        if (_connectionStrings.TryGetValue(ScopedKey(scope, alias), out var connStr)) return connStr;
         // Fall back to a partial image name only when it names exactly one container, and return
         // that container's own connection string. It used to return the most recently started one.
-        var matches = _connectionStrings.Keys.Where(k => k.Contains(alias, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+        var prefix = ScopePrefix(scope);
+        var matches = _connectionStrings.Keys
+            .Where(k => k.StartsWith(prefix, StringComparison.Ordinal) && k[prefix.Length..].Contains(alias, StringComparison.OrdinalIgnoreCase))
+            .Take(2).ToList();
         return matches.Count == 1 && _connectionStrings.TryGetValue(matches[0], out var match) ? match : null;
     }
 
@@ -58,28 +84,29 @@ public class DockerContainerManager : IDockerManager
     /// <param name="imageName">The Docker image name (e.g., 'mcr.microsoft.com/mssql/server').</param>
     /// <param name="alias">An optional alias to refer to this container instance.</param>
     /// <returns>The connection string for the started container.</returns>
-    public async Task<string> StartContainer(string imageName, string? alias = null, CancellationToken cancellationToken = default)
+    public async Task<string> StartContainer(string scope, string imageName, string? alias = null, CancellationToken cancellationToken = default)
     {
         var kind = ImageKind(imageName);
-        string key = alias ?? imageName;
+        string name = alias ?? imageName;
+        string key = ScopedKey(scope, name);
         if (_activeContainers.TryGetValue(key, out var activeContainer) && activeContainer.State.ToString() == "Running")
         {
-            _logger.Info("Using existing session Docker container for {Key}.", key);
+            _logger.Info("Using existing session Docker container for {Key}.", name);
             string activeConnStr = _connectionStrings.TryGetValue(key, out var cached) ? cached : GetConnectionString(activeContainer, imageName, null);
             _connectionStrings[key] = activeConnStr;
-            LastConnectionString = activeConnStr;
+            Remember(scope, name, activeConnStr);
             return activeConnStr;
         }
 
         // Attempt to find an already running container on the system by name
-        string containerName = "etlsql_" + (alias ?? imageName.Split('/').Last().Split(':').First()).Replace(".", "_").Replace(":", "_");
+        string containerName = ContainerName(scope, alias ?? imageName.Split('/').Last().Split(':').First());
         var credentials = GetCredentials(containerName, imageName);
         var existingConnStr = await GetExistingContainerConnectionString(containerName, imageName, credentials, cancellationToken);
         if (existingConnStr != null)
         {
             _logger.Info("Re-attached to existing Docker container: {ContainerName}", containerName);
             _connectionStrings[key] = existingConnStr;
-            LastConnectionString = existingConnStr;
+            Remember(scope, name, existingConnStr);
             return existingConnStr;
         }
 
@@ -135,7 +162,12 @@ public class DockerContainerManager : IDockerManager
         {
             // Final fallback if name exists but wasn't found by ListContainers
             var retryConnStr = await GetExistingContainerConnectionString(containerName, imageName, credentials, cancellationToken);
-            if (retryConnStr != null) return retryConnStr;
+            if (retryConnStr != null)
+            {
+                _connectionStrings[key] = retryConnStr;
+                Remember(scope, name, retryConnStr);
+                return retryConnStr;
+            }
             await DisposeBuiltContainerAsync(container, key);
             throw;
         }
@@ -149,8 +181,7 @@ public class DockerContainerManager : IDockerManager
 
         string connectionString = GetConnectionString(container, imageName, credentials);
         _connectionStrings[key] = connectionString;
-        LastConnectionString = connectionString;
-        LastAlias = key;
+        Remember(scope, name, connectionString);
         return connectionString;
     }
 
@@ -238,20 +269,20 @@ public class DockerContainerManager : IDockerManager
     /// Stops a running container by its alias or image name.
     /// </summary>
     /// <param name="alias">The alias of the container to stop.</param>
-    public async Task StopContainer(string? alias, CancellationToken cancellationToken = default)
+    public async Task StopContainer(string scope, string? alias, CancellationToken cancellationToken = default)
     {
-        alias ??= LastAlias;
-        if (alias != null && _activeContainers.TryGetValue(alias, out var container))
+        alias ??= GetLastAlias(scope);
+        if (alias != null && _activeContainers.TryGetValue(ScopedKey(scope, alias), out var container))
         {
             _logger.Warning("Stopping Docker container {Alias}.", alias);
             await container.StopAsync(cancellationToken);
         }
     }
 
-    public async Task PauseContainer(string? alias, CancellationToken cancellationToken = default)
+    public async Task PauseContainer(string scope, string? alias, CancellationToken cancellationToken = default)
     {
-        alias ??= LastAlias;
-        if (alias != null && _activeContainers.TryGetValue(alias, out var container))
+        alias ??= GetLastAlias(scope);
+        if (alias != null && _activeContainers.TryGetValue(ScopedKey(scope, alias), out var container))
         {
             _logger.Warning("Pausing Docker container {Alias}.", alias);
             using var client = await CreateDockerClient(cancellationToken);
@@ -259,10 +290,10 @@ public class DockerContainerManager : IDockerManager
         }
     }
 
-    public async Task ResumeContainer(string? alias, CancellationToken cancellationToken = default)
+    public async Task ResumeContainer(string scope, string? alias, CancellationToken cancellationToken = default)
     {
-        alias ??= LastAlias;
-        if (alias != null && _activeContainers.TryGetValue(alias, out var container))
+        alias ??= GetLastAlias(scope);
+        if (alias != null && _activeContainers.TryGetValue(ScopedKey(scope, alias), out var container))
         {
             _logger.Info("Resuming Docker container {Alias}.", alias);
             using var client = await CreateDockerClient(cancellationToken);
@@ -282,11 +313,13 @@ public class DockerContainerManager : IDockerManager
     /// Stops and disposes of one or all active containers.
     /// </summary>
     /// <param name="nameOrAlias">The optional alias to target. If null, all containers are closed.</param>
-    public async Task CloseContainers(string? nameOrAlias = null, CancellationToken cancellationToken = default)
+    public async Task CloseContainers(string scope, string? nameOrAlias = null, CancellationToken cancellationToken = default)
     {
-        var targets = nameOrAlias != null
-            ? _activeContainers.Where(c => c.Key.Contains(nameOrAlias, StringComparison.OrdinalIgnoreCase)).ToList()
-            : _activeContainers.ToList();
+        var prefix = ScopePrefix(scope);
+        var targets = _activeContainers
+            .Where(c => c.Key.StartsWith(prefix, StringComparison.Ordinal)
+                && (nameOrAlias == null || c.Key[prefix.Length..].Contains(nameOrAlias, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
 
         foreach (var kvp in targets)
         {
@@ -416,18 +449,22 @@ public class DockerContainerManager : IDockerManager
 
     internal sealed record DockerCredentials(string Username, string Password, string Database);
 
-    public Dictionary<string, string> GetState()
+    public Dictionary<string, string> GetState(string scope)
     {
-        return new Dictionary<string, string>(_connectionStrings, StringComparer.OrdinalIgnoreCase);
+        var prefix = ScopePrefix(scope);
+        return _connectionStrings
+            .Where(kvp => kvp.Key.StartsWith(prefix, StringComparison.Ordinal))
+            .ToDictionary(kvp => kvp.Key[prefix.Length..], kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
     }
 
-    public void LoadState(Dictionary<string, string> connectionStrings, string? lastConnectionString)
+    public void LoadState(string scope, Dictionary<string, string> connectionStrings, string? lastConnectionString)
     {
         foreach (var kvp in connectionStrings)
         {
-            _connectionStrings[kvp.Key] = kvp.Value;
+            _connectionStrings[ScopedKey(scope, kvp.Key)] = kvp.Value;
         }
-        if (lastConnectionString != null) LastConnectionString = lastConnectionString;
+        if (lastConnectionString != null)
+            _last.AddOrUpdate(scope, (null, lastConnectionString), (_, previous) => (previous.Alias, lastConnectionString));
     }
 
     public ValueTask DisposeAsync()

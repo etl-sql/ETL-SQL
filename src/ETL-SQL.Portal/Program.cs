@@ -895,6 +895,10 @@ using (var scope = app.Services.CreateScope())
                     scope.ServiceProvider.GetRequiredService<PortalPiiProtector>(),
                     scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
                         .CreateLogger("PiiColumnEncryptionMaintenance"));
+                await AnonymousReportTokens.HashExistingPlaintextAsync(
+                    db,
+                    scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("AnonymousReportTokens"));
                 if (scope.ServiceProvider.GetRequiredService<PortalModuleRegistry>().IsEnabled("Reporting"))
                 {
                     await DatasetStorageMaintenance.ReconcileAsync(

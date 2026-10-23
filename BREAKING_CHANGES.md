@@ -94,6 +94,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 - **Diagnostic**: N/A
 - **Earliest removal**: N/A
 
+### v0.22.0 — Runtime: Share links and embed tokens are shown once
+- **What changed**: The catalog stored each share link and embed token in plain text and listed it back. It now stores a SHA-256 hash; the token and URL are returned only when the link is created. Existing tokens are hashed at startup and keep working.
+- **Who is affected**: Anyone who copied a link from the Portal list or `eng.share_links()` / `eng.embed_tokens()` after creating it, and API clients that revoke by the listed token.
+- **Migration**: Copy the URL from the create response or `CREATE SHARE LINK ... INTO #t`. Revoke with `DELETE .../share-links/by-id/{id}` (or `REVOKE SHARE LINK ... FOR REPORT`). A lost link is revoked and created again.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.21.0 — Runtime: Portal and Orchestrator databases use snake_case names
 - **What changed**: Portal and Orchestrator tables and columns were PascalCase (for example `AspNetUsers`). The first v0.21.0 start renames them to snake_case on SQLite and PostgreSQL. Earlier releases cannot open a renamed database.
 - **Who is affected**: Operators who roll back to v0.20.x, and SQL, reports, or tools that query these databases directly.
