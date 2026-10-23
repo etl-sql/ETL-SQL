@@ -5,10 +5,11 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Data;
 using MailKit.Net.Smtp;
+using MailKit.Security;
 using MimeKit;
-using ETL_SQL.Connectors.Shared;
 
 namespace ETL_SQL.Connectors.Email
 {
@@ -181,7 +182,7 @@ namespace ETL_SQL.Connectors.Email
 
             try
             {
-                await client.ConnectAsync(host, port, useSsl, effectiveCancellationToken);
+                await client.ConnectAsync(host, port, TlsMode(useSsl, port), effectiveCancellationToken);
 
                 if (_options.TryGetValue("USERNAME", out var user) && _options.TryGetValue("PASSWORD", out var pass))
                 {
@@ -208,6 +209,17 @@ namespace ETL_SQL.Connectors.Email
         }
 
         public Task TruncateAsync() => Task.CompletedTask;
+
+        /// <summary>
+        /// USE_SSL = TRUE requires TLS: implicit TLS on 465, otherwise STARTTLS that must succeed. The
+        /// boolean overload of ConnectAsync meant implicit TLS on every port, which fails on 587 (the
+        /// documented pairing), and FALSE meant STARTTLS only when offered, which a man in the middle
+        /// can strip. FALSE keeps that opportunistic behavior for relays without TLS.
+        /// </summary>
+        internal static SecureSocketOptions TlsMode(bool useSsl, int port) =>
+            !useSsl ? SecureSocketOptions.StartTlsWhenAvailable
+            : port == 465 ? SecureSocketOptions.SslOnConnect
+            : SecureSocketOptions.StartTls;
 
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(new[] { "To", "From", "Cc", "Bcc", "Subject", "Body", "Attachments" }.AsEnumerable());
 

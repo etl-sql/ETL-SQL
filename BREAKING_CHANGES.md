@@ -24,6 +24,20 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 - **Diagnostic**: N/A
 - **Earliest removal**: N/A
 
+### v0.22.0 — Connector: Kafka SECURITY_PROTOCOL applies without SASL and refuses unknown values
+- **What changed**: `SECURITY_PROTOCOL` was read only when SASL credentials were set, so `SECURITY_PROTOCOL = 'Ssl'` alone connected in plaintext, and any unrecognized value (including librdkafka's own `SASL_SSL`) became `SaslPlaintext`. It now always applies, accepts `SASL_SSL`-style names, and an unknown value is an error.
+- **Who is affected**: Kafka connections that set `SECURITY_PROTOCOL` without SASL credentials, or with a misspelled value.
+- **Migration**: Use one of `Plaintext`, `SaslPlaintext`, `SaslSsl`, `Ssl`; a broker without TLS must not be given `Ssl`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Connector: SMTP USE_SSL = TRUE requires TLS on the port's own terms
+- **What changed**: `USE_SSL = TRUE` meant implicit TLS on every port, which fails on 587; `FALSE` meant STARTTLS only if offered. `TRUE` now means implicit TLS on 465 and required STARTTLS on any other port; `FALSE` is unchanged.
+- **Who is affected**: SMTP connections with `USE_SSL = TRUE` on a port other than 465 that speaks implicit TLS.
+- **Migration**: Use port 465 for implicit TLS. A server on a custom implicit-TLS port must move to 465 or offer STARTTLS.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Semantic: LIKE with a NULL operand is UNKNOWN
 - **What changed**: `LIKE` returned false for a NULL operand, so `NOT LIKE` returned true and `WHERE col NOT LIKE 'A%'` kept the rows where `col` is NULL. Both now return NULL, as in SQL and in queries pushed down to a database.
 - **Who is affected**: Engine-side queries using `NOT LIKE` or `NOT (... LIKE ...)` over nullable columns.

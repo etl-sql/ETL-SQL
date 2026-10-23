@@ -22,6 +22,8 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 - Arithmetic on doubles outside decimal's range stays numeric instead of concatenating as text.
 - Scripts can no longer read or write the application's own configuration, secrets, databases,
   keys or binaries, even inside an approved safe zone.
+- Kafka `SECURITY_PROTOCOL` applies without SASL credentials and an unknown value is an error.
+- SMTP `USE_SSL = TRUE` requires TLS: implicit on 465, STARTTLS on any other port.
 
 ### Security
 
@@ -36,11 +38,21 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
   through the SVG sanitizer.
 - A Gateway session matches replies to their operation, so rows that arrive after a caller gave up
   are never handed to the next caller.
+- Connection tests (`TEST CONNECTION`, the Portal connection test) resolve `KEYFILE` and other
+  key or credential file options through the path guard, so a test cannot load the service
+  account's own SSH key. `LINT 'path'` reads through the same guard.
+- `POST /api/connectors/test` is limited to administrators and accounts with Studio script preview.
+- `POST /api/scripts/upload` no longer replaces the script of a report or pipeline the uploader
+  cannot author.
+- The ReportPlayer serves only loopback host names, refuses cross-origin requests and requires JSON
+  on POSTs, so a web page cannot drive it or read it through DNS rebinding.
 
 ### Fixed
 
 - Gateway reconnect backoff doubles across failed connections instead of staying at twice the
   initial delay, and waits before reconnecting after a session ends.
+- A Gateway result larger than one frame is sent as several row batches; it used to end the
+  session after the operation was recorded as committed.
 - `admin restore` writes the installer-managed secrets (JWT secret, dataset at-rest keys,
   Orchestrator API keys and identity signing secret, first-run password) to
   `appsettings.secrets.json` again. Restored only into `appsettings.json`, they were shadowed by an

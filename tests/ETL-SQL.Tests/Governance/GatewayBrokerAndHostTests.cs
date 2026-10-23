@@ -278,6 +278,61 @@ public sealed class GatewayBrokerAndHostTests
     }
 
     [Fact]
+    public async Task Session_ReturnsAResultLargerThanOneFrame()
+    {
+        var enrollmentStore = new InMemoryGatewayEnrollmentStore();
+        await enrollmentStore.IssueAsync(TenantA, GatewayId, "token-32-chars-long-minimum-length-req", DateTimeOffset.UtcNow.AddHours(1));
+        await enrollmentStore.ConsumeAsync(TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
+        var registry = new GatewaySessionRegistry();
+        var broker = new GatewayBroker(enrollmentStore, registry, allowUnprovenTestIdentities: true);
+        await using var server = await LoopbackWebSocketServer.StartAsync(broker.HandleInboundConnectionAsync);
+
+        var resources = new GatewayResourceRegistry();
+        await resources.ProposeAsync(new GatewayResource(
+            "orders", "SQLSERVER", "sqlserver://db:1433/Sales", "SECRET:sales",
+            GatewayOperationClass.Read, new GatewayResourceLimits()));
+        await resources.ApproveAsync("orders");
+        var rows = Enumerable.Range(0, 500)
+            .Select(i => (IReadOnlyList<string?>)[$"row-{i:D4}-{new string('x', 40)}"]).ToList();
+        var dispatcher = new GatewayOperationDispatcher(resources, new FixedResultExecutor(["value"], rows), new GatewayOutcomeLedger());
+        // Far smaller than the result, so it must arrive as many batches.
+        var client = new GatewaySessionClient(
+            new GatewaySessionOptions(server.Uri, TenantA, GatewayId, Thumbprint, MaxFrameBytes: 2048), dispatcher);
+        using var run = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        var clientTask = client.RunAsync(run.Token);
+
+        IGatewaySession? session = null;
+        for (var i = 0; i < 100 && !registry.TryGet(TenantA, GatewayId, out session); i++)
+            await Task.Delay(20); // flaky-delay-ok: waiting for the session to register
+        Assert.NotNull(session);
+
+        var result = await session!.ExecuteAsync(
+            new GatewayOperation("op-large", TenantA, GatewayId, "orders", GatewayOperationClass.Read,
+                GatewayOperationEffect.ReadOnly, GatewayOperationBounds.Default, "op-large"),
+            "SELECT *", null, run.Token);
+
+        Assert.Equal(500, result.Rows.Count);
+        Assert.Equal(rows.Select(row => row[0]), result.Rows.Select(row => row[0]));
+        Assert.False(result.Truncated);
+        Assert.False(clientTask.IsFaulted);
+        run.Cancel();
+        try { await clientTask; } catch (OperationCanceledException) { }
+    }
+
+    private sealed class FixedResultExecutor(IReadOnlyList<string> columns, IReadOnlyList<IReadOnlyList<string?>> rows)
+        : IGatewayResourceExecutor
+    {
+        public Task<GatewayExecutionResult> ExecuteAsync(
+            GatewayResource resource,
+            GatewayOperationClass operationClass,
+            string? request,
+            IReadOnlyList<string>? parameters,
+            GatewayOperationBounds bounds,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new GatewayExecutionResult(columns, rows));
+    }
+
+    [Fact]
     public async Task GatewayHost_BackoffDoublesAcrossFailedConnections()
     {
         var time = new RecordingDelayTimeProvider();

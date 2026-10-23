@@ -3675,6 +3675,48 @@ CREATE VISUAL EdgeRows AS TABLE (
         Assert.Equal(HttpStatusCode.BadRequest, wrongType.StatusCode);
     }
 
+    [Fact]
+    public async Task UploadScript_CannotReplaceTheScriptOfAReportTheUploaderCannotEdit()
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var name = $"owned-{Guid.NewGuid():N}.rptsql";
+        var original = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("SELECT 1 AS original;"));
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthPost(adminToken, "/api/scripts/upload", new { filename = name, contentBase64 = original })).StatusCode);
+        var folder = await AuthPost(adminToken, "/api/folders", new { name = "Upload Owned " + Guid.NewGuid().ToString("N")[..8], parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folder.StatusCode);
+        var folderId = (await folder.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+        var created = await AuthPost(adminToken, "/api/reports", new
+        {
+            folderId,
+            name = name.Replace(".rptsql", ""),
+            description = "upload ownership",
+            scriptPath = Path.Combine(_factory.TempDir, "scripts", name)
+        });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        // A publisher with no permission on that report's folder cannot swap its script.
+        var publisherToken = await GetFreshTokenAsync("Publisher");
+        var replacement = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("SELECT 2 AS replaced;"));
+        var refused = await AuthPost(publisherToken, "/api/scripts/upload", new { filename = name, contentBase64 = replacement });
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Contains("original", await File.ReadAllTextAsync(Path.Combine(_factory.TempDir, "scripts", name)));
+
+        // Its author can still republish over it.
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthPost(adminToken, "/api/scripts/upload", new { filename = name, contentBase64 = replacement })).StatusCode);
+    }
+
+    [Fact]
+    public async Task ConnectorTest_IsForAdministratorsAndScriptAuthorsOnly()
+    {
+        var probe = new { connectorType = "MOCKDB", target = "mock:diag" };
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await AuthPost(await GetFreshViewerTokenAsync(), "/api/connectors/test", probe)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthPost(await GetAdminTokenAsync(), "/api/connectors/test", probe)).StatusCode);
+    }
+
     // ── 8. Operational hardening ──────────────────────────────────────────────
 
     [Fact]
@@ -4024,10 +4066,12 @@ CREATE VISUAL Summary AS TABLE (
         }
     }
 
-    private async Task<string> GetFreshViewerTokenAsync()
+    private Task<string> GetFreshViewerTokenAsync() => GetFreshTokenAsync("Viewer");
+
+    private async Task<string> GetFreshTokenAsync(string role)
     {
         var adminToken = await GetAdminTokenAsync();
-        var username = $"share_viewer_{Guid.NewGuid():N}"[..20];
+        var username = $"share_{role.ToLowerInvariant()}_{Guid.NewGuid():N}"[..20];
         const string initialPassword = "Viewer@Test1!";
         const string changedPassword = "Viewer@Test2!";
 
@@ -4036,7 +4080,7 @@ CREATE VISUAL Summary AS TABLE (
             username,
             email = $"{username}@test.local",
             password = initialPassword,
-            role = "Viewer"
+            role
         });
         Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
 

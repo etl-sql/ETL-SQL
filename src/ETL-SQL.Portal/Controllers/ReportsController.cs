@@ -1877,6 +1877,26 @@ public class ReportsController : ControllerBase
         if (string.IsNullOrWhiteSpace(portalConfig.ScriptRootPath))
             return StatusCode(503, new { error = "ScriptRootPath is not configured on the portal." });
 
+        // Replacing a script that published reports or pipelines run changes them. Require the same
+        // Author permission on every one of them that saving through the report does; the
+        // published-script hash is only compared after the replaced text has run.
+        if (await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, req.Filename))
+        {
+            var tenantId = datasetScope.TenantId;
+            var dependents = (await catalogScope.Documents.Include(r => r.Folder).Where(r => !r.IsDeleted).ToListAsync())
+                .Where(r => string.Equals(
+                    PortalPathGuard.ToScriptKey(portalConfig, tenantId, r.ScriptPath), req.Filename,
+                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+            foreach (var report in dependents)
+            {
+                if (!(await GetEffectiveReportPermissionAsync(report)).AtLeast(FolderPermission.Author))
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        error = $"'{req.Filename}' is the script of a report you cannot edit. Upload under a new name."
+                    });
+            }
+        }
+
         // Filename-only key (separators already rejected above); written through the guarded Scripts area.
         await artifacts.WriteAllBytesAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, req.Filename, content);
 
