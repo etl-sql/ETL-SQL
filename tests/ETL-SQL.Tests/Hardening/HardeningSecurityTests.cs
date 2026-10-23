@@ -80,7 +80,9 @@ namespace ETL_SQL.Tests.Hardening.Hardening
             securityService.ApprovedSafeZones.Add(baseDir);
             try
             {
-                var tempFile = Path.Combine(baseDir, "test_hardening_blocked.dll");
+                // A subfolder: a .dll directly in the application folder is refused earlier, as an
+                // application file. This test is about the file-type check.
+                var tempFile = Path.Combine(baseDir, "hardening", "test_hardening_blocked.dll");
                 var sql = $"DELETE FILE '{tempFile.Replace("\\", "/")}';";
                 var script = TestHelpers.Parse(sql);
 
