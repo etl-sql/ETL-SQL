@@ -370,6 +370,7 @@ public partial class SecurityService
         // 0. Internal Bypass
         if (IsInternalOperation) return;
 
+        EnforceApplicationFileProtection(fullPath);
         EnforceAdditionalBlockedPaths(fullPath);
 
         // 0.1 Unrestricted Mode Bypass
@@ -487,6 +488,55 @@ public partial class SecurityService
             if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase))) return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Refuses a script access to the application's own files, whatever the safe zones or protection
+    /// mode say. The installers approve the install folder as a safe zone so the services can keep
+    /// their data under it, and the services run user-authored scripts in-process, so without this a
+    /// script could read the Portal database, the Data Protection key ring or the installed secrets
+    /// file (the JWT signing key), or rewrite the service's configuration.
+    /// </summary>
+    private static void EnforceApplicationFileProtection(string fullPath)
+    {
+        var fileName = Path.GetFileName(fullPath);
+        var segments = fullPath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var protectedFile =
+            string.Equals(fileName, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName, StringComparison.OrdinalIgnoreCase)
+            || segments.Any(segment => string.Equals(segment, ".portal-keys", StringComparison.OrdinalIgnoreCase))
+            || (IsDirectlyInApplicationDirectory(fullPath) && IsApplicationFileName(fileName));
+        if (protectedFile)
+        {
+            throw new SecurityException(
+                $"Unauthorized access to an ETL-SQL application file: {fileName}. Scripts cannot read or write the application's configuration, keys, databases or binaries.");
+        }
+    }
+
+    private static bool IsDirectlyInApplicationDirectory(string fullPath)
+    {
+        var parent = Path.GetDirectoryName(fullPath);
+        if (string.IsNullOrEmpty(parent)) return false;
+        var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        return string.Equals(
+            Path.TrimEndingDirectorySeparator(parent),
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(baseDir)),
+            PathComparison);
+    }
+
+    private static bool IsApplicationFileName(string fileName)
+    {
+        var name = fileName.ToLowerInvariant();
+        return (name.StartsWith("appsettings", StringComparison.Ordinal) && name.EndsWith(".json", StringComparison.Ordinal))
+            || name.StartsWith("portal.db", StringComparison.Ordinal)
+            || name.StartsWith("etlsql.db", StringComparison.Ordinal)
+            || name.StartsWith("first-run-password", StringComparison.Ordinal)
+            || name.EndsWith(".deps.json", StringComparison.Ordinal)
+            || name.EndsWith(".runtimeconfig.json", StringComparison.Ordinal)
+            || name.EndsWith(".dll", StringComparison.Ordinal)
+            || name.EndsWith(".exe", StringComparison.Ordinal)
+            || name.EndsWith(".so", StringComparison.Ordinal)
+            || name.EndsWith(".dylib", StringComparison.Ordinal)
+            || name.EndsWith(".pdb", StringComparison.Ordinal);
     }
 
     private void EnforceAdditionalBlockedPaths(string fullPath)

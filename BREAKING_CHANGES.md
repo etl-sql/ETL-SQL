@@ -17,6 +17,34 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Connector: An unquoted TRUE turns boolean connection options on
+- **What changed**: `CREATE CONNECTION` stores an unquoted `TRUE` as `ON`, and most connectors only accepted `TRUE`, so `USE_SSL = TRUE` or `ENCRYPT = TRUE` turned the option off. MSSQL connections were built with `Encrypt=False` and Active Directory bound over plain LDAP. Connectors now accept `TRUE`, `ON`, `YES` and `1`.
+- **Who is affected**: Connections that set boolean options without quotes: MSSQL `ENCRYPT`/`USE_SSL`/`TRUST_SERVER_CERTIFICATE`/`TRUSTED_CONNECTION`/`MULTI_SUBNET_FAILOVER`/`POOLING`, Postgres/MySQL/Oracle `POOLING` and `TRUST_SERVER_CERTIFICATE`, MySQL `ALLOW_PUBLIC_KEY_RETRIEVAL`/`ALLOW_USER_VARIABLES`, Active Directory and SMTP `USE_SSL`, S3 `FORCE_PATH_STYLE`, SFTP `ALLOW_UNPINNED_HOST_KEY`, REST `VALIDATE_JSON_BODY`, Neo4j boolean options.
+- **Migration**: A connection that worked only because encryption was silently off now encrypts; a server without TLS needs `USE_SSL = FALSE`, and one with a self-signed certificate needs its certificate trusted or `TRUST_SERVER_CERTIFICATE = TRUE`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Semantic: LIKE with a NULL operand is UNKNOWN
+- **What changed**: `LIKE` returned false for a NULL operand, so `NOT LIKE` returned true and `WHERE col NOT LIKE 'A%'` kept the rows where `col` is NULL. Both now return NULL, as in SQL and in queries pushed down to a database.
+- **Who is affected**: Engine-side queries using `NOT LIKE` or `NOT (... LIKE ...)` over nullable columns.
+- **Migration**: Add `OR col IS NULL` where the NULL rows were wanted.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — TypeSystem: Arithmetic on doubles outside decimal's range stays numeric
+- **What changed**: A double beyond decimal's range (about 7.9e28), NaN or infinity could not be converted for arithmetic: `+` returned the two values concatenated as text and `-`, `*`, `/`, `%` and unary minus returned NULL. They now compute as doubles; a non-finite result is NULL, as decimal overflow already is.
+- **Who is affected**: Expressions over very large `FLOAT`/`DOUBLE` values.
+- **Migration**: None expected; code that matched the concatenated text must use the numeric value.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Scripts cannot open the application's own files
+- **What changed**: The installers approve the install folder as a safe zone, which let a script read the Portal database, the Data Protection key ring and `appsettings.secrets.json`, or rewrite the service configuration. Configuration, secrets, the Portal and Orchestrator databases and binaries in the application folder, any `appsettings.secrets.json` and any `.portal-keys` folder are now refused in every protection mode.
+- **Who is affected**: Scripts that read or write those files directly.
+- **Migration**: Use `etl-sql admin backup` for the databases and keys; keep script data in a subfolder or another safe zone.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.21.0 — Runtime: Portal and Orchestrator databases use snake_case names
 - **What changed**: Portal and Orchestrator tables and columns were PascalCase (for example `AspNetUsers`). The first v0.21.0 start renames them to snake_case on SQLite and PostgreSQL. Earlier releases cannot open a renamed database.
 - **Who is affected**: Operators who roll back to v0.20.x, and SQL, reports, or tools that query these databases directly.

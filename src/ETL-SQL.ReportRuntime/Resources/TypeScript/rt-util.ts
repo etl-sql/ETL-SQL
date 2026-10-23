@@ -15,7 +15,11 @@
 // Returns the URL only if it uses a safe scheme; otherwise returns '#'. Blocks
 // javascript:, data:, vbscript: and similar from reaching href/src or location.
 export function safeUrl(value: unknown) {
-    const raw = String(value == null ? '' : value).trim();
+    // Normalize the way the browser's URL parser does before looking at the scheme: it removes
+    // tab, LF and CR anywhere and C0 controls or spaces at either end, so "java\tscript:" and
+    // "\x01javascript:" would otherwise pass as relative URLs and still run as javascript:.
+    // eslint-disable-next-line no-control-regex -- the control characters are what is being removed
+    const raw = String(value == null ? '' : value).replace(/[\t\n\r]/g, '').replace(/^[\u0000- ]+|[\u0000- ]+$/g, '').trim();
     // Allow relative URLs (no scheme) and explicit http(s)/mailto.
     if (/^(?:https?:|mailto:)/i.test(raw)) return raw;
     if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) return '#'; // some other scheme — reject

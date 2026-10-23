@@ -12,15 +12,35 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
+
+- An unquoted `TRUE` now turns boolean connection options on. `USE_SSL = TRUE` / `ENCRYPT = TRUE`
+  had turned encryption off for MSSQL and LDAPS off for Active Directory.
+- `LIKE` and `NOT LIKE` with a NULL operand are UNKNOWN; `NOT LIKE` no longer keeps NULL rows.
+- Arithmetic on doubles outside decimal's range stays numeric instead of concatenating as text.
+- Scripts can no longer read or write the application's own configuration, secrets, databases,
+  keys or binaries, even inside an approved safe zone.
+
 ### Security
 
 - Chart and micro-chart SVG keeps only SVG-namespace elements and drops `<style>`, `style`
   attributes and any `url()` that leaves the document. An XHTML `<meta>` refresh inside a chart
   could redirect a report page, and `<img>`, `@import` or `url()` could fetch from outside it, in
   hosts without the Portal's CSP.
+- Identity-sensitive reports no longer serve a shared snapshot left from before they read the
+  viewer's identity; the snapshot routes refuse them and the report opens live.
+- The report runtime's URL check strips tab, newline and control characters first, as the browser
+  does, so `java\tscript:` no longer passes as a relative link. HTML-visual inline micro-charts go
+  through the SVG sanitizer.
+- A Gateway session matches replies to their operation, so rows that arrive after a caller gave up
+  are never handed to the next caller.
 
 ### Fixed
 
+- Gateway reconnect backoff doubles across failed connections instead of staying at twice the
+  initial delay, and waits before reconnecting after a session ends.
 - `admin restore` writes the installer-managed secrets (JWT secret, dataset at-rest keys,
   Orchestrator API keys and identity signing secret, first-run password) to
   `appsettings.secrets.json` again. Restored only into `appsettings.json`, they were shadowed by an

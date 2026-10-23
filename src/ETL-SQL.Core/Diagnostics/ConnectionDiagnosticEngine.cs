@@ -402,6 +402,7 @@ public sealed class ConnectionDiagnosticEngine(IConnectorRegistry connectorRegis
 
     private static bool IsTruthy(string value) =>
         value.Equals("true", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("on", StringComparison.OrdinalIgnoreCase)
         || value.Equals("yes", StringComparison.OrdinalIgnoreCase)
         || value.Equals("1", StringComparison.Ordinal)
         || value.Equals("required", StringComparison.OrdinalIgnoreCase)

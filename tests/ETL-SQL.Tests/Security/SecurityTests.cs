@@ -257,6 +257,45 @@ namespace ETL_SQL.Tests.Security
         }
 
         [Fact]
+        public void ApplicationFiles_StayProtected_WhenTheInstallFolderIsASafeZone()
+        {
+            // The installers approve the install folder as a safe zone, and the services run
+            // user-authored scripts in-process. The service's own configuration, keys, databases
+            // and binaries must still be out of reach.
+            var installDir = AppDomain.CurrentDomain.BaseDirectory;
+            var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance) { IsTestMode = false };
+            security.ApprovedSafeZones.Add(installDir);
+
+            foreach (var name in new[]
+                     {
+                         "appsettings.json", "appsettings.secrets.json", "appsettings.Production.json",
+                         "portal.db", "portal.db-wal", "etlsql.db", "first-run-password.txt",
+                         "ETL-SQL.Portal.dll", "ETL-SQL.Portal.runtimeconfig.json", "ETL-SQL.Portal.deps.json"
+                     })
+            {
+                Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+                    security.ValidatePath(System.IO.Path.Combine(installDir, name)));
+            }
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+                security.ValidatePath(System.IO.Path.Combine(installDir, ".portal-keys", "key-1.xml")));
+            // The secrets file is protected wherever a deployment keeps it.
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+                security.ValidatePath(System.IO.Path.Combine(installDir, "data", "appsettings.secrets.json")));
+
+            // Data the services keep under the install folder stays reachable.
+            security.ValidatePath(System.IO.Path.Combine(installDir, "data", "datasets", "sales.parquet"));
+            security.ValidatePath(System.IO.Path.Combine(installDir, "Reports", "sales.json"));
+            security.ValidatePath(System.IO.Path.Combine(installDir, "export.csv"));
+
+            // Unrestricted mode does not reopen them; only engine-internal operations bypass the check.
+            security.ProtectionMode = ETL_SQL.Services.PathProtectionMode.Unrestricted;
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+                security.ValidatePath(System.IO.Path.Combine(installDir, "appsettings.secrets.json")));
+            security.IsInternalOperation = true;
+            security.ValidatePath(System.IO.Path.Combine(installDir, "appsettings.secrets.json"));
+        }
+
+        [Fact]
         public void TestHardwareLockedEncryption()
         {
             var plainText = "Sensitive Session State Data";

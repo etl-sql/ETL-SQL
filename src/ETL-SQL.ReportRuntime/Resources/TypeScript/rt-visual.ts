@@ -666,7 +666,9 @@ function renderHtmlVisual(container: HTMLElement, visual: VisualVisual, manifest
         slot.classList.add('html-inline-microchart');
         slot.setAttribute('role', 'img');
         slot.setAttribute('aria-label', microChart.accessibleLabel || microChart.plainText || 'Indicator');
-        slot.innerHTML = String(microChart.svg || '');
+        if (!renderSafeSvgInto(slot, microChart.svg)) {
+            slot.replaceChildren(errorEl('Inline micro-chart could not be rendered.'));
+        }
     });
 }
 

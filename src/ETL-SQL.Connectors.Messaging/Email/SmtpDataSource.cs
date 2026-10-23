@@ -8,6 +8,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Data;
 using MailKit.Net.Smtp;
 using MimeKit;
+using ETL_SQL.Connectors.Shared;
 
 namespace ETL_SQL.Connectors.Email
 {
@@ -176,7 +177,7 @@ namespace ETL_SQL.Connectors.Email
 
             string host = _options.TryGetValue("HOST", out var h) ? h : "localhost";
             int port = _options.TryGetValue("PORT", out var p) && int.TryParse(p, out var pt) ? pt : 587; // Security: Default to 587 (STARTTLS) instead of 25 (plaintext)
-            bool useSsl = _options.TryGetValue("USE_SSL", out var ssl) && bool.TryParse(ssl, out var s) && s;
+            bool useSsl = ConnectorOptionValues.IsTrue(_options, "USE_SSL");
 
             try
             {

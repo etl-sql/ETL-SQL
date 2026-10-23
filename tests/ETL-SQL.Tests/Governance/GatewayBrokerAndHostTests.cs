@@ -218,6 +218,96 @@ public sealed class GatewayBrokerAndHostTests
     }
 
     [Fact]
+    public async Task Session_NeverHandsAnAbandonedOperationsLateRowsToTheNextOperation()
+    {
+        var enrollmentStore = new InMemoryGatewayEnrollmentStore();
+        await enrollmentStore.IssueAsync(TenantA, GatewayId, "token-32-chars-long-minimum-length-req", DateTimeOffset.UtcNow.AddHours(1));
+        await enrollmentStore.ConsumeAsync(TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
+        var registry = new GatewaySessionRegistry();
+        var broker = new GatewayBroker(enrollmentStore, registry, allowUnprovenTestIdentities: true);
+        await using var server = await LoopbackWebSocketServer.StartAsync(broker.HandleInboundConnectionAsync);
+
+        using var gateway = new ClientWebSocket();
+        await gateway.ConnectAsync(server.Uri, CancellationToken.None);
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.Hello,
+            TenantId = TenantA,
+            GatewayId = GatewayId,
+            WorkloadPublicKeyThumbprint = Thumbprint
+        });
+        Assert.Equal(GatewayFrameKind.HelloAck, (await ReceiveFrameAsync(gateway))!.Kind);
+        Assert.True(registry.TryGet(TenantA, GatewayId, out var session));
+
+        static GatewayOperation Operation(string id) => new(
+            id, TenantA, GatewayId, "orders", GatewayOperationClass.Read, GatewayOperationEffect.ReadOnly,
+            GatewayOperationBounds.Default, id);
+
+        // The first caller gives up before its rows arrive (a timeout, a closed browser tab).
+        using (var abandoned = new CancellationTokenSource())
+        {
+            var first = session!.ExecuteAsync(Operation("op-first"), "SELECT 1", null, abandoned.Token);
+            Assert.Equal("op-first", (await ReceiveFrameAsync(gateway))!.OperationId);
+            abandoned.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+        }
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.RowBatch,
+            OperationId = "op-first",
+            Columns = ["who"],
+            Rows = [["first viewer's row"]]
+        });
+        await SendFrameAsync(gateway, new GatewayFrame { Kind = GatewayFrameKind.Complete, OperationId = "op-first", RowsProduced = 1 });
+
+        // The next caller gets its own rows, not the leftovers.
+        var second = session!.ExecuteAsync(Operation("op-second"), "SELECT 2", null, CancellationToken.None);
+        Assert.Equal("op-second", (await ReceiveFrameAsync(gateway))!.OperationId);
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.RowBatch,
+            OperationId = "op-second",
+            Columns = ["who"],
+            Rows = [["second viewer's row"]]
+        });
+        await SendFrameAsync(gateway, new GatewayFrame { Kind = GatewayFrameKind.Complete, OperationId = "op-second", RowsProduced = 1 });
+
+        var result = await second;
+        Assert.Equal("second viewer's row", Assert.Single(result.Rows)[0]);
+        await gateway.CloseAsync(WebSocketCloseStatus.NormalClosure, "Test done", CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task GatewayHost_BackoffDoublesAcrossFailedConnections()
+    {
+        var time = new RecordingDelayTimeProvider();
+        var options = new GatewayHostOptions(
+            new GatewaySessionOptions(new Uri("ws://127.0.0.1:1/"), TenantA, GatewayId, Thumbprint),
+            InitialBackoff: TimeSpan.FromMilliseconds(10),
+            MaxBackoff: TimeSpan.FromSeconds(30),
+            MaxRetries: 4);
+        var dispatcher = new GatewayOperationDispatcher(new GatewayResourceRegistry(), new MockResourceExecutor(), new GatewayOutcomeLedger());
+
+        await new GatewayHost(options, dispatcher, time).RunAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
+
+        Assert.Equal(
+            new[] { 10, 20, 40, 80 },
+            time.Delays.Select(delay => (int)delay.TotalMilliseconds).ToArray());
+    }
+
+    /// <summary>Records each requested delay and lets it elapse at once.</summary>
+    private sealed class RecordingDelayTimeProvider : TimeProvider
+    {
+        public List<TimeSpan> Delays { get; } = [];
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            lock (Delays) Delays.Add(dueTime);
+            return System.CreateTimer(callback, state, TimeSpan.Zero, period);
+        }
+    }
+
+    [Fact]
     public void CapabilityAuthorizedDestinationScope_RestrictsOutboundDestinations()
     {
         using (CapabilityAuthorizedDestinationScope.Enter(["api.example.com", "db.internal.corp"]))

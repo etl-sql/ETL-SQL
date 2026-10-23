@@ -179,6 +179,11 @@ try {
 const utilPath = path.join(repo, 'src/ETL-SQL.ReportRuntime/Resources/Shared/rt-util.js');
 const util = await import(`data:text/javascript;base64,${Buffer.from(fs.readFileSync(utilPath, 'utf8')).toString('base64')}`);
 assert.equal(util.safeUrl(' javascript:alert(1) '), '#');
+// The browser drops tab/LF/CR anywhere and C0 controls at the ends before parsing the scheme.
+assert.equal(util.safeUrl('java\tscript:alert(1)'), '#');
+assert.equal(util.safeUrl('java\nscript:alert(1)'), '#');
+assert.equal(util.safeUrl('\u0001javascript:alert(1)'), '#');
+assert.equal(util.safeUrl('https://example.com/a?b=1'), 'https://example.com/a?b=1');
 assert.equal(util.safeUrl('/reports/one'), '/reports/one');
 assert.equal(util.escHtml('<>&"\''), '&lt;&gt;&amp;&quot;&#39;');
 assert.equal(util.escHtml(null), '');

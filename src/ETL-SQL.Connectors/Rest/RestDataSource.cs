@@ -1087,9 +1087,9 @@ namespace ETL_SQL.Connectors.Rest
         {
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             bool validateJsonBody = true;
-            if (_options != null && _options.TryGetValue("VALIDATE_JSON_BODY", out var vjbStr) && bool.TryParse(vjbStr, out var vjb))
+            if (_options != null && _options.TryGetValue("VALIDATE_JSON_BODY", out var vjbStr))
             {
-                validateJsonBody = vjb;
+                validateJsonBody = ConnectorOptionValues.IsTrue(vjbStr);
             }
 
             var contentType = GetBodyContentType().Trim().ToLowerInvariant();

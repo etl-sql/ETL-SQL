@@ -333,6 +333,12 @@ internal sealed class ActiveGatewaySession : IGatewaySession
             while (true)
             {
                 var frame = await _inboundChannel.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+                // Replies arrive on one channel for every operation this session has sent. A caller that
+                // stopped waiting (cancelled or timed out) leaves its late frames behind, and they must
+                // never be read as this operation's rows — the next caller can be a different viewer.
+                if (frame.OperationId is not null
+                    && !string.Equals(frame.OperationId, operation.OperationId, StringComparison.Ordinal))
+                    continue;
                 ingressBytes += Encoding.UTF8.GetByteCount(frame.Serialize());
 
                 if (frame.Kind == GatewayFrameKind.Fault)

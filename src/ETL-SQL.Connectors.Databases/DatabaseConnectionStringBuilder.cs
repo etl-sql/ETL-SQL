@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ETL_SQL.Connectors.Shared;
 using Microsoft.Data.SqlClient;
 using Npgsql;
 using Oracle.ManagedDataAccess.Client;
@@ -65,7 +66,7 @@ namespace ETL_SQL.Connectors
             if (props.TryGetValue("DATABASE", out var db)) builder.InitialCatalog = db;
 
             bool trusted = props.ContainsKey("TRUSTED_CONNECTION") &&
-                          props["TRUSTED_CONNECTION"].Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+                          ConnectorOptionValues.IsTrue(props["TRUSTED_CONNECTION"]);
 
             if (trusted)
             {
@@ -79,10 +80,12 @@ namespace ETL_SQL.Connectors
 
             // Production Options: Security
             if ((props.TryGetValue("USE_SSL", out var ssl) || props.TryGetValue("ENCRYPT", out ssl)) && ssl != null)
-                builder.Encrypt = ssl.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+                // COMPAT_BREAK: 0.22.0 — an unquoted ENCRYPT/USE_SSL = TRUE (stored as "ON") now encrypts
+                // instead of explicitly turning encryption off.
+                builder.Encrypt = ConnectorOptionValues.IsTrue(ssl);
 
             if (props.TryGetValue("TRUST_SERVER_CERTIFICATE", out var trustCert) && trustCert != null)
-                builder.TrustServerCertificate = trustCert.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+                builder.TrustServerCertificate = ConnectorOptionValues.IsTrue(trustCert);
 
             // Production Options: Failover
             if (props.TryGetValue("APPLICATION_INTENT", out var intent) && intent != null)
@@ -91,11 +94,11 @@ namespace ETL_SQL.Connectors
                     : ApplicationIntent.ReadWrite;
 
             if (props.TryGetValue("MULTI_SUBNET_FAILOVER", out var failover) && failover != null)
-                builder.MultiSubnetFailover = failover.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+                builder.MultiSubnetFailover = ConnectorOptionValues.IsTrue(failover);
 
             // Production Options: Pooling
             if (props.TryGetValue("POOLING", out var pooling) && pooling != null)
-                builder.Pooling = pooling.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+                builder.Pooling = ConnectorOptionValues.IsTrue(pooling);
 
             if (props.TryGetValue("MIN_POOL_SIZE", out var minPool) && int.TryParse(minPool, out var min))
                 builder.MinPoolSize = min;
@@ -125,7 +128,7 @@ namespace ETL_SQL.Connectors
 
             // Production Options: Pooling
             if (props.TryGetValue("POOLING", out var pooling) && pooling != null)
-                builder.Pooling = pooling.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+                builder.Pooling = ConnectorOptionValues.IsTrue(pooling);
 
             if (props.TryGetValue("MIN_POOL_SIZE", out var minPool) && int.TryParse(minPool, out var min))
                 builder.MinPoolSize = min;
@@ -141,7 +144,7 @@ namespace ETL_SQL.Connectors
                 if (Enum.TryParse<SslMode>(sslMode, true, out var mode))
                     builder.SslMode = mode;
 
-            if (props.TryGetValue("TRUST_SERVER_CERTIFICATE", out var trustCert) && trustCert != null && trustCert.Equals("TRUE", StringComparison.OrdinalIgnoreCase))
+            if (props.TryGetValue("TRUST_SERVER_CERTIFICATE", out var trustCert) && trustCert != null && ConnectorOptionValues.IsTrue(trustCert))
                 builder["Trust Server Certificate"] = true;
 
             return builder.ConnectionString;
@@ -165,7 +168,7 @@ namespace ETL_SQL.Connectors
 
             // Production Options: Pooling
             if (props.TryGetValue("POOLING", out var pooling) && pooling != null)
-                builder.Pooling = pooling.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+                builder.Pooling = ConnectorOptionValues.IsTrue(pooling);
 
             if (props.TryGetValue("MIN_POOL_SIZE", out var minPool) && uint.TryParse(minPool, out var min))
                 builder.MinimumPoolSize = min;
@@ -187,10 +190,10 @@ namespace ETL_SQL.Connectors
             }
 
             if (props.TryGetValue("ALLOW_PUBLIC_KEY_RETRIEVAL", out var pkr) && pkr != null)
-                builder.AllowPublicKeyRetrieval = pkr.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+                builder.AllowPublicKeyRetrieval = ConnectorOptionValues.IsTrue(pkr);
 
             if (props.TryGetValue("ALLOW_USER_VARIABLES", out var auv) && auv != null)
-                builder.AllowUserVariables = auv.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+                builder.AllowUserVariables = ConnectorOptionValues.IsTrue(auv);
 
             // Production Options: Timeouts
             if (props.TryGetValue("CONNECT_TIMEOUT", out var connTimeout) && uint.TryParse(connTimeout, out var ct))
@@ -224,7 +227,7 @@ namespace ETL_SQL.Connectors
 
             // Production Options: Pooling
             if (props.TryGetValue("POOLING", out var pooling) && pooling != null)
-                builder.Pooling = pooling.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+                builder.Pooling = ConnectorOptionValues.IsTrue(pooling);
 
             if (props.TryGetValue("MIN_POOL_SIZE", out var minPool) && int.TryParse(minPool, out var min))
                 builder.MinPoolSize = min;
