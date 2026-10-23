@@ -111,6 +111,9 @@ on one host, as v0.20.0 did.
 The [complete Smoke comparison](docs/benchmarks/scale-order-independence-2026-10-22.md#process-isolation-follow-up--2026-10-23)
 passes all 78 directional checks against existing failure bands. Clean baseline calibration and
 the historical Parquet/dataset baseline acceptance remain open.
+The [2026-10-23 clean calibration](docs/benchmarks/scale-baseline-calibration-2026-10-23.md) passes all
+1,040 measured assertions, but a Standard control-repeat GC-pause comparison fails. Reference
+replacement is rejected; investigate GC/heap state before another full capture. Existing bands remain.
 
 **Acceptance Evidence:** the order-independence check passes, and the v0.21.0 deviation's two
 scenarios pass against the recalibrated baseline.

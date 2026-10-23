@@ -45,6 +45,56 @@ function Assert-ScaleChildMetrics {
     }
 }
 
+function Get-ScaleGcConfigurationKey {
+    param([Parameter(Mandatory)][object]$Configuration)
+
+    $booleans = @('server','concurrent','retainVirtualMemory')
+    $numbers = @('heapCount','dynamicAdaptationMode','heapHardLimitBytes','heapHardLimitPercent','conserveMemory','processorCount')
+    $names = @($booleans + $numbers + 'latencyMode' | Sort-Object)
+    $observedNames = if ($Configuration -is [Collections.IDictionary]) { @($Configuration.Keys | Sort-Object) }
+        else { @($Configuration.PSObject.Properties.Name | Sort-Object) }
+    if (($observedNames -join ',') -cne ($names -join ',')) { throw 'GC configuration fields are missing or unexpected.' }
+    $normalized = [ordered]@{}
+    foreach ($name in $names) {
+        $value = $Configuration.$name
+        if ($name -in $booleans) {
+            if ($value -isnot [bool]) { throw 'GC configuration requires typed Boolean flags.' }
+            $normalized[$name] = $value
+        } elseif ($name -in $numbers) {
+            if ($value -isnot [ValueType] -or $value -is [bool]) { throw 'GC configuration requires numeric settings.' }
+            try { $number = [decimal]$value } catch { throw 'GC configuration requires finite numeric settings.' }
+            if ($number -lt 0 -or [decimal]::Truncate($number) -ne $number -or
+                ($name -in @('heapCount','processorCount') -and $number -le 0)) {
+                throw 'GC configuration requires finite nonnegative integer settings and positive heap/processor counts.'
+            }
+            $normalized[$name] = $number
+        } else {
+            if ($value -cnotin @('Batch','Interactive','LowLatency','SustainedLowLatency','NoGCRegion')) {
+                throw 'GC configuration requires a recognized latency mode.'
+            }
+            $normalized[$name] = $value
+        }
+    }
+    $normalized | ConvertTo-Json -Compress
+}
+
+function Assert-ScaleRuntimeEvidence {
+    param([Parameter(Mandatory)][object]$Metric, [Parameter(Mandatory)][bool]$OwnPathWarmUp)
+
+    if ($Metric.rowCountScale -isnot [ValueType] -or $Metric.rowCountScale -is [bool] -or
+        -not [double]::IsFinite([double]$Metric.rowCountScale) -or $Metric.rowCountScale -le 0) {
+        throw 'Scale metrics require the observed positive row-count scale.'
+    }
+    $expected = if ($OwnPathWarmUp) { [math]::Min([double]$Metric.rowCountScale, 10.0) } else { 0.0 }
+    if ($Metric.warmUpRowScale -isnot [ValueType] -or $Metric.warmUpRowScale -is [bool] -or
+        [double]$Metric.warmUpRowScale -ne $expected) { throw 'Observed warm-up scale does not match the capture protocol.' }
+    if ($null -eq $Metric.gcConfiguration) { throw 'Scale metrics require observed GC configuration.' }
+    $null = Get-ScaleGcConfigurationKey -Configuration $Metric.gcConfiguration
+    if ($Metric.serverGcEnabled -isnot [bool] -or $Metric.serverGcEnabled -ne $Metric.gcConfiguration.server) {
+        throw 'Observed GC configuration disagrees with the measured server-GC flag.'
+    }
+}
+
 # Scale measurements include result formatting and output. Capture bytes without write-through
 # file handles or per-line flushes, so the runner does not inject physical-disk latency into them.
 function Start-ScaleCapturedProcess {
@@ -150,11 +200,24 @@ function Assert-ScaleCaptureCompatibility {
     }
     $baselineDiscardedWarmUp = $BaselineReport.config.discardedProcessWarmUp
     $currentDiscardedWarmUp = $CurrentReport.config.discardedProcessWarmUp
-    if ($null -ne $baselineDiscardedWarmUp -or $null -ne $currentDiscardedWarmUp) {
+    if ($null -ne $baselineDiscardedWarmUp -or $null -ne $currentDiscardedWarmUp -or
+        $baselineWarmUp -ceq 'own-path-scaled-untimed-v2' -or
+        $BaselineReport.config.gcConfigurationCapture -or $CurrentReport.config.gcConfigurationCapture) {
         if ($baselineDiscardedWarmUp -isnot [bool] -or $currentDiscardedWarmUp -isnot [bool] -or
             -not $baselineDiscardedWarmUp -or -not $currentDiscardedWarmUp -or
-            $baselineWarmUp -cne 'own-path-untimed-v1' -or $currentWarmUp -cne 'own-path-untimed-v1') {
+            $baselineWarmUp -cnotin @('own-path-untimed-v1','own-path-scaled-untimed-v2') -or
+            $currentWarmUp -cnotin @('own-path-untimed-v1','own-path-scaled-untimed-v2')) {
             throw 'Baseline comparisons require recorded discarded-process and own-path warm-up; diagnostic or incomplete captures cannot qualify.'
+        }
+    }
+    $baselineGcCapture = $BaselineReport.config.gcConfigurationCapture
+    $currentGcCapture = $CurrentReport.config.gcConfigurationCapture
+    if ($baselineGcCapture -or $currentGcCapture -or $baselineWarmUp -ceq 'own-path-scaled-untimed-v2') {
+        if ($baselineGcCapture -cne 'runtime-observed-v1' -or $currentGcCapture -cne 'runtime-observed-v1' -or
+            $null -eq $BaselineReport.gcConfiguration -or $null -eq $CurrentReport.gcConfiguration -or
+            (Get-ScaleGcConfigurationKey $BaselineReport.gcConfiguration) -cne
+            (Get-ScaleGcConfigurationKey $CurrentReport.gcConfiguration)) {
+            throw 'Observed GC configurations differ or are incomplete. Calibrate matching GC profiles before regression decisions.'
         }
     }
     $baselineIsolation = $BaselineReport.config.processIsolation

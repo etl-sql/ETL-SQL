@@ -49,6 +49,7 @@ namespace ETL_SQL.Tests.Scale
         private readonly ScenarioResourceSampler _resourceSampler;
         private readonly Dictionary<Evaluator, FixtureRoot> _roots = new();
         private bool _ownPathWarmUpRunning;
+        private double _completedWarmUpRowScale;
 
         public ScaleCertificationTests(ITestOutputHelper output)
         {
@@ -297,17 +298,18 @@ namespace ETL_SQL.Tests.Scale
         /// depend on which scenarios ran first: in v0.21.0 two Smoke baselines held warm Parquet
         /// Decimal128 timings that earlier scenarios stopped providing (see
         /// docs/releases/v0.21.0-performance-results.md). This reduces first-use effects but does not
-        /// establish order independence; the 2026-10-22 comparison still fails existing bands.
-        /// The warm-up uses the Smoke row count (or the
-        /// configured scale when smaller), still asserts correctness, and emits no metrics.
+        /// establish order independence without the runner's per-scenario process isolation.
+        /// Warm the measured workload through Standard scale, capping larger tiers at that size.
+        /// The warm-up still asserts correctness and emits no measured metrics.
         /// CERT_SCENARIO_WARMUP=0 disables it for diagnostics; the runner records the mode.
         /// </summary>
         private async Task MeasureAfterOwnPathWarmUp(Func<Task> scenario)
         {
+            _completedWarmUpRowScale = 0;
             if (OwnPathWarmUpEnabled())
             {
                 var previous = Environment.GetEnvironmentVariable("CERT_ROW_SCALE");
-                var warmUpScale = Math.Min(RowScale(), 1.0);
+                var warmUpScale = Math.Min(RowScale(), 10.0);
                 Environment.SetEnvironmentVariable("CERT_ROW_SCALE", warmUpScale.ToString(CultureInfo.InvariantCulture));
                 _ownPathWarmUpRunning = true;
                 try { await scenario(); }
@@ -320,6 +322,7 @@ namespace ETL_SQL.Tests.Scale
                     GC.WaitForPendingFinalizers();
                     GC.Collect(2, GCCollectionMode.Forced, blocking: true);
                 }
+                _completedWarmUpRowScale = warmUpScale;
             }
 
             await scenario();
@@ -384,6 +387,9 @@ namespace ETL_SQL.Tests.Scale
 
             var lifecycle = _resourceSampler.SnapshotAndReset();
             var resources = measuredResources;
+            // Observe GC state after the timed resource snapshot so diagnostics are not measured.
+            var gcConfiguration = GC.GetConfigurationVariables();
+            var gcMemory = GC.GetGCMemoryInfo();
             const double bytesPerMb = 1024.0 * 1024.0;
             var startWorkingSetMB = Math.Round(lifecycle.StartWorkingSetBytes / bytesPerMb, 1);
             var peakWorkingSetMB = Math.Round(lifecycle.PeakWorkingSetBytes / bytesPerMb, 1);
@@ -422,6 +428,8 @@ namespace ETL_SQL.Tests.Scale
                 tier = certificationTier,
                 memoryTier,
                 rowCount,
+                rowCountScale = rowScale,
+                warmUpRowScale = _completedWarmUpRowScale,
                 elapsedMs,
                 rowsPerSecond,
                 spillBytes,
@@ -448,6 +456,32 @@ namespace ETL_SQL.Tests.Scale
                 cpuTimeMs = Math.Round(resources.CpuTime.TotalMilliseconds, 1),
                 cpuUtilizationPercent = resources.CpuUtilizationPercent,
                 serverGcEnabled = GCSettings.IsServerGC,
+                gcConfiguration = new
+                {
+                    server = GCSettings.IsServerGC,
+                    concurrent = gcConfiguration["ConcurrentGC"],
+                    heapCount = gcConfiguration["HeapCount"],
+                    dynamicAdaptationMode = gcConfiguration["GCDynamicAdaptationMode"],
+                    heapHardLimitBytes = gcConfiguration["GCHeapHardLimit"],
+                    heapHardLimitPercent = gcConfiguration["GCHeapHardLimitPercent"],
+                    conserveMemory = gcConfiguration["GCConserveMem"],
+                    retainVirtualMemory = gcConfiguration["RetainVM"],
+                    processorCount = Environment.ProcessorCount,
+                    latencyMode = GCSettings.LatencyMode.ToString()
+                },
+                gcMemoryState = new
+                {
+                    memoryLoadBytes = gcMemory.MemoryLoadBytes,
+                    totalAvailableMemoryBytes = gcMemory.TotalAvailableMemoryBytes,
+                    highMemoryLoadThresholdBytes = gcMemory.HighMemoryLoadThresholdBytes,
+                    heapSizeBytes = gcMemory.HeapSizeBytes,
+                    fragmentedBytes = gcMemory.FragmentedBytes,
+                    totalCommittedBytes = gcMemory.TotalCommittedBytes,
+                    index = gcMemory.Index,
+                    generation = gcMemory.Generation,
+                    concurrent = gcMemory.Concurrent,
+                    compacted = gcMemory.Compacted
+                },
                 runtimeVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
                 memoryBoundMB,
                 memoryMetric = "peak process working set",

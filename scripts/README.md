@@ -288,6 +288,13 @@ true in both reports and retain own-path warm-up. `-NoWarmUp` and `-NoScenarioWa
 diagnostic; matching skipped-warm-up flags do not make them valid baseline references. Historical
 reports without the new field can be compared with each other, but cannot qualify a new capture.
 
+New captures use `own-path-scaled-untimed-v2`:
+one untimed operation at the measured row scale through Standard (10x), capped at 10x for larger
+workloads. Each metric records the scale actually warmed, selected runtime GC settings and GC memory
+state after measurement. A capture rejects missing/wrong warm-up provenance or changing GC settings;
+baseline comparisons require matching observed GC configurations and warm-up versions. These
+protocol changes require clean recalibration; no baseline is automatically replaced.
+
 | Script Name | Language | Platform | Description |
 | :--- | :--- | :---: | :--- |
 | **[`Test-ColumnarStorageGate.ps1`](./Test-ColumnarStorageGate.ps1)** | PowerShell | Cross-platform | Certifies columnar storage size against a maximum ratio (default 0.5) at a chosen row count. |

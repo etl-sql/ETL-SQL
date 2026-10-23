@@ -415,10 +415,11 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
 and the [v0.21.0 performance results](docs/releases/v0.21.0-performance-results.md).
 
 - [x] **Warm each scenario's own code path (one untimed operation) before its timed samples.**
-  **Verified locally:** `ScaleCertificationTests` runs an untimed warm-up of each scenario at Smoke scale
-  before measured sampling, discarding warm-up metrics and resetting fixture roots and GC state. The runner
-  records `scenarioWarmUp: 'own-path-untimed-v1'` in report configuration. `Assert-ScaleCaptureCompatibility`
-  enforces matching warm-up modes, and `ScaleCertificationProcessTests` validates acceptance and rejection.
+  **Verified locally:** `ScaleCertificationTests` warms the measured workload through Standard scale,
+  capped at 10x for larger workloads, discarding warm-up metrics and resetting fixture roots and GC
+  state. Reports record `scenarioWarmUp: 'own-path-scaled-untimed-v2'` and the scale actually warmed.
+  All 52 native functional checks across Smoke/Standard and 89 focused provenance/compatibility tests
+  pass. Comparisons enforce matching warm-up versions and observed GC settings.
 - [x] Prove order independence: each Smoke scenario alone and in the tier agree within the band.
   **Verified 2026-10-23:** [measurement record](docs/benchmarks/scale-order-independence-2026-10-22.md#process-isolation-follow-up--2026-10-23)
   captures five samples of every Smoke scenario alone between two full-tier captures on unchanged
@@ -436,6 +437,22 @@ and the [v0.21.0 performance results](docs/releases/v0.21.0-performance-results.
   **Preparation:** reports now record whether the discarded process warm-up ran. Comparisons reject
   diagnostic captures that skipped either warm-up, invalid flags and missing warm-up provenance
   when paired with a new capture. Baseline files remain unchanged until clean calibration passes.
+  **Clean capture result, 2026-10-23:** [measurement record](docs/benchmarks/scale-baseline-calibration-2026-10-23.md)
+  retains eight full-tier captures in control/candidate/candidate/control order, ten samples each.
+  All 1,040 measured correctness/memory checks and 23 of 24 full-metric comparisons pass. The first
+  Standard control compared with its final control fails temp-table GC pause (50.3 to 70.65 ms,
+  +40.5% against the unchanged 35% band). Every candidate/control comparison passes. The controller
+  rejects reference replacement. Investigate GC/heap-state variation with focused probes before
+  repeating full calibration; preserve the failed captures and existing bands.
+  A forty-sample temp-table probe records runtime GC state and compares Smoke-sized with
+  Standard-sized warm-up. Both profiles pass their repeat comparisons without reproducing the
+  original failure. Standard-sized warm-up reduces Gen 2 collections and raises working set;
+  this is diagnostic evidence, not a replacement baseline or proof of the failure's cause.
+  The harness now uses `own-path-scaled-untimed-v2`: warm the measured workload through Standard,
+  cap larger tiers at 10x, record completed warm-up scale and observed GC state, and reject
+  incomplete/changing runtime provenance. Native full-tier functional checks pass all 52 measured
+  cases across Smoke and Standard, including actual warm-up scale, GC snapshots and absolute
+  memory gates. A new clean calibration remains required.
 
 ### 3. Flaky tests — the dedicated fix
 

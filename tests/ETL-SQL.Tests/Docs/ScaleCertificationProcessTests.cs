@@ -49,12 +49,85 @@ public sealed class ScaleCertificationProcessTests
     [InlineData("Smoke", "duplicate")]
     [InlineData("Smoke", "failed")]
     [InlineData("Smoke", "drift")]
+    [InlineData("Standard", "badwarmup")]
+    [InlineData("Smoke", "missinggc")]
+    [InlineData("Smoke", "invalidgc")]
+    [InlineData("Smoke", "gcdifferent")]
     public async Task Runner_RetainsCompleteIsolatedSamplesAndRejectsIncompleteEvidence(string tier, string mode)
     {
         var result = await ReleasePolicyHelperTests.RunHelper(
             $"Test-ScaleRunnerFixture -Tier {tier} -Mode {mode}", helperName: "checks/fixtures/scale-capture-runner.ps1");
         Assert.True(result.ExitCode == 0, result.Output);
         Assert.Contains($"Validated {tier}/{mode}", result.Output);
+    }
+
+    [Theory]
+    [InlineData(0.5, 0.5, true, true)]
+    [InlineData(1, 1, true, true)]
+    [InlineData(10, 10, true, true)]
+    [InlineData(100, 10, true, true)]
+    [InlineData(10, 1, true, false)]
+    [InlineData(10, 0, false, true)]
+    [InlineData(10, 10, false, false)]
+    public async Task RuntimeEvidence_RequiresTheActualWarmUpScale(double scale, double warmUp, bool enabled, bool accepted)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $gc = @{server=$true; concurrent=$true; heapCount=24; dynamicAdaptationMode=1;
+                heapHardLimitBytes=0; heapHardLimitPercent=0; conserveMemory=0; retainVirtualMemory=$false;
+                processorCount=24; latencyMode='Interactive'}
+            $metric = @{rowCountScale={{scale.ToString(System.Globalization.CultureInfo.InvariantCulture)}};
+                warmUpRowScale={{warmUp.ToString(System.Globalization.CultureInfo.InvariantCulture)}};
+                serverGcEnabled=$true; gcConfiguration=$gc}
+            Assert-ScaleRuntimeEvidence -Metric $metric -OwnPathWarmUp ${{enabled.ToString().ToLowerInvariant()}}
+            'Runtime evidence accepted'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.Equal(accepted, result.ExitCode == 0);
+        Assert.Contains(accepted ? "Runtime evidence accepted" : "warm-up scale", result.Output);
+    }
+
+    [Theory]
+    [InlineData("same", true)]
+    [InlineData("reordered", true)]
+    [InlineData("different", false)]
+    [InlineData("missing", false)]
+    [InlineData("invalid", false)]
+    [InlineData("string", false)]
+    [InlineData("missing-warm-up", false)]
+    [InlineData("missing-capture", false)]
+    [InlineData("unrecorded-v1", false)]
+    [InlineData("precision", false)]
+    public async Task BaselineComparison_RequiresMatchingObservedGcConfiguration(string mode, bool accepted)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $baselineGc = @{server=$true; concurrent=$true; heapCount=24; dynamicAdaptationMode=1;
+                heapHardLimitBytes=0; heapHardLimitPercent=0; conserveMemory=0; retainVirtualMemory=$false;
+                processorCount=24; latencyMode='Interactive'}
+            $currentGc = $baselineGc.Clone()
+            if ('{{mode}}' -eq 'different') { $currentGc.dynamicAdaptationMode=0 }
+            if ('{{mode}}' -eq 'missing') { $currentGc.Remove('heapCount') }
+            if ('{{mode}}' -eq 'invalid') { $currentGc.heapCount=-1 }
+            if ('{{mode}}' -eq 'string') { $currentGc.server='true' }
+            if ('{{mode}}' -eq 'precision') {
+                $baselineGc.heapHardLimitBytes=9007199254740992L
+                $currentGc.heapHardLimitBytes=9007199254740993L
+            }
+            if ('{{mode}}' -eq 'reordered') {
+                $currentGc = [ordered]@{}
+                foreach ($key in @($baselineGc.Keys | Sort-Object -Descending)) { $currentGc[$key]=$baselineGc[$key] }
+            }
+            $config = @{scenarioWarmUp='own-path-scaled-untimed-v2'; discardedProcessWarmUp=$true;
+                gcConfigurationCapture='runtime-observed-v1'}
+            if ('{{mode}}' -in @('missing-warm-up','unrecorded-v1')) { $config.Remove('discardedProcessWarmUp') }
+            if ('{{mode}}' -eq 'unrecorded-v1') { $config.scenarioWarmUp='own-path-untimed-v1' }
+            if ('{{mode}}' -eq 'missing-capture') { $config.Remove('gcConfigurationCapture') }
+            Assert-ScaleCaptureCompatibility -BaselineReport @{config=$config; gcConfiguration=$baselineGc} `
+                -CurrentReport @{config=$config; gcConfiguration=$currentGc}
+            'GC profiles accepted'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.Equal(accepted, result.ExitCode == 0);
+        var expected = accepted ? "GC profiles accepted"
+            : mode is "missing-warm-up" or "unrecorded-v1" ? "warm-up" : "GC configuration";
+        Assert.Contains(expected, result.Output);
     }
 
     [Theory]
@@ -238,6 +311,8 @@ public sealed class ScaleCertificationProcessTests
     [InlineData("none", "", true)]
     [InlineData("", "own-path-untimed-v1", false)]
     [InlineData("own-path-untimed-v1", "none", false)]
+    [InlineData("own-path-untimed-v1", "own-path-scaled-untimed-v2", false)]
+    [InlineData("own-path-scaled-untimed-v2", "own-path-untimed-v1", false)]
     public async Task BaselineComparison_RequiresMatchingScenarioWarmUp(string baseline, string current, bool compatible)
     {
         var result = await ReleasePolicyHelperTests.RunHelper($$"""

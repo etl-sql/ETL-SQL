@@ -14,6 +14,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Scale warm-up now uses the measured workload through Standard scale, capped at 10x for larger
+  workloads. Reports record the completed warm-up scale, selected observed GC settings and GC
+  memory state after timing. Capture rejects incomplete provenance or changing GC settings;
+  baseline comparison rejects different warm-up versions or GC configurations.
+
+- Retained clean Smoke/Standard baseline-calibration evidence: all 1,040 measured correctness and
+  memory checks pass, but one control-repeat GC-pause comparison fails. Reference replacement is
+  rejected; existing baselines and bands remain unchanged while GC variation is investigated.
+  A forty-sample diagnostic probe records GC configuration and memory state under two warm-up
+  sizes. Both repeat checks pass; the original failure remains unreproduced in the focused probe.
+
 - Scale reports now record discarded process warm-up. New baseline comparisons reject diagnostic
   skipped-warm-up captures and incomplete warm-up provenance, including matching diagnostic flags.
 

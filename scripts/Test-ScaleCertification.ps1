@@ -371,7 +371,8 @@ $config = [ordered]@{
     preEnumerateTheories = $false
     testFixture = 'isolated-scale-v1'
     resourceScope = 'timed-operations-lifecycle-peaks-v1'
-    scenarioWarmUp = if ($NoScenarioWarmUp) { 'none' } else { 'own-path-untimed-v1' }
+    scenarioWarmUp = if ($NoScenarioWarmUp) { 'none' } else { 'own-path-scaled-untimed-v2' }
+    gcConfigurationCapture = 'runtime-observed-v1'
     discardedProcessWarmUp = -not $NoWarmUp
     fixtureDefinitionSha256 = $fixtureHash
 }
@@ -571,6 +572,10 @@ for ($sampleIndex = 1; $sampleIndex -le $Samples; $sampleIndex++) {
             Where-Object { $_ -ne $null })
         try { Assert-ScaleChildMetrics -Plan $plan -Metrics $childMetrics }
         catch { Write-Warning $_; $testExitCode = 1; $sampleExitCode = 1 }
+        foreach ($metric in $childMetrics) {
+            try { Assert-ScaleRuntimeEvidence -Metric $metric -OwnPathWarmUp (-not $NoScenarioWarmUp) }
+            catch { Write-Warning $_; $testExitCode = 1; $sampleExitCode = 1 }
+        }
         $sampleMetrics += $childMetrics
         $childReports += [ordered]@{ name=$plan.Name; filter=$plan.Filter; exitCode=$childExitCode; rawLog=$sampleRawLog; metrics=$childMetrics }
         Clear-ScaleSpill
@@ -619,6 +624,13 @@ if ($metrics.Count -eq 0 -or @($metrics | Where-Object { $_.samples -ne $Samples
 }
 
 $hardware.serverGcEnabled = if ($metrics.Count -gt 0) { [bool]$metrics[0].serverGcEnabled } else { $null }
+$gcConfigurations = @($allSampleMetrics | ForEach-Object {
+    try { Get-ScaleGcConfigurationKey -Configuration $_.gcConfiguration } catch { 'invalid' }
+} | Select-Object -Unique)
+if ($gcConfigurations.Count -ne 1 -or $gcConfigurations[0] -ceq 'invalid') {
+    Write-Warning 'Scale capture requires one complete, consistent observed GC configuration across every sample.'
+    $testExitCode = 1
+}
 $measuredRuntimes = @($allSampleMetrics | ForEach-Object { $_.runtimeVersion } | Where-Object { $_ } | Select-Object -Unique)
 if ($measuredRuntimes.Count -eq 0) {
     # Older commits have no runtime metric. Use their adapter's actual test-host version, never
@@ -657,6 +669,7 @@ $report = [ordered]@{
     host = $hardware
     hardware = $hardware
     config = $config
+    gcConfiguration = if ($gcConfigurations.Count -eq 1 -and $gcConfigurations[0] -cne 'invalid') { $gcConfigurations[0] | ConvertFrom-Json } else { $null }
     sampleReports = @($sampleReports)
     scenarios = @($metrics)
 }
@@ -698,6 +711,8 @@ $mdLines += "- Engine memory grant: $($hardware.memoryGrantMB) MB"
 $mdLines += "- Output capture: $($config.outputCapture); full formatted result output retained"
 $mdLines += "- Temporary storage: $($config.temporaryStorage)"
 $mdLines += "- Scenario warm-up: $($config.scenarioWarmUp)"
+$mdLines += '- Warm-up scale: measured row scale through Standard (10x); larger workloads warm at 10x.'
+$mdLines += "- Observed GC configuration: $($gcConfigurations -join '; ')"
 $mdLines += "- Discarded process warm-up: $($config.discardedProcessWarmUp)"
 $mdLines += "- Process isolation: $($config.processIsolation)"
 $mdLines += "- Theory data pre-enumeration: $($config.preEnumerateTheories) (selected theories still execute all their rows)"

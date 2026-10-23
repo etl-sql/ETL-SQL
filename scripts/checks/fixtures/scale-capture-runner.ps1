@@ -51,6 +51,14 @@ function Start-ScaleCapturedProcess {
     $metric = @{scenario=$plan.MetricPrefix+'rows'; tier=$env:CERT_CERTIFICATION_TIER;
         rowCount=([int](50000 * [double]$env:CERT_ROW_SCALE)); elapsedMs=10; resultRows=10; checksum=55;
         passed=($exitCode -eq 0); serverGcEnabled=$true; runtimeVersion='.NET 10.0.0'}
+    $metric.rowCountScale = [double]$env:CERT_ROW_SCALE
+    $metric.warmUpRowScale = [math]::Min($metric.rowCountScale, 10.0)
+    $metric.gcConfiguration = @{server=$true; concurrent=$true; heapCount=1; dynamicAdaptationMode=1;
+        heapHardLimitBytes=0; heapHardLimitPercent=0; conserveMemory=0; retainVirtualMemory=$false; processorCount=1; latencyMode='Interactive'}
+    if ($target -and $env:SCALE_FIXTURE_MODE -eq 'badwarmup') { $metric.warmUpRowScale=0 }
+    if ($target -and $env:SCALE_FIXTURE_MODE -eq 'missinggc') { $metric.Remove('gcConfiguration') }
+    if ($target -and $env:SCALE_FIXTURE_MODE -eq 'invalidgc') { $metric.gcConfiguration.heapCount=-1 }
+    if ($target -and $env:SCALE_FIXTURE_MODE -eq 'gcdifferent') { $metric.gcConfiguration.heapCount=2 }
     if ($target -and $env:SCALE_FIXTURE_MODE -eq 'wrong') { $metric.scenario='ExternalSort_rows' }
     $lines = @('Passed: 1')
     if (-not ($target -and $env:SCALE_FIXTURE_MODE -eq 'missing')) {
@@ -81,6 +89,9 @@ function Complete-ScaleCapturedProcess { param($Capture) return $Capture.Process
         if (($exitCode -eq 0) -ne $success -or $report.testsPassed -ne $success) { throw "Wrong result: $exitCode; $(Get-Content (Join-Path $root 'runner.log') -Raw)" }
         if ($report.config.processIsolation -cne 'single-scenario-process-v1' -or $report.config.filters.Count -ne 13) { throw 'Missing process plan.' }
         if ($report.config.discardedProcessWarmUp -isnot [bool] -or $report.config.discardedProcessWarmUp -ne (-not $NoWarmUp)) { throw 'Discarded warm-up scope was not recorded.' }
+        if ($report.config.scenarioWarmUp -cne 'own-path-scaled-untimed-v2' -or
+            $report.config.gcConfigurationCapture -cne 'runtime-observed-v1') { throw 'New capture protocol was not recorded.' }
+        if ($success -and $null -eq $report.gcConfiguration) { throw 'Observed GC configuration was not retained.' }
         $launches = @(Get-Content (Join-Path $root 'launches.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
         $scale = if ($Tier -eq 'Standard') { 10 } else { 1 }
         $expectedLaunches = if ($NoWarmUp) { 26 } else { 39 }
