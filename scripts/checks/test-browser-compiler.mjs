@@ -198,6 +198,11 @@ assert.equal(util.toCssLength(12), '12px');
 assert.equal(util.interpolateColor('#000', '#fff', 0.5), 'rgb(128,128,128)');
 assert.match(util.simpleMarkdown('# Heading\n\n```sql\n<x>\n```'), /&lt;x&gt;/);
 assert.equal(util.renderInlineMarkdown('<img> **safe**'), '&lt;img&gt; <strong>safe</strong>');
+// Link text and URL are escaped once: '&' reaches the page as one character, not "&amp;".
+assert.equal(util.renderInlineMarkdown('[A & B](https://x.test/?a=1&b=2)'),
+    '<a href="https://x.test/?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">A &amp; B</a>');
+assert.ok(!util.renderInlineMarkdown('[x](javascript:alert(1))').includes('<a'));
+assert.ok(!util.renderInlineMarkdown('[x]("onmouseover="alert(1))').includes('<a'));
 console.log('runtime utility pilot: coercion, URL, escaping, formatting and markdown checks passed');
 
 const designerPath = path.join(repo, 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer-util.js');

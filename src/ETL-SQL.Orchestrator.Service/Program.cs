@@ -136,6 +136,20 @@ try
     //    network-reachable address. Fails fast when no API key is configured
     //    and the service is bound to a non-loopback endpoint.
     OrchestratorStartup.ValidateApiKeyBinding(cfg);
+    if (OrchestratorStartup.IsKeyless(cfg))
+    {
+        // Keyless means loopback-only and unauthenticated; refuse any other Host so a DNS-rebinding
+        // page in a local browser cannot reach the job API.
+        app.Use(async (context, next) =>
+        {
+            if (!OrchestratorStartup.IsLoopbackHost(context.Request.Host.Host))
+            {
+                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                return;
+            }
+            await next();
+        });
+    }
 
     // ── Authorization mode, said out loud ────────────────────────────────
     //    Legacy mode is a supported Solo configuration and not a startup failure, but it is normally

@@ -46,6 +46,10 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
   cannot author.
 - The ReportPlayer serves only loopback host names, refuses cross-origin requests and requires JSON
   on POSTs, so a web page cannot drive it or read it through DNS rebinding.
+- An Orchestrator without an API key (loopback-only) also refuses requests whose Host is not a
+  loopback name, so a DNS-rebinding page cannot reach its unauthenticated job API.
+- The VS Code report preview writes unsaved scripts and the built manifest into a private temporary
+  directory instead of predictable names in the shared temp folder.
 
 ### Fixed
 
@@ -53,6 +57,12 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
   initial delay, and waits before reconnecting after a session ends.
 - A Gateway result larger than one frame is sent as several row batches; it used to end the
   session after the operation was recorded as committed.
+- Markdown link text and URLs in report titles are escaped once; `&` showed as `&amp;` and broke
+  query strings.
+- The ReportPlayer map route answers 403 for a path outside the report folder instead of failing
+  with 500.
+- Gateway session registration and removal no longer race, which could show a connected Gateway
+  as offline; the Player's paginated-page set is no longer changed while a rebuild reads it.
 - `admin restore` writes the installer-managed secrets (JWT secret, dataset at-rest keys,
   Orchestrator API keys and identity signing secret, first-run password) to
   `appsettings.secrets.json` again. Restored only into `appsettings.json`, they were shadowed by an

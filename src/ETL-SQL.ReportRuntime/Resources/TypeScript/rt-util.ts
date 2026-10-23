@@ -178,10 +178,11 @@ export function renderInlineMarkdown(text: string) {
         .replace(/\*(.+?)\*/g,     '<em>$1</em>')
         .replace(/`(.+?)`/g,       '<code>$1</code>')
         .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
-            // Only allow safe protocols
+            // label and url are already escaped (the whole text was escaped above); escaping them
+            // again showed "&amp;" in link text and broke query strings in the href.
             const safe = /^(https?:|mailto:|\/)/i.test(url.trim());
-            if (!safe) return escHtml(label);
-            return `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">${escHtml(label)}</a>`;
+            if (!safe) return label;
+            return `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
         });
 }
 

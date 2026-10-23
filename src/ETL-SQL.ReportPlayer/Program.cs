@@ -462,7 +462,7 @@ app.MapGet("/maps/custom", async (HttpContext ctx) =>
         return Results.BadRequest("Map path must be relative");
 
     if (!SafePath.TryResolveWithinRoot(baseDir, rawPath, out var fullPath))
-        return Results.Forbid();
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
 
     if (!File.Exists(fullPath))
         return Results.NotFound($"Map file not found: {Path.GetFileName(fullPath)}");
@@ -494,7 +494,7 @@ if (multiMode)
             return Results.BadRequest("Map path must be relative");
 
         if (!SafePath.TryResolveWithinRoot(svc.ScriptDirectory, rawPath, out var fullPath))
-            return Results.Forbid();
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
 
         if (!File.Exists(fullPath))
             return Results.NotFound($"Map file not found: {Path.GetFileName(fullPath)}");

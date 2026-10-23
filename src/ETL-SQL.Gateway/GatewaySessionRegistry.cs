@@ -120,12 +120,20 @@ public sealed class GatewaySessionRegistry
 {
     private readonly ConcurrentDictionary<(string TenantId, string GatewayId), GatewayClusterPool> _clusters = new();
 
+    // Register and unregister change pool membership together with the pool's presence in
+    // _clusters. Without one gate, an unregister that saw an empty pool could remove it just after
+    // a register added a live node to it, and that Gateway would read as offline while connected.
+    private readonly Lock _membershipGate = new();
+
     public bool TryRegister(IGatewaySession session)
     {
         ArgumentNullException.ThrowIfNull(session);
         var key = (session.TenantId, session.GatewayId);
-        var pool = _clusters.GetOrAdd(key, k => new GatewayClusterPool(k.TenantId, k.GatewayId));
-        return pool.TryAddNode(session);
+        lock (_membershipGate)
+        {
+            var pool = _clusters.GetOrAdd(key, k => new GatewayClusterPool(k.TenantId, k.GatewayId));
+            return pool.TryAddNode(session);
+        }
     }
 
     public bool TryGet(string tenantId, string gatewayId, out IGatewaySession? session)
@@ -149,16 +157,19 @@ public sealed class GatewaySessionRegistry
         ArgumentNullException.ThrowIfNull(session);
 
         var key = (tenantId, gatewayId);
-        if (_clusters.TryGetValue(key, out var pool))
+        lock (_membershipGate)
         {
-            var removed = pool.TryRemoveNode(session.NodeId, session);
-            if (pool.IsEmpty)
+            if (_clusters.TryGetValue(key, out var pool))
             {
-                _clusters.TryRemove(key, out _);
+                var removed = pool.TryRemoveNode(session.NodeId, session);
+                if (pool.IsEmpty)
+                {
+                    _clusters.TryRemove(key, out _);
+                }
+                return removed;
             }
-            return removed;
+            return false;
         }
-        return false;
     }
 
     public IReadOnlyList<GatewaySessionInfo> ListActive(string? tenantId = null)
