@@ -527,8 +527,8 @@ public class DataSourceManager(
         return mem;
     }
 
-    /// <summary>Restores a temporary table from a session data store (SQLite/Chunks or Legacy JSON).</summary>
-    public async Task<IDataSource> RestoreTempTable(TempTableInfo info, string password)
+    /// <summary>Restores a temporary table from its persisted spill chunks.</summary>
+    public IDataSource RestoreTempTable(TempTableInfo info)
     {
         _evaluator.CancellationToken.ThrowIfCancellationRequested();
 
@@ -548,40 +548,6 @@ public class DataSourceManager(
             ds.Rehydrate(info.Columns ?? new(), info.SpillChunkNames);
             _logger.Debug("[SESSION] Rehydrated temp table {TableName} from {ChunkCount} spill chunks.", info.Name, info.SpillChunkNames.Count);
             return ds;
-        }
-
-        // Legacy/Snapshot Path: Restore from JSON file
-        if (File.Exists(info.DataFilePath))
-        {
-            try
-            {
-                string encryptedJson = await File.ReadAllTextAsync(info.DataFilePath, _evaluator.CancellationToken);
-                string plainJson = CryptoUtils.Unprotect(encryptedJson, password);
-                var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(plainJson);
-
-                if (rows != null && rows.Count > 0)
-                {
-                    var dt = new DataTable();
-                    dt.SetColumns(ds.Schema.Keys, info.Constraints);
-
-                    foreach (var rowDict in rows)
-                    {
-                        _evaluator.CancellationToken.ThrowIfCancellationRequested();
-                        var row = dt.NewRow();
-                        foreach (var kvp in rowDict)
-                        {
-                            row[kvp.Key] = JsonToClr(kvp.Value);
-                        }
-                        await dt.AddRowAsync(row);
-                    }
-                    await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable(), append: false, cancellationToken: _evaluator.CancellationToken);
-                    _logger.Debug("[SESSION] Restored {RowCount} rows into temp table {TableName} via JSON snapshot", rows.Count, info.Name);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.WriteLine($"Warning: Failed to restore temp table {info.Name}: {ex.Message}", ConsoleColor.Yellow);
-            }
         }
 
         return ds;
@@ -632,26 +598,6 @@ public class DataSourceManager(
         var parser = new Parser(tokens, fkSql);
         var stmtParser = new StatementParser(parser);
         return stmtParser.ParseForeignKeyReference();
-    }
-
-    private object? JsonToClr(object? val)
-    {
-        if (val is JsonElement elem)
-        {
-            switch (elem.ValueKind)
-            {
-                case JsonValueKind.String: return elem.GetString();
-                case JsonValueKind.Number:
-                    if (elem.TryGetInt32(out int i)) return i;
-                    if (elem.TryGetInt64(out long l)) return l;
-                    return elem.GetDouble();
-                case JsonValueKind.True: return true;
-                case JsonValueKind.False: return false;
-                case JsonValueKind.Null: return null;
-                default: return elem.ToString();
-            }
-        }
-        return val;
     }
 
     /// <summary>

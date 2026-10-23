@@ -75,6 +75,10 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 - `USE DOCKER` state is scoped by tenant: an alias, `DOCKER.CONNECTION_STRING` and the container
   itself are no longer shared between tenants on one Orchestrator. Single-tenant hosts keep their
   container names.
+- Upgrade code for state written by earlier releases is removed: Orchestrator schema renames and
+  add-missing-column steps, plaintext JSON snapshots, plaintext PII and settings upgrades, the
+  Gateway `outcomes.json` import, `Portal:Dataset:LegacyAtRestKeyVersion`, JSON temp-table restore
+  and browser-stored Studio drafts. Every store is created in its current shape.
 - Only authenticated encryption formats are read. `ENC:` values, encrypted files, SSH-encrypted
   files and machine-bound payloads in the old unauthenticated AES-CBC formats are refused instead
   of decrypted.

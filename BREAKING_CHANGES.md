@@ -108,6 +108,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 - **Diagnostic**: N/A
 - **Earliest removal**: N/A
 
+### v0.22.0 — Runtime: Upgrade paths for data written by earlier releases are removed
+- **What changed**: Startup no longer upgrades state written by earlier releases. Removed: the Orchestrator table and column renames and every add-missing-column step (job store, throttle slots, sandbox admission and metering ledgers, security event outbox); plaintext JSON report snapshots and the snapshot migration service; the plaintext PII column upgrade; the plaintext Orchestrator settings sidecar; the Orchestrator database lookup beside the Portal database; the Gateway `outcomes.json` import; `Portal:Dataset:LegacyAtRestKeyVersion`; JSON temp-table session restore; and Studio drafts kept in browser storage.
+- **Who is affected**: Installations with data from an earlier release. There are none.
+- **Migration**: Start from empty state.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.21.0 — Runtime: Portal and Orchestrator databases use snake_case names
 - **What changed**: Portal and Orchestrator tables and columns were PascalCase (for example `AspNetUsers`). The first v0.21.0 start renames them to snake_case on SQLite and PostgreSQL. Earlier releases cannot open a renamed database.
 - **Who is affected**: Operators who roll back to v0.20.x, and SQL, reports, or tools that query these databases directly.

@@ -1493,7 +1493,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 
         foreach (var temp in state.TempTables)
         {
-            _connections[temp.Name] = await _dataSourceManager.RestoreTempTable(temp, ScriptPassword ?? ETL_SQL.Services.SecurityService.GetMachineKey());
+            _connections[temp.Name] = _dataSourceManager.RestoreTempTable(temp);
         }
     }
 

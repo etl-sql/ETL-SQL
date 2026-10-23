@@ -13,7 +13,7 @@ Manage dataset at-rest encryption keys, perform in-place Portal upgrades safely,
 
 Production portals require `Portal:Dataset:AtRestKey` — a base64 value decoding to at least 32 bytes. Generate it with a cryptographically secure random generator, store it in the portal's secret manager, and set a non-secret `Portal:Dataset:AtRestKeyVersion` such as `2026-01`.
 
-At startup, the Portal validates the current key, every `PreviousAtRestKeys` entry, and `LegacyAtRestKeyVersion`. Startup is fatal when a required key is missing, is not valid base64, decodes to fewer than 32 bytes, reuses the current version as a previous version, or names a legacy version that cannot be resolved.
+At startup, the Portal validates the current key and every `PreviousAtRestKeys` entry. Startup is fatal when a required key is missing, is not valid base64, decodes to fewer than 32 bytes, or reuses the current version as a previous version.
 
 > [!CAUTION]
 > `Portal:Dataset:AllowMachineFallback=true` is supported only for deliberate development/standalone use. It creates host-bound caches that cannot be restored on another host.
@@ -57,7 +57,6 @@ To rotate from `v1` to `v2`:
     "PreviousAtRestKeys": {
       "v1": "<old-v1-base64-key>"
     },
-    "LegacyAtRestKeyVersion": "v1",
     "AllowMachineFallback": false
   }
 }
@@ -67,7 +66,7 @@ To rotate from `v1` to `v2`:
 
 Rotation processes datasets in stable ID order and commits each file and version independently. A failed dataset keeps its old file and version; rerun the same endpoint to resume. Readers can use both current and configured previous versions during the rotation window.
 
-3. After the response reports no failures and every dataset row records `v2`: take a new backup, remove `LegacyAtRestKeyVersion`, and remove `v1` from `PreviousAtRestKeys`. Do not retire the old key until old backups have expired or their recovery procedure retains that key separately.
+3. After the response reports no failures and every dataset row records `v2`: take a new backup and remove `v1` from `PreviousAtRestKeys`. Do not retire the old key until old backups have expired or their recovery procedure retains that key separately.
 
 ### Interrupted Rotation
 

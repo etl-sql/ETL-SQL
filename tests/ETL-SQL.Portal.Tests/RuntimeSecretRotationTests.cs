@@ -148,38 +148,4 @@ public class RuntimeSecretRotationTests
         Assert.Equal(2, keys.Count);
     }
 
-    [Fact]
-    public async Task OrchestratorSettings_MigratesPlaintextSidecarToProtectedValue()
-    {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"portal_secret_test_{Guid.NewGuid():N}");
-        Directory.CreateDirectory(tempDir);
-        try
-        {
-            var databasePath = Path.Combine(tempDir, "portal.db");
-            var settingsPath = Path.Combine(tempDir, "portal-orchestrator.json");
-            File.WriteAllText(settingsPath,
-                """{"ApiUrl":"https://orchestrator.example","ApiKey":"plaintext-secret"}""");
-            var provider = DataProtectionProvider.Create(
-                new DirectoryInfo(Path.Combine(tempDir, "keys")),
-                options => options.SetApplicationName("ETL-SQL.Portal.Tests"));
-            var protector = new OrchestratorApiKeyProtector(provider);
-
-            var settings = new OrchestratorSettingsService(
-                new PortalConfig { DatabasePath = databasePath },
-                protector);
-            await settings.InitializeAsync();
-
-            var persisted = JsonNode.Parse(File.ReadAllText(settingsPath))!.AsObject();
-            Assert.Equal("plaintext-secret", settings.ApiKey);
-            Assert.Null(persisted["ApiKey"]);
-            var protectedValue = persisted["ProtectedApiKey"]?.GetValue<string>();
-            Assert.NotNull(protectedValue);
-            Assert.DoesNotContain("plaintext-secret", protectedValue, StringComparison.Ordinal);
-            Assert.Equal("plaintext-secret", protector.Unprotect(protectedValue));
-        }
-        finally
-        {
-            Directory.Delete(tempDir, recursive: true);
-        }
-    }
 }

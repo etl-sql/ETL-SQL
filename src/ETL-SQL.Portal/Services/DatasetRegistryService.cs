@@ -477,7 +477,6 @@ namespace ETL_SQL.Portal.Services
                 CreatedBy = d.CreatedBy,
                 ParquetFilePath = parquetFilePath,
                 AtRestKeyVersion = d.AtRestKeyVersion
-                    ?? _config.Dataset.LegacyAtRestKeyVersion
                     ?? (_config.KeyManagement.Enabled ? null : _config.Dataset.AtRestKeyVersion),
                 OwningReportId = d.OwningReportId,
                 SourceQuery = d.SourceQuery,

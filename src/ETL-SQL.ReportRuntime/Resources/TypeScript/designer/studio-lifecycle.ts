@@ -69,39 +69,6 @@ export interface StudioLeaseLifecycleHandle<Document extends LeaseDocument> {
     dispose: () => void;
 }
 
-/**
- * Drafts that Studio kept in localStorage before v0.20.0. They are read once so an upgrade does not
- * lose them, offered like a host draft, and removed; nothing new is written to browser storage.
- */
-const LEGACY_DRAFT_PREFIX = 'etlsql_studio_draft:';
-
-function legacyDraftKey(doc: LeaseDocument): string {
-    if (doc.reportId != null) return `${LEGACY_DRAFT_PREFIX}report_${doc.reportId}`;
-    return `${LEGACY_DRAFT_PREFIX}path_${encodeURIComponent(doc.path || String(doc.id || 'untitled'))}`;
-}
-
-function takeLegacyDraft(doc: LeaseDocument): DraftRecord | null {
-    try {
-        const key = legacyDraftKey(doc);
-        const raw = localStorage.getItem(key);
-        if (!raw) return null;
-        const record = JSON.parse(raw) as { content?: unknown; version?: unknown; sourceRevision?: unknown; timestamp?: number };
-        return typeof record?.content === 'string'
-            ? { content: record.content, baseVersion: record.version, baseSourceRevision: record.sourceRevision, updatedAt: record.timestamp }
-            : null;
-    } catch {
-        return null;
-    }
-}
-
-function removeLegacyDraft(doc: LeaseDocument): void {
-    try {
-        localStorage.removeItem(legacyDraftKey(doc));
-    } catch {
-        // storage unavailable or disabled
-    }
-}
-
 /** A draft may leave the browser only without a plaintext credential in it. */
 export function draftMayBeKept(scriptText: string): boolean {
     return detectPlaintextSecrets(scriptText).length === 0;
@@ -256,7 +223,6 @@ export function createStudioLeaseLifecycle<Document extends LeaseDocument>({
     }
 
     function removeDraft(document: Document): void {
-        removeLegacyDraft(document);
         void options.onRemoveDraft?.(document)?.catch?.(() => { /* removed on the next save instead */ });
     }
 
@@ -267,7 +233,6 @@ export function createStudioLeaseLifecycle<Document extends LeaseDocument>({
         } catch {
             draft = null;
         }
-        draft ??= takeLegacyDraft(document);
         if (!draft || draft.content === (document.content || '') || !draftMayBeKept(draft.content)) {
             if (draft) removeDraft(document);
             return null;

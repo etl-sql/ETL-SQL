@@ -163,8 +163,7 @@ public sealed class DatasetAtRestKeyRotationServiceTests : IDisposable
             Dataset = new DatasetConfig
             {
                 AtRestKey = currentKey,
-                AtRestKeyVersion = currentVersion,
-                LegacyAtRestKeyVersion = previousVersion
+                AtRestKeyVersion = currentVersion
             }
         };
         if (previousKey != null && previousVersion != null)

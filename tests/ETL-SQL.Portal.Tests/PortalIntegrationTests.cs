@@ -12,6 +12,7 @@ using ETL_SQL.Portal;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
+using ETL_SQL.Reporting;
 using ETL_SQL.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -1940,8 +1941,11 @@ CREATE VISUAL Total AS CARD (
         var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
 
-        var manifestPath = Path.Combine(_factory.TempDir, "snapshots", $"dependency_{Guid.NewGuid():N}.snapshot.json");
-        await File.WriteAllTextAsync(manifestPath, """
+        var manifestKey = $"dependency_{Guid.NewGuid():N}.etlsnap";
+        string manifestPath;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var manifest = System.Text.Json.JsonSerializer.Deserialize<ReportManifest>("""
 {
   "source": "dependency.rptsql",
   "builtAt": "2026-05-16T00:00:00Z",
@@ -1953,7 +1957,10 @@ CREATE VISUAL Total AS CARD (
   "parameters": {},
   "parameterMetadata": {}
 }
-""");
+""", new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+            await scope.ServiceProvider.GetRequiredService<SnapshotPackageService>().SaveAsync(manifest, manifestKey);
+            manifestPath = Path.Combine(scope.ServiceProvider.GetRequiredService<PortalConfig>().SnapshotDirectory, manifestKey);
+        }
 
         using (var scope = _factory.Services.CreateScope())
         {

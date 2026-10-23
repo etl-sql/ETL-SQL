@@ -46,7 +46,6 @@ internal static class GatewayRuntimeService
         var registry = new GatewayResourceRegistry(Path.Combine(GatewaySetupService.ConfigDirectory, "resources.protected"));
         using var outcomeStore = new SqliteGatewayOutcomeStore(
             Path.Combine(GatewaySetupService.ConfigDirectory, "outcomes.db"), config.OutcomeRetention);
-        await outcomeStore.ImportLegacyAsync(Path.Combine(GatewaySetupService.ConfigDirectory, "outcomes.json"));
         var ledger = new GatewayOutcomeLedger(outcomeStore);
         var dispatcher = new GatewayOperationDispatcher(
             registry, new ConnectorResourceExecutor(connectors), ledger, CreateViewerContextVerifier(logger));
