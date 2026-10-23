@@ -387,22 +387,42 @@ export function formatValue(value: unknown, format?: string | null) {
     }
 }
 
-// Elements that run script, embed other documents or rewrite attributes over time. The server's
-// chart renderers emit none of them, so removing them never changes a legitimate chart.
-const SVG_ACTIVE_ELEMENTS = new Set(['script', 'foreignobject', 'iframe', 'object', 'embed',
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+
+// Elements that run script, embed other documents, restyle the page or rewrite attributes over
+// time. The server's chart renderers emit none of them, so removing them never changes a
+// legitimate chart.
+const SVG_ACTIVE_ELEMENTS = new Set(['script', 'foreignobject', 'iframe', 'object', 'embed', 'style',
     'handler', 'listener', 'animate', 'animatemotion', 'animatetransform', 'set']);
 
-/** Removes script-capable content from a parsed SVG: active elements, event handlers, and links. */
+/** True when every url(...) in the value points inside this document (url(#id)). */
+function onlyLocalUrls(value: string): boolean {
+    // A CSS escape can spell url( without those letters, so an escaped function is never trusted.
+    if (value.includes('\\') && value.includes('(')) return false;
+    const references = value.match(/url\(/gi)?.length ?? 0;
+    const local = value.match(/url\(\s*(['"]?)\s*#[^'"()]*\1\s*\)/gi)?.length ?? 0;
+    return references === local;
+}
+
+/**
+ * Removes script-capable and network-capable content from a parsed SVG. Anything outside the SVG
+ * namespace goes (an XHTML <meta> or <img> would otherwise redirect the page or fetch from it),
+ * as do active elements, event handlers, style attributes, and links or url() references that
+ * leave the document.
+ */
 function sanitizeSvgTree(root: Element): void {
     for (const element of [root, ...Array.from(root.querySelectorAll('*'))]) {
-        if (element !== root && SVG_ACTIVE_ELEMENTS.has(element.localName.toLowerCase())) {
+        if (element !== root && (element.namespaceURI !== SVG_NAMESPACE
+            || SVG_ACTIVE_ELEMENTS.has(element.localName.toLowerCase()))) {
             element.remove();
             continue;
         }
         for (const attribute of Array.from(element.attributes)) {
             const name = attribute.name.toLowerCase();
             const isLink = name === 'href' || name.endsWith(':href');
-            if (name.startsWith('on') || (isLink && !attribute.value.trim().startsWith('#'))) {
+            if (name.startsWith('on') || name === 'style'
+                || (isLink && !attribute.value.trim().startsWith('#'))
+                || !onlyLocalUrls(attribute.value)) {
                 element.removeAttribute(attribute.name);
             }
         }
@@ -420,7 +440,8 @@ export function parseSafeSvg(rawSvg: unknown): SVGSVGElement | null {
     try {
         const parsed = new DOMParser().parseFromString(raw, 'image/svg+xml');
         const svg = parsed.documentElement;
-        if (!svg || svg.nodeName.toLowerCase() !== 'svg' || parsed.querySelector('parsererror')) {
+        if (!svg || svg.nodeName.toLowerCase() !== 'svg' || svg.namespaceURI !== SVG_NAMESPACE
+            || parsed.querySelector('parsererror')) {
             return null;
         }
         sanitizeSvgTree(svg);

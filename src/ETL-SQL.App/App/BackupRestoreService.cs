@@ -442,12 +442,15 @@ namespace ETL_SQL.App
                 await CopyTreeAsync(Path.Combine(keysExtract, DpKeyRingDirName), Path.Combine(target, DpKeyRingDirName), target);
 
                 var restoredConfig = Path.Combine(target, "appsettings.json");
+                var restoredSecrets = Path.Combine(target, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName);
                 await MergeConfigAsync(
                     Path.Combine(dataExtract, "appsettings.json"),
                     Path.Combine(keysExtract, SecretsName),
-                    restoredConfig);
-                // The merged config has the plaintext secrets re-injected — restrict it to the owner.
+                    restoredConfig,
+                    restoredSecrets);
+                // Both files can hold plaintext secrets — restrict them to the owner.
                 RestrictToOwner(restoredConfig, isDirectory: false);
+                if (File.Exists(restoredSecrets)) RestrictToOwner(restoredSecrets, isDirectory: false);
                 // Likewise the restored Data Protection key ring.
                 RestrictToOwner(Path.Combine(target, DpKeyRingDirName), isDirectory: true);
                 if (!string.IsNullOrWhiteSpace(ctx.RestoreExpectedTenant))
@@ -464,6 +467,7 @@ namespace ETL_SQL.App
                 logger.WriteLine($"Restore complete into: {target}", ConsoleColor.Green);
                 logger.WriteLine("Next steps:", ConsoleColor.Cyan);
                 logger.WriteLine("  1. Point the portal/orchestrator at this directory (or copy it into place).", ConsoleColor.Gray);
+                logger.WriteLine($"     Copy {ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName} too: an installed one overrides appsettings.json.", ConsoleColor.Gray);
                 logger.WriteLine("  2. Start the portal — pending migrations apply automatically on startup.", ConsoleColor.Gray);
                 logger.WriteLine("  3. Dataset caches referenced by ABSOLUTE path in the catalog must be restored to", ConsoleColor.Gray);
                 logger.WriteLine("     their original DatasetRootPath, or re-materialized (see admin guide §6.5).", ConsoleColor.Gray);
@@ -863,7 +867,14 @@ namespace ETL_SQL.App
             }
         }
 
-        private static async Task MergeConfigAsync(string strippedConfigPath, string secretsPath, string outPath)
+        /// <summary>
+        /// Rebuilds the configuration from the stripped config and the keys archive. The installer-managed
+        /// secrets go to <paramref name="installedSecretsOutPath"/>, as the installers lay them out: that
+        /// file overrides appsettings.json at runtime and on every upgrade, so a value restored only into
+        /// appsettings.json would be shadowed by whatever secrets file is already in place.
+        /// </summary>
+        private static async Task MergeConfigAsync(
+            string strippedConfigPath, string secretsPath, string outPath, string installedSecretsOutPath)
         {
             var root = File.Exists(strippedConfigPath)
                 ? JsonNode.Parse(await File.ReadAllTextAsync(strippedConfigPath))
@@ -878,7 +889,10 @@ namespace ETL_SQL.App
                         SetByPath(root.AsObject(), kv.Key, kv.Value?.DeepClone());
             }
 
+            var installed = SplitInstalledSecrets(root.AsObject());
             await File.WriteAllTextAsync(outPath, root.ToJsonString(JsonOpts));
+            if (installed.Count > 0)
+                await File.WriteAllTextAsync(installedSecretsOutPath, installed.ToJsonString(JsonOpts));
 
             static void SetByPath(JsonObject root, string dottedPath, JsonNode? value)
             {
@@ -895,6 +909,49 @@ namespace ETL_SQL.App
                 }
                 cur[parts[^1]] = value;
             }
+        }
+
+        /// <summary>
+        /// Moves every non-empty installer-managed secret out of <paramref name="config"/>, leaving its
+        /// empty default behind exactly as the installers do, and returns them as a secrets document.
+        /// </summary>
+        internal static JsonObject SplitInstalledSecrets(JsonObject config)
+        {
+            var secrets = new JsonObject();
+            foreach (var dotted in ETL_SQL.Common.ConfigurationExtensions.InstalledSecretPaths)
+            {
+                var parts = dotted.Split(':');
+                JsonNode? node = config;
+                foreach (var part in parts[..^1]) node = node is JsonObject obj ? obj[part] : null;
+                if (node is not JsonObject parent || !parent.ContainsKey(parts[^1])) continue;
+
+                var value = parent[parts[^1]];
+                var isEmpty = value is null
+                    || value is JsonArray { Count: 0 }
+                    || value is JsonObject { Count: 0 }
+                    || (value is JsonValue v && v.TryGetValue<string>(out var text) && string.IsNullOrEmpty(text));
+                if (!isEmpty)
+                {
+                    var target = secrets;
+                    foreach (var part in parts[..^1])
+                    {
+                        if (target[part] is not JsonObject next)
+                        {
+                            next = new JsonObject();
+                            target[part] = next;
+                        }
+                        target = next;
+                    }
+                    target[parts[^1]] = value!.DeepClone();
+                }
+                parent[parts[^1]] = value switch
+                {
+                    JsonArray => new JsonArray(),
+                    JsonObject => new JsonObject(),
+                    _ => JsonValue.Create(""),
+                };
+            }
+            return secrets;
         }
 
         // ── Helpers ─────────────────────────────────────────────────────────────────

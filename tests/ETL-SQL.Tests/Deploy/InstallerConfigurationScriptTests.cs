@@ -113,13 +113,15 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
     }
 
     [Fact]
-    public void BothInstallers_MoveTheSameSecretsAndEveryOneIsAShippedSecretSetting()
+    public void BothInstallersAndRestore_MoveTheSameSecretsAndEveryOneIsAShippedSecretSetting()
     {
         var root = FindRepoRoot();
         var deb = Paths(File.ReadAllText(Path.Combine(root, "scripts", "build-linux-packages.sh")), @"SECRET_PATHS = \[(?<list>[^\]]*)\]");
         var msi = Paths(File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.Installer", "configure-portal-jwt.ps1")), @"\$secretPaths = @\((?<list>[^)]*)\)");
         Assert.NotEmpty(deb);
         Assert.Equal(deb, msi);
+        // Restore writes the same keys back to the secrets file.
+        Assert.Equal(deb, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretPaths);
 
         var shipped = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "src", "appsettings.json")))!;
         foreach (var dotted in deb)

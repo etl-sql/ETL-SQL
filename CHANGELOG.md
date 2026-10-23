@@ -12,6 +12,20 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- Chart and micro-chart SVG keeps only SVG-namespace elements and drops `<style>`, `style`
+  attributes and any `url()` that leaves the document. An XHTML `<meta>` refresh inside a chart
+  could redirect a report page, and `<img>`, `@import` or `url()` could fetch from outside it, in
+  hosts without the Portal's CSP.
+
+### Fixed
+
+- `admin restore` writes the installer-managed secrets (JWT secret, dataset at-rest keys,
+  Orchestrator API keys and identity signing secret, first-run password) to
+  `appsettings.secrets.json` again. Restored only into `appsettings.json`, they were shadowed by an
+  installed host's existing secrets file, leaving restored dataset caches unreadable.
+
 ## [0.21.0] — 2026-10-18
 
 For complete release details, highlights, and migration notes, see [Release Notes v0.21.0](docs/releases/v0.21.0.md).
