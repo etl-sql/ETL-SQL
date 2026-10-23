@@ -504,6 +504,7 @@ public partial class SecurityService
         var protectedFile =
             string.Equals(fileName, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName, StringComparison.OrdinalIgnoreCase)
             || segments.Any(segment => string.Equals(segment, ".portal-keys", StringComparison.OrdinalIgnoreCase))
+            || string.Equals(fileName, ETL_SQL.Core.Common.MachineBoundCrypto.KeyFileName, StringComparison.OrdinalIgnoreCase)
             || (IsDirectlyInApplicationDirectory(fullPath) && IsApplicationFileName(fileName));
         if (protectedFile)
         {

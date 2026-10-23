@@ -8,7 +8,7 @@ Aliases: `EMAIL`
 
 | Option | Description | Mandatory |
 | :--- | :--- | :---: |
-| `PORT` | SMTP server port (default: `25`) | No |
+| `PORT` | SMTP server port (default: `587`) | No |
 | `USERNAME` | Authentication username | No |
 | `PASSWORD` | Authentication password | No |
 | `USE_SSL` | Require TLS (`TRUE`/`FALSE`, default: `FALSE`). `TRUE` uses implicit TLS on port 465 and required STARTTLS on any other port; `FALSE` uses STARTTLS only when the server offers it | No |

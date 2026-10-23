@@ -46,9 +46,10 @@ public class DockerContainerManager : IDockerManager
     public string? GetConnectionString(string alias)
     {
         if (_connectionStrings.TryGetValue(alias, out var connStr)) return connStr;
-        // Fallback to image name if alias is not found (backward compatibility)
-        var existing = _activeContainers.Keys.FirstOrDefault(k => k.Contains(alias, StringComparison.OrdinalIgnoreCase) || alias.Equals("DOCKER", StringComparison.OrdinalIgnoreCase));
-        return existing != null ? LastConnectionString : null;
+        // Fall back to a partial image name only when it names exactly one container, and return
+        // that container's own connection string. It used to return the most recently started one.
+        var matches = _connectionStrings.Keys.Where(k => k.Contains(alias, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+        return matches.Count == 1 && _connectionStrings.TryGetValue(matches[0], out var match) ? match : null;
     }
 
     /// <summary>
@@ -59,11 +60,12 @@ public class DockerContainerManager : IDockerManager
     /// <returns>The connection string for the started container.</returns>
     public async Task<string> StartContainer(string imageName, string? alias = null, CancellationToken cancellationToken = default)
     {
+        var kind = ImageKind(imageName);
         string key = alias ?? imageName;
         if (_activeContainers.TryGetValue(key, out var activeContainer) && activeContainer.State.ToString() == "Running")
         {
             _logger.Info("Using existing session Docker container for {Key}.", key);
-            string activeConnStr = GetConnectionString(activeContainer, imageName);
+            string activeConnStr = _connectionStrings.TryGetValue(key, out var cached) ? cached : GetConnectionString(activeContainer, imageName, null);
             _connectionStrings[key] = activeConnStr;
             LastConnectionString = activeConnStr;
             return activeConnStr;
@@ -83,44 +85,45 @@ public class DockerContainerManager : IDockerManager
 
         IContainer container;
 
-        if (imageName.Contains("mssql", StringComparison.OrdinalIgnoreCase))
+        if (kind == DatabaseImage.MsSql)
         {
             container = new MsSqlBuilder(imageName)
                 .WithName(containerName)
                 .WithPassword(credentials.Password)
+                .WithCreateParameterModifier(BindPortsToLoopback)
                 .WithLogger(_loggerFactory.CreateLogger<MsSqlBuilder>())
                 .Build();
         }
-        else if (imageName.Contains("postgres", StringComparison.OrdinalIgnoreCase))
+        else if (kind == DatabaseImage.Postgres)
         {
             container = new PostgreSqlBuilder(imageName)
                 .WithName(containerName)
                 .WithUsername(credentials.Username)
                 .WithPassword(credentials.Password)
                 .WithDatabase(credentials.Database)
+                .WithCreateParameterModifier(BindPortsToLoopback)
                 .WithLogger(_loggerFactory.CreateLogger<PostgreSqlBuilder>())
                 .Build();
         }
-        else if (imageName.Contains("oracle", StringComparison.OrdinalIgnoreCase))
+        else if (kind == DatabaseImage.Oracle)
         {
             container = new OracleBuilder(imageName)
                 .WithName(containerName)
+                .WithPassword(credentials.Password)
+                .WithCreateParameterModifier(BindPortsToLoopback)
                 .WithLogger(_loggerFactory.CreateLogger<OracleBuilder>())
                 .Build();
         }
-        else if (imageName.Contains("mysql", StringComparison.OrdinalIgnoreCase) || imageName.Contains("mariadb", StringComparison.OrdinalIgnoreCase))
+        else
         {
             container = new MySqlBuilder(imageName)
                 .WithName(containerName)
                 .WithUsername(credentials.Username)
                 .WithPassword(credentials.Password)
                 .WithDatabase(credentials.Database)
+                .WithCreateParameterModifier(BindPortsToLoopback)
                 .WithLogger(_loggerFactory.CreateLogger<MySqlBuilder>())
                 .Build();
-        }
-        else
-        {
-            throw new ExecutionException($"Unsupported Docker image for database: {imageName}. Currently supported: MsSql, Postgres, Oracle.");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -144,7 +147,7 @@ public class DockerContainerManager : IDockerManager
 
         _activeContainers[key] = container;
 
-        string connectionString = GetConnectionString(container, imageName);
+        string connectionString = GetConnectionString(container, imageName, credentials);
         _connectionStrings[key] = connectionString;
         LastConnectionString = connectionString;
         LastAlias = key;
@@ -184,7 +187,7 @@ public class DockerContainerManager : IDockerManager
     private async Task<string?> GetExistingContainerConnectionString(
         string name,
         string imageName,
-        DockerCredentials credentials,
+        DockerCredentials? credentials,
         CancellationToken cancellationToken)
     {
         try
@@ -198,24 +201,31 @@ public class DockerContainerManager : IDockerManager
 
             if (target != null)
             {
-                int internalPort = imageName.Contains("mssql") ? 1433 : (imageName.Contains("postgres") ? 5432 : (imageName.Contains("mysql") || imageName.Contains("mariadb") ? 3306 : 1521));
+                // Credentials are generated per start, so a container from an earlier session
+                // carries its own: read them back from the environment it was created with.
+                var inspected = await client.Containers.InspectContainerAsync(target.ID, cancellationToken);
+                credentials = CredentialsFromEnvironment(imageName, credentials, inspected.Config?.Env);
+                if (credentials is null) return null;
+
+                var kind = ImageKind(imageName);
+                int internalPort = kind switch { DatabaseImage.MsSql => 1433, DatabaseImage.Postgres => 5432, DatabaseImage.MySql => 3306, _ => 1521 };
                 var portMap = target.Ports.FirstOrDefault(p => p.PrivatePort == internalPort);
                 if (portMap != null)
                 {
                     var host = "localhost";
                     var publicPort = portMap.PublicPort;
 
-                    if (imageName.Contains("mssql"))
+                    if (kind == DatabaseImage.MsSql)
                         return $"Server={host},{publicPort};Database=master;User Id=sa;Password={credentials.Password};Trusted_Connection=False;Encrypt=False;";
-                    if (imageName.Contains("postgres"))
+                    if (kind == DatabaseImage.Postgres)
                         return $"Host={host};Port={publicPort};Database={credentials.Database};Username={credentials.Username};Password={credentials.Password}";
-                    if (imageName.Contains("mysql") || imageName.Contains("mariadb"))
+                    if (kind == DatabaseImage.MySql)
                         return $"Server={host};Port={publicPort};Database={credentials.Database};User ID={credentials.Username};Password={credentials.Password}";
-                    if (imageName.Contains("oracle"))
+                    if (kind == DatabaseImage.Oracle)
                     {
                         if (imageName.Contains("free", StringComparison.OrdinalIgnoreCase))
-                            return $"User Id=system;Password=oracle;Data Source={host}:{publicPort}/FREE";
-                        return $"User Id=oracle;Password=oracle;Data Source={host}:{publicPort}/XE";
+                            return $"User Id=system;Password={credentials.Password};Data Source={host}:{publicPort}/FREE";
+                        return $"User Id=oracle;Password={credentials.Password};Data Source={host}:{publicPort}/XE";
                     }
                 }
             }
@@ -291,7 +301,7 @@ public class DockerContainerManager : IDockerManager
     /// <summary>
     /// Extracts the connection string from a supported IContainer implementation.
     /// </summary>
-    private string GetConnectionString(IContainer container, string imageName)
+    private static string GetConnectionString(IContainer container, string imageName, DockerCredentials? credentials)
     {
         if (container is MsSqlContainer mssql) return mssql.GetConnectionString();
         if (container is PostgreSqlContainer pg) return pg.GetConnectionString();
@@ -299,11 +309,82 @@ public class DockerContainerManager : IDockerManager
         if (container is OracleContainer oracle)
         {
             var port = oracle.GetMappedPublicPort(1521);
+            var password = credentials?.Password ?? throw new ExecutionException("Oracle container credentials are unavailable.");
             if (imageName.Contains("free", StringComparison.OrdinalIgnoreCase))
-                return $"User Id=system;Password=oracle;Data Source={oracle.Hostname}:{port}/FREE";
-            return $"User Id=oracle;Password=oracle;Data Source={oracle.Hostname}:{port}/XE";
+                return $"User Id=system;Password={password};Data Source={oracle.Hostname}:{port}/FREE";
+            return $"User Id=oracle;Password={password};Data Source={oracle.Hostname}:{port}/XE";
         }
         return "";
+    }
+
+    /// <summary>
+    /// Publishes container ports on the loopback interface only. Testcontainers otherwise binds
+    /// every interface, which puts a database with a generated password on the LAN.
+    /// </summary>
+    private static void BindPortsToLoopback(CreateContainerParameters parameters)
+    {
+        if (parameters.HostConfig?.PortBindings is null) return;
+        foreach (var bindings in parameters.HostConfig.PortBindings.Values)
+            foreach (var binding in bindings ?? [])
+                binding.HostIP = "127.0.0.1";
+    }
+
+    /// <summary>
+    /// Reads the credentials a container was created with from its environment. Returns null when
+    /// they cannot be recovered, so the caller does not hand out a connection string that fails.
+    /// </summary>
+    internal static DockerCredentials? CredentialsFromEnvironment(string imageName, DockerCredentials? defaults, IEnumerable<string>? environment)
+    {
+        var env = (environment ?? [])
+            .Select(e => e.Split('=', 2))
+            .Where(p => p.Length == 2)
+            .GroupBy(p => p[0], StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Last()[1], StringComparer.Ordinal);
+        string? Get(string key) => env.TryGetValue(key, out var v) && v.Length > 0 ? v : null;
+
+        var kind = ImageKind(imageName);
+        if (kind == DatabaseImage.MsSql)
+            return Get("MSSQL_SA_PASSWORD") is { } sa ? new DockerCredentials("sa", sa, "master") : null;
+        if (kind == DatabaseImage.Postgres)
+            return Get("POSTGRES_PASSWORD") is { } pg
+                ? new DockerCredentials(Get("POSTGRES_USER") ?? "postgres", pg, Get("POSTGRES_DB") ?? Get("POSTGRES_USER") ?? "postgres")
+                : null;
+        if (kind == DatabaseImage.MySql)
+        {
+            if (Get("MYSQL_USER") is { } user && Get("MYSQL_PASSWORD") is { } mysqlPassword)
+                return new DockerCredentials(user, mysqlPassword, Get("MYSQL_DATABASE") ?? defaults?.Database ?? "etldb");
+            return Get("MYSQL_ROOT_PASSWORD") is { } root
+                ? new DockerCredentials("root", root, Get("MYSQL_DATABASE") ?? defaults?.Database ?? "etldb")
+                : null;
+        }
+        return Get("ORACLE_PASSWORD") is { } oracle ? new DockerCredentials("oracle", oracle, "XE") : null;
+    }
+
+    public enum DatabaseImage { MsSql, Postgres, MySql, Oracle }
+
+    /// <summary>
+    /// Identifies the database an image runs from its repository name, ignoring registry, tag and
+    /// digest. Only the official repositories are accepted: a name that merely contains
+    /// <c>postgres</c> or <c>mssql</c> is refused.
+    /// </summary>
+    internal static DatabaseImage ImageKind(string imageName)
+    {
+        // COMPAT_BREAK: 0.22.0 — exact repository names replace the substring match.
+        var repository = imageName.Split('@')[0];
+        int lastSlash = repository.LastIndexOf('/');
+        int tagColon = repository.IndexOf(':', lastSlash + 1);
+        if (tagColon >= 0) repository = repository[..tagColon];
+        var segments = repository.ToLowerInvariant().Split('/');
+        var last = segments[^1];
+        var parent = segments.Length > 1 ? segments[^2] : "";
+
+        if (parent == "mssql" && last == "server") return DatabaseImage.MsSql;
+        if (last == "postgres") return DatabaseImage.Postgres;
+        if (last is "mysql" or "mariadb") return DatabaseImage.MySql;
+        if (last is "oracle-xe" or "oracle-free" || parent == "database" && last is "free" or "express")
+            return DatabaseImage.Oracle;
+        throw new ExecutionException(
+            $"Unsupported Docker image for database: {imageName}. Supported repositories: mssql/server, postgres, mysql, mariadb, oracle-xe, oracle-free.");
     }
 
     private static DockerCredentials GetCredentials(string containerName, string imageName)
@@ -312,13 +393,13 @@ public class DockerContainerManager : IDockerManager
         var seed = Convert.ToHexString(rawBytes).ToLowerInvariant();
         var password = $"Et1!{seed}";
 
-        if (imageName.Contains("postgres", StringComparison.OrdinalIgnoreCase))
+        var kind = ImageKind(imageName);
+        if (kind is DatabaseImage.Postgres or DatabaseImage.MySql)
             return new DockerCredentials("etluser", password, "etldb");
-        if (imageName.Contains("mysql", StringComparison.OrdinalIgnoreCase) || imageName.Contains("mariadb", StringComparison.OrdinalIgnoreCase))
-            return new DockerCredentials("etluser", password, "etldb");
-        if (imageName.Contains("mssql", StringComparison.OrdinalIgnoreCase))
+        if (kind == DatabaseImage.MsSql)
             return new DockerCredentials("sa", password, "master");
-        return new DockerCredentials("oracle", "oracle", "XE");
+        // Oracle images build the password into unquoted SQL, so keep it to letters and digits.
+        return new DockerCredentials("oracle", $"Et1{seed[..24]}", "XE");
     }
 
     private async Task DisposeBuiltContainerAsync(IContainer container, string key)
@@ -333,7 +414,7 @@ public class DockerContainerManager : IDockerManager
         }
     }
 
-    private sealed record DockerCredentials(string Username, string Password, string Database);
+    internal sealed record DockerCredentials(string Username, string Password, string Database);
 
     public Dictionary<string, string> GetState()
     {

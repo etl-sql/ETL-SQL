@@ -109,6 +109,30 @@ namespace ETL_SQL.Tests.CliCommands
         }
 
         [Fact]
+        public void IsUnsafeTarget_RejectsTheInstallFolderAndItsParents()
+        {
+            var appDir = Path.GetFullPath(AppContext.BaseDirectory);
+            Assert.True(DataPurgeService.IsUnsafeTarget(appDir));
+            Assert.True(DataPurgeService.IsUnsafeTarget(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(appDir))!));
+            Assert.False(DataPurgeService.IsUnsafeTarget(Path.Combine(appDir, "logs", "app")));
+        }
+
+        [Fact]
+        public void IsUnsafeTarget_RejectsAGitWorkingTree()
+        {
+            var repo = Path.Combine(_baseDir, "reports-repo");
+            Directory.CreateDirectory(Path.Combine(repo, ".git"));
+            Directory.CreateDirectory(Path.Combine(repo, "Reports"));
+
+            Assert.True(DataPurgeService.IsUnsafeTarget(repo));
+            Assert.True(DataPurgeService.IsUnsafeTarget(Path.Combine(repo, "Reports")));
+
+            var results = DataPurgeService.Execute(new[] { new PurgeTarget(Path.Combine(repo, "Reports"), true, "Published reports") }, dryRun: false);
+            Assert.Equal("Refused: unsafe path", Assert.Single(results).Error);
+            Assert.True(Directory.Exists(Path.Combine(repo, "Reports")));
+        }
+
+        [Fact]
         public void Execute_DryRun_ReportsButDeletesNothing()
         {
             var dir = Path.Combine(_baseDir, "Reports");

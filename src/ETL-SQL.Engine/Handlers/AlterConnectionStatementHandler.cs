@@ -52,7 +52,7 @@ public class AlterConnectionStatementHandler(
             foreach (var kvp in stmt.Options)
             {
                 var val = StringifyOption(await context.EvaluateValue(kvp.Value, new Row(), decryptSensitive: true));
-                options[kvp.Key] = Interpolate(val);
+                options[kvp.Key] = Interpolate(val, context);
             }
         }
 
@@ -65,7 +65,7 @@ public class AlterConnectionStatementHandler(
         {
             target = context.DecryptValue(target);
         }
-        target = Interpolate(target ?? "");
+        target = Interpolate(target ?? "", context);
         target = await _secretResolver.ResolveTargetAsync(target, context.CancellationToken);
         options = await _secretResolver.ResolveOptionsAsync(options, context.CancellationToken);
 
@@ -112,12 +112,18 @@ public class AlterConnectionStatementHandler(
         context.LastResult = new DataTable();
     }
 
-    private string Interpolate(string value)
+    /// <summary>
+    /// Replaces <c>${NAME}</c> with the host environment variable. COMPAT_BREAK: 0.22.0 — a name
+    /// must be in Security:AllowedEnvVars, the same list ENV() uses; a hosted script could otherwise
+    /// read the service's own secrets (Portal__Jwt__Secret) into a connection it controls.
+    /// </summary>
+    private string Interpolate(string value, IExecutionContext context)
     {
         if (string.IsNullOrEmpty(value)) return value;
         return Regex.Replace(value, @"\${(\w+)}", m =>
         {
             var varName = m.Groups[1].Value;
+            context.SecurityService.ValidateEnvVar(varName);
             var envValue = Environment.GetEnvironmentVariable(varName);
             if (envValue == null)
                 _logger.Warning("ALTER CONNECTION: environment variable '{VarName}' is not set; placeholder left as-is.", varName);

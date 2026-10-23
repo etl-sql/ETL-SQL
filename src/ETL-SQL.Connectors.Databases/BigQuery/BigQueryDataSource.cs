@@ -463,18 +463,15 @@ namespace ETL_SQL.Connectors.BigQuery
             return value;
         }
 
-        private static string QuoteIdentifier(string name)
+        internal static string QuoteIdentifier(string name)
         {
             if (string.IsNullOrEmpty(name)) return name;
             var parts = name.Split('.');
             return string.Join(".", parts.Select(p =>
             {
-                if (p.StartsWith('`') && p.EndsWith('`') && p.Length >= 2)
-                {
-                    var unquoted = p.Substring(1, p.Length - 2).Replace("`", "\\`");
-                    return $"`{unquoted}`";
-                }
-                return $"`{p.Replace("`", "\\`")}`";
+                var unquoted = p.StartsWith('`') && p.EndsWith('`') && p.Length >= 2 ? p[1..^1] : p;
+                // A backslash is escaped first, so a trailing one cannot escape the closing backtick.
+                return $"`{unquoted.Replace("\\", "\\\\").Replace("`", "\\`")}`";
             }));
         }
 

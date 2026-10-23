@@ -510,7 +510,7 @@ namespace ETL_SQL.Connectors
             string list = string.IsNullOrEmpty(_listName) ? throw new ExecutionException("LIST_NAME option must be configured to query SharePoint lists.") : _listName;
 
             var siteUri = new Uri(_siteUrl);
-            Uri? requestUri = new($"{_siteUrl.TrimEnd('/')}/_api/web/lists/GetByTitle('{Uri.EscapeDataString(list)}')/items");
+            Uri? requestUri = new($"{_siteUrl.TrimEnd('/')}/_api/web/lists/GetByTitle('{ODataTitle(list)}')/items");
             var visited = new HashSet<string>(StringComparer.Ordinal);
             var table = new DataTable();
             while (requestUri != null)
@@ -585,6 +585,12 @@ namespace ETL_SQL.Connectors
             if (table.Rows.Count > 0) yield return table;
         }
 
+        /// <summary>
+        /// Encodes a list title as an OData string literal. A single quote is doubled before URL
+        /// escaping: SharePoint decodes <c>%27</c> back to a quote before it parses the literal.
+        /// </summary>
+        internal static string ODataTitle(string title) => Uri.EscapeDataString(title.Replace("'", "''"));
+
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             if (_context != null && _context.IsWhatIf) return;
@@ -592,7 +598,7 @@ namespace ETL_SQL.Connectors
             await AuthenticateAsync();
             string list = string.IsNullOrEmpty(_listName) ? throw new ExecutionException("LIST_NAME option must be configured to write to SharePoint lists.") : _listName;
 
-            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/lists/GetByTitle('{Uri.EscapeDataString(list)}')/items";
+            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/lists/GetByTitle('{ODataTitle(list)}')/items";
             _httpClient.DefaultRequestHeaders.Accept.Clear();
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 

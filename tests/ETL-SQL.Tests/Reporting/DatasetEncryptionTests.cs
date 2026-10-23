@@ -48,6 +48,33 @@ namespace ETL_SQL.Tests.Reporting
         }
 
         [Fact]
+        public void MachineBoundCrypto_KeysComeFromAPrivateKeyFile_AndOldPayloadsStillDecrypt()
+        {
+            if (OperatingSystem.IsWindows()) return; // Windows in-memory payloads use DPAPI.
+
+            var protected_ = MachineBoundCrypto.Protect("new payload"u8.ToArray());
+            Assert.Equal("ETLSQLM3", System.Text.Encoding.ASCII.GetString(protected_, 0, 8));
+            var keyFile = MachineBoundCrypto.KeyFilePath();
+            Assert.True(File.Exists(keyFile));
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(keyFile));
+
+            // A payload written before the key file existed: AES-GCM keyed from the machine id.
+            var machineSecret = File.Exists("/etc/machine-id") ? File.ReadAllText("/etc/machine-id").Trim() : Environment.MachineName;
+            var legacyKey = System.Security.Cryptography.HKDF.DeriveKey(
+                System.Security.Cryptography.HashAlgorithmName.SHA256,
+                System.Text.Encoding.UTF8.GetBytes(machineSecret), 32, info: "etl-sql-machine-bound"u8.ToArray());
+            var plaintext = "old payload"u8.ToArray();
+            var nonce = new byte[12];
+            var tag = new byte[16];
+            var cipher = new byte[plaintext.Length];
+            using (var gcm = new System.Security.Cryptography.AesGcm(legacyKey, 16))
+                gcm.Encrypt(nonce, plaintext, cipher, tag);
+            var legacy = "ETLSQLM2"u8.ToArray().Concat(nonce).Concat(tag).Concat(cipher).ToArray();
+
+            Assert.Equal(plaintext, MachineBoundCrypto.Unprotect(legacy));
+        }
+
+        [Fact]
         public async Task MachineBoundCrypto_FileRoundTrip_ProducesIdenticalContent()
         {
             var dir = Path.GetTempPath();

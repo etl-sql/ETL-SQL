@@ -59,6 +59,41 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 - **Diagnostic**: N/A
 - **Earliest removal**: N/A
 
+### v0.22.0 — Runtime: `${NAME}` in CREATE/ALTER CONNECTION needs an allow-listed variable
+- **What changed**: A `${NAME}` placeholder read any host environment variable. It now reads only names in `Security:AllowedEnvVars`, the list `ENV()` already uses, and any other name is a security error.
+- **Who is affected**: Scripts that build connections from environment variables, such as `PASSWORD='${REDSHIFT_PASSWORD}'`.
+- **Migration**: Add each variable name to `Security:AllowedEnvVars` (or `"*"` on a host where scripts are trusted). Prefer `SECRET:` references for credentials.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: EXECUTE TOOL keeps a parameter value as one argument
+- **What changed**: Parameter values were substituted into the `ARGS` template before it was split on spaces, so a value with spaces became several arguments. The template is now split first; a value is always one argument.
+- **Who is affected**: Tool definitions whose `ARGS` relied on a parameter expanding into several arguments.
+- **Migration**: Give each argument its own placeholder in `ARGS`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: GENERATE JWT_SECRET no longer edits appsettings.json
+- **What changed**: The statement wrote `Security:JwtSecret`, which nothing reads, into the running application's `appsettings.json`. It now only returns the secret and its encrypted value.
+- **Who is affected**: Nobody relied on the written key; operators who expected the file to change.
+- **Migration**: Run `etl-sql config setup-jwt --update` on the Portal host, or set `Portal:Jwt:Secret`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: USE DOCKER accepts official database repositories only
+- **What changed**: The database was picked by a substring of the image name, so any image containing `postgres` or `mssql` was pulled and run. The repository name (registry, tag and digest ignored) must now be `mssql/server`, `postgres`, `mysql`, `mariadb`, `oracle-xe` or `oracle-free`. Containers get generated passwords, Oracle included, and publish ports on loopback only. `<prefix>.CONNECTION_STRING` resolves a partial image name only when it names one container.
+- **Who is affected**: Scripts using a mirrored or custom image under another repository name, scripts that hard-coded `oracle`/`oracle`, and tools that connected to a container from another machine.
+- **Migration**: Mirror the image under its official repository name; read credentials from `<alias>.CONNECTION_STRING`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: LDAP sign-in refuses names qualified with another domain
+- **What changed**: `alice@other.example` and `OTHER\alice` were stripped to `alice` and signed in as this domain's `alice`. With `Identity:Ldap:Domain` set, a qualifier must match it (UPN suffix, or NetBIOS name equal to its first label).
+- **Who is affected**: Multi-domain or trusted-forest directories where users sign in with another domain's qualifier.
+- **Migration**: Sign in with the configured domain or no qualifier. A Portal serving several domains needs one account per domain, which this release does not provide.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.21.0 — Runtime: Portal and Orchestrator databases use snake_case names
 - **What changed**: Portal and Orchestrator tables and columns were PascalCase (for example `AspNetUsers`). The first v0.21.0 start renames them to snake_case on SQLite and PostgreSQL. Earlier releases cannot open a renamed database.
 - **Who is affected**: Operators who roll back to v0.20.x, and SQL, reports, or tools that query these databases directly.

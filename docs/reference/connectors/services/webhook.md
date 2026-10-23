@@ -17,7 +17,7 @@ CREATE CONNECTION alerts AS WEBHOOK(
 
 | Option | Description | Mandatory |
 | :--- | :--- | :---: |
-| `URL` | Webhook endpoint. Accepts `'SECRET:name'` references and `${ENV_VAR}` placeholders. | Yes |
+| `URL` | Webhook endpoint. Accepts `'SECRET:name'` references and `${ENV_VAR}` placeholders (the name must be in `Security:AllowedEnvVars`). | Yes |
 | `FORMAT` | Payload shape: `SLACK`, `TEAMS`, or `GENERIC` (default: `GENERIC`). | No |
 | `BODY_TEMPLATE` | Raw request body with `${column}` placeholders; overrides `FORMAT` shaping. Substituted values are JSON-string-escaped so JSON templates stay valid. | No |
 | `TIMEOUT_SECONDS` | Per-request timeout in seconds (default: `30`). | No |

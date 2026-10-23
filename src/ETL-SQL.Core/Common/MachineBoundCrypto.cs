@@ -9,15 +9,27 @@ using System.Threading.Tasks;
 namespace ETL_SQL.Core.Common;
 /// <summary>
 /// Machine-bound symmetric encryption.
-/// Windows: uses DPAPI <see cref="DataProtectionScope.LocalMachine"/> so data is
-/// unreadable if moved to another machine.
-/// Linux/macOS: derives a machine-unique AES-256 key from <c>/etc/machine-id</c>
-/// (or the hostname as a fallback), then encrypts with authenticated AES-256-GCM.
+/// Windows: in-memory payloads use DPAPI <see cref="DataProtectionScope.LocalMachine"/> so data
+/// is unreadable if moved to another machine.
+/// Linux/macOS, and encrypted files everywhere: keys are derived from a random 256-bit key file
+/// created on first use (<see cref="KeyFileName"/> under the account's local application data, or
+/// <c>ETLSQL_MACHINE_KEY_PATH</c>), readable only by its owner. Payloads written before that key
+/// existed were keyed from <c>/etc/machine-id</c> or the host name, which anyone with a copy of the
+/// image can read; they still decrypt, and are rewritten under the key file the next time they are
+/// saved.
 /// </summary>
 public static class MachineBoundCrypto
 {
     private static readonly byte[] MagicV2 = Encoding.ASCII.GetBytes("ETLSQLM2");
+    private static readonly byte[] MagicV3 = Encoding.ASCII.GetBytes("ETLSQLM3");
     private static readonly byte[] FileMagicV2 = Encoding.ASCII.GetBytes("ETLSQLMF2");
+    private static readonly byte[] FileMagicV3 = Encoding.ASCII.GetBytes("ETLSQLMF3");
+
+    /// <summary>The key file's name. The application-file guard refuses it to scripts anywhere.</summary>
+    public const string KeyFileName = ".etlsql-machine-key";
+    private const string KeyPathVariable = "ETLSQL_MACHINE_KEY_PATH";
+    private const int KeyFileSecretLength = 32;
+    private static readonly Lazy<byte[]> KeyFileSecret = new(LoadOrCreateKeyFileSecret, LazyThreadSafetyMode.ExecutionAndPublication);
     private const int AesIvLength = 16;
     private const int AesGcmNonceLength = 12;
     private const int AesGcmTagLength = 16;
@@ -43,7 +55,7 @@ public static class MachineBoundCrypto
                 await fsIn.CopyToAsync(cs, cancellationToken).ConfigureAwait(false);
             }
 
-            await WriteAuthenticatedFileAsync(outputPath, aes.IV, fileKey, tempCipher, cancellationToken).ConfigureAwait(false);
+            await WriteAuthenticatedFileAsync(outputPath, FileMagicV3, aes.IV, fileKey, tempCipher, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -54,7 +66,7 @@ public static class MachineBoundCrypto
     public static async Task DecryptFileAsync(string inputPath, string outputPath, CancellationToken cancellationToken = default)
     {
         await using var fsIn = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
-        if (await TryReadFileMagicAsync(fsIn, cancellationToken).ConfigureAwait(false))
+        if (await TryReadFileMagicAsync(fsIn, cancellationToken).ConfigureAwait(false) is { } magic)
         {
             var iv = new byte[AesIvLength];
             await fsIn.ReadExactlyAsync(iv, cancellationToken).ConfigureAwait(false);
@@ -63,8 +75,8 @@ public static class MachineBoundCrypto
             if (cipherLength < 0)
                 throw new CryptographicException("Ciphertext is too short to contain authenticated payload metadata.");
 
-            var fileKey = GetMachineFileKey();
-            await VerifyAuthenticatedFileAsync(fsIn, iv, fileKey, cipherStart, cipherLength, cancellationToken).ConfigureAwait(false);
+            var fileKey = FileKeyFor(magic);
+            await VerifyAuthenticatedFileAsync(fsIn, magic, iv, fileKey, cipherStart, cipherLength, cancellationToken).ConfigureAwait(false);
 
             fsIn.Position = cipherStart;
             using var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
@@ -95,7 +107,7 @@ public static class MachineBoundCrypto
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             return ProtectedData.Protect(data, null, DataProtectionScope.LocalMachine);
 
-        return AesEncrypt(data, GetMachineKey());
+        return AesEncrypt(data, GetMachineKey(), MagicV3);
     }
 
     /// <summary>Decrypts a payload produced by <see cref="Protect(byte[])"/> on the same machine.</summary>
@@ -104,12 +116,22 @@ public static class MachineBoundCrypto
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             return ProtectedData.Unprotect(data, null, DataProtectionScope.LocalMachine);
 
-        return AesDecrypt(data, GetMachineKey());
+        return AesDecrypt(data);
     }
 
     // ── Non-Windows key derivation ────────────────────────────────────────────
 
-    private static byte[] GetMachineKey()
+    private static byte[] GetMachineKey() =>
+        HKDF.DeriveKey(HashAlgorithmName.SHA256, KeyFileSecret.Value, 32, info: "etl-sql-machine-bound-v3"u8.ToArray());
+
+    private static byte[] GetMachineFileKey() =>
+        HKDF.DeriveKey(HashAlgorithmName.SHA256, KeyFileSecret.Value, 32, info: "etl-sql-machine-bound-file-stream-v3"u8.ToArray());
+
+    private static byte[] FileKeyFor(byte[] magic) =>
+        ReferenceEquals(magic, FileMagicV3) ? GetMachineFileKey() : GetLegacyMachineFileKey();
+
+    // Read-only: keys for payloads written before the key file existed.
+    private static byte[] GetLegacyMachineKey()
     {
         var machineSecret = ReadMachineSecret();
         // HKDF-SHA256: IKM = machine secret, no salt, label = context string
@@ -120,13 +142,80 @@ public static class MachineBoundCrypto
             info: "etl-sql-machine-bound"u8.ToArray());
     }
 
-    private static byte[] GetMachineFileKey()
+    private static byte[] GetLegacyMachineFileKey()
     {
         return HKDF.DeriveKey(
             HashAlgorithmName.SHA256,
             Encoding.UTF8.GetBytes($"{Environment.MachineName}:{Environment.UserName}:{ReadMachineSecret()}"),
             32,
             info: "etl-sql-machine-bound-file-stream"u8.ToArray());
+    }
+
+    /// <summary>Where the key file lives: <c>ETLSQL_MACHINE_KEY_PATH</c>, else local application data.</summary>
+    internal static string KeyFilePath()
+    {
+        var configured = Environment.GetEnvironmentVariable(KeyPathVariable);
+        if (!string.IsNullOrWhiteSpace(configured)) return Path.GetFullPath(configured);
+        var root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify);
+        if (string.IsNullOrEmpty(root)) root = Path.Combine(Path.GetTempPath(), "etl-sql-" + Environment.UserName);
+        return Path.Combine(root, "etl-sql", KeyFileName);
+    }
+
+    private static byte[] LoadOrCreateKeyFileSecret()
+    {
+        var path = KeyFilePath();
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            if (File.Exists(path))
+                return ReadKeyFile(path);
+            try
+            {
+                CreateKeyFile(path);
+            }
+            catch (IOException) when (File.Exists(path))
+            {
+                // Another process created it first; read theirs.
+            }
+        }
+        return ReadKeyFile(path);
+    }
+
+    private static void CreateKeyFile(string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var secret = RandomNumberGenerator.GetBytes(KeyFileSecretLength);
+        var stored = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? ProtectedData.Protect(secret, null, DataProtectionScope.CurrentUser)
+            : secret;
+        var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        var temp = path + ".tmp-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            using (var stream = new FileStream(temp, options))
+            {
+                stream.Write(stored);
+                stream.Flush(flushToDisk: true);
+            }
+            // Never replace an existing key: payloads written under it would become unreadable.
+            File.Move(temp, path, overwrite: false);
+        }
+        finally
+        {
+            TryDeleteFile(temp);
+        }
+    }
+
+    private static byte[] ReadKeyFile(string path)
+    {
+        var stored = File.ReadAllBytes(path);
+        var secret = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? ProtectedData.Unprotect(stored, null, DataProtectionScope.CurrentUser)
+            : stored;
+        if (secret.Length != KeyFileSecretLength)
+            throw new CryptographicException($"The machine key file '{path}' is not a {KeyFileSecretLength}-byte key.");
+        return secret;
     }
 
     private static string ReadMachineSecret()
@@ -141,7 +230,7 @@ public static class MachineBoundCrypto
 
     // ── AES-256-GCM helpers ───────────────────────────────────────────────────
 
-    private static byte[] AesEncrypt(byte[] data, byte[] key)
+    private static byte[] AesEncrypt(byte[] data, byte[] key, byte[] magic)
     {
         var nonce = RandomNumberGenerator.GetBytes(AesGcmNonceLength);
         var ciphertext = new byte[data.Length];
@@ -151,22 +240,24 @@ public static class MachineBoundCrypto
             aes.Encrypt(nonce, data, ciphertext, tag);
         }
 
-        using var ms = new MemoryStream(MagicV2.Length + AesGcmNonceLength + AesGcmTagLength + ciphertext.Length);
-        ms.Write(MagicV2, 0, MagicV2.Length);
+        using var ms = new MemoryStream(magic.Length + AesGcmNonceLength + AesGcmTagLength + ciphertext.Length);
+        ms.Write(magic, 0, magic.Length);
         ms.Write(nonce, 0, nonce.Length);
         ms.Write(tag, 0, tag.Length);
         ms.Write(ciphertext, 0, ciphertext.Length);
         return ms.ToArray();
     }
 
-    private static byte[] AesDecrypt(byte[] data, byte[] key)
+    private static byte[] AesDecrypt(byte[] data)
     {
-        if (HasMagicV2(data))
+        var magic = HasMagic(data, MagicV3) ? MagicV3 : HasMagic(data, MagicV2) ? MagicV2 : null;
+        var key = ReferenceEquals(magic, MagicV3) ? GetMachineKey() : GetLegacyMachineKey();
+        if (magic is not null)
         {
-            if (data.Length < MagicV2.Length + AesGcmNonceLength + AesGcmTagLength)
+            if (data.Length < magic.Length + AesGcmNonceLength + AesGcmTagLength)
                 throw new CryptographicException("Ciphertext is too short to contain authenticated payload metadata.");
 
-            var offset = MagicV2.Length;
+            var offset = magic.Length;
             var nonce = data.AsSpan(offset, AesGcmNonceLength).ToArray();
             offset += AesGcmNonceLength;
             var tag = data.AsSpan(offset, AesGcmTagLength).ToArray();
@@ -201,11 +292,12 @@ public static class MachineBoundCrypto
         return ms.ToArray();
     }
 
-    private static bool HasMagicV2(byte[] data) =>
-        data.Length >= MagicV2.Length && data.AsSpan(0, MagicV2.Length).SequenceEqual(MagicV2);
+    private static bool HasMagic(byte[] data, byte[] magic) =>
+        data.Length >= magic.Length && data.AsSpan(0, magic.Length).SequenceEqual(magic);
 
     private static async Task WriteAuthenticatedFileAsync(
         string outputPath,
+        byte[] magic,
         byte[] iv,
         byte[] hmacKey,
         string tempCipher,
@@ -213,7 +305,7 @@ public static class MachineBoundCrypto
     {
         using var hmac = new HMACSHA256(hmacKey);
         await using var fsOut = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
-        await WriteAndHashAsync(fsOut, hmac, FileMagicV2, cancellationToken).ConfigureAwait(false);
+        await WriteAndHashAsync(fsOut, hmac, magic, cancellationToken).ConfigureAwait(false);
         await WriteAndHashAsync(fsOut, hmac, iv, cancellationToken).ConfigureAwait(false);
 
         var buffer = new byte[81920];
@@ -231,10 +323,10 @@ public static class MachineBoundCrypto
         await fsOut.WriteAsync(hmac.Hash!, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task VerifyAuthenticatedFileAsync(FileStream fsIn, byte[] iv, byte[] hmacKey, long cipherStart, long cipherLength, CancellationToken cancellationToken)
+    private static async Task VerifyAuthenticatedFileAsync(FileStream fsIn, byte[] magic, byte[] iv, byte[] hmacKey, long cipherStart, long cipherLength, CancellationToken cancellationToken)
     {
         using var hmac = new HMACSHA256(hmacKey);
-        hmac.TransformBlock(FileMagicV2, 0, FileMagicV2.Length, null, 0);
+        hmac.TransformBlock(magic, 0, magic.Length, null, 0);
         hmac.TransformBlock(iv, 0, iv.Length, null, 0);
 
         var buffer = new byte[81920];
@@ -261,25 +353,31 @@ public static class MachineBoundCrypto
         hmac.TransformBlock(bytes, 0, bytes.Length, null, 0);
     }
 
-    private static async Task<bool> TryReadFileMagicAsync(FileStream fs, CancellationToken cancellationToken)
+    /// <summary>Returns the file format's magic (V2 or V3), or null for a whole-file payload.</summary>
+    private static async Task<byte[]?> TryReadFileMagicAsync(FileStream fs, CancellationToken cancellationToken)
     {
-        if (fs.Length < FileMagicV2.Length) return false;
+        if (fs.Length < FileMagicV2.Length) return null;
         var magic = new byte[FileMagicV2.Length];
         await fs.ReadExactlyAsync(magic, cancellationToken).ConfigureAwait(false);
-        return magic.AsSpan().SequenceEqual(FileMagicV2);
+        return MatchFileMagic(magic);
     }
 
-    private static bool TryReadFileMagic(Stream fs)
+    private static byte[]? TryReadFileMagic(Stream fs)
     {
-        if (fs.Length < FileMagicV2.Length) return false;
+        if (fs.Length < FileMagicV2.Length) return null;
         var magic = new byte[FileMagicV2.Length];
         fs.ReadExactly(magic, 0, FileMagicV2.Length);
-        return magic.AsSpan().SequenceEqual(FileMagicV2);
+        return MatchFileMagic(magic);
     }
+
+    private static byte[]? MatchFileMagic(byte[] magic) =>
+        magic.AsSpan().SequenceEqual(FileMagicV3) ? FileMagicV3
+        : magic.AsSpan().SequenceEqual(FileMagicV2) ? FileMagicV2
+        : null;
 
     public static Stream DecryptStream(Stream fsIn)
     {
-        if (TryReadFileMagic(fsIn))
+        if (TryReadFileMagic(fsIn) is { } magic)
         {
             var iv = new byte[AesIvLength];
             fsIn.ReadExactly(iv, 0, AesIvLength);
@@ -288,7 +386,7 @@ public static class MachineBoundCrypto
             if (cipherLength < 0)
                 throw new CryptographicException("Ciphertext is too short.");
 
-            var fileKey = GetMachineFileKey();
+            var fileKey = FileKeyFor(magic);
             fsIn.Position = cipherStart;
             var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
             var aes = Aes.Create();

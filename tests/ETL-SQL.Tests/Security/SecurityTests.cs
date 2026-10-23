@@ -278,6 +278,9 @@ namespace ETL_SQL.Tests.Security
             }
             Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
                 security.ValidatePath(System.IO.Path.Combine(installDir, ".portal-keys", "key-1.xml")));
+            // The machine key file is protected wherever it lives.
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+                security.ValidatePath(System.IO.Path.Combine(installDir, "data", ".etlsql-machine-key")));
             // The secrets file is protected wherever a deployment keeps it.
             Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
                 security.ValidatePath(System.IO.Path.Combine(installDir, "data", "appsettings.secrets.json")));

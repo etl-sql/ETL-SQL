@@ -28,11 +28,17 @@ CREATE CONNECTION stage_db AS MSSQL(@conn);
 
 ## Supported Images
 
-| Database | Image pattern | Default credentials | Port |
-| :--- | :--- | :--- | :--- |
-| SQL Server | contains `mssql` | `sa` / `Password123!` | 1433 |
-| PostgreSQL | contains `postgres` | `postgres` / `postgres` | 5432 |
-| Oracle | contains `oracle` | `system` / `oracle` | 1521 |
+The database is identified by the image's repository name; registry, tag and digest are ignored.
+An image whose name only contains a database name (`someone/postgres-tools`) is refused.
+
+- **SQL Server** — repository `mssql/server`; user `sa`; port 1433.
+- **PostgreSQL** — repository `postgres`; user `etluser`, database `etldb`; port 5432.
+- **MySQL / MariaDB** — repository `mysql` or `mariadb`; user `etluser`, database `etldb`; port 3306.
+- **Oracle** — repository `oracle-xe` or `oracle-free` (or `database/free`, `database/express`); user `system` on Free images, `oracle` otherwise; port 1521.
+
+Every container gets a generated password. Read it from `<alias>.CONNECTION_STRING`; never hard-code
+it. Ports are published on the loopback interface only, so the container is not reachable from other
+machines.
 
 ---
 
