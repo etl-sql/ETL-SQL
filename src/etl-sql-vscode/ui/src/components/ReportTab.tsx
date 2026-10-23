@@ -503,22 +503,9 @@ const ReportChart: React.FC<{
     return <div ref={chartRef} className="w-full h-full min-h-[350px]" dangerouslySetInnerHTML={{ __html: visual.nativeSvg || "" }} onContextMenu={event => { if (visual.actions?.some(action => action.type === "DRILL_DOWN")) { event.preventDefault(); onShowContextMenu(event.clientX, event.clientY); } }} />;
 };
 
-/**
- * Reads the resolved interaction contract a v0.19+ manifest carries, falling back to the pre-v0.19
- * authored map for older manifests. The fallback is the only place a mapping option is still
- * consulted for a filter column.
- */
+/** The resolved interaction contract; a visual without one takes part in no interaction. */
 function resolveInteraction(visual: VisualManifest): InteractionManifest {
-    if (visual.interaction) return visual.interaction;
-    const mode = visual.interactions?.ON_SELECT?.toUpperCase();
-    const active = !!mode && mode !== "NONE";
-    return {
-        key: visual.interactions?.MATCHING || visual.options?.["mapping:x"] || visual.columns?.[0],
-        valueKey: visual.options?.["mapping:y"],
-        select: active ? "MULTIPLE" : "NONE",
-        effect: mode === "FILTER" ? "FILTER" : "HIGHLIGHT",
-        highlight: active ? "CATEGORICAL" : "NONE"
-    };
+    return visual.interaction ?? { select: "NONE", effect: "HIGHLIGHT", highlight: "NONE" };
 }
 
 function parseHexColor(hex: string): [number, number, number] {

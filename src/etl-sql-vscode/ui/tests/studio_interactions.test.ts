@@ -95,19 +95,6 @@ describe('Studio interaction clauses', () => {
         expect(m.filterSourceOn(source, 'Region')).toBe(expected);
     });
 
-    test('the single-value filter Studio wrote earlier is upgraded to match several values', () => {
-        expect(m.filterSourceOnSeveral("(SELECT * FROM #sales WHERE @Region = 'All' OR Region = @Region)", 'Region'))
-            .toBe("(SELECT * FROM #sales WHERE 'All' IN @Region OR Region IN @Region)");
-    });
-
-    test.each([
-        "(SELECT * FROM #sales WHERE Region = @Region)",
-        "(SELECT * FROM #sales WHERE 'All' IN @Region OR Region IN @Region)",
-        '#sales',
-    ])('a hand-written or already-upgraded filter is left alone: %s', source => {
-        expect(m.filterSourceOnSeveral(source, 'Region')).toBeNull();
-    });
-
     test.each([
         '(SELECT * FROM #sales WHERE Total > 0)',
         '(SELECT Region, SUM(Total) AS T FROM #sales GROUP BY Region)',

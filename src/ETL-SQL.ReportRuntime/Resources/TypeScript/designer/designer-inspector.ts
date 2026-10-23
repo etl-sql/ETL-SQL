@@ -9,7 +9,7 @@ import { GRID_COLUMNS, VTYPES, controlTarget, datasetValue, inspectorGroupKey, q
 
 import type { CascadeMode, CascadeParent, CascadeState, DesignerDom, DesignerEvent, DesignerFormControl, DesignerOptions, DesignerState, DesignerVisual, GridPlacement, UnsupportedCascade } from './designer-context.js';
 import type { ClickAction, ClickActionKind, RowDetailState, Tooltip, TooltipKind } from './designer-interactions.js';
-import { filterSourceOn, filterSourceOnHover, filterSourceOnSeveral, listFilterCondition, hoverContextColumn, parametersRead, readClickAction, readEmitTargets, readRowDetail, readTooltip, selectionKey, splitNames, writeClickAction, writeRowDetail, writeTooltip } from './designer-interactions.js';
+import { filterSourceOn, filterSourceOnHover, listFilterCondition, hoverContextColumn, parametersRead, readClickAction, readEmitTargets, readRowDetail, readTooltip, selectionKey, splitNames, writeClickAction, writeRowDetail, writeTooltip } from './designer-interactions.js';
 import { esc } from './designer-util.js';
 import type { FormattableVisual } from './visual-format-inspector.js';
 import { renderFormattingSectionHtml, renderVisualFormatInspectorHtml, toHexColor } from './visual-format-inspector.js';
@@ -574,8 +574,6 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
         }
         const reads = parametersRead(v.options?.inline_source);
         const unreadKeys = [...incoming.keys()].filter(key => !reads.has(`@${key}`.toLowerCase()));
-        // Keys this visual filters on with Studio's earlier single-value condition.
-        const singlePickKeys = [...incoming.keys()].filter(key => filterSourceOnSeveral(v.options?.inline_source, key));
         const acceptsClickActions = !DISPLAY_ONLY_TYPES.has(String(v.type || '').toUpperCase());
         const writtenClick = readClickAction(v.options?.['action:ON_CLICK']);
         const clickAction = writtenClick.kind === 'NONE' ? (clickDrafts.get(v.id) ?? writtenClick) : writtenClick;
@@ -935,11 +933,6 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
                             ${filterSourceOn(v.options?.inline_source, key) ? '' : ` Add <code>WHERE ${esc(listFilterCondition(key))}</code> to its query and declare <code>@${esc(key)} LIST = 'All'</code>.`}</p>
                             ${filterSourceOn(v.options?.inline_source, key) ? `<button type="button" class="btn btn-sm" data-filter-on="${esc(key)}">Filter this visual on @${esc(key)}</button>` : ''}
                         </div>`).join('')}
-                        ${singlePickKeys.map(key => `
-                        <div class="etlsql-dsgn-unread-key" data-single-pick="${esc(key)}">
-                            <p class="etlsql-dsgn-interaction-note">This visual matches one selected ${esc(key)} at a time, so a Ctrl+click on several points narrows it to nothing.</p>
-                            <button type="button" class="btn btn-sm" data-filter-several="${esc(key)}">Match several ${esc(key)} values</button>
-                        </div>`).join('')}
                         ${sendsSelection ? `
                         <fieldset class="etlsql-dsgn-emit-targets" data-emit-targets>
                             <legend class="etlsql-dsgn-label">A selection here reaches</legend>
@@ -1293,17 +1286,6 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
             renderProps();
             context.syncScriptFromGridDebounced();
         };
-        queryElements<HTMLElement>(context.propsPanel, '[data-filter-several]').forEach(button => {
-            button.addEventListener('click', () => {
-                const column = datasetValue(button, 'filterSeveral');
-                const next = filterSourceOnSeveral(v.options?.inline_source, column);
-                if (!next || !v.options) return;
-                v.options.inline_source = next;
-                declareListParameter(column);
-                renderProps();
-                context.syncScriptFromGridDebounced();
-            });
-        });
         queryElements<HTMLElement>(context.propsPanel, '[data-filter-on]').forEach(button => {
             button.addEventListener('click', () => readParameterIn(v, datasetValue(button, 'filterOn')));
         });

@@ -115,6 +115,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 - **Diagnostic**: N/A
 - **Earliest removal**: N/A
 
+### v0.22.0 — Runtime: Report formats from earlier releases are no longer read
+- **What changed**: The report runtime and the VS Code preview no longer read the pre-v0.19 `interactions` map; a visual without the resolved `interaction` contract takes part in no interaction. Version-one ChartSpec and PlotPlan envelopes are refused instead of migrated. Studio no longer offers to upgrade the single-value selection filter it wrote before v0.20.0. Data-quality trends report only structured per-rule failures; the counts-only rows parsed from the compact history string, and `countsOnly` on `DataQualityRuleFailureDto`, are gone.
+- **Who is affected**: Snapshots, chart contracts and job history produced by earlier releases.
+- **Migration**: Rebuild reports and rerun jobs.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.21.0 — Runtime: Portal and Orchestrator databases use snake_case names
 - **What changed**: Portal and Orchestrator tables and columns were PascalCase (for example `AspNetUsers`). The first v0.21.0 start renames them to snake_case on SQLite and PostgreSQL. Earlier releases cannot open a renamed database.
 - **Who is affected**: Operators who roll back to v0.20.x, and SQL, reports, or tools that query these databases directly.

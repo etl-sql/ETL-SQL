@@ -79,6 +79,9 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
   add-missing-column steps, plaintext JSON snapshots, plaintext PII and settings upgrades, the
   Gateway `outcomes.json` import, `Portal:Dataset:LegacyAtRestKeyVersion`, JSON temp-table restore
   and browser-stored Studio drafts. Every store is created in its current shape.
+- Report formats from earlier releases are no longer read: the pre-v0.19 `interactions` map,
+  version-one chart contracts, Studio's pre-v0.20 single-value filter upgrade, and counts-only
+  data-quality rows.
 - Only authenticated encryption formats are read. `ENC:` values, encrypted files, SSH-encrypted
   files and machine-bound payloads in the old unauthenticated AES-CBC formats are refused instead
   of decrypted.
@@ -109,6 +112,7 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
   used to hand out a new password the container never had.
 - Importing a connection string keeps a password that reads `True` or `False` as typed.
 - SMTP docs give the default port as 587, which the connector uses.
+- Chart contract fingerprint tests normalize line endings, so they pass on Linux and macOS.
 - Security tests that used Windows paths now build OS-neutral paths, so the safe-zone, temp-folder,
   runaway-protection and credential-folder rules are checked on Linux and macOS too.
 - `admin restore` writes the installer-managed secrets (JWT secret, dataset at-rest keys,
