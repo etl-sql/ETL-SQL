@@ -63,7 +63,7 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 - Machine-bound encryption on Linux and macOS, and machine-bound encrypted files everywhere, is
   keyed from the engine's machine key (the owner-only `etl-sql/machine.key`, or a mounted
   `ETLSQL_MACHINE_KEY_FILE`). It was keyed from `/etc/machine-id` or the host name, which a cloned
-  image shares. Existing payloads still decrypt. Scripts cannot open the machine key file.
+  image shares. Scripts cannot open the machine key file.
 - ODBC connection values with `;`, `{`, `}` or `=` are brace-quoted, so a value cannot add keywords;
   an option name with those characters is refused.
 - SharePoint list titles and BigQuery identifiers are escaped (a quote, and a trailing backslash).
@@ -75,8 +75,9 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 - `USE DOCKER` state is scoped by tenant: an alias, `DOCKER.CONNECTION_STRING` and the container
   itself are no longer shared between tenants on one Orchestrator. Single-tenant hosts keep their
   container names.
-- Decrypting an `ENC:` value or file in the legacy unauthenticated format logs a warning, once per
-  process, so it can be re-encrypted before read support is removed.
+- Only authenticated encryption formats are read. `ENC:` values, encrypted files, SSH-encrypted
+  files and machine-bound payloads in the old unauthenticated AES-CBC formats are refused instead
+  of decrypted.
 - Streaming decryption of encrypted files (password, SSH key and machine-bound) checks the file's
   authentication tag before returning any data; a tampered file is refused instead of decrypting
   to garbage rows.

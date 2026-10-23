@@ -95,9 +95,16 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 - **Earliest removal**: N/A
 
 ### v0.22.0 — Runtime: Share links and embed tokens are shown once
-- **What changed**: The catalog stored each share link and embed token in plain text and listed it back. It now stores a SHA-256 hash; the token and URL are returned only when the link is created. Existing tokens are hashed at startup and keep working.
+- **What changed**: The catalog stored each share link and embed token in plain text and listed it back. It now stores a SHA-256 hash; the token and URL are returned only when the link is created.
 - **Who is affected**: Anyone who copied a link from the Portal list or `eng.share_links()` / `eng.embed_tokens()` after creating it, and API clients that revoke by the listed token.
 - **Migration**: Copy the URL from the create response or `CREATE SHARE LINK ... INTO #t`. Revoke with `DELETE .../share-links/by-id/{id}` (or `REVOKE SHARE LINK ... FOR REPORT`). A lost link is revoked and created again.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Unauthenticated encryption formats are no longer read
+- **What changed**: `ENC:` values (version 1 and unversioned), password-encrypted files, SSH-encrypted files and machine-bound payloads written in the old AES-CBC formats without an authentication tag were still decrypted. They are now refused; only the authenticated formats are read.
+- **Who is affected**: Values and files encrypted by releases before the authenticated formats were introduced.
+- **Migration**: Encrypt the value again with `etl-sql encrypt`, or the file with `ENCRYPT FILE`.
 - **Diagnostic**: N/A
 - **Earliest removal**: N/A
 

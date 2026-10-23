@@ -26,12 +26,6 @@ public class LoggerService : ILogger, ILoggerService, IDisposable
     private readonly AsyncLocal<string?> _sessionId = new();
     private readonly AsyncLocal<IDisposable?> _sessionContext = new();
 
-    public LoggerService()
-    {
-        // Static crypto helpers have no logger of their own; the host's logger reports for them.
-        ETL_SQL.Common.CryptoUtils.LegacyFormatSink = message => Warning("{Message}", message);
-    }
-
     public bool IsSilent { get; set; }
     public bool IsVerbose { get; set; }
     public bool IsFileLogging { get; set; }

@@ -32,10 +32,10 @@ namespace ETL_SQL.Tests.Security
         }
 
         [Fact]
-        public void LegacyEncValue_StillDecrypts_AndIsReported()
+        public void UnauthenticatedEncValue_IsRefused()
         {
             const string password = "legacy-master-password";
-            // A version-1 payload: AES-CBC with no authentication tag, keyed as the engine keys it.
+            // A version-1 payload: AES-CBC with no authentication tag.
             var salt = new byte[16];
             var iv = new byte[16];
             using var aes = System.Security.Cryptography.Aes.Create();
@@ -43,24 +43,7 @@ namespace ETL_SQL.Tests.Security
             var cipher = aes.EncryptCbc(System.Text.Encoding.UTF8.GetBytes("Server=db;"), iv);
             var legacy = "ENC:" + Convert.ToBase64String(new byte[] { 1 }.Concat(salt).Concat(iv).Concat(cipher).ToArray());
 
-            var reported = new List<string>();
-            var previous = ETL_SQL.Common.CryptoUtils.LegacyFormatSink;
-            ETL_SQL.Common.CryptoUtils.ResetLegacyReports();
-            ETL_SQL.Common.CryptoUtils.LegacyFormatSink = reported.Add;
-            try
-            {
-                Assert.Equal("Server=db;", ETL_SQL.Common.CryptoUtils.Decrypt(legacy, password));
-                Assert.Equal("Server=db;", ETL_SQL.Common.CryptoUtils.Decrypt(legacy, password));
-                Assert.Contains("legacy", Assert.Single(reported));
-
-                // The current format is not reported.
-                ETL_SQL.Common.CryptoUtils.Decrypt(ETL_SQL.Common.CryptoUtils.Encrypt("x", password), password);
-                Assert.Single(reported);
-            }
-            finally
-            {
-                ETL_SQL.Common.CryptoUtils.LegacyFormatSink = previous;
-            }
+            Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => ETL_SQL.Common.CryptoUtils.Decrypt(legacy, password));
         }
 
         [Fact]
@@ -368,7 +351,7 @@ namespace ETL_SQL.Tests.Security
         }
 
         [Fact]
-        public void MachineGenericEncryption_ReadsLegacyCbcOnlyBlob()
+        public void MachineGenericEncryption_RefusesLegacyCbcOnlyBlob()
         {
             var plain = System.Text.Encoding.UTF8.GetBytes("legacy session state");
 
@@ -386,7 +369,7 @@ namespace ETL_SQL.Tests.Security
             }
             var legacyBlob = ms.ToArray();
 
-            Assert.Equal(plain, CryptoUtils.UnprotectGeneric(legacyBlob, entropy: null));
+            Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => CryptoUtils.UnprotectGeneric(legacyBlob, entropy: null));
         }
 
         [Fact]

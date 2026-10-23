@@ -300,32 +300,6 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
-    [Trait("CompatBreak", "0.22.0")]
-    public async Task ShareLinkStoredBeforeHashing_IsHashedAtStartup_AndKeepsWorking()
-    {
-        await using var db = await CreateDbAsync();
-        var report = await SeedReportAsync(db);
-        db.ReportAcls.Add(new ReportAcl { ReportId = report.Id, UserId = 2, Permission = FolderPermission.Execute });
-        db.ReportShareLinks.Add(new ReportShareLink
-        {
-            ReportId = report.Id,
-            CreatedBy = 2,
-            Name = "Old link",
-            Token = "pre-upgrade-plaintext-token",
-            ExpiresAt = DateTime.UtcNow.AddDays(1)
-        });
-        await db.SaveChangesAsync();
-
-        Assert.Equal(1, await AnonymousReportTokens.HashExistingPlaintextAsync(db, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance));
-        Assert.Equal(0, await AnonymousReportTokens.HashExistingPlaintextAsync(db, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance));
-
-        var stored = await db.ReportShareLinks.SingleAsync(value => value.ReportId == report.Id);
-        Assert.Equal(AnonymousReportTokens.Hash("pre-upgrade-plaintext-token"), stored.Token);
-        var controller = CreateReportsController(db, userId: 2);
-        Assert.IsType<OkObjectResult>(await controller.ResolveShareLink("pre-upgrade-plaintext-token"));
-    }
-
-    [Fact]
     public async Task ReportAcl_KeepsCreatorShareLinkResolvableWithoutFolderAccess()
     {
         await using var db = await CreateDbAsync();

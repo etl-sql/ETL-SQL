@@ -13,15 +13,11 @@ namespace ETL_SQL.Core.Common;
 /// is unreadable if moved to another machine.
 /// Linux/macOS, and encrypted files everywhere: keys are derived from the engine's machine key
 /// (<see cref="ETL_SQL.Common.CryptoUtils.GetMachineKey"/>: a random key file readable only by its
-/// owner, or a server-mounted <c>ETLSQL_MACHINE_KEY_FILE</c>). Payloads written before were keyed from
-/// <c>/etc/machine-id</c> or the host name, which anyone with a copy of the image can read; they
-/// still decrypt, and are rewritten under the machine key the next time they are saved.
+/// owner, or a server-mounted <c>ETLSQL_MACHINE_KEY_FILE</c>).
 /// </summary>
 public static class MachineBoundCrypto
 {
-    private static readonly byte[] MagicV2 = Encoding.ASCII.GetBytes("ETLSQLM2");
     private static readonly byte[] MagicV3 = Encoding.ASCII.GetBytes("ETLSQLM3");
-    private static readonly byte[] FileMagicV2 = Encoding.ASCII.GetBytes("ETLSQLMF2");
     private static readonly byte[] FileMagicV3 = Encoding.ASCII.GetBytes("ETLSQLMF3");
 
     private static readonly Lazy<byte[]> KeyFileSecret = new(() => ETL_SQL.Common.CryptoUtils.GetMachineKey(null), LazyThreadSafetyMode.ExecutionAndPublication);
@@ -70,7 +66,7 @@ public static class MachineBoundCrypto
             if (cipherLength < 0)
                 throw new CryptographicException("Ciphertext is too short to contain authenticated payload metadata.");
 
-            var fileKey = FileKeyFor(magic);
+            var fileKey = GetMachineFileKey();
             await VerifyAuthenticatedFileAsync(fsIn, magic, iv, fileKey, cipherStart, cipherLength, cancellationToken).ConfigureAwait(false);
 
             fsIn.Position = cipherStart;
@@ -83,11 +79,7 @@ public static class MachineBoundCrypto
             return;
         }
 
-        fsIn.Position = 0;
-        using var ms = new MemoryStream();
-        await fsIn.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
-        var plaintext = Unprotect(ms.ToArray());
-        await File.WriteAllBytesAsync(outputPath, plaintext, cancellationToken).ConfigureAwait(false);
+        throw new CryptographicException("Unsupported machine-bound encrypted file format.");
     }
 
     // ── Core protect/unprotect ────────────────────────────────────────────────
@@ -122,40 +114,6 @@ public static class MachineBoundCrypto
     private static byte[] GetMachineFileKey() =>
         HKDF.DeriveKey(HashAlgorithmName.SHA256, KeyFileSecret.Value, 32, info: "etl-sql-machine-bound-file-stream-v3"u8.ToArray());
 
-    private static byte[] FileKeyFor(byte[] magic) =>
-        ReferenceEquals(magic, FileMagicV3) ? GetMachineFileKey() : GetLegacyMachineFileKey();
-
-    // Read-only: keys for payloads written before the key file existed.
-    private static byte[] GetLegacyMachineKey()
-    {
-        var machineSecret = ReadMachineSecret();
-        // HKDF-SHA256: IKM = machine secret, no salt, label = context string
-        return HKDF.DeriveKey(
-            HashAlgorithmName.SHA256,
-            Encoding.UTF8.GetBytes(machineSecret),
-            32,
-            info: "etl-sql-machine-bound"u8.ToArray());
-    }
-
-    private static byte[] GetLegacyMachineFileKey()
-    {
-        return HKDF.DeriveKey(
-            HashAlgorithmName.SHA256,
-            Encoding.UTF8.GetBytes($"{Environment.MachineName}:{Environment.UserName}:{ReadMachineSecret()}"),
-            32,
-            info: "etl-sql-machine-bound-file-stream"u8.ToArray());
-    }
-
-    private static string ReadMachineSecret()
-    {
-        // Linux: systemd machine-id is stable across reboots, unique per installation
-        if (File.Exists("/etc/machine-id"))
-            return File.ReadAllText("/etc/machine-id").Trim();
-
-        // macOS / containers without machine-id: fall back to hostname
-        return Environment.MachineName;
-    }
-
     // ── AES-256-GCM helpers ───────────────────────────────────────────────────
 
     private static byte[] AesEncrypt(byte[] data, byte[] key, byte[] magic)
@@ -178,10 +136,10 @@ public static class MachineBoundCrypto
 
     private static byte[] AesDecrypt(byte[] data)
     {
-        var magic = HasMagic(data, MagicV3) ? MagicV3 : HasMagic(data, MagicV2) ? MagicV2 : null;
-        var key = ReferenceEquals(magic, MagicV3) ? GetMachineKey() : GetLegacyMachineKey();
-        if (magic is not null)
+        if (HasMagic(data, MagicV3))
         {
+            var magic = MagicV3;
+            var key = GetMachineKey();
             if (data.Length < magic.Length + AesGcmNonceLength + AesGcmTagLength)
                 throw new CryptographicException("Ciphertext is too short to contain authenticated payload metadata.");
 
@@ -200,24 +158,7 @@ public static class MachineBoundCrypto
             return plaintext;
         }
 
-        // Legacy non-Windows payloads used AES-CBC with the IV prepended. Keep read compatibility.
-        if (data.Length < AesIvLength)
-            throw new CryptographicException("Ciphertext is too short to contain an IV.");
-
-        var iv = new byte[AesIvLength];
-        Array.Copy(data, 0, iv, 0, AesIvLength);
-
-        using var legacyAes = Aes.Create();
-        legacyAes.Key = key;
-        legacyAes.IV = iv;
-
-        using var ms = new MemoryStream();
-        using (var cs = new CryptoStream(ms, legacyAes.CreateDecryptor(), CryptoStreamMode.Write))
-        {
-            cs.Write(data, AesIvLength, data.Length - AesIvLength);
-            cs.FlushFinalBlock();
-        }
-        return ms.ToArray();
+        throw new CryptographicException("Unsupported machine-bound payload format.");
     }
 
     private static bool HasMagic(byte[] data, byte[] magic) =>
@@ -281,27 +222,25 @@ public static class MachineBoundCrypto
         hmac.TransformBlock(bytes, 0, bytes.Length, null, 0);
     }
 
-    /// <summary>Returns the file format's magic (V2 or V3), or null for a whole-file payload.</summary>
+    /// <summary>Returns the file format's magic, or null when the file is not in it.</summary>
     private static async Task<byte[]?> TryReadFileMagicAsync(FileStream fs, CancellationToken cancellationToken)
     {
-        if (fs.Length < FileMagicV2.Length) return null;
-        var magic = new byte[FileMagicV2.Length];
+        if (fs.Length < FileMagicV3.Length) return null;
+        var magic = new byte[FileMagicV3.Length];
         await fs.ReadExactlyAsync(magic, cancellationToken).ConfigureAwait(false);
         return MatchFileMagic(magic);
     }
 
     private static byte[]? TryReadFileMagic(Stream fs)
     {
-        if (fs.Length < FileMagicV2.Length) return null;
-        var magic = new byte[FileMagicV2.Length];
-        fs.ReadExactly(magic, 0, FileMagicV2.Length);
+        if (fs.Length < FileMagicV3.Length) return null;
+        var magic = new byte[FileMagicV3.Length];
+        fs.ReadExactly(magic, 0, FileMagicV3.Length);
         return MatchFileMagic(magic);
     }
 
     private static byte[]? MatchFileMagic(byte[] magic) =>
-        magic.AsSpan().SequenceEqual(FileMagicV3) ? FileMagicV3
-        : magic.AsSpan().SequenceEqual(FileMagicV2) ? FileMagicV2
-        : null;
+        magic.AsSpan().SequenceEqual(FileMagicV3) ? FileMagicV3 : null;
 
     public static Stream DecryptStream(Stream fsIn)
     {
@@ -314,7 +253,7 @@ public static class MachineBoundCrypto
             if (cipherLength < 0)
                 throw new CryptographicException("Ciphertext is too short.");
 
-            var fileKey = FileKeyFor(magic);
+            var fileKey = GetMachineFileKey();
             ETL_SQL.Common.CryptoUtils.VerifyStreamTag(fsIn, fileKey, cipherStart, cipherLength, magic, iv);
             var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
             var aes = Aes.Create();
@@ -322,11 +261,7 @@ public static class MachineBoundCrypto
             return new ChainedStream(new CryptoStream(limitedCipher, decryptor, CryptoStreamMode.Read), aes);
         }
 
-        fsIn.Position = 0;
-        using var ms = new MemoryStream();
-        fsIn.CopyTo(ms);
-        var plaintext = Unprotect(ms.ToArray());
-        return new MemoryStream(plaintext);
+        throw new CryptographicException("Unsupported machine-bound encrypted file format.");
     }
 
     private static void TryDeleteFile(string path)
