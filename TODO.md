@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 20 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 19 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -501,8 +501,15 @@ here; each one failed a single test per run and passed on rerun.
   alongside a stale-dirty-state ordinary exit check and the sandbox discard/cancel interaction.
   Shutdown timeouts now retain the bounded transport/resource snapshot before teardown. The original
   hosted log contains no request detail, so this does not yet establish its cause or close the item.
-- [ ] **Docker lane:** confirm the FTP mapped-port wait and the scheduled-job `lastRun` race fixes hold
+- [x] **Docker lane:** confirm the FTP mapped-port wait and the scheduled-job `lastRun` race fixes hold
   across consecutive CI runs, then close them in the record.
+  **Verified 2026-10-24:** consecutive CI runs 247, 248 and 249 on 2026-10-18 each passed all
+  224 engine and 63 Portal integration cases, with zero failures/skips. All three fixes are ancestors
+  of every checkout, and the target fixture/test files are unchanged. Original-attempt logs verify
+  run 249's later Docker job is carried success, not another execution. Later completed Docker jobs
+  through the current base also pass. The [stability record](docs/releases/flaky-test-stability.md#docker-follow-up-closure-v0220)
+  and [historical evidence](certification-results/flaky-docker-stability-2026-10-24.json) retain IDs,
+  candidate SHAs, counts and scope limits. Final-candidate Docker certification remains required.
 
 ### 4. Carried from the v0.21.0 delivery matrix
 

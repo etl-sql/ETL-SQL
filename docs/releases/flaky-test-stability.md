@@ -377,7 +377,7 @@ class load and shared background-service state from its startup/shutdown observa
   timeout cannot tell a refused sign-in from a library page still loading on a starved runner, so
   the helper now reports the URL and the page text when it gives up. Its wait is unchanged.
 
-  **Open: `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds` in the Docker lane.** It failed in
+  **v0.21.0 FTP failure: `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds` in the Docker lane.** It failed in
   2 ms with "Failed to connect to host" in three runs on 2026-10-11 and passed in the two before
   them, while the other FTP tests in the same class passed each time. A 2 ms refusal means nothing
   was accepting on the mapped port when that test, the first to run, connected. The fixture waited
@@ -392,6 +392,34 @@ class load and shared background-service state from its startup/shutdown observa
   the run's metrics, and only then the job's last and next run, so the read was racing those
   writes. The test now waits for the job to carry both values, as
   `JobSchedulingIntegrationTests` already did for the same reason.
+
+## Docker follow-up closure (v0.22.0)
+
+Reviewed the retained GitHub job logs on 2026-10-24. These three consecutive CI run numbers on
+`release/v0.21.0` each executed the full Release integration lane. Counts below are passed/failed/skipped.
+
+| CI Docker job | Candidate | Engine integration | Portal integration |
+| :--- | :--- | :---: | :---: |
+| [247](https://github.com/etl-sql/ETL-SQL/actions/runs/39131831664/job/117688413174) | `7141a5df3390178c5aa3b81a9b6dc6eebd52d280` | 224 / 0 / 0 | 63 / 0 / 0 |
+| [248](https://github.com/etl-sql/ETL-SQL/actions/runs/39137736693/job/117705594862) | `e26936db7e6aa07ec90901f3e48fa2d97a647578` | 224 / 0 / 0 | 63 / 0 / 0 |
+| [249, original attempt](https://github.com/etl-sql/ETL-SQL/actions/runs/39143534977/job/117722627004) | `cd1770eacd17b988c57b96c6f398af45093ada9a` | 224 / 0 / 0 | 63 / 0 / 0 |
+
+Every checkout contains the mapped-port wait (`c7586fe26`), passive sign-in/list readiness
+(`5344e3e6a`) and scheduled-job last/next-run wait (`373cdf980`). The FTP fixture, FTP integration
+tests and platform Docker integration tests are unchanged through this review. The frozen lane
+selects `Category=Integration` in both projects; both named regressions are ordinary facts in that
+category. The original workflow retained console summaries, so these are full-lane results rather
+than individual TRX timings.
+
+Run 249 retried its browser job. Its later Docker job ID has the original execution timestamps and
+a decoded log identical to the first attempt, so it counts once. Later completed Docker executions
+in CI 251 and 254 also passed; [CI 258 at the current base](https://github.com/etl-sql/ETL-SQL/actions/runs/39171524120/job/117805403570)
+passed the same 287 cases without skips. Cancelled executions do not add successful samples.
+
+The [historical evidence record](../../certification-results/flaky-docker-stability-2026-10-24.json)
+retains candidate identities, original job links, log hashes and limitations. This closes the FTP
+and scheduled-job stability follow-up. It does not certify the eventual release candidate or prove
+that a timing defect can never recur. The browser transport and desktop exit investigations remain open.
 
 
 ## Browser navigation failure diagnostics (v0.22.0)

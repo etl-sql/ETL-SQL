@@ -14,6 +14,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Closed the Docker test stability follow-up using three consecutive CI executions, each passing
+  all 287 integration cases without skips. Verified the FTP readiness and scheduled-job fixes in
+  every checkout and preserved original-attempt evidence. This is historical stability evidence;
+  final-candidate release certification remains required.
+
 - Desktop Studio's confirmed forced exit no longer depends on a final heartbeat succeeding.
   Ordinary exit still refreshes the dirty-document guard. Browser regressions cover failed heartbeats,
   stale dirty state, discard/cancel confirmation and host shutdown; future shutdown timeouts retain
