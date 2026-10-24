@@ -211,7 +211,12 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   canonical topology, scope and uncovered work from the producer's shared contracts. Executed
   publisher probes stop incomplete indexes before output replacement/builds; helper archives identify
   selected claims separately from all-profile/transition indexes. This does not supply missing
-  evidence, verify complete execution plans, or close the remaining provenance/operator publication gate.
+  evidence or close the remaining provenance/operator publication gate.
+  Deployment execution now shares its phase plan with validation. Supplied packaging evidence must
+  retain each ordered phase, exact invocation and canonical log, complete passed TRX covering every
+  planned selector, Enterprise prerequisite rows and hashed lifecycle/fault scenario files.
+  Missing, skipped, duplicate, altered and out-of-window receipts fail validation. Deployment
+  `-NoBuild` runs remain development evidence until matching build provenance supports reuse.
 - [ ] **Move the local-only lanes into CI.** That covers Docker integration, the Portal shards, the HA
   soak contracts, the recovery drill and the final-candidate package checks. Then trim the release
   checklist to match.

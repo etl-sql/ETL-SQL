@@ -768,6 +768,16 @@ The ZIP includes a version/commit manifest and SHA-256 hashes checked against it
 Its `claimIndexScope` is `AllProfilesAndTransitions`. Direct archive-helper calls may still retain
 partial reviews as `SelectedClaims`; the publisher does not accept that partial coverage. A complete
 claim index does not attest trusted execution or replace review of the required phases and operator evidence.
+The publisher also requires `executionEvidenceScope = RequiredPhasesAndTestReceipts`. The shared
+execution plan must match every retained phase and invocation. Per-phase TRX must cover each planned
+selector with unique passed results, no skipped cases and timestamps within that phase's execution.
+The validator checks Enterprise prerequisites, lifecycle file hashes and nested provider-neutral
+fault receipts. Earlier reports without these receipts must be rerun. This verifies the declared
+execution records and retained results; trusted-host provenance and other operator/package gates remain required.
+
+Deployment certification with `-NoBuild` is development-only until matching candidate build provenance
+is supplied. Run the release commands above without that switch; a cached test assembly alone cannot
+establish which candidate was tested.
 
 A build checkout without release-specific evidence emits no certification ZIP. That packaging result
 does not close Phase 3: upload the accepted certification ZIP and all other required operator,

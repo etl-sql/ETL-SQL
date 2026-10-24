@@ -20,6 +20,9 @@ public sealed class ReleaseEvidenceArchiveTests
     [InlineData("short-candidate", false)]
     [InlineData("skipped", false)]
     [InlineData("stale", false)]
+    [InlineData("future-index", false)]
+    [InlineData("future-phase", false)]
+    [InlineData("phase-after-index", false)]
     [InlineData("missing-log", false)]
     [InlineData("escaping-path", false)]
     [InlineData("inflated-claim", false)]
@@ -77,6 +80,9 @@ public sealed class ReleaseEvidenceArchiveTests
                     'wrong-fingerprint' { $report.sourceFingerprint = 'dirty' }
                     'skipped' { $phase.status = 'Skipped' }
                     'stale' { $phase.startedUtc = [DateTimeOffset]::UtcNow.AddDays(-30).ToString('O') }
+                    'future-index' { $index.generatedUtc = [DateTimeOffset]::UtcNow.AddMinutes(2).ToString('O') }
+                    'future-phase' { $phase.startedUtc = [DateTimeOffset]::UtcNow.AddMinutes(2).ToString('O'); $phase.completedUtc = $phase.startedUtc }
+                    'phase-after-index' { $index.generatedUtc = [DateTimeOffset]::UtcNow.AddSeconds(-10).ToString('O') }
                     'missing-log' { Remove-Item -LiteralPath (Join-Path $bundle proof.log) }
                     'escaping-path' { $claim.evidence = '../old/certification.json' }
                     'inflated-claim' { $claim.claim = 'Hosted production certified'; $claim.sharedSaaS = 'Certified' }

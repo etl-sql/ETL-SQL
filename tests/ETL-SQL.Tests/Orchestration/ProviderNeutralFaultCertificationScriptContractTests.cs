@@ -34,13 +34,22 @@ public sealed class ProviderNeutralFaultCertificationScriptContractTests
     }
 
     [Fact]
-    public void EveryDeploymentProfileLaneIncludesItsFaultMatrix()
+    public async Task EveryDeploymentProfileLaneIncludesItsFaultMatrix()
     {
         var script = File.ReadAllText(Path.Combine(
             RepoRoot(), "scripts", "Test-DeploymentProfileCertification.ps1"));
 
-        foreach (var profile in new[] { "Solo", "Team", "Enterprise", "SaaS", "SharedSaaS" })
-            Assert.Contains($"New-FaultPhase \"{profile}\"", script, StringComparison.Ordinal);
+        var result = await ETL_SQL.Tests.Docs.ReleasePolicyHelperTests.RunHelper("""
+            @(foreach ($profile in (Get-DeploymentCertificationLanes Profile)) {
+                [pscustomobject]@{ profile = $profile; faults = @((Get-DeploymentCertificationPlan -Kind Profile -Names $profile) | Where-Object faultProfile | ForEach-Object faultProfile) }
+            }) | ConvertTo-Json -Depth 5
+            """, helperName: "DeploymentCertification.Plan.ps1");
+        Assert.True(result.ExitCode == 0, result.Output);
+        using var plan = JsonDocument.Parse(result.Output);
+        Assert.Equal(new[] { "Solo", "Team", "Enterprise", "SaaS", "SharedSaaS" },
+            plan.RootElement.EnumerateArray().Select(item => item.GetProperty("profile").GetString()));
+        foreach (var item in plan.RootElement.EnumerateArray())
+            Assert.Equal(new[] { item.GetProperty("profile").GetString() }, item.GetProperty("faults").EnumerateArray().Select(value => value.GetString()));
         Assert.Contains("Test-ProviderNeutralFaultCertification.ps1", script, StringComparison.Ordinal);
         Assert.Contains("provider-neutral-faults", script, StringComparison.Ordinal);
     }

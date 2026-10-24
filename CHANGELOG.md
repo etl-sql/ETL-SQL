@@ -14,6 +14,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Deployment packaging now checks the shared execution plan against ordered phase records,
+  structured invocations, canonical logs and per-phase TRX receipts. Receipts require every planned
+  test selector, unique passed outcomes and timestamps inside the phase run. Enterprise prerequisites,
+  concrete lifecycle files and nested fault-matrix receipts are verified before archiving.
+  Deployment `-NoBuild` results remain development evidence until matching build provenance exists.
+
 - Packaging supplied deployment evidence now requires every profile and transition claim, canonical
   topology/scope/gaps and Release reports. Producer and validator share the lane and topology contracts.
   Partial helper archives remain marked `SelectedClaims`; packaging requires `AllProfilesAndTransitions`.

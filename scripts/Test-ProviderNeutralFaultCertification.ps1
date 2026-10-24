@@ -26,6 +26,7 @@ param(
 $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 . (Join-Path $ScriptRoot 'Release.Helpers.ps1')
+. (Join-Path $ScriptRoot 'DeploymentTestEvidence.Helpers.ps1')
 $RepoRoot = (Resolve-Path (Join-Path $ScriptRoot "..")).Path
 $MatrixPath = Join-Path $RepoRoot "tests/fixtures/provider-neutral-fault-matrix.json"
 $TestProject = "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj"
@@ -72,16 +73,29 @@ try {
             [Environment]::SetEnvironmentVariable("ETLSQL_FAULT_CERT_PROFILE", [string]$row.profile)
             [Environment]::SetEnvironmentVariable("ETLSQL_FAULT_CERT_ADAPTER", [string]$row.adapter)
             $logName = "$($row.profile)-$($row.adapter).log".ToLowerInvariant()
+            $trxName = [IO.Path]::ChangeExtension($logName, '.trx')
+            if (Test-Path -LiteralPath (Join-Path $runRoot $trxName)) { Remove-Item -LiteralPath (Join-Path $runRoot $trxName) -Force }
+            $filter = 'FullyQualifiedName=ETL_SQL.Tests.Orchestration.ProviderNeutralFaultCertificationTests.RepeatedMatrixProducesDurableInvariantAndRecoveryEvidence'
             $arguments = @(
                 "test", $TestProject,
                 "--configuration", $Configuration,
-                "--filter", "FullyQualifiedName=ETL_SQL.Tests.Orchestration.ProviderNeutralFaultCertificationTests.RepeatedMatrixProducesDurableInvariantAndRecoveryEvidence",
-                "--logger", "console;verbosity=normal")
+                "--filter", $filter,
+                "--logger", "console;verbosity=normal", '--logger', "trx;LogFileName=$trxName", '--results-directory', $runRoot)
             if ($NoBuild) { $arguments += @("--no-build", "--no-restore") }
             Write-Host "[$($row.profile)] $($row.provider) / $($row.adapter)" -ForegroundColor Cyan
             $started = [DateTimeOffset]::UtcNow
             $output = & dotnet @arguments 2>&1
             $exitCode = $LASTEXITCODE
+            $testEvidence = $null
+            if ($exitCode -eq 0) {
+                try {
+                    $testEvidence = Get-DeploymentTestEvidence -Path (Join-Path $runRoot $trxName) -Filter $filter
+                    $testEvidence.path = $trxName
+                } catch {
+                    $exitCode = 1
+                    $output += 'Provider-neutral tests did not retain complete passing TRX evidence.'
+                }
+            }
             $output | Set-Content -LiteralPath (Join-Path $runRoot $logName) -Encoding utf8
             $results.Add([ordered]@{
                 profile = $row.profile
@@ -92,6 +106,8 @@ try {
                 exitCode = $exitCode
                 status = if ($exitCode -eq 0) { "Passed" } else { "Failed" }
                 log = $logName
+                invocation = [ordered]@{ executable = 'dotnet'; arguments = @($arguments) }
+                testEvidence = $testEvidence
             })
             if ($exitCode -ne 0) { break }
         }
@@ -106,7 +122,7 @@ try {
 
     $reports = @(Get-ChildItem -LiteralPath $reportRoot -Filter "*.json" -File |
         Sort-Object Name | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json })
-    $expectedRuns = $Repetitions * 9
+    $expectedRuns = $Repetitions * $matrix.scenarioIds.Count
     $invalidReports = @($reports | Where-Object {
         $_.schema -ne "etl-sql.provider-neutral-fault-certification/v1" -or
         -not $_.passed -or $_.repetitions -ne $Repetitions -or $_.runs.Count -ne $expectedRuns -or
@@ -133,12 +149,15 @@ try {
         sourceFingerprint = $source.fingerprint
         dirty = $dirtyLines.Count -gt 0
         dirtyPaths = @($dirtyLines)
+        configuration = $Configuration
+        noBuild = [bool]$NoBuild
+        runDirectory = $runRoot
         matrix = [ordered]@{
             path = "tests/fixtures/provider-neutral-fault-matrix.json"
             sha256 = (Get-FileHash -LiteralPath $MatrixPath -Algorithm SHA256).Hash.ToLowerInvariant()
         }
         repetitions = $Repetitions
-        scenarioCount = 9
+        scenarioCount = $matrix.scenarioIds.Count
         selectedProfiles = @($selected | ForEach-Object { $_.profile })
         result = if ($passed) { "Passed" } else { "Failed" }
         runs = $results.ToArray()
