@@ -85,39 +85,6 @@ that does not schedule their proposed implementation.
 
 ## Foundation and Next Horizon
 
-### Release Engineering — Order-Independent Scale Certification
-
-**Status:** Accepted  
-**Horizon:** Next (v0.22.0)  
-**Authoritative design:** [v0.21.0 performance results](docs/releases/v0.21.0-performance-results.md)
-
-**Problem and Intended Outcome:** A scenario's timing depends on which scenarios ran before it in
-the same host. v0.21.0 showed it: two Smoke baselines held warm timings that a spill-format change
-(`be3175f3e`) stopped earlier scenarios from providing, and they now fail with no change in their own
-code. Each scenario should measure the same whether it runs alone or in the tier.
-
-**Boundaries:** Change the harness, not the bands. Recalibrate only from clean candidate/control runs
-on one host, as v0.20.0 did.
-
-**Dependencies:** None.
-
-**Vertical Delivery Slices:**
-
-1. Warm each scenario's own code path (one untimed operation) before its timed samples.
-2. Prove order independence: each Smoke scenario alone and in the tier agree within the band.
-3. Recalibrate the Smoke and Standard baselines from clean candidate/control runs and record them.
-
-**Progress (2026-10-23):** Smoke and Standard capture now isolate each scenario per process.
-The [complete Smoke comparison](docs/benchmarks/scale-order-independence-2026-10-22.md#process-isolation-follow-up--2026-10-23)
-passes all 78 directional checks against existing failure bands. Clean baseline calibration and
-the historical Parquet/dataset baseline acceptance remain open.
-The [2026-10-23 clean calibration](docs/benchmarks/scale-baseline-calibration-2026-10-23.md) passes all
-1,040 measured assertions, but a Standard control-repeat GC-pause comparison fails. Reference
-replacement is rejected; investigate GC/heap state before another full capture. Existing bands remain.
-
-**Acceptance Evidence:** the order-independence check passes, and the v0.21.0 deviation's two
-scenarios pass against the recalibrated baseline.
-
 ### Release Engineering — Faster Release Certification
 
 **Status:** Accepted  
@@ -200,7 +167,7 @@ Measure clean-run, recovery and publication times; the targets still require hos
   contracts and the recovery drill, so nothing needs the workstation's memory. The local gate shrinks
   to the operator certifications that need a real host.
 - **Track performance continuously.** A nightly scale comparison against the last release catches
-  drift when it lands. It also depends on the order-independence fix above.
+  drift when it lands. It uses the calibrated process-isolated scale harness.
 - **One-command release metadata.** `Set-Version.ps1` (or a release step) flips the CHANGELOG
   date, the release-notes status and the releases index together.
 - **An evidence manifest instead of hand reconciliation.** A script collects the run IDs, lane results
@@ -215,8 +182,8 @@ Measure clean-run, recovery and publication times; the targets still require hos
 check as passed; faster means less waiting and fewer repeats. Larger or self-hosted runners are an
 option only if the changes above leave the critical path too long.
 
-**Dependencies:** Order-Independent Scale Certification, for continuous performance tracking. The
-v0.22.0 flaky-test work, for flake containment.
+**Dependencies:** The [completed scale calibration](docs/benchmarks/scale-baseline-calibration-2026-10-23.md#scaled-warm-up-calibration)
+supplies the performance reference. The v0.22.0 flaky-test work remains required for flake containment.
 
 **Vertical Delivery Slices:**
 

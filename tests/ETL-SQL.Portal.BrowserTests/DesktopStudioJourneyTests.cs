@@ -43,7 +43,7 @@ public sealed class DesktopStudioJourneyTests(StudioAuthoringFixture fixture)
 
         await using var firstWindow = await fixture.NewSessionAsync();
         var firstPage = firstWindow.Page;
-        await firstPage.GotoAsync(StudioUrl(firstHost, "first-token"));
+        await firstPage.GotoWithDiagnosticsAsync(StudioUrl(firstHost, "first-token"));
         await WaitForStudioAsync(firstWindow);
 
         await firstPage.EvaluateAsync(
@@ -137,7 +137,7 @@ public sealed class DesktopStudioJourneyTests(StudioAuthoringFixture fixture)
         await secondHost.StartAsync();
         await using var secondWindow = await fixture.NewSessionAsync();
         var secondPage = secondWindow.Page;
-        await secondPage.GotoAsync(StudioUrl(secondHost, "second-token"));
+        await secondPage.GotoWithDiagnosticsAsync(StudioUrl(secondHost, "second-token"));
         await WaitForStudioAsync(secondWindow);
         var firstLifecycle = await LifecycleAsync(firstPage);
         var secondLifecycle = await LifecycleAsync(secondPage);
@@ -170,7 +170,7 @@ public sealed class DesktopStudioJourneyTests(StudioAuthoringFixture fixture)
         await using var relaunchedHost = WorkstationEditorApp.Create([], Options(firstWorkspace.Root, renamedFile, "relaunch-token"));
         await relaunchedHost.StartAsync();
         await using var relaunchedWindow = await fixture.NewSessionAsync();
-        await relaunchedWindow.Page.GotoAsync(StudioUrl(relaunchedHost, "relaunch-token"));
+        await relaunchedWindow.Page.GotoWithDiagnosticsAsync(StudioUrl(relaunchedHost, "relaunch-token"));
         await WaitForStudioAsync(relaunchedWindow);
         Assert.Contains(editMarker,
             await relaunchedWindow.Page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()"),
@@ -192,7 +192,7 @@ public sealed class DesktopStudioJourneyTests(StudioAuthoringFixture fixture)
         await host.StartAsync();
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync(StudioUrl(host, "exit-token"));
+        await page.GotoWithDiagnosticsAsync(StudioUrl(host, "exit-token"));
         await WaitForStudioAsync(session);
 
         var stopping = ApplicationStoppingAsync(host);

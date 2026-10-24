@@ -106,7 +106,7 @@ public sealed class PortalReaderJourneyTests(PortalJourneyFixture fixture)
         await WaitForRegionsAsync(report, [clicked]);
 
         // A fresh page opens the base report, and the saved view brings the reader's state back.
-        await page.GotoAsync("/index.html");
+        await page.GotoWithDiagnosticsAsync("/index.html");
         await (await FindInFolderAsync(page, folderId, reportId)).ClickAsync();
         report = await FrameAsync(page);
         await WaitForRegionsAsync(report, ["North", "South", "West"]);
@@ -196,7 +196,7 @@ public sealed class PortalReaderJourneyTests(PortalJourneyFixture fixture)
 
         // A saved view, reopened from a fresh page, is still that reader's rows.
         await SaveViewAsync(southFrame, "Larger sales");
-        await southPage.GotoAsync("/index.html");
+        await southPage.GotoWithDiagnosticsAsync("/index.html");
         await (await FindInFolderAsync(southPage, folderId, reportId)).ClickAsync();
         southFrame = await FrameAsync(southPage);
         await southFrame.Locator("#etlsql-views-menu-button").ClickAsync();
@@ -396,11 +396,11 @@ public sealed class PortalReaderJourneyTests(PortalJourneyFixture fixture)
 
     private static async Task SignInAsync(IPage page, Person person)
     {
-        await page.GotoAsync("/login.html");
+        await page.GotoWithDiagnosticsAsync("/login.html");
         await page.FillAsync("#username", person.UserName);
         await page.FillAsync("#password", Password);
         await page.ClickAsync("#loginBtn");
-        await page.WaitForURLAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
+        await page.WaitForURLWithDiagnosticsAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
         await page.WaitForSelectorAsync("body[data-nav-applied='true']",
             new PageWaitForSelectorOptions { State = WaitForSelectorState.Attached, Timeout = 20_000 });
     }

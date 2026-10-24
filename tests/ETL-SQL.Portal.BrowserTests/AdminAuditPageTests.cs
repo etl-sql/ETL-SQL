@@ -36,7 +36,7 @@ public sealed class AdminAuditPageTests(AdminUsersFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/admin.html");
+        await page.GotoWithDiagnosticsAsync("/admin.html");
         await Expect(page.Locator("#userTableWrap")).ToHaveAttributeAsync("data-users-state", "ready");
         await page.Locator(".admin-tab[data-tab='audit']").ClickAsync();
         await page.Locator("#auditFilter").FillAsync(action);

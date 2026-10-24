@@ -37,9 +37,18 @@ $selected = $manifest.shards | Where-Object index -EQ $Shard
 $trxName = "shard-$Shard-$([guid]::NewGuid().ToString('N')).trx"
 $env:DOTNET_GCHeapHardLimit = ([int64]8GB).ToString('X')
 Write-Host "Browser shard $Shard/$ShardCount, $($selected.discoveredCases) discovered cases."
-& dotnet @common --settings (Join-Path $evidence "shard-$Shard.runsettings") `
-    --results-directory $evidence --logger "trx;LogFileName=$trxName" --logger 'console;verbosity=normal'
-$testExit = $LASTEXITCODE
+$previousDiagnostics = $env:ETLSQL_BROWSER_DIAGNOSTICS_DIR
+$previousShard = $env:ETLSQL_BROWSER_SHARD
+$env:ETLSQL_BROWSER_DIAGNOSTICS_DIR = Join-Path $evidence 'navigation-diagnostics'
+$env:ETLSQL_BROWSER_SHARD = "$Shard"
+try {
+    & dotnet @common --settings (Join-Path $evidence "shard-$Shard.runsettings") `
+        --results-directory $evidence --logger "trx;LogFileName=$trxName" --logger 'console;verbosity=normal'
+    $testExit = $LASTEXITCODE
+} finally {
+    $env:ETLSQL_BROWSER_DIAGNOSTICS_DIR = $previousDiagnostics
+    $env:ETLSQL_BROWSER_SHARD = $previousShard
+}
 if ($testExit -ne 0) { throw "Browser shard failed with exit code $testExit. Retain the TRX before retrying." }
 & (Join-Path $PSScriptRoot 'Test-BrowserShardResult.ps1') -ManifestPath (Join-Path $evidence 'manifest.json') `
     -Shard $Shard -TrxPath (Join-Path $evidence $trxName) -OutputPath $receiptPath

@@ -77,8 +77,8 @@ public sealed class OrchestratorPageOwnerSandboxTests(SandboxStoryFixture fixtur
         var page = session.Page;
         // The exit target does not exist in the sandbox; answer it so the navigation can be observed.
         await page.RouteAsync("**/index.html", route => route.FulfillAsync(new() { ContentType = "text/html", Body = "<title>catalog</title>" }));
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/orchestrator-page-frame.html?fixture=healthy&role=Viewer");
-        await page.WaitForURLAsync("**/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/orchestrator-page-frame.html?fixture=healthy&role=Viewer");
+        await page.WaitForURLWithDiagnosticsAsync("**/index.html");
         Assert.Empty(session.PageErrors);
     }
 
@@ -328,7 +328,7 @@ public sealed class OrchestratorPageOwnerSandboxTests(SandboxStoryFixture fixtur
 
     private async Task OpenAsync(IPage page, string scenario = "healthy", string role = "Admin")
     {
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/orchestrator-page-frame.html?fixture={scenario}&role={role}");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/orchestrator-page-frame.html?fixture={scenario}&role={role}");
         await Expect(page.Locator("body")).ToHaveAttributeAsync("data-orchestrator-sandbox-ready", "true");
         await Expect(page.Locator("[data-action='toggle'][data-name='daily_sales']")).ToBeVisibleAsync();
     }

@@ -382,5 +382,38 @@ class load and shared background-service state from its startup/shutdown observa
   `JobSchedulingIntegrationTests` already did for the same reason.
 
 
+## Browser navigation failure diagnostics (v0.22.0)
+
+Transport failures may never produce an HTTP response, so the existing browser session's 4xx/5xx
+history cannot explain `net::ERR_NO_BUFFER_SPACE`. Each browser context now records up to 100
+transport failures separately. Records include timestamp, method, resource type, navigation flag,
+sanitized URL and Chromium error code. User information, query strings and fragments are removed;
+request headers, bodies and raw provider messages are never collected.
+
+`GotoWithDiagnosticsAsync` and `WaitForURLWithDiagnosticsAsync` preserve Playwright options,
+responses and original exceptions, collecting diagnostics on failures. Failed navigation requests
+also trigger collection, including on additional pages or click-driven navigation. Collection is
+bounded to eight snapshots per context and a four-second collection budget. A failed process lookup
+retains the test host and an explicit unavailable reason. Diagnostic errors cannot replace the
+original navigation failure.
+
+Snapshots identify only the test host and processes reported by that Chromium instance's
+[`SystemInfo.getProcessInfo`](https://chromedevtools.github.io/devtools-protocol/tot/SystemInfo/).
+Windows snapshots collect handle counts and per-owner-PID TCP/UDP endpoint counts for both IPv4 and
+IPv6 using [IP Helper TCP tables](https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable)
+and [UDP tables](https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedudptable).
+Addresses and ports are discarded. An exited/inaccessible process or unavailable table is recorded
+explicitly; unsupported platforms do not report fabricated socket counts.
+
+`Test-BrowserShard.ps1` puts JSON snapshots in its retained evidence directory's
+`navigation-diagnostics/` folder. Records carry candidate/run/attempt/shard identity when available,
+plus the navigation wrapper's caller name. Direct test runs can set `ETLSQL_BROWSER_DIAGNOSTICS_DIR`;
+the default is `TestResults/navigation-diagnostics/` under the test output directory. Synthetic
+diagnostic tests retain their deliberate-failure snapshots under `diagnostic-tests/`.
+
+This instrumentation does not establish the cause or fix the Windows CI flake. Capture the next
+hosted failure, correlate transport errors and process resource counts with its TRX, and retain
+consecutive-run evidence before closing the TODO.
+
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
 diagnostics belong in generated evidence, not a new release-specific tracking file.

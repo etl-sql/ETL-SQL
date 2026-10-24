@@ -11,7 +11,7 @@ public sealed class ReportPreviewModuleTests(StudioSurfaceFixture fixture)
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync("/designer-preview.html");
+        await page.GotoWithDiagnosticsAsync("/designer-preview.html");
 
         // Use the same message protocol as the designer, through the real Portal static host.
         const string sendManifest = """

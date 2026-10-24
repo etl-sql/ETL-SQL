@@ -310,7 +310,7 @@ public sealed class ReaderSubscriptionsSandboxTests(SandboxStoryFixture fixture)
 
     private async Task OpenAsync(IPage page, string scenario, string hash)
     {
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/reader-page-frame.html?fixture={scenario}{hash}");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/reader-page-frame.html?fixture={scenario}{hash}");
         await Expect(page.Locator("body")).ToHaveAttributeAsync("data-reader-sandbox-ready", "true");
     }
 

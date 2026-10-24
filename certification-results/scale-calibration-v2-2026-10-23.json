@@ -1,0 +1,3098 @@
+{
+  "schemaVersion": 2,
+  "passed": true,
+  "reviewedAtUtc": "2026-10-23T20:05:12.6969764-05:00",
+  "control": "53a3343d449845c11c7f144cf5b305d07e2e2b7f",
+  "candidate": "040d2c217774bb02223ed4bc078990d09871b956",
+  "measuredChecks": 1170,
+  "fullComparisons": 24,
+  "orderComparisons": 78,
+  "fixtureDefinitionSha256": "dc848d37fae4a1725dec9a3e6f24a2caf27fcc51d18ea908328dbefc4a99b723",
+  "controllerSha256": "063dcebf869114dbc2c7d2f9e535aa16e3acbdec78790a4755a747ddec08c63e",
+  "protocol": "own-path-scaled-untimed-v2",
+  "failureBandsChanged": false,
+  "hardwareSuppression": false,
+  "selectedReference": "Predetermined first candidate full capture (index 2), copied without transformation",
+  "referenceSha256": {
+    "Smoke": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+    "Standard": "4ac752b1d2f9971996b175baeebb826b642fd1407a6bdbf503573e0286c72c80"
+  },
+  "captures": [
+    {
+      "tier": "Smoke",
+      "index": 1,
+      "arm": "control",
+      "commit": "53a3343d449845c11c7f144cf5b305d07e2e2b7f",
+      "clean": true,
+      "capturedAtUtc": "2026-10-23T20:06:13.6328644Z",
+      "report": "Smoke/01-control/cert-report.json",
+      "sha256": "e0b14e2954e9f272549f0737adcd9711e2e29023afe958fa6b516d5e23bea140",
+      "sourceFingerprint": "0e591185270aac5cc614da9949386386975067b1c3c1adcd4f0c3558fc7ee4a8",
+      "configFingerprint": "c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b",
+      "measuredChecks": 130,
+      "gcConfiguration": {
+        "concurrent": true,
+        "conserveMemory": 0.0,
+        "dynamicAdaptationMode": 1.0,
+        "heapCount": 24.0,
+        "heapHardLimitBytes": 0.0,
+        "heapHardLimitPercent": 0.0,
+        "latencyMode": "Interactive",
+        "processorCount": 24.0,
+        "retainVirtualMemory": false,
+        "server": true
+      },
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 46.0,
+          "gcPauseMs": 4.4,
+          "peakProcessWorkingSetMB": 121.1,
+          "allocatedMB": 31.6,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_50000_10x5",
+          "rowCount": 50000,
+          "resultRows": 66,
+          "checksum": 5000100000,
+          "samples": 10,
+          "elapsedMs": 1219.0,
+          "gcPauseMs": 56.0,
+          "peakProcessWorkingSetMB": 245.1,
+          "allocatedMB": 447.85,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_100000_10grps",
+          "rowCount": 100000,
+          "resultRows": 10,
+          "checksum": 499960000,
+          "samples": 10,
+          "elapsedMs": 453.0,
+          "gcPauseMs": 24.45,
+          "peakProcessWorkingSetMB": 194.4,
+          "allocatedMB": 115.8,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_50000_equality",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 2500050000,
+          "samples": 10,
+          "elapsedMs": 619.5,
+          "gcPauseMs": 47.25,
+          "peakProcessWorkingSetMB": 230.1,
+          "allocatedMB": 255.3,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_50000_DESC",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 393.0,
+          "gcPauseMs": 9.55,
+          "peakProcessWorkingSetMB": 193.7,
+          "allocatedMB": 88.8,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 35.0,
+          "gcPauseMs": 6.55,
+          "peakProcessWorkingSetMB": 120.7,
+          "allocatedMB": 21.5,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 266.0,
+          "gcPauseMs": 11.65,
+          "peakProcessWorkingSetMB": 219.8,
+          "allocatedMB": 94.7,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_50000_1000keys",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50050000,
+          "samples": 10,
+          "elapsedMs": 539.0,
+          "gcPauseMs": 32.2,
+          "peakProcessWorkingSetMB": 226.5,
+          "allocatedMB": 192.3,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_40000",
+          "rowCount": 40000,
+          "resultRows": 0,
+          "checksum": 0,
+          "samples": 10,
+          "elapsedMs": 39.0,
+          "gcPauseMs": 5.35,
+          "peakProcessWorkingSetMB": 126.5,
+          "allocatedMB": 24.8,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_50000",
+          "rowCount": 50000,
+          "resultRows": 1,
+          "checksum": 1,
+          "samples": 10,
+          "elapsedMs": 48.5,
+          "gcPauseMs": 6.6,
+          "peakProcessWorkingSetMB": 131.0,
+          "allocatedMB": 29.6,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_100000_cap50000",
+          "rowCount": 100000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "samples": 10,
+          "elapsedMs": 473.0,
+          "gcPauseMs": 24.05,
+          "peakProcessWorkingSetMB": 180.7,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_50000_SELECT_INTO",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "samples": 10,
+          "elapsedMs": 61.0,
+          "gcPauseMs": 7.55,
+          "peakProcessWorkingSetMB": 148.6,
+          "allocatedMB": 30.6,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 957.5,
+          "gcPauseMs": 59.95,
+          "peakProcessWorkingSetMB": 209.7,
+          "allocatedMB": 267.8,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "tier": "Smoke",
+      "index": 2,
+      "arm": "candidate",
+      "commit": "040d2c217774bb02223ed4bc078990d09871b956",
+      "clean": true,
+      "capturedAtUtc": "2026-10-23T20:17:18.5116174Z",
+      "report": "Smoke/02-candidate/cert-report.json",
+      "sha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+      "sourceFingerprint": "9442cb2b0d29050b69f728a4ebb6567b4ac97be993606686b055177e09a40cf9",
+      "configFingerprint": "c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b",
+      "measuredChecks": 130,
+      "gcConfiguration": {
+        "concurrent": true,
+        "conserveMemory": 0.0,
+        "dynamicAdaptationMode": 1.0,
+        "heapCount": 24.0,
+        "heapHardLimitBytes": 0.0,
+        "heapHardLimitPercent": 0.0,
+        "latencyMode": "Interactive",
+        "processorCount": 24.0,
+        "retainVirtualMemory": false,
+        "server": true
+      },
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 46.5,
+          "gcPauseMs": 4.2,
+          "peakProcessWorkingSetMB": 121.2,
+          "allocatedMB": 31.6,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_50000_10x5",
+          "rowCount": 50000,
+          "resultRows": 66,
+          "checksum": 5000100000,
+          "samples": 10,
+          "elapsedMs": 1166.5,
+          "gcPauseMs": 54.75,
+          "peakProcessWorkingSetMB": 235.4,
+          "allocatedMB": 450.65,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_100000_10grps",
+          "rowCount": 100000,
+          "resultRows": 10,
+          "checksum": 499960000,
+          "samples": 10,
+          "elapsedMs": 440.0,
+          "gcPauseMs": 24.4,
+          "peakProcessWorkingSetMB": 189.8,
+          "allocatedMB": 115.45,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_50000_equality",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 2500050000,
+          "samples": 10,
+          "elapsedMs": 604.5,
+          "gcPauseMs": 48.55,
+          "peakProcessWorkingSetMB": 225.7,
+          "allocatedMB": 255.25,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_50000_DESC",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 389.5,
+          "gcPauseMs": 10.6,
+          "peakProcessWorkingSetMB": 197.4,
+          "allocatedMB": 88.8,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 35.5,
+          "gcPauseMs": 6.2,
+          "peakProcessWorkingSetMB": 122.4,
+          "allocatedMB": 21.55,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 258.5,
+          "gcPauseMs": 12.85,
+          "peakProcessWorkingSetMB": 219.8,
+          "allocatedMB": 94.8,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_50000_1000keys",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50050000,
+          "samples": 10,
+          "elapsedMs": 546.0,
+          "gcPauseMs": 32.85,
+          "peakProcessWorkingSetMB": 225.7,
+          "allocatedMB": 192.3,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_40000",
+          "rowCount": 40000,
+          "resultRows": 0,
+          "checksum": 0,
+          "samples": 10,
+          "elapsedMs": 39.0,
+          "gcPauseMs": 4.7,
+          "peakProcessWorkingSetMB": 126.2,
+          "allocatedMB": 24.8,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_50000",
+          "rowCount": 50000,
+          "resultRows": 1,
+          "checksum": 1,
+          "samples": 10,
+          "elapsedMs": 47.0,
+          "gcPauseMs": 4.8,
+          "peakProcessWorkingSetMB": 131.6,
+          "allocatedMB": 29.6,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_100000_cap50000",
+          "rowCount": 100000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "samples": 10,
+          "elapsedMs": 470.5,
+          "gcPauseMs": 22.95,
+          "peakProcessWorkingSetMB": 180.2,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_50000_SELECT_INTO",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "samples": 10,
+          "elapsedMs": 60.0,
+          "gcPauseMs": 4.7,
+          "peakProcessWorkingSetMB": 147.9,
+          "allocatedMB": 30.5,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 914.5,
+          "gcPauseMs": 60.25,
+          "peakProcessWorkingSetMB": 213.1,
+          "allocatedMB": 267.7,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "tier": "Smoke",
+      "index": 3,
+      "arm": "candidate",
+      "commit": "040d2c217774bb02223ed4bc078990d09871b956",
+      "clean": true,
+      "capturedAtUtc": "2026-10-23T20:30:50.3365403Z",
+      "report": "Smoke/03-candidate/cert-report.json",
+      "sha256": "50ed5de9bf6d30f4b0e5b5c33ef646171b7061a145725fd186db634ce79c13a3",
+      "sourceFingerprint": "9442cb2b0d29050b69f728a4ebb6567b4ac97be993606686b055177e09a40cf9",
+      "configFingerprint": "c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b",
+      "measuredChecks": 130,
+      "gcConfiguration": {
+        "concurrent": true,
+        "conserveMemory": 0.0,
+        "dynamicAdaptationMode": 1.0,
+        "heapCount": 24.0,
+        "heapHardLimitBytes": 0.0,
+        "heapHardLimitPercent": 0.0,
+        "latencyMode": "Interactive",
+        "processorCount": 24.0,
+        "retainVirtualMemory": false,
+        "server": true
+      },
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 46.0,
+          "gcPauseMs": 4.4,
+          "peakProcessWorkingSetMB": 121.8,
+          "allocatedMB": 31.6,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_50000_10x5",
+          "rowCount": 50000,
+          "resultRows": 66,
+          "checksum": 5000100000,
+          "samples": 10,
+          "elapsedMs": 1226.5,
+          "gcPauseMs": 59.4,
+          "peakProcessWorkingSetMB": 236.7,
+          "allocatedMB": 450.2,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_100000_10grps",
+          "rowCount": 100000,
+          "resultRows": 10,
+          "checksum": 499960000,
+          "samples": 10,
+          "elapsedMs": 424.5,
+          "gcPauseMs": 26.2,
+          "peakProcessWorkingSetMB": 195.9,
+          "allocatedMB": 115.45,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_50000_equality",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 2500050000,
+          "samples": 10,
+          "elapsedMs": 620.5,
+          "gcPauseMs": 49.15,
+          "peakProcessWorkingSetMB": 234.3,
+          "allocatedMB": 255.15,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_50000_DESC",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 390.0,
+          "gcPauseMs": 9.3,
+          "peakProcessWorkingSetMB": 195.4,
+          "allocatedMB": 88.8,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 35.5,
+          "gcPauseMs": 7.05,
+          "peakProcessWorkingSetMB": 118.2,
+          "allocatedMB": 21.55,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 257.0,
+          "gcPauseMs": 11.6,
+          "peakProcessWorkingSetMB": 219.3,
+          "allocatedMB": 94.3,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_50000_1000keys",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50050000,
+          "samples": 10,
+          "elapsedMs": 487.0,
+          "gcPauseMs": 32.1,
+          "peakProcessWorkingSetMB": 226.9,
+          "allocatedMB": 192.3,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_40000",
+          "rowCount": 40000,
+          "resultRows": 0,
+          "checksum": 0,
+          "samples": 10,
+          "elapsedMs": 39.0,
+          "gcPauseMs": 4.85,
+          "peakProcessWorkingSetMB": 127.4,
+          "allocatedMB": 24.8,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_50000",
+          "rowCount": 50000,
+          "resultRows": 1,
+          "checksum": 1,
+          "samples": 10,
+          "elapsedMs": 48.5,
+          "gcPauseMs": 5.6,
+          "peakProcessWorkingSetMB": 132.6,
+          "allocatedMB": 29.6,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_100000_cap50000",
+          "rowCount": 100000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "samples": 10,
+          "elapsedMs": 465.5,
+          "gcPauseMs": 23.7,
+          "peakProcessWorkingSetMB": 181.0,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_50000_SELECT_INTO",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "samples": 10,
+          "elapsedMs": 60.0,
+          "gcPauseMs": 6.95,
+          "peakProcessWorkingSetMB": 145.7,
+          "allocatedMB": 30.45,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 934.0,
+          "gcPauseMs": 47.8,
+          "peakProcessWorkingSetMB": 204.6,
+          "allocatedMB": 267.8,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "tier": "Smoke",
+      "index": 4,
+      "arm": "control",
+      "commit": "53a3343d449845c11c7f144cf5b305d07e2e2b7f",
+      "clean": true,
+      "capturedAtUtc": "2026-10-23T20:37:52.812912Z",
+      "report": "Smoke/04-control/cert-report.json",
+      "sha256": "c6e996f87ccd09fbe16a9baf2ee4706240829467a7a4b99817a3a856b796dd67",
+      "sourceFingerprint": "0e591185270aac5cc614da9949386386975067b1c3c1adcd4f0c3558fc7ee4a8",
+      "configFingerprint": "c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b",
+      "measuredChecks": 130,
+      "gcConfiguration": {
+        "concurrent": true,
+        "conserveMemory": 0.0,
+        "dynamicAdaptationMode": 1.0,
+        "heapCount": 24.0,
+        "heapHardLimitBytes": 0.0,
+        "heapHardLimitPercent": 0.0,
+        "latencyMode": "Interactive",
+        "processorCount": 24.0,
+        "retainVirtualMemory": false,
+        "server": true
+      },
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 46.0,
+          "gcPauseMs": 4.4,
+          "peakProcessWorkingSetMB": 120.8,
+          "allocatedMB": 31.6,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_50000_10x5",
+          "rowCount": 50000,
+          "resultRows": 66,
+          "checksum": 5000100000,
+          "samples": 10,
+          "elapsedMs": 1318.5,
+          "gcPauseMs": 57.55,
+          "peakProcessWorkingSetMB": 235.9,
+          "allocatedMB": 450.05,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_100000_10grps",
+          "rowCount": 100000,
+          "resultRows": 10,
+          "checksum": 499960000,
+          "samples": 10,
+          "elapsedMs": 446.5,
+          "gcPauseMs": 24.05,
+          "peakProcessWorkingSetMB": 198.7,
+          "allocatedMB": 115.85,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_50000_equality",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 2500050000,
+          "samples": 10,
+          "elapsedMs": 627.0,
+          "gcPauseMs": 45.2,
+          "peakProcessWorkingSetMB": 226.6,
+          "allocatedMB": 255.2,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_50000_DESC",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 364.0,
+          "gcPauseMs": 9.15,
+          "peakProcessWorkingSetMB": 195.9,
+          "allocatedMB": 88.8,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 35.0,
+          "gcPauseMs": 6.3,
+          "peakProcessWorkingSetMB": 124.9,
+          "allocatedMB": 21.65,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 260.5,
+          "gcPauseMs": 12.25,
+          "peakProcessWorkingSetMB": 218.6,
+          "allocatedMB": 94.85,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_50000_1000keys",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50050000,
+          "samples": 10,
+          "elapsedMs": 526.5,
+          "gcPauseMs": 32.3,
+          "peakProcessWorkingSetMB": 227.2,
+          "allocatedMB": 192.3,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_40000",
+          "rowCount": 40000,
+          "resultRows": 0,
+          "checksum": 0,
+          "samples": 10,
+          "elapsedMs": 39.0,
+          "gcPauseMs": 4.05,
+          "peakProcessWorkingSetMB": 126.5,
+          "allocatedMB": 24.8,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_50000",
+          "rowCount": 50000,
+          "resultRows": 1,
+          "checksum": 1,
+          "samples": 10,
+          "elapsedMs": 47.0,
+          "gcPauseMs": 4.85,
+          "peakProcessWorkingSetMB": 131.7,
+          "allocatedMB": 29.6,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_100000_cap50000",
+          "rowCount": 100000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "samples": 10,
+          "elapsedMs": 452.5,
+          "gcPauseMs": 21.25,
+          "peakProcessWorkingSetMB": 179.4,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_50000_SELECT_INTO",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "samples": 10,
+          "elapsedMs": 64.0,
+          "gcPauseMs": 7.8,
+          "peakProcessWorkingSetMB": 149.3,
+          "allocatedMB": 30.7,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_50000",
+          "rowCount": 50000,
+          "resultRows": 50000,
+          "checksum": 1250025000,
+          "samples": 10,
+          "elapsedMs": 1039.5,
+          "gcPauseMs": 48.6,
+          "peakProcessWorkingSetMB": 209.6,
+          "allocatedMB": 267.8,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "tier": "Standard",
+      "index": 1,
+      "arm": "control",
+      "commit": "53a3343d449845c11c7f144cf5b305d07e2e2b7f",
+      "clean": true,
+      "capturedAtUtc": "2026-10-23T20:54:37.0517867Z",
+      "report": "Standard/01-control/cert-report.json",
+      "sha256": "dbc529086e2118e46bb4730ab11ed5354beac11bccff94d10a7b3c7da11b745c",
+      "sourceFingerprint": "dd7fd2b4a7912e046a8f1e2ea985f598e86c98a98c7eb1be8a99bae16f6d4d7b",
+      "configFingerprint": "ceeceb89d538a1eb7cd895182f6ba18167b10536f0a25138e7e9f7c5b87a3b07",
+      "measuredChecks": 130,
+      "gcConfiguration": {
+        "concurrent": true,
+        "conserveMemory": 0.0,
+        "dynamicAdaptationMode": 1.0,
+        "heapCount": 24.0,
+        "heapHardLimitBytes": 0.0,
+        "heapHardLimitPercent": 0.0,
+        "latencyMode": "Interactive",
+        "processorCount": 24.0,
+        "retainVirtualMemory": false,
+        "server": true
+      },
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 288.5,
+          "gcPauseMs": 54.65,
+          "peakProcessWorkingSetMB": 218.2,
+          "allocatedMB": 318.85,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_500000_10x5",
+          "rowCount": 500000,
+          "resultRows": 66,
+          "checksum": 500001000000,
+          "samples": 10,
+          "elapsedMs": 5226.0,
+          "gcPauseMs": 473.55,
+          "peakProcessWorkingSetMB": 425.6,
+          "allocatedMB": 4334.5,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_1000000_10grps",
+          "rowCount": 1000000,
+          "resultRows": 10,
+          "checksum": 49999600000,
+          "samples": 10,
+          "elapsedMs": 1939.5,
+          "gcPauseMs": 174.85,
+          "peakProcessWorkingSetMB": 309.9,
+          "allocatedMB": 1141.65,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_500000_equality",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 250000500000,
+          "samples": 10,
+          "elapsedMs": 2870.5,
+          "gcPauseMs": 297.05,
+          "peakProcessWorkingSetMB": 634.3,
+          "allocatedMB": 2432.7,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_500000_DESC",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 2218.5,
+          "gcPauseMs": 155.2,
+          "peakProcessWorkingSetMB": 494.9,
+          "allocatedMB": 1346.1,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 232.5,
+          "gcPauseMs": 24.8,
+          "peakProcessWorkingSetMB": 237.5,
+          "allocatedMB": 218.3,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 866.0,
+          "gcPauseMs": 112.1,
+          "peakProcessWorkingSetMB": 675.7,
+          "allocatedMB": 887.6,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_500000_1000keys",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500500000,
+          "samples": 10,
+          "elapsedMs": 1889.0,
+          "gcPauseMs": 91.55,
+          "peakProcessWorkingSetMB": 688.6,
+          "allocatedMB": 754.0,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_400000",
+          "rowCount": 400000,
+          "resultRows": 0,
+          "checksum": 0,
+          "samples": 10,
+          "elapsedMs": 352.5,
+          "gcPauseMs": 39.65,
+          "peakProcessWorkingSetMB": 204.8,
+          "allocatedMB": 241.1,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_500000",
+          "rowCount": 500000,
+          "resultRows": 1,
+          "checksum": 1,
+          "samples": 10,
+          "elapsedMs": 437.0,
+          "gcPauseMs": 46.7,
+          "peakProcessWorkingSetMB": 271.9,
+          "allocatedMB": 299.9,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_1000000_cap50000",
+          "rowCount": 1000000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "samples": 10,
+          "elapsedMs": 466.0,
+          "gcPauseMs": 25.2,
+          "peakProcessWorkingSetMB": 181.4,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_500000_SELECT_INTO",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500000,
+          "samples": 10,
+          "elapsedMs": 457.0,
+          "gcPauseMs": 48.7,
+          "peakProcessWorkingSetMB": 288.0,
+          "allocatedMB": 318.55,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 3972.5,
+          "gcPauseMs": 261.95,
+          "peakProcessWorkingSetMB": 477.6,
+          "allocatedMB": 2695.2,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "tier": "Standard",
+      "index": 2,
+      "arm": "candidate",
+      "commit": "040d2c217774bb02223ed4bc078990d09871b956",
+      "clean": true,
+      "capturedAtUtc": "2026-10-23T21:10:39.0108369Z",
+      "report": "Standard/02-candidate/cert-report.json",
+      "sha256": "4ac752b1d2f9971996b175baeebb826b642fd1407a6bdbf503573e0286c72c80",
+      "sourceFingerprint": "82bb171003e5171040a5dca13e3d33fd36329675ac1e85cea31c4a259e48da15",
+      "configFingerprint": "ceeceb89d538a1eb7cd895182f6ba18167b10536f0a25138e7e9f7c5b87a3b07",
+      "measuredChecks": 130,
+      "gcConfiguration": {
+        "concurrent": true,
+        "conserveMemory": 0.0,
+        "dynamicAdaptationMode": 1.0,
+        "heapCount": 24.0,
+        "heapHardLimitBytes": 0.0,
+        "heapHardLimitPercent": 0.0,
+        "latencyMode": "Interactive",
+        "processorCount": 24.0,
+        "retainVirtualMemory": false,
+        "server": true
+      },
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 305.5,
+          "gcPauseMs": 56.5,
+          "peakProcessWorkingSetMB": 223.3,
+          "allocatedMB": 318.9,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_500000_10x5",
+          "rowCount": 500000,
+          "resultRows": 66,
+          "checksum": 500001000000,
+          "samples": 10,
+          "elapsedMs": 4586.5,
+          "gcPauseMs": 486.2,
+          "peakProcessWorkingSetMB": 390.6,
+          "allocatedMB": 3744.65,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_1000000_10grps",
+          "rowCount": 1000000,
+          "resultRows": 10,
+          "checksum": 49999600000,
+          "samples": 10,
+          "elapsedMs": 1979.5,
+          "gcPauseMs": 171.2,
+          "peakProcessWorkingSetMB": 326.8,
+          "allocatedMB": 1141.65,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_500000_equality",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 250000500000,
+          "samples": 10,
+          "elapsedMs": 2739.0,
+          "gcPauseMs": 296.65,
+          "peakProcessWorkingSetMB": 636.2,
+          "allocatedMB": 2432.6,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_500000_DESC",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 1956.5,
+          "gcPauseMs": 159.25,
+          "peakProcessWorkingSetMB": 491.8,
+          "allocatedMB": 1346.1,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 231.5,
+          "gcPauseMs": 21.6,
+          "peakProcessWorkingSetMB": 230.5,
+          "allocatedMB": 218.3,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 885.0,
+          "gcPauseMs": 123.75,
+          "peakProcessWorkingSetMB": 704.1,
+          "allocatedMB": 887.9,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_500000_1000keys",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500500000,
+          "samples": 10,
+          "elapsedMs": 1732.0,
+          "gcPauseMs": 89.15,
+          "peakProcessWorkingSetMB": 649.9,
+          "allocatedMB": 754.05,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_400000",
+          "rowCount": 400000,
+          "resultRows": 0,
+          "checksum": 0,
+          "samples": 10,
+          "elapsedMs": 360.5,
+          "gcPauseMs": 36.2,
+          "peakProcessWorkingSetMB": 218.3,
+          "allocatedMB": 241.1,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_500000",
+          "rowCount": 500000,
+          "resultRows": 1,
+          "checksum": 1,
+          "samples": 10,
+          "elapsedMs": 430.5,
+          "gcPauseMs": 42.3,
+          "peakProcessWorkingSetMB": 256.7,
+          "allocatedMB": 299.9,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_1000000_cap50000",
+          "rowCount": 1000000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "samples": 10,
+          "elapsedMs": 470.0,
+          "gcPauseMs": 23.35,
+          "peakProcessWorkingSetMB": 180.9,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_500000_SELECT_INTO",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500000,
+          "samples": 10,
+          "elapsedMs": 530.0,
+          "gcPauseMs": 51.2,
+          "peakProcessWorkingSetMB": 284.2,
+          "allocatedMB": 318.5,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 3436.5,
+          "gcPauseMs": 269.0,
+          "peakProcessWorkingSetMB": 470.8,
+          "allocatedMB": 2695.2,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "tier": "Standard",
+      "index": 3,
+      "arm": "candidate",
+      "commit": "040d2c217774bb02223ed4bc078990d09871b956",
+      "clean": true,
+      "capturedAtUtc": "2026-10-24T00:01:08.9850212Z",
+      "report": "Standard/03-candidate/cert-report.json",
+      "sha256": "0870372b979fd0ad06db4bc2e1e90786bbb045fb222bcef5596a352d150d05f6",
+      "sourceFingerprint": "82bb171003e5171040a5dca13e3d33fd36329675ac1e85cea31c4a259e48da15",
+      "configFingerprint": "ceeceb89d538a1eb7cd895182f6ba18167b10536f0a25138e7e9f7c5b87a3b07",
+      "measuredChecks": 130,
+      "gcConfiguration": {
+        "concurrent": true,
+        "conserveMemory": 0.0,
+        "dynamicAdaptationMode": 1.0,
+        "heapCount": 24.0,
+        "heapHardLimitBytes": 0.0,
+        "heapHardLimitPercent": 0.0,
+        "latencyMode": "Interactive",
+        "processorCount": 24.0,
+        "retainVirtualMemory": false,
+        "server": true
+      },
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 321.5,
+          "gcPauseMs": 55.4,
+          "peakProcessWorkingSetMB": 232.5,
+          "allocatedMB": 318.85,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_500000_10x5",
+          "rowCount": 500000,
+          "resultRows": 66,
+          "checksum": 500001000000,
+          "samples": 10,
+          "elapsedMs": 4775.5,
+          "gcPauseMs": 517.95,
+          "peakProcessWorkingSetMB": 383.0,
+          "allocatedMB": 4429.6,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_1000000_10grps",
+          "rowCount": 1000000,
+          "resultRows": 10,
+          "checksum": 49999600000,
+          "samples": 10,
+          "elapsedMs": 1791.0,
+          "gcPauseMs": 167.55,
+          "peakProcessWorkingSetMB": 312.8,
+          "allocatedMB": 1141.45,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_500000_equality",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 250000500000,
+          "samples": 10,
+          "elapsedMs": 2453.5,
+          "gcPauseMs": 311.05,
+          "peakProcessWorkingSetMB": 651.1,
+          "allocatedMB": 2432.85,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_500000_DESC",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 1940.5,
+          "gcPauseMs": 150.15,
+          "peakProcessWorkingSetMB": 499.2,
+          "allocatedMB": 1346.1,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 232.0,
+          "gcPauseMs": 24.35,
+          "peakProcessWorkingSetMB": 258.0,
+          "allocatedMB": 218.3,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 864.5,
+          "gcPauseMs": 110.4,
+          "peakProcessWorkingSetMB": 687.4,
+          "allocatedMB": 887.55,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_500000_1000keys",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500500000,
+          "samples": 10,
+          "elapsedMs": 1719.5,
+          "gcPauseMs": 78.05,
+          "peakProcessWorkingSetMB": 626.3,
+          "allocatedMB": 754.0,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_400000",
+          "rowCount": 400000,
+          "resultRows": 0,
+          "checksum": 0,
+          "samples": 10,
+          "elapsedMs": 355.0,
+          "gcPauseMs": 38.65,
+          "peakProcessWorkingSetMB": 207.0,
+          "allocatedMB": 241.1,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_500000",
+          "rowCount": 500000,
+          "resultRows": 1,
+          "checksum": 1,
+          "samples": 10,
+          "elapsedMs": 416.0,
+          "gcPauseMs": 49.1,
+          "peakProcessWorkingSetMB": 261.5,
+          "allocatedMB": 300.05,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_1000000_cap50000",
+          "rowCount": 1000000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "samples": 10,
+          "elapsedMs": 452.0,
+          "gcPauseMs": 23.65,
+          "peakProcessWorkingSetMB": 179.8,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_500000_SELECT_INTO",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500000,
+          "samples": 10,
+          "elapsedMs": 499.5,
+          "gcPauseMs": 46.2,
+          "peakProcessWorkingSetMB": 287.4,
+          "allocatedMB": 318.45,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 3529.0,
+          "gcPauseMs": 295.9,
+          "peakProcessWorkingSetMB": 470.3,
+          "allocatedMB": 2695.2,
+          "passed": true
+        }
+      ]
+    },
+    {
+      "tier": "Standard",
+      "index": 4,
+      "arm": "control",
+      "commit": "53a3343d449845c11c7f144cf5b305d07e2e2b7f",
+      "clean": true,
+      "capturedAtUtc": "2026-10-24T00:27:18.4715703Z",
+      "report": "Standard/04-control/cert-report.json",
+      "sha256": "329f6a3be841e2b5fa6277ba4a3bc575502f3c8667f924f5e888673ee5b11784",
+      "sourceFingerprint": "dd7fd2b4a7912e046a8f1e2ea985f598e86c98a98c7eb1be8a99bae16f6d4d7b",
+      "configFingerprint": "ceeceb89d538a1eb7cd895182f6ba18167b10536f0a25138e7e9f7c5b87a3b07",
+      "measuredChecks": 130,
+      "gcConfiguration": {
+        "concurrent": true,
+        "conserveMemory": 0.0,
+        "dynamicAdaptationMode": 1.0,
+        "heapCount": 24.0,
+        "heapHardLimitBytes": 0.0,
+        "heapHardLimitPercent": 0.0,
+        "latencyMode": "Interactive",
+        "processorCount": 24.0,
+        "retainVirtualMemory": false,
+        "server": true
+      },
+      "scenarios": [
+        {
+          "scenario": "CsvIngest_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 324.0,
+          "gcPauseMs": 57.6,
+          "peakProcessWorkingSetMB": 229.6,
+          "allocatedMB": 318.85,
+          "passed": true
+        },
+        {
+          "scenario": "CubeGroupingSets_500000_10x5",
+          "rowCount": 500000,
+          "resultRows": 66,
+          "checksum": 500001000000,
+          "samples": 10,
+          "elapsedMs": 4452.0,
+          "gcPauseMs": 523.6,
+          "peakProcessWorkingSetMB": 406.2,
+          "allocatedMB": 4399.85,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalAggregate_1000000_10grps",
+          "rowCount": 1000000,
+          "resultRows": 10,
+          "checksum": 49999600000,
+          "samples": 10,
+          "elapsedMs": 1824.5,
+          "gcPauseMs": 183.0,
+          "peakProcessWorkingSetMB": 320.7,
+          "allocatedMB": 1141.45,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalJoin_500000_equality",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 250000500000,
+          "samples": 10,
+          "elapsedMs": 2423.0,
+          "gcPauseMs": 307.6,
+          "peakProcessWorkingSetMB": 633.7,
+          "allocatedMB": 2432.55,
+          "passed": true
+        },
+        {
+          "scenario": "ExternalSort_500000_DESC",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 1929.0,
+          "gcPauseMs": 152.95,
+          "peakProcessWorkingSetMB": 484.8,
+          "allocatedMB": 1346.1,
+          "passed": true
+        },
+        {
+          "scenario": "ParquetRoundTrip_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 233.0,
+          "gcPauseMs": 26.95,
+          "peakProcessWorkingSetMB": 232.0,
+          "allocatedMB": 218.5,
+          "passed": true
+        },
+        {
+          "scenario": "ReportDatasetSnapshotReload_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 860.0,
+          "gcPauseMs": 124.8,
+          "peakProcessWorkingSetMB": 689.6,
+          "allocatedMB": 887.9,
+          "passed": true
+        },
+        {
+          "scenario": "ScalarSubqueryCache_500000_1000keys",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500500000,
+          "samples": 10,
+          "elapsedMs": 1689.0,
+          "gcPauseMs": 86.75,
+          "peakProcessWorkingSetMB": 633.2,
+          "allocatedMB": 754.0,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupFailure_400000",
+          "rowCount": 400000,
+          "resultRows": 0,
+          "checksum": 0,
+          "samples": 10,
+          "elapsedMs": 318.5,
+          "gcPauseMs": 38.4,
+          "peakProcessWorkingSetMB": 201.5,
+          "allocatedMB": 241.1,
+          "passed": true
+        },
+        {
+          "scenario": "SpillCleanupSuccess_500000",
+          "rowCount": 500000,
+          "resultRows": 1,
+          "checksum": 1,
+          "samples": 10,
+          "elapsedMs": 444.5,
+          "gcPauseMs": 45.05,
+          "peakProcessWorkingSetMB": 257.8,
+          "allocatedMB": 300.45,
+          "passed": true
+        },
+        {
+          "scenario": "StreamingSelect_1000000_cap50000",
+          "rowCount": 1000000,
+          "resultRows": 50000,
+          "checksum": 50000,
+          "samples": 10,
+          "elapsedMs": 456.0,
+          "gcPauseMs": 23.2,
+          "peakProcessWorkingSetMB": 178.7,
+          "allocatedMB": 59.2,
+          "passed": true
+        },
+        {
+          "scenario": "TempTableSpill_500000_SELECT_INTO",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 500000,
+          "samples": 10,
+          "elapsedMs": 495.5,
+          "gcPauseMs": 47.05,
+          "peakProcessWorkingSetMB": 278.5,
+          "allocatedMB": 318.65,
+          "passed": true
+        },
+        {
+          "scenario": "WindowFunction_ROW_NUMBER_500000",
+          "rowCount": 500000,
+          "resultRows": 500000,
+          "checksum": 125000250000,
+          "samples": 10,
+          "elapsedMs": 3386.0,
+          "gcPauseMs": 278.95,
+          "peakProcessWorkingSetMB": 479.2,
+          "allocatedMB": 2695.2,
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "tier": "Smoke",
+      "baseline": 1,
+      "current": 2,
+      "evidence": {
+        "log": "Smoke/compare-1-2.log",
+        "sha256": "03fade8aa47a9d7571594e8ddb980d293be33b26a2ca755c0e87230c7b82cb26",
+        "markdownSha256": "2af7a66fce31c6b569e6465108a05adec1e9b5cf4c9f39235f2b93da8974adb9",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 1,
+      "current": 3,
+      "evidence": {
+        "log": "Smoke/compare-1-3.log",
+        "sha256": "03fade8aa47a9d7571594e8ddb980d293be33b26a2ca755c0e87230c7b82cb26",
+        "markdownSha256": "2e6afee84d03ca7f30ae21c329f99fa84dad871b8445a905bd24facdebf254e2",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 1,
+      "current": 4,
+      "evidence": {
+        "log": "Smoke/compare-1-4.log",
+        "sha256": "03fade8aa47a9d7571594e8ddb980d293be33b26a2ca755c0e87230c7b82cb26",
+        "markdownSha256": "b5a2049488b2fdc92f48c0737af591ac6acff9aca54b6bd1211e38aecefa1703",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 2,
+      "current": 1,
+      "evidence": {
+        "log": "Smoke/compare-2-1.log",
+        "sha256": "16f05b6c95b6e08c7e4c54892a6141f505d68b9bf9dfa36f7263756df98bedc2",
+        "markdownSha256": "ba5803f283906e42eb38336592805daea9278d7ee02683976d869537a0c476b0",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 2,
+      "current": 3,
+      "evidence": {
+        "log": "Smoke/compare-2-3.log",
+        "sha256": "16f05b6c95b6e08c7e4c54892a6141f505d68b9bf9dfa36f7263756df98bedc2",
+        "markdownSha256": "36a325009ba420fe4339e9452acc08f8ac72f699ce6da7745068c700ae1e1170",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 2,
+      "current": 4,
+      "evidence": {
+        "log": "Smoke/compare-2-4.log",
+        "sha256": "16f05b6c95b6e08c7e4c54892a6141f505d68b9bf9dfa36f7263756df98bedc2",
+        "markdownSha256": "70757df6300e7ba0dcd4f26cbd68f55b394bc6d4f3475921cb4284e77505213d",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 3,
+      "current": 1,
+      "evidence": {
+        "log": "Smoke/compare-3-1.log",
+        "sha256": "6a1bfde03eed968f0a1561867b25e4d11f401035273bd2a4c1035ba41bb92b4f",
+        "markdownSha256": "8b7162cd3e01436889832e37753faa207a5b455159f48522fa94ba403d773634",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 3,
+      "current": 2,
+      "evidence": {
+        "log": "Smoke/compare-3-2.log",
+        "sha256": "6a1bfde03eed968f0a1561867b25e4d11f401035273bd2a4c1035ba41bb92b4f",
+        "markdownSha256": "b00739daac3c9aaa64439ecfd4a494c78c8db54925b45b5fd4a794a439a74403",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 3,
+      "current": 4,
+      "evidence": {
+        "log": "Smoke/compare-3-4.log",
+        "sha256": "6a1bfde03eed968f0a1561867b25e4d11f401035273bd2a4c1035ba41bb92b4f",
+        "markdownSha256": "f29183df836137c34d4f7b1e1e77b442e2883d0428b44fc0ea6ec69a4f4dd2bb",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 4,
+      "current": 1,
+      "evidence": {
+        "log": "Smoke/compare-4-1.log",
+        "sha256": "73617802b6279f81b1cfeeeb02e2fb592e5dde06c47bf6aeb4b4742c15774cfd",
+        "markdownSha256": "c8b59e65e81fa95d578ad03645f32ab1c6abae088eebd63e99d3a97a3ea76fea",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 4,
+      "current": 2,
+      "evidence": {
+        "log": "Smoke/compare-4-2.log",
+        "sha256": "73617802b6279f81b1cfeeeb02e2fb592e5dde06c47bf6aeb4b4742c15774cfd",
+        "markdownSha256": "0fcfeed61b4b006e292251a60952409120e608765d8caa99dcce36dfb7c34738",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Smoke",
+      "baseline": 4,
+      "current": 3,
+      "evidence": {
+        "log": "Smoke/compare-4-3.log",
+        "sha256": "73617802b6279f81b1cfeeeb02e2fb592e5dde06c47bf6aeb4b4742c15774cfd",
+        "markdownSha256": "5943c5652c15425728657ab40ee9f6bda477face931edd970556a2143a674473",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Standard",
+      "baseline": 1,
+      "current": 2,
+      "evidence": {
+        "log": "Standard/compare-1-2.log",
+        "sha256": "d319db5c3024634bbc800ad0af94d7bcf5b1059bc2db0f67628736f41b6941e2",
+        "markdownSha256": "314598290f2812493d995a29cd13bc27ea64b99421e19813429c93208039d5ab",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Standard",
+      "baseline": 1,
+      "current": 3,
+      "evidence": {
+        "log": "Standard/compare-1-3.log",
+        "sha256": "d319db5c3024634bbc800ad0af94d7bcf5b1059bc2db0f67628736f41b6941e2",
+        "markdownSha256": "0702c8d5224b92fc71bb1daae77148ba5f15f595139eafb7cc0b05bf116f67ef",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Standard",
+      "baseline": 1,
+      "current": 4,
+      "evidence": {
+        "log": "Standard/compare-1-4.log",
+        "sha256": "d319db5c3024634bbc800ad0af94d7bcf5b1059bc2db0f67628736f41b6941e2",
+        "markdownSha256": "0ef32a4a8c7cdf445a903b60ba83becd0e41400fea0f2196051fdb501bb67474",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Standard",
+      "baseline": 2,
+      "current": 1,
+      "evidence": {
+        "log": "Standard/compare-2-1.log",
+        "sha256": "eaf9381dfdec7e37303584b9c2aaf15d2ee24af6b27dd997d7884d62eca43cb1",
+        "markdownSha256": "4ae816fcefdcb66b368f2954a659cdd6e2d6e3cd583e97d8901ef832877d339b",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Standard",
+      "baseline": 2,
+      "current": 3,
+      "evidence": {
+        "log": "Standard/compare-2-3.log",
+        "sha256": "eaf9381dfdec7e37303584b9c2aaf15d2ee24af6b27dd997d7884d62eca43cb1",
+        "markdownSha256": "0d11ae3cfb82586037f41cd89a5f0bda0e55ad9b4e11c6a7dda28dbbb10f7877",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Standard",
+      "baseline": 2,
+      "current": 4,
+      "evidence": {
+        "log": "Standard/compare-2-4.log",
+        "sha256": "eaf9381dfdec7e37303584b9c2aaf15d2ee24af6b27dd997d7884d62eca43cb1",
+        "markdownSha256": "6017e9c7750c0209954f9169896e16d27b77e252db34b9a7271707aa784a164a",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Standard",
+      "baseline": 3,
+      "current": 1,
+      "evidence": {
+        "log": "Standard/compare-3-1.log",
+        "sha256": "02d54f474e949c0a34602ab0e1158a26de38aaeb6811e38211527c11730798fc",
+        "markdownSha256": "e69f0e469020c2d493dd13d7218547e5445ffc07a12e453596787f38b817123a",
+        "warnings": [
+          "| WARN | CubeGroupingSets_500000_10x5 | PEAK_WORKING_SET_MB | 383 MB | 425.6 MB | 11.1% | Warning band 10%. (Spread: 32.8 MB) |"
+        ]
+      }
+    },
+    {
+      "tier": "Standard",
+      "baseline": 3,
+      "current": 2,
+      "evidence": {
+        "log": "Standard/compare-3-2.log",
+        "sha256": "70867378026b60abc059f29cf1f115dd926390aced4f5ad608dd1a98930c62de",
+        "markdownSha256": "d84f2b22ce602f45a01961305a25f0fa54e04f234f0f44b55b7f5c3d5c081f5d",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Standard",
+      "baseline": 3,
+      "current": 4,
+      "evidence": {
+        "log": "Standard/compare-3-4.log",
+        "sha256": "70867378026b60abc059f29cf1f115dd926390aced4f5ad608dd1a98930c62de",
+        "markdownSha256": "cdf2b741d223003f618614351c5eac1238b51a277e256ef77d1f70a1b02c4128",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Standard",
+      "baseline": 4,
+      "current": 1,
+      "evidence": {
+        "log": "Standard/compare-4-1.log",
+        "sha256": "80b141e3e997b327718a95ef3dac0b1fa36588bdd05815edbd7fad2c4225119f",
+        "markdownSha256": "80ce47be64e5d5402f0972ad85ba097d867e458b1479e6c16bf958d5663a9b2b",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Standard",
+      "baseline": 4,
+      "current": 2,
+      "evidence": {
+        "log": "Standard/compare-4-2.log",
+        "sha256": "80b141e3e997b327718a95ef3dac0b1fa36588bdd05815edbd7fad2c4225119f",
+        "markdownSha256": "aebd5aba9f7f629009596f56a38a3acab5867c7d0da80b75686a9e0ccf8b8996",
+        "warnings": []
+      }
+    },
+    {
+      "tier": "Standard",
+      "baseline": 4,
+      "current": 3,
+      "evidence": {
+        "log": "Standard/compare-4-3.log",
+        "sha256": "80b141e3e997b327718a95ef3dac0b1fa36588bdd05815edbd7fad2c4225119f",
+        "markdownSha256": "b863a42f77c4dd2f57e56e3005819fc4a77a9fba0e4873237f06139c9504f0ba",
+        "warnings": []
+      }
+    }
+  ],
+  "orderIndependence": {
+    "isolated": [
+      {
+        "scenario": "ExternalSort",
+        "report": "Smoke-order/ExternalSort/cert-report.json",
+        "sha256": "f0d75db28d4c55b18c0844f22df399b0a045e2bc1ae4943bec32a4cd0ed31ba0",
+        "sourceFingerprint": "c96e788df8974c87c381d1b65a12411737a2351ea16313f253a1b827abf859cc",
+        "configFingerprint": "84b25e4ee0b3c3606981ed7d654411512886f8250faf4d22c9da5e83383dd98d",
+        "measuredChecks": 10,
+        "elapsedMs": 420.5
+      },
+      {
+        "scenario": "ExternalAggregate",
+        "report": "Smoke-order/ExternalAggregate/cert-report.json",
+        "sha256": "590d75dd6fb9d2869199b3915bb9b92f6d01942202232739e499da4166e32e1b",
+        "sourceFingerprint": "6ebb4f888fc9d6f29649ca84eb57f65568f1046ce00d94b17b8ef0888efacdf7",
+        "configFingerprint": "70569a8ba0c9318b53cc5936875cb3a7f4961c40bf0b1e05fc48a44b95a8e0fe",
+        "measuredChecks": 10,
+        "elapsedMs": 441.0
+      },
+      {
+        "scenario": "ExternalJoin",
+        "report": "Smoke-order/ExternalJoin/cert-report.json",
+        "sha256": "27fd2afb0f88e3ee6ea0f9476f9dfa84c05767d49d6b9036c4b34954ab1ef944",
+        "sourceFingerprint": "d9e903c8739ea2286754d2d93c413844cd10a22c4e6b27ae612f7f301f4d6e95",
+        "configFingerprint": "bacddca54a8937e181a4c99405aadc907a4656f9d3d2c159d4db4c1cdb7e78a1",
+        "measuredChecks": 10,
+        "elapsedMs": 596.0
+      },
+      {
+        "scenario": "TempTableSpill",
+        "report": "Smoke-order/TempTableSpill/cert-report.json",
+        "sha256": "300f12966f08a6c498714a5727ed876c1bd66bfaa74079c21019fa95bebb10b2",
+        "sourceFingerprint": "76353a16fc8009423b2f74b1d6344b572c4b7072c52c45795063c54419423ee6",
+        "configFingerprint": "d2514cbd6893d28c4438f0783b4c5ad0e1201b9f62bb3ab1c1e051d95f079c8d",
+        "measuredChecks": 10,
+        "elapsedMs": 59.0
+      },
+      {
+        "scenario": "StreamingSelect",
+        "report": "Smoke-order/StreamingSelect/cert-report.json",
+        "sha256": "fe1212b8c03c652e78bc8db1c866ff9bcf50bd3d4eb5b20b0f919a7bcf4c0e4b",
+        "sourceFingerprint": "4f29d683ae6b64a7232fbf473c8ab5f198a306c88b805e7abc7b9d481f120e72",
+        "configFingerprint": "308f6b718bec123d02ac54ff44f4b46be0e7fb8cee8810713b37472a292bc661",
+        "measuredChecks": 10,
+        "elapsedMs": 459.5
+      },
+      {
+        "scenario": "WindowFunction",
+        "report": "Smoke-order/WindowFunction/cert-report.json",
+        "sha256": "6c10de6d84fc8f7945c9bfd29dda198411c3d7878b6e63ad6a1e55e2f56a5190",
+        "sourceFingerprint": "bf48f4d776a8bf236a2c01016fca8669adf44bb8edf38b64aa6831c2d9af8bca",
+        "configFingerprint": "b3fa1417358d62c65b9231503672f1518d80c5bad520da9ba9a2beb20f13088c",
+        "measuredChecks": 10,
+        "elapsedMs": 984.0
+      },
+      {
+        "scenario": "CsvIngest",
+        "report": "Smoke-order/CsvIngest/cert-report.json",
+        "sha256": "0ad5b0abbb04b7dbf5fb63a0797ab11a754312ba130fed4245581089ca0bb1c6",
+        "sourceFingerprint": "744eb2b8d5887d6f950942fc47c07b407f76288272ddc4a2d85bbee4f3d7869f",
+        "configFingerprint": "57f079eca9939b2e2511c7699295b9c1a6c775bdc5b0f93fe6c0823cb790349f",
+        "measuredChecks": 10,
+        "elapsedMs": 46.0
+      },
+      {
+        "scenario": "ParquetRoundTrip",
+        "report": "Smoke-order/ParquetRoundTrip/cert-report.json",
+        "sha256": "904385a1ace8078469418c75f51d46f4337288d61ae92da79e4f08488044e75e",
+        "sourceFingerprint": "760f3bd162c696ba430bbb95643f79739f36fa0da97c201cd7fd5d507a1c1d0e",
+        "configFingerprint": "511e58d3510fac934ba702a9b74384641a01e791c1922328dc71e330d9a385a4",
+        "measuredChecks": 10,
+        "elapsedMs": 35.5
+      },
+      {
+        "scenario": "ReportDatasetSnapshotReload",
+        "report": "Smoke-order/ReportDatasetSnapshotReload/cert-report.json",
+        "sha256": "1143dc4db42f3cfd4c8be47cb12d58bb1e1aa742889de653626b4938910e6432",
+        "sourceFingerprint": "2d9b10cc882919c57933b917e5a682927a4c5e17a00ba55be8ae126c0733e9ce",
+        "configFingerprint": "9d67e3e82452961e30a77f6ec496e6db3ebd075c5e2c526f8afd2c217b403665",
+        "measuredChecks": 10,
+        "elapsedMs": 265.5
+      },
+      {
+        "scenario": "CubeGroupingSets",
+        "report": "Smoke-order/CubeGroupingSets/cert-report.json",
+        "sha256": "51a83fe01b5284f366496e99f691c1d0ae8d0f14210b05c01917aba3f2cf39b7",
+        "sourceFingerprint": "cc56e9bb74928b8bc923fd86a5a0326d6537c40b03e68c8dd31b69ba0915ee43",
+        "configFingerprint": "11d7dea1535785f3e41b82bcc0084c5619762b485f2b066abb09dba6dafd9c26",
+        "measuredChecks": 10,
+        "elapsedMs": 1229.0
+      },
+      {
+        "scenario": "ScalarSubqueryCache",
+        "report": "Smoke-order/ScalarSubqueryCache/cert-report.json",
+        "sha256": "b1228d7cb0b4ed1cd87abd708e7ef40943eb0d92aeab5627010a472e63d2f309",
+        "sourceFingerprint": "571a49b5ff196bc5b0c5d2efb8231b96063c377939607cd6168b5e8c03ed33f5",
+        "configFingerprint": "25832979ad29405b44779437b56cb42600d5f98821e8622fb95c1ab980e02ad4",
+        "measuredChecks": 10,
+        "elapsedMs": 540.0
+      },
+      {
+        "scenario": "SpillCleanupSuccess",
+        "report": "Smoke-order/SpillCleanupSuccess/cert-report.json",
+        "sha256": "534c8062422c69ec22ffb772069168bb0b05f1eb6017b191b917958bf0f1b512",
+        "sourceFingerprint": "a5f3f906e3d1b8daa3ccfba5e41d9189cfe834b9c7afe1a185e994522b2ea893",
+        "configFingerprint": "6d68561734dfbe4d1b8a801580bde6fd2b1245d10049d95451a9e7aed84e0f05",
+        "measuredChecks": 10,
+        "elapsedMs": 49.0
+      },
+      {
+        "scenario": "SpillCleanupFailure",
+        "report": "Smoke-order/SpillCleanupFailure/cert-report.json",
+        "sha256": "5eb3d690d953ffcb27734ffe6e64c7382c68dca86b0f62dad0a40b92e98fe1f4",
+        "sourceFingerprint": "312052aa11f74fb5a6c803b796c7216a30687d4ecb2d19da931b8ab2df936d48",
+        "configFingerprint": "3b2b21b39c4a1a88ffba022484f4f501ddfe7ddc135e308e5a1cbd36273fad7e",
+        "measuredChecks": 10,
+        "elapsedMs": 39.5
+      }
+    ],
+    "timingViews": [
+      {
+        "originalSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+        "originalReport": "Smoke/02-candidate/cert-report.json",
+        "sha256": "acbe3b3f9f9e78789c2aae34d5342a37cf66d3026ca1aca30cce1067e20278c3",
+        "path": "Smoke-order/timing-views/ExternalSort-before.json"
+      },
+      {
+        "originalSha256": "f0d75db28d4c55b18c0844f22df399b0a045e2bc1ae4943bec32a4cd0ed31ba0",
+        "originalReport": "Smoke-order/ExternalSort/cert-report.json",
+        "sha256": "977bd4a81cd198874f38e6e012e3419d78c9af51c91b1638a2dfd44c6d0df161",
+        "path": "Smoke-order/timing-views/ExternalSort-isolated.json"
+      },
+      {
+        "originalSha256": "50ed5de9bf6d30f4b0e5b5c33ef646171b7061a145725fd186db634ce79c13a3",
+        "originalReport": "Smoke/03-candidate/cert-report.json",
+        "sha256": "7d810c68f81eb7a7db464f9e1758a8aef2b4db54bea602c09c520084d3a68f96",
+        "path": "Smoke-order/timing-views/ExternalSort-after.json"
+      },
+      {
+        "originalSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+        "originalReport": "Smoke/02-candidate/cert-report.json",
+        "sha256": "c38705b626469adcf4225c70e1392e2889cf3073d4a8e0f80edf820756c64354",
+        "path": "Smoke-order/timing-views/ExternalAggregate-before.json"
+      },
+      {
+        "originalSha256": "590d75dd6fb9d2869199b3915bb9b92f6d01942202232739e499da4166e32e1b",
+        "originalReport": "Smoke-order/ExternalAggregate/cert-report.json",
+        "sha256": "d8b95c1015979768c2af93b6d23194ae01b55ee4707d1cb3b8252be813226ddb",
+        "path": "Smoke-order/timing-views/ExternalAggregate-isolated.json"
+      },
+      {
+        "originalSha256": "50ed5de9bf6d30f4b0e5b5c33ef646171b7061a145725fd186db634ce79c13a3",
+        "originalReport": "Smoke/03-candidate/cert-report.json",
+        "sha256": "6d678c5a041110fcac860df945810185383ee73e872998114792d4d36cc5f231",
+        "path": "Smoke-order/timing-views/ExternalAggregate-after.json"
+      },
+      {
+        "originalSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+        "originalReport": "Smoke/02-candidate/cert-report.json",
+        "sha256": "94da59d8a484cc9de48d9f2746afa2f2aa8673cb2a8e2533fb51430aa86f435d",
+        "path": "Smoke-order/timing-views/ExternalJoin-before.json"
+      },
+      {
+        "originalSha256": "27fd2afb0f88e3ee6ea0f9476f9dfa84c05767d49d6b9036c4b34954ab1ef944",
+        "originalReport": "Smoke-order/ExternalJoin/cert-report.json",
+        "sha256": "a926857af0c2ff6571892c8c1fe42120eaf2a2b8fe8b97a4e0c72bbacd9a8ed7",
+        "path": "Smoke-order/timing-views/ExternalJoin-isolated.json"
+      },
+      {
+        "originalSha256": "50ed5de9bf6d30f4b0e5b5c33ef646171b7061a145725fd186db634ce79c13a3",
+        "originalReport": "Smoke/03-candidate/cert-report.json",
+        "sha256": "80973e1e6fb4e206be0879e86fb96312d06ee784f373af1b2acb983670d342f5",
+        "path": "Smoke-order/timing-views/ExternalJoin-after.json"
+      },
+      {
+        "originalSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+        "originalReport": "Smoke/02-candidate/cert-report.json",
+        "sha256": "66c02a08dd5f1eccab2ca8a2acb6a0851597ee542902c47138b192a6560d0a6a",
+        "path": "Smoke-order/timing-views/TempTableSpill-before.json"
+      },
+      {
+        "originalSha256": "300f12966f08a6c498714a5727ed876c1bd66bfaa74079c21019fa95bebb10b2",
+        "originalReport": "Smoke-order/TempTableSpill/cert-report.json",
+        "sha256": "dcc31788a63744042d48b85cbb135652609c7b5b49725b1c043fb821229852a5",
+        "path": "Smoke-order/timing-views/TempTableSpill-isolated.json"
+      },
+      {
+        "originalSha256": "50ed5de9bf6d30f4b0e5b5c33ef646171b7061a145725fd186db634ce79c13a3",
+        "originalReport": "Smoke/03-candidate/cert-report.json",
+        "sha256": "741a83ba59c82e81bdfbe71ba9451a840e9ac945faae36a33fafd162d1c63417",
+        "path": "Smoke-order/timing-views/TempTableSpill-after.json"
+      },
+      {
+        "originalSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+        "originalReport": "Smoke/02-candidate/cert-report.json",
+        "sha256": "88e9ebfced3ff561f882d7090613ab3ac500a87589a53ed3e820d5c727d9b229",
+        "path": "Smoke-order/timing-views/StreamingSelect-before.json"
+      },
+      {
+        "originalSha256": "fe1212b8c03c652e78bc8db1c866ff9bcf50bd3d4eb5b20b0f919a7bcf4c0e4b",
+        "originalReport": "Smoke-order/StreamingSelect/cert-report.json",
+        "sha256": "d02f84ef85cc1379fafe853fe78e64e5a8f0ed099eb5dcf8b269baba9c9d4936",
+        "path": "Smoke-order/timing-views/StreamingSelect-isolated.json"
+      },
+      {
+        "originalSha256": "50ed5de9bf6d30f4b0e5b5c33ef646171b7061a145725fd186db634ce79c13a3",
+        "originalReport": "Smoke/03-candidate/cert-report.json",
+        "sha256": "c1dff970e45d6018fdd62aabb860d3e16e639fc3de4af8ae34b6589f55488041",
+        "path": "Smoke-order/timing-views/StreamingSelect-after.json"
+      },
+      {
+        "originalSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+        "originalReport": "Smoke/02-candidate/cert-report.json",
+        "sha256": "a7f61e91261f1b0b8edd49ac0baf1fc310685594e9ff2f9c10829b4aa5688ff1",
+        "path": "Smoke-order/timing-views/WindowFunction-before.json"
+      },
+      {
+        "originalSha256": "6c10de6d84fc8f7945c9bfd29dda198411c3d7878b6e63ad6a1e55e2f56a5190",
+        "originalReport": "Smoke-order/WindowFunction/cert-report.json",
+        "sha256": "ebb6ada0bde483f1e0c42ccdf207ea3f164609d8c9e383fb1960c18c96816519",
+        "path": "Smoke-order/timing-views/WindowFunction-isolated.json"
+      },
+      {
+        "originalSha256": "50ed5de9bf6d30f4b0e5b5c33ef646171b7061a145725fd186db634ce79c13a3",
+        "originalReport": "Smoke/03-candidate/cert-report.json",
+        "sha256": "69dd50ac2eb17fdebf76e99c77b0eea2304a03a1e2256dea80c65e5245b0bb99",
+        "path": "Smoke-order/timing-views/WindowFunction-after.json"
+      },
+      {
+        "originalSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+        "originalReport": "Smoke/02-candidate/cert-report.json",
+        "sha256": "7642ec9e677a6f6a723e3daa5cad59ce7a9d30d291ff6412bab326b5d8f59e52",
+        "path": "Smoke-order/timing-views/CsvIngest-before.json"
+      },
+      {
+        "originalSha256": "0ad5b0abbb04b7dbf5fb63a0797ab11a754312ba130fed4245581089ca0bb1c6",
+        "originalReport": "Smoke-order/CsvIngest/cert-report.json",
+        "sha256": "ba29e8d0e02c3a8c807cec3c168428aa567529b41008335e6d22332477b51d6c",
+        "path": "Smoke-order/timing-views/CsvIngest-isolated.json"
+      },
+      {
+        "originalSha256": "50ed5de9bf6d30f4b0e5b5c33ef646171b7061a145725fd186db634ce79c13a3",
+        "originalReport": "Smoke/03-candidate/cert-report.json",
+        "sha256": "1daf21dfe8ef9b8ec3255e7c1d93802d8fbcde67378cac4fd0a48b879c76611f",
+        "path": "Smoke-order/timing-views/CsvIngest-after.json"
+      },
+      {
+        "originalSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+        "originalReport": "Smoke/02-candidate/cert-report.json",
+        "sha256": "d8a18ac743086bf0f8b911d5db25d80c15c39aea3ac8cd6a5a0d752754fe5052",
+        "path": "Smoke-order/timing-views/ParquetRoundTrip-before.json"
+      },
+      {
+        "originalSha256": "904385a1ace8078469418c75f51d46f4337288d61ae92da79e4f08488044e75e",
+        "originalReport": "Smoke-order/ParquetRoundTrip/cert-report.json",
+        "sha256": "0038e391bcf770ba7b84016f1504a11e09b1decf6d936bdea74a0637ee1e734a",
+        "path": "Smoke-order/timing-views/ParquetRoundTrip-isolated.json"
+      },
+      {
+        "originalSha256": "50ed5de9bf6d30f4b0e5b5c33ef646171b7061a145725fd186db634ce79c13a3",
+        "originalReport": "Smoke/03-candidate/cert-report.json",
+        "sha256": "4fcfd63b63f5ebe75b1843f2688003b809719bc5149470bc450f17784756be17",
+        "path": "Smoke-order/timing-views/ParquetRoundTrip-after.json"
+      },
+      {
+        "originalSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+        "originalReport": "Smoke/02-candidate/cert-report.json",
+        "sha256": "436f184eb73bbc30fcb735fd3ae1a04d0a724ca7572bb21071c699df97bbe2f6",
+        "path": "Smoke-order/timing-views/ReportDatasetSnapshotReload-before.json"
+      },
+      {
+        "originalSha256": "1143dc4db42f3cfd4c8be47cb12d58bb1e1aa742889de653626b4938910e6432",
+        "originalReport": "Smoke-order/ReportDatasetSnapshotReload/cert-report.json",
+        "sha256": "208e6b5279c5d358984bc8f02a8c0633cd909de2dbc6645d2497d7cbd172f063",
+        "path": "Smoke-order/timing-views/ReportDatasetSnapshotReload-isolated.json"
+      },
+      {
+        "originalSha256": "50ed5de9bf6d30f4b0e5b5c33ef646171b7061a145725fd186db634ce79c13a3",
+        "originalReport": "Smoke/03-candidate/cert-report.json",
+        "sha256": "589ac81ed35703d4fb87c9f316e069c7e34dbd6ed21e038bcf9c84b8cb4967a6",
+        "path": "Smoke-order/timing-views/ReportDatasetSnapshotReload-after.json"
+      },
+      {
+        "originalSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+        "originalReport": "Smoke/02-candidate/cert-report.json",
+        "sha256": "56aa970cdaf4b4d4b5862028d24f3c2ca9d77b6fc2eaf80ae30e0d8bdebe5abe",
+        "path": "Smoke-order/timing-views/CubeGroupingSets-before.json"
+      },
+      {
+        "originalSha256": "51a83fe01b5284f366496e99f691c1d0ae8d0f14210b05c01917aba3f2cf39b7",
+        "originalReport": "Smoke-order/CubeGroupingSets/cert-report.json",
+        "sha256": "f2c0e0a4f075f62bfce7fc87f0d0084fb4e5de6edbd3b87fd22942e8c6ea76a0",
+        "path": "Smoke-order/timing-views/CubeGroupingSets-isolated.json"
+      },
+      {
+        "originalSha256": "50ed5de9bf6d30f4b0e5b5c33ef646171b7061a145725fd186db634ce79c13a3",
+        "originalReport": "Smoke/03-candidate/cert-report.json",
+        "sha256": "273242bbf739ada61b47065654a2b46300ccd312149ef5b4ffe2d7ad2e819677",
+        "path": "Smoke-order/timing-views/CubeGroupingSets-after.json"
+      },
+      {
+        "originalSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+        "originalReport": "Smoke/02-candidate/cert-report.json",
+        "sha256": "be029ba87a0dff00d72b1952fa54d559bfbc0d84b716a1f62d453eaf31fdcbe1",
+        "path": "Smoke-order/timing-views/ScalarSubqueryCache-before.json"
+      },
+      {
+        "originalSha256": "b1228d7cb0b4ed1cd87abd708e7ef40943eb0d92aeab5627010a472e63d2f309",
+        "originalReport": "Smoke-order/ScalarSubqueryCache/cert-report.json",
+        "sha256": "14f1c2e852e93f918ac00391aa6e6bccfce5286c1619c5eda72cd26f655143b6",
+        "path": "Smoke-order/timing-views/ScalarSubqueryCache-isolated.json"
+      },
+      {
+        "originalSha256": "50ed5de9bf6d30f4b0e5b5c33ef646171b7061a145725fd186db634ce79c13a3",
+        "originalReport": "Smoke/03-candidate/cert-report.json",
+        "sha256": "141d79d41f7c015cef0d6b1a33a6f8c4b47994850c82e33c10bb09c0766dd2e7",
+        "path": "Smoke-order/timing-views/ScalarSubqueryCache-after.json"
+      },
+      {
+        "originalSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+        "originalReport": "Smoke/02-candidate/cert-report.json",
+        "sha256": "c93f386b200d6ee6e16390684dcf80b95345edc84d83ff08b1bbe6d42ce03397",
+        "path": "Smoke-order/timing-views/SpillCleanupSuccess-before.json"
+      },
+      {
+        "originalSha256": "534c8062422c69ec22ffb772069168bb0b05f1eb6017b191b917958bf0f1b512",
+        "originalReport": "Smoke-order/SpillCleanupSuccess/cert-report.json",
+        "sha256": "9e92c61be92bd6dd1fc18a211cfe1871394ff1cbced3a4ff6ff0131b65acc46f",
+        "path": "Smoke-order/timing-views/SpillCleanupSuccess-isolated.json"
+      },
+      {
+        "originalSha256": "50ed5de9bf6d30f4b0e5b5c33ef646171b7061a145725fd186db634ce79c13a3",
+        "originalReport": "Smoke/03-candidate/cert-report.json",
+        "sha256": "0ed00f1a5a68be5c60d552611ed51cb99cd2778499084e9889e15d8a2c22cb7c",
+        "path": "Smoke-order/timing-views/SpillCleanupSuccess-after.json"
+      },
+      {
+        "originalSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+        "originalReport": "Smoke/02-candidate/cert-report.json",
+        "sha256": "5976d9d8249cef525e7de67cc3a5bb3aa20557324c937a0af4df88645bc1a8e1",
+        "path": "Smoke-order/timing-views/SpillCleanupFailure-before.json"
+      },
+      {
+        "originalSha256": "5eb3d690d953ffcb27734ffe6e64c7382c68dca86b0f62dad0a40b92e98fe1f4",
+        "originalReport": "Smoke-order/SpillCleanupFailure/cert-report.json",
+        "sha256": "35d8d0ef159b26fd249f2f527f136baf292a0ac841191b975d4db15ab89ce492",
+        "path": "Smoke-order/timing-views/SpillCleanupFailure-isolated.json"
+      },
+      {
+        "originalSha256": "50ed5de9bf6d30f4b0e5b5c33ef646171b7061a145725fd186db634ce79c13a3",
+        "originalReport": "Smoke/03-candidate/cert-report.json",
+        "sha256": "9285a5aab9cd4a1efa227e8ad35c3b81bf3c9d6e7a3ba394ae693114089cbe08",
+        "path": "Smoke-order/timing-views/SpillCleanupFailure-after.json"
+      }
+    ],
+    "comparisons": [
+      {
+        "scenario": "ExternalSort_50000_DESC",
+        "baseline": "before",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalSort-before-isolated.log",
+          "sha256": "a7063a559c5c15c0a88060853cc0dfacf54c981ef63fbc227ddc3158bd6e44d0",
+          "markdownSha256": "f484e13f23b56de3ffaf524b6286daf02f8db6a0c99a16ebfccfdc345de86346",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 84b25e4ee0b3c3606981ed7d654411512886f8250faf4d22c9da5e83383dd98d |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ExternalSort_50000_DESC",
+        "baseline": "isolated",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalSort-isolated-before.log",
+          "sha256": "8d06397e19559b5e13d4c4e6cdc284057671bcf2ccef7ca0a04095c9d8aef208",
+          "markdownSha256": "7867708ad527b7461de6999b75f99850db6466b66ebb2e0983c58927098608b5",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 84b25e4ee0b3c3606981ed7d654411512886f8250faf4d22c9da5e83383dd98d | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ExternalSort_50000_DESC",
+        "baseline": "after",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalSort-after-isolated.log",
+          "sha256": "f0c22684f72ce58ab887f51b9ef13c61083735786315ecd0457a741a0546086b",
+          "markdownSha256": "e53875c7bbe17c74f578a895ae05c69a5555584b83db7eb0a1802a5e7019a7bb",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 84b25e4ee0b3c3606981ed7d654411512886f8250faf4d22c9da5e83383dd98d |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ExternalSort_50000_DESC",
+        "baseline": "isolated",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalSort-isolated-after.log",
+          "sha256": "8d06397e19559b5e13d4c4e6cdc284057671bcf2ccef7ca0a04095c9d8aef208",
+          "markdownSha256": "468b4b6c03e7f2cdae34e2906dbae9f17fb0981a5d2644aac263e345d9a60bdf",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 84b25e4ee0b3c3606981ed7d654411512886f8250faf4d22c9da5e83383dd98d | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ExternalSort_50000_DESC",
+        "baseline": "before",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalSort-before-after.log",
+          "sha256": "13d8c07c20871883bb7ce46b87213119e9782a61ebda47f30db0bfec23a7f031",
+          "markdownSha256": "d2fc3d51de1f527338eb8243615f63140cec4c5f6fd08a67322422efcbdfa2ec",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "ExternalSort_50000_DESC",
+        "baseline": "after",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalSort-after-before.log",
+          "sha256": "8e91c183135f0bf5a5c3b8810107540103446acebc916d88e3879f51da44583b",
+          "markdownSha256": "10720225f51417a535e3f10c45d826c519e6af07cd47eba234d0f8686574708c",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "ExternalAggregate_100000_10grps",
+        "baseline": "before",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalAggregate-before-isolated.log",
+          "sha256": "b6a07707a4c9d59c5d5236856a7efd0b9450fe15a20dee74b123b25321e3c7af",
+          "markdownSha256": "cd69ed9625238a2f123d00ffd801c624b7d9cde75928f9efce4017633b7d6934",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 70569a8ba0c9318b53cc5936875cb3a7f4961c40bf0b1e05fc48a44b95a8e0fe |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ExternalAggregate_100000_10grps",
+        "baseline": "isolated",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalAggregate-isolated-before.log",
+          "sha256": "5ae789454a07143a575c63e6ff8efc0982cee4516f7cdfaa608d11c7a1683b4b",
+          "markdownSha256": "391460d1aa5e92e3a4971bc0f5e3cef7c1418eb072356d1b0764961974e30e11",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 70569a8ba0c9318b53cc5936875cb3a7f4961c40bf0b1e05fc48a44b95a8e0fe | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ExternalAggregate_100000_10grps",
+        "baseline": "after",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalAggregate-after-isolated.log",
+          "sha256": "315d3afecb98665d4bee1d51253e5523c08ae927d785238b425e9768e7763a74",
+          "markdownSha256": "1fe2d273bcf6d07924e4c3ca1689505e0476e93716e4b2e745d0046bce080231",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 70569a8ba0c9318b53cc5936875cb3a7f4961c40bf0b1e05fc48a44b95a8e0fe |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ExternalAggregate_100000_10grps",
+        "baseline": "isolated",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalAggregate-isolated-after.log",
+          "sha256": "5ae789454a07143a575c63e6ff8efc0982cee4516f7cdfaa608d11c7a1683b4b",
+          "markdownSha256": "ffc778e2d8c85901f84a5c7248ece34382192ebf3c722203e49c945d740cfbf9",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 70569a8ba0c9318b53cc5936875cb3a7f4961c40bf0b1e05fc48a44b95a8e0fe | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ExternalAggregate_100000_10grps",
+        "baseline": "before",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalAggregate-before-after.log",
+          "sha256": "40a32f56f1c01b400c5defd722ee4e32ec608de9ee903ceea6266d38ed07ba48",
+          "markdownSha256": "640dac9925d84db76571af8a52d3eeec59486e4e1685e171d85e12a27d9814b0",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "ExternalAggregate_100000_10grps",
+        "baseline": "after",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalAggregate-after-before.log",
+          "sha256": "8f8e49a2228b12072a1c8542bc59ee8dba4bdf43f96e1b3a4c32dce964f54485",
+          "markdownSha256": "58b36fceecf343efe75841939f1b767e5152af7c9c043d41ad13a9497ff16f9a",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "ExternalJoin_50000_equality",
+        "baseline": "before",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalJoin-before-isolated.log",
+          "sha256": "659df116cae8adae39b72b2116101d2ea5719fb43f64ab29499b412d996000c6",
+          "markdownSha256": "5ca844517f90f21dab8a102c3e7bbaf694f2f264eab1c0f6914ce0c319c44582",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | bacddca54a8937e181a4c99405aadc907a4656f9d3d2c159d4db4c1cdb7e78a1 |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ExternalJoin_50000_equality",
+        "baseline": "isolated",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalJoin-isolated-before.log",
+          "sha256": "81c9b9f7f41d1f6e78c5d032a5031f7837ba494ce51de3ffe43e01f94873c91f",
+          "markdownSha256": "16022400f540e8499bb076b80d1c9f871cd90e99bf261cb4756cca6bfd679269",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | bacddca54a8937e181a4c99405aadc907a4656f9d3d2c159d4db4c1cdb7e78a1 | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ExternalJoin_50000_equality",
+        "baseline": "after",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalJoin-after-isolated.log",
+          "sha256": "9ca960ebb1f95521dd10704bdde4e98242b9f8b5c413181276fd97c30e53b891",
+          "markdownSha256": "ce3add37cd8e3ee9f60919db3c44f2e85687c50936f16d61a946459fe063c194",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | bacddca54a8937e181a4c99405aadc907a4656f9d3d2c159d4db4c1cdb7e78a1 |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ExternalJoin_50000_equality",
+        "baseline": "isolated",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalJoin-isolated-after.log",
+          "sha256": "81c9b9f7f41d1f6e78c5d032a5031f7837ba494ce51de3ffe43e01f94873c91f",
+          "markdownSha256": "e71e82812460db66e326c0bf7893d55ea43b7ad6db2ef9ff0f2ff020212169b5",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | bacddca54a8937e181a4c99405aadc907a4656f9d3d2c159d4db4c1cdb7e78a1 | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ExternalJoin_50000_equality",
+        "baseline": "before",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalJoin-before-after.log",
+          "sha256": "0af58a4adc4263aed45874e02d1d17a6da6c5da2caae74588ba95e09fbe20eec",
+          "markdownSha256": "5f1181d94c64902b920dcf623bd7083a795e0c1a2103d6c00d383810c41eee49",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "ExternalJoin_50000_equality",
+        "baseline": "after",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ExternalJoin-after-before.log",
+          "sha256": "c7410df9d14c067683837b58c1705f62668bf3a75a05e0267cd0a6332869e7f1",
+          "markdownSha256": "1053ac1558accf6f056b86483e092b97c603f9af376afd11667350eb244db8c4",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "TempTableSpill_50000_SELECT_INTO",
+        "baseline": "before",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/TempTableSpill-before-isolated.log",
+          "sha256": "3311b7eccaea77cc58a256a47453009ed58a833d89aa6d205da4ca357e895807",
+          "markdownSha256": "de94b437955a33d4641d4f67b88ac439bdd6c34b519303bf660c600daa4561c6",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | d2514cbd6893d28c4438f0783b4c5ad0e1201b9f62bb3ab1c1e051d95f079c8d |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "TempTableSpill_50000_SELECT_INTO",
+        "baseline": "isolated",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/TempTableSpill-isolated-before.log",
+          "sha256": "35cbcf5830ef4d14fdf8a0add2e4b41e48edb5ce272200ba4618c8da534e1504",
+          "markdownSha256": "c5433cd62cf2d7f02d9013d78f78ad73450de62e707fba75cbddb08bdf893c84",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | d2514cbd6893d28c4438f0783b4c5ad0e1201b9f62bb3ab1c1e051d95f079c8d | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "TempTableSpill_50000_SELECT_INTO",
+        "baseline": "after",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/TempTableSpill-after-isolated.log",
+          "sha256": "5d8256ece1eefe58e7b872e867a4cc9fd57892943d5504c5aaec1193e355869b",
+          "markdownSha256": "3f0f4c41223cbaa61c25f31b078da159422956b71ea5cb4394447097b320b619",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | d2514cbd6893d28c4438f0783b4c5ad0e1201b9f62bb3ab1c1e051d95f079c8d |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "TempTableSpill_50000_SELECT_INTO",
+        "baseline": "isolated",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/TempTableSpill-isolated-after.log",
+          "sha256": "35cbcf5830ef4d14fdf8a0add2e4b41e48edb5ce272200ba4618c8da534e1504",
+          "markdownSha256": "58945e1ac90cc29d10651ad4182a4a53246f574ad200ccee403de5d826b579e5",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | d2514cbd6893d28c4438f0783b4c5ad0e1201b9f62bb3ab1c1e051d95f079c8d | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "TempTableSpill_50000_SELECT_INTO",
+        "baseline": "before",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/TempTableSpill-before-after.log",
+          "sha256": "3bfd51af7d97076a44184f11ed75e06ce4a20d000a4a9e5ad91ba2fb56752059",
+          "markdownSha256": "26928597cb3f84eaaed05026958c82cc990a5410883cb5c3e207747a48611464",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "TempTableSpill_50000_SELECT_INTO",
+        "baseline": "after",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/TempTableSpill-after-before.log",
+          "sha256": "3d2a318eb224adaa26c1cfb40ac1149215717ae7e4cd2bbd0149709d097ed3d9",
+          "markdownSha256": "9b586b5a74f17c0496d84c4bfedb8c1731878b9fd156255e8a25372b289a5e17",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "StreamingSelect_100000_cap50000",
+        "baseline": "before",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/StreamingSelect-before-isolated.log",
+          "sha256": "b00544fbeef0f7434ce4db64152c6190bd9293c256b33d8eb80505dcd9fe633a",
+          "markdownSha256": "ac0079beb342f54757d225f98a88a69ad9b67220dfca56efacabb9206c4b4ba4",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 308f6b718bec123d02ac54ff44f4b46be0e7fb8cee8810713b37472a292bc661 |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "StreamingSelect_100000_cap50000",
+        "baseline": "isolated",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/StreamingSelect-isolated-before.log",
+          "sha256": "d9887ce4bd5690fc0b38b20ea984fe01110a8cc7418ae54ddcfdda785085e0d9",
+          "markdownSha256": "307375fa8b5d0bf544a93173e534946591fbfe468b4a75613b773ded4b96d7c1",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 308f6b718bec123d02ac54ff44f4b46be0e7fb8cee8810713b37472a292bc661 | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "StreamingSelect_100000_cap50000",
+        "baseline": "after",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/StreamingSelect-after-isolated.log",
+          "sha256": "c43ceb9c3592d5f095a195d1de0a4d641776693b47a6e1d6490f09a1b54620bb",
+          "markdownSha256": "daab5583cfd0e8ac37bc5f2e3891fd3532e7450cd5273857605de7adedfc5a36",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 308f6b718bec123d02ac54ff44f4b46be0e7fb8cee8810713b37472a292bc661 |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "StreamingSelect_100000_cap50000",
+        "baseline": "isolated",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/StreamingSelect-isolated-after.log",
+          "sha256": "d9887ce4bd5690fc0b38b20ea984fe01110a8cc7418ae54ddcfdda785085e0d9",
+          "markdownSha256": "c159d1f4d83b6aff48cc3bebf70287616e6b43769fa75ebaa3f3d6fb5a8565b4",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 308f6b718bec123d02ac54ff44f4b46be0e7fb8cee8810713b37472a292bc661 | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "StreamingSelect_100000_cap50000",
+        "baseline": "before",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/StreamingSelect-before-after.log",
+          "sha256": "c92f3c735f001f0564a7fc66f813b12103b02c4bd33e056707ea8a0fe3266393",
+          "markdownSha256": "b50aed42174cbed9701ea89035ef9e051826e54539c725f8852e86dd8dead806",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "StreamingSelect_100000_cap50000",
+        "baseline": "after",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/StreamingSelect-after-before.log",
+          "sha256": "9aec7eb6c415aaab223d40cb43c3083f0b9a070a562fa9ec4330fba2f57812bc",
+          "markdownSha256": "48e15ec3ad506a521e44346bfa3e46bd946c5c31586ba4336ca514174c333d57",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "WindowFunction_ROW_NUMBER_50000",
+        "baseline": "before",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/WindowFunction-before-isolated.log",
+          "sha256": "60ffaf0ff3bf9def5d780088c625904f5e5d273993c1ea4f2c48717db69e3481",
+          "markdownSha256": "0af4940a0871355178e46eefb39f3869e89ba2307019b4c978bcb6b7e3139775",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | b3fa1417358d62c65b9231503672f1518d80c5bad520da9ba9a2beb20f13088c |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "WindowFunction_ROW_NUMBER_50000",
+        "baseline": "isolated",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/WindowFunction-isolated-before.log",
+          "sha256": "4f7ae29162ce864002f6c9dc0f7ef6d9f7a184d795491e82774a7f53ac3d655e",
+          "markdownSha256": "43d0d9a7c54612ab8686fdf6a82cb1fae0e0dda261ef9571d42ae3dee680277e",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | b3fa1417358d62c65b9231503672f1518d80c5bad520da9ba9a2beb20f13088c | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "WindowFunction_ROW_NUMBER_50000",
+        "baseline": "after",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/WindowFunction-after-isolated.log",
+          "sha256": "83c9975129be93ba8b1d63bf539e4dda61540b24f5f89ab7b9278bdcc54ea6bd",
+          "markdownSha256": "c1fdae21abad2a8dd956f34bc980d4710857be79ea260a100e5f9210bf119125",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | b3fa1417358d62c65b9231503672f1518d80c5bad520da9ba9a2beb20f13088c |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "WindowFunction_ROW_NUMBER_50000",
+        "baseline": "isolated",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/WindowFunction-isolated-after.log",
+          "sha256": "4f7ae29162ce864002f6c9dc0f7ef6d9f7a184d795491e82774a7f53ac3d655e",
+          "markdownSha256": "c56e9c2a84262cbbd1335b9896bcab57edd357d75d3967e8c3044a0ecc14c206",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | b3fa1417358d62c65b9231503672f1518d80c5bad520da9ba9a2beb20f13088c | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "WindowFunction_ROW_NUMBER_50000",
+        "baseline": "before",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/WindowFunction-before-after.log",
+          "sha256": "56fec615df854fb26eefadac213c269f4a2f8fd4b760c9f1e5416f1c6414d761",
+          "markdownSha256": "c72ae744d4ce20e341c1ac02eef531e5ed37b49e864eabf8cb0d7295a3415ef5",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "WindowFunction_ROW_NUMBER_50000",
+        "baseline": "after",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/WindowFunction-after-before.log",
+          "sha256": "ee9b468be2b7415d4bdf1eb403e4f34add3fd8d47b3327882084bbb928958a9c",
+          "markdownSha256": "a76c8b25f79fe1c291db7da2c9abc1fcf218b39edffb6a6b4b10291ac920ba84",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "CsvIngest_50000",
+        "baseline": "before",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/CsvIngest-before-isolated.log",
+          "sha256": "bbe5d0b47b568e01b4c0e41d8e86f40f57468c3054eb27c4ace126d97b39fddd",
+          "markdownSha256": "fefa36fcf896efafc6884473209f4fc7951067030a30c299183e03685bd8246f",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 57f079eca9939b2e2511c7699295b9c1a6c775bdc5b0f93fe6c0823cb790349f |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "CsvIngest_50000",
+        "baseline": "isolated",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/CsvIngest-isolated-before.log",
+          "sha256": "75c1744ab6434e4257f3797a6f5a96a534b0cfb61432dfec23c00e841f5a2158",
+          "markdownSha256": "8c149f5e6b297409d6815e68428713267d1a31a2cf21410127175933f71c3801",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 57f079eca9939b2e2511c7699295b9c1a6c775bdc5b0f93fe6c0823cb790349f | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "CsvIngest_50000",
+        "baseline": "after",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/CsvIngest-after-isolated.log",
+          "sha256": "96d78e8914339ec0849051f964d39241b51169fd756779d866f3468faacec00a",
+          "markdownSha256": "9574e1012b3f20aa7c06b0c97cb5928d132801f2899b1e70d9d824cf32cf9365",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 57f079eca9939b2e2511c7699295b9c1a6c775bdc5b0f93fe6c0823cb790349f |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "CsvIngest_50000",
+        "baseline": "isolated",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/CsvIngest-isolated-after.log",
+          "sha256": "75c1744ab6434e4257f3797a6f5a96a534b0cfb61432dfec23c00e841f5a2158",
+          "markdownSha256": "0afa3d4825c79a659064ef7ce533c86cdd9c44778b1da619c5235b17da092a83",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 57f079eca9939b2e2511c7699295b9c1a6c775bdc5b0f93fe6c0823cb790349f | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "CsvIngest_50000",
+        "baseline": "before",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/CsvIngest-before-after.log",
+          "sha256": "42ab9c5747c95e1591a6ad7f2fc5474a5350ed25014bf96d3d813e33af66d49d",
+          "markdownSha256": "2e15ce995acc246ca678a314ed0c6bf4a6881f786b9e060d4aa8bdb69d2f987d",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "CsvIngest_50000",
+        "baseline": "after",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/CsvIngest-after-before.log",
+          "sha256": "3cb4aec73b073ce40183b5f590bfb762c1ce2a9f0640fda280b718d24d690bb6",
+          "markdownSha256": "90765150dc1d221db6fe8973dface241bec30be9997f63f7921a25154d0cee4a",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "ParquetRoundTrip_50000",
+        "baseline": "before",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ParquetRoundTrip-before-isolated.log",
+          "sha256": "8ecfe23d29922cb421b71369f15a72d50268b41c2efc92afd49d5cc2fcd89c0a",
+          "markdownSha256": "1ed9bdb32701972fc3f9ce3efc36089dee0ebb7ae9e3cf9d96dca3d2d152ad67",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 511e58d3510fac934ba702a9b74384641a01e791c1922328dc71e330d9a385a4 |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ParquetRoundTrip_50000",
+        "baseline": "isolated",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ParquetRoundTrip-isolated-before.log",
+          "sha256": "6cad923d570984f3eccf10439a59fe9c8337278c9c13e1b6dc8fb45c7cf29e7b",
+          "markdownSha256": "35535eb723d49e1f4d8c8c0447c383fde02dd3d24d8a2372275317845f092c2b",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 511e58d3510fac934ba702a9b74384641a01e791c1922328dc71e330d9a385a4 | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ParquetRoundTrip_50000",
+        "baseline": "after",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ParquetRoundTrip-after-isolated.log",
+          "sha256": "fa644c6ffa48119fde1be471a575c91b5f2841a0f14b57e50cb85c452c1af97d",
+          "markdownSha256": "98a3e21cb6df4973364efc92338affec422d5d877601280ae06ff43990fa23dc",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 511e58d3510fac934ba702a9b74384641a01e791c1922328dc71e330d9a385a4 |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ParquetRoundTrip_50000",
+        "baseline": "isolated",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ParquetRoundTrip-isolated-after.log",
+          "sha256": "6cad923d570984f3eccf10439a59fe9c8337278c9c13e1b6dc8fb45c7cf29e7b",
+          "markdownSha256": "66965b7cbacb8bd43b17c42be7da7b94195ed22a5f5a227a02a513f41b40ff45",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 511e58d3510fac934ba702a9b74384641a01e791c1922328dc71e330d9a385a4 | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ParquetRoundTrip_50000",
+        "baseline": "before",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ParquetRoundTrip-before-after.log",
+          "sha256": "02d16f8d2a57cae2e329d8542e3137b8576ab99817988ab53ac6aa62c75a9c3c",
+          "markdownSha256": "b90324903e6bde05b568d161aaa9b76c6e6f780f425509b25eded6ea02dad66a",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "ParquetRoundTrip_50000",
+        "baseline": "after",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ParquetRoundTrip-after-before.log",
+          "sha256": "6d289336252b144037f523b247c9834e3754e3539cf928fbe981de6b0265f218",
+          "markdownSha256": "b44da97d690806bff65b93a0e12c5a94b71c58dd092078ffdeef4726af7c5085",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "ReportDatasetSnapshotReload_50000",
+        "baseline": "before",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ReportDatasetSnapshotReload-before-isolated.log",
+          "sha256": "032bc52dd33e4cd024471c050ccc498e516197f29b92a50fb6dc566675d71d41",
+          "markdownSha256": "1c7894f84def1559853a849c2b4b886ed86a3bff99d057e07dd72ac617362fdf",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 9d67e3e82452961e30a77f6ec496e6db3ebd075c5e2c526f8afd2c217b403665 |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ReportDatasetSnapshotReload_50000",
+        "baseline": "isolated",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ReportDatasetSnapshotReload-isolated-before.log",
+          "sha256": "89f222b13c65b43182229d02f5e151b853046152387688809611656ee2ff5e7b",
+          "markdownSha256": "2ce61ae54780acbd131edf004d2e35d11d3999280c0956a6a3755fc1b4c41887",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 9d67e3e82452961e30a77f6ec496e6db3ebd075c5e2c526f8afd2c217b403665 | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ReportDatasetSnapshotReload_50000",
+        "baseline": "after",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ReportDatasetSnapshotReload-after-isolated.log",
+          "sha256": "d15f161e062f8423d6bf9c767ad7378de54df8f8021f2c3a7866fd2ec2db5ff6",
+          "markdownSha256": "62ecabf5e18f27bb8046de33bd38c1aeeb0f9d8153daceaefc1156163ceb95f1",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 9d67e3e82452961e30a77f6ec496e6db3ebd075c5e2c526f8afd2c217b403665 |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ReportDatasetSnapshotReload_50000",
+        "baseline": "isolated",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ReportDatasetSnapshotReload-isolated-after.log",
+          "sha256": "89f222b13c65b43182229d02f5e151b853046152387688809611656ee2ff5e7b",
+          "markdownSha256": "40883132ce24ae1e76109bf02a0f48754983022abdf11c83f2a4fd991aba9441",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 9d67e3e82452961e30a77f6ec496e6db3ebd075c5e2c526f8afd2c217b403665 | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ReportDatasetSnapshotReload_50000",
+        "baseline": "before",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ReportDatasetSnapshotReload-before-after.log",
+          "sha256": "a96b9095ab0142e288057cf3ee95d3aa0ba05707925b5dd0861692e0c1d17321",
+          "markdownSha256": "ebbaa42521c1bf6c40534786dca260a58a0731094fe0013590e9c7b532e963e1",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "ReportDatasetSnapshotReload_50000",
+        "baseline": "after",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ReportDatasetSnapshotReload-after-before.log",
+          "sha256": "d47aa759ab6fb6113506f69da1fa19f73a0b955a12d6786d7befc7d501426676",
+          "markdownSha256": "1c50f8717659bf41d89ef28f06fcd83171474bcb818fabba170f40e2d4e1930b",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "CubeGroupingSets_50000_10x5",
+        "baseline": "before",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/CubeGroupingSets-before-isolated.log",
+          "sha256": "b239050cbb7c76dcf8bd7b58667a75643725a7f3069ebee61a500a8f4015fbd6",
+          "markdownSha256": "6f33735e3571cd8967d6fb7d52dc26c9910d5e6ca408f4032dffc9d6b17f5c6b",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 11d7dea1535785f3e41b82bcc0084c5619762b485f2b066abb09dba6dafd9c26 |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "CubeGroupingSets_50000_10x5",
+        "baseline": "isolated",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/CubeGroupingSets-isolated-before.log",
+          "sha256": "1f16d2feb6ca89ec077df0ca80cdae6683c62c0fff61b2ba828bb396b1bb0317",
+          "markdownSha256": "a94665cec4553dcf7400cd2db3803f14a9722b0cdffcfc3b8a04ea46ce8dd554",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 11d7dea1535785f3e41b82bcc0084c5619762b485f2b066abb09dba6dafd9c26 | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "CubeGroupingSets_50000_10x5",
+        "baseline": "after",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/CubeGroupingSets-after-isolated.log",
+          "sha256": "25a29f05e50e835990c63e08f797269ff8db91c687f2f42a5e499f496ad54f22",
+          "markdownSha256": "2723faf551c915605658fb0d0925cfc432824f093de55559a4100f245dc6e68c",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 11d7dea1535785f3e41b82bcc0084c5619762b485f2b066abb09dba6dafd9c26 |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "CubeGroupingSets_50000_10x5",
+        "baseline": "isolated",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/CubeGroupingSets-isolated-after.log",
+          "sha256": "1f16d2feb6ca89ec077df0ca80cdae6683c62c0fff61b2ba828bb396b1bb0317",
+          "markdownSha256": "132e203f6603cdc51a972a9f533dc13098d7262ac16235d687ea75c0fc6000c3",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 11d7dea1535785f3e41b82bcc0084c5619762b485f2b066abb09dba6dafd9c26 | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "CubeGroupingSets_50000_10x5",
+        "baseline": "before",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/CubeGroupingSets-before-after.log",
+          "sha256": "5dda5f1da091f63d3e9bd416ffac0ec2b7f56edbc45714a85daabc190d70c2a2",
+          "markdownSha256": "a6d2cb545aa1f4d7c7df9c197efc5d9ffd02a157c0b7871ac6851546274def2f",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "CubeGroupingSets_50000_10x5",
+        "baseline": "after",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/CubeGroupingSets-after-before.log",
+          "sha256": "5d9ec6143fbe29594699ba93daa992da74abfa94ed5edb3adced87fca48d8cab",
+          "markdownSha256": "8850480901299260e679f341d866da57504cf779ed818560b4e3e89df08b5013",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "ScalarSubqueryCache_50000_1000keys",
+        "baseline": "before",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ScalarSubqueryCache-before-isolated.log",
+          "sha256": "8e9e60f54058858f1c9e96e21dbfc84e721eab0f5bcd3380f8e4bf162f1155f2",
+          "markdownSha256": "664e0e88123e9f6d7bc081d103d4031fbc4b2ad62a047536df13f0931cedd509",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 25832979ad29405b44779437b56cb42600d5f98821e8622fb95c1ab980e02ad4 |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ScalarSubqueryCache_50000_1000keys",
+        "baseline": "isolated",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ScalarSubqueryCache-isolated-before.log",
+          "sha256": "5818b2947c930c24fbda4bbb65fb962f28352d44e33116b99b1e3c560a874f28",
+          "markdownSha256": "33ad2c9b4888cbc7ab3b55c19afe3ae83dd8a08a2877d72e407f06b69d5f0873",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 25832979ad29405b44779437b56cb42600d5f98821e8622fb95c1ab980e02ad4 | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ScalarSubqueryCache_50000_1000keys",
+        "baseline": "after",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ScalarSubqueryCache-after-isolated.log",
+          "sha256": "a00fc5711301e634f9d9856e142375a7a465ebced64f9b75102bbcf50ad87551",
+          "markdownSha256": "54b5cca0644c1809da2f77069146ed8cdaa5302030d61db23404ad6d31363f2c",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 25832979ad29405b44779437b56cb42600d5f98821e8622fb95c1ab980e02ad4 |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ScalarSubqueryCache_50000_1000keys",
+        "baseline": "isolated",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ScalarSubqueryCache-isolated-after.log",
+          "sha256": "5818b2947c930c24fbda4bbb65fb962f28352d44e33116b99b1e3c560a874f28",
+          "markdownSha256": "dfe2faa7a63f7178a644260868b53a24805d45eef5342506cd009797b4038398",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 25832979ad29405b44779437b56cb42600d5f98821e8622fb95c1ab980e02ad4 | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "ScalarSubqueryCache_50000_1000keys",
+        "baseline": "before",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ScalarSubqueryCache-before-after.log",
+          "sha256": "4bdc17ac1bd0654499cca22c7e5bb4251de00dd4ae6288113333c0d9114c3ff5",
+          "markdownSha256": "297f0f15a6fcd50b46c7da27abf4a45d90c9fef7ff80196ebd1f0eaefc02d682",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "ScalarSubqueryCache_50000_1000keys",
+        "baseline": "after",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/ScalarSubqueryCache-after-before.log",
+          "sha256": "a73cf90486162049b29f967b93bec6bfd3db072b961824a94d8846adbeb335a2",
+          "markdownSha256": "e361600c5e4c6c2a1dbbbbd3a5a6d5868b7372f95dc55c7b0ba3930575377a9b",
+          "warnings": [
+            "| WARN | ScalarSubqueryCache_50000_1000keys | ELAPSED_MS | 487 ms | 546 ms | 12.1% | Warning band 12%. |"
+          ]
+        }
+      },
+      {
+        "scenario": "SpillCleanupSuccess_50000",
+        "baseline": "before",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/SpillCleanupSuccess-before-isolated.log",
+          "sha256": "f67efd2e55f36b49e326ee1c98580ba7e89dbf7350576160a6f64d62f2016e36",
+          "markdownSha256": "f9de077dfde3839c911cbb0189c430bc0d0a7b2afe0e7b031a694a89305ac32c",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 6d68561734dfbe4d1b8a801580bde6fd2b1245d10049d95451a9e7aed84e0f05 |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "SpillCleanupSuccess_50000",
+        "baseline": "isolated",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/SpillCleanupSuccess-isolated-before.log",
+          "sha256": "67651fb551a6aea8fa5c2114e88e864ee7636e7b2bcfb1fd4814c3ce53589e0d",
+          "markdownSha256": "e4e82206543e3596561a9bebbcfe86e650813d4a77c75a8fba79fed13e56ea5a",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 6d68561734dfbe4d1b8a801580bde6fd2b1245d10049d95451a9e7aed84e0f05 | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "SpillCleanupSuccess_50000",
+        "baseline": "after",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/SpillCleanupSuccess-after-isolated.log",
+          "sha256": "76f1618cd9ebec3667d78d63c34e781b4a0df9d372df400b06db7173446e2968",
+          "markdownSha256": "510f5d865687d314592541579fe87f9b73de566e38a35d5609e6871ef9ee4369",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 6d68561734dfbe4d1b8a801580bde6fd2b1245d10049d95451a9e7aed84e0f05 |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "SpillCleanupSuccess_50000",
+        "baseline": "isolated",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/SpillCleanupSuccess-isolated-after.log",
+          "sha256": "67651fb551a6aea8fa5c2114e88e864ee7636e7b2bcfb1fd4814c3ce53589e0d",
+          "markdownSha256": "1f449438444331e78c8be349e49036cee3148cfe1ee0582bedafcb7c61bafd3f",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 6d68561734dfbe4d1b8a801580bde6fd2b1245d10049d95451a9e7aed84e0f05 | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "SpillCleanupSuccess_50000",
+        "baseline": "before",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/SpillCleanupSuccess-before-after.log",
+          "sha256": "4a5db8e08fb6f0fe109ad6dd73ac7082f5c71c456d8563a49cae639f3d27377d",
+          "markdownSha256": "485b5bc8b9b49d1b101f65cc1fc953fc4b65877bbb02b5c2c993f3bf7dc34395",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "SpillCleanupSuccess_50000",
+        "baseline": "after",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/SpillCleanupSuccess-after-before.log",
+          "sha256": "954f5d9e158473304a2bd79e35403f2e7032f530fcac626c7bf0dd6277918e3c",
+          "markdownSha256": "ec4f1d11a7beff0c16793be65105fb93b8c770586ba38fbf712e5c0a1a9531bc",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "SpillCleanupFailure_40000",
+        "baseline": "before",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/SpillCleanupFailure-before-isolated.log",
+          "sha256": "da44c918c62b610c9bda761a370c5b0e03d74a2f97855f798068faac22e2551c",
+          "markdownSha256": "b3d05ae9080d23b4b3257224c0926a71a0fd3d76885fcdb42929298e2cbc044b",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 3b2b21b39c4a1a88ffba022484f4f501ddfe7ddc135e308e5a1cbd36273fad7e |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "SpillCleanupFailure_40000",
+        "baseline": "isolated",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/SpillCleanupFailure-isolated-before.log",
+          "sha256": "1b17412b812103ed05c94ad6accd48dab64cbed31692d31cfc3dacace212d2a7",
+          "markdownSha256": "f27b213c9f07dae1611efd633302957f84e3938acf9460ae3b0f05d9c17d07e4",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 3b2b21b39c4a1a88ffba022484f4f501ddfe7ddc135e308e5a1cbd36273fad7e | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "SpillCleanupFailure_40000",
+        "baseline": "after",
+        "current": "isolated",
+        "evidence": {
+          "log": "Smoke-order/timing-views/SpillCleanupFailure-after-isolated.log",
+          "sha256": "2d7adacf55bc133635805691306169661a12d8b018fd4fc695b6d74dba06f1f8",
+          "markdownSha256": "a0cb3dee429804af48d0a8e766cf2ee4c24ea912cf6bf40d0158d0cb0c894614",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b | 3b2b21b39c4a1a88ffba022484f4f501ddfe7ddc135e308e5a1cbd36273fad7e |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "SpillCleanupFailure_40000",
+        "baseline": "isolated",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/SpillCleanupFailure-isolated-after.log",
+          "sha256": "1b17412b812103ed05c94ad6accd48dab64cbed31692d31cfc3dacace212d2a7",
+          "markdownSha256": "c322145707e8ac9e9edf8e57b8646478bd17e73b1cdc78d2b63e06c84d71e493",
+          "warnings": [
+            "| WARN | _report | CONFIG_FINGERPRINT | 3b2b21b39c4a1a88ffba022484f4f501ddfe7ddc135e308e5a1cbd36273fad7e | c17404b5f1824436813e48c54392905b5ea93c31ea895ce13444f36a41da248b |  | Performance config differs from the checked-in baseline. |"
+          ]
+        }
+      },
+      {
+        "scenario": "SpillCleanupFailure_40000",
+        "baseline": "before",
+        "current": "after",
+        "evidence": {
+          "log": "Smoke-order/timing-views/SpillCleanupFailure-before-after.log",
+          "sha256": "448335d777ab184f8a06e9559a207ac668218d63f44ad4b7c53a8fe65679eef5",
+          "markdownSha256": "8c7d4bb9401a80710b1e739d93f49736205fd5ba2a8c83234ee7ae28c38cf55f",
+          "warnings": []
+        }
+      },
+      {
+        "scenario": "SpillCleanupFailure_40000",
+        "baseline": "after",
+        "current": "before",
+        "evidence": {
+          "log": "Smoke-order/timing-views/SpillCleanupFailure-after-before.log",
+          "sha256": "9e48ea8c356618f1bfbbd6ae02c233a61860f5e2809913d36612a87b68eda009",
+          "markdownSha256": "04b57d9d43cf2391680797134629e528a525efda83a07ad6f6d08b48318d16ce",
+          "warnings": []
+        }
+      }
+    ]
+  },
+  "localEvidenceRoot": "release-validation/calibration-preparation-20261023/captures-v2-20261023T192353-3dda32c3",
+  "promotion": {
+    "method": "Unmodified predetermined index-2 candidate reports; historical references archived byte for byte",
+    "baselines": [
+      {
+        "archive": "certification-results/historical-baselines/2026-10-04-smoke-shared-host.json",
+        "canonical": "certification-results/baseline-smoke.json",
+        "oldSha256": "237ac309cdd48625039c826d56dd3b37f946435e28a9608e026c0f1026429957",
+        "newSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+        "tier": "Smoke"
+      },
+      {
+        "archive": "certification-results/historical-baselines/2026-10-04-standard-shared-host.json",
+        "canonical": "certification-results/baseline-standard.json",
+        "oldSha256": "b475ff49e01b847bbc4484d2f632626fdea97621655ba382f89efe21b0ffd033",
+        "newSha256": "4ac752b1d2f9971996b175baeebb826b642fd1407a6bdbf503573e0286c72c80",
+        "tier": "Standard"
+      }
+    ],
+    "currentComparatorReplayedComparisons": 24
+  }
+}

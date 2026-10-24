@@ -37,7 +37,7 @@ public sealed class StudioDesktopPracticeTests(StudioAuthoringFixture fixture)
         await host.StartAsync();
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=practice-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=practice-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)");
         await page.Locator("[data-projection='split']").ClickAsync();
 

@@ -59,7 +59,7 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
         var authorId = await SignInAsPublisherAsync(page);
         var reportId = await CreateReportAsync(page, alias, authorId);
 
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         await WaitForStudioAsync(session);
 
         var expected = await DriveJourneyAsync(session, alias, "-- continuous Portal journey");
@@ -87,7 +87,7 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
         StudioCertification.Certify(
             new CertifiedArtifact("continuous authoring", StudioHost.Portal, $"report-{reportId}.rptsql", expected),
             reloaded);
-        await page.GotoAsync($"/index.html#report-{reportId}");
+        await page.GotoWithDiagnosticsAsync($"/index.html#report-{reportId}");
         var execute = page.Locator("#execBtn");
         var refresh = page.Locator("#refreshBtn");
         await Microsoft.Playwright.Assertions.Expect(execute.Or(refresh).First).ToBeVisibleAsync(new() { Timeout = 30_000 });
@@ -114,7 +114,7 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=journey-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=journey-token");
         await WaitForStudioAsync(session);
 
         var expected = await DriveJourneyAsync(session, "sample_data", "-- continuous desktop journey");
@@ -313,11 +313,11 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
             Assert.Equal("Publisher", Assert.Single(await users.GetRolesAsync(user)));
             userId = user.Id;
         }
-        await page.GotoAsync("/login.html");
+        await page.GotoWithDiagnosticsAsync("/login.html");
         await page.FillAsync("#username", name);
         await page.FillAsync("#password", password);
         await page.ClickAsync("#loginBtn");
-        await page.WaitForURLAsync("**/index.html");
+        await page.WaitForURLWithDiagnosticsAsync("**/index.html");
         return userId;
     }
 

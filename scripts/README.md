@@ -121,6 +121,12 @@ To reproduce one shard after preparing assets and building the browser project:
 .\scripts\Test-BrowserShard.ps1 -Shard 2 -ShardCount 3 -Configuration Release -NoBuild -EvidenceDirectory artifacts/browser-shard-local
 ```
 
+Navigation failures retain sanitized transport history and process resource snapshots in
+`<EvidenceDirectory>/navigation-diagnostics/`, within the uploaded shard artifact. Windows captures
+per-process handles and IPv4/IPv6 TCP/UDP endpoint counts; unavailable counters are explicit.
+For direct `dotnet test` runs, set `ETLSQL_BROWSER_DIAGNOSTICS_DIR` to retain the same evidence at a
+chosen path. The shard driver sets it automatically and restores the caller's environment afterward.
+
 Omit `-NoBuild` to prepare and build first. CI runs the script through
 `Invoke-CertificationProcess.ps1` with a 30-minute timeout inside a 35-minute step limit. A timeout
 or failed test never produces a passing receipt. A failed-job rerun retains previous shard

@@ -32,7 +32,7 @@ public sealed class RuntimeSvgSanitizationTests(AdminUsersFixture fixture)
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync("/login.html");
+        await page.GotoWithDiagnosticsAsync("/login.html");
 
         var result = await page.EvaluateAsync<string[]>("""
             async svg => {
@@ -70,7 +70,7 @@ public sealed class RuntimeSvgSanitizationTests(AdminUsersFixture fixture)
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync("/login.html");
+        await page.GotoWithDiagnosticsAsync("/login.html");
 
         var rendered = await page.EvaluateAsync<string>("""
             async payload => {

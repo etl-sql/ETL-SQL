@@ -49,7 +49,7 @@ public sealed class ControlPlaneDashboardJourneyTests(ControlPlaneFixture fixtur
         {
             ["X-Portal-Platform-Key"] = ControlPlaneBrowserFactory.ManagementKey
         });
-        await page.GotoAsync("/control-plane.html");
+        await page.GotoWithDiagnosticsAsync("/control-plane.html");
         await Expect(page.Locator("#btnOpenProvision")).ToBeEnabledAsync();
         var tenantId = "browser-cp-" + Guid.NewGuid().ToString("N")[..10];
         await page.Locator("#btnOpenProvision").ClickAsync();
@@ -146,7 +146,7 @@ public sealed class ControlPlaneDashboardJourneyTests(ControlPlaneFixture fixtur
         Assert.Equal(HttpStatusCode.Unauthorized, mutation.StatusCode);
         await using var session = await fixture.NewSessionAsync();
         await session.Page.Context.SetExtraHTTPHeadersAsync(new Dictionary<string, string> { ["Authorization"] = "Bearer " + token });
-        await session.Page.GotoAsync("/control-plane.html");
+        await session.Page.GotoWithDiagnosticsAsync("/control-plane.html");
         await Expect(session.Page.Locator("#controlPlaneStatus")).ToContainTextAsync("Platform management credentials required.");
         await Expect(session.Page.Locator("#btnOpenProvision")).ToBeDisabledAsync();
         await Expect(session.Page.Locator("#kpiAuditOutbox")).ToHaveTextAsync("Unavailable");

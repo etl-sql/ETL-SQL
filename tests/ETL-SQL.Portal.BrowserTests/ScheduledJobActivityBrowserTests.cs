@@ -225,11 +225,11 @@ public sealed partial class ScheduledJobActivityBrowserTests : IAsyncLifetime
             OrchestratorObjectPermission.Read, "user:admin"));
         await using var session = await browser.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync("/login.html");
+        await page.GotoWithDiagnosticsAsync("/login.html");
         await page.FillAsync("#username", "activity-reader");
         await page.FillAsync("#password", "Activity@Reader99!");
         await page.ClickAsync("#loginBtn");
-        await page.WaitForURLAsync("**/index.html");
+        await page.WaitForURLWithDiagnosticsAsync("**/index.html");
         await OpenAsync(page);
         await Expect(Rows(page)).ToHaveCountAsync(1);
         await Expect(Rows(page)).ToContainTextAsync("activity-complete");
@@ -323,7 +323,7 @@ public sealed partial class ScheduledJobActivityBrowserTests : IAsyncLifetime
 
     private static async Task OpenAsync(IPage page)
     {
-        await page.GotoAsync("/orchestrator.html");
+        await page.GotoWithDiagnosticsAsync("/orchestrator.html");
         await Expect(page.Locator("#statusLabel")).ToHaveTextAsync("Online");
         await Expect(page.Locator("#jobsTableWrap")).ToHaveAttributeAsync("aria-busy", "false");
     }

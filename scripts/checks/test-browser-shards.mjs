@@ -116,7 +116,17 @@ try {
   for (const invalid of [{ outcome: 'Failed' }, { outcome: 'NotExecuted' }, { method: 'Other' }, { results: false }]) {
     assert.notEqual(validate(invalid).status, 0);
   }
-  console.log('Browser shards: deterministic partition, theories, exact filters, complete results, failed-job retry selection and candidate-bound recovery reports passed.');
+  const environmentFixture = fileURLToPath(new URL('./fixtures/browser-shard-environment.ps1', import.meta.url));
+  const driver = fileURLToPath(new URL('../Test-BrowserShard.ps1', import.meta.url));
+  for (const outcome of ['success', 'failed-exit', 'thrown']) {
+    const result = spawnSync('pwsh', ['-NoProfile', '-File', environmentFixture, '-Driver', driver,
+      '-Evidence', path.join(fixture, `environment-${outcome}`), '-NodeExecutable', process.execPath, '-Outcome', outcome],
+    { encoding: 'utf8', windowsHide: true, timeout: 15000 });
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, new RegExp(`Browser shard environment verified: ${outcome}`));
+  }
+  console.log('Browser shards: partition, coverage, retry selection, recovery reports and diagnostic environment lifecycle passed.');
 } finally {
   // Remove only this private fixture.
   rmSync(fixture, { recursive: true, force: true });

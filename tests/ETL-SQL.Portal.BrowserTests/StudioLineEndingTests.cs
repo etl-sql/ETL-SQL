@@ -51,7 +51,7 @@ public sealed class StudioLineEndingTests(StudioSurfaceFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=endings-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=endings-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
 

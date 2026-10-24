@@ -32,7 +32,7 @@ public sealed class StudioPrivateDraftJourneyTests(PortalJourneyFixture fixture)
         {
             var page = session.Page;
             await SignInAsync(page, learner.UserName);
-            await page.GotoAsync("/studio.html");
+            await page.GotoWithDiagnosticsAsync("/studio.html");
             await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null, new() { Timeout = 20_000 });
 
             // The learner cannot publish, cannot save to the catalog, and has no folder to write to.
@@ -73,7 +73,7 @@ public sealed class StudioPrivateDraftJourneyTests(PortalJourneyFixture fixture)
             Assert.Equal(catalogDocuments, await CatalogDocumentCountAsync());
 
             // A fresh page: the draft is listed on Studio Home and reopens with what was saved.
-            await page.GotoAsync("/studio.html");
+            await page.GotoWithDiagnosticsAsync("/studio.html");
             var card = page.Locator($"[data-private-draft='{draftId}']");
             await Expect(card).ToContainTextAsync(name, new() { Timeout = 20_000 });
             await card.Locator("[data-open-private-draft][data-open-proj='code']").ClickAsync();
@@ -92,7 +92,7 @@ public sealed class StudioPrivateDraftJourneyTests(PortalJourneyFixture fixture)
         // A colleague with the same rights sees no draft at all.
         await using var other = await fixture.NewSessionAsync();
         await SignInAsync(other.Page, colleague.UserName);
-        await other.Page.GotoAsync("/studio.html");
+        await other.Page.GotoWithDiagnosticsAsync("/studio.html");
         await Expect(other.Page.Locator("[data-private-drafts]")).ToContainTextAsync("Nothing kept yet", new() { Timeout = 20_000 });
         await Expect(other.Page.Locator("[data-private-draft]")).ToHaveCountAsync(0);
         await Expect(other.Page.Locator("body")).Not.ToContainTextAsync(name);
@@ -235,7 +235,7 @@ public sealed class StudioPrivateDraftJourneyTests(PortalJourneyFixture fixture)
         {
             var page = session.Page;
             await SignInAsync(page, author.UserName);
-            await page.GotoAsync("/studio.html");
+            await page.GotoWithDiagnosticsAsync("/studio.html");
 
             // The sample dashboard opens unsaved. Save offers the catalog or a private draft.
             await page.Locator("[data-create-from-home='dashboard'][data-seed-sample]").ClickAsync();
@@ -293,7 +293,7 @@ public sealed class StudioPrivateDraftJourneyTests(PortalJourneyFixture fixture)
             await page.Locator("[data-action='save']").ClickAsync();
             await page.WaitForFunctionAsync($"() => {ActiveDraft}.isDirty === false && {ActiveDraft}.version === 2",
                 null, new() { Timeout = 15_000 });
-            await page.GotoAsync($"/studio.html?reportId={reportId}");
+            await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
             await page.WaitForFunctionAsync(
                 "edit => { const editor = window.__STUDIO__?.state?.editorInstance; return Boolean(editor) && editor.getValue().includes(edit) && editor.getValue().includes('-- after publishing'); }",
                 Edit, new() { Timeout = 30_000 });
@@ -347,7 +347,7 @@ public sealed class StudioPrivateDraftJourneyTests(PortalJourneyFixture fixture)
     /// <summary>Creates a dashboard, keeps it as a private draft and leaves it open in the code view.</summary>
     private static async Task<int> KeepNewDraftAsync(IPage page)
     {
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         await page.Locator("[data-create-from-home='dashboard']:not([data-seed-sample])").ClickAsync();
         await page.WaitForFunctionAsync($"() => {ActiveDraft}?.path?.startsWith('untitled_dashboard')", null, new() { Timeout = 20_000 });
         await page.EvaluateAsync("() => window.__STUDIO__.setProjection('code')");
@@ -363,7 +363,7 @@ public sealed class StudioPrivateDraftJourneyTests(PortalJourneyFixture fixture)
 
     private static async Task ReopenDraftAsync(IPage page, int draftId)
     {
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         var open = page.Locator($"[data-private-draft='{draftId}'] [data-open-private-draft][data-open-proj='code']");
         await Expect(open).ToBeVisibleAsync(new() { Timeout = 20_000 });
         await open.ClickAsync();
@@ -418,11 +418,11 @@ public sealed class StudioPrivateDraftJourneyTests(PortalJourneyFixture fixture)
 
     private static async Task SignInAsync(IPage page, string userName)
     {
-        await page.GotoAsync("/login.html");
+        await page.GotoWithDiagnosticsAsync("/login.html");
         await page.FillAsync("#username", userName);
         await page.FillAsync("#password", Password);
         await page.ClickAsync("#loginBtn");
-        await page.WaitForURLAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
+        await page.WaitForURLWithDiagnosticsAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
     }
 
     private sealed record Learner(string UserName, int UserId);

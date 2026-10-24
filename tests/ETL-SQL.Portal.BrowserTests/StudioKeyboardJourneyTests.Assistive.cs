@@ -26,7 +26,7 @@ public sealed partial class StudioKeyboardJourneyTests
         var authorId = await SignInAsPublisherAsync(page);
         await CreateWritableFolderAsync(authorId);
 
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         await WaitForStudioAsync(session);
         await page.WaitForFunctionAsync("() => window.__STUDIO__.state.activeDocId === '__home__'");
         var heard = await AssistiveTranscript.StartAsync(page);
@@ -125,7 +125,7 @@ public sealed partial class StudioKeyboardJourneyTests
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token={token}");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token={token}");
         await WaitForStudioAsync(session);
         await page.WaitForFunctionAsync("() => window.__STUDIO__.state.activeDocId === '__home__'");
         var heard = await AssistiveTranscript.StartAsync(page);

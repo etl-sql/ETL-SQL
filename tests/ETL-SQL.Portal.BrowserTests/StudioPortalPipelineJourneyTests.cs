@@ -23,7 +23,7 @@ public sealed class StudioPortalPipelineJourneyTests(StudioAuthoringFixture fixt
         var page = session.Page;
         await fixture.SignInAsync(page);
         var folder = await CreateWritableFolderAsync();
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
 
         var card = page.Locator("[data-create-from-home='etl']:not([data-seed-sample])");
         await Expect(card).Not.ToHaveAttributeAsync("aria-disabled", "true", new() { Timeout = 20_000 });
@@ -51,7 +51,7 @@ public sealed class StudioPortalPipelineJourneyTests(StudioAuthoringFixture fixt
         }
 
         // A fresh page lists it among catalog documents and opens it as ETL-SQL with the saved text.
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         var open = page.Locator($"[data-open-report='{reportId}'][data-open-proj='code']");
         await Expect(open).ToBeVisibleAsync(new() { Timeout = 20_000 });
         await open.ClickAsync();

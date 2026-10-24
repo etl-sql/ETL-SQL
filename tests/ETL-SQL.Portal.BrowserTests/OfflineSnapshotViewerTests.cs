@@ -144,7 +144,7 @@ public sealed class OfflineSnapshotViewerTests(DetailSurfaceHarnessFixture fixtu
         var page = session.Page;
         var attempted = await FenceOffTheNetworkAsync(page);
 
-        await page.GotoAsync(WriteViewer());
+        await page.GotoWithDiagnosticsAsync(WriteViewer());
         await page.WaitForSelectorAsync(".visual-card", new PageWaitForSelectorOptions { Timeout = 30_000 });
 
         Assert.Contains("RevenueByMonth", await page.Locator("#root").InnerTextAsync());
@@ -167,7 +167,7 @@ public sealed class OfflineSnapshotViewerTests(DetailSurfaceHarnessFixture fixtu
         var page = session.Page;
         var attempted = await FenceOffTheNetworkAsync(page);
 
-        await page.GotoAsync(WriteViewer());
+        await page.GotoWithDiagnosticsAsync(WriteViewer());
         await page.WaitForSelectorAsync(".visual-card", new PageWaitForSelectorOptions { Timeout = 30_000 });
 
         // The Views menu is the only way a reader reaches a bookmark in a snapshot: there is no
@@ -197,7 +197,7 @@ public sealed class OfflineSnapshotViewerTests(DetailSurfaceHarnessFixture fixtu
         var page = session.Page;
         var attempted = await FenceOffTheNetworkAsync(page);
 
-        await page.GotoAsync(WriteViewer());
+        await page.GotoWithDiagnosticsAsync(WriteViewer());
         await page.WaitForSelectorAsync("[data-row-index='1']", new PageWaitForSelectorOptions { Timeout = 30_000 });
 
         await page.Locator("[data-row-index='1']").FocusAsync();

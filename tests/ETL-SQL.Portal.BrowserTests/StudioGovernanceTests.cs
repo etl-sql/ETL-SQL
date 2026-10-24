@@ -36,7 +36,7 @@ public sealed class StudioGovernanceTests(StudioSurfaceFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync(StudioUrl(host, "gov-token"));
+        await page.GotoWithDiagnosticsAsync(StudioUrl(host, "gov-token"));
         await WaitForStudioAsync(session);
 
         await page.Locator("[data-activity='governance']").ClickAsync();
@@ -87,7 +87,7 @@ public sealed class StudioGovernanceTests(StudioSurfaceFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync(StudioUrl(host, "gov-refuse-token"));
+        await page.GotoWithDiagnosticsAsync(StudioUrl(host, "gov-refuse-token"));
         await WaitForStudioAsync(session);
 
         await page.Locator("[data-activity='governance']").ClickAsync();
@@ -119,7 +119,7 @@ public sealed class StudioGovernanceTests(StudioSurfaceFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync(StudioUrl(host, "gov-rule-token"));
+        await page.GotoWithDiagnosticsAsync(StudioUrl(host, "gov-rule-token"));
         await WaitForStudioAsync(session);
 
         await page.Locator("[data-activity='governance']").ClickAsync();
@@ -194,7 +194,7 @@ public sealed class StudioGovernanceTests(StudioSurfaceFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync(StudioUrl(host, "gov-rls-token"));
+        await page.GotoWithDiagnosticsAsync(StudioUrl(host, "gov-rls-token"));
         await WaitForStudioAsync(session);
 
         Assert.Equal(0, await RunRowCountAsync(page));
@@ -246,7 +246,7 @@ public sealed class StudioGovernanceTests(StudioSurfaceFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync(StudioUrl(host, "gov-dataset-token"));
+        await page.GotoWithDiagnosticsAsync(StudioUrl(host, "gov-dataset-token"));
         await WaitForStudioAsync(session);
 
         await page.Locator("[data-activity='governance']").ClickAsync();
@@ -299,7 +299,7 @@ public sealed class StudioGovernanceTests(StudioSurfaceFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync(StudioUrl(host, "gov-dataset-refuse"));
+        await page.GotoWithDiagnosticsAsync(StudioUrl(host, "gov-dataset-refuse"));
         await WaitForStudioAsync(session);
 
         await page.Locator("[data-activity='governance']").ClickAsync();
@@ -354,7 +354,7 @@ public sealed class StudioGovernanceTests(StudioSurfaceFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync(StudioUrl(host, "gov-schedule-token"));
+        await page.GotoWithDiagnosticsAsync(StudioUrl(host, "gov-schedule-token"));
         await WaitForStudioAsync(session);
 
         await page.Locator("[data-activity='governance']").ClickAsync();

@@ -14,6 +14,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Browser navigation failures now retain bounded, sanitized transport-request history and
+  Chromium/test-host process resource snapshots. Windows snapshots count handles and owned
+  IPv4/IPv6 TCP/UDP endpoints. Shards retain diagnostics with candidate/run/attempt identity;
+  navigation errors still fail with their original exception.
+
+- Recalibrated Smoke and Standard scale baselines from clean candidate/control runs using the
+  scaled warm-up protocol. All 1,170 measured correctness/resource checks, 24 full comparisons and
+  78 Smoke order comparisons pass unchanged bands. Previous references are archived byte for byte;
+  Git attributes preserve raw reference hashes across platforms. The measurement record retains
+  working-set/timing warnings and the earlier failed run.
+
 - Scale warm-up now uses the measured workload through Standard scale, capped at 10x for larger
   workloads. Reports record the completed warm-up scale, selected observed GC settings and GC
   memory state after timing. Capture rejects incomplete provenance or changing GC settings;

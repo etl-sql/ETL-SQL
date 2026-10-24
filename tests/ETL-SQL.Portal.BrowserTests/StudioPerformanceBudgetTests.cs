@@ -29,7 +29,7 @@ public sealed class StudioPerformanceBudgetTests(
         var page = session.Page;
 
         var startup = Stopwatch.StartNew();
-        await page.GotoAsync(StudioStory);
+        await page.GotoWithDiagnosticsAsync(StudioStory);
         await page.WaitForFunctionAsync(
             "() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)",
             null,

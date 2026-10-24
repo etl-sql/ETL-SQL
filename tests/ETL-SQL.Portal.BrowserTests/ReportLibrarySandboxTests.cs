@@ -278,7 +278,7 @@ public sealed class ReportLibrarySandboxTests(SandboxStoryFixture fixture) : IAs
 
     private async Task OpenAsync(IPage page, string scenario = "healthy", string hash = "")
     {
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/reader-page-frame.html?fixture={scenario}{hash}");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/reader-page-frame.html?fixture={scenario}{hash}");
         await Expect(page.Locator("body")).ToHaveAttributeAsync("data-reader-sandbox-ready", "true");
         await Expect(page.Locator("#mainContent .loading-state")).ToHaveCountAsync(0);
     }

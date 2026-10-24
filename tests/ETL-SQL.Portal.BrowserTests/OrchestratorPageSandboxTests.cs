@@ -197,7 +197,7 @@ public sealed class OrchestratorPageSandboxTests(SandboxStoryFixture fixture) : 
 
     private async Task OpenAsync(IPage page, string scenario = "healthy")
     {
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/orchestrator-page-frame.html?fixture={scenario}");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/orchestrator-page-frame.html?fixture={scenario}");
         await Expect(page.Locator("body")).ToHaveAttributeAsync("data-orchestrator-sandbox-ready", "true");
         await Expect(page.Locator("[data-action='toggle'][data-name='daily_sales']")).ToBeVisibleAsync();
     }

@@ -22,7 +22,7 @@ public sealed class AdminSettingsPageTests(AdminUsersFixture fixture)
             await using var session = await fixture.NewSessionAsync();
             var page = session.Page;
             await fixture.SignInAsync(page);
-            await page.GotoAsync("/admin.html");
+            await page.GotoWithDiagnosticsAsync("/admin.html");
             await page.Locator(".admin-tab[data-tab='settings']").ClickAsync();
             await Expect(page.Locator("#orch-key-status")).ToContainTextAsync("key is set");
             await page.Locator("#orch-url").FillAsync("https://native.example.test");

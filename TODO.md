@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 21 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 20 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -411,8 +411,8 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
 
 ### 2. Order-independent scale certification
 
-**Design:** [`ROADMAP.md`](ROADMAP.md#release-engineering--order-independent-scale-certification)
-and the [v0.21.0 performance results](docs/releases/v0.21.0-performance-results.md).
+**Design:** [v0.21.0 performance results](docs/releases/v0.21.0-performance-results.md).
+**Completed evidence:** [clean calibration](docs/benchmarks/scale-baseline-calibration-2026-10-23.md#scaled-warm-up-calibration).
 
 - [x] **Warm each scenario's own code path (one untimed operation) before its timed samples.**
   **Verified locally:** `ScaleCertificationTests` warms the measured workload through Standard scale,
@@ -430,20 +430,27 @@ and the [v0.21.0 performance results](docs/releases/v0.21.0-performance-results.
   Smoke and Standard now use one exact scenario method per process per sample, recording child
   filters, exits and metrics. Old shared-host baselines are rejected. All 55 focused process tests
   pass, including full runner fixtures for Standard row scale, incomplete metrics, child failures,
-  source drift and case-insensitive scenario selection. Clean baseline calibration remains below.
+  source drift and case-insensitive scenario selection. Clean baseline calibration is verified below.
   A real Standard capture also passes all thirteen scenarios with two samples at 10x row scale
   (26 measured correctness/resource checks); its evidence is retained beside the Smoke proof.
-- [ ] Recalibrate the Smoke and Standard baselines from clean candidate/control runs and record them.
+- [x] Recalibrate the Smoke and Standard baselines from clean candidate/control runs and record them.
+  **Verified 2026-10-23:** the new-protocol clean A/B/B/A calibration passes all 1,170 measured
+  correctness/resource checks, all 24 full-metric comparisons and all 78 renewed Smoke order
+  comparisons. Promoted the predetermined first candidate capture for each tier byte for byte;
+  archived both previous references. Standard cube working-set and Smoke scalar timing warnings
+  remain visible, alongside expected full/isolated configuration-fingerprint warnings.
+  [Measurement record](docs/benchmarks/scale-baseline-calibration-2026-10-23.md#scaled-warm-up-calibration)
+  and [curated evidence](certification-results/scale-calibration-v2-2026-10-23.json) retain provenance,
+  hashes and every warning. Existing bands are unchanged. Final-release certification remains open.
   **Preparation:** reports now record whether the discarded process warm-up ran. Comparisons reject
   diagnostic captures that skipped either warm-up, invalid flags and missing warm-up provenance
-  when paired with a new capture. Baseline files remain unchanged until clean calibration passes.
-  **Clean capture result, 2026-10-23:** [measurement record](docs/benchmarks/scale-baseline-calibration-2026-10-23.md)
+  when paired with a new capture. Reference promotion required the passing clean follow-up above.
+  **Earlier failed capture, 2026-10-23:** [measurement record](docs/benchmarks/scale-baseline-calibration-2026-10-23.md)
   retains eight full-tier captures in control/candidate/candidate/control order, ten samples each.
   All 1,040 measured correctness/memory checks and 23 of 24 full-metric comparisons pass. The first
   Standard control compared with its final control fails temp-table GC pause (50.3 to 70.65 ms,
   +40.5% against the unchanged 35% band). Every candidate/control comparison passes. The controller
-  rejects reference replacement. Investigate GC/heap-state variation with focused probes before
-  repeating full calibration; preserve the failed captures and existing bands.
+  rejected reference replacement. The failed captures and existing bands remain preserved.
   A forty-sample temp-table probe records runtime GC state and compares Smoke-sized with
   Standard-sized warm-up. Both profiles pass their repeat comparisons without reproducing the
   original failure. Standard-sized warm-up reduces Gen 2 collections and raises working set;
@@ -452,7 +459,7 @@ and the [v0.21.0 performance results](docs/releases/v0.21.0-performance-results.
   cap larger tiers at 10x, record completed warm-up scale and observed GC state, and reject
   incomplete/changing runtime provenance. Native full-tier functional checks pass all 52 measured
   cases across Smoke and Standard, including actual warm-up scale, GC snapshots and absolute
-  memory gates. A new clean calibration remains required.
+  memory gates. The clean follow-up above completes calibration for this protocol.
 
 ### 3. Flaky tests — the dedicated fix
 
@@ -462,6 +469,14 @@ here; each one failed a single test per run and passed on rerun.
 - [ ] **Browser lane on the Windows CI runner:** `net::ERR_NO_BUFFER_SPACE` and 30 s navigation
   timeouts, one test per run. The recorded next step is to capture failed requests and the process's
   handle and socket counts when a navigation fails.
+  **In progress:** context-level transport history and navigation/URL-wait wrappers now capture
+  bounded JSON snapshots before teardown. Chromium identifies its own processes through CDP;
+  Windows IP Helper tables supply per-PID IPv4/IPv6 TCP/UDP endpoint counts alongside handle counts.
+  Shard artifacts retain snapshots with sanitized URLs and run/attempt/shard identity. Diagnostics
+  preserve original navigation failures; HTTP-error assertions remain separate. All 21 deterministic
+  failure/resource checks and four desktop/critical/compiler journeys pass locally. Shard fixtures
+  verify environment propagation/restoration for success, failed exits and launch exceptions.
+  Hosted failure capture, diagnosis and consecutive-run evidence remain required before closure.
 - [ ] **`DesktopStudioJourneyTests` exit timeout:** waited 10 s for `ApplicationStopping` after "Exit
   Without Saving" on CI; passes 3 of 3 locally in 9–11 s.
 - [ ] **Docker lane:** confirm the FTP mapped-port wait and the scheduled-job `lastRun` race fixes hold

@@ -1,8 +1,13 @@
 # Smoke and Standard baseline calibration — 2026-10-23
 
-The v0.22.0 baseline update remains open. All 1,040 measured correctness and memory checks pass,
-but one of twenty-four comparator checks fails. The existing baseline files and comparison bands
-are unchanged. The [curated results](../../certification-results/scale-calibration-2026-10-23.json)
+The v0.22.0 baseline update passes with the scaled warm-up protocol. All 1,170 measured
+correctness/resource checks, 24 full comparisons and 78 Smoke order comparisons pass. Both
+predetermined candidate references are promoted, with previous references archived byte for byte.
+See [scaled warm-up calibration](#scaled-warm-up-calibration) for the accepted evidence and warnings.
+
+The first calibration attempt below failed one of twenty-four comparator checks despite passing
+all 1,040 measured correctness/memory checks. Its baselines were not promoted. Its
+[curated results](../../certification-results/scale-calibration-2026-10-23.json)
 retain capture hashes, source/config fingerprints, scenario summaries, temp-table samples and
 every comparison outcome.
 
@@ -111,8 +116,60 @@ of this implementation passes two full samples of each tier: all 52
 measured checks use the expected warm-up scale and absolute peak-memory gate, with retained GC
 state. Evidence is under
 `release-validation/calibration-preparation-20261023/new-protocol-functional-20261023T185428/`.
-The source tree was dirty during this functional check. It is not clean calibration evidence,
-and neither canonical baseline has changed.
+The source tree was dirty during this functional check. It is not clean calibration evidence.
+
+## Scaled warm-up calibration
+
+The clean follow-up uses candidate `040d2c217774bb02223ed4bc078990d09871b956` and the same published
+v0.21.0 control, on the host described above. Both use the frozen fixture
+`dc848d37fae4a1725dec9a3e6f24a2caf27fcc51d18ea908328dbefc4a99b723`, protocol
+`own-path-scaled-untimed-v2`, observed GC configuration and unchanged comparison bands. Engine,
+dependency and comparator inputs are identical between the two commits.
+
+Each tier runs control/candidate/candidate/control, ten samples of thirteen scenarios per capture.
+Between the two full candidate Smoke captures, thirteen isolated Smoke captures each measure ten
+samples. All captures use fresh scenario processes, discarded process warm-up and the same
+completed own-path warm-up scale. Independent review checks every child exit, exact filter,
+correctness result, absolute peak-memory gate, clean source/config binding and stable runtime/GC
+profile. No measured sample was retried or omitted.
+
+| Scope | Checks | Outcome |
+| :--- | ---: | :--- |
+| Full Smoke measured correctness/resources | 520 / 520 | Pass |
+| Full Standard measured correctness/resources | 520 / 520 | Pass |
+| Isolated Smoke measured correctness/resources | 130 / 130 | Pass |
+| Full-metric comparisons, all six pairs in both directions per tier | 24 / 24 | Pass, one working-set warning |
+| Smoke order comparisons, six directions per scenario | 78 / 78 | Pass, one timing warning |
+
+The original Standard temp-table GC-pause failure does not recur. Parquet round-trip and report
+dataset snapshot reload pass every applicable full and order comparison. This supports replacing
+the incompatible shared-host references; it does not establish a cause for the earlier GC failure.
+
+The one full-metric warning is Standard cube peak working set, candidate repeat (capture 3) versus
+first control (capture 1): 383 MB to 425.6 MB, +11.1% against the unchanged 10% warning band, with
+32.8 MB baseline spread. No metric crosses a failure band. The 52 full/isolated order comparisons
+also retain expected configuration-fingerprint warnings: independent review proves the configuration
+differs only in scenario/filter selection. One order comparison warns for scalar-subquery elapsed
+time, second full candidate versus first full candidate: 487 ms to 546 ms, +12.1% against the 12%
+warning band. All warnings remain in the curated evidence; there are no hardware suppressions.
+
+The references were selected before measurement: full candidate capture 2 for each tier, copied
+without pooling, transformation or band edits. Exact `.gitattributes` rules disable line-ending
+conversion for these references and their archived predecessors, preserving the recorded hashes
+when staged or checked out on another platform. Their SHA-256 hashes are:
+
+- **Smoke:** `de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004`
+- **Standard:** `4ac752b1d2f9971996b175baeebb826b642fd1407a6bdbf503573e0286c72c80`
+
+The [curated review and promotion record](../../certification-results/scale-calibration-v2-2026-10-23.json)
+retains all capture hashes, scenario summaries, full comparison warnings, order comparisons,
+timing-view/original hashes, source/config fingerprints and old/new reference hashes. Original
+October 4 baselines remain under [historical references](../../certification-results/historical-baselines/README.md).
+Raw reports, child logs, frozen harness inventory, controller, replacement plan and independent
+review remain at
+`release-validation/calibration-preparation-20261023/captures-v2-20261023T192353-3dda32c3/`.
+The independent review was repeated before promotion, and all 24 full comparisons were replayed
+with the current comparator. Final v0.22.0 release certification must still run on the shipping SHA.
 
 References:
 

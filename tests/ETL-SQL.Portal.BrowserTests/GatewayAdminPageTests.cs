@@ -13,7 +13,7 @@ public sealed class GatewayAdminPageTests(PortalAdminFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/admin.html");
+        await page.GotoWithDiagnosticsAsync("/admin.html");
         await page.Locator("[data-tab='gateways']").ClickAsync();
         await Expect(page.Locator("#panel-gateways")).ToHaveAttributeAsync("aria-busy", "false");
         await Expect(page.Locator("#gw-status")).Not.ToHaveTextAsync("Gateway fleet unavailable");

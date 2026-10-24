@@ -87,7 +87,7 @@ public sealed class StudioFailedRecoveryJourneyTests(StudioAuthoringFixture fixt
             else if (failure == "disconnect") await route.AbortAsync();
             // Timeout: leave the actual browser request unanswered until its AbortSignal expires.
         });
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         await Expect(page.Locator("#retrySessionBtn")).ToBeVisibleAsync(new() { Timeout = 22_000 });
         if (failure == "timeout") await Expect(page.Locator(".etlsql-studio-error-stage")).ToContainTextAsync("15 seconds");
         Assert.Null(await page.EvaluateAsync<object?>("() => window.__STUDIO__ || null"));
@@ -137,16 +137,16 @@ public sealed class StudioFailedRecoveryJourneyTests(StudioAuthoringFixture fixt
             """);
         if (failRefresh)
             await page.RouteAsync("**/api/auth/refresh", route => route.FulfillAsync(new() { Status = 401, ContentType = "application/json", Body = "{\"error\":\"Expired refresh session\"}" }));
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         if (failRefresh)
         {
-            await page.WaitForURLAsync("**/login.html");
+            await page.WaitForURLWithDiagnosticsAsync("**/login.html");
             Assert.Null(await page.EvaluateAsync<object?>("() => sessionStorage.getItem('etlsql_token')"));
             await page.UnrouteAsync("**/api/auth/refresh");
             await fixture.SignInAsync(page);
             // The existing startup retry action must succeed after re-authentication, too.
             await page.RouteAsync("**/api/studio/session", route => route.FulfillAsync(new() { Status = 500, ContentType = "application/json", Body = "{\"error\":\"Retry after sign-in\"}" }));
-            await page.GotoAsync($"/studio.html?reportId={reportId}");
+            await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
             await Expect(page.Locator("#retrySessionBtn")).ToBeVisibleAsync();
             await page.UnrouteAsync("**/api/studio/session");
             await page.Locator("#retrySessionBtn").ClickAsync();
