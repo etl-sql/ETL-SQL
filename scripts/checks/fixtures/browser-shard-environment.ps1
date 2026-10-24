@@ -9,6 +9,12 @@ $env:ETLSQL_BROWSER_DIAGNOSTICS_DIR = 'existing-diagnostics'
 $env:ETLSQL_BROWSER_SHARD = 'existing-shard'
 $observation = @{ Invoked = $false }
 function node {
+    if ($args[0] -like '*check-built-browser-assets.mjs') {
+        $scope = [array]::IndexOf($args, '--project')
+        if ($scope -lt 0 -or $args[$scope + 1] -notlike '*ETL-SQL.Portal.BrowserTests.csproj') {
+            throw 'Browser no-build verification must name the browser test project.'
+        }
+    }
     if ($args[0] -like '*browser-shards.mjs') {
         & $NodeExecutable @args
     } else { $global:LASTEXITCODE = 0 }

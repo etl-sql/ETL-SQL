@@ -17,7 +17,7 @@ if (Test-Path -LiteralPath $receiptPath) { Remove-Item -LiteralPath $receiptPath
 if ($NoBuild) {
     & node (Join-Path $PSScriptRoot 'sync-assets.js') -Check
     if ($LASTEXITCODE -ne 0) { throw 'Browser assets need preparation.' }
-    & node (Join-Path $PSScriptRoot 'check-built-browser-assets.mjs') --configuration $Configuration
+    & node (Join-Path $PSScriptRoot 'check-built-browser-assets.mjs') --configuration $Configuration --project $project
     if ($LASTEXITCODE -ne 0) { throw 'Rebuild stale browser test binaries.' }
 } else {
     & node (Join-Path $PSScriptRoot 'sync-assets.js')

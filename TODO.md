@@ -306,14 +306,14 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   failures before exiting. Run it before expensive packaging and installation. Keep checks requiring
   a built MSI immediately after the build. Inject two independent errors and require both in the
   same report; measure a target of under five minutes for the source-only checks.
-  **Verified locally:** `node scripts/release-preflight.mjs` collects ten source checks and twenty-two
+  **Verified locally:** `node scripts/release-preflight.mjs` collects ten source checks and twenty-three
   release-automation fixtures before restore/build. Each fixture has its own log and deadline,
   covering artifact reuse, timeout/recovery and release gates without a hosted run. It runs
   with at most three child processes, per-check deadlines and individual logs plus `summary.json`.
   Pre-push, pre-release, CI, Release and MSI automation run it before expensive work. Replaced
   duplicate individual checks in the local drivers and CI. Failure-injection tests prove multiple
-  errors, a missing tool and a hung check do not hide later findings. All 23 checks passed in
-  19.3 seconds locally, including timeline, impact, shard, hosted-evidence and dispatch regressions. Version consistency checks
+  errors, a missing tool and a hung check do not hide later findings. All 33 checks passed in
+  37.1 seconds locally, including timeline, impact, shard, project-asset scope, hosted-evidence and dispatch regressions. Version consistency checks
   .NET, VS Code manifest/lock and Portal cache
   URLs together; injected partial bumps and malformed metadata fail locally. Installer XML,
   static source-file references and script syntax run before packaging, including direct
@@ -352,6 +352,11 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
     annotated/lightweight tags, mismatched local/remote tags and failed lookups.
     Recovery also preserves same-named branches using explicit tag refs; the previous automatic
     branch deletion is removed. The nine local release-check scripts passed together.
+    Targeted browser no-build checks now query MSBuild's evaluated transitive project graph and
+    validate every consumed asset stamp. Stale unrelated hosts no longer force a rebuild; missing
+    stamps, conditional/configuration mismatches, graph errors and unsupported reference overrides
+    still reject reuse. SDK-backed fixtures cover these cases; a real browser-project graph check passes.
+    Other local lane selectors and hosted acceptance remain open.
 - [ ] **Protect runner capacity and measure the actual critical path.** Cancel superseded branch
   validation runs, deduplicate equivalent push/PR work where their tested commits match, and retain
   immutable candidate/tag runs. Add queue wait, setup, build, test and upload times to the release

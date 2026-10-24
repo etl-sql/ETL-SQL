@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Browser shard no-build checks now validate asset stamps for the selected project's evaluated
+  dependency graph. Unrelated stale hosts no longer block a targeted run; missing/stale consumed
+  assets and unresolved or ambiguous project graphs still fail validation.
+
 - Local release-evidence bundles now reject aliased phase logs/artifacts, orphaned payloads and
   directories, and unsafe or duplicate directory-entry names even when manifest hashes agree.
   Verification walks the complete declared artifact tree using the producer's canonical paths.
