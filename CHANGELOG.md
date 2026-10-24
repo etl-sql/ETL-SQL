@@ -12,6 +12,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Track the pre-commit hook as executable and pin its line endings to LF so fresh Linux clones
+  run the staged C# and browser-asset checks.
+
 - Release promotes the Windows ZIP and VSIX already tested by native-package certification.
   It verifies the candidate, original job/artifact, CLI and webview acceptance, toolchain and hashes,
   then rechecks the retained selection and actual draft files before publication. Missing or changed

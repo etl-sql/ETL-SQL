@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 28 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 27 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -610,8 +610,9 @@ here; each one failed a single test per run and passed on rerun.
 - [ ] **`ON TYPE … WITH` completion branch** in `LanguageService`. Confirm whether that syntax still
   exists; remove the branch if not.
 - [ ] **Review `scripts/`, the installers and `tests/`.** The v0.22.0 review covered `src/` only.
-- [ ] **Pre-commit hook.** `scripts/pre-commit` is not executable in a fresh Linux clone, so the hook
-  is skipped there. Set the executable bit in Git (`git update-index --chmod=+x`).
+- [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
+  **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook
+  body unchanged. Its repository bytes use LF and `.gitattributes` now pins that checkout form.
 
 ---
 
