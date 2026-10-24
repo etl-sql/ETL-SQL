@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Local UI pre-push validation now runs the selected extension/UI package checks and complete browser
+  inventory, including Studio performance evidence. Existing formatting, consumer and smoke checks
+  remain; failures stop validation without reporting UI success.
+
 - Enterprise certification preserves supplied build caches and earlier evidence attempts. Fresh builds
   use a unique private directory; cleanup rejects paths outside that attempt and linked build roots.
   Nonempty evidence directories now require a new run/output path before testing starts.

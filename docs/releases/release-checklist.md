@@ -321,7 +321,10 @@ Regular CI selects extension, browser/consumer-contract, browser-journey and Stu
 checks for VS Code UI source edits, with native packaging retained. Consumer contracts have an
 independent diagnostic lane, `browser-consumer-contracts`. Shared inputs, dependency manifests,
 build configuration and unknown files still select full coverage. These targeted results do not
-satisfy full candidate certification; local pre-push remains broad for mixed UI changes.
+satisfy full candidate certification. Local UI pre-push adds extension/UI package checks and the
+complete browser inventory with Studio performance evidence to the existing broad formatting,
+consumer and smoke checks. Other mixed selections retain broad validation; no existing UI coverage
+is removed before the complete publication gate is enforced.
 
 ```powershell
 $candidateSha = git rev-parse HEAD

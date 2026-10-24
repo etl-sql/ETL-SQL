@@ -44,7 +44,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed. Run npm ci -
 
 # Browser-test-only edits use the same consumers as regular CI. One complete shard also runs
 # StudioPerformanceBudgetTests, so capture that result without a second test invocation.
-if ((@($impact.lanes | Sort-Object) -join ',') -ceq 'portal-browser-journey,source-preflight,studio-performance-budgets') {
+function Invoke-PrePushBrowserValidation {
     $browserProject = Join-Path $RepoRoot 'tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj'
     & dotnet build $browserProject --configuration $Configuration
     if ($LASTEXITCODE -ne 0) { throw 'Browser pre-push build failed.' }
@@ -76,13 +76,11 @@ if ((@($impact.lanes | Sort-Object) -join ',') -ceq 'portal-browser-journey,sour
     }
     & node (Join-Path $ScriptRoot 'sync-assets.js') -Check
     if ($LASTEXITCODE -ne 0) { throw 'Browser pre-push left prepared browser assets changed.' }
-    Write-Host "Browser pre-push passed. Evidence: $browserEvidence. Full release certification remains required before tagging." -ForegroundColor Green
-    exit 0
+    Write-Host "Browser validation passed. Evidence: $browserEvidence." -ForegroundColor Green
 }
 
-# Extension-only changes retain their engine integration prerequisite and both UI consumers.
-# Other selections continue through the conservative validation below.
-if (@($impact.lanes).Count -eq 2 -and $impact.lanes -contains 'source-preflight' -and $impact.lanes -contains 'build-vscode') {
+# Extension changes retain their engine integration prerequisite and both UI consumers.
+function Invoke-PrePushExtensionValidation {
     & dotnet build (Join-Path $RepoRoot 'src/ETL-SQL.App/ETL-SQL.App.csproj') --configuration Debug
     if ($LASTEXITCODE -ne 0) { throw 'Extension integration prerequisite build failed.' }
     foreach ($package in @('src/etl-sql-vscode', 'src/etl-sql-vscode/ui')) {
@@ -94,8 +92,75 @@ if (@($impact.lanes).Count -eq 2 -and $impact.lanes -contains 'source-preflight'
     }
     & node (Join-Path $ScriptRoot 'sync-assets.js') -Check
     if ($LASTEXITCODE -ne 0) { throw 'Extension validation left prepared browser assets changed.' }
+    Write-Host 'Extension validation passed.' -ForegroundColor Green
+}
+
+function Invoke-PrePushBrowserConsumerValidation {
+    # 2. Shared Report Assets
+    Write-Host "[3/7] Checking shared report runtime assets..." -ForegroundColor White
+    & node (Join-Path $ScriptRoot "sync-assets.js") -Check
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Shared report runtime assets are out of sync. Edit canonical files in 'src/ETL-SQL.ReportRuntime/Resources/Shared/' and run 'node .\scripts\sync-assets.js'."
+        exit $LASTEXITCODE
+    }
+    # The staged tree must hold every owner and input; generated outputs sit on the side of the index
+    # that .gitignore declares.
+    & node (Join-Path $ScriptRoot "browser-asset-ownership.mjs") --check
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Browser ownership check failed. Track the listed inputs, or move output edits into their owners and run 'node .\scripts\sync-assets.js'."
+        exit $LASTEXITCODE
+    }
+
+    # 3. Browser Type Gate
+    Write-Host "[4/7] Checking browser-side types..." -ForegroundColor White
+    & node (Join-Path $ScriptRoot "typecheck-browser.mjs")
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Browser type gate failed. See the findings above; run 'node scripts/typecheck-browser.mjs --summary' for the current picture. If the toolchain is missing, run 'npm ci --prefix scripts/typecheck'."
+        exit $LASTEXITCODE
+    }
+
+    # 4. Browser Lint Gate
+    Write-Host "[5/7] Linting the browser sources..." -ForegroundColor White
+    & node (Join-Path $ScriptRoot "lint-browser.mjs")
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Browser lint gate failed. See the findings above; run 'node scripts/lint-browser.mjs --summary' for the current picture. If the toolchain is missing, run 'npm ci --prefix scripts/lint'."
+        exit $LASTEXITCODE
+    }
+
+    # 5. Consumer Contract Checks
+    #
+    # Was one script — test-page-layout-options.mjs — while its twenty-seven siblings ran nowhere. That
+    # is how eight of them came to be red at the same time without anyone noticing. The runner discovers
+    # every scripts/checks/test-*.mjs, so a new check is gated the moment it is written rather than when
+    # somebody remembers to add a line here.
+    Write-Host "[6/7] Running consumer contract checks over the shipped sources..." -ForegroundColor White
+    & node (Join-Path $ScriptRoot "check-consumer-contracts.mjs") --exclude-preflight
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Consumer contract checks failed. Each failure above names the script and how to rerun it on its own."
+        exit $LASTEXITCODE
+    }
+    # Some checks write temporary modules beside the sources they load. Nothing may be left changed.
+    & node (Join-Path $ScriptRoot "sync-assets.js") -Check
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "A consumer check left the prepared browser assets changed. Run 'node .\scripts\sync-assets.js' and find the check that wrote to the checkout."
+        exit $LASTEXITCODE
+    }
+}
+
+$selectedLanes = @($impact.lanes | Sort-Object) -join ','
+if ($selectedLanes -ceq 'portal-browser-journey,source-preflight,studio-performance-budgets') {
+    Invoke-PrePushBrowserValidation
+    Write-Host 'Browser pre-push passed. Full release certification remains required before tagging.' -ForegroundColor Green
+    exit 0
+}
+if ($selectedLanes -ceq 'build-vscode,source-preflight') {
+    Invoke-PrePushExtensionValidation
     Write-Host 'Extension pre-push passed. Full release certification remains required before tagging.' -ForegroundColor Green
     exit 0
+}
+$validateUiConsumers = $selectedLanes -ceq 'browser-consumer-contracts,build-vscode,portal-browser-journey,source-preflight,studio-performance-budgets'
+if ($validateUiConsumers) {
+    Invoke-PrePushExtensionValidation
 }
 
 # 1. Code Formatting
@@ -108,55 +173,7 @@ if (-not $SkipFormat) {
     }
 }
 
-# 2. Shared Report Assets
-Write-Host "[3/7] Checking shared report runtime assets..." -ForegroundColor White
-& node (Join-Path $ScriptRoot "sync-assets.js") -Check
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Shared report runtime assets are out of sync. Edit canonical files in 'src/ETL-SQL.ReportRuntime/Resources/Shared/' and run 'node .\scripts\sync-assets.js'."
-    exit $LASTEXITCODE
-}
-# The staged tree must hold every owner and input; generated outputs sit on the side of the index
-# that .gitignore declares.
-& node (Join-Path $ScriptRoot "browser-asset-ownership.mjs") --check
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Browser ownership check failed. Track the listed inputs, or move output edits into their owners and run 'node .\scripts\sync-assets.js'."
-    exit $LASTEXITCODE
-}
-
-# 3. Browser Type Gate
-Write-Host "[4/7] Checking browser-side types..." -ForegroundColor White
-& node (Join-Path $ScriptRoot "typecheck-browser.mjs")
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Browser type gate failed. See the findings above; run 'node scripts/typecheck-browser.mjs --summary' for the current picture. If the toolchain is missing, run 'npm ci --prefix scripts/typecheck'."
-    exit $LASTEXITCODE
-}
-
-# 4. Browser Lint Gate
-Write-Host "[5/7] Linting the browser sources..." -ForegroundColor White
-& node (Join-Path $ScriptRoot "lint-browser.mjs")
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Browser lint gate failed. See the findings above; run 'node scripts/lint-browser.mjs --summary' for the current picture. If the toolchain is missing, run 'npm ci --prefix scripts/lint'."
-    exit $LASTEXITCODE
-}
-
-# 5. Consumer Contract Checks
-#
-# Was one script — test-page-layout-options.mjs — while its twenty-seven siblings ran nowhere. That
-# is how eight of them came to be red at the same time without anyone noticing. The runner discovers
-# every scripts/checks/test-*.mjs, so a new check is gated the moment it is written rather than when
-# somebody remembers to add a line here.
-Write-Host "[6/7] Running consumer contract checks over the shipped sources..." -ForegroundColor White
-& node (Join-Path $ScriptRoot "check-consumer-contracts.mjs") --exclude-preflight
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Consumer contract checks failed. Each failure above names the script and how to rerun it on its own."
-    exit $LASTEXITCODE
-}
-# Some checks write temporary modules beside the sources they load. Nothing may be left changed.
-& node (Join-Path $ScriptRoot "sync-assets.js") -Check
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "A consumer check left the prepared browser assets changed. Run 'node .\scripts\sync-assets.js' and find the check that wrote to the checkout."
-    exit $LASTEXITCODE
-}
+Invoke-PrePushBrowserConsumerValidation
 
 # 13. Fast Contract & Smoke Suite
 if (-not $SkipSmoke) {
@@ -184,6 +201,11 @@ if (-not $SkipSmoke) {
         Write-Error "Fast pre-push smoke/contract tests failed."
         exit $LASTEXITCODE
     }
+}
+
+if ($validateUiConsumers) {
+    Invoke-PrePushBrowserValidation
+    Write-Host 'UI pre-push passed. Full release certification remains required before tagging.' -ForegroundColor Green
 }
 
 $stopwatch.Stop()

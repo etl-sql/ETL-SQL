@@ -25,7 +25,13 @@ platform result beside the inventory, TRX and coverage receipt under a unique
 validation. Chromium installs on first use unless `ETLSQL_PLAYWRIGHT_SKIP_INSTALL=1` is already set
 for an installed browser. Runtime depends on the selected tests and browser setup.
 
-Shared inputs, unknown paths and mixed selections retain broader formatting, asset, browser
+UI source selections add the engine integration build, both extension/UI package checks and the
+complete browser inventory described above. They retain the existing solution-format, generated-contract,
+asset, type/lint, consumer-contract and smoke checks. The complete publication gate is still required
+before removing existing coverage. Any failing stage stops the run; Studio performance evidence and
+the caller's performance-output environment setting are checked/restored as in browser-only validation.
+
+Shared inputs, unknown paths and other mixed selections retain broader formatting, asset, browser
 type/lint, consumer-contract and engine smoke checks. Local pre-push results do not replace full
 candidate certification before release. See [CI impact selection](../../../scripts/README.md#ci-impact-selection).
 

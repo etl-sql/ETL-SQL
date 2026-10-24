@@ -4,9 +4,12 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync
 import os from 'node:os';
 import path from 'node:path';
 import { runInNewContext } from 'node:vm';
+import { fileURLToPath } from 'node:url';
 import { manifest, selectLanes, changedPaths, runSelection, validateManifest } from '../select-ci-lanes.mjs';
 
 const all = manifest.lanes;
+assert.ok(process.argv.length === 2 || (process.argv.length === 4 && process.argv[2] === '--legacy-prepush' && /^[a-f0-9]{7,40}$/.test(process.argv[3])));
+const legacyPrePush = process.argv[3];
 assert.equal(selectLanes(['TODO.md']).nativePackages, false);
 assert.equal(selectLanes(['tests/ETL-SQL.Portal.BrowserTests/Journey.cs']).nativePackages, false);
 assert.equal(selectLanes(['TODO.md', 'tests/ETL-SQL.Portal.BrowserTests/Journey.cs']).nativePackages, false);
@@ -219,13 +222,33 @@ ConvertTo-Json -InputObject @($results)
       if (full === 'true') assert.deepEqual(JSON.parse(values.lanes), all);
     }
   }
-  file('scripts/Test-PrePush.ps1', readFileSync(new URL('../Test-PrePush.ps1', import.meta.url), 'utf8'));
+  const old = legacyPrePush ? spawnSync('git', ['show', `${legacyPrePush}:scripts/Test-PrePush.ps1`],
+    { cwd: fileURLToPath(new URL('../../', import.meta.url)), encoding: 'utf8', windowsHide: true }) : null;
+  if (old) assert.equal(old.status, 0, old.stderr);
+  file('scripts/Test-PrePush.ps1', old?.stdout ?? readFileSync(new URL('../Test-PrePush.ps1', import.meta.url), 'utf8'));
   file('prepush-fixture.ps1', `
 $ErrorActionPreference = 'Stop'
+$global:ImpactAssetChecks = 0
 function node {
     if (($env:IMPACT_EXTENSION -eq '1' -or $env:IMPACT_BROWSER -eq '1') -and $args[0].EndsWith('sync-assets.js')) {
-        $global:LASTEXITCODE = if ($env:IMPACT_FAIL_TASK -eq 'assets' -and $args -contains '-Check') { 1 } else { 0 }
+        $key = 'prepare-assets'
+        if ($args -contains '-Check') { $global:ImpactAssetChecks++; $key = "assets-$global:ImpactAssetChecks" }
+        if ($env:IMPACT_UI -eq '1') { $key | Add-Content (Join-Path $env:IMPACT_FIXTURE_ROOT 'commands.txt') }
+        $global:LASTEXITCODE = if (($env:IMPACT_FAIL_TASK -eq 'assets' -and $args -contains '-Check') -or
+            $env:IMPACT_FAIL_TASK -eq $key) { 1 } else { 0 }
         return
+    }
+    if ($env:IMPACT_UI -eq '1') {
+        $checks = @{ 'browser-asset-ownership.mjs' = 'ownership'; 'typecheck-browser.mjs' = 'types';
+            'lint-browser.mjs' = 'browser-lint'; 'check-consumer-contracts.mjs' = 'consumers' }
+        $key = $checks[[IO.Path]::GetFileName($args[0])]
+        if ($key) {
+            if ($key -eq 'ownership' -and $args -notcontains '--check') { throw 'MISSING_OWNERSHIP_CHECK' }
+            if ($key -eq 'consumers' -and $args -notcontains '--exclude-preflight') { throw 'REPEATED_PREFLIGHT' }
+            $key | Add-Content (Join-Path $env:IMPACT_FIXTURE_ROOT 'commands.txt')
+            $global:LASTEXITCODE = if ($env:IMPACT_FAIL_TASK -eq $key) { 1 } else { 0 }
+            return
+        }
     }
     if ($args[0].EndsWith('select-ci-lanes.mjs')) {
         $output = Join-Path $env:IMPACT_FIXTURE_ROOT 'release-validation/preflight/local-ci-impact.json'
@@ -237,16 +260,33 @@ function node {
     $global:LASTEXITCODE = 0
 }
 function dotnet {
+    if ($env:IMPACT_UI -eq '1' -and $args[0] -eq 'format' -and $args[1].EndsWith('ETL-SQL.slnx')) {
+        if ($env:IMPACT_EXPECT_BROAD -eq '1') { throw 'BROAD_VALIDATION_REACHED' }
+        'solution-format' | Add-Content (Join-Path $env:IMPACT_FIXTURE_ROOT 'commands.txt')
+        if ($args -notcontains '--no-restore' -or $args -notcontains '--verify-no-changes') { throw 'WRONG_SOLUTION_FORMAT_FLAGS' }
+        $global:LASTEXITCODE = if ($env:IMPACT_FAIL_TASK -eq 'solution-format') { 1 } else { 0 }
+        return
+    }
+    if ($env:IMPACT_UI -eq '1' -and $args[0] -eq 'test') {
+        $key = if ($args[1].EndsWith('ETL-SQL.Portal.Tests.csproj')) { 'generated-contracts' } elseif ($args[1].EndsWith('ETL-SQL.Tests.csproj')) { 'smoke' } else { throw 'UNEXPECTED_TEST_PROJECT' }
+        $filter = $args[[Array]::IndexOf($args, '--filter') + 1]
+        $expectedFilter = if ($key -eq 'generated-contracts') { 'FullyQualifiedName~BrowserContractsGeneratorTests' } else { 'Category=Architecture|Category=Docs|Category=Smoke.Core|Category=Smoke.Reporting|Category=Smoke.Security' }
+        if ($filter -cne $expectedFilter -or $args -notcontains '--no-restore' -or $args -notcontains 'Release') { throw 'WRONG_SMOKE_ARGS' }
+        $key | Add-Content (Join-Path $env:IMPACT_FIXTURE_ROOT 'commands.txt')
+        $global:LASTEXITCODE = if ($env:IMPACT_FAIL_TASK -eq $key) { 1 } else { 0 }
+        return
+    }
     if ($env:IMPACT_BROWSER -eq '1' -and $args[1].EndsWith('ETL-SQL.Portal.BrowserTests.csproj') -and $args[0] -in @('build', 'format')) {
         "browser-$($args[0])" | Add-Content (Join-Path $env:IMPACT_FIXTURE_ROOT 'commands.txt')
         if ($args[0] -eq 'build' -and ($args -notcontains '--configuration' -or $args -notcontains 'Release')) { throw 'WRONG_BROWSER_CONFIGURATION' }
         if ($args[0] -eq 'format' -and ($args -notcontains '--no-restore' -or $args -notcontains '--verify-no-changes')) { throw 'WRONG_FORMAT_FLAGS' }
-        $global:LASTEXITCODE = if ($env:IMPACT_FAIL_TASK -eq $args[0]) { 1 } else { 0 }
+        $global:LASTEXITCODE = if ($env:IMPACT_FAIL_TASK -in @($args[0], "browser-$($args[0])")) { 1 } else { 0 }
         return
     }
     if ($env:IMPACT_EXTENSION -ne '1' -or $args[0] -ne 'build' -or -not $args[1].EndsWith('ETL-SQL.App.csproj')) { throw 'UNEXPECTED_DOTNET' }
+    if ($args -notcontains '--configuration' -or $args -notcontains 'Debug') { throw 'WRONG_EXTENSION_CONFIGURATION' }
     'engine' | Add-Content (Join-Path $env:IMPACT_FIXTURE_ROOT 'commands.txt')
-    $global:LASTEXITCODE = 0
+    $global:LASTEXITCODE = if ($env:IMPACT_FAIL_TASK -eq 'engine-build') { 1 } else { 0 }
 }
 function pwsh {
     if ($env:IMPACT_BROWSER -ne '1' -or $args -notcontains '-NoBuild' -or $args -notcontains '-File' -or $args -notcontains '-EvidenceDirectory') { throw 'UNEXPECTED_CHILD' }
@@ -269,7 +309,8 @@ function pwsh {
 }
 function npm {
     "$($args[1]) / $($args[3])" | Add-Content (Join-Path $env:IMPACT_FIXTURE_ROOT 'commands.txt')
-    $global:LASTEXITCODE = if ($env:IMPACT_FAIL_TASK -eq $args[3]) { 1 } else { 0 }
+    $prefix = if ([IO.Path]::GetFileName($args[1]) -eq 'ui') { 'ui' } else { 'extension' }
+    $global:LASTEXITCODE = if ($env:IMPACT_FAIL_TASK -in @($args[3], "$prefix-$($args[3])")) { 1 } else { 0 }
 }
 try { & (Join-Path $env:IMPACT_FIXTURE_ROOT 'scripts/Test-PrePush.ps1') }
 finally { $env:ETLSQL_STUDIO_PERF_OUTPUT | Set-Content (Join-Path $env:IMPACT_FIXTURE_ROOT 'restored-performance-output.txt') }
@@ -316,6 +357,57 @@ finally { $env:ETLSQL_STUDIO_PERF_OUTPUT | Set-Content (Join-Path $env:IMPACT_FI
       assert.match(commands[4], /etl-sql-vscode[/\\]ui/);
     }
   }
+  const uiCommands = ['prepare-assets', 'engine', 'extension-compile', 'extension-lint', 'extension-test:unit',
+    'ui-lint', 'ui-build', 'ui-test:unit', 'assets-1', 'solution-format', 'assets-2', 'ownership', 'types', 'browser-lint',
+    'consumers', 'assets-3', 'generated-contracts', 'smoke', 'browser-build', 'browser-format', 'browser-tests', 'assets-4'];
+  const uiFailures = ['', 'prepare-assets', 'engine-build', 'extension-compile', 'extension-lint', 'extension-test:unit',
+    'ui-lint', 'ui-build', 'ui-test:unit', 'assets-1', 'solution-format', 'assets-2', 'ownership', 'types', 'browser-lint',
+    'consumers', 'assets-3', 'generated-contracts', 'smoke', 'browser-build', 'browser-format', 'tests', 'missing-performance', 'invalid-performance',
+    'wrong-platform', 'missing-method', 'assets-4'];
+  for (const failure of legacyPrePush ? [''] : uiFailures) {
+    file('commands.txt', '');
+    const local = spawnSync('pwsh', ['-NoProfile', '-File', path.join(fixture, 'prepush-fixture.ps1')], {
+      encoding: 'utf8', windowsHide: true, cwd: fixture, timeout: 15000,
+      env: { ...process.env, IMPACT_FIXTURE_ROOT: fixture, IMPACT_FIXTURE_LANES: (failure ? uiLanes : uiLanes.toReversed()).join(','),
+        IMPACT_EXTENSION: '1', IMPACT_BROWSER: '1', IMPACT_UI: '1', IMPACT_FAIL_TASK: failure,
+        ETLSQL_STUDIO_PERF_OUTPUT: 'original-performance-output' },
+    });
+    assert.ifError(local.error);
+    const commands = readFileSync(path.join(fixture, 'commands.txt'), 'utf8').trim().split(/\r?\n/).filter(Boolean).map(line => {
+      if (!line.includes(' / ')) return line;
+      const [packagePath, task] = line.split(' / ');
+      return `${/[/\\]ui$/.test(packagePath) ? 'ui' : 'extension'}-${task}`;
+    });
+    if (legacyPrePush) {
+      assert.equal(local.status, 0, local.stdout + local.stderr);
+      assert.deepEqual(commands, ['prepare-assets', 'solution-format', 'assets-1', 'ownership', 'types', 'browser-lint',
+        'consumers', 'assets-2', 'generated-contracts', 'smoke']);
+      assert.match(local.stdout, /PRE-PUSH VALIDATION SUCCEEDED/);
+      console.log('Reproduced UI pre-push success without selected extension/browser validation.');
+      continue;
+    }
+    assert.equal(local.status, failure ? 1 : 0, local.stdout + local.stderr);
+    const stop = !failure ? uiCommands.length : uiCommands.indexOf(failure === 'engine-build' ? 'engine' :
+      ['tests', 'missing-performance', 'invalid-performance', 'wrong-platform', 'missing-method'].includes(failure) ? 'browser-tests' : failure) + 1;
+    assert.ok(stop > 0);
+    assert.deepEqual(commands, uiCommands.slice(0, stop), failure);
+    assert.equal(readFileSync(path.join(fixture, 'restored-performance-output.txt'), 'utf8').trim(), 'original-performance-output');
+    assert.equal(local.stdout.includes('UI pre-push passed'), !failure);
+  }
+  for (const lanes of [all, [...uiLanes, 'enterprise-certification'], uiLanes.filter(lane => lane !== 'browser-consumer-contracts')]) {
+    file('commands.txt', '');
+    const local = spawnSync('pwsh', ['-NoProfile', '-File', path.join(fixture, 'prepush-fixture.ps1')], {
+      encoding: 'utf8', windowsHide: true, cwd: fixture, timeout: 15000,
+      env: { ...process.env, IMPACT_FIXTURE_ROOT: fixture, IMPACT_FIXTURE_LANES: lanes.join(','),
+        IMPACT_EXTENSION: '1', IMPACT_BROWSER: '1', IMPACT_UI: '1', IMPACT_EXPECT_BROAD: '1', IMPACT_FAIL_TASK: '' },
+    });
+    assert.ifError(local.error);
+    assert.equal(local.status, 1, local.stdout + local.stderr);
+    assert.match(local.stderr, /BROAD_VALIDATION_REACHED/);
+    assert.deepEqual(readFileSync(path.join(fixture, 'commands.txt'), 'utf8').trim().split(/\r?\n/), ['prepare-assets']);
+    assert.ok(!local.stdout.includes('UI pre-push passed'));
+  }
+  console.log(`UI pre-push: ${legacyPrePush ? 'legacy gap reproduced' : 'all selected consumers, retained broad checks and 26 failure paths verified'}.`);
   console.log('CI impact: narrow changes, shared consumers, unknown paths, full override, real Git comparisons, renames, local changes and missing bases passed.');
 } finally {
   // Only the private fixture created by mkdtemp is removed.

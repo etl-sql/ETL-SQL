@@ -68,8 +68,11 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   VS Code UI source changes now select extension, consumer-contract, browser and Studio performance
   jobs in regular CI, with native package checks retained. Consumer contracts have an independent
   lane selector; full certification still selects them. Fixtures evaluate actual CI conditions for
-  push/PR/manual events and cover UI renames plus shared/configuration fallback. Local mixed-lane
-  pre-push remains broad; hosted selection and timing proof remain open.
+  push/PR/manual events and cover UI renames plus shared/configuration fallback. Local UI selections
+  now run extension/UI package checks and the complete browser inventory, including Studio performance,
+  alongside the existing broad formatting, consumer and smoke gates. Executed routing fixtures cover
+  every failing stage and retain broad fallback for other combinations. Hosted selection/timing proof
+  and the complete publication gate remain open; no existing UI pre-push coverage is removed.
   Full local/operator requirements remain; other local lanes still need
   targeted selection, and hosted timing/recovery/rollout evidence is outstanding.
   Release smoke checks now run against CI's existing Release build; tag validation no longer
