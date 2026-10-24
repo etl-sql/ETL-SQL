@@ -41,6 +41,12 @@ preflight before builds, retain their selection report, and reject missing or in
 Superseded native-package PR runs are cancelled within the same PR ref. Manual candidate runs use
 separate SHA identities and are preserved. A no-impact PR skip does not certify release packages.
 
+Release promotes the Windows ZIP/VSIX from a successful manual native-package run on the frozen
+release branch. `collect-certified-windows.mjs` verifies the original job/artifact, acceptance details,
+toolchain and package hashes. It pins the selection before promotion and rechecks it alongside the
+actual draft files before publication. Missing certification blocks Release without a Windows rebuild.
+See the [release checklist](../docs/releases/release-checklist.md) for dispatch and recovery.
+
 `MsiImpact.Helpers.ps1` reads the same manifest rules for regular MSI selection. The same classified
 documentation and browser-test-only paths can skip installer certification; shipped/shared and
 unknown inputs require it. Missing comparison history requires certification. Manual dispatch and

@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Release promotes the Windows ZIP and VSIX already tested by native-package certification.
+  It verifies the candidate, original job/artifact, CLI and webview acceptance, toolchain and hashes,
+  then rechecks the retained selection and actual draft files before publication. Missing or changed
+  certification blocks promotion without rebuilding the Windows packages.
+
 ### Breaking Changes
 
 Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).

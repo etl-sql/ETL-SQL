@@ -295,12 +295,13 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   MSI discovery now also reuses exact-candidate nightly certification, checking complete run/artifact
   inventories and rechecking the run before selection to reject concurrent retries. Executed fake-CLI
   fixtures cover nightly reuse, empty inventories, incomplete pagination and changed attempts.
-  Windows ZIP/VSIX publication now retains build outputs by artifact ID before a separate upload
-  job. Failed-upload retries can reuse the successful build. Candidate SHA, version and package
-  hashes are checked before upload and against the downloaded draft using the original manifest
-  digest. Packaging has a 90-minute supervisor with streamed logs retained on failure. Executed
-  fixtures reject missing, empty, changed and wrong-candidate inputs; workflow gates pass locally.
-  Hosted failed-upload recovery and pre-tag Windows package certification remain open.
+  Windows ZIP/VSIX publication now consumes the retained exact-candidate manual native-package
+  certification artifact from a release branch. Release no longer builds a second Windows ZIP/VSIX.
+  Selection verifies successful original jobs, complete artifact inventories, acceptance reports/logs,
+  Node/.NET versions and package hashes, preserving carried execution identity across retries.
+  The selection is attached/attested; publication rechecks its origin and actual draft bytes against
+  the pinned receipt. Local API/producer/draft rejection and actual upload-recovery fixtures pass.
+  Hosted cross-run reuse, failed-upload recovery and elapsed-time acceptance remain open.
   macOS Intel and Apple Silicon builds now retain separate artifacts and manifest digests through
   independent reusable-workflow calls. A Linux upload job verifies both before publication;
   attestation checks the downloaded draft against their original digests. A successful optional

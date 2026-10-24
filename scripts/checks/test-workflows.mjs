@@ -50,16 +50,14 @@ for (const prefix of ['browser-asset-ownership-', 'studio-performance-windows-',
   assert.ok(artifactNames.has(`${prefix}123-1`));
   assert.ok(artifactNames.has(`${prefix}123-2`));
 }
-const windowsBuild = jobs.get('build-windows');
 const windowsUpload = jobs.get('upload-windows');
-assert.match(windowsBuild, /^    needs: validate\r?$/m);
-assert.doesNotMatch(windowsBuild, /gh release upload/);
-assert.match(windowsBuild, /artifact_id: \$\{\{ steps\.packages\.outputs\.artifact-id \}\}/);
-assert.match(windowsBuild, /manifest_sha256: \$\{\{ steps\.identity\.outputs\.manifest_sha256 \}\}/);
-assert.match(windowsBuild, /Invoke-CertificationProcess\.ps1[^\r\n]+-TimeoutSeconds 5400/);
-assert.match(windowsBuild, /if: always\(\)[\s\S]+path: release-validation\/windows-package\//);
-assert.match(windowsUpload, /^    needs: \[validate, prepare-release, build-windows\]/m);
-assert.match(windowsUpload, /artifact-ids: \$\{\{ needs\.build-windows\.outputs\.artifact_id \}\}/);
+assert.equal(jobs.has('build-windows'), false, 'Release must promote the accepted Windows bytes without rebuilding.');
+assert.match(jobs.get('validate'), /Require certified pre-tag Windows packages/);
+assert.match(jobs.get('validate'), /collect-certified-windows\.mjs/);
+assert.match(windowsUpload, /^    needs: \[validate, prepare-release\]/m);
+assert.match(windowsUpload, /artifact-ids: \$\{\{ needs\.validate\.outputs\.windows_artifact_id \}\}/);
+assert.match(windowsUpload, /run-id: \$\{\{ needs\.validate\.outputs\.windows_run_id \}\}/);
+assert.match(windowsUpload, /github-token: \$\{\{ github.token \}\}/);
 assert.doesNotMatch(windowsUpload, /publish-release\.ps1|dotnet build|npm ci/);
 assert.ok(windowsUpload.indexOf('windows-release-packages.mjs verify') < windowsUpload.indexOf('gh release upload'));
 assert.match(jobs.get('attest-provenance'), /needs: \[validate, upload-windows,/);

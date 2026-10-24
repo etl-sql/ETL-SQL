@@ -287,6 +287,30 @@ jobs:
           $summary | Add-Member -NotePropertyName vsixInstalledAssets -NotePropertyValue $report.installedAssets
           $summary | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $summaryPath
 
+      - name: Finalize certified Windows package identity
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . ./scripts/Release.Helpers.ps1
+          $source = Get-ReleaseCertificationSource -RepoRoot $PWD.Path
+          if ($source.commit -cne $env:CANDIDATE_SHA -or $source.dirtyPaths.Count -ne 0) { throw 'Native package acceptance changed candidate source.' }
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.VersionPrefix
+          $nodeVersion = (& node --version).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot record Node toolchain.' }
+          $dotnetVersion = (& dotnet --version).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot record .NET toolchain.' }
+          node scripts/windows-release-packages.mjs create release $env:CANDIDATE_SHA $version
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot bind accepted Windows package bytes.' }
+          $summaryPath = 'artifacts/native-packages/win-x64/certification.json'
+          $summary = Get-Content $summaryPath -Raw | ConvertFrom-Json
+          $summary | Add-Member -NotePropertyName packageManifestSha256 -NotePropertyValue (Get-FileHash release/windows-package-inputs.json -Algorithm SHA256).Hash.ToLowerInvariant()
+          $summary | Add-Member -NotePropertyName toolchain -NotePropertyValue @{ nodeVersion = $nodeVersion; dotnetVersion = $dotnetVersion }
+          $summary | Add-Member -NotePropertyName releaseCandidateChecksPassedAt -NotePropertyValue ([DateTimeOffset]::UtcNow.ToString('o'))
+          $summary | ConvertTo-Json -Depth 8 | Set-Content $summaryPath -Encoding utf8
+
       - name: Retain native package evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -299,6 +323,7 @@ jobs:
             release/*.dmg
             release/sha256sums.txt
             release/sbom.json
+            release/windows-package-inputs.json
           if-no-files-found: error
           retention-days: 30
 

@@ -87,8 +87,8 @@ try {
   for (const name of ['windows-release-packages.mjs', 'release-package-manifest.mjs']) {
     copyFileSync(fileURLToPath(new URL(`../${name}`, import.meta.url)), path.join(rehearsal, 'scripts', name));
   }
-  const candidate = path.join(rehearsal, 'candidate');
-  mkdirSync(candidate);
+  const candidate = path.join(rehearsal, 'candidate/release');
+  mkdirSync(candidate, { recursive: true });
   for (const name of names) writeFileSync(path.join(candidate, name), `retained ${name}`);
   await windowsPackages('create', candidate, sourceSha, version);
   const manifest = 'windows-package-inputs.json';
@@ -119,3 +119,5 @@ try {
 } finally {
   rmSync(rehearsal, { recursive: true, force: true });
 }
+
+await import('./test-certified-windows.mjs');

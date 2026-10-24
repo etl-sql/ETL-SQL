@@ -53,14 +53,26 @@ run rejects concurrent retries. Both release drivers wait on the selected nightl
 without dispatching another full certification. CodeQL and the other release requirements still
 need their own evidence. Hosted reuse and timing acceptance remain open.
 
-Windows ZIP/VSIX packaging retains both files and a candidate hash manifest before uploading to
-the draft release in a separate job. If upload fails after a successful build, rerun failed jobs
-in the same Release run to reuse its retained artifact ID. Missing artifacts, changed bytes or
-candidate identities block upload. Before attestation, the downloaded draft manifest must match
-the original build's manifest digest, and both package hashes must match. This supports upload
-recovery within one Release run; pre-tag Windows package certification and hosted retry acceptance
-remain outstanding. Packaging streams through a 90-minute watchdog inside a 95-minute step and
-110-minute job, with per-attempt diagnostics retained even on failure.
+Windows ZIP/VSIX publication requires the exact candidate's successful manual `native-packages.yml`
+run on a release branch within seven days. Dispatch it before tagging, after freezing the branch:
+
+```powershell
+gh workflow run native-packages.yml --ref release/vx.y.z
+```
+
+That workflow builds and checks the native packages, launches the extracted CLI, verifies packaged
+browser assets and exercises both VSIX webviews. Its Windows artifact retains those original bytes,
+acceptance reports/logs, Node/.NET versions and a candidate hash manifest. PR results and no-impact
+skips cannot authorize publication. Release rejects a missing or newer unsuccessful candidate run;
+it does not rebuild Windows packages as a fallback.
+
+Release selects the original successful job and artifact across failed-job retries, verifies the
+acceptance details and package hashes, then uploads those retained bytes. Its selection receipt is
+attached and attested with the draft. Before publication, the collector rechecks the selected run,
+job, artifact and evidence hashes against the pinned receipt, then verifies the actual draft ZIP,
+VSIX, manifest and selection. Missing/expired artifacts, input changes and altered acceptance details
+block promotion. After an upload failure, rerun failed jobs in the same Release run; the successful
+validation retains its selection. Hosted cross-run reuse, retry and timing acceptance remain open.
 
 macOS Intel and Apple Silicon builds also retain packages by independent artifact IDs before a
 separate Linux upload job. Rerun failed jobs in the same Release run after a build or upload failure;
@@ -401,7 +413,7 @@ metadata changes after certification: a new commit requires new evidence. The re
 commits. Inspect the discovery job's selection log to confirm the pre-tag run was reused.
 
 Release promotes the selected installer artifact ID. There is no separate MSI build in Windows ZIP/VSIX packaging and no second
-standalone tag-triggered MSI run. Linux candidate certification and macOS/Windows ZIP/VSIX packaging can run while MSI
+standalone tag-triggered MSI run. Linux candidate certification and macOS packaging can run while MSI
 certification proceeds. Promotion uploads `msi-certification-inputs.json` alongside the MSI; the
 attestation job downloads the draft MSI and checks its bytes against that manifest before it can
 attest and publish. A failed or skipped required certification blocks promotion and publication.
