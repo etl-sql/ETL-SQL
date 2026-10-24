@@ -22,7 +22,7 @@ function repository() {
   const repo = path.join(temporary, `repo-${next++}`);
   mkdirSync(path.join(repo, 'scripts'), { recursive: true });
   mkdirSync(path.join(repo, 'tests/fixtures'), { recursive: true });
-  for (const name of ['Release.Helpers.ps1', 'ProductionCanaryEvidence.Helpers.ps1', 'Test-ProductionCanaryCertification.ps1']) {
+  for (const name of ['Release.Helpers.ps1', 'ProductionCanaryEvidence.Helpers.ps1', 'Test-ProductionCanaryCertification.ps1', 'Test-EnterpriseHardeningCertification.ps1']) {
     copyFileSync(path.join(root, 'scripts', name), path.join(repo, 'scripts', name));
   }
   if (legacy) {
@@ -77,6 +77,25 @@ try {
         'Source drift or failed identity lookup must not leave a completed certification report.');
     }
     console.log(`${legacy ? 'Reproduced unsafe legacy acceptance' : 'Verified certification driver'}: ${mode}`);
+  }
+  if (!legacy) {
+    for (const configuration of ['default', 'Release', 'Debug', 'release']) {
+      const repo = repository();
+      const run = powershell('./run-enterprise-configuration-probe.ps1', ['-RepoRoot', repo, '-Configuration', configuration]);
+      assert.equal(run.status, 0, run.stdout + run.stderr);
+      const expected = configuration === 'default' || configuration.toLowerCase() === 'release' ? 'Release' : 'Debug';
+      const report = JSON.parse(readFileSync(path.join(repo, 'out/enterprise-hardening-summary.json'), 'utf8').replace(/^\uFEFF/, ''));
+      assert.equal(report.status, 'Passed');
+      assert.equal(report.configuration, expected);
+      assert.equal(report.releaseEligible, expected === 'Release');
+      const commands = readFileSync(path.join(repo, 'out/arguments.jsonl'), 'utf8').trim().split(/\r?\n/).map(line => JSON.parse(line));
+      assert.equal(commands.length, 2);
+      assert.deepEqual(commands.map(args => args[args.indexOf('--configuration') + 1]), [expected, expected]);
+      assert.ok(commands.every(args => args.includes('--no-build')));
+      console.log(`Verified enterprise configuration and eligibility: ${configuration}`);
+    }
+    const invalid = powershell('./run-enterprise-configuration-probe.ps1', ['-RepoRoot', repository(), '-Configuration', 'Unknown']);
+    assert.notEqual(invalid.status, 0, 'Unknown enterprise configurations must fail before running tests.');
   }
 } finally {
   rmSync(temporary, { recursive: true, force: true });

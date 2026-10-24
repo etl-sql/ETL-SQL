@@ -620,6 +620,8 @@ in top-level and nested certifications. Rerun older producers whose reports omit
       and Linux for the candidate SHA. Use the `Enterprise Certification (windows)` and `(linux)` CI
       artifacts, or equivalent controlled-host runs under
       `certification-results/enterprise-hardening/<run-id>/<platform>/`.
+      The driver defaults to Release and records the configuration in its summary. Explicit
+      `-Configuration Debug` runs are development evidence and cannot support release claims.
 - [ ] **Recovery drill:** `etl-sql admin restore --validate --report` passes against candidate backup
       material, with the report retained under `artifacts/release-evidence/x.y.z/recovery/`.
 - [ ] **HA fault/recovery evidence:** the candidate's fault plan is run and its evidence validates.

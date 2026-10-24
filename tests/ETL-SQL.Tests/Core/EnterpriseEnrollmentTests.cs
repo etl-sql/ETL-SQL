@@ -117,10 +117,16 @@ public sealed class EnterpriseEnrollmentTests : IDisposable
         var directory = System.IO.Path.Combine(_root, "unsafe");
         Directory.CreateDirectory(directory);
         var path = System.IO.Path.Combine(directory, "enrollment.json");
-        File.WriteAllText(path, "{}");
         if (OperatingSystem.IsWindows())
         {
-            var security = new DirectoryInfo(directory).GetAccessControl();
+            // Define this private fixture's ACL instead of modifying an inherited non-canonical ACL.
+            var security = new DirectorySecurity();
+            security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+            using var identity = WindowsIdentity.GetCurrent();
+            security.AddAccessRule(new FileSystemAccessRule(
+                identity.User!, FileSystemRights.FullControl,
+                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                PropagationFlags.None, AccessControlType.Allow));
             security.AddAccessRule(new FileSystemAccessRule(
                 new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null),
                 FileSystemRights.Modify,
@@ -129,7 +135,8 @@ public sealed class EnterpriseEnrollmentTests : IDisposable
                 AccessControlType.Allow));
             new DirectoryInfo(directory).SetAccessControl(security);
         }
-        else
+        File.WriteAllText(path, "{}");
+        if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(directory,
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Orchestrator;
@@ -276,7 +277,7 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
     }
 
     [Fact]
-    public void ProductionHttpClients_UsePolicyBoundFactory()
+    public async Task ProductionHttpClients_UsePolicyBoundFactory()
     {
         var srcRoot = Path.Combine(FindRepositoryRoot(), "src");
         var forbidden = new[]
@@ -290,7 +291,7 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
         var allowedFile = Path.GetFullPath(Path.Combine(srcRoot, "ETL-SQL.Core", "Governance",
             "PolicyBoundHttp.cs"));
 
-        var offenders = Directory.EnumerateFiles(srcRoot, "*.cs", SearchOption.AllDirectories)
+        var offenders = (await ProductionSourceFilesAsync(FindRepositoryRoot()))
             .Where(file => !string.Equals(Path.GetFullPath(file), allowedFile, StringComparison.OrdinalIgnoreCase))
             .SelectMany(file => File.ReadLines(file)
                 .Select((line, index) => new { file, line, lineNumber = index + 1 }))
@@ -299,6 +300,75 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
             .ToArray();
 
         Assert.Empty(offenders);
+    }
+
+    [Fact]
+    public async Task ProductionSourceInventory_IncludesNewAuthoredFilesAndExcludesIgnoredOutputs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"policy_source_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(root, "src", "Example"));
+        Directory.CreateDirectory(Path.Combine(root, "src", "etl-sql-vscode", ".vscode-test", "user-data"));
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, ".gitignore"), ".vscode-test/\n");
+            var tracked = Path.Combine(root, "src", "Example", "Tracked.cs");
+            var added = Path.Combine(root, "src", "Example", "New é.cs");
+            await File.WriteAllTextAsync(tracked, "// tracked source");
+            await GitAsync(root, "init", "--quiet");
+            await GitAsync(root, "add", ".gitignore", "src/Example/Tracked.cs");
+            await File.WriteAllTextAsync(added, "// untracked candidate source");
+            await File.WriteAllTextAsync(Path.Combine(root, "src", "etl-sql-vscode", ".vscode-test", "user-data", "Generated.cs"), "// ignored output");
+
+            Assert.Equal(new[] { added, tracked }.Order(StringComparer.Ordinal),
+                (await ProductionSourceFilesAsync(root)).Order(StringComparer.Ordinal));
+        }
+        finally
+        {
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, FileAttributes.Normal);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static async Task<string[]> ProductionSourceFilesAsync(string root)
+    {
+        var paths = await GitAsync(root, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "src/");
+        return paths.Split('\0', StringSplitOptions.RemoveEmptyEntries)
+            .Where(file => file.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.Ordinal)
+            .Select(file => Path.GetFullPath(Path.Combine(root, file))).ToArray();
+    }
+
+    private static async Task<string> GitAsync(string root, params string[] arguments)
+    {
+        var start = new ProcessStartInfo("git")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        start.ArgumentList.Add("-C");
+        start.ArgumentList.Add(root);
+        foreach (var argument in arguments) start.ArgumentList.Add(argument);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start source inventory Git command.");
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        try
+        {
+            var output = process.StandardOutput.ReadToEndAsync(deadline.Token);
+            var error = process.StandardError.ReadToEndAsync(deadline.Token);
+            await process.WaitForExitAsync(deadline.Token);
+            var result = await output;
+            var diagnostics = await error;
+            Assert.True(process.ExitCode == 0, $"Source inventory Git command failed: {diagnostics}");
+            return result;
+        }
+        catch
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            throw;
+        }
     }
 
     [Fact]

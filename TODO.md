@@ -217,6 +217,13 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   failed or mismatched evidence. This validates archive recovery prerequisites, not live HA
   continuity or measured recovery time. Hosted execution and full package promotion remain open;
   local release requirements stay in place until that evidence passes.
+  Enterprise certification now explicitly defaults both test projects to Release, records the
+  configuration and keeps Debug evidence ineligible for release. Executed driver fixtures verify
+  configuration propagation. The source-policy audit includes tracked/new authored C# files while
+  excluding ignored runtime outputs; the ACL fixture no longer depends on inherited ACL ordering.
+  The repaired local Windows lane passes all 327 engine and 76 Portal cases without skips under
+  ordinary OS access (the certificate-store test cannot run in the restricted sandbox). This is
+  dirty-tree development evidence, not final-candidate or Linux certification; earlier failures remain retained.
 
 #### Codex review — stop paying for successful work again
 

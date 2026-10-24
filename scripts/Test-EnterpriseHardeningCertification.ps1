@@ -12,6 +12,8 @@
 #>
 [CmdletBinding()]
 param(
+    [ValidateSet('Debug', 'Release')]
+    [string]$Configuration = 'Release',
     [string]$RunId = '',
     [string]$Platform = '',
     [string]$OutDir = '',
@@ -22,6 +24,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$Configuration = if ($Configuration -eq 'Release') { 'Release' } else { 'Debug' }
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Resolve-Path (Join-Path $ScriptRoot '..')
 . (Join-Path $ScriptRoot 'Release.Helpers.ps1')
@@ -107,6 +110,7 @@ function Write-Markdown {
         ('Run id: `{0}`' -f $Summary.runId),
         ('Platform: `{0}`' -f $Summary.platform),
         ('Commit: `{0}`' -f $Summary.commit),
+        ('Configuration: `{0}`' -f $Summary.configuration),
         ('Status: **{0}**' -f $Summary.status),
         '',
         '| Step | Result | Log |',
@@ -128,6 +132,7 @@ $portalArtifactsPath = Join-Path $ArtifactsPath 'portal'
 $testArgsCommon = @(
     'test',
     'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj',
+    '--configuration', $Configuration,
     '--filter',
     'FullyQualifiedName~ConnectorPolicyEnforcementTests|FullyQualifiedName~RestApiTests|FullyQualifiedName~SharePointAndADConnectorTests|FullyQualifiedName~SecretProviderTests|FullyQualifiedName~OrganizationPolicySourceTests|FullyQualifiedName~OrganizationPolicyCacheTests|FullyQualifiedName~OrganizationPolicySchemaTests|FullyQualifiedName~PolicyAuthorityServiceTests|FullyQualifiedName~GovernanceRecoveryTests|FullyQualifiedName~GovernanceEnforcementAuditTests|FullyQualifiedName~EnterpriseEnrollmentTests|FullyQualifiedName~EnterprisePolicyRuntimeTests|FullyQualifiedName~EnterpriseHostCertificationTests|FullyQualifiedName~ExecutionSnapshotPropagationTests|FullyQualifiedName~ProcessJobExecutorChaosTests|FullyQualifiedName~PolicyRefreshBypassTests|FullyQualifiedName~FileSystemPolicyAuthorizerTests|FullyQualifiedName~FileSystemPolicyEnforcementTests|FullyQualifiedName~FileConnectorWriteBoundaryTests|FullyQualifiedName~MutationGuardrailEnforcementTests|FullyQualifiedName~ResourceCeilingEnforcementTests|FullyQualifiedName~ProcessPolicyRulesTests|FullyQualifiedName~StandaloneRegressionTests|FullyQualifiedName~SecurityEventContractTests|FullyQualifiedName~SecurityEventRuntimeTests|FullyQualifiedName~SecurityEventOutboxTests|FullyQualifiedName~SecurityEventTransportTests|FullyQualifiedName~SecurityEventHealthGateTests|FullyQualifiedName~BootstrapSecurityEventSinkTests|FullyQualifiedName~StmtFileSystemTests',
     '--logger',
@@ -157,6 +162,7 @@ if (-not $SkipPortalTests) {
     $portalArgs = @(
         'test',
         'tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj',
+        '--configuration', $Configuration,
         '--filter',
         'FullyQualifiedName~AuditOutboxTransportTests|FullyQualifiedName~OidcAuthTests|FullyQualifiedName~PolicyDistributionApiTests|FullyQualifiedName~PolicyAuthorityApiTests|FullyQualifiedName~GovernanceRecoveryCertificationTests|FullyQualifiedName~FleetContainmentTests|FullyQualifiedName~FleetHealthAggregatorTests|FullyQualifiedName~AdminServicesTests',
         '--logger',
@@ -200,11 +206,15 @@ $summary = [pscustomobject]@{
     generatedAt = (Get-Date).ToUniversalTime().ToString('o')
     runId = $RunId
     platform = $Platform
+    configuration = $Configuration
     commit = $commit
     sourceFingerprint = $source.fingerprint
     dirty = $dirtyPaths.Count -gt 0
-    releaseEligible = $status -eq 'Passed' -and $dirtyPaths.Count -eq 0
-    uncovered = @(if ($SkipPortalTests) { 'Portal enterprise HTTP and policy tests were not run.' })
+    releaseEligible = $status -eq 'Passed' -and $dirtyPaths.Count -eq 0 -and $Configuration -eq 'Release'
+    uncovered = @(
+        if ($SkipPortalTests) { 'Portal enterprise HTTP and policy tests were not run.' }
+        if ($Configuration -ne 'Release') { 'Debug configuration is development evidence and cannot support a release claim.' }
+    )
     status = $status
     steps = @($stepArray)
 }

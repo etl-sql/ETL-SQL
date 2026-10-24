@@ -14,6 +14,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Enterprise certification now defaults to Release, passes the selected configuration to both test
+  projects and records it in JSON/Markdown. Debug results remain development evidence. Security
+  tests define the unsafe fixture's ACL independently of host inheritance and audit Git's authored
+  source inventory, including new files, without traversing ignored VS Code runtime data.
+
 - Deployment-profile, provider-neutral fault, canary and enterprise certification now capture source
   identity before testing and recheck it before completing their reports. Changed commits, tracked,
   staged or untracked source changes and failed Git lookups abort certification. Reports retain the
