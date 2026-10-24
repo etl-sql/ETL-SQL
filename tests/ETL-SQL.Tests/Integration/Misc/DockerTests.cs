@@ -30,7 +30,7 @@ namespace ETL_SQL.Tests.Integration
         public async Task DisposeAsync()
         {
             var manager = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<IDockerManager>();
-            await manager.CloseContainers(null);
+            await manager.CloseContainers("", null);
         }
     }
 
@@ -163,20 +163,20 @@ namespace ETL_SQL.Tests.Integration
             using var client = await CreateDockerClient();
             try
             {
-                await manager.StartContainer("postgres:15-alpine", alias);
+                await manager.StartContainer("", "postgres:15-alpine", alias);
 
                 var beforePause = await InspectContainerByName(client, containerName);
                 Assert.True(beforePause.State.Running);
                 Assert.False(beforePause.State.Paused);
 
-                await manager.PauseContainer(alias);
+                await manager.PauseContainer("", alias);
                 paused = true;
 
                 var afterPause = await InspectContainerByName(client, containerName);
                 Assert.True(afterPause.State.Running);
                 Assert.True(afterPause.State.Paused);
 
-                await manager.ResumeContainer(alias);
+                await manager.ResumeContainer("", alias);
                 paused = false;
 
                 var afterResume = await InspectContainerByName(client, containerName);
@@ -186,8 +186,8 @@ namespace ETL_SQL.Tests.Integration
             finally
             {
                 if (paused)
-                    await manager.ResumeContainer(alias);
-                await manager.CloseContainers(alias);
+                    await manager.ResumeContainer("", alias);
+                await manager.CloseContainers("", alias);
             }
         }
 

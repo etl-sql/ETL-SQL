@@ -16,6 +16,19 @@ public static class ConfigurationExtensions
     public const string InstalledSecretsFileName = "appsettings.secrets.json";
 
     /// <summary>
+    /// The settings the installers move into <see cref="InstalledSecretsFileName"/>, as
+    /// colon-separated paths. Keep in sync with build-linux-packages.sh and configure-portal-jwt.ps1
+    /// (InstallerConfigurationScriptTests compares all three).
+    /// </summary>
+    public static readonly IReadOnlyList<string> InstalledSecretPaths =
+    [
+        "Portal:Jwt:Secret", "Portal:Jwt:PreviousSecrets", "Portal:Dataset:AtRestKey",
+        "Portal:Dataset:PreviousAtRestKeys", "Portal:FirstRun:AdminPassword", "Orchestrator:ApiKey",
+        "Orchestrator:PreviousApiKeys", "Orchestrator:IdentitySigningSecret", "Portal:Orchestrator:ApiKey",
+        "Portal:Orchestrator:IdentitySigningSecret",
+    ];
+
+    /// <summary>
     /// Layers <see cref="InstalledSecretsFileName"/> from <paramref name="directory"/> directly above
     /// the appsettings*.json sources, so it overrides them and environment variables and the command
     /// line still override it. A caller who cannot read the file (an ordinary user running the CLI)

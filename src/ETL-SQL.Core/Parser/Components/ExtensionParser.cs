@@ -423,29 +423,6 @@ public class ExtensionParser : ParserComponent
         DockerTargetMode mode = DockerTargetMode.LastStarted;
         string? alias = null;
 
-        if (startToken.Type == TokenType.DOCKER)
-        {
-            // Legacy: DOCKER CLOSE [<alias>], DOCKER STOP, etc.
-            if (Match(TokenType.START)) action = DockerAction.Start;
-            else if (Match(TokenType.STOP)) action = DockerAction.Stop;
-            else if (Match(TokenType.PAUSE)) action = DockerAction.Pause;
-            else if (Match(TokenType.CLOSE)) action = DockerAction.Close;
-
-            if (_parser.Current.Type == TokenType.IDENTIFIER && !LanguageMetadata.IsKeyword(_parser.Current.Value))
-            {
-                alias = Advance().Value;
-                mode = DockerTargetMode.Single;
-            }
-            else if (_parser.Current.Type == TokenType.STRING_LITERAL)
-            {
-                alias = Advance().Value.Trim('\'', '\"');
-                mode = DockerTargetMode.Single;
-            }
-
-            _parser.Match(TokenType.SEMICOLON);
-            return new DockerActionStatement(action, alias, mode) { Line = startToken.Line, Column = startToken.Column };
-        }
-
         if (Match(TokenType.ALL))
         {
             Consume(TokenType.DOCKER, "Expected DOCKER after ALL");
@@ -476,21 +453,6 @@ public class ExtensionParser : ParserComponent
 
     public Statement ParseLineage(Token startToken)
     {
-        // Legacy parser for an earlier draft spelling. Canonical file export is EXPORT LINEAGE.
-        if (_parser.Current.Type == TokenType.EXPORT)
-        {
-            Advance(); // consume EXPORT
-            Consume(TokenType.AS, "Expected AS after EXPORT");
-            var olTok = _parser.Current;
-            if (!olTok.Value.Equals("OPENLINEAGE", StringComparison.OrdinalIgnoreCase))
-                throw new SyntaxException("Expected OPENLINEAGE after AS", olTok.Line, olTok.Column);
-            Advance();
-            Consume(TokenType.TO, "Expected TO after OPENLINEAGE");
-            var path = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
-            Match(TokenType.SEMICOLON);
-            return new LineageStatement(null, null, path, exportAsOpenLineage: true) { Line = startToken.Line, Column = startToken.Column };
-        }
-
         Match(TokenType.LPAREN);
         var targetTable = _parser.ParseTableReference(allowAlias: false);
         string? columnName = null;

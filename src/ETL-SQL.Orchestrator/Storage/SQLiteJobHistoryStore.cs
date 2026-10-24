@@ -39,45 +39,6 @@ namespace ETL_SQL.Orchestrator.Storage
             await InitializeAsync();
         }
 
-        private static readonly (string OldName, string NewName)[] LegacyTables =
-        [
-            ("Jobs", "jobs"),
-            ("Schedules", "schedules"),
-            ("Notifications", "notifications"),
-            ("JobSchedules", "job_schedules"),
-            ("JobNotifications", "job_notifications"),
-            ("OrchestratorObjectAcls", "orchestrator_object_acls"),
-            ("JobHistory", "job_history"),
-            ("JobColumnMetrics", "job_column_metrics"),
-            ("JobDataQualityFailures", "job_data_quality_failures"),
-            ("JobStatementMetrics", "job_statement_metrics"),
-            ("TenantUsageRecords", "tenant_usage_records"),
-            ("SharedTenantControlPlanes", "shared_tenant_control_planes"),
-            ("SharedTenantLifecycleOperations", "shared_tenant_lifecycle_operations"),
-            ("SharedTenantLifecycleFencedJobs", "shared_tenant_lifecycle_fenced_jobs"),
-            ("TenantPortabilityCutovers", "tenant_portability_cutovers"),
-            ("TenantPortabilityFencedJobs", "tenant_portability_fenced_jobs"),
-            ("BundleVersions", "bundle_versions"),
-            ("BundleFiles", "bundle_files"),
-            ("BundleDependencies", "bundle_dependencies"),
-            ("LineageHistory", "lineage_history"),
-            ("Nodes", "nodes"),
-            ("WriteEpochs", "write_epochs"),
-            ("ClusterLocks", "cluster_locks"),
-            ("JobState", "job_state"),
-            ("HostMetrics", "host_metrics"),
-            ("JobHistoryDaily", "job_history_daily"),
-            ("HostMetricsDaily", "host_metrics_daily"),
-        ];
-
-        private async Task MigrateLegacySchemaAsync(DbConnection connection)
-        {
-            foreach (var (oldName, newName) in LegacyTables)
-            {
-                await OrchestratorSchemaMigration.MigrateLegacyTableAsync(_dialect, connection, oldName, newName);
-            }
-        }
-
         /// <summary>Initializes the SQLite database and creates the necessary tables if they don't exist.</summary>
         public async Task InitializeAsync()
         {
@@ -122,6 +83,10 @@ namespace ETL_SQL.Orchestrator.Storage
                     is_enabled INTEGER NOT NULL DEFAULT 1,
                     max_retries INTEGER NOT NULL DEFAULT 0,
                     retry_delay_seconds INTEGER NOT NULL DEFAULT 30,
+                    script_hash TEXT,
+                    hash_policy TEXT NOT NULL DEFAULT 'Warn',
+                    lease_owner TEXT,
+                    lease_expires_at TEXT,
                     version INTEGER NOT NULL DEFAULT 1,
                     lease_fence_token INTEGER NOT NULL DEFAULT 0,
                     run_state TEXT NOT NULL DEFAULT 'Idle',
@@ -219,7 +184,16 @@ namespace ETL_SQL.Orchestrator.Storage
                     end_time TEXT,
                     status TEXT NOT NULL,
                     error_message TEXT,
-                    rows_processed INTEGER DEFAULT 0
+                    rows_processed INTEGER DEFAULT 0,
+                    peak_memory_bytes INTEGER DEFAULT 0,
+                    cpu_time_seconds REAL DEFAULT 0,
+                    script_hash_at_run_time TEXT,
+                    hash_matched INTEGER,
+                    rows_quarantined INTEGER DEFAULT 0,
+                    rows_warned INTEGER DEFAULT 0,
+                    data_quality_failures TEXT,
+                    session_id TEXT,
+                    checkpoint_label TEXT
                 );";
                     // The index over (TenantId, JobId) is created after the column migrations rather
                     // than here: CREATE TABLE IF NOT EXISTS leaves an existing table alone, so on a
@@ -551,21 +525,11 @@ namespace ETL_SQL.Orchestrator.Storage
                         .Replace("peak_memory_bytes INTEGER", $"peak_memory_bytes {_dialect.Int64Type}");
 
                     await EnsureCollationExistsAsync(connection);
-                    await MigrateLegacySchemaAsync(connection);
 
                     using var command = connection.CreateCommand();
                     command.CommandText = schema;
                     await command.ExecuteNonQueryAsync();
 
-                    // 8B-2: Schema migration — add resource tracking columns if missing
-                    await EnsureHistoryColumnsExist(connection);
-                    await EnsureColumnMetricColumnsExist(connection);
-                    await EnsureJobColumnsExist(connection);
-                    await EnsureLineageHistoryColumnsExist(connection);
-                    await EnsureHostMetricsDailyColumnsExist(connection);
-                    await EnsureHostMetricsColumnsExist(connection);
-
-                    // Indexes over migrated columns, once those columns are guaranteed to exist.
                     await ExecuteOptionalSqlAsync(
                         connection,
                         "CREATE INDEX IF NOT EXISTS idx_jh_tenant_job ON job_history(tenant_id, job_id, start_time);");
@@ -622,174 +586,6 @@ namespace ETL_SQL.Orchestrator.Storage
         {
             var sqlState = ex.GetType().GetProperty("SqlState")?.GetValue(ex) as string;
             return string.Equals(sqlState, "23505", StringComparison.Ordinal);
-        }
-
-        private static bool IsDuplicateColumnRace(DbException ex)
-        {
-            // PostgreSQL reports duplicate_column. SQLite exposes no provider-neutral SQL state,
-            // so constrain its fallback to the provider type and exact diagnostic category.
-            var sqlState = ex.GetType().GetProperty("SqlState")?.GetValue(ex) as string;
-            if (string.Equals(sqlState, "42701", StringComparison.Ordinal))
-                return true;
-
-            return string.Equals(
-                       ex.GetType().FullName,
-                       "Microsoft.Data.Sqlite.SqliteException",
-                       StringComparison.Ordinal)
-                   && ex.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static async Task AddColumnIfMissingAsync(
-            DbConnection connection,
-            ISet<string> knownColumns,
-            string table,
-            string column,
-            string definition)
-        {
-            if (knownColumns.Contains(column))
-                return;
-
-            try
-            {
-                using var command = connection.CreateCommand();
-                command.CommandText = $"ALTER TABLE {table} ADD COLUMN {definition};";
-                await command.ExecuteNonQueryAsync();
-            }
-            catch (DbException ex) when (IsDuplicateColumnRace(ex))
-            {
-                // Another process or store instance won the additive migration after this
-                // instance read its column snapshot. The desired schema is already present.
-            }
-
-            knownColumns.Add(column);
-        }
-
-        private async Task EnsureJobColumnsExist(DbConnection connection)
-        {
-            var columns = await _dialect.GetColumnNamesAsync(connection, "jobs");
-
-            // A Jobs table with no Id predates surrogate object identity, when a job's name was its
-            // primary key. That cannot be migrated by adding columns: the identity has to become the
-            // key and the name has to become unique per tenant instead of globally. Refuse here, with
-            // the remedy, rather than letting it surface later as "no such column: j.Id" from
-            // whichever query happened to run first.
-            if (columns.Count > 0 && !columns.Contains("id"))
-                throw new InvalidOperationException(
-                    "This orchestrator database predates surrogate job identity and cannot be " +
-                    "upgraded in place. No release shipped with data in this schema, so the remedy " +
-                    "is to delete the database file and let it be recreated.");
-
-            await AddColumnIfMissingAsync(connection, columns, "jobs", "max_retries", "max_retries INTEGER NOT NULL DEFAULT 0");
-            await AddColumnIfMissingAsync(connection, columns, "jobs", "retry_delay_seconds", "retry_delay_seconds INTEGER NOT NULL DEFAULT 30");
-            await AddColumnIfMissingAsync(connection, columns, "jobs", "script_hash", "script_hash TEXT");
-            await AddColumnIfMissingAsync(connection, columns, "jobs", "hash_policy", "hash_policy TEXT NOT NULL DEFAULT 'Warn'");
-            await AddColumnIfMissingAsync(connection, columns, "jobs", "lease_owner", "lease_owner TEXT");
-            await AddColumnIfMissingAsync(connection, columns, "jobs", "lease_expires_at", "lease_expires_at TEXT");
-            await AddColumnIfMissingAsync(connection, columns, "jobs", "lease_fence_token", "lease_fence_token INTEGER NOT NULL DEFAULT 0");
-            await AddColumnIfMissingAsync(connection, columns, "jobs", "run_state", "run_state TEXT NOT NULL DEFAULT 'Idle'");
-            await AddColumnIfMissingAsync(connection, columns, "jobs", "version", "version INTEGER NOT NULL DEFAULT 1");
-
-            // Unified job/schedule/notification model. A job now names what it acts on rather than
-            // carrying an inline script body, and carries the human-facing label that lets its Name
-            // stay a stable machine identity.
-            await AddColumnIfMissingAsync(connection, columns, "jobs", "job_type", "job_type TEXT NOT NULL DEFAULT 'Script'");
-
-            foreach (var column in new[] { "target_path", "display_name", "description", "options", "created_by", "modified_by", "tenant_id" })
-                await AddColumnIfMissingAsync(connection, columns, "jobs", column, $"{column} TEXT");
-        }
-
-        private async Task EnsureHostMetricsColumnsExist(DbConnection connection)
-        {
-            // The node's tenant and capacity-pool binding, added after the table first shipped. These
-            // describe which tenant a *node* is dedicated to, not which tenant a sample belongs to —
-            // a Shared node's gauges do not decompose by tenant, and an empty binding says exactly
-            // that rather than misattributing capacity.
-            var columns = await _dialect.GetColumnNamesAsync(connection, "host_metrics");
-            await AddColumnIfMissingAsync(
-                connection, columns, "host_metrics", "node_tenant_id", "node_tenant_id TEXT NOT NULL DEFAULT ''");
-            await AddColumnIfMissingAsync(
-                connection, columns, "host_metrics", "capacity_pool", "capacity_pool TEXT NOT NULL DEFAULT ''");
-        }
-
-        private async Task EnsureHostMetricsDailyColumnsExist(DbConnection connection)
-        {
-            // Whole-host CPU joined the daily roll-up after the table first shipped; upgrade
-            // existing databases in place (nullable REAL — no backfill possible for pruned raw rows).
-            var columns = await _dialect.GetColumnNamesAsync(connection, "host_metrics_daily");
-
-            await AddColumnIfMissingAsync(connection, columns, "host_metrics_daily", "avg_host_cpu_percent", "avg_host_cpu_percent REAL");
-            await AddColumnIfMissingAsync(connection, columns, "host_metrics_daily", "max_host_cpu_percent", "max_host_cpu_percent REAL");
-        }
-
-        private async Task EnsureHistoryColumnsExist(DbConnection connection)
-        {
-            var columns = await _dialect.GetColumnNamesAsync(connection, "job_history");
-
-            // Identity and tenant, matching the CREATE defaults. The empty default is meaningful in
-            // both: '' is an ad-hoc run with no job, and '' is the unbound (Solo) tenant. Rows in a
-            // table written by an earlier build of this schema are exactly that — unbound runs whose
-            // job binding was never recorded — so the default states the truth rather than guessing.
-            await AddColumnIfMissingAsync(connection, columns, "job_history", "job_id", "job_id TEXT NOT NULL DEFAULT ''");
-            await AddColumnIfMissingAsync(connection, columns, "job_history", "tenant_id", "tenant_id TEXT NOT NULL DEFAULT ''");
-
-            await AddColumnIfMissingAsync(connection, columns, "job_history", "peak_memory_bytes", "peak_memory_bytes INTEGER DEFAULT 0");
-            await AddColumnIfMissingAsync(connection, columns, "job_history", "cpu_time_seconds", "cpu_time_seconds REAL DEFAULT 0");
-            await AddColumnIfMissingAsync(connection, columns, "job_history", "script_hash_at_run_time", "script_hash_at_run_time TEXT");
-            await AddColumnIfMissingAsync(connection, columns, "job_history", "hash_matched", "hash_matched INTEGER");
-
-            // Data-quality outcomes per run (rolling-expand safe: additive, defaulted).
-            await AddColumnIfMissingAsync(connection, columns, "job_history", "rows_quarantined", "rows_quarantined INTEGER DEFAULT 0");
-            await AddColumnIfMissingAsync(connection, columns, "job_history", "rows_warned", "rows_warned INTEGER DEFAULT 0");
-
-            // Compact "column:rule=count;..." payload — counts only, never sample values.
-            await AddColumnIfMissingAsync(connection, columns, "job_history", "data_quality_failures", "data_quality_failures TEXT");
-            await AddColumnIfMissingAsync(connection, columns, "job_history", "session_id", "session_id TEXT");
-            await AddColumnIfMissingAsync(connection, columns, "job_history", "checkpoint_label", "checkpoint_label TEXT");
-        }
-
-        private async Task EnsureColumnMetricColumnsExist(DbConnection connection)
-        {
-            var columns = await _dialect.GetColumnNamesAsync(connection, "job_column_metrics");
-            await AddColumnIfMissingAsync(connection, columns, "job_column_metrics", "max_timestamp_utc", "max_timestamp_utc TEXT");
-
-            // The tenant of the run these measurements belong to, carried directly as
-            // SharedBackupSurfaceInventory declares. It is copied from JobHistory at insert rather
-            // than passed in by the caller, so it cannot disagree with the run it describes; the
-            // reason to hold it at all is that backup, restore and tenant deletion then take a
-            // predicate on this table instead of a join that a future query could forget.
-            foreach (var table in new[] { "job_column_metrics", "job_data_quality_failures", "job_statement_metrics" })
-            {
-                var tableColumns = await _dialect.GetColumnNamesAsync(connection, table);
-                await AddColumnIfMissingAsync(
-                    connection, tableColumns, table, "tenant_id", "tenant_id TEXT NOT NULL DEFAULT ''");
-            }
-        }
-
-        private async Task EnsureLineageHistoryColumnsExist(DbConnection connection)
-        {
-            var columns = await _dialect.GetColumnNamesAsync(connection, "lineage_history");
-
-            async Task AddColumn(string name, string ddl)
-            {
-                await AddColumnIfMissingAsync(connection, columns, "lineage_history", name, ddl);
-            }
-
-            // SourceColumns predates this migration on new installs but may be
-            // missing on databases created before it was added to the schema.
-            await AddColumn("source_columns", "source_columns TEXT NOT NULL DEFAULT '[]'");
-            await AddColumn("tenant_id", "tenant_id TEXT NOT NULL DEFAULT 'portal-host'");
-            await AddColumn("transformation_kind", "transformation_kind TEXT");
-            await AddColumn("transformation_expression", "transformation_expression TEXT");
-            await AddColumn("functions_applied", "functions_applied TEXT NOT NULL DEFAULT '[]'");
-            await AddColumn("derived_from_descriptions", "derived_from_descriptions TEXT");
-
-            using var indexes = connection.CreateCommand();
-            indexes.CommandText = @"
-                CREATE INDEX IF NOT EXISTS idx_lh_tenant_target
-                    ON lineage_history(tenant_id, target_table COLLATE NOCASE);
-                CREATE INDEX IF NOT EXISTS idx_lh_tenant_runAt
-                    ON lineage_history(tenant_id, run_at);";
-            await indexes.ExecuteNonQueryAsync();
         }
 
         public async Task SaveJobAsync(JobDefinition job)

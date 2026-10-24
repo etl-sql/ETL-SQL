@@ -12,6 +12,31 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
+
+- An unquoted `TRUE` now turns boolean connection options on. `USE_SSL = TRUE` / `ENCRYPT = TRUE`
+  had turned encryption off for MSSQL and LDAPS off for Active Directory.
+- `LIKE` and `NOT LIKE` with a NULL operand are UNKNOWN; `NOT LIKE` no longer keeps NULL rows.
+- Arithmetic on doubles outside decimal's range stays numeric instead of concatenating as text.
+- Scripts can no longer read or write the application's own configuration, secrets, databases,
+  keys or binaries, even inside an approved safe zone.
+- Kafka `SECURITY_PROTOCOL` applies without SASL credentials and an unknown value is an error.
+- SMTP `USE_SSL = TRUE` requires TLS: implicit on 465, STARTTLS on any other port.
+- `${NAME}` placeholders in `CREATE CONNECTION` / `ALTER CONNECTION` read only variables listed in
+  `Security:AllowedEnvVars`, the list `ENV()` uses.
+- `EXECUTE TOOL` keeps a parameter value with spaces as one argument.
+- `GENERATE JWT_SECRET` no longer writes to `appsettings.json`; install the value with
+  `etl-sql config setup-jwt --update`.
+- `USE DOCKER` accepts the official database repositories only, gives every container a generated
+  password (Oracle included) and publishes its ports on loopback.
+- LDAP sign-in refuses a name qualified with a domain other than `Identity:Ldap:Domain`.
+- Share links and embed tokens are stored as hashes and shown once, when created. Listings return
+  the id instead of the token, and `DELETE .../share-links/by-id/{id}` revokes by id.
+
+### Added
+
 - Controlled-host local certification can resume failed phases or recover failed evidence uploads
   after verifying the same run, runner, workspace, toolchain, cached outputs and original receipts.
   Reused phases retain their original execution times and job identities. Missing checkpoints or
@@ -328,6 +353,95 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   or invalid receipts. Cross-run reuse still needs hosted rehearsal.
 - The release driver requires the MSI input manifest, checksums and SBOM, treats a draft as
   incomplete, and no longer downloads all binaries to overwrite verification assets after publication.
+
+### Security
+
+- Chart and micro-chart SVG keeps only SVG-namespace elements and drops `<style>`, `style`
+  attributes and any `url()` that leaves the document. An XHTML `<meta>` refresh inside a chart
+  could redirect a report page, and `<img>`, `@import` or `url()` could fetch from outside it, in
+  hosts without the Portal's CSP.
+- Identity-sensitive reports no longer serve a shared snapshot left from before they read the
+  viewer's identity; the snapshot routes refuse them and the report opens live.
+- The report runtime's URL check strips tab, newline and control characters first, as the browser
+  does, so `java\tscript:` no longer passes as a relative link. HTML-visual inline micro-charts go
+  through the SVG sanitizer.
+- A Gateway session matches replies to their operation, so rows that arrive after a caller gave up
+  are never handed to the next caller.
+- Connection tests (`TEST CONNECTION`, the Portal connection test) resolve `KEYFILE` and other
+  key or credential file options through the path guard, so a test cannot load the service
+  account's own SSH key. `LINT 'path'` reads through the same guard.
+- `POST /api/connectors/test` is limited to administrators and accounts with Studio script preview.
+- `POST /api/scripts/upload` no longer replaces the script of a report or pipeline the uploader
+  cannot author.
+- The ReportPlayer serves only loopback host names, refuses cross-origin requests and requires JSON
+  on POSTs, so a web page cannot drive it or read it through DNS rebinding.
+- An Orchestrator without an API key (loopback-only) also refuses requests whose Host is not a
+  loopback name, so a DNS-rebinding page cannot reach its unauthenticated job API.
+- The VS Code report preview writes unsaved scripts and the built manifest into a private temporary
+  directory instead of predictable names in the shared temp folder.
+- Machine-bound encryption on Linux and macOS, and machine-bound encrypted files everywhere, is
+  keyed from the engine's machine key (the owner-only `etl-sql/machine.key`, or a mounted
+  `ETLSQL_MACHINE_KEY_FILE`). It was keyed from `/etc/machine-id` or the host name, which a cloned
+  image shares. Scripts cannot open the machine key file.
+- ODBC connection values with `;`, `{`, `}` or `=` are brace-quoted, so a value cannot add keywords;
+  an option name with those characters is refused.
+- SharePoint list titles and BigQuery identifiers are escaped (a quote, and a trailing backslash).
+- `etl-sql purge` refuses the install folder, a folder that contains it, and any folder in a git
+  working tree.
+- The operation ledger refuses a session id that leaves the session root.
+- LDAP refuses an empty password before binding.
+- The shipped `appsettings.json` no longer lists a developer's folder as an approved safe zone.
+- `USE DOCKER` state is scoped by tenant: an alias, `DOCKER.CONNECTION_STRING` and the container
+  itself are no longer shared between tenants on one Orchestrator. Single-tenant hosts keep their
+  container names.
+- Upgrade code for state written by earlier releases is removed: Orchestrator schema renames and
+  add-missing-column steps, plaintext JSON snapshots, plaintext PII and settings upgrades, the
+  Gateway `outcomes.json` import, `Portal:Dataset:LegacyAtRestKeyVersion`, JSON temp-table restore
+  and browser-stored Studio drafts. Every store is created in its current shape.
+- Report formats from earlier releases are no longer read: the pre-v0.19 `interactions` map,
+  version-one chart contracts, Studio's pre-v0.20 single-value filter upgrade, and counts-only
+  data-quality rows.
+- Deprecated syntax is removed: the `FILE` connection type (use `FLATFILE`), `DROP CHART`
+  (use `DROP VISUAL`), `DOCKER STOP|CLOSE|...` (use `STOP DOCKER`), `LINEAGE EXPORT AS
+  OPENLINEAGE` (use `EXPORT LINEAGE`), the `@sensitivity` tag alias (use `@classification`), the
+  missing comma between `TOOLTIP` parts, and the `etl-sql ui old` command.
+- Only authenticated encryption formats are read. `ENC:` values, encrypted files, SSH-encrypted
+  files and machine-bound payloads in the old unauthenticated AES-CBC formats are refused instead
+  of decrypted.
+- Streaming decryption of encrypted files (password, SSH key and machine-bound) checks the file's
+  authentication tag before returning any data; a tampered file is refused instead of decrypting
+  to garbage rows.
+- The Gateway broker refuses a result beyond the operation's row or size limit and drops rows for
+  an operation nobody is waiting on, so a Gateway cannot make the Portal buffer without bound.
+- A Gateway node id held by a live session with a different workload key is refused; the same node
+  reconnecting replaces its stale session.
+- The Linux package keeps shipped binaries and configuration owned by root. The bin folder stays
+  writable for the services' databases and data, with the sticky bit so they cannot replace root's
+  files, and the `.deb` is built with root ownership.
+
+### Fixed
+
+- Gateway reconnect backoff doubles across failed connections instead of staying at twice the
+  initial delay, and waits before reconnecting after a session ends.
+- A Gateway result larger than one frame is sent as several row batches; it used to end the
+  session after the operation was recorded as committed.
+- Markdown link text and URLs in report titles are escaped once; `&` showed as `&amp;` and broke
+  query strings.
+- The ReportPlayer map route answers 403 for a path outside the report folder instead of failing
+  with 500.
+- Gateway session registration and removal no longer race, which could show a connected Gateway
+  as offline; the Player's paginated-page set is no longer changed while a rebuild reads it.
+- Re-attaching to a running `USE DOCKER` container reads the credentials it was created with; it
+  used to hand out a new password the container never had.
+- Importing a connection string keeps a password that reads `True` or `False` as typed.
+- SMTP docs give the default port as 587, which the connector uses.
+- Chart contract fingerprint tests normalize line endings, so they pass on Linux and macOS.
+- Security tests that used Windows paths now build OS-neutral paths, so the safe-zone, temp-folder,
+  runaway-protection and credential-folder rules are checked on Linux and macOS too.
+- `admin restore` writes the installer-managed secrets (JWT secret, dataset at-rest keys,
+  Orchestrator API keys and identity signing secret, first-run password) to
+  `appsettings.secrets.json` again. Restored only into `appsettings.json`, they were shadowed by an
+  installed host's existing secrets file, leaving restored dataset caches unreadable.
 
 ## [0.21.0] — 2026-10-18
 

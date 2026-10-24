@@ -136,18 +136,20 @@ public static class ConnectionStringParser
 
             var canonicalKey = StandardKeyAliases.TryGetValue(key, out var mapped) ? mapped : key.ToUpperInvariant().Replace(' ', '_');
 
-            // Normalize boolean values
-            if (val.Equals("True", StringComparison.OrdinalIgnoreCase) || val.Equals("SSPI", StringComparison.OrdinalIgnoreCase))
+            bool isPassword = canonicalKey.Equals("PASSWORD", StringComparison.OrdinalIgnoreCase) || canonicalKey.Equals("PWD", StringComparison.OrdinalIgnoreCase);
+
+            // Normalize boolean values. A password that happens to read "True" stays as typed.
+            if (!isPassword && (val.Equals("True", StringComparison.OrdinalIgnoreCase) || val.Equals("SSPI", StringComparison.OrdinalIgnoreCase)))
             {
                 val = "ON";
             }
-            else if (val.Equals("False", StringComparison.OrdinalIgnoreCase))
+            else if (!isPassword && val.Equals("False", StringComparison.OrdinalIgnoreCase))
             {
                 val = "OFF";
             }
 
             // Extract credentials
-            if (canonicalKey.Equals("PASSWORD", StringComparison.OrdinalIgnoreCase) || canonicalKey.Equals("PWD", StringComparison.OrdinalIgnoreCase))
+            if (isPassword)
             {
                 extractedCredential = val;
                 canonicalKey = "PASSWORD";
@@ -220,7 +222,7 @@ public static class ConnectionStringParser
             _ => scheme.ToUpperInvariant()
         };
 
-        if (detectedProvider is "FLATFILE" or "FILE")
+        if (detectedProvider is "FLATFILE")
         {
             options["PATH"] = uri.LocalPath;
             return new ParsedConnectionStringResult("FLATFILE", options, null, null);

@@ -52,6 +52,11 @@ public static class BinaryOperatorFactory
         }
         catch
         {
+            // COMPAT_BREAK: 0.22.0 — a double outside decimal's range (1e30, NaN, ±Infinity) is still a
+            // number: compute it as a double instead of concatenating the two values as text for "+"
+            // and returning NULL for the other operators.
+            if (IsFloatingPoint(a) || IsFloatingPoint(b))
+                return DoubleOp(a, b, op);
             return op == "+" ? a?.ToString() + b?.ToString() : null;
         }
         try
@@ -71,6 +76,35 @@ public static class BinaryOperatorFactory
         {
             return null;
         }
+    }
+
+    private static bool IsFloatingPoint(object? value) => value is double or float;
+
+    private static object? DoubleOp(object a, object b, string op)
+    {
+        double da, db;
+        try
+        {
+            da = Convert.ToDouble(a, System.Globalization.CultureInfo.InvariantCulture);
+            db = Convert.ToDouble(b, System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch
+        {
+            return null;
+        }
+        if ((op == "/" || op == "%") && db == 0)
+            throw new ExecutionException("Divide by zero error encountered.");
+        var result = op switch
+        {
+            "+" => da + db,
+            "-" => da - db,
+            "*" => da * db,
+            "/" => da / db,
+            "%" => da % db,
+            _ => double.NaN
+        };
+        // An out-of-range result is NULL, as decimal overflow is above.
+        return double.IsFinite(result) ? result : null;
     }
 
     private static object? ShiftOp(object? a, object? b, string op)

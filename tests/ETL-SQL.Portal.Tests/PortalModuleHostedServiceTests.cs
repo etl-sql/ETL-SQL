@@ -20,7 +20,6 @@ public class PortalModuleHostedServiceTests
         Assert.DoesNotContain(typeof(ExecutionJobService), hostedTypes);
         Assert.DoesNotContain(typeof(OrchestratorPollerService), hostedTypes);
         Assert.DoesNotContain(typeof(DatasetAtRestKeyValidationService), hostedTypes);
-        Assert.DoesNotContain(typeof(SnapshotMigrationService), hostedTypes);
         Assert.Contains(typeof(JwtSecretValidationService), hostedTypes);
         Assert.Contains(typeof(AuditRetentionService), hostedTypes);
     }

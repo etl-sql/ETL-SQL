@@ -89,6 +89,36 @@ public class RowLevelSecurityPortalTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    public async Task ReportThatStartsReadingIdentity_NoLongerServesItsEarlierSnapshot()
+    {
+        var token = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var folderId = await CreateFolderAsync(token, $"RLS Became Sensitive {suffix}");
+        var stem = $"rls_became_{suffix}";
+        var id = await CreateReportAsync(token, folderId, stem,
+            $"CREATE VISUAL Became_{suffix} AS CARD (SOURCE = (SELECT 42 AS Answer), MAPPINGS (VALUE = Answer));");
+        await ExecuteAndAwaitAsync(token, id);
+        Assert.Equal(HttpStatusCode.OK, (await AuthGet(token, $"/api/reports/{id}/snapshot/manifest")).StatusCode);
+
+        // The next version filters by the viewer. The snapshot built before holds every row.
+        await File.WriteAllTextAsync(Path.Combine(_factory.TempDir, "scripts", $"{stem}.rptsql"),
+            $"CREATE VISUAL Became_{suffix} AS CARD (SOURCE = (SELECT 42 AS Answer, HAS_GROUP('Region:East') AS Allowed), MAPPINGS (VALUE = Answer));");
+
+        foreach (var route in new[]
+                 {
+                     $"/api/reports/{id}/snapshot?includeManifest=true",
+                     $"/api/reports/{id}/snapshot/manifest",
+                     $"/api/reports/{id}/snapshot/rows/0",
+                     $"/api/reports/{id}/snapshot/rows/0.arrow"
+                 })
+        {
+            Assert.Equal(HttpStatusCode.NotFound, (await AuthGet(token, route)).StatusCode);
+        }
+        // The report itself still opens, live, for the viewer.
+        Assert.Equal(HttpStatusCode.OK, (await AuthGet(token, $"/api/reports/{id}/manifest")).StatusCode);
+    }
+
+    [Fact]
     public async Task AdminImpersonation_Runs_AuditsRealActor_AndSharesNoSnapshot()
     {
         var token = await GetAdminTokenAsync();

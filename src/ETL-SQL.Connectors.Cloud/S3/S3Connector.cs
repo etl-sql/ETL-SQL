@@ -60,8 +60,7 @@ namespace ETL_SQL.Connectors.S3
             _secretKey = _options.GetValueOrDefault("SECRET_KEY", "");
             _region = _options.GetValueOrDefault("REGION", "us-east-1");
 
-            var forcePathStr = _options.GetValueOrDefault("FORCE_PATH_STYLE", "FALSE");
-            _forcePathStyle = forcePathStr.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+            _forcePathStyle = ConnectorOptionValues.IsTrue(_options, "FORCE_PATH_STYLE");
 
             // Egress Security Hardening: Validate host against egress policies
             var host = GetHost(connectionString, _options);

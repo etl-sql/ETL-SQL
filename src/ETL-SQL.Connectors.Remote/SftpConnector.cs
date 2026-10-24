@@ -195,7 +195,7 @@ namespace ETL_SQL.Connectors
                     || atomicStr.Equals("TRUE", StringComparison.OrdinalIgnoreCase));
             bool allowUnpinnedHostKey = options != null
                 && options.TryGetValue("ALLOW_UNPINNED_HOST_KEY", out var allowUnpinnedStr)
-                && bool.TryParse(allowUnpinnedStr, out var parsedAllowUnpinned) && parsedAllowUnpinned;
+                && ConnectorOptionValues.IsTrue(allowUnpinnedStr);
 
             string host = connectionString;
             int port = 22;

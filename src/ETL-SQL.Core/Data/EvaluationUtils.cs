@@ -213,7 +213,7 @@ public static class EvaluationUtils
 
     public static bool EvaluateLike(object? input, object? pattern, string? escapeChar = null)
     {
-        if (input == null || pattern == null) return false;
+        if (input == null || pattern == null || input is DBNull || pattern is DBNull) return false;
         string s = input.ToString() ?? "";
         string p = pattern.ToString() ?? "";
 

@@ -71,7 +71,6 @@ public static class CryptoUtils
             var hashAlgo = algo ?? HashAlgorithmName.SHA256;
             byte[] fullBytes = Convert.FromBase64String(cipherText.Substring(4));
 
-            int offset = 0;
             int iterations = Iterations;
             int keySize = KeySize;
 
@@ -94,32 +93,8 @@ public static class CryptoUtils
                 return Encoding.UTF8.GetString(plaintext);
             }
 
-            // Legacy AES-CBC payloads used version 1. Keep read compatibility.
-            if (fullBytes.Length > 0 && fullBytes[0] == 1)
-            {
-                offset = 1;
-            }
-
-            if (fullBytes.Length < offset + SaltSize + IvSize)
-                throw new ExecutionException("Invalid encrypted connection string format.");
-
-            byte[] salt = new byte[SaltSize];
-            byte[] iv = new byte[IvSize];
-            byte[] encrypted = new byte[fullBytes.Length - offset - SaltSize - IvSize];
-
-            Buffer.BlockCopy(fullBytes, offset, salt, 0, SaltSize);
-            Buffer.BlockCopy(fullBytes, offset + SaltSize, iv, 0, IvSize);
-            Buffer.BlockCopy(fullBytes, offset + SaltSize + IvSize, encrypted, 0, encrypted.Length);
-
-            byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, hashAlgo, keySize / 8);
-
-            using var aes = Aes.Create();
-            using var decryptor = aes.CreateDecryptor(key, iv);
-            using var ms = new MemoryStream(encrypted);
-            using var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read);
-            using var sr = new StreamReader(cs, Encoding.UTF8);
-
-            return sr.ReadToEnd();
+            // Only the authenticated (AES-GCM) format is accepted.
+            throw new ExecutionException("Unsupported encrypted value format. Encrypt the value again with 'etl-sql encrypt'.");
         }
         catch (CryptographicException)
         {
@@ -206,21 +181,7 @@ public static class CryptoUtils
                 return;
             }
 
-            fsIn.Position = 0;
-            byte[] salt = new byte[SaltSize];
-            byte[] iv = new byte[IvSize];
-            fsIn.ReadExactly(salt, 0, SaltSize);
-            fsIn.ReadExactly(iv, 0, IvSize);
-
-            byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, hashAlgo, KeySize / 8);
-
-            using var aes = Aes.Create();
-            using var decryptor = aes.CreateDecryptor(key, iv);
-            using (var cs = new CryptoStream(fsIn, decryptor, CryptoStreamMode.Read))
-            using (var fsOut = new FileStream(outputFile, FileMode.Create))
-            {
-                cs.CopyTo(fsOut);
-            }
+            throw new ExecutionException("Unsupported encrypted file format. Encrypt the file again.");
         }
     }
 
@@ -249,6 +210,7 @@ public static class CryptoUtils
                 throw new ExecutionException("Invalid encrypted file format.");
 
             var (encryptionKey, hmacKey) = DeriveFileKeys(password, salt, hashAlgo);
+            VerifyStreamTag(fsIn, hmacKey, cipherStart, cipherLength, FileMagicV2, salt, iv);
             var limited = new LimitedReadStream(fsIn, cipherLength);
             var aes = Aes.Create();
             aes.Key = encryptionKey;
@@ -257,16 +219,7 @@ public static class CryptoUtils
             return new ChainedStream(new CryptoStream(limited, decryptor, CryptoStreamMode.Read), aes);
         }
 
-        fsIn.Position = 0;
-        byte[] saltV1 = new byte[SaltSize];
-        byte[] ivV1 = new byte[IvSize];
-        fsIn.ReadExactly(saltV1, 0, SaltSize);
-        fsIn.ReadExactly(ivV1, 0, IvSize);
-
-        byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, saltV1, Iterations, hashAlgo, KeySize / 8);
-        var aesV1 = Aes.Create();
-        var decryptorV1 = aesV1.CreateDecryptor(key, ivV1);
-        return new ChainedStream(new CryptoStream(fsIn, decryptorV1, CryptoStreamMode.Read), aesV1);
+        throw new ExecutionException("Unsupported encrypted file format. Encrypt the file again.");
     }
 
     public static Stream DecryptStreamWithSsh(Stream fsIn, string keyFile, string? passphrase = null)
@@ -295,11 +248,13 @@ public static class CryptoUtils
                 throw new ExecutionException("Invalid SSH encrypted file key material.");
 
             byte[] aesKey = keyMaterial.AsSpan(0, 32).ToArray();
+            byte[] hmacKey = keyMaterial.AsSpan(32, 32).ToArray();
             var cipherStart = fsIn.Position;
             var cipherLength = fsIn.Length - cipherStart - FileTagSize;
             if (cipherLength < 0)
                 throw new ExecutionException("Invalid SSH encrypted file format.");
 
+            VerifyStreamTag(fsIn, hmacKey, cipherStart, cipherLength, SshFileMagicV2, lenBytes, encryptedKey, iv);
             var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
             var aes = Aes.Create();
             var decryptor = aes.CreateDecryptor(aesKey, iv);
@@ -369,6 +324,37 @@ public static class CryptoUtils
         fsIn.ReadExactly(expectedTag, 0, expectedTag.Length);
         if (!CryptographicOperations.FixedTimeEquals(hmac.Hash!, expectedTag))
             throw new CryptographicException("Encrypted file authentication failed.");
+    }
+
+    /// <summary>
+    /// Checks the HMAC-SHA256 tag that follows the ciphertext before any of it is decrypted, then
+    /// leaves <paramref name="stream"/> at the start of the ciphertext. The streaming decryptors
+    /// used to return plaintext from a file nobody had authenticated.
+    /// </summary>
+    internal static void VerifyStreamTag(Stream stream, byte[] hmacKey, long cipherStart, long cipherLength, params byte[][] header)
+    {
+        using var hmac = new HMACSHA256(hmacKey);
+        foreach (var part in header)
+            hmac.TransformBlock(part, 0, part.Length, null, 0);
+
+        stream.Position = cipherStart;
+        var buffer = new byte[81920];
+        var remaining = cipherLength;
+        while (remaining > 0)
+        {
+            var read = stream.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+            if (read <= 0)
+                throw new CryptographicException("Encrypted stream is truncated.");
+            hmac.TransformBlock(buffer, 0, read, null, 0);
+            remaining -= read;
+        }
+        hmac.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+
+        var expectedTag = new byte[FileTagSize];
+        stream.ReadExactly(expectedTag, 0, expectedTag.Length);
+        if (!CryptographicOperations.FixedTimeEquals(hmac.Hash!, expectedTag))
+            throw new CryptographicException("Encrypted stream authentication failed.");
+        stream.Position = cipherStart;
     }
 
     private static void WriteAndHash(Stream stream, HMAC hmac, byte[] bytes)
@@ -530,26 +516,7 @@ public static class CryptoUtils
                 return;
             }
 
-            fsIn.Position = 0;
-            byte[] lenBytes = new byte[4];
-            await fsIn.ReadExactlyAsync(lenBytes, cancellationToken).ConfigureAwait(false);
-            int keyLen = BitConverter.ToInt32(lenBytes, 0);
-
-            byte[] encryptedKey = new byte[keyLen];
-            await fsIn.ReadExactlyAsync(encryptedKey, cancellationToken).ConfigureAwait(false);
-
-            byte[] iv = new byte[IvSize];
-            await fsIn.ReadExactlyAsync(iv, cancellationToken).ConfigureAwait(false);
-
-            byte[] aesKey = rsa.Decrypt(encryptedKey, RSAEncryptionPadding.OaepSHA256);
-
-            using var aes = Aes.Create();
-            using var decryptor = aes.CreateDecryptor(aesKey, iv);
-            await using (var cs = new CryptoStream(fsIn, decryptor, CryptoStreamMode.Read))
-            await using (var fsOut = new FileStream(outputFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
-            {
-                await cs.CopyToAsync(fsOut, cancellationToken).ConfigureAwait(false);
-            }
+            throw new ExecutionException("Unsupported SSH encrypted file format. Encrypt the file again.");
         }
     }
 
@@ -725,8 +692,7 @@ public static class CryptoUtils
 
     // Authenticated (encrypt-then-MAC) machine-bound payload format:
     //   [MachineMagicG2 (8)] [IV (16)] [AES-CBC ciphertext] [HMAC-SHA256 tag (32)]
-    // The HMAC covers magic||IV||ciphertext. Pre-magic payloads are legacy CBC-only (no MAC) and are
-    // still read for backward compatibility — see UnprotectGeneric.
+    // The HMAC covers magic||IV||ciphertext.
     private static readonly byte[] MachineMagicG2 = Encoding.ASCII.GetBytes("ETLSQLG2");
 
     internal static byte[] ProtectGeneric(byte[] plainBytes, string? entropy)
@@ -797,23 +763,7 @@ public static class CryptoUtils
             return msOut.ToArray();
         }
 
-        // Legacy CBC-only payloads (IV prepended, no MAC) used the raw machine key directly. Kept for
-        // read compatibility with data protected before authenticated machine encryption was added.
-        if (cipherBytes.Length < 16)
-            throw new ExecutionException("Machine-protected payload is too short.");
-        using var legacyAes = Aes.Create();
-        legacyAes.Key = material;
-        byte[] legacyIv = new byte[16];
-        Buffer.BlockCopy(cipherBytes, 0, legacyIv, 0, legacyIv.Length);
-        legacyAes.IV = legacyIv;
-        using var legacyDecryptor = legacyAes.CreateDecryptor();
-        using var legacyOut = new MemoryStream();
-        using (var msIn = new MemoryStream(cipherBytes, legacyIv.Length, cipherBytes.Length - legacyIv.Length))
-        using (var cs = new CryptoStream(msIn, legacyDecryptor, CryptoStreamMode.Read))
-        {
-            cs.CopyTo(legacyOut);
-        }
-        return legacyOut.ToArray();
+        throw new ExecutionException("Unsupported machine-protected payload format.");
     }
 
     private static (byte[] EncKey, byte[] MacKey) DeriveMachineSubKeys(byte[] material)

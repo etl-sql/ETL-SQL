@@ -197,11 +197,73 @@ namespace ETL_SQL.Tests.CliCommands
             Assert.True(File.Exists(Path.Combine(restoreDir, "data", "datasets", "sales.parquet")));
             Assert.True(File.Exists(Path.Combine(restoreDir, ".portal-keys", "key-abc.xml")));
 
-            // Secrets re-injected into the restored config.
-            var restored = JsonNode.Parse(File.ReadAllText(Path.Combine(restoreDir, "appsettings.json")))!.AsObject();
-            Assert.Equal(AtRestKey, (string?)restored["Portal"]!["Dataset"]!["AtRestKey"]);
-            Assert.Equal(JwtSecret, (string?)restored["Portal"]!["Jwt"]!["Secret"]);
-            Assert.Equal("OLD-KEY", (string?)restored["Portal"]!["Dataset"]!["PreviousAtRestKeys"]!["v0"]);
+            // Secrets re-injected: the installer-managed ones into the secrets file the services
+            // read over appsettings.json, as the installers lay them out.
+            var restoredConfigText = File.ReadAllText(Path.Combine(restoreDir, "appsettings.json"));
+            Assert.DoesNotContain(JwtSecret, restoredConfigText);
+            Assert.DoesNotContain(AtRestKey, restoredConfigText);
+            var restored = new ConfigurationBuilder()
+                .AddJsonFile(Path.Combine(restoreDir, "appsettings.json"))
+                .AddInstalledSecrets(restoreDir)
+                .Build();
+            Assert.Equal(AtRestKey, restored["Portal:Dataset:AtRestKey"]);
+            Assert.Equal(JwtSecret, restored["Portal:Jwt:Secret"]);
+            Assert.Equal("OLD-KEY", restored["Portal:Dataset:PreviousAtRestKeys:v0"]);
+            Assert.Equal("v1", restored["Portal:Dataset:AtRestKeyVersion"]);
+        }
+
+        [Fact]
+        public async Task RoundTrip_InstalledSecretsComeBackInTheirOwnFile()
+        {
+            // An installed host: appsettings.json holds empty defaults, the values live beside it.
+            File.WriteAllText(Path.Combine(_source, "appsettings.json"), """
+            {
+              "Portal": {
+                "DatabasePath": "./portal.db",
+                "Jwt": { "Secret": "", "ExpiryMinutes": 60 },
+                "Dataset": { "AtRestKey": "", "AtRestKeyVersion": "v1", "PreviousAtRestKeys": {} },
+                "Smtp": { "Password": "SMTP-PASSWORD" }
+              },
+              "Orchestrator": { "HistoryDbPath": "./etlsql.db", "ApiKey": "" }
+            }
+            """);
+            File.WriteAllText(Path.Combine(_source, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName), $$"""
+            {
+              "Portal": {
+                "Jwt": { "Secret": "{{JwtSecret}}" },
+                "Dataset": { "AtRestKey": "{{AtRestKey}}", "PreviousAtRestKeys": { "v0": "OLD-KEY" } }
+              },
+              "Orchestrator": { "ApiKey": "API-KEY-VALUE" }
+            }
+            """);
+
+            var outDir = Path.Combine(_root, "out");
+            await BackupRestoreService.BackupCoreAsync(Config(), _source, outDir, NullLogger.Instance);
+            var (dataZip, keysZip) = FindArchives(outDir);
+            var restoreDir = Path.Combine(_root, "restored");
+            Assert.Equal(0, await BackupRestoreService.RestoreAsync(new CliContext
+            {
+                Command = "admin-restore",
+                RestoreFrom = dataZip,
+                RestoreKeys = keysZip,
+                RestoreTo = restoreDir
+            }, NullLogger.Instance));
+
+            var config = JsonNode.Parse(File.ReadAllText(Path.Combine(restoreDir, "appsettings.json")))!;
+            var secrets = JsonNode.Parse(File.ReadAllText(Path.Combine(restoreDir, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName)))!;
+            Assert.Equal("", (string?)config["Portal"]!["Jwt"]!["Secret"]);
+            Assert.Equal("", (string?)config["Portal"]!["Dataset"]!["AtRestKey"]);
+            Assert.Empty(config["Portal"]!["Dataset"]!["PreviousAtRestKeys"]!.AsObject());
+            Assert.Equal("", (string?)config["Orchestrator"]!["ApiKey"]);
+            Assert.Equal(JwtSecret, (string?)secrets["Portal"]!["Jwt"]!["Secret"]);
+            Assert.Equal(AtRestKey, (string?)secrets["Portal"]!["Dataset"]!["AtRestKey"]);
+            Assert.Equal("OLD-KEY", (string?)secrets["Portal"]!["Dataset"]!["PreviousAtRestKeys"]!["v0"]);
+            Assert.Equal("API-KEY-VALUE", (string?)secrets["Orchestrator"]!["ApiKey"]);
+            // A secret the installers do not manage stays where it was.
+            Assert.Equal("SMTP-PASSWORD", (string?)config["Portal"]!["Smtp"]!["Password"]);
+            if (!OperatingSystem.IsWindows())
+                Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite,
+                    File.GetUnixFileMode(Path.Combine(restoreDir, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretsFileName)));
         }
 
         [Fact]

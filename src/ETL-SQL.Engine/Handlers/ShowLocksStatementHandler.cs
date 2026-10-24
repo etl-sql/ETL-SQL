@@ -54,15 +54,6 @@ public class ShowLocksStatementHandler : IStatementHandler
                 );";
             await cmd.ExecuteNonQueryAsync();
 
-            try
-            {
-                cmd.CommandText = "ALTER TABLE throttle_slots ADD COLUMN machine_name TEXT DEFAULT '';";
-                await cmd.ExecuteNonQueryAsync();
-            }
-            catch (SqliteException ex) when (ex.SqliteErrorCode == 1)
-            {
-                // Column already exists, ignore
-            }
         }
 
         using (var cmd = conn.CreateCommand())

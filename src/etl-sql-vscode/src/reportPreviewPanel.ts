@@ -259,27 +259,30 @@ export class ReportPreviewPanel {
 
     /** Spawns `ETL-SQL-Report build --format json` and returns the parsed manifest. */
     private async _buildManifest(isInteraction: boolean, pageName: string | undefined, callback: (err: string | null, manifest: Record<string, unknown> | null) => void): Promise<void> {
-        const outputPath = path.join(os.tmpdir(), `etlsql-preview-${Date.now()}.json`);
+        // One private directory (mkdtemp: unpredictable name, owner-only on POSIX) for the unsaved
+        // script and the manifest, so another local user cannot plant a link at a guessable /tmp path.
+        const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'etlsql-preview-'));
+        const removeWorkDir = () => {
+            try { fs.rmSync(workDir, { recursive: true, force: true }); } catch { /* ignore */ }
+        };
+        const outputPath = path.join(workDir, 'manifest.json');
         const { exe, baseArgs } = this._resolveCliCall();
         
         let targetPath = this._scriptPath;
-        let isTempScript = false;
 
         // Handle Untitled or Dirty buffers by writing to a temporary file first
         const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.fsPath === this._scriptPath);
         if (editor && (editor.document.isUntitled || editor.document.isDirty)) {
-            const tempScriptPath = path.join(os.tmpdir(), `etlsql-script-${Date.now()}.rptsql`);
-            fs.writeFileSync(tempScriptPath, editor.document.getText());
+            const tempScriptPath = path.join(workDir, 'script.rptsql');
+            fs.writeFileSync(tempScriptPath, editor.document.getText(), { flag: 'wx' });
             targetPath = tempScriptPath;
-            isTempScript = true;
         } else if (!fs.existsSync(this._scriptPath)) {
             // Fallback: try to find the document by URI if fsPath doesn't exist on disk
             const doc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === this._scriptPath);
             if (doc) {
-                const tempScriptPath = path.join(os.tmpdir(), `etlsql-script-${Date.now()}.rptsql`);
-                fs.writeFileSync(tempScriptPath, doc.getText());
+                const tempScriptPath = path.join(workDir, 'script.rptsql');
+                fs.writeFileSync(tempScriptPath, doc.getText(), { flag: 'wx' });
                 targetPath = tempScriptPath;
-                isTempScript = true;
             }
         }
 
@@ -303,30 +306,24 @@ export class ReportPreviewPanel {
         let stderr = '';
         proc.stderr.on('data', d => { stderr += d.toString(); });
         proc.on('error', err => {
-            if (isTempScript && fs.existsSync(targetPath)) {
-                try { fs.unlinkSync(targetPath); } catch { /* ignore */ }
-            }
+            removeWorkDir();
             callback(`Failed to start ETL-SQL-Report: ${err.message}`, null);
         });
         proc.on('close', code => {
-            if (isTempScript && fs.existsSync(targetPath)) {
-                try { fs.unlinkSync(targetPath); } catch { /* ignore */ }
-            }
-
             if (code !== 0 || !fs.existsSync(outputPath)) {
+                removeWorkDir();
                 callback(stderr || `ETL-SQL-Report exited with code ${code}`, null);
                 return;
             }
             try {
                 const json     = fs.readFileSync(outputPath, 'utf8');
+                removeWorkDir();
                 const manifest = JSON.parse(json);
                 // In the unified React UI, the protocol expect { type: 'reportManifest', ... }
                 manifest.type  = 'reportManifest';
-                if (fs.existsSync(outputPath)) {
-                    fs.unlinkSync(outputPath);
-                }
                 callback(null, manifest);
             } catch (e: unknown) {
+                removeWorkDir();
                 const message = e instanceof Error ? e.message : String(e);
                 callback(message, null);
             }

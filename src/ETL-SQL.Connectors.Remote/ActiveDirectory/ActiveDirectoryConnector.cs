@@ -84,7 +84,8 @@ namespace ETL_SQL.Connectors
             {
                 _port = port;
             }
-            _useSsl = _options.GetValueOrDefault("USE_SSL", _useSsl.ToString()).Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+            // COMPAT_BREAK: 0.22.0 — an unquoted USE_SSL = TRUE (stored as "ON") now enables LDAPS.
+            _useSsl = ConnectorOptionValues.IsTrue(_options, "USE_SSL", _useSsl);
 
             _authMode = _options.GetValueOrDefault("AUTH_MODE", "INTEGRATED").ToUpperInvariant();
             _user = _options.GetValueOrDefault("USER", "");
@@ -209,7 +210,7 @@ namespace ETL_SQL.Connectors
 
         public string BuildConnectionString(Dictionary<string, string> properties)
         {
-            string protocol = properties.GetValueOrDefault("USE_SSL", "FALSE").Equals("TRUE", StringComparison.OrdinalIgnoreCase) ? "ldaps" : "ldap";
+            string protocol = ConnectorOptionValues.IsTrue(properties, "USE_SSL") ? "ldaps" : "ldap";
             string host = properties.GetValueOrDefault("HOST", "localhost");
             string port = properties.ContainsKey("PORT") ? $":{properties["PORT"]}" : "";
             string baseDn = properties.ContainsKey("BASE_DN") ? $"/{properties["BASE_DN"]}" : "";

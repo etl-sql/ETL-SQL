@@ -117,58 +117,7 @@ namespace ETL_SQL.Reporting
             {
                 bool exists = await Task.Run(() => File.Exists(fullPath));
                 if (!exists)
-                {
-                    // If .etlsnap requested but only legacy .snapshot.json or .json exists, load legacy
-                    if (fullPath.EndsWith(".etlsnap", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var legacyPackagePath = LegacyFlatSnapshotPath(fullPath);
-                        if (legacyPackagePath is not null && await Task.Run(() => File.Exists(legacyPackagePath)))
-                        {
-                            var directory = Path.GetDirectoryName(legacyPackagePath) ?? "";
-                            var filename = Path.GetFileName(legacyPackagePath);
-                            var storage = new FileSystemArtifactStorage(new Dictionary<ArtifactArea, string> {
-                                { ArtifactArea.Snapshots, directory }
-                            });
-                            var service = new SnapshotPackageService(
-                                new PortalConfig(),
-                                storage,
-                                Microsoft.Extensions.Logging.Abstractions.NullLogger<SnapshotPackageService>.Instance);
-                            return await service.LoadAsync(filename);
-                        }
-
-                        var legacyPath = Path.ChangeExtension(fullPath, ".snapshot.json");
-                        if (await Task.Run(() => File.Exists(legacyPath)))
-                        {
-                            var json = await File.ReadAllTextAsync(legacyPath);
-                            return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
-                        }
-
-                        var jsonPath = Path.ChangeExtension(fullPath, ".json");
-                        if (await Task.Run(() => File.Exists(jsonPath)))
-                        {
-                            var json = await File.ReadAllTextAsync(jsonPath);
-                            return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
-                        }
-
-                        if (legacyPackagePath is not null)
-                        {
-                            legacyPath = Path.ChangeExtension(legacyPackagePath, ".snapshot.json");
-                            if (await Task.Run(() => File.Exists(legacyPath)))
-                            {
-                                var json = await File.ReadAllTextAsync(legacyPath);
-                                return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
-                            }
-
-                            jsonPath = Path.ChangeExtension(legacyPackagePath, ".json");
-                            if (await Task.Run(() => File.Exists(jsonPath)))
-                            {
-                                var json = await File.ReadAllTextAsync(jsonPath);
-                                return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
-                            }
-                        }
-                    }
                     return null;
-                }
 
                 if (fullPath.EndsWith(".etlsnap", StringComparison.OrdinalIgnoreCase))
                 {
@@ -261,18 +210,6 @@ namespace ETL_SQL.Reporting
                 if (--_readerCount == 0) WriterLock.Release();
                 _readLock.Release();
             }
-        }
-
-        private static string? LegacyFlatSnapshotPath(string partitionedPath)
-        {
-            var leafDir = Directory.GetParent(partitionedPath);
-            var secondPartition = leafDir?.Parent;
-            var firstPartition = secondPartition?.Parent;
-            var root = firstPartition?.Parent;
-            return root is not null
-                && string.Equals(firstPartition!.Name, ".etlsnap", StringComparison.OrdinalIgnoreCase)
-                ? Path.Combine(root.FullName, Path.GetFileName(partitionedPath))
-                : null;
         }
     }
 }

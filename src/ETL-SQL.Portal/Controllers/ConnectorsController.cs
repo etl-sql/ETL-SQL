@@ -26,6 +26,7 @@ namespace ETL_SQL.Portal.Controllers;
 [Authorize]
 public class ConnectorsController(
     IConnectorRegistry connectorRegistry,
+    StudioAuthorizationService studioAuthorization,
     ConnectionDiagnosticEngine diagnosticEngine,
     IExecutionContext context,
     RequestTenantContextAccessor? tenantAccessor = null,
@@ -82,6 +83,11 @@ public class ConnectorsController(
     [HttpPost("test")]
     public async Task<IActionResult> TestConnection([FromBody] TestConnectionRequest request, CancellationToken ct)
     {
+        // A probe reaches hosts and tries credentials from the Portal's network position. Only
+        // administrators and accounts that can already run a connection through Studio preview may
+        // ask for one.
+        if (!User.IsInRole("Admin") && !studioAuthorization.HasCapability(User, StudioCapabilities.ScriptPreview))
+            return Forbid();
         if (request is null || string.IsNullOrWhiteSpace(request.ConnectorType))
             return BadRequest(new { error = "ConnectorType is required for connection testing." });
 

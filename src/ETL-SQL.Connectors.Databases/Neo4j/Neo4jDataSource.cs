@@ -1043,8 +1043,9 @@ namespace ETL_SQL.Connectors.Neo4j
         {
             var value = GetOption(key);
             if (value == null) return defaultValue;
-            if (value.Equals("TRUE", StringComparison.OrdinalIgnoreCase)) return true;
-            if (value.Equals("FALSE", StringComparison.OrdinalIgnoreCase)) return false;
+            // An unquoted TRUE/FALSE literal arrives as ON/OFF.
+            if (value.Equals("TRUE", StringComparison.OrdinalIgnoreCase) || value.Equals("ON", StringComparison.OrdinalIgnoreCase)) return true;
+            if (value.Equals("FALSE", StringComparison.OrdinalIgnoreCase) || value.Equals("OFF", StringComparison.OrdinalIgnoreCase)) return false;
             throw new ExecutionException($"Neo4j option {key} must be TRUE or FALSE.");
         }
 

@@ -1515,7 +1515,6 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql studio` | Launch the modern ETL-SQL Studio visual & script workbench on local loopback | [studio](reference/cli/studio.md) |
 | `etl-sql test` | Run native ETL-SQL test suites (*.test.etlsql) and table assertions | [test](reference/cli/test.md) |
 | `etl-sql ui edit` | Start the modern windowed Terminal IDE (default) | [ui edit](reference/cli/ui-edit.md) |
-| `etl-sql ui old` | Start the legacy Spectre-based console editor | [ui old](reference/cli/ui-old.md) |
 | `etl-sql ui repl` | Start the JSON-based REPL protocol for IDE integration | [ui repl](reference/cli/ui-repl.md) |
 | `etl-sql ui simple` | Start the simple interactive menu UI | [ui simple](reference/cli/ui-simple.md) |
 | `etl-sql ui` | Interactive user interface commands | [ui](reference/cli/ui.md) |

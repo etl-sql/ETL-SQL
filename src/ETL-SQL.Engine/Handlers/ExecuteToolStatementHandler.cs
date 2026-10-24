@@ -67,8 +67,10 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
             .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        // Resolve parameters
-        var args = argsTemplate;
+        // Resolve parameters. COMPAT_BREAK: 0.22.0 — the ARGS template is split into arguments
+        // before values are substituted, so a value with spaces stays one argument instead of
+        // adding arguments the tool definition never declared.
+        var argValues = new Dictionary<string, string>();
         if (stmt.Parameters != null)
         {
             var evaluator = (Evaluator)context;
@@ -81,9 +83,10 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
                     continue;
                 }
                 var val = await evaluator.ExpressionEvaluator.Evaluate(kvp.Value, Row.Empty);
-                args = args.Replace($"{{{kvp.Key}}}", val?.ToString() ?? string.Empty);
+                argValues[kvp.Key] = val?.ToString() ?? string.Empty;
             }
         }
+        var args = BuildArguments(argsTemplate, argValues);
 
         context.Log($"Executing tool '{stmt.ToolAlias}'...");
 
@@ -169,25 +172,17 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
                 startInfo.ArgumentList.Add(command);
             }
 
-            if (!string.IsNullOrWhiteSpace(args))
+            foreach (var arg in args)
             {
-                var splitArgs = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                foreach (var arg in splitArgs)
-                {
-                    startInfo.ArgumentList.Add(arg);
-                }
+                startInfo.ArgumentList.Add(arg);
             }
         }
         else
         {
             startInfo.FileName = command;
-            if (!string.IsNullOrWhiteSpace(args))
+            foreach (var arg in args)
             {
-                var splitArgs = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                foreach (var arg in splitArgs)
-                {
-                    startInfo.ArgumentList.Add(arg);
-                }
+                startInfo.ArgumentList.Add(arg);
             }
 
             // Sanitized environment: explicitly clear and only allowlist PATH
@@ -566,6 +561,23 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
             PolicyVersion = context.ExecutionPolicy?.PolicyVersion,
             PolicyHash = context.ExecutionPolicy?.PolicyHash
         });
+    }
+
+    /// <summary>
+    /// Splits the ARGS template on spaces, then replaces each <c>{NAME}</c> placeholder inside
+    /// each argument. A value never adds an argument; an argument left empty is dropped.
+    /// </summary>
+    internal static List<string> BuildArguments(string template, IReadOnlyDictionary<string, string> values)
+    {
+        var args = template.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        foreach (var (name, value) in values)
+        {
+            var placeholder = $"{{{name}}}";
+            for (int i = 0; i < args.Count; i++)
+                args[i] = args[i].Replace(placeholder, value);
+        }
+        args.RemoveAll(string.IsNullOrEmpty);
+        return args;
     }
 
     private static void AddContainerSecret(ProcessStartInfo startInfo, string name, string value)

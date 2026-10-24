@@ -132,7 +132,29 @@ namespace ETL_SQL.App
                     return true;
             }
 
+            // The install folder, or a folder that contains it: ScriptRootPath = "." would otherwise
+            // delete the application itself.
+            var appDir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(AppContext.BaseDirectory));
+            if (string.Equals(appDir, normalized, PathComparison) || IsAncestor(normalized, appDir))
+                return true;
+
+            // A git working tree, or a folder inside one. Studio's source-controlled mode keeps
+            // reports in a repository; purging runtime data must not delete the team's source.
+            // Data under the install folder is the application's own, wherever that folder sits.
+            if (IsAncestor(appDir, normalized)) return false;
+            for (var dir = new DirectoryInfo(normalized); dir != null; dir = dir.Parent)
+            {
+                if (Directory.Exists(Path.Combine(dir.FullName, ".git")) || File.Exists(Path.Combine(dir.FullName, ".git")))
+                    return true;
+            }
+
             return false;
+        }
+
+        private static bool IsAncestor(string ancestor, string path)
+        {
+            var prefix = ancestor.EndsWith(Path.DirectorySeparatorChar) ? ancestor : ancestor + Path.DirectorySeparatorChar;
+            return path.StartsWith(prefix, PathComparison);
         }
 
         private static StringComparison PathComparison =>

@@ -49,7 +49,10 @@ namespace ETL_SQL.ReportHosting
         private ReportManifest? _manifest;
         private Evaluator? _evaluator;
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _parameters = new(StringComparer.OrdinalIgnoreCase);
+        // Parameter requests add pages outside _lock while a rebuild under it reads the set, so every
+        // access takes this gate and the builder gets a copy.
         private readonly HashSet<string> _runPages = new(StringComparer.OrdinalIgnoreCase);
+        private readonly System.Threading.Lock _runPagesGate = new();
         private readonly Dictionary<string, VisualDrillState> _drillStates = new(StringComparer.OrdinalIgnoreCase);
 
         public string ScriptDirectory => Path.GetDirectoryName(_scriptPath) ?? Directory.GetCurrentDirectory();
@@ -234,8 +237,11 @@ namespace ETL_SQL.ReportHosting
         private void MarkAllPaginatedPagesRun()
         {
             if (_manifest?.Pages == null) return;
-            foreach (var page in _manifest.Pages.Where(p => string.Equals(p.Mode, "PAGINATED", StringComparison.OrdinalIgnoreCase)))
-                _runPages.Add(page.Name);
+            lock (_runPagesGate)
+            {
+                foreach (var page in _manifest.Pages.Where(p => string.Equals(p.Mode, "PAGINATED", StringComparison.OrdinalIgnoreCase)))
+                    _runPages.Add(page.Name);
+            }
         }
 
         /// <summary>
@@ -254,7 +260,7 @@ namespace ETL_SQL.ReportHosting
                 if (!string.IsNullOrWhiteSpace(pageName) && IsPaginatedPage(pageName))
                 {
                     foreach (var (name, value) in updateList) _parameters[name] = value;
-                    _runPages.Add(pageName);
+                    lock (_runPagesGate) _runPages.Add(pageName);
                     return await RebuildAsync(ct);
                 }
 
@@ -674,7 +680,9 @@ namespace ETL_SQL.ReportHosting
 
                 ct.ThrowIfCancellationRequested();
                 var builder = new ManifestBuilder(evaluator);
-                _manifest = await builder.BuildAsync(_scriptPath, runPages: _runPages);
+                HashSet<string> runPages;
+                lock (_runPagesGate) runPages = new HashSet<string>(_runPages, StringComparer.OrdinalIgnoreCase);
+                _manifest = await builder.BuildAsync(_scriptPath, runPages: runPages);
                 StampDefaultLayouts(_manifest);
 
                 return _manifest;

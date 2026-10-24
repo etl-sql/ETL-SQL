@@ -730,12 +730,7 @@ public class DataParser : ParserComponent
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new DropSetsStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
         }
-        // CHART is a legacy alias for VISUAL. It is tested without consuming: the previous spelling
-        // was `Match(TokenType.VISUAL) || (Match(TokenType.IDENTIFIER) && …Equals("CHART"))`, where
-        // the second Match consumed *any* identifier before the value check rejected it — leaving the
-        // parser a token ahead, so every later identifier-dispatched DROP reported a syntax error
-        // pointing past the word it had already eaten.
-        else if (Match(TokenType.VISUAL) || MatchIdentifier("CHART"))
+        else if (Match(TokenType.VISUAL))
         {
             if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
             var name = ConsumeIdentifier("Expected visual name").Value;

@@ -177,6 +177,9 @@ public sealed class ConnectionDiagnosticEngine(IConnectorRegistry connectorRegis
     /// (e.g. <c>ExecutionPolicySnapshot.Capture(EnterprisePolicyRuntime.Current, …)</c>). Governance
     /// runs before any network I/O; the report never contains secret values.
     /// </summary>
+    private static readonly string[] FilePathOptions =
+        ["KEYFILE", "KEY_FILE", "PRIVATE_KEY_FILE", "CREDENTIAL_FILE", "CERT_FILE"];
+
     public async Task<DiagnosticReport> DiagnoseAsync(
         string alias,
         string connectorType,
@@ -211,6 +214,31 @@ public sealed class ConnectionDiagnosticEngine(IConnectorRegistry connectorRegis
             steps.Add(new DiagnosticStep("POLICY", DiagnosticStatus.Denied, Sanitize(ex.Message),
                 "This connection's destination is not permitted by the active security policy. Ask an administrator to authorize the host/connector, or correct the connection target."));
             return new DiagnosticReport(alias, connectorType, steps);
+        }
+
+        // A probe opens key and credential files itself. They pass the same path guard a running
+        // connection's do, so a test cannot load a file a script could not, such as the service
+        // account's own SSH key.
+        if (opts is not null)
+        {
+            foreach (var key in FilePathOptions)
+            {
+                if (!opts.TryGetValue(key, out var path) || string.IsNullOrWhiteSpace(path)) continue;
+                try
+                {
+                    var fullPath = System.IO.Path.GetFullPath(path);
+                    security.ValidatePath(fullPath);
+                    opts[key] = fullPath;
+                }
+                catch (Exception ex) when (ex is SecurityException or ArgumentException or NotSupportedException
+                                              or System.IO.PathTooLongException)
+                {
+                    steps.Add(new DiagnosticStep("POLICY", DiagnosticStatus.Denied,
+                        $"The {key} path is not permitted by the active security policy.",
+                        "Point the option at a key or credential file inside an approved safe zone."));
+                    return new DiagnosticReport(alias, connectorType, steps);
+                }
+            }
         }
 
         steps.Add(new DiagnosticStep("POLICY", DiagnosticStatus.Ok, "Destination permitted by active security policy."));
@@ -402,6 +430,7 @@ public sealed class ConnectionDiagnosticEngine(IConnectorRegistry connectorRegis
 
     private static bool IsTruthy(string value) =>
         value.Equals("true", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("on", StringComparison.OrdinalIgnoreCase)
         || value.Equals("yes", StringComparison.OrdinalIgnoreCase)
         || value.Equals("1", StringComparison.Ordinal)
         || value.Equals("required", StringComparison.OrdinalIgnoreCase)

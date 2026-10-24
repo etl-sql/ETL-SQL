@@ -21,6 +21,33 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
+        public void BuildOdbc_ValueWithSeparators_IsBraceQuoted()
+        {
+            var props = new Dictionary<string, string>
+            {
+                { "DSN", "MySalesDSN" },
+                { "USER", "admin" },
+                { "PASSWORD", "p;w}d" },
+                { "APP", "x;Trusted_Connection=Yes" }
+            };
+
+            var cs = ConnectionStringBuilder.Build("ODBC", props);
+            Assert.Equal("DSN=MySalesDSN;UID=admin;PWD={p;w}}d};APP={x;Trusted_Connection=Yes}", cs);
+        }
+
+        [Fact]
+        public void BuildOdbc_OptionNameWithSeparator_IsRefused()
+        {
+            var props = new Dictionary<string, string>
+            {
+                { "DSN", "MySalesDSN" },
+                { "APP;Trusted_Connection", "Yes" }
+            };
+
+            Assert.Throws<System.ArgumentException>(() => ConnectionStringBuilder.Build("ODBC", props));
+        }
+
+        [Fact]
         public void BuildOdbc_DSNWithCredentials_CorrectlyBuilds()
         {
             var props = new Dictionary<string, string>

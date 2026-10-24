@@ -113,13 +113,15 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
     }
 
     [Fact]
-    public void BothInstallers_MoveTheSameSecretsAndEveryOneIsAShippedSecretSetting()
+    public void BothInstallersAndRestore_MoveTheSameSecretsAndEveryOneIsAShippedSecretSetting()
     {
         var root = FindRepoRoot();
         var deb = Paths(File.ReadAllText(Path.Combine(root, "scripts", "build-linux-packages.sh")), @"SECRET_PATHS = \[(?<list>[^\]]*)\]");
         var msi = Paths(File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.Installer", "configure-portal-jwt.ps1")), @"\$secretPaths = @\((?<list>[^)]*)\)");
         Assert.NotEmpty(deb);
         Assert.Equal(deb, msi);
+        // Restore writes the same keys back to the secrets file.
+        Assert.Equal(deb, ETL_SQL.Common.ConfigurationExtensions.InstalledSecretPaths);
 
         var shipped = JsonNode.Parse(File.ReadAllText(Path.Combine(root, "src", "appsettings.json")))!;
         foreach (var dotted in deb)
@@ -143,6 +145,18 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
             Assert.Contains("Environment=HOME=/var/lib/etl-sql", File.ReadAllText(Path.Combine(linux, unit)));
         Assert.Contains("\"/var/lib/etl-sql/.local/share/etlsql-data/etlsql.db\"",
             File.ReadAllText(Path.Combine(root, "scripts", "build-linux-packages.sh")));
+    }
+
+    [Fact]
+    public void DebPackage_KeepsShippedFilesOutOfTheServiceAccountsHands()
+    {
+        var script = File.ReadAllText(Path.Combine(FindRepoRoot(), "scripts", "build-linux-packages.sh")).Replace("\r\n", "\n");
+
+        // The service account must not own the install tree: it could rewrite its own binaries.
+        Assert.DoesNotContain("chown -R etlsql:etlsql /usr/lib/etl-sql", script);
+        // The bin folder stays writable for runtime state, with the sticky bit protecting root's files.
+        Assert.Contains("chmod 1775 \"$BIN\"", script);
+        Assert.Contains("dpkg-deb --root-owner-group --build", script);
     }
 
     private static string[] Paths(string text, string pattern) =>

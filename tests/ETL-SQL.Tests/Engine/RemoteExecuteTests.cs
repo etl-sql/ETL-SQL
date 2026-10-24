@@ -175,19 +175,12 @@ SELECT COUNT(*) AS cnt FROM #emp;";
         [Fact]
         public async Task TestDockerCloseSyntax()
         {
-            // Legacy syntax (still supported via DOCKER fallback)
-            var script = "DOCKER CLOSE 'mssql';";
+            // The verb comes first; DOCKER CLOSE is not a statement.
+            Assert.DoesNotContain(new Parser(new Lexer("DOCKER CLOSE 'mssql';").Tokenize()).Parse().Statements, s => s is DockerActionStatement);
+
+            var script = "CLOSE DOCKER 'mssql';";
             var parser = new Parser(new Lexer(script).Tokenize());
             var ast = parser.Parse();
-
-            Assert.True(ast.Statements[0] is DockerActionStatement, "Should parse as DockerActionStatement (legacy)");
-            var dcs = (DockerActionStatement)ast.Statements[0];
-            Assert.Equal(DockerAction.Close, dcs.Action);
-
-            // New standard syntax
-            script = "CLOSE DOCKER 'mssql';";
-            parser = new Parser(new Lexer(script).Tokenize());
-            ast = parser.Parse();
             Assert.True(ast.Statements[0] is DockerActionStatement, "Should parse as DockerActionStatement (new)");
 
             script = "CLOSE DOCKER;";

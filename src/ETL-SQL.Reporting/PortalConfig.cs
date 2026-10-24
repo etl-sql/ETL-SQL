@@ -609,12 +609,6 @@ public class DatasetConfig
         new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Version assigned to unversioned legacy rows during rotation. Leave unset when first adopting
-    /// version metadata without changing the key; set to the old version before the first key rotation.
-    /// </summary>
-    public string? LegacyAtRestKeyVersion { get; set; }
-
-    /// <summary>
     /// Allow the host-bound ENCRYPT=MACHINE fallback when <see cref="AtRestKey"/> is unset. Production
     /// must leave this false: the portal refuses to start without a key. Set true only for
     /// dev/standalone, where host-bound (non-portable) dataset caches are acceptable.

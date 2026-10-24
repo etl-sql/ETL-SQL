@@ -87,7 +87,7 @@ public class CreateConnectionStatementHandler(
                 foreach (var kvp in stmt.Options)
                 {
                     var val = StringifyOption(await context.EvaluateValue(kvp.Value, new Row(), decryptSensitive: true), kvp.Value);
-                    options[kvp.Key] = Interpolate(val);
+                    options[kvp.Key] = Interpolate(val, context);
                 }
             }
         }
@@ -100,7 +100,7 @@ public class CreateConnectionStatementHandler(
         {
             target = context.DecryptValue(target);
         }
-        target = Interpolate(target ?? "");
+        target = Interpolate(target ?? "", context);
         IReadOnlyCollection<string>? entrySensitiveFields = null;
         GatewayResourceBinding? gatewayBinding = null;
         if (SharedConnectionExpander.IsSharedReference(target))
@@ -281,13 +281,19 @@ public class CreateConnectionStatementHandler(
         return "";
     }
 
-    private string Interpolate(string value)
+    /// <summary>
+    /// Replaces <c>${NAME}</c> with the host environment variable. COMPAT_BREAK: 0.22.0 — a name
+    /// must be in Security:AllowedEnvVars, the same list ENV() uses; a hosted script could otherwise
+    /// read the service's own secrets (Portal__Jwt__Secret) into a connection it controls.
+    /// </summary>
+    private string Interpolate(string value, IExecutionContext context)
     {
         if (string.IsNullOrEmpty(value)) return value;
 
         return Regex.Replace(value, @"\${(\w+)}", match =>
         {
             var varName = match.Groups[1].Value;
+            context.SecurityService.ValidateEnvVar(varName);
             var envValue = Environment.GetEnvironmentVariable(varName);
             if (envValue == null)
                 _logger.Warning("CREATE CONNECTION: environment variable '{VarName}' is not set; placeholder left as-is.", varName);

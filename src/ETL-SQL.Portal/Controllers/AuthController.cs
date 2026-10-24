@@ -45,16 +45,13 @@ public class AuthController(
     public async Task<IActionResult> Login([FromBody] LoginRequest req)
     {
         bool isDomainQualified = req.Username.Contains("@") || req.Username.Contains("\\");
-        string cleanUsername = req.Username;
-        if (req.Username.Contains("@"))
-        {
-            cleanUsername = req.Username.Split('@')[0];
-        }
-        else if (req.Username.Contains("\\"))
-        {
-            var parts = req.Username.Split('\\');
-            cleanUsername = parts.Length > 1 ? parts[1] : parts[0];
-        }
+        // COMPAT_BREAK: 0.22.0 — a name qualified with a domain other than Identity:Ldap:Domain is
+        // refused. It used to be stripped to the bare name and sign in as this domain's account.
+        var accountName = LdapService.AccountName(req.Username,
+            config.Identity.Ldap.Enabled ? config.Identity.Ldap.Domain : null);
+        if (accountName is null)
+            return Unauthorized(new { error = "Invalid credentials" });
+        string cleanUsername = accountName;
 
         var user = await userManager.FindByNameAsync(cleanUsername);
 

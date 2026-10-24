@@ -27,7 +27,7 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 | Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `Security:AllowedHosts` | array | `["*"]` | Hosts permitted to connect to the Portal's HTTP endpoints. |
-| `Security:AllowedEnvVars` | array | `["TEMP", "USERDOMAIN", ...]` | Environment variables accessible within ETL scripts via `ENV_VAR()`. |
+| `Security:AllowedEnvVars` | array | `["TEMP", "USERDOMAIN", ...]` | Environment variables a script can read with `ENV()` or a `${NAME}` placeholder in `CREATE CONNECTION` / `ALTER CONNECTION`. `"*"` allows all. |
 
 ---
 

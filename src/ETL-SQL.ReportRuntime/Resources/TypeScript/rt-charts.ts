@@ -79,15 +79,11 @@ export function renderMissingChartPayload(container: HTMLElement, visual: ChartV
 // column carries its measure, and how a selection is drawn — and ships it as the compact
 // `visual.interaction` manifest. The runtime reads that and nothing else: it never re-derives a
 // filter column from `mapping:*` options, and never infers geometry from a visual's type name.
-//
-// `legacyInteraction()` is the migration path for manifests built before v0.19 — offline
-// snapshots, cached artifacts — which carry the old `visual.interactions` map instead. It is the
-// only place left that reads `visualType`, and it is reached only when `visual.interaction` is
-// absent.
+// A visual without `visual.interaction` takes part in no interaction.
 
 export function resolveInteraction(visual?: ChartVisual | Record<string, unknown> | null): ChartInteraction {
     const resolved = visual && (visual.interaction as ChartInteraction | undefined);
-    if (!resolved) return legacyInteraction((visual || {}) as ChartVisual);
+    if (!resolved) return { key: null, valueKey: null, select: 'NONE', effect: 'HIGHLIGHT', highlight: 'NONE', extent: null };
     return {
         key: resolved.key || null,
         valueKey: resolved.valueKey || null,
@@ -95,30 +91,6 @@ export function resolveInteraction(visual?: ChartVisual | Record<string, unknown
         effect: String(resolved.effect || 'HIGHLIGHT').toUpperCase(),
         highlight: String(resolved.highlight || 'NONE').toUpperCase(),
         extent: null
-    };
-}
-
-function legacyInteraction(visual: ChartVisual | Record<string, unknown>): ChartInteraction {
-    const legacy = (visual.interactions || {}) as Record<string, string>;
-    const mode = String(legacy['ON_SELECT'] || '').toUpperCase();
-    const active = !!mode && mode !== 'NONE';
-    const options = (visual.options || {}) as Record<string, string>;
-    const key = legacy['MATCHING'] || options['mapping:x'] || options['mapping:label'] ||
-        options['mapping:name'] || options['mapping:region'] || options['mapping:y'] ||
-        ((visual.columns as string[] | undefined) || [])[0] || null;
-    const type = String(visual.visualType || '').toUpperCase();
-    const bar = type === 'BAR' || type === 'HBAR' || type === 'HORIZONTALBAR';
-    return {
-        key: key,
-        valueKey: options['mapping:y'] || null,
-        select: active ? 'MULTIPLE' : 'NONE',
-        effect: mode === 'FILTER' ? 'FILTER' : 'HIGHLIGHT',
-        highlight: active ? (bar ? 'PROPORTIONAL' : 'CATEGORICAL') : 'CATEGORICAL',
-        // Pre-v0.19 SVG carries no semantic extent attributes, so the shim supplies what the
-        // server now stamps on the mark itself.
-        extent: bar
-            ? { axis: type === 'BAR' ? 'y' : 'x', anchor: type === 'BAR' ? 'end' : 'start' }
-            : null
     };
 }
 

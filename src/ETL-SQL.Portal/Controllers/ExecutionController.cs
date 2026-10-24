@@ -183,6 +183,8 @@ public class ExecutionController(
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
+        if (await ReportIdentitySensitivity.IsRunLiveAsync(resolvedScriptPath, HttpContext.RequestAborted))
+            return NotFound(new { error = IdentitySensitiveSnapshotRefusal });
 
         var snapshot = await CatalogScope.ReportSnapshots
             .Where(s => s.ReportId == id)
@@ -321,6 +323,9 @@ public class ExecutionController(
             : File(table, "application/vnd.apache.arrow.stream");
     }
 
+    private const string IdentitySensitiveSnapshotRefusal =
+        "This report depends on who is viewing it and has no shared snapshot. Open it to see it live.";
+
     private async Task<(string? Key, Report? Report, ReportSnapshot? Snapshot, IActionResult? Error)> ResolveReadableSnapshotKeyAsync(int id)
     {
         var report = await CatalogScope.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
@@ -329,8 +334,13 @@ public class ExecutionController(
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return (null, null, null, Forbid());
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out _))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var scriptPath))
             return (null, null, null, Forbid());
+        // A report whose rows depend on the viewer is shown live. A snapshot left from before it
+        // read the viewer's identity holds rows its row-level security now hides, so it is never
+        // served, whoever built it.
+        if (await ReportIdentitySensitivity.IsRunLiveAsync(scriptPath, HttpContext.RequestAborted))
+            return (null, null, null, NotFound(new { error = IdentitySensitiveSnapshotRefusal }));
 
         var snapshot = await CatalogScope.ReportSnapshots
             .Where(s => s.ReportId == id)

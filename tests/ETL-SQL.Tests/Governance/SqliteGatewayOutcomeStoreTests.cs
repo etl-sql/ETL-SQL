@@ -53,23 +53,6 @@ public sealed class SqliteGatewayOutcomeStoreTests(ITestOutputHelper output) : I
     }
 
     [Fact]
-    public async Task LegacyImportIsAtomicAndDoesNotOverwriteNewerReceipts()
-    {
-        using var store = new SqliteGatewayOutcomeStore(DatabasePath);
-        var legacyPath = Path.Combine(_root, "outcomes.json");
-        await File.WriteAllTextAsync(legacyPath, "[" + JsonSerializer.Serialize(Receipt("first")) + ",broken]");
-        await Assert.ThrowsAsync<GatewayProtocolException>(() => store.ImportLegacyAsync(legacyPath));
-        Assert.Null(store.Find("tenant", "first"));
-        await File.WriteAllTextAsync(legacyPath, JsonSerializer.Serialize(new[] { Receipt("first") with { State = GatewayOutcomeState.InFlight } }));
-        await store.ImportLegacyAsync(legacyPath);
-        Assert.Equal(GatewayOutcomeState.Ambiguous, store.Find("tenant", "first")!.State);
-        store.Save(Receipt("first"));
-        await store.ImportLegacyAsync(legacyPath);
-        Assert.Equal(GatewayOutcomeState.Committed, store.Find("tenant", "first")!.State);
-        Assert.True(File.Exists(legacyPath));
-    }
-
-    [Fact]
     public void FailedSaveDoesNotPublishAnUndurableOutcome()
     {
         using var store = new SqliteGatewayOutcomeStore(DatabasePath);
@@ -86,17 +69,15 @@ public sealed class SqliteGatewayOutcomeStoreTests(ITestOutputHelper output) : I
     }
 
     [Fact]
-    public async Task TenThousandReceiptsDoNotAmplifyTransitionWritesOrRestartMemory()
+    public void TenThousandReceiptsDoNotAmplifyTransitionWritesOrRestartMemory()
     {
         var policy = new GatewayOutcomeRetentionOptions { MaintenanceEveryTransitions = int.MaxValue };
         long earlyBytes;
         using (var store = new SqliteGatewayOutcomeStore(DatabasePath, policy))
         {
             earlyBytes = MeasureTransitions(store, "early");
-            var legacyPath = Path.Combine(_root, "outcomes.json");
-            await File.WriteAllTextAsync(legacyPath, JsonSerializer.Serialize(
-                Enumerable.Range(0, 10_000).Select(i => Receipt("history-" + i) with { Detail = new string('x', 2048) })));
-            await store.ImportLegacyAsync(legacyPath);
+            foreach (var i in Enumerable.Range(0, 10_000))
+                store.Save(Receipt("history-" + i) with { Detail = new string('x', 2048) });
             var lateBytes = MeasureTransitions(store, "late");
             output.WriteLine($"100 transitions: empty history WAL={earlyBytes:N0} bytes; 10,000 receipts WAL={lateBytes:N0} bytes.");
             Assert.True(lateBytes < earlyBytes * 4, $"Transition writes amplified: {earlyBytes} -> {lateBytes}.");

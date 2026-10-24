@@ -141,6 +141,31 @@ namespace ETL_SQL.Portal.Tests
             }
         }
 
+        [Theory]
+        [InlineData("alice", "corp.local", "alice")]
+        [InlineData("alice@corp.local", "corp.local", "alice")]
+        [InlineData("CORP\\alice", "corp.local", "alice")]
+        [InlineData("corp.local\\alice", "corp.local", "alice")]
+        [InlineData("alice@other.local", "corp.local", null)]
+        [InlineData("OTHER\\alice", "corp.local", null)]
+        [InlineData("alice@other.local", null, "alice")]
+        [InlineData("@corp.local", "corp.local", null)]
+        public void AccountName_RefusesAnotherDomain(string input, string? domain, string? expected) =>
+            Assert.Equal(expected, LdapService.AccountName(input, domain));
+
+        [Fact]
+        [Trait("CompatBreak", "0.22.0")]
+        public async Task Login_QualifiedWithAnotherDomain_IsRefusedBeforeTheDirectory()
+        {
+            var called = false;
+            _factory.MockLdap.AuthenticateFunc = (u, p) => { called = true; return new LdapUserResult { Username = "alice" }; };
+
+            var res = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest("alice@other.local", "secret"));
+
+            Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+            Assert.False(called);
+        }
+
         [Fact]
         public async Task Login_InvalidLdapCredentials_ReturnsUnauthorized()
         {

@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 18 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 28 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -582,6 +582,35 @@ here; each one failed a single test per run and passed on rerun.
   (win-x64, linux-x64 under xvfb-run, osx-x64, and osx-arm64). Verified locally on Windows
   against candidate VSIX with all 59 assets and designer/preview webviews passing; records outcome in
   certification.json.
+
+### 5. Follow-ups from the v0.22.0 security review and legacy removal
+
+**Record:** `CHANGELOG.md` (Unreleased) and the v0.22.0 entries in `BREAKING_CHANGES.md`.
+
+- [ ] **Test the deprecated-syntax removal.** The commit removing `FILE`, `DROP CHART`,
+  `DOCKER <verb>`, `LINEAGE EXPORT`, `@sensitivity`, comma-less `TOOLTIP` parts and `ui old` was
+  built but not tested. Run the default lane, fix what it finds, and add its `BREAKING_CHANGES.md`
+  entry.
+- [ ] **Linux package install and upgrade.** The postinst now leaves shipped files root-owned and
+  makes `/usr/lib/etl-sql/bin` `root:etlsql 1775`. Install fresh and upgrade over a previous package;
+  confirm the Portal and Orchestrator start and write their databases, logs and data.
+- [ ] **Windows run of the security tests.** `SecurityTests` was rewritten with OS-neutral paths and
+  passes on Linux; confirm it on Windows, including `TestHardwareLockedEncryption` (DPAPI).
+- [ ] **Docker integration lane.** `IDockerManager` now takes a tenant scope and container names carry
+  a tenant tag. Run `Category=Integration` Docker tests and `USE DOCKER` scripts end to end.
+- [ ] **Alert inline delivery columns.** `ReportAlert.Recipient` and `SmtpAlias` predate
+  `AlertNotifications`. Removing them needs EF migrations for SQLite and PostgreSQL; with no
+  deployments, consider squashing the migration history at the same time.
+- [ ] **Saved-view flat parameters.** Decide whether `Parameters`/`Filters` on the saved-view API
+  stay. If not, have `CREATE SAVED VIEW` send the resolved-state envelope and drop `ParametersJson`
+  and `FiltersJson`.
+- [ ] **JSON spill format.** `SpillFormat = Json` encrypts with AES-CBC and no authentication tag.
+  Move it to the authenticated format or remove the option.
+- [ ] **`ON TYPE … WITH` completion branch** in `LanguageService`. Confirm whether that syntax still
+  exists; remove the branch if not.
+- [ ] **Review `scripts/`, the installers and `tests/`.** The v0.22.0 review covered `src/` only.
+- [ ] **Pre-commit hook.** `scripts/pre-commit` is not executable in a fresh Linux clone, so the hook
+  is skipped there. Set the executable bit in Git (`git update-index --chmod=+x`).
 
 ---
 
