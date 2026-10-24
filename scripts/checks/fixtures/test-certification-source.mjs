@@ -7,10 +7,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
-assert.ok(process.argv.length === 2 || (process.argv.length === 4 && process.argv[2] === '--legacy-producer'
-  && /^[a-f0-9]{7,40}$/.test(process.argv[3])), 'Expected no arguments or --legacy-producer <commit>.');
+assert.ok(process.argv.length === 2 || (process.argv.length === 4 && ['--legacy-producer', '--legacy-boundaries'].includes(process.argv[2])
+  && /^[a-f0-9]{7,40}$/.test(process.argv[3])), 'Expected no arguments or --legacy-producer/--legacy-boundaries <commit>.');
 const temporary = mkdtempSync(path.join(os.tmpdir(), 'certification-source-'));
-const legacy = process.argv[2] === '--legacy-producer' ? process.argv[3] : null;
+const legacy = process.argv[3] ?? null;
 const templates = path.join(root, 'certification-results/production-canaries/20260906-173002-120/journey-evidence');
 function git(repo, args) {
   const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8', windowsHide: true, timeout: 10000 });
@@ -50,7 +50,8 @@ try {
   const helper = powershell('./test-certification-source-helpers.ps1', ['-RepoRoot', repository()]);
   assert.equal(helper.status, 0, helper.stdout + helper.stderr);
   console.log(helper.stdout.trim());
-  const modes = legacy ? ['tracked'] : ['stable', 'dirty-stable', 'tracked', 'untracked', 'commit', 'initial-status-error', 'final-status-error'];
+  const boundaryModes = ['provisioning-tenant', 'provisioning-cost', 'credential-identity', 'credential-reason'];
+  const modes = legacy ? (process.argv[2] === '--legacy-boundaries' ? boundaryModes : ['tracked']) : ['stable', 'dirty-stable', 'tracked', 'untracked', 'commit', 'initial-status-error', 'final-status-error', ...boundaryModes];
   for (const mode of modes) {
     const repo = repository();
     if (mode === 'dirty-stable') appendFileSync(path.join(repo, 'tracked.txt'), 'development change');
@@ -68,9 +69,17 @@ try {
         assert.match(report.sourceFingerprint, /^[a-f0-9]{64}$/);
         if (mode === 'stable') assert.equal(report.sourceFingerprint, createHash('sha256').update(sha).digest('hex'));
       }
-      if (legacy) assert.notEqual(git(repo, ['status', '--porcelain']), '', 'Legacy producer should falsely describe this changed source as clean.');
+      if (legacy && mode === 'tracked') assert.notEqual(git(repo, ['status', '--porcelain']), '', 'Legacy producer should falsely describe this changed source as clean.');
     } else {
       assert.notEqual(run.status, 0, `Accepted ${mode}\n${run.stdout}\n${run.stderr}`);
+      if (boundaryModes.includes(mode)) {
+        const outputs = readdirSync(path.join(repo, 'out'));
+        const report = JSON.parse(readFileSync(path.join(repo, 'out', outputs[0], 'certification.json'), 'utf8').replace(/^\uFEFF/, ''));
+        assert.equal(report.result, 'Failed');
+        assert.ok(report.boundaryFindingCount > 0);
+        console.log(`Verified certification driver rejects boundary evidence: ${mode}`);
+        continue;
+      }
       assert.match(run.stderr, /Candidate source changed|Cannot establish certification candidate cleanliness/);
       const output = path.join(repo, 'out');
       assert.ok(!existsSync(output) || readdirSync(output).every(name => !existsSync(path.join(output, name, 'certification.json'))),

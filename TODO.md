@@ -322,6 +322,10 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
     exactly once, matching isolation and fault attribution to the declared plan. Executed fixtures
     reject duplicate/missing combinations and invalid alert delivery. The checklist distinguishes
     deterministic contract evidence from live hosted evidence; complete manifest enforcement remains open.
+    Canary provisioning and credential receipts now validate their underlying plan-bound identities,
+    cost/customer guards, revocations, replacement reasons and lifecycle continuity/timing. Corrupted
+    details cannot pass solely by retaining a successful summary. Deterministic evidence still does
+    not establish live provisioning, notification delivery or trusted-host provenance.
 - [x] **Report all cheap failures in one preflight.** Move independent syntax, metadata, workflow,
   path-map and static installer-source checks into a shared local/CI preflight that collects all
   failures before exiting. Run it before expensive packaging and installation. Keep checks requiring

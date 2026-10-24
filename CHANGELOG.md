@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Canary certification now checks provisioning identities and cost/customer boundaries against the
+  plan, and validates credential revocation, replacement identities, reasons, continuity and lifetime
+  details. A retained `passed` summary cannot override inconsistent provisioning or credential data.
+
 - Deployment packaging now checks the shared execution plan against ordered phase records,
   structured invocations, canonical logs and per-phase TRX receipts. Receipts require every planned
   test selector, unique passed outcomes and timestamps inside the phase run. Enterprise prerequisites,

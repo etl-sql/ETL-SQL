@@ -92,15 +92,11 @@ try {
         $expectedRuns += $journey.regions.Count * $journey.failureDomains.Count * 5
     }
     $runFindings = @(Get-ProductionCanaryRunFindings -Plan $plan -Report $report)
+    $boundaryFindings = @(Get-ProductionCanaryBoundaryFindings -Plan $plan -Provisioning $provisioning -Credential $credential)
     $passed = $exitCode -eq 0 -and $null -ne $report -and
         $report.schema -eq "etl-sql.production-canary-evidence/v1" -and
         $report.passed -and $report.runs.Count -eq $expectedRuns -and $runFindings.Count -eq 0 -and
-        $null -ne $provisioning -and $provisioning.schema -eq "etl-sql.production-canary-provisioning/v1" -and
-        $provisioning.passed -and $provisioning.observed.customerResourceGrants -eq 0 -and
-        $provisioning.observed.customerNetworkRoutes -eq 0 -and $provisioning.observed.usesDedicatedCapacity -and
-        $null -ne $credential -and $credential.schema -eq "etl-sql.production-canary-credential-lifecycle/v1" -and
-        $credential.passed -and $credential.scheduledRotation.previousRevoked -and
-        $credential.compromiseResponse.previousRevoked
+        $boundaryFindings.Count -eq 0
     Assert-ReleaseCertificationSourceUnchanged -RepoRoot $RepoRoot -Initial $source
     $evidence = [ordered]@{
         schema = "etl-sql.production-canary-certification/v1"
@@ -126,6 +122,8 @@ try {
         actualRunCount = if ($null -eq $report) { 0 } else { $report.runs.Count }
         runFindingCount = $runFindings.Count
         runFindings = $runFindings
+        boundaryFindingCount = $boundaryFindings.Count
+        boundaryFindings = $boundaryFindings
         result = if ($passed) { "Passed" } else { "Failed" }
         testExitCode = $exitCode
         testLog = "production-canary-tests.log"

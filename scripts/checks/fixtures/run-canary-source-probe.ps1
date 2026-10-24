@@ -15,6 +15,30 @@ function dotnet {
         Copy-Item -LiteralPath (Join-Path $TemplateRoot $name) -Destination $env:ETLSQL_CANARY_EVIDENCE_DIR
     }
     switch ($Mutation) {
+        'provisioning-tenant' {
+            $path = Join-Path $env:ETLSQL_CANARY_EVIDENCE_DIR 'production-canary-provisioning.json'
+            $value = Get-Content $path -Raw | ConvertFrom-Json
+            $value.observed.tenantId = 'wrong-synthetic-tenant'
+            $value | ConvertTo-Json -Depth 12 | Set-Content $path
+        }
+        'provisioning-cost' {
+            $path = Join-Path $env:ETLSQL_CANARY_EVIDENCE_DIR 'production-canary-provisioning.json'
+            $value = Get-Content $path -Raw | ConvertFrom-Json
+            $value.observed.enforcedMonthlyCostLimitUsd = 100000
+            $value | ConvertTo-Json -Depth 12 | Set-Content $path
+        }
+        'credential-identity' {
+            $path = Join-Path $env:ETLSQL_CANARY_EVIDENCE_DIR 'production-canary-credential-lifecycle.json'
+            $value = Get-Content $path -Raw | ConvertFrom-Json
+            $value.scheduledRotation.current.credentialId = $value.scheduledRotation.previous.credentialId
+            $value | ConvertTo-Json -Depth 12 | Set-Content $path
+        }
+        'credential-reason' {
+            $path = Join-Path $env:ETLSQL_CANARY_EVIDENCE_DIR 'production-canary-credential-lifecycle.json'
+            $value = Get-Content $path -Raw | ConvertFrom-Json
+            $value.compromiseResponse.reason = 'scheduled'
+            $value | ConvertTo-Json -Depth 12 | Set-Content $path
+        }
         'tracked' { [IO.File]::AppendAllText((Join-Path $RepoRoot 'tracked.txt'), ' changed during test') }
         'untracked' { [IO.File]::WriteAllText((Join-Path $RepoRoot 'extra.txt'), 'new source during test') }
         'commit' {
@@ -27,3 +51,4 @@ function dotnet {
     'Passed: 18'
 }
 & (Join-Path $RepoRoot 'scripts/Test-ProductionCanaryCertification.ps1') -NoBuild -OutputRoot 'out'
+exit $LASTEXITCODE

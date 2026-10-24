@@ -68,3 +68,79 @@ Assert-Rejected 'duplicate plan region' { param($r, $p) $p.journeys[0].regions[1
 Assert-Rejected 'empty plan domains' { param($r, $p) $p.journeys[0].failureDomains = @() }
 Assert-Rejected 'ambiguous routes' { param($r, $p) $p.journeys[0].dependencyAlertRoute = $p.journeys[0].etlSqlAlertRoute }
 Write-Host 'Canary run inventory and attribution: valid matrix passed; 30 invalid reports/plans rejected.'
+
+# Synthetic contract receipts use model time, not the wall clock or live-host observations.
+$boundary = @{
+    provisioning = @{
+        schema = 'etl-sql.production-canary-provisioning/v1'; passed = $true; provisionerKind = 'fixture'
+        expected = $plan.isolation
+        observed = @{ tenantId = $plan.isolation.tenantId; identityId = $plan.isolation.identityId
+            resourceNamespace = $plan.isolation.resourceNamespace; quotaPool = $plan.isolation.quotaPool
+            enforcedMonthlyCostLimitUsd = 250; customerResourceGrants = 0; customerNetworkRoutes = 0; usesDedicatedCapacity = $true }
+    }
+    credential = @{
+        schema = 'etl-sql.production-canary-credential-lifecycle/v1'; passed = $true; completedUtc = '2026-08-21T00:01:00Z'
+        scheduledRotation = @{ previousRevoked = $true; reason = 'scheduled'; completedUtc = '2026-08-21T00:00:00Z'
+            previous = @{ credentialId = 'fixture-old'; issuedUtc = '2026-08-20T00:00:00Z'; expiresUtc = '2026-08-22T00:00:00Z'; revoked = $false }
+            current = @{ credentialId = 'fixture-scheduled'; issuedUtc = '2026-08-21T00:00:00Z'; expiresUtc = '2026-08-23T00:00:00Z'; revoked = $false } }
+        compromiseResponse = @{ previousRevoked = $true; reason = 'compromise'; completedUtc = '2026-08-21T00:01:00Z'
+            previous = @{ credentialId = 'fixture-scheduled'; issuedUtc = '2026-08-21T00:00:00Z'; expiresUtc = '2026-08-23T00:00:00Z'; revoked = $false }
+            current = @{ credentialId = 'fixture-compromise'; issuedUtc = '2026-08-21T00:01:00Z'; expiresUtc = '2026-08-23T00:01:00Z'; revoked = $false } }
+    }
+}
+$boundaryJson = $boundary | ConvertTo-Json -Depth 16
+function Assert-BoundaryRejected {
+    param([string]$Name, [scriptblock]$Mutation)
+    $value = $boundaryJson | ConvertFrom-Json
+    $candidatePlan = $planJson | ConvertFrom-Json
+    & $Mutation $value $candidatePlan
+    if (@(Get-ProductionCanaryBoundaryFindings $candidatePlan $value.provisioning $value.credential).Count -eq 0) {
+        throw "Accepted invalid canary boundary evidence: $Name"
+    }
+    Write-Host "Rejected boundary $Name"
+}
+foreach ($value in @($boundary, ($boundaryJson | ConvertFrom-Json))) {
+    $findings = @(Get-ProductionCanaryBoundaryFindings $plan $value.provisioning $value.credential)
+    if ($findings.Count -ne 0) { throw "Valid synthetic boundary rejected: $findings" }
+}
+foreach ($field in @('tenantId', 'identityId', 'resourceNamespace', 'quotaPool')) {
+    Assert-BoundaryRejected "observed $field" { param($b) $b.provisioning.observed.$field = 'wrong' }
+    Assert-BoundaryRejected "expected $field" { param($b) $b.provisioning.expected.$field = 'wrong' }
+}
+Assert-BoundaryRejected 'missing provisioning' { param($b) $b.provisioning = $null }
+Assert-BoundaryRejected 'string provisioning pass' { param($b) $b.provisioning.passed = 'true' }
+Assert-BoundaryRejected 'missing provisioner' { param($b) $b.provisioning.provisionerKind = '' }
+Assert-BoundaryRejected 'unplanned expected cost' { param($b) $b.provisioning.expected.maximumMonthlyCostUsd = 1000 }
+foreach ($cost in @(0, -1, 251, '250', $null)) {
+    Assert-BoundaryRejected "invalid enforced cost $cost" { param($b) $b.provisioning.observed.enforcedMonthlyCostLimitUsd = $cost }
+}
+foreach ($field in @('customerNetworkAccessAllowed', 'customerCapacityAllowed')) {
+    Assert-BoundaryRejected "expected permits $field" { param($b) $b.provisioning.expected.$field = $true }
+    Assert-BoundaryRejected "string $field" { param($b) $b.provisioning.expected.$field = 'false' }
+}
+foreach ($field in @('customerResourceGrants', 'customerNetworkRoutes')) {
+    Assert-BoundaryRejected "observed $field" { param($b) $b.provisioning.observed.$field = 1 }
+    Assert-BoundaryRejected "missing $field" { param($b) $b.provisioning.observed.$field = $null }
+}
+Assert-BoundaryRejected 'shared capacity' { param($b) $b.provisioning.observed.usesDedicatedCapacity = $false }
+Assert-BoundaryRejected 'string capacity flag' { param($b) $b.provisioning.observed.usesDedicatedCapacity = 'true' }
+Assert-BoundaryRejected 'missing credential report' { param($b) $b.credential = $null }
+Assert-BoundaryRejected 'string credential pass' { param($b) $b.credential.passed = 'true' }
+foreach ($field in @('scheduledRotation', 'compromiseResponse')) {
+    Assert-BoundaryRejected "missing $field" { param($b) $b.credential.$field = $null }
+    Assert-BoundaryRejected "unrevoked $field" { param($b) $b.credential.$field.previousRevoked = $false }
+    Assert-BoundaryRejected "string revocation $field" { param($b) $b.credential.$field.previousRevoked = 'true' }
+    Assert-BoundaryRejected "wrong reason $field" { param($b) $b.credential.$field.reason = 'other' }
+    Assert-BoundaryRejected "reused identity $field" { param($b) $b.credential.$field.current.credentialId = $b.credential.$field.previous.credentialId }
+    Assert-BoundaryRejected "empty replacement $field" { param($b) $b.credential.$field.current.credentialId = '' }
+    Assert-BoundaryRejected "revoked replacement $field" { param($b) $b.credential.$field.current.revoked = $true }
+    Assert-BoundaryRejected "invalid issue time $field" { param($b) $b.credential.$field.current.issuedUtc = 'invalid' }
+    Assert-BoundaryRejected "expired replacement $field" { param($b) $b.credential.$field.current.expiresUtc = $b.credential.$field.current.issuedUtc }
+    Assert-BoundaryRejected "overlong replacement $field" { param($b) $b.credential.$field.current.expiresUtc = '2027-01-01T00:00:00Z' }
+}
+Assert-BoundaryRejected 'early scheduled rotation' { param($b) $b.credential.scheduledRotation.previous.issuedUtc = '2026-08-20T23:00:00Z' }
+Assert-BoundaryRejected 'unrelated compromise credential' { param($b) $b.credential.compromiseResponse.previous.credentialId = 'unrelated' }
+Assert-BoundaryRejected 'inconsistent lifecycle completion' { param($b) $b.credential.completedUtc = '2026-08-20T00:00:00Z' }
+Assert-BoundaryRejected 'invalid rotation plan' { param($b, $p) $p.credentialRotationInterval = 'invalid' }
+Assert-BoundaryRejected 'overlong rotation plan' { param($b, $p) $p.credentialRotationInterval = $p.maximumCredentialLifetime }
+Write-Host 'Canary provisioning and credential details reject corrupt receipts despite unchanged Passed summaries.'

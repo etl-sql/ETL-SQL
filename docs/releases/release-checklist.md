@@ -601,6 +601,10 @@ in top-level and nested certifications. Rerun older producers whose reports omit
       Retain `certification-results/production-canaries/<run-id>/` with the release evidence. Review
       the detailed runs for every declared region/failure domain and reject dirty, stale, missing,
       cross-tenant, customer-capacity, ambiguous-alert, or failed credential-rotation evidence.
+      The driver validates provisioning identities, enforced cost limits and customer boundaries
+      against the plan, plus credential revocation, replacement identities/reasons, lifecycle continuity
+      and rotation/lifetime timing. A successful summary does not override inconsistent details.
+      These deterministic fixtures use model time; their internal timestamps are not live-host freshness evidence.
       This lane runs deterministic test adapters and labels its scope `DeterministicCanaryContracts`.
       It does not certify live regional provisioning, availability or latency, external notification
       delivery, or hosted fleet recovery. Retain separate operator evidence before making those claims;
