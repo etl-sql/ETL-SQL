@@ -36,6 +36,9 @@ function Get-ReleaseCertificationInputs {
         [ValidateRange(1, 30)][int]$MaxAgeDays = 7
     )
 
+    if ($CandidateCommit -cnotmatch '^[a-f0-9]{40}$') { throw 'Certification candidate must be a full Git SHA.' }
+    $cleanFingerprint = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
+            [Text.Encoding]::UTF8.GetBytes($CandidateCommit))).ToLowerInvariant()
     $root = (Resolve-Path -LiteralPath $EvidenceRoot -ErrorAction Stop).Path
     $indexPath = Resolve-ReleaseEvidenceFile -Root $root -RelativePath 'claims-index.json'
     $index = Get-Content -LiteralPath $indexPath -Raw | ConvertFrom-Json
@@ -59,7 +62,7 @@ function Get-ReleaseCertificationInputs {
         $reportPath = Resolve-ReleaseEvidenceFile -Root $root -RelativePath $claim.evidence
         $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
         if ($report.schemaVersion -ne 'etl-sql.deployment-profile-certification/v1' -or
-            $report.commit -ne $CandidateCommit -or $report.dirty -ne $false -or
+            $report.commit -cne $CandidateCommit -or $report.sourceFingerprint -cne $cleanFingerprint -or $report.dirty -ne $false -or
             $report.releaseEligible -ne $true -or $report.result -ne 'Passed' -or
             $report.kind -ne $claim.kind -or $claim.lane -notin $report.lanes -or @($report.phases).Count -eq 0) {
             throw "Unusable or mixed-candidate certification: '$($claim.evidence)'."
@@ -105,7 +108,8 @@ function Get-ReleaseCertificationInputs {
             if (-not $item.PSIsContainer) {
                 if ($item.Name -eq 'certification.json') {
                     $nested = Get-Content -LiteralPath $item.FullName -Raw | ConvertFrom-Json
-                    if ($nested.commit -ne $CandidateCommit -or $nested.dirty -ne $false -or $nested.result -ne 'Passed') {
+                    if ($nested.commit -cne $CandidateCommit -or $nested.sourceFingerprint -cne $cleanFingerprint -or
+                        $nested.dirty -ne $false -or $nested.result -ne 'Passed') {
                         throw "Unusable or mixed-candidate nested certification: '$($item.FullName)'."
                     }
                 }

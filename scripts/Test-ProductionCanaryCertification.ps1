@@ -23,6 +23,7 @@ $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RepoRoot = (Resolve-Path (Join-Path $ScriptRoot "..")).Path
 . (Join-Path $ScriptRoot 'ProductionCanaryEvidence.Helpers.ps1')
+. (Join-Path $ScriptRoot 'Release.Helpers.ps1')
 $PlanPath = Join-Path $RepoRoot "tests/fixtures/production-canary-plan.json"
 $TestProject = "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj"
 $plan = Get-Content -LiteralPath $PlanPath -Raw | ConvertFrom-Json
@@ -43,9 +44,9 @@ if ($Explain) {
 
 Push-Location $RepoRoot
 try {
-    $commit = ((& git rev-parse HEAD) -join "").Trim()
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($commit)) { throw "Could not resolve git commit." }
-    $dirtyLines = @(& git status --short)
+    $source = Get-ReleaseCertificationSource -RepoRoot $RepoRoot
+    $commit = $source.commit
+    $dirtyLines = $source.dirtyPaths
     $runId = Get-Date -Format "yyyyMMdd-HHmmss-fff"
     $resolvedOutputRoot = if ([System.IO.Path]::IsPathRooted($OutputRoot)) {
         [System.IO.Path]::GetFullPath($OutputRoot)
@@ -100,10 +101,12 @@ try {
         $null -ne $credential -and $credential.schema -eq "etl-sql.production-canary-credential-lifecycle/v1" -and
         $credential.passed -and $credential.scheduledRotation.previousRevoked -and
         $credential.compromiseResponse.previousRevoked
+    Assert-ReleaseCertificationSourceUnchanged -RepoRoot $RepoRoot -Initial $source
     $evidence = [ordered]@{
         schema = "etl-sql.production-canary-certification/v1"
         runId = $runId
         commit = $commit
+        sourceFingerprint = $source.fingerprint
         dirty = $dirtyLines.Count -gt 0
         dirtyPaths = @($dirtyLines)
         evidenceScope = "DeterministicCanaryContracts"

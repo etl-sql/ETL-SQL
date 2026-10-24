@@ -564,6 +564,13 @@ Use this schedule on every release. “Separate workflow” means the work may r
 controlled operator host; it does **not** make the evidence optional. Every blocking artifact must
 name the exact clean candidate commit, its topology/platform, command, result, and uncovered scope.
 Missing, skipped, dirty, stale, or wrong-commit evidence is a release failure.
+Deployment-profile, provider-neutral fault, canary and enterprise producers capture the commit,
+working-tree fingerprint and cleanliness before testing, then recheck them before completing the
+report. Source drift or a failed Git lookup aborts the run and leaves its partial logs/results for
+diagnosis. An unchanged dirty run is development evidence. These boundary checks do not establish
+trusted-host provenance or replace the complete operator/package evidence review.
+Deployment-profile evidence archives require the full candidate SHA and its clean source fingerprint
+in top-level and nested certifications. Rerun older producers whose reports omit that fingerprint.
 
 #### Required for every release candidate
 

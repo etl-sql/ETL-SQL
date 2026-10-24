@@ -400,6 +400,12 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   The pre-release state writer now rechecks the source fingerprint before recording success.
   Source drift or a failed fingerprint lookup persists a failed state and stops certification;
   executed state-writer fixtures cover unchanged, changed and unavailable identities.
+  Deployment-profile, provider-neutral fault, canary and enterprise producers now capture source
+  identity before testing and reject drift or unavailable identity before completing their reports.
+  Executed real-Git fixtures and the canary driver cover content, index, commit and lookup failures;
+  a retained reproduction shows the previous canary producer emitting a clean success after source changed.
+  Deployment-profile archive validation also rejects missing or mismatched clean fingerprints in
+  top-level and nested certifications, and requires the full candidate SHA.
   Both drivers also require the saved commit and clean-tree fingerprint to match the candidate,
   with a result timestamp in the past seven days. Wrong-commit, stale/future/missing timestamp
   and dirty-fingerprint regressions pass. Phase records now retain their original completion time

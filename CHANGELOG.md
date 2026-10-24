@@ -14,6 +14,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Deployment-profile, provider-neutral fault, canary and enterprise certification now capture source
+  identity before testing and recheck it before completing their reports. Changed commits, tracked,
+  staged or untracked source changes and failed Git lookups abort certification. Reports retain the
+  source fingerprint; stable dirty runs remain development evidence. Deployment-profile archives
+  require a full candidate SHA and matching clean fingerprints in the report and nested certifications.
+
 - Closed the Docker test stability follow-up using three consecutive CI executions, each passing
   all 287 integration cases without skips. Verified the FTP readiness and scheduled-job fixes in
   every checkout and preserved original-attempt evidence. This is historical stability evidence;

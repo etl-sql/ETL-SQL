@@ -25,6 +25,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+. (Join-Path $ScriptRoot 'Release.Helpers.ps1')
 $RepoRoot = (Resolve-Path (Join-Path $ScriptRoot "..")).Path
 $MatrixPath = Join-Path $RepoRoot "tests/fixtures/provider-neutral-fault-matrix.json"
 $TestProject = "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj"
@@ -45,9 +46,9 @@ if ($Explain) {
 
 Push-Location $RepoRoot
 try {
-    $commit = ((& git rev-parse HEAD) -join "").Trim()
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($commit)) { throw "Could not resolve git commit." }
-    $dirtyLines = @(& git status --short)
+    $source = Get-ReleaseCertificationSource -RepoRoot $RepoRoot
+    $commit = $source.commit
+    $dirtyLines = $source.dirtyPaths
     $runId = Get-Date -Format "yyyyMMdd-HHmmss-fff"
     $resolvedOutputRoot = if ([System.IO.Path]::IsPathRooted($OutputRoot)) {
         [System.IO.Path]::GetFullPath($OutputRoot)
@@ -124,10 +125,12 @@ try {
     $passed = $results.Count -eq $selected.Count -and
         @($results | Where-Object { $_.status -ne "Passed" }).Count -eq 0 -and
         $reports.Count -eq $selected.Count -and $invalidReports.Count -eq 0 -and $missingRows.Count -eq 0
+    Assert-ReleaseCertificationSourceUnchanged -RepoRoot $RepoRoot -Initial $source
     $evidence = [ordered]@{
         schema = "etl-sql.provider-neutral-fault-matrix-evidence/v1"
         runId = $runId
         commit = $commit
+        sourceFingerprint = $source.fingerprint
         dirty = $dirtyLines.Count -gt 0
         dirtyPaths = @($dirtyLines)
         matrix = [ordered]@{

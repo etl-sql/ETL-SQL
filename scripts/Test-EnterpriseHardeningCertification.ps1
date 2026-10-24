@@ -119,10 +119,8 @@ function Write-Markdown {
     $lines | Set-Content -LiteralPath $Path -Encoding UTF8
 }
 
-$commit = ''
-try {
-    $commit = (& git -C $RepoRoot rev-parse HEAD 2>$null).Trim()
-} catch { }
+$source = Get-ReleaseCertificationSource -RepoRoot $RepoRoot
+$commit = $source.commit
 
 $engineArtifactsPath = Join-Path $ArtifactsPath 'engine'
 $portalArtifactsPath = Join-Path $ArtifactsPath 'portal'
@@ -194,8 +192,8 @@ if (-not $SkipPortalTests) {
 $stepArray = $steps.ToArray()
 $status = if (@($stepArray | Where-Object { -not $_.passed }).Count -gt 0) { 'Failed' }
     elseif ($SkipPortalTests) { 'Incomplete' } else { 'Passed' }
-$dirtyPaths = @(& git -C $RepoRoot status --porcelain)
-if ($LASTEXITCODE -ne 0) { throw 'Cannot establish certification candidate cleanliness.' }
+Assert-ReleaseCertificationSourceUnchanged -RepoRoot $RepoRoot -Initial $source
+$dirtyPaths = $source.dirtyPaths
 $summary = [pscustomobject]@{
     schemaVersion = 1
     phase = 'Enterprise policy and monitoring certification'
@@ -203,6 +201,7 @@ $summary = [pscustomobject]@{
     runId = $RunId
     platform = $Platform
     commit = $commit
+    sourceFingerprint = $source.fingerprint
     dirty = $dirtyPaths.Count -gt 0
     releaseEligible = $status -eq 'Passed' -and $dirtyPaths.Count -eq 0
     uncovered = @(if ($SkipPortalTests) { 'Portal enterprise HTTP and policy tests were not run.' })

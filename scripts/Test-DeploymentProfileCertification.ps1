@@ -381,9 +381,9 @@ if ($Explain) {
 
 Push-Location $RepoRoot
 try {
-    $commit = ((& git rev-parse HEAD) -join "").Trim()
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($commit)) { throw "Could not resolve git commit." }
-    $dirtyLines = @(& git status --short)
+    $source = Get-ReleaseCertificationSource -RepoRoot $RepoRoot
+    $commit = $source.commit
+    $dirtyLines = $source.dirtyPaths
     $runId = Get-Date -Format "yyyyMMdd-HHmmss"
     $resolvedOutputRoot = if ([System.IO.Path]::IsPathRooted($OutputRoot)) {
         [System.IO.Path]::GetFullPath($OutputRoot)
@@ -503,10 +503,12 @@ try {
         $uncovered.Add("The worktree was dirty at start; this run is development evidence and cannot support a release claim.")
     }
     $journeyCoverage = @(Get-JourneyCoverage $journeyFixture $laneKind $laneNames $phasesPassed)
+    Assert-ReleaseCertificationSourceUnchanged -RepoRoot $RepoRoot -Initial $source
     $evidence = [ordered]@{
         schemaVersion = "etl-sql.deployment-profile-certification/v1"
         runId = $runId
         commit = $commit
+        sourceFingerprint = $source.fingerprint
         dirty = $dirtyLines.Count -gt 0
         dirtyPaths = @($dirtyLines)
         kind = $laneKind

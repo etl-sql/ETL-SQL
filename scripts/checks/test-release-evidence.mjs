@@ -137,3 +137,7 @@ const canary = spawnSync('pwsh', ['-NoProfile', '-File', fileURLToPath(new URL('
   { encoding: 'utf8', windowsHide: true, timeout: 15000 });
 assert.equal(canary.status, 0, canary.stdout + canary.stderr);
 console.log(canary.stdout.trim());
+const source = spawnSync(process.execPath, [fileURLToPath(new URL('./fixtures/test-certification-source.mjs', import.meta.url))],
+  { encoding: 'utf8', windowsHide: true, timeout: 45000 });
+assert.equal(source.status, 0, source.stdout + source.stderr);
+console.log(source.stdout.trim());

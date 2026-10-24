@@ -63,6 +63,38 @@ function Get-ReleaseSourceFingerprint {
     }
 }
 
+function Get-ReleaseCertificationSource {
+    param([Parameter(Mandatory)][string]$RepoRoot)
+
+    $commit = ((& git -C $RepoRoot rev-parse HEAD 2>$null) -join '').Trim()
+    if ($LASTEXITCODE -ne 0 -or $commit -cnotmatch '^[a-f0-9]{40}$') {
+        throw 'Cannot establish the certification candidate commit.'
+    }
+    $dirtyPaths = @(& git -C $RepoRoot status --porcelain=v1 --untracked-files=all 2>$null)
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot establish certification candidate cleanliness.' }
+    $fingerprint = Get-ReleaseSourceFingerprint -RepoRoot $RepoRoot
+    if ($dirtyPaths.Count -eq 0) {
+        $cleanFingerprint = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
+                [Text.Encoding]::UTF8.GetBytes($commit))).ToLowerInvariant()
+        if ($fingerprint -cne $cleanFingerprint) { throw 'Certification source changed while capturing its identity.' }
+    }
+    return [pscustomobject]@{ commit = $commit; dirtyPaths = $dirtyPaths; fingerprint = $fingerprint }
+}
+
+function Assert-ReleaseCertificationSourceUnchanged {
+    param(
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [Parameter(Mandatory)][object]$Initial
+    )
+
+    $current = Get-ReleaseCertificationSource -RepoRoot $RepoRoot
+    if ($current.commit -cne $Initial.commit -or $current.fingerprint -cne $Initial.fingerprint -or
+        (ConvertTo-Json -InputObject @($current.dirtyPaths) -Compress) -cne
+        (ConvertTo-Json -InputObject @($Initial.dirtyPaths) -Compress)) {
+        throw 'Candidate source changed during certification; retained partial results cannot certify this candidate.'
+    }
+}
+
 function ConvertTo-StableReleaseVersion {
     param([Parameter(Mandatory)][string]$Tag)
 
