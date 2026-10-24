@@ -14,6 +14,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Release now requires a verified full local phase bundle from the exact candidate's controlled-host
+  workflow. It checks job/artifact origin, freshness, execution windows and file hashes, pins the
+  manifest, and verifies the attached ZIP before publication. The new manual Windows workflow retains
+  per-attempt evidence and failure diagnostics. Host rollout and full-run acceptance remain pending;
+  deployment/operator and complete package requirements remain separate.
+
 - Local UI pre-push validation now runs the selected extension/UI package checks and complete browser
   inventory, including Studio performance evidence. Existing formatting, consumer and smoke checks
   remain; failures stop validation without reporting UI success.

@@ -212,8 +212,13 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   rejecting log/artifact aliases, orphaned payloads and empty directories, and unsafe/duplicate
   original entry names even when the submitted file hashes agree. Regressions include nested/Unicode
   artifacts, symbolic links and actual CLI rejection.
-  Portable-bundle regression fixtures pass and run in shared preflight. Hosted ingestion,
-  trusted provenance and the complete operator/package gate remain open.
+  Portable-bundle regression fixtures pass and run in shared preflight. Controlled-host local
+  ingestion now binds a full bundle to the exact candidate's successful workflow/job/artifact,
+  original execution window and pinned manifest. Release attaches/attests the ZIP and rechecks
+  both current hosted evidence and the draft attachment before publication. Executed API, candidate
+  guard and attachment fixtures cover missing/failed/stale/changed evidence, carried attempts,
+  corrupt ZIP payloads and failed downloads. Host rollout/full-run/retry acceptance and the complete
+  operator/package gate remain open; these local phase receipts do not certify that other scope.
   Supplied deployment evidence now needs every profile/transition claim before packaging, with
   canonical topology, scope and uncovered work from the producer's shared contracts. Executed
   publisher probes stop incomplete indexes before output replacement/builds; helper archives identify
@@ -234,6 +239,12 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   failed or mismatched evidence. This validates archive recovery prerequisites, not live HA
   continuity or measured recovery time. Hosted execution and full package promotion remain open;
   local release requirements stay in place until that evidence passes.
+  A manual-only `local-release-certification.yml` now runs the full local gate on a controlled
+  Windows x64 release host, retaining immutable per-attempt bundles and failure diagnostics.
+  Release requires and verifies that artifact before packaging and again before publishing.
+  This needs the dedicated host label and workflow rollout; no hosted full-run result is claimed.
+  The initial controlled-host workflow starts a fresh local plan on each attempt. Trusted phase
+  resume and failed-upload recovery still need implementation and rehearsal before this item closes.
   Enterprise certification now explicitly defaults both test projects to Release, records the
   configuration and keeps Debug evidence ineligible for release. Executed driver fixtures verify
   configuration propagation. The source-policy audit includes tracked/new authored C# files while
@@ -319,6 +330,8 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
     blocks publication; successful jobs from earlier attempts of the same run are reused.
     A live read-only check rejected the latest cancelled candidate CI instead of accepting
     earlier success. The complete local/operator checklist manifest is not yet enforced.
+    Full local phase evidence now has its own controlled-host workflow and mandatory publication
+    check, including the actual draft ZIP. The remaining operator checklist manifest is still open.
     Local evidence now explicitly requires Standard scale and all 44 mandatory phases, even when
     a saved plan omits one. Tests compare policy with the producer's actual full plan and remove
     each required phase in turn; both release drivers reject truncated plans.
@@ -338,14 +351,14 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   failures before exiting. Run it before expensive packaging and installation. Keep checks requiring
   a built MSI immediately after the build. Inject two independent errors and require both in the
   same report; measure a target of under five minutes for the source-only checks.
-  **Verified locally:** `node scripts/release-preflight.mjs` collects ten source checks and twenty-three
+  **Verified locally:** `node scripts/release-preflight.mjs` collects ten source checks and twenty-four
   release-automation fixtures before restore/build. Each fixture has its own log and deadline,
   covering artifact reuse, timeout/recovery and release gates without a hosted run. It runs
   with at most three child processes, per-check deadlines and individual logs plus `summary.json`.
   Pre-push, pre-release, CI, Release and MSI automation run it before expensive work. Replaced
   duplicate individual checks in the local drivers and CI. Failure-injection tests prove multiple
-  errors, a missing tool and a hung check do not hide later findings. All 33 checks passed in
-  37.1 seconds locally, including timeline, impact, shard, project-asset scope, hosted-evidence and dispatch regressions. Version consistency checks
+  errors, a missing tool and a hung check do not hide later findings. All 34 checks passed in
+  63.1 seconds locally, including timeline, impact, shard, project-asset scope, hosted-evidence and dispatch regressions. Version consistency checks
   .NET, VS Code manifest/lock and Portal cache
   URLs together; injected partial bumps and malformed metadata fail locally. Installer XML,
   static source-file references and script syntax run before packaging, including direct

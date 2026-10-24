@@ -18,7 +18,8 @@ VS Code UI files under `src/etl-sql-vscode/ui/src/` select extension checks, bro
 contracts, browser journeys and Studio performance in regular CI, plus native packaging. The
 `browser-consumer-contracts` lane can also be requested directly for diagnostic CI. UI dependency
 manifests, lockfiles, Vite/TypeScript configuration, public assets and unknown paths keep full
-selection. This mixed UI selection still uses broad local pre-push validation.
+selection. Local UI selection adds both package checks and complete browser/Studio validation to
+the existing broad formatting, consumer and smoke checks.
 
 The extension CI job has a 75-minute ceiling and explicit command-step deadlines. Its engine build
 runs through the shared supervisor; npm commands stream stdout/stderr to individual logs under
@@ -106,6 +107,13 @@ retry, not a new dispatch. The new dispatch workflow must be available on the re
 branch before hosted rollout; see [GitHub's dispatch requirements](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch).
 MSI diagnostics use `msi-upgrade.yml` directly, not the regular CI lane selector.
 Full local/operator and package certification requirements remain.
+
+`local-release-certification.yml` runs the full local phase gate on a dedicated Windows release
+host. Release uses `collect-hosted-local-evidence.mjs` to require the exact candidate's successful
+workflow execution and verified portable bundle, then checks the attached ZIP before publication.
+This is separate from ordinary CI selection and does not certify the remaining operator/package
+scope. Host setup, dispatch and evidence rules are in the
+[release checklist](../docs/releases/release-checklist.md#controlled-host-full-local-certification).
 
 ## Browser CI shards
 

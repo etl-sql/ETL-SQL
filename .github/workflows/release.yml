@@ -29,6 +29,8 @@ jobs:
     outputs:
       source_sha: ${{ steps.candidate.outputs.source_sha }}
       hosted_evidence_artifact_id: ${{ steps.hosted-evidence.outputs.artifact-id }}
+      local_evidence_artifact_id: ${{ steps.local-evidence.outputs.artifact-id }}
+      local_manifest_sha256: ${{ steps.local-selection.outputs.manifest_sha256 }}
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -80,6 +82,22 @@ jobs:
         with:
           name: hosted-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/hosted-release-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Require full controlled-host local evidence
+        id: local-selection
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
+        run: node scripts/collect-hosted-local-evidence.mjs "$env:GITHUB_REPOSITORY" "$env:SOURCE_SHA" release-validation/selected-local-evidence
+
+      - name: Retain verified local phase bundle
+        id: local-evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: selected-local-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/selected-local-evidence/
           if-no-files-found: error
           retention-days: 30
 
@@ -571,6 +589,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" dist/hosted-release-evidence.json --clobber
+      - name: Download verified local phase evidence
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.validate.outputs.local_evidence_artifact_id }}
+          path: local-evidence
+          merge-multiple: true
+      - name: Verify and attach local evidence to draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          MANIFEST_SHA256: ${{ needs.validate.outputs.local_manifest_sha256 }}
+        run: |
+          node scripts/local-release-bundle.mjs verify local-evidence/bundle "$SOURCE_SHA"
+          test "$(sha256sum local-evidence/bundle/manifest.json | cut -d ' ' -f 1)" = "$MANIFEST_SHA256"
+          test ! -e local-release-evidence.zip
+          ( cd local-evidence && zip -qr ../local-release-evidence.zip bundle selection.json )
+          mv local-release-evidence.zip dist/local-release-evidence.zip
+          gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" dist/local-release-evidence.zip --clobber
       - name: Attest draft artifacts
         uses: actions/attest-build-provenance@v4
         with:
@@ -609,6 +645,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
         run: node scripts/collect-hosted-release-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-hosted-evidence.json
+      - name: Recheck full local evidence before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          MANIFEST_SHA256: ${{ needs.validate.outputs.local_manifest_sha256 }}
+        run: node scripts/collect-hosted-local-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-local-evidence "$MANIFEST_SHA256"
+      - name: Verify draft local evidence attachment
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory current-local-attachment | Out-Null
+          gh release download $env:TAG_NAME --repo $env:GITHUB_REPOSITORY --pattern local-release-evidence.zip --dir current-local-attachment
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot download the draft local evidence attachment.' }
+          [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $PWD 'current-local-attachment/local-release-evidence.zip'), (Join-Path $PWD 'current-local-attachment/contents'))
+          node scripts/collect-hosted-local-evidence.mjs verify-attachment current-local-attachment/contents current-local-evidence/selection.json
+          if ($LASTEXITCODE -ne 0) { throw 'Draft local evidence does not match the current verified selection.' }
       - name: Publish draft release
         shell: pwsh
         env:

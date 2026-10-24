@@ -27,8 +27,8 @@ A physical, copy-pasteable checklist for cutting a release. It wraps the real sc
 > `Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale` in Release configuration. A normal
 > resume cannot reuse a legacy or forced-resume state; start a fresh run. Release drivers provide
 > no local-gate or CI-wait bypass. Source fingerprints cannot be overridden.
-> CI/CodeQL job evidence is enforced by Release; the complete local/operator evidence manifest is
-> not yet enforced. Complete every applicable checkbox before tagging;
+> CI/CodeQL jobs and the controlled-host full local phase bundle are enforced by Release. The
+> complete operator/package evidence manifest is not yet enforced. Complete every applicable checkbox before tagging;
 > a green local gate alone is necessary but not sufficient.
 
 Release now requires the DEB installed-upgrade workflow and promotes its retained package by
@@ -142,7 +142,7 @@ API details: [workflow runs](https://docs.github.com/en/rest/actions/workflow-ru
       references and installer PowerShell/JavaScript syntax. The installer check parses scripts
       without executing them; it also runs at the start of `build-msi.ps1`. Published binaries,
       generated WiX assets and WiX compilation still require the packaging lane.
-      Fourteen release-automation fixtures also run here: MSI artifact/reuse/impact policy, process
+      Release-automation fixtures also run here: MSI artifact/reuse/impact policy, process
       supervision, preflight failure aggregation, version and installer checks, evidence scope,
       driver/resume gates, GitHub run selection, tag identity, timeline collection, CI impact and
       browser-shard coverage/retry checks, hosted release evidence selection and certification
@@ -558,8 +558,45 @@ canonical phase-log and artifact paths, walks the complete artifact tree, and re
 orphaned payloads, unlisted directories, unsafe/duplicate original entry names, changed or missing
 files and symbolic links. Every listed file must belong to the state, a phase log or a declared
 artifact. Hashes detect changed contents; trusted hosting or
-attestation must establish provenance. This bundle covers local phases only. It does not replace
-the operator/package evidence below or authorize publication, and hosted ingestion is still pending.
+attestation must establish provenance. This bundle covers local phases only. Release accepts its
+hosted origin through the controlled-host workflow below; a manually created bundle alone cannot
+authorize publication or replace the remaining operator/package evidence.
+
+### Controlled-host full local certification
+
+The `Full Local Release Certification` workflow runs the full pre-release command on a controlled
+Windows x64 host labelled `etlsql-release-operator`. Register a dedicated release host with that label
+and the prerequisites for `Test-PreRelease.ps1`, including PowerShell 7, Git and a working Linux-container
+Docker engine. The workflow installs Node 22, .NET 10 and the pinned browser compiler. It has no PR or
+reusable-workflow trigger. Deploy the workflow to the default branch before dispatching it from the
+frozen candidate's matching `release/vx.y.z` branch:
+
+```powershell
+$candidateSha = (git rev-parse HEAD).Trim()
+gh workflow run local-release-certification.yml --ref release/vx.y.z -f "candidate_sha=$candidateSha"
+```
+
+The workflow rejects a mismatched workflow/checkout SHA, version branch or dirty checkout before
+certification. It runs SLT, Docker integration and Standard scale along with every other mandatory
+local phase, without diagnostic skips or resume. Per-process watchdogs stream logs; attempt-specific
+diagnostics survive failures. Its eight-hour job ceiling is a recovery bound, not a measured clean-run time.
+
+Release requires the latest eligible successful run for the exact candidate and its original job's
+`local-release-evidence-<run-id>-<attempt>` artifact. The collector checks complete API inventories,
+job identity, artifact ownership/digest metadata, freshness, clean source identity, all required local
+phases, retained file hashes and producing-job time windows. Whole-second API timestamps retain that
+precision. Carried success keeps its original job and artifact; newer failed runs, missing/expired
+artifacts and concurrent retries block reuse.
+
+Release pins the verified manifest hash, attaches and attests `local-release-evidence.zip`, then
+recollects the hosted evidence and verifies the actual draft ZIP before publication. Changed bundles,
+selection identities or unlisted payloads leave the release unpublished. The attachment comparator
+uses the current hosted collector receipt as its authority; an arbitrary local receipt is not provenance.
+This enforces full local phase evidence only. Deployment profiles/transitions, live topology/HA,
+recovery, conditionally applicable suites and complete package promotion still require their own gates.
+Controlled-host rollout, a real full run and hosted retry/timing acceptance remain outstanding.
+This first workflow version starts fresh on each attempt. Trusted phase resume and failed-upload
+recovery are unfinished; the retained whole-job reuse checks do not provide phase-level recovery.
 
 ### Certification schedule and evidence ledger
 
@@ -583,6 +620,9 @@ in top-level and nested certifications. Rerun older producers whose reports omit
       .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
       Evidence: `release-validation/<run-id>/` and `release-validation/latest/state.json`.
+      Publication requires the controlled-host workflow bundle above. Its full run satisfies this
+      local-phase component; repeating it manually is unnecessary. An ad-hoc workstation state or
+      bundle cannot replace the workflow's verified artifact origin.
 - [ ] **Deployment profiles:** all Solo, Team, Enterprise, and Managed Dedicated profile lanes pass:
       ```powershell
       .\scripts\Test-DeploymentProfileCertification.ps1 -Profile All -ReleaseVersion x.y.z

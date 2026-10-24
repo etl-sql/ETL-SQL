@@ -1,0 +1,96 @@
+name: Full Local Release Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact frozen SHA on the selected release branch
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-release-certification-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    name: Full local pre-release certification
+    runs-on: [self-hosted, Windows, X64, etlsql-release-operator]
+    timeout-minutes: 480
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          fetch-depth: 0
+      - name: Verify controlled-host candidate identity
+        shell: pwsh
+        env:
+          EXPECTED_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          if ($env:EXPECTED_SHA -cnotmatch '^[a-f0-9]{40}$' -or $env:EXPECTED_SHA -cne $env:GITHUB_SHA) {
+            throw 'Dispatch from the frozen candidate branch; workflow and checkout must use the same exact SHA.'
+          }
+          . ./scripts/Release.Helpers.ps1
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.VersionPrefix
+          if ($env:GITHUB_REF -cne "refs/heads/release/v$version") { throw 'Select the matching version release branch.' }
+          $source = Get-ReleaseCertificationSource -RepoRoot $PWD.Path
+          if ($source.commit -cne $env:EXPECTED_SHA -or $source.dirtyPaths.Count -ne 0) { throw 'The controlled host must start on the clean candidate.' }
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Prepare pinned browser compiler
+        shell: pwsh
+        timeout-minutes: 12
+        run: |
+          $node = (Get-Command node -CommandType Application).Source
+          $npm = Join-Path (Split-Path (Get-Command npm.cmd -CommandType Application).Source) 'node_modules/npm/bin/npm-cli.js'
+          ./scripts/Invoke-CertificationProcess.ps1 -Command $node -CommandArguments @($npm, 'ci', '--prefix', 'scripts/typecheck') -EvidenceDirectory release-validation/local-bootstrap -TimeoutSeconds 600
+      - name: Run every required local phase
+        shell: pwsh
+        timeout-minutes: 425
+        run: >
+          ./scripts/Invoke-CertificationProcess.ps1
+          -ScriptPath scripts/Test-PreRelease.ps1
+          -ScriptArguments @('-IncludeSlt', '-IncludeDockerIntegration', '-IncludeStandardScale')
+          -EvidenceDirectory release-validation/local-process -TimeoutSeconds 25200
+      - name: Verify and retain portable phase evidence
+        shell: pwsh
+        timeout-minutes: 12
+        env:
+          EXPECTED_SHA: ${{ inputs.candidate_sha }}
+          BUNDLE_DIRECTORY: release-validation/hosted-local-bundle/${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          . ./scripts/Release.Helpers.ps1
+          $source = Get-ReleaseCertificationSource -RepoRoot $PWD.Path
+          if ($source.commit -cne $env:EXPECTED_SHA -or $source.dirtyPaths.Count -ne 0) { throw 'Candidate source changed before evidence retention.' }
+          New-Item -ItemType Directory -Force (Split-Path $env:BUNDLE_DIRECTORY) | Out-Null
+          $node = (Get-Command node -CommandType Application).Source
+          ./scripts/Invoke-CertificationProcess.ps1 -Command $node -CommandArguments @('scripts/local-release-bundle.mjs', 'create', 'release-validation/latest/state.json', $env:EXPECTED_SHA, $env:BUNDLE_DIRECTORY) -EvidenceDirectory release-validation/local-bundle-process -TimeoutSeconds 600
+          if ($LASTEXITCODE -ne 0) { throw 'Full local phase bundle failed validation.' }
+          Assert-ReleaseCertificationSourceUnchanged -RepoRoot $PWD.Path -Initial $source
+      - name: Retain full local evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: local-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/hosted-local-bundle/${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Retain original process diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: local-release-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release-validation/local-bootstrap/
+            release-validation/local-process/
+            release-validation/local-bundle-process/
+            release-validation/latest/
+          if-no-files-found: warn
+          retention-days: 30
