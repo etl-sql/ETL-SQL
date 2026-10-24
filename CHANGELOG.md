@@ -14,6 +14,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Packaging supplied deployment evidence now requires every profile and transition claim, canonical
+  topology/scope/gaps and Release reports. Producer and validator share the lane and topology contracts.
+  Partial helper archives remain marked `SelectedClaims`; packaging requires `AllProfilesAndTransitions`.
+  Missing evidence and the remaining operator/package publication requirements still need the full gate.
+
 - Enterprise certification now defaults to Release, passes the selected configuration to both test
   projects and records it in JSON/Markdown. Debug results remain development evidence. Security
   tests define the unsafe fixture's ACL independently of host inheritance and audit Git's authored

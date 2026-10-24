@@ -28,12 +28,14 @@ public sealed class DeploymentProfileCertificationScriptContractTests
     {
         var script = File.ReadAllText(Path.Combine(
             RepoRoot(), "scripts", "Test-DeploymentProfileCertification.ps1"));
+        var contracts = File.ReadAllText(Path.Combine(
+            RepoRoot(), "scripts", "DeploymentCertification.Contracts.ps1"));
 
         Assert.Contains("Managed Dedicated", script, StringComparison.Ordinal);
-        Assert.Contains("sharedSaaS = \"NotCertified\"", script, StringComparison.Ordinal);
+        Assert.Contains("sharedSaaS = \"NotCertified\"", contracts, StringComparison.Ordinal);
         Assert.Contains("\"SharedSaaS\"", script, StringComparison.Ordinal);
-        Assert.Contains("claimScope = \"ApplicationAndPolicyContracts\"", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("sharedSaaS = \"Certified\"", script, StringComparison.Ordinal);
+        Assert.Contains("claimScope = \"ApplicationAndPolicyContracts\"", contracts, StringComparison.Ordinal);
+        Assert.DoesNotContain("sharedSaaS = \"Certified\"", contracts, StringComparison.Ordinal);
         Assert.Contains("etl-sql.deployment-profile-release-claims/v1", script, StringComparison.Ordinal);
         Assert.Contains("claims-index.json", script, StringComparison.Ordinal);
         Assert.Contains("claims-index.md", script, StringComparison.Ordinal);

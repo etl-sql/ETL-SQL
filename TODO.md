@@ -207,6 +207,11 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   artifacts, symbolic links and actual CLI rejection.
   Portable-bundle regression fixtures pass and run in shared preflight. Hosted ingestion,
   trusted provenance and the complete operator/package gate remain open.
+  Supplied deployment evidence now needs every profile/transition claim before packaging, with
+  canonical topology, scope and uncovered work from the producer's shared contracts. Executed
+  publisher probes stop incomplete indexes before output replacement/builds; helper archives identify
+  selected claims separately from all-profile/transition indexes. This does not supply missing
+  evidence, verify complete execution plans, or close the remaining provenance/operator publication gate.
 - [ ] **Move the local-only lanes into CI.** That covers Docker integration, the Portal shards, the HA
   soak contracts, the recovery drill and the final-candidate package checks. Then trim the release
   checklist to match.

@@ -141,3 +141,10 @@ const source = spawnSync(process.execPath, [fileURLToPath(new URL('./fixtures/te
   { encoding: 'utf8', windowsHide: true, timeout: 45000 });
 assert.equal(source.status, 0, source.stdout + source.stderr);
 console.log(source.stdout.trim());
+const claimsRoot = mkdtempSync(path.join(os.tmpdir(), 'complete-deployment-claims-'));
+try {
+  const claims = spawnSync('pwsh', ['-NoProfile', '-File', fileURLToPath(new URL('./fixtures/test-complete-deployment-claims.ps1', import.meta.url)), '-Root', claimsRoot],
+    { encoding: 'utf8', windowsHide: true, timeout: 25000 });
+  assert.equal(claims.status, 0, claims.stdout + claims.stderr);
+  console.log(claims.stdout.trim());
+} finally { rmSync(claimsRoot, { recursive: true, force: true }); }

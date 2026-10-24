@@ -40,6 +40,7 @@ param(
 $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 . (Join-Path $ScriptRoot 'Release.Helpers.ps1')
+. (Join-Path $ScriptRoot 'DeploymentCertification.Contracts.ps1')
 $RepoRoot = (Resolve-Path (Join-Path $ScriptRoot "..")).Path
 $CoreTests = "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj"
 $PortalTests = "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj"
@@ -183,51 +184,6 @@ function Get-TransitionPhases {
     }
 }
 
-function Get-TopologyClaim {
-    param([string]$Name)
-    switch ($Name) {
-        "Solo" {
-            [ordered]@{ lane = $Name; topology = "Local process, local artifacts, optional local SQLite"; claim = "Solo" }
-        }
-        "Team" {
-            [ordered]@{ lane = $Name; topology = "Single-node Orchestrator with SQLite and local artifacts"; claim = "Team single-node" }
-        }
-        "Enterprise" {
-            [ordered]@{ lane = $Name; topology = "Governed Enterprise contract; HA topology requires its separate certification lane"; claim = "Enterprise" }
-        }
-        "SaaS" {
-            [ordered]@{ lane = $Name; topology = "Managed Dedicated (one host-fixed tenant runtime boundary per tenant)"; claim = "Managed Dedicated"; sharedSaaS = "NotCertified" }
-        }
-        "SharedSaaS" {
-            [ordered]@{
-                lane = $Name
-                topology = "Shared tenant-aware application state and deterministic sandbox adapters"
-                claim = "Shared SaaS application isolation and sandbox policy contracts"
-                claimScope = "ApplicationAndPolicyContracts"
-                sharedSaaS = "NotCertified"
-                uncovered = @("Live hardened-runtime containment is not certified by this lane.", "Hosted production regions, fleet capacity and recovery objectives are not certified by this lane.")
-            }
-        }
-        "SoloToTeam" {
-            [ordered]@{ lane = $Name; topology = "Solo local state to Team single-node providers"; claim = "Solo to Team" }
-        }
-        "TeamToEnterprise" {
-            [ordered]@{ lane = $Name; topology = "Team single-node providers to governed Enterprise providers"; claim = "Team to Enterprise" }
-        }
-        "EnterpriseToSaaS" {
-            [ordered]@{ lane = $Name; topology = "Enterprise to Managed Dedicated SaaS"; claim = "Enterprise to Managed Dedicated"; sharedSaaS = "NotCertified" }
-        }
-        "SoloToSaaS" {
-            [ordered]@{ lane = $Name; topology = "Solo to Managed Dedicated SaaS"; claim = "Solo to Managed Dedicated"; sharedSaaS = "NotCertified" }
-        }
-        "SaaSToEnterpriseExit" {
-            [ordered]@{ lane = $Name; topology = "Managed Dedicated SaaS to customer-operated self-hosted Enterprise, via the portable tenant bundle"; claim = "Customer exit from Managed Dedicated"; sharedSaaS = "NotCertified" }
-        }
-        "Upgrade" {
-            [ordered]@{ lane = $Name; topology = "In-place profile-preserving N to N+1 upgrade"; claim = "Solo, Team, Enterprise, and Managed Dedicated"; sharedSaaS = "NotCertified" }
-        }
-    }
-}
 
 function Get-ExpectedScenarioIds {
     param([string[]]$Names)
@@ -348,9 +304,9 @@ function Update-ReleaseClaimsIndex {
 }
 
 $laneNames = if ($PSCmdlet.ParameterSetName -eq "Transition") {
-    if ($Transition -eq "All") { @("SoloToTeam", "TeamToEnterprise", "EnterpriseToSaaS", "SoloToSaaS", "SaaSToEnterpriseExit", "Upgrade") } else { @($Transition) }
+    if ($Transition -eq "All") { @(Get-DeploymentCertificationLanes -Kind Transition) } else { @($Transition) }
 } else {
-    if ($Profile -eq "All") { @("Solo", "Team", "Enterprise", "SaaS", "SharedSaaS") } else { @($Profile) }
+    if ($Profile -eq "All") { @(Get-DeploymentCertificationLanes -Kind Profile) } else { @($Profile) }
 }
 $laneKind = if ($PSCmdlet.ParameterSetName -eq "Transition") { "Transition" } else { "Profile" }
 $phases = New-Object System.Collections.Generic.List[object]

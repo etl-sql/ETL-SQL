@@ -756,12 +756,18 @@ Linux (WSL/Docker) as part of the gate.
 
 Packaging consumes validated evidence. `publish-release.ps1` selects only run bundles referenced by
 `artifacts/release-evidence/x.y.z/deployment-profiles/claims-index.json`; an explicit
-`-CertificationEvidenceRoot` may point at the accepted index elsewhere. It requires the matching
+`-CertificationEvidenceRoot` may point at the accepted index elsewhere. Supplied indexes must contain
+each lane selected by both `-Profile All` and `-Transition All` exactly once, passed and release-eligible.
+Lane inventories and canonical topology/scope/uncovered contracts are shared with the certification
+producer. Report configuration must be Release. It requires the matching
 release version, exact clean candidate commit, Passed/release-eligible claims, executed phases,
 nonempty logs and timestamps no older than seven days. Claim text, topology, scope and uncovered
 work must match the executed report. Mixed, dirty, skipped, stale, missing or
 linked evidence fails before deleting existing release output. Historical sibling runs are excluded.
 The ZIP includes a version/commit manifest and SHA-256 hashes checked against its actual entries.
+Its `claimIndexScope` is `AllProfilesAndTransitions`. Direct archive-helper calls may still retain
+partial reviews as `SelectedClaims`; the publisher does not accept that partial coverage. A complete
+claim index does not attest trusted execution or replace review of the required phases and operator evidence.
 
 A build checkout without release-specific evidence emits no certification ZIP. That packaging result
 does not close Phase 3: upload the accepted certification ZIP and all other required operator,
