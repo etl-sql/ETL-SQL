@@ -22,6 +22,7 @@ param(
 $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RepoRoot = (Resolve-Path (Join-Path $ScriptRoot "..")).Path
+. (Join-Path $ScriptRoot 'ProductionCanaryEvidence.Helpers.ps1')
 $PlanPath = Join-Path $RepoRoot "tests/fixtures/production-canary-plan.json"
 $TestProject = "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj"
 $plan = Get-Content -LiteralPath $PlanPath -Raw | ConvertFrom-Json
@@ -89,17 +90,10 @@ try {
     foreach ($journey in $plan.journeys) {
         $expectedRuns += $journey.regions.Count * $journey.failureDomains.Count * 5
     }
-    $invalidRuns = if ($null -eq $report) { @("missing-report") } else {
-        @($report.runs | Where-Object {
-            -not $_.passed -or -not $_.isolationSatisfied -or
-            ($_.request.fault -ne "None" -and
-                ([string]::IsNullOrWhiteSpace($_.alertRoute) -or -not $_.alertDelivery.delivered -or
-                    [string]::IsNullOrWhiteSpace($_.alertDelivery.alertId)))
-        })
-    }
+    $runFindings = @(Get-ProductionCanaryRunFindings -Plan $plan -Report $report)
     $passed = $exitCode -eq 0 -and $null -ne $report -and
         $report.schema -eq "etl-sql.production-canary-evidence/v1" -and
-        $report.passed -and $report.runs.Count -eq $expectedRuns -and $invalidRuns.Count -eq 0 -and
+        $report.passed -and $report.runs.Count -eq $expectedRuns -and $runFindings.Count -eq 0 -and
         $null -ne $provisioning -and $provisioning.schema -eq "etl-sql.production-canary-provisioning/v1" -and
         $provisioning.passed -and $provisioning.observed.customerResourceGrants -eq 0 -and
         $provisioning.observed.customerNetworkRoutes -eq 0 -and $provisioning.observed.usesDedicatedCapacity -and
@@ -127,7 +121,8 @@ try {
         journeyCount = $plan.journeys.Count
         expectedRunCount = $expectedRuns
         actualRunCount = if ($null -eq $report) { 0 } else { $report.runs.Count }
-        invalidRunCount = $invalidRuns.Count
+        runFindingCount = $runFindings.Count
+        runFindings = $runFindings
         result = if ($passed) { "Passed" } else { "Failed" }
         testExitCode = $exitCode
         testLog = "production-canary-tests.log"

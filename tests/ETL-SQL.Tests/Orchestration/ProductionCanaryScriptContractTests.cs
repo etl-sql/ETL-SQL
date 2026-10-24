@@ -12,7 +12,7 @@ public sealed class ProductionCanaryScriptContractTests
         Assert.Contains("ETLSQL_CANARY_EVIDENCE_DIR", script, StringComparison.Ordinal);
         Assert.Contains("production-canary-certification/v1", script, StringComparison.Ordinal);
         Assert.Contains("expectedRunCount", script, StringComparison.Ordinal);
-        Assert.Contains("invalidRunCount", script, StringComparison.Ordinal);
+        Assert.Contains("runFindingCount", script, StringComparison.Ordinal);
         Assert.Contains("production-canary-provisioning/v1", script, StringComparison.Ordinal);
         Assert.Contains("production-canary-credential-lifecycle/v1", script, StringComparison.Ordinal);
         Assert.Contains("dirtyPaths", script, StringComparison.Ordinal);

@@ -133,3 +133,7 @@ if ($results.Count -ne 1 -or $results[0].completedAt -cne $completed -or $result
   rmSync(fixture, { recursive: true, force: true });
 }
 console.log('Local evidence scope: full results pass; partial, legacy, forced, missing and unsuccessful evidence fails.');
+const canary = spawnSync('pwsh', ['-NoProfile', '-File', fileURLToPath(new URL('./fixtures/test-production-canary-evidence.ps1', import.meta.url))],
+  { encoding: 'utf8', windowsHide: true, timeout: 15000 });
+assert.equal(canary.status, 0, canary.stdout + canary.stderr);
+console.log(canary.stdout.trim());

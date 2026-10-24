@@ -586,7 +586,7 @@ Missing, skipped, dirty, stale, or wrong-commit evidence is a release failure.
       ```powershell
       .\scripts\Test-ProviderNeutralFaultCertification.ps1 -Profile All
       ```
-- [ ] **Hosted production canaries:** the plan, provisioning boundary, credential lifecycle, and all
+- [ ] **Production-canary contracts:** the plan, provisioning boundary, credential lifecycle, and all
       external-health/report/job/Gateway/export/notification fault drills pass for the candidate SHA:
       ```powershell
       .\scripts\Test-ProductionCanaryCertification.ps1
@@ -594,6 +594,10 @@ Missing, skipped, dirty, stale, or wrong-commit evidence is a release failure.
       Retain `certification-results/production-canaries/<run-id>/` with the release evidence. Review
       the detailed runs for every declared region/failure domain and reject dirty, stale, missing,
       cross-tenant, customer-capacity, ambiguous-alert, or failed credential-rotation evidence.
+      This lane runs deterministic test adapters and labels its scope `DeterministicCanaryContracts`.
+      It does not certify live regional provisioning, availability or latency, external notification
+      delivery, or hosted fleet recovery. Retain separate operator evidence before making those claims;
+      a passing contract report cannot stand in for live hosted evidence.
 - [ ] **Deployment transitions and upgrades:** all supported transitions and N→N+1 profile upgrades
       pass:
       ```powershell

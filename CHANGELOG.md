@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Canary contract certification now rejects duplicate or missing planned runs, mismatched isolation,
+  incorrect fault attribution and alerts sent to an unexpected route. Release policy now states
+  that these deterministic contracts require separate operator evidence for live hosted claims.
+
 - Browser shard, test-lane and smoke no-build checks now validate asset stamps for each selected project's evaluated
   dependency graph. Unrelated stale hosts no longer block a targeted run; missing/stale consumed
   assets and unresolved or ambiguous project graphs still fail validation.
