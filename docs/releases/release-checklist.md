@@ -579,8 +579,8 @@ gh workflow run local-release-certification.yml --ref release/vx.y.z -f "candida
 The workflow rejects a mismatched workflow/checkout SHA, version branch or dirty checkout before
 certification. It runs SLT, Docker integration and Standard scale along with every other mandatory
 local phase, without diagnostic skips. Per-process watchdogs stream logs; attempt-specific
-diagnostics survive failures. The certification process has a 400-minute watchdog within its
-425-minute step, reserving time for checkpoint verification. The eight-hour job ceiling is a recovery
+diagnostics survive failures. Input verification and the certification process share a 400-minute
+budget within the 425-minute step, reserving time for checkpoint verification. The eight-hour job ceiling is a recovery
 bound, not a measured clean-run time.
 
 Rerun the failed job in the same workflow run on the same dedicated runner and workspace. A closed

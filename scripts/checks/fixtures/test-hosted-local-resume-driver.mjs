@@ -21,7 +21,7 @@ try {
   copyFileSync(new URL('./hosted-local-phase-driver.ps1', import.meta.url), path.join(root, 'scripts/Test-PreRelease.ps1'));
   writeFileSync(path.join(root, 'scripts/Invoke-CertificationProcess.ps1'), `
 param([string]$ScriptPath, [string[]]$ScriptArguments, [string]$EvidenceDirectory, [int]$TimeoutSeconds)
-if ($TimeoutSeconds -ne 24000) { throw 'Wrong process deadline' }
+if ($TimeoutSeconds -lt 23000 -or $TimeoutSeconds -ge 24000) { throw 'Input verification was not charged to the process deadline' }
 & pwsh -NoProfile -File $ScriptPath @ScriptArguments
 exit $LASTEXITCODE
 `);

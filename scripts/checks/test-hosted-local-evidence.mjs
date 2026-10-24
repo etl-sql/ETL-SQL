@@ -185,7 +185,8 @@ try {
   assert.match(producer, /timeout-minutes: 425[\s\S]+Invoke-HostedLocalCertification.ps1/);
   const resumeDriver = readFileSync(new URL('../Invoke-HostedLocalCertification.ps1', import.meta.url), 'utf8');
   assert.match(resumeDriver, /'-Configuration', 'Release', '-IncludeSlt', '-IncludeDockerIntegration', '-IncludeStandardScale'/);
-  assert.match(resumeDriver, /-TimeoutSeconds 24000/);
+  assert.match(resumeDriver, /24000 - \[int\]\[Math\]::Ceiling\(\$attemptClock.Elapsed.TotalSeconds\)/);
+  assert.match(resumeDriver, /-TimeoutSeconds \$remainingSeconds/);
   assert.match(producer, /name: local-release-evidence-\$\{\{ github.run_id \}\}-\$\{\{ github.run_attempt \}\}/);
   assert.match(producer, /name: Retain original process diagnostics\r?\n        if: always\(\)/);
   assert.match(producer, /'scripts\/local-release-bundle.mjs', 'create', \$state/);

@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param()
 $ErrorActionPreference = 'Stop'
+$attemptClock = [Diagnostics.Stopwatch]::StartNew()
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'Release.Helpers.ps1')
 if ($env:GITHUB_RUN_ID -cnotmatch '^[1-9][0-9]*$' -or $env:GITHUB_RUN_ATTEMPT -cnotmatch '^[1-9][0-9]*$' -or
@@ -59,8 +60,10 @@ if ($plan.resume) { $arguments += '-Resume' }
 Write-Host "Controlled local attempt $env:GITHUB_RUN_ID/$env:GITHUB_RUN_ATTEMPT; resume=$($plan.resume)."
 $exitCode = 1
 try {
+    $remainingSeconds = 24000 - [int][Math]::Ceiling($attemptClock.Elapsed.TotalSeconds)
+    if ($remainingSeconds -le 0) { throw 'Controlled input verification exhausted the execution budget; retain the checkpoint diagnostics.' }
     & (Join-Path $PSScriptRoot 'Invoke-CertificationProcess.ps1') -ScriptPath scripts/Test-PreRelease.ps1 `
-        -ScriptArguments $arguments -EvidenceDirectory (Join-Path $sessionRoot "process-$env:GITHUB_RUN_ATTEMPT") -TimeoutSeconds 24000
+        -ScriptArguments $arguments -EvidenceDirectory (Join-Path $sessionRoot "process-$env:GITHUB_RUN_ATTEMPT") -TimeoutSeconds $remainingSeconds
     $exitCode = $LASTEXITCODE
 } finally {
     Assert-ReleaseCertificationSourceUnchanged -RepoRoot $RepoRoot -Initial $source
