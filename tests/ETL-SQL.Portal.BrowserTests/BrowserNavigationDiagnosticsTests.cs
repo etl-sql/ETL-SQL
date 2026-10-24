@@ -8,6 +8,36 @@ namespace ETL_SQL.Portal.BrowserTests;
 public sealed class BrowserNavigationDiagnosticsTests(DetailSurfaceHarnessFixture fixture)
 {
     [Fact]
+    public async Task DesktopShutdownTimeout_RecordsTransportHistoryAndPreservesException()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        await using var context = await session.Page.Context.Browser!.NewContextAsync();
+        var directory = EvidenceDirectory();
+        var original = new TimeoutException("Injected application-stopping timeout.");
+        await using (var diagnostics = new BrowserNavigationDiagnostics(context, directory))
+        {
+            var page = await context.NewPageAsync();
+            await page.RouteAsync("https://example.invalid/**", route => route.FulfillAsync(new()
+            { Status = 200, ContentType = "text/html", Body = "<title>Desktop host</title>" }));
+            await page.GotoWithDiagnosticsAsync("https://example.invalid/studio?token=must-not-survive");
+            await page.RouteAsync("**/api/studio/heartbeat", route => route.AbortAsync("connectionrefused"));
+            Assert.True(await page.EvaluateAsync<bool>("async () => { try { await fetch('/api/studio/heartbeat'); return false; } catch { return true; } }"));
+            var observed = await Assert.ThrowsAsync<TimeoutException>(() => DesktopStudioJourneyTests.WaitForStoppingAsync(
+                Task.FromException(original), page));
+            Assert.Same(original, observed);
+        }
+        var snapshot = Assert.Single(ReadSnapshots(directory));
+        Assert.Equal("desktop-shutdown-failure", snapshot.GetProperty("trigger").GetString());
+        Assert.Equal(nameof(DesktopShutdownTimeout_RecordsTransportHistoryAndPreservesException), snapshot.GetProperty("caller").GetString());
+        Assert.Equal("https://example.invalid/api/studio/shutdown", snapshot.GetProperty("targetUrl").GetString());
+        var request = Assert.Single(snapshot.GetProperty("requests").GetProperty("Requests").EnumerateArray());
+        Assert.Equal("https://example.invalid/api/studio/heartbeat", request.GetProperty("Url").GetString());
+        Assert.Equal("net::ERR_CONNECTION_REFUSED", request.GetProperty("FailureCode").GetString());
+        Assert.NotEmpty(snapshot.GetProperty("processes").EnumerateArray());
+        Assert.DoesNotContain("must-not-survive", snapshot.GetRawText());
+    }
+
+    [Fact]
     public async Task AbortedNavigation_RetainsSanitizedRequestAndOwnProcessResources()
     {
         await using var session = await fixture.NewSessionAsync();

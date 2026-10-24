@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using ETL_SQL.WorkstationEditor;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
 
 namespace ETL_SQL.Portal.BrowserTests;
@@ -158,7 +160,7 @@ public sealed class DesktopStudioJourneyTests(StudioAuthoringFixture fixture)
         await exitConfirmation.WaitForAsync();
         Assert.Contains("unsaved changes", await exitConfirmation.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
         await exitConfirmation.GetByRole(AriaRole.Button, new() { Name = "Exit Without Saving" }).ClickAsync();
-        await firstStopping.WaitAsync(TimeSpan.FromSeconds(10));
+        await WaitForStoppingAsync(firstStopping, firstPage);
         await firstHost.StopAsync();
         // The shutdown surface, not any live region: it replaces the whole body, while the success
         // toasts from the workspace operations above are also role="status" and are still on screen
@@ -192,17 +194,53 @@ public sealed class DesktopStudioJourneyTests(StudioAuthoringFixture fixture)
         await host.StartAsync();
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
+        var firstHeartbeat = page.WaitForResponseAsync("**/api/studio/heartbeat");
         await page.GotoWithDiagnosticsAsync(StudioUrl(host, "exit-token"));
         await WaitForStudioAsync(session);
 
+        using var heartbeatBody = JsonDocument.Parse((await firstHeartbeat).Request.PostData!);
+        var clientId = heartbeatBody.RootElement.GetProperty("clientId").GetString()!;
+        var lifecycle = host.Services.GetRequiredService<StudioHostLifecycleService>();
+        lifecycle.Heartbeat(new StudioHeartbeatRequest(clientId, Dirty: true));
+        Assert.Equal(1, lifecycle.DirtyClients);
+
         var stopping = ApplicationStoppingAsync(host);
         await page.Locator("[data-action='exit']").ClickAsync();
-        await stopping.WaitAsync(TimeSpan.FromSeconds(10));
+        await WaitForStoppingAsync(stopping, page);
         await host.StopAsync();
 
         var stoppedPage = page.Locator("main[role='status']");
         await stoppedPage.WaitForAsync(new() { Timeout = 10_000 });
         Assert.Contains("project host exited cleanly", await stoppedPage.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ExitWithoutSaving_StopsTheHostWhenHeartbeatsFail()
+    {
+        using var workspace = new StudioTempWorkspace();
+        var file = Path.Combine(workspace.Root, "exit.etlsql");
+        const string savedScript = "SELECT 1 AS Saved;";
+        await File.WriteAllTextAsync(file, savedScript);
+
+        await using var host = WorkstationEditorApp.Create([], Options(workspace.Root, file, "exit-token"));
+        await host.StartAsync();
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoWithDiagnosticsAsync(StudioUrl(host, "exit-token"));
+        await WaitForStudioAsync(session);
+        await page.EvaluateAsync("() => window.__STUDIO__.state.editorInstance.setValue('SELECT 2 AS Unsaved;')");
+        await page.WaitForFunctionAsync("() => window.__STUDIO__.state.documents[0].isDirty === true");
+
+        await page.RouteAsync("**/api/studio/heartbeat", route => route.AbortAsync("failed"));
+        var stopping = ApplicationStoppingAsync(host);
+        await page.Locator("[data-action='exit']").ClickAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Exit Without Saving" }).ClickAsync();
+        await WaitForStoppingAsync(stopping, page);
+        await host.StopAsync();
+
+        await page.Locator("main[role='status']").WaitForAsync(new() { Timeout = 10_000 });
+        Assert.Equal(savedScript, await File.ReadAllTextAsync(file));
         Assert.Empty(session.PageErrors);
     }
 
@@ -237,6 +275,20 @@ public sealed class DesktopStudioJourneyTests(StudioAuthoringFixture fixture)
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         app.Lifetime.ApplicationStopping.Register(() => completion.TrySetResult());
         return completion.Task;
+    }
+
+    internal static async Task WaitForStoppingAsync(Task stopping, IPage page, [CallerMemberName] string caller = "")
+    {
+        try
+        {
+            await stopping.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        catch (TimeoutException)
+        {
+            await BrowserNavigationDiagnostics.CaptureAsync(page, "desktop-shutdown-failure", caller,
+                new Uri(new Uri(page.Url), "/api/studio/shutdown").AbsoluteUri);
+            throw;
+        }
     }
 
     private static Task<JsonElement> LifecycleAsync(IPage page) => page.EvaluateAsync<JsonElement>(

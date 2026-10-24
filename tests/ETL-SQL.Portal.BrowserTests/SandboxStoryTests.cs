@@ -5159,6 +5159,30 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task Studio_DesktopExitRequiresDiscardConfirmation()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=studio&fixture=desktop-exit");
+        var stage = page.Locator("#stage");
+        var exit = stage.Locator("[data-action='exit']");
+        await exit.ClickAsync();
+        var dialog = page.Locator(".etlsql-feedback-dialog");
+        await Expect(dialog).ToContainTextAsync("unsaved changes");
+        var screenshot = Path.Combine(RepoRoot(), "artifacts", "section1", "desktop-exit", "discard-confirmation.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(screenshot)!);
+        await dialog.ScreenshotAsync(new() { Path = screenshot });
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Stay", Exact = true }).ClickAsync();
+        await Expect(dialog).ToHaveCountAsync(0);
+        Assert.Null(await stage.GetAttributeAsync("data-exit-request"));
+
+        await exit.ClickAsync();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Exit Without Saving" }).ClickAsync();
+        await Expect(stage).ToHaveAttributeAsync("data-exit-request", "{\"force\":true,\"activeRuns\":0,\"dirtyDocuments\":1}");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
     public async Task Studio_DegradedEditorStoryRetriesWithTheLatestTypedText()
     {
         await using var session = await fixture.NewSessionAsync();

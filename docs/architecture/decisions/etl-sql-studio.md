@@ -69,6 +69,8 @@ It used to default to never, which left a host running after its window closed, 
 locking the build output. The explicit **Exit Studio** flow checks dirty documents
 and active runs, requests graceful application shutdown, and polls for a bounded period so the UI
 can report whether the host actually stopped.
+Ordinary exit sends a final heartbeat to refresh the server's dirty-document guard. A confirmed
+forced exit skips that heartbeat, so an unrelated heartbeat failure cannot prevent its shutdown request.
 
 ### 1.3 Explicit Localization Decision
 

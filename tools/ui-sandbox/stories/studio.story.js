@@ -219,6 +219,7 @@ export default {
   fixtures: [
     { id: 'default', label: 'Multi-Tab Workbench (Report, ETL, Script)' },
     { id: 'pending-save', label: 'Slow Save (type while saving)' },
+    { id: 'desktop-exit', label: 'Desktop Exit (confirm unsaved documents)' },
     { id: 'crlf-pipeline', label: 'CRLF Pipeline (initial projection)' },
     { id: 'pipeline-run', label: 'Saved Pipeline (Run, follow, Stop, schedule)' },
     { id: 'helper-context', label: 'Helper preview context controls (mock rows)' },
@@ -293,6 +294,10 @@ export default {
       authFetch,
       apiBase: '',
       initialSnapshot: sampleSnapshot(),
+      onExit: fixtureId === 'desktop-exit' ? async request => {
+        stage.dataset.exitRequest = JSON.stringify(request);
+        return true;
+      } : undefined,
       onSave: async (content, path) => {
         if (fixtureId === 'pending-save') await new Promise(resolve => setTimeout(resolve, 3000));
         console.log(`[Studio Save] Saved ${path} (${content.length} chars)`);
@@ -392,6 +397,7 @@ export default {
       window.__STUDIO_API_DELAY__ = null;
       window.__STUDIO_PIPELINE_RUN__ = null;
       window.__STUDIO_NO_GIT__ = null;
+      delete stage.dataset.exitRequest;
       workbench?.dispose?.();
       helperWorkbench?.dispose?.();
     };

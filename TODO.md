@@ -495,6 +495,12 @@ here; each one failed a single test per run and passed on rerun.
   Hosted failure capture, diagnosis and consecutive-run evidence remain required before closure.
 - [ ] **`DesktopStudioJourneyTests` exit timeout:** waited 10 s for `ApplicationStopping` after "Exit
   Without Saving" on CI; passes 3 of 3 locally in 9–11 s.
+  **In progress:** aborting the final heartbeat now deterministically reproduces the same shutdown
+  timeout locally. A confirmed forced exit no longer waits on that unnecessary heartbeat; ordinary
+  exit still refreshes the server's dirty guard. The regression and original desktop journey pass,
+  alongside a stale-dirty-state ordinary exit check and the sandbox discard/cancel interaction.
+  Shutdown timeouts now retain the bounded transport/resource snapshot before teardown. The original
+  hosted log contains no request detail, so this does not yet establish its cause or close the item.
 - [ ] **Docker lane:** confirm the FTP mapped-port wait and the scheduled-job `lastRun` race fixes hold
   across consecutive CI runs, then close them in the record.
 

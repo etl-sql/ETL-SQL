@@ -330,6 +330,18 @@ class load and shared background-service state from its startup/shutdown observa
   waited 10 s for the first host's `ApplicationStopping` after "Exit Without Saving" and timed out.
   It passed 3 of 3 locally the same day (9–11 s each). New, not yet diagnosed; same deferral.
 
+  **v0.22.0 investigation:** an aborted final heartbeat reproduces that shutdown wait timeout in
+  the desktop browser journey. The shell awaited the heartbeat before requesting shutdown, even
+  after the user confirmed a forced exit. Confirmed forced exits now send the shutdown request
+  without that heartbeat. Ordinary exits still refresh dirty state, including when the server's
+  last heartbeat said dirty and the browser has since saved. The deterministic regression fails
+  before the change and passes after it; the original desktop journey and the sandbox's
+  discard/cancel confirmation also pass locally. Shutdown-wait failures retain the existing bounded
+  transport/resource snapshot. The [original job log](https://github.com/etl-sql/ETL-SQL/actions/runs/39131831664/job/117688413031)
+  records only the wait timeout, with no failed-request detail, so it cannot establish that a
+  heartbeat failure caused that hosted incident. Hosted diagnosis and consecutive-run evidence
+  remain required before closure.
+
   The release candidate's first CI attempt (`cd1770eac`, run 39143534977) failed single browser
   tests on timeouts; the rerun of the failed jobs passed. Same deferral.
 

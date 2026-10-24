@@ -14,6 +14,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Desktop Studio's confirmed forced exit no longer depends on a final heartbeat succeeding.
+  Ordinary exit still refreshes the dirty-document guard. Browser regressions cover failed heartbeats,
+  stale dirty state, discard/cancel confirmation and host shutdown; future shutdown timeouts retain
+  transport/resource diagnostics. The historical CI timeout remains under investigation.
+
 - Canary contract certification now rejects duplicate or missing planned runs, mismatched isolation,
   incorrect fault attribution and alerts sent to an unexpected route. Release policy now states
   that these deterministic contracts require separate operator evidence for live hosted claims.
