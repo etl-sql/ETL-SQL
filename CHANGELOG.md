@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Closed the one-command release-metadata follow-up after public CLI rehearsal verifies preview,
+  exactly three metadata writes, repeat safety, invalid-request rejection and LF/CRLF preservation.
+  Private v0.22.0 rehearsal metadata agrees; the real release date and version remain unchanged.
+
 - Canary certification now checks provisioning identities and cost/customer boundaries against the
   plan, and validates credential revocation, replacement identities, reasons, continuity and lifetime
   details. A retained `passed` summary cannot override inconsistent provisioning or credential data.

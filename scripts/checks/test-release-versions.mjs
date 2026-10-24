@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -64,7 +64,7 @@ const crlf = Object.fromEntries(Object.entries(draft).map(([name, text]) => [nam
 for (const change of planReleaseMetadata('v1.2.3', '2026-10-18', name => crlf[name])) assert.ok(!/(?<!\r)\n/.test(change.after));
 console.log('Metadata finalization: preview, complete update, idempotency, historical-date protection, rollback and line endings passed.');
 
-const root = mkdtempSync(path.join(os.tmpdir(), 'release-versions-'));
+const root = mkdtempSync(path.join(os.tmpdir(), 'release-versions espaces-é-$-'));
 const script = fileURLToPath(new URL('../Test-ReleaseVersions.ps1', import.meta.url));
 function write(name, value) {
   const target = path.join(root, name);
@@ -95,6 +95,58 @@ try {
   write('Directory.Build.props', '<Project><PropertyGroup><VersionPrefix>$(Other)</VersionPrefix></PropertyGroup></Project>');
   assert.equal(run().status, 1);
   console.log('Release versions: consistent sources pass; partial bumps and invalid metadata fail.');
+
+  // Execute the public command from outside a private candidate checkout. Its own location,
+  // not the caller's working directory, must own every metadata read and write.
+  mkdirSync(path.join(root, 'scripts'), { recursive: true });
+  for (const name of ['finalize-release-metadata.mjs', 'check-release-metadata.mjs']) {
+    copyFileSync(fileURLToPath(new URL(`../${name}`, import.meta.url)), path.join(root, 'scripts', name));
+  }
+  write('unrelated.txt', 'Keep unrelated candidate bytes.\n');
+  const tracked = [...Object.keys(draft), 'unrelated.txt', 'scripts/finalize-release-metadata.mjs', 'scripts/check-release-metadata.mjs'];
+  const snapshot = () => Object.fromEntries(tracked.map(name => [name, readFileSync(path.join(root, name))]));
+  const command = (args) => {
+    const result = spawnSync(process.execPath, [path.join(root, 'scripts/finalize-release-metadata.mjs'), ...args],
+      { cwd: os.tmpdir(), encoding: 'utf8', windowsHide: true, timeout: 10000 });
+    assert.ifError(result.error);
+    return result;
+  };
+  for (const eol of ['\n', '\r\n']) {
+    for (const [name, value] of Object.entries(draft)) write(name, value.replaceAll('\n', eol));
+    // Exercise existing draft index rows as well as insertion into an empty index.
+    if (eol === '\r\n') write('docs/releases/README.md',
+      '| Page | Description |\r\n| :--- | :--- |\r\n| [ETL-SQL v1.2.3 (Draft)](v1.2.3.md) | **Status:** Draft |\r\n');
+    const before = snapshot();
+    const preview = command(['v1.2.3', '2026-10-18']);
+    assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+    assert.equal((preview.stdout.match(/^Would update /gm) ?? []).length, 3, preview.stdout);
+    assert.deepEqual(snapshot(), before, 'CLI preview must preserve every candidate file.');
+    const applied = command(['v1.2.3', '2026-10-18', '--write']);
+    assert.equal(applied.status, 0, applied.stdout + applied.stderr);
+    assert.equal((applied.stdout.match(/^Updated /gm) ?? []).length, 3, applied.stdout);
+    const after = snapshot();
+    assert.deepEqual(tracked.filter(name => !before[name].equals(after[name])).sort(),
+      ['CHANGELOG.md', 'docs/releases/README.md', 'docs/releases/v1.2.3.md']);
+    assert.deepEqual(metadataFindings('v1.2.3', name => after[name].toString()), []);
+    assert.match(after['CHANGELOG.md'].toString(), /## \[Unreleased\]\r?\n\r?\n## \[1\.2\.3\] — 2026-10-18/);
+    assert.ok(after['CHANGELOG.md'].toString().includes('Authored change.'));
+    assert.ok(after['CHANGELOG.md'].toString().includes('## [1.2.2] — 2026-10-01'));
+    assert.ok(after['docs/releases/v1.2.3.md'].toString().includes('Authored notes.'));
+    if (eol === '\r\n') for (const name of Object.keys(draft)) assert.ok(!/(?<!\r)\n/.test(after[name].toString()), name);
+    const repeated = command(['v1.2.3', '2026-10-18', '--write']);
+    assert.equal(repeated.status, 0, repeated.stdout + repeated.stderr);
+    assert.match(repeated.stdout, /already finalized; no changes/);
+    assert.deepEqual(snapshot(), after, 'CLI repeat must preserve exact bytes.');
+    for (const args of [
+      ['v1.2.3', '2026-10-19', '--write'], ['v1.2.4', '2026-10-18', '--write'],
+      ['v1.2.3', '2026-02-30', '--write'], ['v1.2.3', '2026-10-18', '--unknown'],
+    ]) {
+      const rejected = command(args);
+      assert.notEqual(rejected.status, 0, args.join(' '));
+      assert.deepEqual(snapshot(), after, 'Rejected CLI requests must preserve every file.');
+    }
+  }
+  console.log('Public metadata command: preview, three-file finalization, draft-index insertion/update, repeat, invalid requests, external working directory, Unicode paths and CRLF preservation passed.');
 } finally {
   // Only remove the private fixture created above.
   rmSync(root, { recursive: true, force: true });

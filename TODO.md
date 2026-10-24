@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 19 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 18 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -185,12 +185,16 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   existing per-attempt shard artifact; the 50-minute job ceiling and test coverage gate remain.
   A duplicate Node setup is removed. Executed workflow fixtures verify original arguments,
   failing exits and both log channels. Hosted timing and failure uploads remain unverified.
-- [ ] **One-command release metadata.** One step flips the CHANGELOG date, release-notes status and
+- [x] **One-command release metadata.** One step flips the CHANGELOG date, release-notes status and
   releases index together.
-  **In progress:** `finalize-release-metadata.mjs` previews or writes the three surfaces after
-  validating the complete proposed result. Tests cover repeat runs, finalized-date protection,
-  write-failure rollback, concurrent-edit rejection and CRLF preservation. Current-release preview
-  was a no-op; use and review it on the next authored candidate before freezing the SHA.
+  **Verified locally 2026-10-24:** `finalize-release-metadata.mjs` previews or writes all three files
+  after validating the complete proposed result. The public CLI passes preview/apply/repeat and
+  rejection checks from an external working directory, with Unicode paths and LF/CRLF inputs.
+  Its exact write set is the changelog, notes and index; versions and unrelated files remain unchanged.
+  Tests also cover finalized-date protection, write-failure rollback and concurrent-edit rejection.
+  A private v0.22.0 rehearsal using the current authored changelog/index passes metadata validation
+  and byte-identical repeat writes. The real release's version, date and publication are unchanged;
+  finalizing its authored notes before freezing the candidate remains part of the release checklist.
 - [ ] **Evidence manifest.** A script gathers run IDs, lane results and certification outcomes for
   the candidate commit into a retained artifact/release attachment outside the frozen source
   commit. The release gates below point at it.
