@@ -93,7 +93,7 @@ export function builtAssetProblems({ root = defaultRoot, configuration = 'Debug'
             if (typeof project !== 'string' || !project) throw new Error('A project path is required.');
             return projectConsumers(root, project, configuration, evaluate).flatMap(name => {
                 const matches = stamps.filter(stamp => stamp.toLowerCase() === `${name}${suffix}`.toLowerCase());
-                if (matches.length !== 1) return [`${name} (${configuration}) has no unique build recorded for the prepared browser assets. Build without --no-build.`];
+                if (matches.length !== 1) return [`${name} (${configuration}) has no unique build recorded for the prepared browser assets. Build once without --no-build.`];
                 return fs.readFileSync(path.join(directory, matches[0]), 'utf8').trim().toLowerCase() === current ? [] :
                     [`${name} (${configuration}) was built from an older browser asset preparation. Rebuild without --no-build.`];
             });

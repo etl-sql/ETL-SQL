@@ -356,7 +356,10 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
     validate every consumed asset stamp. Stale unrelated hosts no longer force a rebuild; missing
     stamps, conditional/configuration mismatches, graph errors and unsupported reference overrides
     still reject reuse. SDK-backed fixtures cover these cases; a real browser-project graph check passes.
-    Other local lane selectors and hosted acceptance remain open.
+    PowerShell and Bash lane/smoke entry points now apply the same check before each selected project;
+    PowerShell also guards sharded-engine discovery. Executed wiring probes cover aggregate lanes,
+    project/configuration argument boundaries and early rejection; real preparation fixtures pass
+    with an unrelated stale host. Impact-driven local pre-push routing and hosted acceptance remain open.
 - [ ] **Protect runner capacity and measure the actual critical path.** Cancel superseded branch
   validation runs, deduplicate equivalent push/PR work where their tested commits match, and retain
   immutable candidate/tag runs. Add queue wait, setup, build, test and upload times to the release

@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { builtAssetProblems } from '../check-built-browser-assets.mjs';
+import { verifyNoBuildEntrypoints } from './fixtures/no-build-entrypoint-probe.mjs';
 
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'built-browser-scope-'));
 const root = path.join(temporary, 'repo espaces-é-$');
@@ -103,3 +104,4 @@ try {
     assert.equal(path.dirname(temporary), path.resolve(os.tmpdir()));
     fs.rmSync(temporary, { recursive: true, force: true });
 }
+verifyNoBuildEntrypoints();

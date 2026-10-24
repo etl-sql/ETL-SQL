@@ -127,10 +127,11 @@ per-process handles and IPv4/IPv6 TCP/UDP endpoint counts; unavailable counters 
 For direct `dotnet test` runs, set `ETLSQL_BROWSER_DIAGNOSTICS_DIR` to retain the same evidence at a
 chosen path. The shard driver sets it automatically and restores the caller's environment afterward.
 
-`-NoBuild` checks every asset consumer in the selected browser project's evaluated MSBuild graph.
+Browser shard, test-lane and smoke `-NoBuild` / `--no-build` entry points check every asset consumer
+in each selected project's evaluated MSBuild graph before tests or shard discovery.
 Unrelated host outputs do not require rebuilding. Missing or stale consumed stamps, graph-evaluation
-errors and unsupported configuration/framework overrides reject reuse. Other no-build entry points
-retain their existing checks. For an explicit project check:
+errors and unsupported configuration/framework overrides reject reuse. The standalone checker also
+supports an explicit project check:
 
 ```powershell
 node scripts/check-built-browser-assets.mjs --configuration Release --project tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj

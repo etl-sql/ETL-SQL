@@ -487,8 +487,11 @@ try {
     const shim = path.join(root, 'entrypoint-tools');
     const outside = path.join(root, 'outside espaces-é');
     fs.mkdirSync(shim); fs.mkdirSync(outside);
+    write(path.join(root, 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'),
+        '<Project><ItemGroup><ProjectReference Include="../../ETL-SQL.ReportRuntime.proj" /></ItemGroup></Project>');
     const debug = path.join(root, 'scripts', process.platform === 'win32' ? 'build-debug.ps1' : 'build-debug.sh');
     let shell;
+    let realDotnet = '';
     if (process.platform === 'win32') {
         const lookup = spawnSync('pwsh', ['-NoProfile', '-Command', '(Get-Process -Id $PID).Path'], { encoding: 'utf8' });
         assert.equal(lookup.status, 0, lookup.stdout + lookup.stderr);
@@ -509,12 +512,20 @@ exit $LASTEXITCODE
 `);
     } else {
         shell = '/bin/bash';
+        const dotnet = spawnSync('/bin/sh', ['-c', 'command -v dotnet'], { encoding: 'utf8' });
+        assert.equal(dotnet.status, 0, dotnet.stderr);
+        realDotnet = dotnet.stdout.trim();
         // Path discovery must still work when the fixture intentionally removes Node from PATH.
         const dirname = spawnSync('/bin/sh', ['-c', 'command -v dirname'], { encoding: 'utf8' });
         assert.equal(dirname.status, 0, dirname.stderr);
         fs.symlinkSync(dirname.stdout.trim(), path.join(shim, 'dirname'));
         const logger = path.join(shim, 'log.mjs');
         write(logger, `import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
+if (process.argv[2] === 'dotnet' && process.argv[3] === 'msbuild' && process.argv.includes('-getItem:ProjectReference')) {
+  const result = spawnSync(process.env.ETLSQL_ENTRYPOINT_REAL_DOTNET, process.argv.slice(3), { encoding: 'utf8' });
+  process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? ''); process.exit(result.status ?? 1);
+}
 fs.appendFileSync(process.env.ETLSQL_ENTRYPOINT_CALLS, JSON.stringify({command:process.argv[2],args:process.argv.slice(3)})+'\\n');
 if (process.argv[2] === 'dotnet' && Number(process.env.ETLSQL_ENTRYPOINT_BUILD_EXIT) === 0) console.log('Passed: 1');
 process.exit(process.argv[2] === 'dotnet' ? Number(process.env.ETLSQL_ENTRYPOINT_BUILD_EXIT) : 0);
@@ -531,6 +542,7 @@ process.exit(process.argv[2] === 'dotnet' ? Number(process.env.ETLSQL_ENTRYPOINT
         const env = { ...process.env, ETLSQL_ENTRYPOINT_CALLS: callsFile,
             ETLSQL_ENTRYPOINT_SCRIPT: script, ETLSQL_ENTRYPOINT_PARAMETERS: JSON.stringify(parameters),
             ETLSQL_ENTRYPOINT_BUILD_EXIT: String(buildExit),
+            ETLSQL_ENTRYPOINT_REAL_DOTNET: realDotnet,
             ETLSQL_ENTRYPOINT_NODE: process.execPath, ETLSQL_ENTRYPOINT_LOGGER: path.join(shim, 'log.mjs'),
             PATH: missingNode ? shim : [shim, path.dirname(process.execPath), process.env.PATH].join(path.delimiter) };
         const args = process.platform === 'win32' ? ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', driver] : [script, ...argv];
@@ -630,6 +642,7 @@ process.exit(process.argv[2] === 'dotnet' ? Number(process.env.ETLSQL_ENTRYPOINT
         verifyReuse(index === 0 ? /no build recorded for the prepared browser assets/ : /built from an older browser asset preparation/);
         recordBuild();
         verifyReuse();
+        write(path.join(root, 'artifacts/browser-assets-built/Unrelated.Debug.any.sha256'), 'deliberately-stale-unrelated-host');
         const before = metadataSnapshot();
         const current = runEntrypoint(noBuild);
         assert.equal(current.status, 0, current.stdout + current.stderr);
