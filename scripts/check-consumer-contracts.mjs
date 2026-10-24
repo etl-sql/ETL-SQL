@@ -16,11 +16,11 @@
  *   node scripts/check-consumer-contracts.mjs --only dq  # just the ones whose name contains "dq"
  *   node scripts/check-consumer-contracts.mjs --list     # names only, run nothing
  */
-import { spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { releaseAutomationChecks, runChecks } from './release-preflight.mjs';
 
 const scriptRoot = path.dirname(fileURLToPath(import.meta.url));
 const checkRoot = path.join(scriptRoot, 'checks');
@@ -42,6 +42,9 @@ const OUTSIDE_CHECKS = {
 const args = process.argv.slice(2);
 const only = args.includes('--only') ? args[args.indexOf('--only') + 1] : null;
 const listOnly = args.includes('--list');
+// Use only after this candidate's shared preflight passed. The manifest owns membership.
+const excludePreflight = args.includes('--exclude-preflight');
+const preflightFiles = new Set(releaseAutomationChecks.map(check => path.basename(check.args[0])));
 
 const checks = [
   ...readdirSync(checkRoot)
@@ -51,6 +54,7 @@ const checks = [
     .map(([name, extra]) => ({ name, file: path.join(scriptRoot, name), label: `scripts/${name}`, extra })),
 ]
   .filter(check => !only || check.name.includes(only))
+  .filter(check => !excludePreflight || !preflightFiles.has(check.name))
   .sort((left, right) => left.name.localeCompare(right.name));
 
 if (checks.length === 0) {
@@ -64,25 +68,16 @@ if (listOnly) {
 }
 
 const started = Date.now();
-const failures = [];
-
-for (const { name, file, label, extra } of checks) {
-  const result = spawnSync(process.execPath, [file, ...extra], {
-    cwd: path.resolve(scriptRoot, '..'),
-    encoding: 'utf8',
-  });
-
-  if (result.status === 0) continue;
-
-  failures.push({
-    name,
-    label,
-    extra,
-    // A check that cannot start reports nothing on stdout, so both streams are kept.
-    output: [result.stdout, result.stderr].filter(Boolean).join('\n').trimEnd(),
-    status: result.status,
-  });
-}
+const summary = await runChecks(checks.map(({ name, file, extra }) => ({
+  id: name.replace(/\.mjs$/, ''), command: process.execPath, args: [file, ...extra],
+})), {
+  outputDirectory: path.resolve(scriptRoot, '..', 'release-validation', 'consumer-contracts', `${started}-${process.pid}`),
+  // Some fixtures mutate prepared assets. Preserve serial execution and bound each independently.
+  // The successful hosted consumer stage took 22.4 minutes; allow a slow individual fixture
+  // that budget plus margin while the enclosing CI job still has its 60-minute ceiling.
+  concurrency: 1, timeoutMs: 30 * 60 * 1000, streamLogs: true,
+});
+const failures = summary.results.filter(result => !result.passed);
 
 const seconds = ((Date.now() - started) / 1000).toFixed(1);
 
@@ -93,9 +88,10 @@ if (failures.length === 0) {
 
 console.error(`consumer contract gate: ${failures.length} of ${checks.length} checks failed in ${seconds}s\n`);
 for (const failure of failures) {
-  const invocation = ['node', failure.label, ...failure.extra].join(' ');
-  console.error(`── ${failure.name} (exit ${failure.status}) — reproduce with: ${invocation}`);
-  console.error(failure.output);
+  const check = checks.find(check => check.name === `${failure.id}.mjs`);
+  const invocation = ['node', check.label, ...check.extra].join(' ');
+  console.error(`── ${check.name} (exit ${failure.exitCode}) — reproduce with: ${invocation}`);
+  console.error(`Complete output: ${failure.logPath}`);
   console.error('');
 }
 process.exit(1);

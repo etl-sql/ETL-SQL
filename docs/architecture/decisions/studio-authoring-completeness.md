@@ -3,7 +3,7 @@
 **Status:** ST01 and ST02 inventories complete; ST03 assessed 2026-10-12 — beginner experience not yet accepted.
 **Decision:** Studio combines the ReportBuilder and WorkstationEditor foundations into one SQL-first
 product across desktop and Portal. Completeness and a better beginner experience define success.
-**Scope owner:** [Studio design](etl-sql-studio.md), with task status in [TODO §2](../../../TODO.md#2-studio--unified-authoring-experience-and-completeness-criteria).
+**Scope owner:** [Studio design](etl-sql-studio.md), with task status in [the authoring roadmap](../../../ROADMAP.md#unified-authoring-experience-and-completeness-criteria).
 
 ## Acceptance approach
 

@@ -131,7 +131,7 @@ const degradingRuns = [
   { historyId: 2, jobName: 'nightly_import', startTime: '2026-07-21T02:00:00Z', endTime: '2026-07-21T02:12:00Z', status: 'SUCCESS', rowsProcessed: 1000, rowsQuarantined: 9, rowsWarned: 6, quarantineRate: 0.009, warnRate: 0.006, ruleFailures: [{ column: 'Email', rule: "MATCHES '^[^@]+@[^@]+$'", count: 9 }] },
   { historyId: 1, jobName: 'nightly_import', startTime: '2026-07-20T02:00:00Z', endTime: '2026-07-20T02:11:00Z', status: 'SUCCESS', rowsProcessed: 995, rowsQuarantined: 8, rowsWarned: 5, quarantineRate: 0.008, warnRate: 0.005, ruleFailures: [{ column: 'Email', rule: "MATCHES '^[^@]+@[^@]+$'", count: 8 }] },
 ].map(run => ({ ...run, quarantineRate: run.rowsQuarantined / run.rowsProcessed, warnRate: run.rowsWarned / run.rowsProcessed,
-  ruleFailures: run.ruleFailures.map(failure => ({ ...failure, targetTable: null, action: null, owner: null, countsOnly: true })) }));
+  ruleFailures: run.ruleFailures.map(failure => ({ ...failure, targetTable: 'warehouse.Customers', action: 'QUARANTINE', owner: 'DataSteward' })) }));
 
 const trends = {
   degrading: {
@@ -143,23 +143,21 @@ const trends = {
     averageQuarantineRate: degradingRuns.reduce((sum, run) => sum + run.quarantineRate, 0) / degradingRuns.length,
     latestQuarantineRate: 0.2,
     quarantineRateDelta: degradingRuns[0].quarantineRate - degradingRuns.slice(1).reduce((sum, run) => sum + run.quarantineRate, 0) / (degradingRuns.length - 1),
-    // Two structured rows plus one counts-only row from a run recorded before per-rule capture.
     // The two `Email` rows are the case worth having a fixture for: same column, different target
     // tables, which used to render as two indistinguishable rows with different numbers.
     topRuleFailures: [
       {
         column: 'Email', rule: "MATCHES '^[^@]+@[^@]+$'", count: 240,
-        targetTable: 'warehouse.Customers', action: 'QUARANTINE', owner: 'DataSteward', countsOnly: false
+        targetTable: 'warehouse.Customers', action: 'QUARANTINE', owner: 'DataSteward'
       },
       {
         column: 'Email', rule: "MATCHES '^[^@]+@[^@]+$'", count: 31,
-        targetTable: 'warehouse.Leads', action: 'WARN', owner: 'GrowthTeam', countsOnly: false
+        targetTable: 'warehouse.Leads', action: 'WARN', owner: 'GrowthTeam'
       },
       {
         column: 'Age', rule: '>= 0', count: 20,
-        targetTable: 'warehouse.Customers', action: 'WARN', owner: 'DataSteward', countsOnly: false
+        targetTable: 'warehouse.Customers', action: 'WARN', owner: 'DataSteward'
       },
-      { column: 'Email', rule: 'NOT NULL', count: 88, countsOnly: true },
     ],
     runs: degradingRuns,
   },

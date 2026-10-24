@@ -450,7 +450,6 @@ interface DataQualityRuleFailureDto {
     targetTable?: string | null;
     action?: string | null;
     owner?: string | null;
-    countsOnly: boolean;
 }
 
 interface DataQualityRunDto {

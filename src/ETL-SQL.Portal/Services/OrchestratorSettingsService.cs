@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using ETL_SQL.Portal.Models;
 
 namespace ETL_SQL.Portal.Services;
@@ -44,15 +43,13 @@ public class OrchestratorSettingsService
                 var persisted = await PortalSettingsFile.ReadAsync<PersistedSettings>(_settingsPath, cancellationToken);
                 if (persisted is not null)
                 {
-                    var apiUrl = persisted.FormatVersion == 1 ? persisted.ApiUrl : persisted.ApiUrl ?? current.ApiUrl;
-                    var apiKey = persisted.ProtectedApiKey is not null
-                        ? protector.Unprotect(persisted.ProtectedApiKey)
-                            ?? throw new InvalidOperationException("The saved Orchestrator key could not be read.")
-                        : persisted.FormatVersion == 1 ? null : persisted.ApiKey ?? current.ApiKey;
-                    var loaded = new Settings(apiUrl, apiKey);
-                    // Upgrade the legacy plaintext sidecar before publishing its values.
-                    if (persisted.ApiKey is not null) await PersistAsync(loaded, cancellationToken);
-                    Volatile.Write(ref current, loaded);
+                    if (persisted.FormatVersion != 1)
+                        throw new JsonException("Unsupported Orchestrator settings format.");
+                    var apiKey = persisted.ProtectedApiKey is null
+                        ? null
+                        : protector.Unprotect(persisted.ProtectedApiKey)
+                            ?? throw new InvalidOperationException("The saved Orchestrator key could not be read.");
+                    Volatile.Write(ref current, new Settings(persisted.ApiUrl, apiKey));
                 }
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
@@ -104,9 +101,6 @@ public class OrchestratorSettingsService
         public int FormatVersion { get; init; }
         public string? ApiUrl { get; init; }
         public string? ProtectedApiKey { get; init; }
-        // Legacy read-only field. Persist() never writes plaintext API keys.
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public string? ApiKey { get; init; }
     }
 
     private async Task PersistAsync(Settings settings, CancellationToken cancellationToken)

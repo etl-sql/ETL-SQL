@@ -116,6 +116,7 @@ $PowerShellExe = Get-PowerShellExecutable
 function Get-PlannedPreReleasePhases {
     $phases = New-Object System.Collections.Generic.List[object]
 
+    $phases.Add([ordered]@{ Phase = "Source preflight"; Command = "node scripts/release-preflight.mjs"; Reason = "Collect every independent source-check failure before restore/build." })
     $phases.Add([ordered]@{ Phase = "Asset preparation"; Command = "node .\scripts\sync-assets.js"; Reason = "Generate browser assets before checks and builds consume them." })
     $phases.Add([ordered]@{ Phase = "Asset drift check"; Command = "node .\scripts\sync-assets.js -Check"; Reason = "Shared report runtime files must match generated host copies." })
     $phases.Add([ordered]@{ Phase = "Asset ownership check"; Command = "node .\scripts\browser-asset-ownership.mjs --check"; Reason = "Every browser owner and input is tracked, and generated outputs match the layout .gitignore declares." })
@@ -128,7 +129,6 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "SBOM generation"; Command = "node scripts/generate-sbom.js"; Reason = "The released SBOM generates and its component version matches Directory.Build.props." })
     $phases.Add([ordered]@{ Phase = "Third-party inventory drift"; Command = "node scripts/generate-third-party-inventory.js --check"; Reason = "THIRD-PARTY-INVENTORY.md matches the current package graph, so the licence review and NOTICES reflect what actually ships." })
     $phases.Add([ordered]@{ Phase = "Dotnet build"; Command = "dotnet build ETL-SQL.slnx --configuration $Configuration --no-restore"; Reason = "All projects compile in the release configuration." })
-    $phases.Add([ordered]@{ Phase = "Test structure audit"; Command = ".\scripts\Get-TestLaneInventory.ps1 -FailOnIssues"; Reason = "Lane ownership is category-based, release-only suites have targeted runners, and milestone-era/root-level test naming cannot drift back in." })
     $phases.Add([ordered]@{ Phase = "Format verify"; Command = "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)"; Reason = "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run." })
     if (-not $EffectiveSkipScale) {
         $phases.Add([ordered]@{ Phase = "Scale certification smoke"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke -OutDir <run>\scale-smoke"; Reason = "Small certification workload still meets baseline before the long test lanes heat the machine." })
@@ -409,6 +409,18 @@ function Save-State {
     )
 
     New-Item -ItemType Directory -Force -Path $LatestDir | Out-Null
+
+    $identityError = $null
+    if ($Status -eq 'Passed') {
+        try {
+            if ((Get-SourceFingerprint) -cne $Fingerprint) {
+                throw 'Candidate sources changed during validation. Rerun certification on the frozen candidate.'
+            }
+        } catch {
+            $identityError = $_.Exception.Message
+            $Status = 'Failed'
+        }
+    }
     
     $commitHash = ""
     try { $commitHash = (& git rev-parse HEAD 2>$null) -join "" } catch { }
@@ -420,6 +432,17 @@ function Save-State {
         sourceFingerprint = $Fingerprint
         commitHash = $commitHash
         configuration = $Configuration
+        evidenceSchemaVersion = 1
+        scope = [ordered]@{
+            quick = [bool]$Quick
+            forceResume = [bool]$ForceResume
+            skipNode = [bool]$EffectiveSkipNode
+            skipScale = [bool]$EffectiveSkipScale
+            includeSlt = [bool]$IncludeSlt
+            includeDockerIntegration = [bool]$EffectiveIncludeDockerIntegration
+            includeStandardScale = [bool]$EffectiveIncludeStandardScale
+        }
+        plannedPhases = @((Get-PlannedPreReleasePhases) | ForEach-Object { $_.Phase })
         coverageResultsRelative = $CoverageResultsRelative
         coverageReportDirectory = $CoverageReportDir
         smokeBaselineReport = $smokeBaselineReport
@@ -428,6 +451,7 @@ function Save-State {
     }
 
     $state | ConvertTo-Json -Depth 8 | Set-Content -Path $StatePath -Encoding UTF8
+    if ($identityError) { throw $identityError }
 }
 
 function Get-PreReleasePhaseDependencies {
@@ -615,9 +639,10 @@ function Invoke-LoggedPhase {
                 command = $Command
                 status = "Passed"
                 elapsedSeconds = 0
+                completedAt = $previous.completedAt
                 log = $previous.log
                 artifacts = @($previous.artifacts)
-                note = "Reused by -Resume; matching command passed for this source fingerprint and its log exists."
+                note = "Reused by -Resume; matching command passed within seven days for this source fingerprint and its log exists."
             })
             $hasAnyFailure = $Results | Where-Object { $_.status -eq "Failed" }
             Save-State -Results $Results.ToArray() -Status $(if ($hasAnyFailure) { "Failed" } else { "Running" }) -Fingerprint $Fingerprint
@@ -691,6 +716,7 @@ function Invoke-LoggedPhase {
         command = $Command
         status = $status
         elapsedSeconds = [Math]::Round($timer.Elapsed.TotalSeconds, 2)
+        completedAt = [datetimeoffset]::UtcNow.ToString('o')
         log = $phaseLog
         artifacts = @($Artifacts)
         note = $note
@@ -915,6 +941,9 @@ if ($Resume) {
         throw "Source fingerprint changed since the previous run. Rerun without -Resume. -ForceResume is only for development iteration, not release evidence."
     }
 
+    if (-not $ForceResume -and ($previousState.evidenceSchemaVersion -ne 1 -or $previousState.scope.forceResume -ne $false)) {
+        throw 'Previous run has unknown or forced-resume scope. Start a fresh run without -Resume for release evidence.'
+    }
     $previousPhaseMap = Convert-PhaseMap $previousState
     # Carry the original artifact paths through repeated resumes. Changing a run directory must not
     # rerun the memory-heavy lanes just to add the Docker segment to the same candidate evidence.
@@ -933,6 +962,11 @@ $spillAllocationOutput = Join-Path (Split-Path -Parent $standardBaselineReport) 
 $spillAllocationJson = Join-Path $spillAllocationOutput ("profile-10000000rows-{0}.json" -f ((& git -C $RepoRoot rev-parse --short HEAD).Trim()))
 
 try {
+    Invoke-LoggedPhase "Source preflight" `
+        "node scripts/release-preflight.mjs" `
+        { & node "scripts/setup-actionlint.mjs"; if ($LASTEXITCODE -ne 0) { throw "Workflow checker setup failed." }; & node "scripts/release-preflight.mjs" } `
+        $previousPhaseMap $fingerprint $results -AlwaysRun
+
     Invoke-LoggedPhase "Asset preparation" `
         "node .\scripts\sync-assets.js" `
         { & node ".\scripts\sync-assets.js" } `
@@ -1024,11 +1058,6 @@ try {
     Invoke-LoggedPhase "Dotnet build" `
         "dotnet build ETL-SQL.slnx --configuration $Configuration --no-restore" `
         { & dotnet build "ETL-SQL.slnx" "--configuration" $Configuration "--no-restore" } `
-        $previousPhaseMap $fingerprint $results
-
-    Invoke-LoggedPhase "Test structure audit" `
-        ".\scripts\Get-TestLaneInventory.ps1 -FailOnIssues" `
-        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Get-TestLaneInventory.ps1" "-FailOnIssues" } `
         $previousPhaseMap $fingerprint $results
 
     # Matches the CI 'dotnet format --verify-no-changes' gate so formatting drift fails locally

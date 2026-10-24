@@ -9,7 +9,7 @@ public sealed class FilterControlBehaviourTests(DetailSurfaceHarnessFixture fixt
     private async Task<IPage> OpenAsync(BrowserSession session)
     {
         var page = session.Page;
-        await page.GotoAsync($"{fixture.BaseUrl}/tools/ui-sandbox/filter-controls.html");
+        await page.GotoWithDiagnosticsAsync($"{fixture.BaseUrl}/tools/ui-sandbox/filter-controls.html");
         await page.Locator("input[type='search']").WaitForAsync();
         return page;
     }

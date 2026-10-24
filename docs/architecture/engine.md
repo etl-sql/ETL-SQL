@@ -469,7 +469,6 @@ Currently 39 rules:
 | `DatasetEncryptWithoutKeyRule` | Declaring a dataset with `ENCRYPT = PASSWORD` but omitting the password value |
 | `DatasetEncryptionModeRule` | Conflicting or invalid encryption settings in dataset creation |
 | `DatasetRefreshIntervalRule` | Refresh intervals configured below the minimum safe threshold |
-| `DeprecatedConnectionSyntaxRule` | Legacy connection syntax formats (e.g., using `WITH` clause at connection level) |
 | `DialectKeywordRule` | Database-specific keywords or syntax elements not supported by the target connection |
 | `FileSystemSecurityRule` | Operations attempting to read/write from restricted system paths or outside workspace root |
 | `FlatFileDelimiterConflictRule` | Incompatible flat file properties (e.g., specifying both CSV and custom delimiters) |

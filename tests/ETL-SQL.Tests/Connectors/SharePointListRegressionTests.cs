@@ -24,6 +24,13 @@ public sealed class SharePointListRegressionTests
         Assert.Equal(new[] { "1", "2" }, rows.Select(row => row["Id"]?.ToString()));
     }
 
+    [Theory]
+    [InlineData("Sales", "Sales")]
+    [InlineData("Bob's Orders", "Bob%27%27s%20Orders")]
+    [InlineData("x') or ('a", "x%27%27%29%20or%20%28%27%27a")]
+    public void ListTitleIsAnODataStringLiteral(string title, string expected) =>
+        Assert.Equal(expected, SharePointConnector.ODataTitle(title));
+
     [Fact]
     public async Task VerbosePaginationMustIncludeAllRowsWithoutDuplicateBatches()
     {

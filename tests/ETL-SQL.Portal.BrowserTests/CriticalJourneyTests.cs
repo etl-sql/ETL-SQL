@@ -112,7 +112,7 @@ public sealed class CriticalJourneyTests(PortalJourneyFixture fixture)
     // ── Step 5: run it and see rows ──────────────────────────────────────────
     private static async Task RunReportAsync(IPage page, string folderName, string reportName)
     {
-        await page.GotoAsync("/index.html");
+        await page.GotoWithDiagnosticsAsync("/index.html");
         await page.ClickAsync($"#folderTree .folder-item:has-text(\"{folderName}\")");
         await page.ClickAsync($"a.report-card-link:has-text(\"{reportName}\")");
 
@@ -134,7 +134,7 @@ public sealed class CriticalJourneyTests(PortalJourneyFixture fixture)
     {
         if (!page.Url.Contains("/admin.html", StringComparison.Ordinal))
         {
-            await page.GotoAsync("/admin.html");
+            await page.GotoWithDiagnosticsAsync("/admin.html");
         }
 
         await page.ClickAsync($"#tab-{tab}");

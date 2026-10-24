@@ -389,8 +389,7 @@ describe('resolved interaction contract', () => {
     });
 
     it('never infers chart geometry from the visual type', () => {
-        // The generic renderer must not recognise a chart by name. The only surviving reference is
-        // inside legacyInteraction(), the pre-v0.19 manifest shim.
+        // The generic renderer must not recognise a chart by name.
         const generic = RUNTIME_SRC.slice(RUNTIME_SRC.indexOf('function applyNativeHighlight'));
         const body = generic.slice(0, generic.indexOf('\n    }'));
         expect(body).not.toContain('visualType');
@@ -399,13 +398,13 @@ describe('resolved interaction contract', () => {
     });
 });
 
-describe('legacy interaction migration', () => {
-    it('reads the pre-v0.19 interactions map when no resolved contract is present', () => {
+describe('visual without an interaction contract', () => {
+    it('takes part in no interaction, whatever an old interactions map says', () => {
         const win = makeDOM();
         const container = win.document.createElement('div');
 
         win.__reportRuntime__.renderNativeSvg(container, {
-            name: 'Legacy',
+            name: 'Plain',
             visualType: 'BAR',
             columns: ['Region', 'Revenue'],
             rows: [['North', '500'], ['South', '300']],
@@ -416,45 +415,7 @@ describe('legacy interaction migration', () => {
             nativeSvg: barSvg('')
         }, { visuals: [] });
 
-        // A pre-v0.19 snapshot carries no extent attributes, so the shim supplies them and the
-        // proportional treatment still renders.
-        const overlay = container.querySelector('.cross-highlight-selection');
-        expect(overlay).not.toBeNull();
-        expect(overlay!.getAttribute('height')).toBe('25');
-    });
-
-    it('honours a legacy MATCHING column over the mapping fallback', async () => {
-        const posted: any[] = [];
-        const win = makeDOM(w => {
-            w.__IS_WEB__ = true;
-            w.fetch = (url: string, init: any) => {
-                posted.push(JSON.parse(init.body));
-                return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
-            };
-        });
-        const page = win.document.createElement('div');
-        page.className = 'page';
-        page.id = 'p3';
-        win.document.body.appendChild(page);
-        const card = win.document.createElement('div');
-        card.className = 'visual-card';
-        page.appendChild(card);
-
-        win.__reportRuntime__.renderNativeSvg(card, {
-            name: 'Legacy',
-            visualType: 'BAR',
-            columns: ['Revenue', 'Region'],
-            rows: [['500', 'North']],
-            options: { 'mapping:x': 'Revenue' },
-            actions: [],
-            interactions: { ON_SELECT: 'HIGHLIGHT', MATCHING: 'Region' },
-            nativeSvg: barSvg()
-        }, { visuals: [] });
-        card.querySelector('[data-row-index="0"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-        await new Promise(resolve => setTimeout(resolve, 0));
-
-        expect(posted.length).toBe(1);
-        expect(JSON.stringify(posted[0])).toContain('North');
+        expect(container.querySelector('.cross-highlight-selection')).toBeNull();
     });
 });
 

@@ -253,16 +253,29 @@ namespace ETL_SQL.Connectors.Kafka
                     ? SaslMechanism.ScramSha256
                     : SaslMechanism.Plain;
 
-                string protocol = _options.GetValueOrDefault("SECURITY_PROTOCOL", "SaslPlaintext");
-                config.SecurityProtocol = protocol.Equals("SaslSsl", StringComparison.OrdinalIgnoreCase)
-                    ? SecurityProtocol.SaslSsl
-                    : protocol.Equals("Ssl", StringComparison.OrdinalIgnoreCase)
-                    ? SecurityProtocol.Ssl
-                    : protocol.Equals("Plaintext", StringComparison.OrdinalIgnoreCase)
-                    ? SecurityProtocol.Plaintext
-                    : SecurityProtocol.SaslPlaintext;
+                config.SecurityProtocol = SecurityProtocol.SaslPlaintext;
             }
+
+            // Applied with or without SASL: SECURITY_PROTOCOL = 'Ssl' alone is a TLS (or mutual-TLS)
+            // connection, and was silently left in plaintext when it was only read alongside SASL.
+            if (_options.TryGetValue("SECURITY_PROTOCOL", out var protocol) && !string.IsNullOrWhiteSpace(protocol))
+                config.SecurityProtocol = ParseSecurityProtocol(protocol);
         }
+
+        /// <summary>
+        /// Accepts the documented names and librdkafka's own spelling (SASL_SSL). An unknown value is
+        /// refused rather than read as a weaker protocol.
+        /// </summary>
+        internal static SecurityProtocol ParseSecurityProtocol(string value) =>
+            value.Replace("_", "", StringComparison.Ordinal).Trim().ToUpperInvariant() switch
+            {
+                "SASLSSL" => SecurityProtocol.SaslSsl,
+                "SSL" => SecurityProtocol.Ssl,
+                "SASLPLAINTEXT" => SecurityProtocol.SaslPlaintext,
+                "PLAINTEXT" => SecurityProtocol.Plaintext,
+                _ => throw new ExecutionException(
+                    $"Kafka SECURITY_PROTOCOL '{value}' is not supported. Use Plaintext, SaslPlaintext, SaslSsl or Ssl.")
+            };
 
         public Task<IEnumerable<string>> GetColumnsAsync()
         {

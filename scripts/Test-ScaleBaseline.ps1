@@ -24,6 +24,7 @@ $ErrorActionPreference = 'Stop'
 $PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RepoRoot = Join-Path $PSScriptRoot '..'
 $runner = Join-Path $PSScriptRoot 'Test-ScaleCertification.ps1'
+. (Join-Path $PSScriptRoot 'ScaleCertification.Helpers.ps1')
 $pwsh = (Get-Process -Id $PID).Path
 
 function Invoke-GitText {
@@ -116,43 +117,47 @@ $commit = $null
 $sourceFingerprint = $null
 $configFingerprint = $null
 $startedAt = Get-Date
+$referenceChild = $null
 foreach ($scenario in $scenarioNames) {
     $scale = $Rows / [double]$baseRows[$scenario]
     $scenarioOut = Join-Path $runRoot $scenario
     $existingReport = Join-Path $scenarioOut 'cert-report.json'
+    $child = $null
     if (Test-Path $existingReport) {
         try {
             $existing = Get-Content $existingReport -Raw | ConvertFrom-Json
             $existingMetrics = @($existing.scenarios)
             $existingSamples = if ($existingMetrics.Count -eq 1 -and $existingMetrics[0].samples) { [int]$existingMetrics[0].samples } else { 1 }
             if ($existing.testsPassed -and $existingMetrics.Count -eq 1 -and
+                $existing.config.scenarioWarmUp -eq 'own-path-scaled-untimed-v2' -and
+                $existing.config.gcConfigurationCapture -eq 'runtime-observed-v1' -and
                 [long]$existingMetrics[0].rowCount -eq $Rows -and
                 $existingSamples -ge $Samples) {
                 Write-Host "[$scenario] Reusing completed isolated result." -ForegroundColor DarkGray
-                if ($null -eq $hardware) { $hardware = $existing.hardware }
-                if ($null -eq $commit) { $commit = $existing.commit }
-                if ($null -eq $sourceFingerprint) { $sourceFingerprint = $existing.sourceFingerprint }
-                if ($null -eq $configFingerprint) { $configFingerprint = $existing.configFingerprint }
-                $allMetrics += $existingMetrics
-                continue
+                Assert-ScaleCaptureCompatibility -BaselineReport $existing -CurrentReport $existing
+                $child = $existing
             }
         } catch { /* incomplete/corrupt child report is rerun */ }
     }
-    Write-Host "[$scenario] $Rows rows (${scale}x), isolated test host..." -ForegroundColor Cyan
+    if ($null -eq $child) {
+        Write-Host "[$scenario] $Rows rows (${scale}x), isolated test host..." -ForegroundColor Cyan
 
-    $arguments = @(
-        '-NoProfile', '-File', $runner,
-        '-Tier', $tier,
-        '-Scenario', $scenario,
-        '-RowCountScale', $scale.ToString([Globalization.CultureInfo]::InvariantCulture),
-        '-OutDir', $scenarioOut,
-        '-Samples', $Samples,
-        '-SkipBuild'
-    )
-    $process = Start-Process -FilePath $pwsh -ArgumentList $arguments -Wait -PassThru -NoNewWindow
-    if ($process.ExitCode -ne 0) { throw "Baseline scenario '$scenario' failed with exit code $($process.ExitCode)." }
+        $arguments = @(
+            '-NoProfile', '-File', $runner,
+            '-Tier', $tier,
+            '-Scenario', $scenario,
+            '-RowCountScale', $scale.ToString([Globalization.CultureInfo]::InvariantCulture),
+            '-OutDir', $scenarioOut,
+            '-Samples', $Samples,
+            '-SkipBuild'
+        )
+        $process = Start-Process -FilePath $pwsh -ArgumentList $arguments -Wait -PassThru -NoNewWindow
+        if ($process.ExitCode -ne 0) { throw "Baseline scenario '$scenario' failed with exit code $($process.ExitCode)." }
 
-    $child = Get-Content (Join-Path $scenarioOut 'cert-report.json') -Raw | ConvertFrom-Json
+        $child = Get-Content (Join-Path $scenarioOut 'cert-report.json') -Raw | ConvertFrom-Json
+    }
+    if ($null -eq $referenceChild) { $referenceChild = $child }
+    Assert-ScaleCaptureCompatibility -BaselineReport $referenceChild -CurrentReport $child
     if ($null -eq $hardware) { $hardware = $child.hardware }
     if ($null -eq $commit) { $commit = $child.commit }
     if ($null -eq $sourceFingerprint) { $sourceFingerprint = $child.sourceFingerprint }
@@ -177,7 +182,15 @@ $config = [ordered]@{
     targetRowsPerScenario = $Rows
     matrix = $Matrix
     samples = $Samples
-    processIsolation = 'one Release test host per scenario'
+    processIsolation = $referenceChild.config.processIsolation
+    scenarioWarmUp = $referenceChild.config.scenarioWarmUp
+    discardedProcessWarmUp = $referenceChild.config.discardedProcessWarmUp
+    gcConfigurationCapture = $referenceChild.config.gcConfigurationCapture
+    testFixture = $referenceChild.config.testFixture
+    fixtureDefinitionSha256 = $referenceChild.config.fixtureDefinitionSha256
+    outputCapture = $referenceChild.config.outputCapture
+    preEnumerateTheories = $referenceChild.config.preEnumerateTheories
+    temporaryStorage = $referenceChild.config.temporaryStorage
     scenarios = @($scenarioNames)
 }
 
@@ -205,6 +218,7 @@ $report = [ordered]@{
     host = $hardware
     hardware = $hardware
     config = $config
+    gcConfiguration = $referenceChild.gcConfiguration
     scenarios = @($allMetrics)
 }
 

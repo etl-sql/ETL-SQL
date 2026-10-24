@@ -12,6 +12,437 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
+
+- An unquoted `TRUE` now turns boolean connection options on. `USE_SSL = TRUE` / `ENCRYPT = TRUE`
+  had turned encryption off for MSSQL and LDAPS off for Active Directory.
+- `LIKE` and `NOT LIKE` with a NULL operand are UNKNOWN; `NOT LIKE` no longer keeps NULL rows.
+- Arithmetic on doubles outside decimal's range stays numeric instead of concatenating as text.
+- Scripts can no longer read or write the application's own configuration, secrets, databases,
+  keys or binaries, even inside an approved safe zone.
+- Kafka `SECURITY_PROTOCOL` applies without SASL credentials and an unknown value is an error.
+- SMTP `USE_SSL = TRUE` requires TLS: implicit on 465, STARTTLS on any other port.
+- `${NAME}` placeholders in `CREATE CONNECTION` / `ALTER CONNECTION` read only variables listed in
+  `Security:AllowedEnvVars`, the list `ENV()` uses.
+- `EXECUTE TOOL` keeps a parameter value with spaces as one argument.
+- `GENERATE JWT_SECRET` no longer writes to `appsettings.json`; install the value with
+  `etl-sql config setup-jwt --update`.
+- `USE DOCKER` accepts the official database repositories only, gives every container a generated
+  password (Oracle included) and publishes its ports on loopback.
+- LDAP sign-in refuses a name qualified with a domain other than `Identity:Ldap:Domain`.
+- Share links and embed tokens are stored as hashes and shown once, when created. Listings return
+  the id instead of the token, and `DELETE .../share-links/by-id/{id}` revokes by id.
+
+### Added
+
+- Controlled-host local certification can resume failed phases or recover failed evidence uploads
+  after verifying the same run, runner, workspace, toolchain, cached outputs and original receipts.
+  Reused phases retain their original execution times and job identities. Missing checkpoints or
+  changed inputs block recovery; the workflow retains every attempt's diagnostics.
+
+### Changed
+
+- Release now requires a verified full local phase bundle from the exact candidate's controlled-host
+  workflow. It checks job/artifact origin, freshness, execution windows and file hashes, pins the
+  manifest, and verifies the attached ZIP before publication. The new manual Windows workflow retains
+  per-attempt evidence and failure diagnostics. Host rollout and full-run acceptance remain pending;
+  deployment/operator and complete package requirements remain separate.
+
+- Local UI pre-push validation now runs the selected extension/UI package checks and complete browser
+  inventory, including Studio performance evidence. Existing formatting, consumer and smoke checks
+  remain; failures stop validation without reporting UI success.
+
+- Enterprise certification preserves supplied build caches and earlier evidence attempts. Fresh builds
+  use a unique private directory; cleanup rejects paths outside that attempt and linked build roots.
+  Nonempty evidence directories now require a new run/output path before testing starts.
+
+- Closed the one-command release-metadata follow-up after public CLI rehearsal verifies preview,
+  exactly three metadata writes, repeat safety, invalid-request rejection and LF/CRLF preservation.
+  Private v0.22.0 rehearsal metadata agrees; the real release date and version remain unchanged.
+
+- Canary certification now checks provisioning identities and cost/customer boundaries against the
+  plan, and validates credential revocation, replacement identities, reasons, continuity and lifetime
+  details. A retained `passed` summary cannot override inconsistent provisioning or credential data.
+
+- Deployment packaging now checks the shared execution plan against ordered phase records,
+  structured invocations, canonical logs and per-phase TRX receipts. Receipts require every planned
+  test selector, unique passed outcomes and timestamps inside the phase run. Enterprise prerequisites,
+  concrete lifecycle files and nested fault-matrix receipts are verified before archiving.
+  Deployment `-NoBuild` results remain development evidence until matching build provenance exists.
+
+- Packaging supplied deployment evidence now requires every profile and transition claim, canonical
+  topology/scope/gaps and Release reports. Producer and validator share the lane and topology contracts.
+  Partial helper archives remain marked `SelectedClaims`; packaging requires `AllProfilesAndTransitions`.
+  Missing evidence and the remaining operator/package publication requirements still need the full gate.
+
+- Enterprise certification now defaults to Release, passes the selected configuration to both test
+  projects and records it in JSON/Markdown. Debug results remain development evidence. Security
+  tests define the unsafe fixture's ACL independently of host inheritance and audit Git's authored
+  source inventory, including new files, without traversing ignored VS Code runtime data.
+
+- Deployment-profile, provider-neutral fault, canary and enterprise certification now capture source
+  identity before testing and recheck it before completing their reports. Changed commits, tracked,
+  staged or untracked source changes and failed Git lookups abort certification. Reports retain the
+  source fingerprint; stable dirty runs remain development evidence. Deployment-profile archives
+  require a full candidate SHA and matching clean fingerprints in the report and nested certifications.
+
+- Closed the Docker test stability follow-up using three consecutive CI executions, each passing
+  all 287 integration cases without skips. Verified the FTP readiness and scheduled-job fixes in
+  every checkout and preserved original-attempt evidence. This is historical stability evidence;
+  final-candidate release certification remains required.
+
+- Desktop Studio's confirmed forced exit no longer depends on a final heartbeat succeeding.
+  Ordinary exit still refreshes the dirty-document guard. Browser regressions cover failed heartbeats,
+  stale dirty state, discard/cancel confirmation and host shutdown; future shutdown timeouts retain
+  transport/resource diagnostics. The historical CI timeout remains under investigation.
+
+- Canary contract certification now rejects duplicate or missing planned runs, mismatched isolation,
+  incorrect fault attribution and alerts sent to an unexpected route. Release policy now states
+  that these deterministic contracts require separate operator evidence for live hosted claims.
+
+- Browser shard, test-lane and smoke no-build checks now validate asset stamps for each selected project's evaluated
+  dependency graph. Unrelated stale hosts no longer block a targeted run; missing/stale consumed
+  assets and unresolved or ambiguous project graphs still fail validation.
+  PowerShell validates before sharded-engine discovery, and both shell variants check every selected
+  project in aggregate lanes. Bash smoke lane selection no longer requires associative arrays.
+
+- Local release-evidence bundles now reject aliased phase logs/artifacts, orphaned payloads and
+  directories, and unsafe or duplicate directory-entry names even when manifest hashes agree.
+  Verification walks the complete declared artifact tree using the producer's canonical paths.
+
+- Browser navigation failures now retain bounded, sanitized transport-request history and
+  Chromium/test-host process resource snapshots. Windows snapshots count handles and owned
+  IPv4/IPv6 TCP/UDP endpoints. Shards retain diagnostics with candidate/run/attempt identity;
+  navigation errors still fail with their original exception.
+
+- Recalibrated Smoke and Standard scale baselines from clean candidate/control runs using the
+  scaled warm-up protocol. All 1,170 measured correctness/resource checks, 24 full comparisons and
+  78 Smoke order comparisons pass unchanged bands. Previous references are archived byte for byte;
+  Git attributes preserve raw reference hashes across platforms. The measurement record retains
+  working-set/timing warnings and the earlier failed run.
+
+- Scale warm-up now uses the measured workload through Standard scale, capped at 10x for larger
+  workloads. Reports record the completed warm-up scale, selected observed GC settings and GC
+  memory state after timing. Capture rejects incomplete provenance or changing GC settings;
+  baseline comparison rejects different warm-up versions or GC configurations.
+
+- Retained clean Smoke/Standard baseline-calibration evidence: all 1,040 measured correctness and
+  memory checks pass, but one control-repeat GC-pause comparison fails. Reference replacement is
+  rejected; existing baselines and bands remain unchanged while GC variation is investigated.
+  A forty-sample diagnostic probe records GC configuration and memory state under two warm-up
+  sizes. Both repeat checks pass; the original failure remains unreproduced in the focused probe.
+
+- Scale reports now record discarded process warm-up. New baseline comparisons reject diagnostic
+  skipped-warm-up captures and incomplete warm-up provenance, including matching diagnostic flags.
+
+- Smoke and Standard scale capture now runs every scenario in its own test host, matching isolated
+  scenario capture. Reports retain each child invocation and reject incomplete metrics, source
+  drift and baseline comparisons across different process-isolation models.
+
+- Verified Smoke order independence with five samples of all thirteen scenarios alone between
+  two full-tier captures. All 78 directional comparisons pass existing failure bands after
+  process isolation; earlier failed experiments remain documented. Baseline calibration is pending.
+
+- Failed Portal browser shards now print failed-job-only recovery commands with candidate and
+  artifact identities, retaining the report in diagnostic artifacts and the job summary.
+
+- Manual CI diagnostics can select one Portal browser shard while preserving the normal test
+  partition. Partial runs skip the full-coverage gate and cannot satisfy release certification;
+  regular CI and full certification still select every shard.
+
+- Portal browser shards now bound preparation and build steps, retain their logs in shard
+  diagnostics, and avoid a duplicate Node setup before UI compilation.
+
+- Studio performance CI now bounds asset preparation, build and measurement on every platform,
+  retaining streamed logs and per-attempt diagnostics when a step fails or times out.
+
+- Browser ownership, Studio performance and enterprise certification CI artifacts now include
+  run and attempt IDs. Failed-job retries can retain new evidence without colliding with or
+  replacing earlier artifacts. Regression checks cover every CI upload and its matrix dimensions.
+
+- Extension CI now bounds its engine build and npm commands, streams npm output into retained logs,
+  and saves per-attempt diagnostics on failure. Pipeline logging preserves failing command exits.
+
+- Regular MSI checks now share the package-impact manifest with native package checks, allowing
+  browser-test-only fixes to skip installer rebuilds and installation tests. Shipped, shared and
+  unknown inputs still require MSI certification; manual and release calls always run it in full.
+
+- VS Code UI source edits now select extension checks, browser/consumer contracts, browser journeys
+  and Studio performance in regular CI, retaining native packaging. The consumer job has its own
+  lane selector. Dependency, build configuration, shared and unknown changes still select full CI.
+
+- Native package PR checks use shared impact selection to skip platform builds for classified
+  documentation and browser-test-only edits. Manual certification and shipped or unknown inputs
+  still select all platforms. Source preflight and an aggregate coverage gate guard selection;
+  newer PR revisions cancel obsolete package work while manual candidate runs are preserved.
+
+- Release certification can reuse complete nightly CI results for the unchanged candidate after
+  a green targeted push. Both release drivers and the publication gate retain exact-SHA,
+  seven-day freshness, job coverage and retry checks; failed explicit or regular CI blocks reuse.
+
+- Browser-test-only local pre-push now builds the browser test project once and validates its
+  complete test inventory, including Studio performance, without broad engine and consumer checks.
+  It retains local browser evidence and rejects missing performance coverage or results.
+
+- Failed Windows and macOS package uploads now print candidate/artifact identities and commands
+  to inspect and rerun failed jobs in the same Release run. Upload steps have explicit deadlines;
+  local rehearsals verify recovery after partial uploads without changing retained package bytes.
+
+- macOS release builds retain Intel and Apple Silicon packages independently before upload.
+  Failed uploads can reuse both builds; a failed architecture can resume while preserving the
+  successful one. Package hashes, including a successfully built optional Intel DMG, are checked
+  before upload and again before attestation against the original build manifest digests.
+
+- Windows ZIP/VSIX release builds retain their packages before a separate upload job, allowing
+  failed uploads to resume without rebuilding. Candidate identity and hashes are verified before
+  upload and attestation. A packaging watchdog streams and retains diagnostic logs.
+
+- Cross-platform native package certification now mounts and launches the macOS DMG package,
+  verifying its CLI version and packaged browser assets before unmounting. Packaged VSIX webview
+  acceptance (scripts/test-vsix-acceptance.mjs) now exercises designer and preview webviews inside
+  real VS Code on Windows, Linux (via xvfb), and macOS matrix runners, recording verified webview
+  outcomes in package certification manifests.
+
+- Scale certification now warms each scenario's own code path with an untimed run before
+  measuring samples, eliminating run-order dependencies. Reports record the warm-up method,
+  and baseline comparison requires matching warm-up configurations.
+
+- Linux release publication reuses the candidate ZIP and VSIX alongside the installed-tested DEB,
+  removing a duplicate Linux build. All three package hashes are checked before attestation.
+  Attestation and publication explicitly handle certification jobs skipped by artifact reuse,
+  while still requiring successful promotion and build gates.
+
+- MSI publication can reuse nightly certification for the exact candidate and predecessor.
+  Discovery rejects incomplete GitHub inventories and runs retried during selection.
+
+- Release can reuse a retained DEB from exact-candidate nightly or dedicated certification,
+  preserving successful build/install evidence across retries and rejecting incomplete selections.
+
+- Release now gates DEB publication on installed-upgrade certification and promotes the tested
+  package. Candidate identity, receipt and package hashes are checked again before attestation.
+
+- Release timelines now break down measured step time by inferred setup/build/test/upload
+  categories without counting carried retry results again. Incomplete timing stays unknown.
+
+- Local certification evidence can now be retained and verified as a portable bundle with
+  candidate identity, original phase times, logs, artifact inventories and file hashes.
+
+- Release drivers no longer accept local-certification or CI-wait bypass flags. Both gates
+  are mandatory before a driver can push a release tag.
+
+- Pre-release resume preserves original phase completion times and reuses only results from
+  the past seven days. The release gate rejects missing, future or expired phase timestamps.
+
+- Release drivers validate the saved evidence commit, clean-tree fingerprint and result age
+  against the candidate, rejecting results older than seven days or dated in the future.
+
+- Pre-release validation rechecks candidate sources before saving success. Source drift or an
+  unavailable fingerprint now saves a failed result and rejects certification.
+
+- Docker integration CI now bounds restore/build, image pulls, sandbox setup and tests, retaining
+  per-attempt process logs. Package installation steps also have explicit time limits.
+
+- Sample and enterprise CI lanes now supervise long-running commands with deadlines, streamed
+  logs and per-attempt diagnostics retained after failure.
+
+- Extension-only local pre-push follows the shared CI selection, checking the extension and UI
+  with their engine integration build instead of repeating unrelated engine validation.
+
+- Release drivers no longer offer a force override for stale source fingerprints. Certification
+  must match the exact candidate; successful evidence for another source state is rejected.
+
+- Release drivers now stop when Git cannot inspect the working tree; the POSIX driver also
+  stops on failed remote refresh instead of proceeding with stale refs.
+
+- CI restore, formatting, compilation and engine coverage now use bounded process supervision,
+  streamed logs and retained diagnostics. Consumer-check deadlines allow the measured hosted baseline.
+
+- Browser and consumer contracts now run independently of engine build/coverage in CI. Full
+  release evidence requires both jobs, and failed-job recovery can preserve either success.
+
+- macOS ZIP/VSIX release packaging now runs independently on native Intel and Apple Silicon
+  runners. Both are required for publication, with per-architecture retries and retained logs.
+
+- Release timing and evidence collection now preserve the original execution attempt when GitHub
+  copies successful jobs into a retry with new job IDs, avoiding double-counted retry work.
+
+- Failed Windows process-tree shutdown now rejects promptly and terminates the direct child,
+  instead of leaving certification waiting indefinitely for the child's output streams.
+
+- Consumer-contract validation now reports the active check, streams output with heartbeats,
+  retains per-check logs, and applies independent deadlines while preserving serial execution.
+
+- CI now runs HA soak harness contracts without repeating their engine tests. DEB certification
+  validates a backup produced by the installed candidate and retains its recovery report.
+
+- Added nightly release-branch orchestration for broad CI, Portal browser shards and installed
+  MSI/DEB upgrade checks. DEB certification retains the built package pair for installation retries.
+
+- Source preflight validates workflow syntax, expressions and reusable-workflow contracts with pinned MIT-licensed actionlint.
+
+- Regular CI now selects affected jobs from the shared impact map. Explicit full CI certification
+  uses the same workflow implementation and preserves successful candidate runs. Release drivers
+  reuse complete regular CI coverage when available, or request/resume full certification with
+  duplicate-dispatch protection. Classified documentation-only local pushes stop after source checks.
+- Release smoke tests now use CI's existing Release build. Tag validation consumes that evidence
+  instead of rebuilding the solution for a second smoke pass.
+- Release now checks candidate-bound CI and CodeQL job evidence before packaging and again before
+  publication. It retains successful jobs across failed-job retries, rejects stale or incomplete
+  evidence, and attaches the selected run/job identities and retry history to the release.
+- Local release evidence now requires Standard scale and the full mandatory phase inventory.
+  Removing a required phase from both the saved plan and results no longer bypasses validation.
+- Split browser CI into three independent jobs with deterministic discovery-based partitions,
+  exact method filters, per-attempt diagnostics and a gate checking complete, nonoverlapping
+  results. Browser execution now uses the bounded streaming supervisor. Hosted timing and
+  recovery evidence remain pending.
+- Added a shared advisory CI impact manifest and selector. Regular CI and local pre-push record
+  proposed affected lanes without changing existing coverage. Unknown paths and missing history
+  select all lanes; Git fixtures cover renames, merge bases and local changes.
+- Added a read-only release timeline collector for exact-candidate GitHub runs, all retry attempts,
+  jobs and steps. Reports distinguish elapsed spans from parallel job totals and preserve missing
+  timestamps as unknown, with JSON/Markdown stored outside the candidate commit. Partial parallel
+  runs and invalid timestamp ranges leave the elapsed span unknown; regressions run in preflight.
+- Added one-command release metadata finalization with preview by default and explicit `--write`.
+  It validates the changelog, notes and index together, protects finalized dates and restores
+  original contents on write failure when possible.
+- New CI revisions cancel obsolete runs for the same event and full branch/PR ref, freeing runner
+  capacity. Independent branches, push/PR runs and Release/MSI workflows remain separate.
+- Stable release drivers and tag preflight now require finalized, consistent version/date metadata
+  across the changelog, release notes and index. Draft branch work remains allowed; all metadata
+  findings are reported together before packaging.
+- Shared preflight now runs the fourteen release-automation regression fixtures before restore/build,
+  with independent deadlines and logs. MSI no longer repeats its two separate policy-test steps.
+- Release recovery preserves branches named like a version tag. All tag lookups use explicit tag
+  refs, removing the old automatic branch deletion and its unsafe merge-lookup failure fallback.
+- Release drivers can resume when existing local/remote tags resolve to the exact candidate,
+  including annotated tags, without a Force override. Conflicting tags and failed lookups stop
+  the release before pushing; tags are never moved by this recovery path.
+- Both release drivers now share workflow-run waiting keyed by workflow, commit and branch/tag.
+  API errors fail promptly; failed runs print inspection/retry commands, and pending runs cannot
+  fall back to older successes. The CI wait default is now 120 minutes.
+- MSI impact selection now requires certification for shipped service/runtime changes and unknown
+  paths. Only explicitly listed documentation paths skip it; an unavailable comparison base runs
+  certification instead of silently checking only the final commit.
+- Release drivers now agree with the validator's content fingerprint for clean candidates,
+  avoiding false stale-evidence failures. Actual driver-gate and resume-guard regressions cover
+  valid candidates and rejection of incomplete, legacy, forced-resume and stale evidence.
+- Local release drivers now require explicit validation scope and successful planned phases;
+  quick, omitted-lane, forced-resume and legacy states cannot pass the normal local gate.
+- Installer source validation now runs before packaging, checking WiX XML, static source-file
+  references and installer script syntax without executing the scripts or publishing applications.
+- Source preflight now detects partial version bumps across .NET, the VS Code manifest and lock
+  file, and Portal cache URLs before packaging. It reports all version mismatches together.
+- Release and CI automation now collect independent source-check failures in one bounded preflight
+  before expensive builds, with separate logs and a JSON summary. Local pre-push/pre-release drivers
+  use the same check list. Fixed the release-note changelog anchor and performance-report index link
+  found by the documentation check.
+- MSI certification now streams output and heartbeats under a bounded supervisor. Timeout cleanup
+  targets only the tracked child, and Windows handle inheritance is restricted to avoid a descendant
+  keeping the runner output pipe open. Local process regressions pass; hosted runner-loss diagnosis
+  and timeout recovery remain pending.
+- MSI upgrade automation saves one installer pair for independent workstation and Portal checks,
+  verifies its source commit and hashes before installation, and retains evidence separately for
+  each retry. Added release-branch PR coverage and documented failed-job recovery. Release publication
+  now requires both profiles, promotes that MSI without rebuilding, and verifies its draft asset
+  hash before attestation. Removed the duplicate standalone MSI tag run. Hosted recovery rehearsal
+  remains pending. Exact-commit pre-tag release-branch certification can now supply the MSI using
+  a successful gate receipt and retained artifact ID, avoiding another build at tag time. Discovery
+  checks freshness and the previous stable release, and stops on unfinished/failed candidate runs
+  or invalid receipts. Cross-run reuse still needs hosted rehearsal.
+- The release driver requires the MSI input manifest, checksums and SBOM, treats a draft as
+  incomplete, and no longer downloads all binaries to overwrite verification assets after publication.
+
+### Security
+
+- Chart and micro-chart SVG keeps only SVG-namespace elements and drops `<style>`, `style`
+  attributes and any `url()` that leaves the document. An XHTML `<meta>` refresh inside a chart
+  could redirect a report page, and `<img>`, `@import` or `url()` could fetch from outside it, in
+  hosts without the Portal's CSP.
+- Identity-sensitive reports no longer serve a shared snapshot left from before they read the
+  viewer's identity; the snapshot routes refuse them and the report opens live.
+- The report runtime's URL check strips tab, newline and control characters first, as the browser
+  does, so `java\tscript:` no longer passes as a relative link. HTML-visual inline micro-charts go
+  through the SVG sanitizer.
+- A Gateway session matches replies to their operation, so rows that arrive after a caller gave up
+  are never handed to the next caller.
+- Connection tests (`TEST CONNECTION`, the Portal connection test) resolve `KEYFILE` and other
+  key or credential file options through the path guard, so a test cannot load the service
+  account's own SSH key. `LINT 'path'` reads through the same guard.
+- `POST /api/connectors/test` is limited to administrators and accounts with Studio script preview.
+- `POST /api/scripts/upload` no longer replaces the script of a report or pipeline the uploader
+  cannot author.
+- The ReportPlayer serves only loopback host names, refuses cross-origin requests and requires JSON
+  on POSTs, so a web page cannot drive it or read it through DNS rebinding.
+- An Orchestrator without an API key (loopback-only) also refuses requests whose Host is not a
+  loopback name, so a DNS-rebinding page cannot reach its unauthenticated job API.
+- The VS Code report preview writes unsaved scripts and the built manifest into a private temporary
+  directory instead of predictable names in the shared temp folder.
+- Machine-bound encryption on Linux and macOS, and machine-bound encrypted files everywhere, is
+  keyed from the engine's machine key (the owner-only `etl-sql/machine.key`, or a mounted
+  `ETLSQL_MACHINE_KEY_FILE`). It was keyed from `/etc/machine-id` or the host name, which a cloned
+  image shares. Scripts cannot open the machine key file.
+- ODBC connection values with `;`, `{`, `}` or `=` are brace-quoted, so a value cannot add keywords;
+  an option name with those characters is refused.
+- SharePoint list titles and BigQuery identifiers are escaped (a quote, and a trailing backslash).
+- `etl-sql purge` refuses the install folder, a folder that contains it, and any folder in a git
+  working tree.
+- The operation ledger refuses a session id that leaves the session root.
+- LDAP refuses an empty password before binding.
+- The shipped `appsettings.json` no longer lists a developer's folder as an approved safe zone.
+- `USE DOCKER` state is scoped by tenant: an alias, `DOCKER.CONNECTION_STRING` and the container
+  itself are no longer shared between tenants on one Orchestrator. Single-tenant hosts keep their
+  container names.
+- Upgrade code for state written by earlier releases is removed: Orchestrator schema renames and
+  add-missing-column steps, plaintext JSON snapshots, plaintext PII and settings upgrades, the
+  Gateway `outcomes.json` import, `Portal:Dataset:LegacyAtRestKeyVersion`, JSON temp-table restore
+  and browser-stored Studio drafts. Every store is created in its current shape.
+- Report formats from earlier releases are no longer read: the pre-v0.19 `interactions` map,
+  version-one chart contracts, Studio's pre-v0.20 single-value filter upgrade, and counts-only
+  data-quality rows.
+- Deprecated syntax is removed: the `FILE` connection type (use `FLATFILE`), `DROP CHART`
+  (use `DROP VISUAL`), `DOCKER STOP|CLOSE|...` (use `STOP DOCKER`), `LINEAGE EXPORT AS
+  OPENLINEAGE` (use `EXPORT LINEAGE`), the `@sensitivity` tag alias (use `@classification`), the
+  missing comma between `TOOLTIP` parts, and the `etl-sql ui old` command.
+- Only authenticated encryption formats are read. `ENC:` values, encrypted files, SSH-encrypted
+  files and machine-bound payloads in the old unauthenticated AES-CBC formats are refused instead
+  of decrypted.
+- Streaming decryption of encrypted files (password, SSH key and machine-bound) checks the file's
+  authentication tag before returning any data; a tampered file is refused instead of decrypting
+  to garbage rows.
+- The Gateway broker refuses a result beyond the operation's row or size limit and drops rows for
+  an operation nobody is waiting on, so a Gateway cannot make the Portal buffer without bound.
+- A Gateway node id held by a live session with a different workload key is refused; the same node
+  reconnecting replaces its stale session.
+- The Linux package keeps shipped binaries and configuration owned by root. The bin folder stays
+  writable for the services' databases and data, with the sticky bit so they cannot replace root's
+  files, and the `.deb` is built with root ownership.
+
+### Fixed
+
+- Gateway reconnect backoff doubles across failed connections instead of staying at twice the
+  initial delay, and waits before reconnecting after a session ends.
+- A Gateway result larger than one frame is sent as several row batches; it used to end the
+  session after the operation was recorded as committed.
+- Markdown link text and URLs in report titles are escaped once; `&` showed as `&amp;` and broke
+  query strings.
+- The ReportPlayer map route answers 403 for a path outside the report folder instead of failing
+  with 500.
+- Gateway session registration and removal no longer race, which could show a connected Gateway
+  as offline; the Player's paginated-page set is no longer changed while a rebuild reads it.
+- Re-attaching to a running `USE DOCKER` container reads the credentials it was created with; it
+  used to hand out a new password the container never had.
+- Importing a connection string keeps a password that reads `True` or `False` as typed.
+- SMTP docs give the default port as 587, which the connector uses.
+- Chart contract fingerprint tests normalize line endings, so they pass on Linux and macOS.
+- Security tests that used Windows paths now build OS-neutral paths, so the safe-zone, temp-folder,
+  runaway-protection and credential-folder rules are checked on Linux and macOS too.
+- `admin restore` writes the installer-managed secrets (JWT secret, dataset at-rest keys,
+  Orchestrator API keys and identity signing secret, first-run password) to
+  `appsettings.secrets.json` again. Restored only into `appsettings.json`, they were shadowed by an
+  installed host's existing secrets file, leaving restored dataset caches unreadable.
+
 ## [0.21.0] — 2026-10-18
 
 For complete release details, highlights, and migration notes, see [Release Notes v0.21.0](docs/releases/v0.21.0.md).

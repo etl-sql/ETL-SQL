@@ -24,6 +24,15 @@ public class ConnectionStringParserTests
     }
 
     [Fact]
+    public void Parse_PasswordThatReadsAsABoolean_IsKeptVerbatim()
+    {
+        var result = ConnectionStringParser.Parse("Server=db;User Id=u;Password=True;Encrypt=True;", "MSSQL");
+
+        Assert.Equal("True", result.Options["PASSWORD"]);
+        Assert.Equal("ON", result.Options["ENCRYPT"]);
+    }
+
+    [Fact]
     public void Parse_PostgresUri_ExtractsHostPortDbUserAndSecret()
     {
         var raw = "postgres://etl_user:P%40ssw0rd!@postgres-dw.corp.internal:5432/reporting_db?sslmode=require";

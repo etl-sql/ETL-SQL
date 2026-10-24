@@ -4,6 +4,222 @@ namespace ETL_SQL.Tests.Docs;
 
 public sealed class ScaleCertificationProcessTests
 {
+    [Fact]
+    public async Task Runner_RecordsDiagnosticSkippedProcessWarmUp()
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper(
+            "Test-ScaleRunnerFixture -Tier Smoke -Mode success -NoWarmUp", helperName: "checks/fixtures/scale-capture-runner.ps1");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains("Validated Smoke/success", result.Output);
+    }
+
+    [Theory]
+    [InlineData("missing", "missing", true)]
+    [InlineData("true", "true", true)]
+    [InlineData("true", "missing", false)]
+    [InlineData("missing", "true", false)]
+    [InlineData("false", "false", false)]
+    [InlineData("false", "true", false)]
+    [InlineData("true", "false", false)]
+    [InlineData("string", "true", false)]
+    [InlineData("true", "disabled-own", false)]
+    [InlineData("disabled-own", "disabled-own", false)]
+    public async Task BaselineComparison_RejectsDiagnosticOrUnrecordedWarmUpScope(string baseline, string current, bool accepted)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            function Config($kind) {
+                $config = @{scenarioWarmUp='own-path-untimed-v1'}
+                if ($kind -ne 'missing') { $config.discardedProcessWarmUp = $kind -notin @('false','string') }
+                if ($kind -eq 'string') { $config.discardedProcessWarmUp = 'true' }
+                if ($kind -eq 'disabled-own') { $config.scenarioWarmUp='none' }
+                $config
+            }
+            Assert-ScaleCaptureCompatibility -BaselineReport @{config=(Config '{{baseline}}')} -CurrentReport @{config=(Config '{{current}}')}
+            'Compatible'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.Equal(accepted, result.ExitCode == 0);
+        Assert.Contains(accepted ? "Compatible" : "warm-up", result.Output);
+    }
+
+    [Theory]
+    [InlineData("Smoke", "success")]
+    [InlineData("Standard", "success")]
+    [InlineData("Smoke", "missing")]
+    [InlineData("Smoke", "wrong")]
+    [InlineData("Smoke", "duplicate")]
+    [InlineData("Smoke", "failed")]
+    [InlineData("Smoke", "drift")]
+    [InlineData("Standard", "badwarmup")]
+    [InlineData("Smoke", "missinggc")]
+    [InlineData("Smoke", "invalidgc")]
+    [InlineData("Smoke", "gcdifferent")]
+    public async Task Runner_RetainsCompleteIsolatedSamplesAndRejectsIncompleteEvidence(string tier, string mode)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper(
+            $"Test-ScaleRunnerFixture -Tier {tier} -Mode {mode}", helperName: "checks/fixtures/scale-capture-runner.ps1");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains($"Validated {tier}/{mode}", result.Output);
+    }
+
+    [Theory]
+    [InlineData(0.5, 0.5, true, true)]
+    [InlineData(1, 1, true, true)]
+    [InlineData(10, 10, true, true)]
+    [InlineData(100, 10, true, true)]
+    [InlineData(10, 1, true, false)]
+    [InlineData(10, 0, false, true)]
+    [InlineData(10, 10, false, false)]
+    public async Task RuntimeEvidence_RequiresTheActualWarmUpScale(double scale, double warmUp, bool enabled, bool accepted)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $gc = @{server=$true; concurrent=$true; heapCount=24; dynamicAdaptationMode=1;
+                heapHardLimitBytes=0; heapHardLimitPercent=0; conserveMemory=0; retainVirtualMemory=$false;
+                processorCount=24; latencyMode='Interactive'}
+            $metric = @{rowCountScale={{scale.ToString(System.Globalization.CultureInfo.InvariantCulture)}};
+                warmUpRowScale={{warmUp.ToString(System.Globalization.CultureInfo.InvariantCulture)}};
+                serverGcEnabled=$true; gcConfiguration=$gc}
+            Assert-ScaleRuntimeEvidence -Metric $metric -OwnPathWarmUp ${{enabled.ToString().ToLowerInvariant()}}
+            'Runtime evidence accepted'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.Equal(accepted, result.ExitCode == 0);
+        Assert.Contains(accepted ? "Runtime evidence accepted" : "warm-up scale", result.Output);
+    }
+
+    [Theory]
+    [InlineData("same", true)]
+    [InlineData("reordered", true)]
+    [InlineData("different", false)]
+    [InlineData("missing", false)]
+    [InlineData("invalid", false)]
+    [InlineData("string", false)]
+    [InlineData("missing-warm-up", false)]
+    [InlineData("missing-capture", false)]
+    [InlineData("unrecorded-v1", false)]
+    [InlineData("precision", false)]
+    public async Task BaselineComparison_RequiresMatchingObservedGcConfiguration(string mode, bool accepted)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $baselineGc = @{server=$true; concurrent=$true; heapCount=24; dynamicAdaptationMode=1;
+                heapHardLimitBytes=0; heapHardLimitPercent=0; conserveMemory=0; retainVirtualMemory=$false;
+                processorCount=24; latencyMode='Interactive'}
+            $currentGc = $baselineGc.Clone()
+            if ('{{mode}}' -eq 'different') { $currentGc.dynamicAdaptationMode=0 }
+            if ('{{mode}}' -eq 'missing') { $currentGc.Remove('heapCount') }
+            if ('{{mode}}' -eq 'invalid') { $currentGc.heapCount=-1 }
+            if ('{{mode}}' -eq 'string') { $currentGc.server='true' }
+            if ('{{mode}}' -eq 'precision') {
+                $baselineGc.heapHardLimitBytes=9007199254740992L
+                $currentGc.heapHardLimitBytes=9007199254740993L
+            }
+            if ('{{mode}}' -eq 'reordered') {
+                $currentGc = [ordered]@{}
+                foreach ($key in @($baselineGc.Keys | Sort-Object -Descending)) { $currentGc[$key]=$baselineGc[$key] }
+            }
+            $config = @{scenarioWarmUp='own-path-scaled-untimed-v2'; discardedProcessWarmUp=$true;
+                gcConfigurationCapture='runtime-observed-v1'}
+            if ('{{mode}}' -in @('missing-warm-up','unrecorded-v1')) { $config.Remove('discardedProcessWarmUp') }
+            if ('{{mode}}' -eq 'unrecorded-v1') { $config.scenarioWarmUp='own-path-untimed-v1' }
+            if ('{{mode}}' -eq 'missing-capture') { $config.Remove('gcConfigurationCapture') }
+            Assert-ScaleCaptureCompatibility -BaselineReport @{config=$config; gcConfiguration=$baselineGc} `
+                -CurrentReport @{config=$config; gcConfiguration=$currentGc}
+            'GC profiles accepted'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.Equal(accepted, result.ExitCode == 0);
+        var expected = accepted ? "GC profiles accepted"
+            : mode is "missing-warm-up" or "unrecorded-v1" ? "warm-up" : "GC configuration";
+        Assert.Contains(expected, result.Output);
+    }
+
+    [Theory]
+    [InlineData("Smoke")]
+    [InlineData("Standard")]
+    public async Task CapturePlan_IsolatesEveryScenarioWithTheSameFilterAsAnIndividualRun(string tier)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $plan = @(Get-ScaleCapturePlan -Tier '{{tier}}')
+            if ($plan.Count -ne 13 -or @($plan.Name | Select-Object -Unique).Count -ne 13) { throw 'Incomplete tier.' }
+            foreach ($child in $plan) {
+                $single = @(Get-ScaleCapturePlan -Tier '{{tier}}' -Scenario $child.Name)
+                if ($single.Count -ne 1 -or $single[0].Filter -cne $child.Filter -or
+                    $child.Filter -notlike 'FullyQualifiedName=ETL_SQL.Tests.Scale.ScaleCertificationTests.*') { throw 'Different capture paths.' }
+                Assert-ScaleChildMetrics -Plan $child -Metrics @(@{scenario=$child.MetricPrefix + 'rows'})
+            }
+            'Complete isolated tier'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains("Complete isolated tier", result.Output);
+    }
+
+    [Fact]
+    public async Task CapturePlan_NormalizesCaseInsensitiveScenarioInputBeforeCheckingMetrics()
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper("""
+            foreach ($expected in @(Get-ScaleCapturePlan -Tier Smoke)) {
+                $actual = @(Get-ScaleCapturePlan -Tier smoke -Scenario $expected.Name.ToLowerInvariant())[0]
+                if ($actual.Name -cne $expected.Name -or $actual.Filter -cne $expected.Filter -or
+                    $actual.MetricPrefix -cne $expected.MetricPrefix) { throw 'Scenario identity changed.' }
+                Assert-ScaleChildMetrics -Plan $actual -Metrics @(@{scenario=$expected.MetricPrefix + 'rows'})
+            }
+            'Canonical scenario identity'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains("Canonical scenario identity", result.Output);
+    }
+
+    [Theory]
+    [InlineData("Stress")]
+    [InlineData("Huge")]
+    [InlineData("Provider")]
+    [InlineData("All")]
+    public async Task CapturePlan_PreservesTheOtherTierEntryPoints(string tier)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $plan = @(Get-ScaleCapturePlan -Tier '{{tier}}')
+            if ($plan.Count -ne 1 -or $plan[0].MetricPrefix) { throw 'Unexpected isolation.' }
+            $plan[0].Filter
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains(tier == "All" ? "Category=ScaleCertification" : $"Tier={tier}", result.Output);
+    }
+
+    [Theory]
+    [InlineData("empty")]
+    [InlineData("duplicate")]
+    [InlineData("wrong-scenario")]
+    public async Task CapturePlan_RejectsMissingDuplicateOrDifferentChildMetrics(string fixture)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $plan = @(Get-ScaleCapturePlan -Tier Smoke -Scenario ExternalSort)[0]
+            $metrics = @(@{scenario='ExternalSort_50000_DESC'})
+            switch ('{{fixture}}') {
+                'empty' { $metrics=@() }
+                'duplicate' { $metrics += $metrics[0] }
+                'wrong-scenario' { $metrics[0].scenario='ExternalJoin_50000_equality' }
+            }
+            Assert-ScaleChildMetrics -Plan $plan -Metrics $metrics
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("expected scenario metric", result.Output);
+    }
+
+    [Theory]
+    [InlineData("", "", true)]
+    [InlineData("shared-testhost-v1", "shared-testhost-v1", true)]
+    [InlineData("single-scenario-process-v1", "single-scenario-process-v1", true)]
+    [InlineData("", "single-scenario-process-v1", false)]
+    [InlineData("single-scenario-process-v1", "shared-testhost-v1", false)]
+    public async Task BaselineComparison_RequiresMatchingProcessIsolation(string baseline, string current, bool compatible)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $baselineConfig = @{processIsolation='{{baseline}}'}
+            $currentConfig = @{processIsolation='{{current}}'}
+            Assert-ScaleCaptureCompatibility -BaselineReport @{config=$baselineConfig} -CurrentReport @{config=$currentConfig}
+            'Compatible'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.Equal(compatible, result.ExitCode == 0);
+        Assert.Contains(compatible ? "Compatible" : "Scale process isolation differs", result.Output);
+    }
+
     [Theory]
     [InlineData("", "", true)]
     [InlineData("", "current", false)]
@@ -87,6 +303,27 @@ public sealed class ScaleCertificationProcessTests
             """, helperName: "ScaleCertification.Helpers.ps1");
         Assert.Equal(compatible, result.ExitCode == 0);
         Assert.Contains(compatible ? "Compatible" : "Output-capture methods differ", result.Output);
+    }
+
+    [Theory]
+    [InlineData("", "", true)]
+    [InlineData("own-path-untimed-v1", "own-path-untimed-v1", true)]
+    [InlineData("none", "", true)]
+    [InlineData("", "own-path-untimed-v1", false)]
+    [InlineData("own-path-untimed-v1", "none", false)]
+    [InlineData("own-path-untimed-v1", "own-path-scaled-untimed-v2", false)]
+    [InlineData("own-path-scaled-untimed-v2", "own-path-untimed-v1", false)]
+    public async Task BaselineComparison_RequiresMatchingScenarioWarmUp(string baseline, string current, bool compatible)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $baselineConfig = @{scenarioWarmUp='{{baseline}}'}
+            $currentConfig = @{scenarioWarmUp='{{current}}'}
+            Assert-ScaleCaptureCompatibility -BaselineReport @{config=$baselineConfig} `
+                -CurrentReport @{config=$currentConfig}
+            'Compatible'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.Equal(compatible, result.ExitCode == 0);
+        Assert.Contains(compatible ? "Compatible" : "Scenario warm-up methods differ", result.Output);
     }
 
     [Theory]

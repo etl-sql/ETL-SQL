@@ -174,12 +174,14 @@ public class ReportsController : ControllerBase
                 .TrimEnd('=')
                 .Replace('+', '-')
                 .Replace('/', '_');
-            if (!await db.ReportShareLinks.AnyAsync(l => l.Token == token))
+            var hash = AnonymousReportTokens.Hash(token);
+            if (!await db.ReportShareLinks.AnyAsync(l => l.Token == hash))
                 return token;
         }
     }
 
-    private ReportShareLinkDto ToShareLinkDto(ReportShareLink link)
+    /// <param name="token">The raw token, known only in the response that creates the link.</param>
+    private ReportShareLinkDto ToShareLinkDto(ReportShareLink link, string? token = null)
     {
         var report = link.Report;
         var folderPath = report.Folder?.Path ?? "";
@@ -189,8 +191,8 @@ public class ReportsController : ControllerBase
             report.Name,
             folderPath,
             link.Name,
-            link.Token,
-            $"{Request.Scheme}://{Request.Host}/api/share/{link.Token}",
+            token,
+            token is null ? null : $"{Request.Scheme}://{Request.Host}/api/share/{token}",
             link.CreatedBy,
             link.CreatedAt,
             link.ExpiresAt,
@@ -203,12 +205,14 @@ public class ReportsController : ControllerBase
         {
             var bytes = RandomNumberGenerator.GetBytes(32);
             var token = Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-            if (!await db.ReportEmbedTokens.AnyAsync(t => t.Token == token))
+            var hash = AnonymousReportTokens.Hash(token);
+            if (!await db.ReportEmbedTokens.AnyAsync(t => t.Token == hash))
                 return token;
         }
     }
 
-    private ReportEmbedTokenDto ToEmbedTokenDto(ReportEmbedToken token)
+    /// <param name="rawToken">The raw token, known only in the response that creates it.</param>
+    private ReportEmbedTokenDto ToEmbedTokenDto(ReportEmbedToken token, string? rawToken = null)
     {
         var report = token.Report;
         return new ReportEmbedTokenDto(
@@ -216,8 +220,8 @@ public class ReportsController : ControllerBase
             token.ReportId,
             report.Name,
             token.Name,
-            token.Token,
-            $"{Request.Scheme}://{Request.Host}/api/embed/{token.Token}",
+            rawToken,
+            rawToken is null ? null : $"{Request.Scheme}://{Request.Host}/api/embed/{rawToken}",
             token.CreatedBy,
             token.CreatedAt,
             token.ExpiresAt,
@@ -992,12 +996,14 @@ public class ReportsController : ControllerBase
         if (await catalogScope.ReportShareLinks.AnyAsync(l => l.ReportId == id && l.Name == name))
             return Conflict(new { error = $"A share link named '{name}' already exists for this report." });
 
+        // COMPAT_BREAK: 0.22.0 — only the token's hash is stored; the link is shown once, here.
+        var rawToken = await GenerateUniqueShareTokenAsync();
         var link = new ReportShareLink
         {
             ReportId = id,
             CreatedBy = CurrentUserId,
             Name = name,
-            Token = await GenerateUniqueShareTokenAsync(),
+            Token = AnonymousReportTokens.Hash(rawToken),
             ExpiresAt = expiresAt
         };
         db.ReportShareLinks.Add(link);
@@ -1005,7 +1011,7 @@ public class ReportsController : ControllerBase
         await db.SaveChangesAsync();
 
         link.Report = report;
-        return CreatedAtAction(nameof(ResolveShareLink), new { token = link.Token }, ToShareLinkDto(link));
+        return CreatedAtAction(nameof(ResolveShareLink), new { token = rawToken }, ToShareLinkDto(link, rawToken));
     }
 
     // ── GET /api/reports/{id}/share-links ───────────────────────────────────
@@ -1027,7 +1033,7 @@ public class ReportsController : ControllerBase
             .OrderByDescending(l => l.CreatedAt)
             .ToListAsync();
 
-        return Ok(links.Select(ToShareLinkDto));
+        return Ok(links.Select(link => ToShareLinkDto(link)));
     }
 
     // ── DELETE /api/reports/{id}/share-links/{token} ────────────────────────
@@ -1035,9 +1041,27 @@ public class ReportsController : ControllerBase
     [HttpDelete("reports/{id:int}/share-links/{token}")]
     public async Task<IActionResult> RevokeShareLink(int id, string token)
     {
+        var hash = AnonymousReportTokens.Hash(token);
         var link = await catalogScope.ReportShareLinks
             .Include(l => l.Report)
-            .FirstOrDefaultAsync(l => l.ReportId == id && l.Token == token);
+            .FirstOrDefaultAsync(l => l.ReportId == id && l.Token == hash);
+        return await RevokeShareLinkAsync(id, link);
+    }
+
+    // ── DELETE /api/reports/{id}/share-links/by-id/{linkId} ─────────────────
+    // The catalog no longer holds the token, so a link is revoked by its id after creation.
+
+    [HttpDelete("reports/{id:int}/share-links/by-id/{linkId:int}")]
+    public async Task<IActionResult> RevokeShareLinkById(int id, int linkId)
+    {
+        var link = await catalogScope.ReportShareLinks
+            .Include(l => l.Report)
+            .FirstOrDefaultAsync(l => l.ReportId == id && l.Id == linkId);
+        return await RevokeShareLinkAsync(id, link);
+    }
+
+    private async Task<IActionResult> RevokeShareLinkAsync(int id, ReportShareLink? link)
+    {
         if (link is null) return NoContent();
 
         var perm = await GetEffectiveReportPermissionAsync(link.Report);
@@ -1047,7 +1071,7 @@ public class ReportsController : ControllerBase
         {
             link.RevokedAt = DateTime.UtcNow;
             // Staged so the revocation and its audit row share one commit (P1.6).
-            audit.Stage(CurrentUserId, "REVOKE_REPORT_SHARE_LINK", "Report", id.ToString(), token);
+            audit.Stage(CurrentUserId, "REVOKE_REPORT_SHARE_LINK", "Report", id.ToString(), $"shareLinkId={link.Id}");
             await db.SaveChangesAsync();
         }
 
@@ -1062,9 +1086,10 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> ResolveShareLink(string token)
     {
         // COMPAT_BREAK: 0.11
+        var hash = AnonymousReportTokens.Hash(token);
         var link = await db.ReportShareLinks
             .Include(l => l.Report).ThenInclude(r => r.Folder)
-            .FirstOrDefaultAsync(l => l.Token == token);
+            .FirstOrDefaultAsync(l => l.Token == hash);
         if (link is null || link.Report.IsDeleted) return NotFound();
         if (link.RevokedAt is not null) return NotFound();
         if (link.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow) return NotFound();
@@ -1099,19 +1124,21 @@ public class ReportsController : ControllerBase
         if (await catalogScope.ReportEmbedTokens.AnyAsync(t => t.ReportId == id && t.Name == name))
             return Conflict(new { error = $"An embed token named '{name}' already exists for this report." });
 
+        // COMPAT_BREAK: 0.22.0 — only the token's hash is stored; the token is shown once, here.
+        var rawToken = await GenerateUniqueEmbedTokenAsync();
         var token = new ReportEmbedToken
         {
             ReportId = id,
             CreatedBy = CurrentUserId,
             Name = name,
-            Token = await GenerateUniqueEmbedTokenAsync(),
+            Token = AnonymousReportTokens.Hash(rawToken),
             ExpiresAt = expiresAt
         };
         db.ReportEmbedTokens.Add(token);
         audit.Stage(CurrentUserId, "CREATE_REPORT_EMBED_TOKEN", "Report", id.ToString(), report.Name);
         await db.SaveChangesAsync();
         token.Report = report;
-        return CreatedAtAction(nameof(ResolveEmbedToken), new { token = token.Token }, ToEmbedTokenDto(token));
+        return CreatedAtAction(nameof(ResolveEmbedToken), new { token = rawToken }, ToEmbedTokenDto(token, rawToken));
     }
 
     [HttpGet("reports/{id:int}/embed-tokens")]
@@ -1127,20 +1154,33 @@ public class ReportsController : ControllerBase
             .Where(t => t.ReportId == id)
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
-        return Ok(tokens.Select(ToEmbedTokenDto));
+        return Ok(tokens.Select(token => ToEmbedTokenDto(token)));
     }
 
     [HttpDelete("reports/{id:int}/embed-tokens/{token}")]
     public async Task<IActionResult> RevokeEmbedToken(int id, string token)
     {
-        var embed = await catalogScope.ReportEmbedTokens.Include(t => t.Report).FirstOrDefaultAsync(t => t.ReportId == id && t.Token == token);
+        var hash = AnonymousReportTokens.Hash(token);
+        var embed = await catalogScope.ReportEmbedTokens.Include(t => t.Report).FirstOrDefaultAsync(t => t.ReportId == id && t.Token == hash);
+        return await RevokeEmbedTokenAsync(id, embed);
+    }
+
+    [HttpDelete("reports/{id:int}/embed-tokens/by-id/{tokenId:int}")]
+    public async Task<IActionResult> RevokeEmbedTokenById(int id, int tokenId)
+    {
+        var embed = await catalogScope.ReportEmbedTokens.Include(t => t.Report).FirstOrDefaultAsync(t => t.ReportId == id && t.Id == tokenId);
+        return await RevokeEmbedTokenAsync(id, embed);
+    }
+
+    private async Task<IActionResult> RevokeEmbedTokenAsync(int id, ReportEmbedToken? embed)
+    {
         if (embed is null) return NoContent();
         var perm = await GetEffectiveReportPermissionAsync(embed.Report);
         if (!perm.AtLeast(FolderPermission.Manage)) return Forbid();
         if (embed.RevokedAt is null)
         {
             embed.RevokedAt = DateTime.UtcNow;
-            audit.Stage(CurrentUserId, "REVOKE_REPORT_EMBED_TOKEN", "Report", id.ToString(), token);
+            audit.Stage(CurrentUserId, "REVOKE_REPORT_EMBED_TOKEN", "Report", id.ToString(), $"embedTokenId={embed.Id}");
             await db.SaveChangesAsync();
         }
         return NoContent();
@@ -1151,7 +1191,8 @@ public class ReportsController : ControllerBase
     [HttpGet("embed/{token}")]
     public async Task<IActionResult> ResolveEmbedToken(string token)
     {
-        var embed = await db.ReportEmbedTokens.Include(t => t.Report).ThenInclude(r => r.Folder).FirstOrDefaultAsync(t => t.Token == token);
+        var hash = AnonymousReportTokens.Hash(token);
+        var embed = await db.ReportEmbedTokens.Include(t => t.Report).ThenInclude(r => r.Folder).FirstOrDefaultAsync(t => t.Token == hash);
         if (embed is null || embed.Report.IsDeleted) return NotFound();
         if (embed.RevokedAt is not null) return NotFound();
         if (embed.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow) return NotFound();
@@ -1876,6 +1917,26 @@ public class ReportsController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(portalConfig.ScriptRootPath))
             return StatusCode(503, new { error = "ScriptRootPath is not configured on the portal." });
+
+        // Replacing a script that published reports or pipelines run changes them. Require the same
+        // Author permission on every one of them that saving through the report does; the
+        // published-script hash is only compared after the replaced text has run.
+        if (await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, req.Filename))
+        {
+            var tenantId = datasetScope.TenantId;
+            var dependents = (await catalogScope.Documents.Include(r => r.Folder).Where(r => !r.IsDeleted).ToListAsync())
+                .Where(r => string.Equals(
+                    PortalPathGuard.ToScriptKey(portalConfig, tenantId, r.ScriptPath), req.Filename,
+                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+            foreach (var report in dependents)
+            {
+                if (!(await GetEffectiveReportPermissionAsync(report)).AtLeast(FolderPermission.Author))
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        error = $"'{req.Filename}' is the script of a report you cannot edit. Upload under a new name."
+                    });
+            }
+        }
 
         // Filename-only key (separators already rejected above); written through the guarded Scripts area.
         await artifacts.WriteAllBytesAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, req.Filename, content);

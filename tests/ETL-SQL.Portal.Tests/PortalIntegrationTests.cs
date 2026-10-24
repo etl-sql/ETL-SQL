@@ -12,6 +12,7 @@ using ETL_SQL.Portal;
 using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
+using ETL_SQL.Reporting;
 using ETL_SQL.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -1586,61 +1587,6 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         Assert.Equal("DataSteward", top.Owner);
     }
 
-    /// <summary>
-    /// A run recorded before structured per-rule capture has only the compact
-    /// <c>column:rule=count</c> string, which cannot express the target table, the action or the
-    /// owner. Such a row is reported as counts-only and is never merged with a structured row that
-    /// happens to share a column and rule.
-    ///
-    /// <para>Merging them would attribute a legacy run's failures to a target table that run never
-    /// named — a plausible-looking number for a specific table, assembled from a source that did
-    /// not know which table it was.</para>
-    /// </summary>
-    [Fact]
-    public async Task DataQuality_Trend_KeepsLegacyCountsSeparateFromStructuredFailures()
-    {
-        var token = await GetAdminTokenAsync();
-        var store = _factory.Services.GetRequiredService<IJobHistoryStore>();
-        var job = $"legacy_mix_{Guid.NewGuid():N}"[..24];
-
-        // Run 1: legacy — the display string only, no structured rows.
-        var legacy = await store.LogJobStartAsync(job);
-        await store.LogJobEndAsync(legacy, "SUCCESS", rowsProcessed: 1000,
-            rowsQuarantined: 40, rowsWarned: 0, dataQualityFailures: "Email:NOT NULL=40");
-        await Task.Delay(5);
-
-        // Run 2: structured — same column and rule, now with the fields the string cannot carry.
-        var structured = await store.LogJobStartAsync(job);
-        await store.LogJobEndAsync(structured, "SUCCESS", rowsProcessed: 1000,
-            rowsQuarantined: 25, rowsWarned: 0, dataQualityFailures: "Email:NOT NULL=25");
-        await store.SaveJobDataQualityFailuresAsync(structured, [
-            new DataQualityRuleFailureMetric(
-                "warehouse.Customers", "Email", "NOT NULL", "QUARANTINE", 25, "DataSteward")
-        ]);
-
-        var res = await AuthGet(token, $"/api/data-quality/trend?jobName={job}");
-        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
-        var trend = await res.Content.ReadFromJsonAsync<DataQualityTrendDto>(_json);
-
-        Assert.Equal(2, trend!.RunCount);
-        Assert.Equal(2, trend.TopRuleFailures.Count);
-
-        var full = Assert.Single(trend.TopRuleFailures, f => !f.CountsOnly);
-        Assert.Equal(25, full.Count);
-        Assert.Equal("warehouse.Customers", full.TargetTable);
-        Assert.Equal("QUARANTINE", full.Action);
-        Assert.Equal("DataSteward", full.Owner);
-
-        var countsOnly = Assert.Single(trend.TopRuleFailures, f => f.CountsOnly);
-        Assert.Equal(40, countsOnly.Count);
-        Assert.Equal("Email", countsOnly.Column);
-        Assert.Equal("NOT NULL", countsOnly.Rule);
-        // Unavailable, not empty. The client renders these differently for exactly this reason.
-        Assert.Null(countsOnly.TargetTable);
-        Assert.Null(countsOnly.Action);
-        Assert.Null(countsOnly.Owner);
-    }
-
     /// <summary>A run with structured rows must never also report the parsed string alongside them.</summary>
     [Fact]
     public async Task DataQuality_Trend_DoesNotDoubleCountAStructuredRunsDisplayString()
@@ -1662,7 +1608,6 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
 
         var failure = Assert.Single(trend!.TopRuleFailures);
         Assert.Equal(12, failure.Count);
-        Assert.False(failure.CountsOnly);
     }
 
     [Fact]
@@ -1888,9 +1833,18 @@ CREATE VISUAL {visualName} AS CARD (
         var listRes = await AuthGet(token, $"/api/reports/{reportId}/share-links");
         Assert.Equal(HttpStatusCode.OK, listRes.StatusCode);
         var links = await listRes.Content.ReadFromJsonAsync<JsonArray>(_json);
-        Assert.Contains(links!, l => l!["token"]!.GetValue<string>() == shareToken);
+        // The catalog keeps only a hash: a listed link carries its id, never the token.
+        var listed = Assert.Single(links!, l => l!["id"]!.GetValue<int>() == share["id"]!.GetValue<int>())!;
+        Assert.Null(listed["token"]);
+        Assert.Null(listed["url"]);
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var stored = await db.ReportShareLinks.SingleAsync(l => l.Id == share["id"]!.GetValue<int>());
+            Assert.Equal(ETL_SQL.Portal.Services.AnonymousReportTokens.Hash(shareToken), stored.Token);
+        }
 
-        var revokeRes = await AuthDelete(token, $"/api/reports/{reportId}/share-links/{shareToken}");
+        var revokeRes = await AuthDelete(token, $"/api/reports/{reportId}/share-links/by-id/{share["id"]!.GetValue<int>()}");
         Assert.Equal(HttpStatusCode.NoContent, revokeRes.StatusCode);
 
         var revokedResolve = await _client.GetAsync($"/api/share/{shareToken}");
@@ -1931,8 +1885,11 @@ CREATE VISUAL Total AS CARD (
         var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         var reportId = report!["id"]!.GetValue<int>();
 
-        var manifestPath = Path.Combine(_factory.TempDir, "snapshots", $"dependency_{Guid.NewGuid():N}.snapshot.json");
-        await File.WriteAllTextAsync(manifestPath, """
+        var manifestKey = $"dependency_{Guid.NewGuid():N}.etlsnap";
+        string manifestPath;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var manifest = System.Text.Json.JsonSerializer.Deserialize<ReportManifest>("""
 {
   "source": "dependency.rptsql",
   "builtAt": "2026-05-16T00:00:00Z",
@@ -1944,7 +1901,10 @@ CREATE VISUAL Total AS CARD (
   "parameters": {},
   "parameterMetadata": {}
 }
-""");
+""", new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+            await scope.ServiceProvider.GetRequiredService<SnapshotPackageService>().SaveAsync(manifest, manifestKey);
+            manifestPath = Path.Combine(scope.ServiceProvider.GetRequiredService<PortalConfig>().SnapshotDirectory, manifestKey);
+        }
 
         using (var scope = _factory.Services.CreateScope())
         {
@@ -3675,6 +3635,48 @@ CREATE VISUAL EdgeRows AS TABLE (
         Assert.Equal(HttpStatusCode.BadRequest, wrongType.StatusCode);
     }
 
+    [Fact]
+    public async Task UploadScript_CannotReplaceTheScriptOfAReportTheUploaderCannotEdit()
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var name = $"owned-{Guid.NewGuid():N}.rptsql";
+        var original = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("SELECT 1 AS original;"));
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthPost(adminToken, "/api/scripts/upload", new { filename = name, contentBase64 = original })).StatusCode);
+        var folder = await AuthPost(adminToken, "/api/folders", new { name = "Upload Owned " + Guid.NewGuid().ToString("N")[..8], parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folder.StatusCode);
+        var folderId = (await folder.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+        var created = await AuthPost(adminToken, "/api/reports", new
+        {
+            folderId,
+            name = name.Replace(".rptsql", ""),
+            description = "upload ownership",
+            scriptPath = Path.Combine(_factory.TempDir, "scripts", name)
+        });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        // A publisher with no permission on that report's folder cannot swap its script.
+        var publisherToken = await GetFreshTokenAsync("Publisher");
+        var replacement = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("SELECT 2 AS replaced;"));
+        var refused = await AuthPost(publisherToken, "/api/scripts/upload", new { filename = name, contentBase64 = replacement });
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Contains("original", await File.ReadAllTextAsync(Path.Combine(_factory.TempDir, "scripts", name)));
+
+        // Its author can still republish over it.
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthPost(adminToken, "/api/scripts/upload", new { filename = name, contentBase64 = replacement })).StatusCode);
+    }
+
+    [Fact]
+    public async Task ConnectorTest_IsForAdministratorsAndScriptAuthorsOnly()
+    {
+        var probe = new { connectorType = "MOCKDB", target = "mock:diag" };
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await AuthPost(await GetFreshViewerTokenAsync(), "/api/connectors/test", probe)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthPost(await GetAdminTokenAsync(), "/api/connectors/test", probe)).StatusCode);
+    }
+
     // ── 8. Operational hardening ──────────────────────────────────────────────
 
     [Fact]
@@ -4024,10 +4026,12 @@ CREATE VISUAL Summary AS TABLE (
         }
     }
 
-    private async Task<string> GetFreshViewerTokenAsync()
+    private Task<string> GetFreshViewerTokenAsync() => GetFreshTokenAsync("Viewer");
+
+    private async Task<string> GetFreshTokenAsync(string role)
     {
         var adminToken = await GetAdminTokenAsync();
-        var username = $"share_viewer_{Guid.NewGuid():N}"[..20];
+        var username = $"share_{role.ToLowerInvariant()}_{Guid.NewGuid():N}"[..20];
         const string initialPassword = "Viewer@Test1!";
         const string changedPassword = "Viewer@Test2!";
 
@@ -4036,7 +4040,7 @@ CREATE VISUAL Summary AS TABLE (
             username,
             email = $"{username}@test.local",
             password = initialPassword,
-            role = "Viewer"
+            role
         });
         Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
 

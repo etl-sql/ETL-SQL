@@ -1748,7 +1748,6 @@ body.theme-midnight select, body.theme-midnight .form-select, body.theme-midnigh
 .dq-trend-subhead { margin: 16px 0 6px; font-size: .95em; }
 /* A field the run never recorded, distinct from one recorded as empty. Carries its own title text
    rather than relying on the muted colour, which conveys nothing in forced-colours mode. */
-.dq-unrecorded { color: var(--portal-muted); }
 .dq-spark {
   display: flex;
   align-items: flex-end;

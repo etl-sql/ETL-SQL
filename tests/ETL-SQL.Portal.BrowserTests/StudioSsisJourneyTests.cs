@@ -43,7 +43,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=ssis-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=ssis-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
         await page.Locator("[data-projection='split']").ClickAsync();
@@ -128,7 +128,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=branch-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=branch-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
         await page.Locator("[data-projection='split']").ClickAsync();
@@ -194,7 +194,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=edit-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=edit-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
         await page.Locator("[data-projection='split']").ClickAsync();
@@ -277,7 +277,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=lane-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=lane-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
         await page.Locator("[data-projection='split']").ClickAsync();
@@ -349,7 +349,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=data-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=data-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
         await page.Locator("[data-projection='split']").ClickAsync();
@@ -440,7 +440,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=transform-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=transform-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
         await page.Locator("[data-projection='split']").ClickAsync();

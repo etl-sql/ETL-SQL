@@ -176,6 +176,7 @@ class MockDOMParser {
             return errDoc;
         }
         const svg = new MockElement('svg');
+        svg.namespaceURI = 'http://www.w3.org/2000/svg';
         svg.setAttribute('viewBox', '0 0 600 400');
         svg.setAttribute('width', '600');
         svg.setAttribute('height', '400');

@@ -50,7 +50,7 @@ public sealed class DataQualityQueuePageTests(DataQualityQueueFixture fixture)
         await store.SaveJobDataQualityFailuresAsync(historyId, [
             new DataQualityRuleFailureMetric(target, "Email", "NOT NULL", "QUARANTINE", 5, "DataSteward")
         ]);
-        await page.GotoAsync($"/index.html?target={Uri.EscapeDataString(target)}&jobName={job}#governance/quarantine");
+        await page.GotoWithDiagnosticsAsync($"/index.html?target={Uri.EscapeDataString(target)}&jobName={job}#governance/quarantine");
         await Expect(page.Locator("#dqRowsModalTitle")).ToHaveTextAsync(target);
         await Expect(page.Locator("[data-edit-row='row-a'][data-edit-column='Email']")).ToHaveValueAsync("bad-address");
         await Expect(page.Locator("[data-edit-row='row-b']")).ToHaveCountAsync(0);
@@ -109,7 +109,7 @@ public sealed class DataQualityQueuePageTests(DataQualityQueueFixture fixture)
         Assert.NotNull(savedJob);
         await store.SetJobStateAsync(savedJob!.Id, $"dq:quarantine-manifest:{target}", JsonSerializer.Serialize(
             new QuarantineReplayManifest(job, null, "Missing script", "#source", target, true, null, ["Id"], "missing", DateTimeOffset.UtcNow)));
-        await page.GotoAsync($"/index.html?q={target}#governance/quarantine");
+        await page.GotoWithDiagnosticsAsync($"/index.html?q={target}#governance/quarantine");
         await Expect(page.Locator($"[data-replay-target='{target}']")).ToBeVisibleAsync();
         await Expect(page.Locator($"[data-review-target='{target}']")).ToHaveCountAsync(0);
         await page.RouteAsync("**/api/data-quality/quarantine/replay", route => route.FulfillAsync(new()

@@ -154,7 +154,7 @@ namespace ETL_SQL.Tests.Statements
 
             // USE DOCKER should be suppressed
             await ev.Evaluate(Parse("USE DOCKER ('postgres:latest') AS db;"));
-            Assert.Null(ev.DockerManager.GetConnectionString("db"));
+            Assert.Null(ev.DockerManager.GetConnectionString(DockerScope.For(ev), "db"));
         }
 
         [Fact]

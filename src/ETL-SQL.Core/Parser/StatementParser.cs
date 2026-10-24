@@ -103,7 +103,6 @@ public class StatementParser
         _dispatchMap[TokenType.STOP] = () => ExtensionParser.ParseDockerVerb(DockerAction.Stop);
         _dispatchMap[TokenType.PAUSE] = () => ExtensionParser.ParseDockerVerb(DockerAction.Pause);
         _dispatchMap[TokenType.CLOSE] = () => ExtensionParser.ParseDockerVerb(DockerAction.Close);
-        _dispatchMap[TokenType.DOCKER] = () => ExtensionParser.ParseDockerVerb(DockerAction.Start); // Fallback
         _dispatchMap[TokenType.STYLE] = () => { var t = _parser.Previous; return ReportParser.ParseStyleStatement(t); };
         _dispatchMap[TokenType.EXPORT] = () =>
         {

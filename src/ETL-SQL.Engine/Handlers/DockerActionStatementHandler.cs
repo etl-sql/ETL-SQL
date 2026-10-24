@@ -33,11 +33,11 @@ public class DockerActionStatementHandler : IStatementHandler
 
             if (actionStmt.Action == DockerAction.Close)
             {
-                await context.DockerManager.CloseContainers(null, context.CancellationToken);
+                await context.DockerManager.CloseContainers(DockerScope.For(context), null, context.CancellationToken);
             }
             else
             {
-                var state = context.DockerManager.GetState();
+                var state = context.DockerManager.GetState(DockerScope.For(context));
                 foreach (var alias in state.Keys)
                 {
                     await ExecuteAction(actionStmt.Action, alias, context);
@@ -46,7 +46,7 @@ public class DockerActionStatementHandler : IStatementHandler
         }
         else
         {
-            string? alias = actionStmt.TargetMode == DockerTargetMode.Single ? actionStmt.Alias : context.DockerManager.LastAlias;
+            string? alias = actionStmt.TargetMode == DockerTargetMode.Single ? actionStmt.Alias : context.DockerManager.GetLastAlias(DockerScope.For(context));
             _logger.Debug("Docker Action: {Action} on {Alias}", actionStmt.Action, alias ?? "(last)");
 
             if (context.IsWhatIf)
@@ -65,16 +65,16 @@ public class DockerActionStatementHandler : IStatementHandler
         {
             case DockerAction.Start:
             case DockerAction.Resume:
-                await context.DockerManager.ResumeContainer(alias, context.CancellationToken);
+                await context.DockerManager.ResumeContainer(DockerScope.For(context), alias, context.CancellationToken);
                 break;
             case DockerAction.Stop:
-                await context.DockerManager.StopContainer(alias, context.CancellationToken);
+                await context.DockerManager.StopContainer(DockerScope.For(context), alias, context.CancellationToken);
                 break;
             case DockerAction.Pause:
-                await context.DockerManager.PauseContainer(alias, context.CancellationToken);
+                await context.DockerManager.PauseContainer(DockerScope.For(context), alias, context.CancellationToken);
                 break;
             case DockerAction.Close:
-                await context.DockerManager.CloseContainers(alias, context.CancellationToken);
+                await context.DockerManager.CloseContainers(DockerScope.For(context), alias, context.CancellationToken);
                 break;
         }
     }

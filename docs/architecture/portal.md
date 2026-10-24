@@ -410,11 +410,13 @@ are deleted with the user.
 | DELETE | `/api/reports/{id}/favorite` | Any | Remove favorite |
 | POST | `/api/reports/{id}/share-links` | Admin, Publisher | Create share link |
 | GET | `/api/reports/{id}/share-links` | Admin, Publisher | List share links |
-| DELETE | `/api/reports/{id}/share-links/{token}` | Admin, Publisher | Revoke share link |
+| DELETE | `/api/reports/{id}/share-links/{token}` | Admin, Publisher | Revoke share link by token |
+| DELETE | `/api/reports/{id}/share-links/by-id/{linkId}` | Admin, Publisher | Revoke share link by id |
 | GET | `/api/share/{token}` | Public | Resolve share link |
 | POST | `/api/reports/{id}/embed-tokens` | Admin, Publisher | Create embed token |
 | GET | `/api/reports/{id}/embed-tokens` | Admin, Publisher | List embed tokens |
-| DELETE | `/api/reports/{id}/embed-tokens/{token}` | Admin, Publisher | Revoke embed token |
+| DELETE | `/api/reports/{id}/embed-tokens/{token}` | Admin, Publisher | Revoke embed token by token |
+| DELETE | `/api/reports/{id}/embed-tokens/by-id/{tokenId}` | Admin, Publisher | Revoke embed token by id |
 | GET | `/api/embed/{token}` | Public | Resolve embed token |
 | GET | `/api/reports/{id}/saved-views` | Any | List saved views |
 | POST | `/api/reports/{id}/saved-views` | Any | Create saved view |

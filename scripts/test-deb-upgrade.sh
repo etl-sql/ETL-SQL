@@ -172,6 +172,8 @@ check "fresh: secrets readable by the service account only" secrets_file_protect
 check "fresh: shared appsettings.json holds no generated secret" shared_config_holds_no_secrets
 check "fresh: served assets match the candidate" assets --inventory-root "$CHECKOUT" --out "$OUT/fresh-assets.json"
 check "fresh: admin backup includes the job history the service writes" backup_has_job_history
+check "fresh: candidate backup passes recovery validation with a retained report" \
+    "$NODE" "$CHECKOUT/scripts/test-backup-recovery.mjs" "$OUT/fresh-backup" "$OUT/recovery-report.json"
 check "fresh: dpkg purge" dpkg --purge etl-sql
 check "fresh: purge removed state, cache and sign-in file" \
     bash -c '[ ! -e /var/lib/etl-sql ] && [ ! -e /var/cache/etl-sql ] && [ ! -e /etc/etl-sql ]'

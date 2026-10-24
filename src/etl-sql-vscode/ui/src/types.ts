@@ -189,8 +189,6 @@ export interface VisualManifest {
     actions: ReportAction[];
     /** Compact resolved interaction contract. The only interaction payload v0.19+ manifests carry. */
     interaction?: InteractionManifest;
-    /** Pre-v0.19 authored interaction map. Read only through resolveInteraction(). */
-    interactions?: Record<string, string>;
     styles?: Record<string, string>;
     defaultValue?: string;
     summaryData?: TableSummaryData;

@@ -13,14 +13,24 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 env:
   TAG_NAME: ${{ inputs.tag || github.ref_name }}
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   # 1. Validation Job - ensures the release is stable
   validate:
     name: Validate & Test
+    outputs:
+      source_sha: ${{ steps.candidate.outputs.source_sha }}
+      hosted_evidence_artifact_id: ${{ steps.hosted-evidence.outputs.artifact-id }}
+      local_evidence_artifact_id: ${{ steps.local-evidence.outputs.artifact-id }}
+      local_manifest_sha256: ${{ steps.local-selection.outputs.manifest_sha256 }}
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -30,6 +40,7 @@ jobs:
           fetch-depth: 0
 
       - name: Verify release tag is on a supported release branch
+        id: candidate
         shell: pwsh
         run: |
           . ./scripts/Release.Helpers.ps1
@@ -37,25 +48,67 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Cannot refresh main and maintenance release refs.' }
           $branch = Assert-ReleaseTagReachable -Tag $env:TAG_NAME
           Write-Host "Release tag is reachable from $branch."
+          $sha = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve candidate commit.' }
+          if ($sha -cne $env:GITHUB_SHA) {
+            throw 'Run this workflow from the requested release tag so workflow provenance matches the candidate commit.'
+          }
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.VersionPrefix
+          if ($env:TAG_NAME -cne "v$version") { throw 'Release tag does not match VersionPrefix.' }
+          "source_sha=$sha" >> $env:GITHUB_OUTPUT
 
       - name: Set up browser compiler runtime
         uses: actions/setup-node@v7
         with:
           node-version: 22
 
-      - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
+      - name: Prepare pinned workflow checker
+        run: node scripts/setup-actionlint.mjs
+      - name: Collect source preflight findings
+        env:
+          ETLSQL_RELEASE_TAG: ${{ env.TAG_NAME }}
+        run: node scripts/release-preflight.mjs
 
-      - name: Prepare browser assets
-        run: node scripts/sync-assets.js
+      - name: Require exact-candidate CI and CodeQL evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
+        run: node scripts/collect-hosted-release-evidence.mjs "$env:GITHUB_REPOSITORY" "$env:SOURCE_SHA" release-validation/hosted-release-evidence.json
 
-      - name: Verify .NET
-        run: dotnet --info
-      - name: Build & Run Smoke Tests
-        shell: pwsh
-        run: |
-          dotnet build ETL-SQL.slnx --configuration Release
-          .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
+      - name: Retain selected hosted evidence
+        id: hosted-evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: hosted-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/hosted-release-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Require full controlled-host local evidence
+        id: local-selection
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
+        run: node scripts/collect-hosted-local-evidence.mjs "$env:GITHUB_REPOSITORY" "$env:SOURCE_SHA" release-validation/selected-local-evidence
+
+      - name: Retain verified local phase bundle
+        id: local-evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: selected-local-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/selected-local-evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload source preflight logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-preflight-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/preflight/
+          if-no-files-found: warn
+          retention-days: 30
 
   prepare-release:
     name: Prepare GitHub Release
@@ -76,16 +129,208 @@ jobs:
             gh release create "$TAG_NAME" --draft --generate-notes "${args[@]}"
           fi
 
-  # 2. Windows Build (ZIP + MSI)
-  build-windows:
-    name: Build Windows (MSI & ZIP)
-    needs: prepare-release
-    runs-on: windows-latest
+  find-msi:
+    name: Find certified candidate MSI
+    needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ steps.find.outputs.artifact_id }}
+      run_id: ${{ steps.find.outputs.run_id }}
+      receipt_id: ${{ steps.find.outputs.receipt_id }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.TAG_NAME }}
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - name: Find successful certification for this commit
+        id: find
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: |
+          . ./scripts/Release.Helpers.ps1
+          [xml]$props = Get-Content Directory.Build.props
+          $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve previous stable release.' }
+          $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ })
+          $previousTag = Select-PreviousStableRelease -CurrentVersion ([string]$props.Project.PropertyGroup.VersionPrefix) -Releases $releases
+          ./scripts/Find-CertifiedMsi.ps1 -SourceSha $env:SOURCE_SHA -Repository $env:GITHUB_REPOSITORY -PreviousTag $previousTag -OutputDirectory msi-selection
+
+  certify-msi:
+    name: Certify release MSI
+    needs: [validate, find-msi]
+    if: needs.find-msi.outputs.artifact_id == ''
+    permissions:
+      contents: read
+    uses: ./.github/workflows/msi-upgrade.yml
+    with:
+      source_sha: ${{ needs.validate.outputs.source_sha }}
+
+  promote-msi:
+    name: Promote certified MSI
+    needs: [validate, prepare-release, find-msi, certify-msi]
+    if: >-
+      ${{ !cancelled() && needs.validate.result == 'success' && needs.prepare-release.result == 'success' &&
+          needs.find-msi.result == 'success' &&
+          ((needs.find-msi.outputs.artifact_id != '' && needs.certify-msi.result == 'skipped') ||
+           (needs.find-msi.outputs.artifact_id == '' && needs.certify-msi.result == 'success')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+
+      - name: Require certified artifact ID
+        shell: pwsh
+        env:
+          ARTIFACT_ID: ${{ needs.find-msi.outputs.artifact_id || needs.certify-msi.outputs.artifact_id }}
+          RECEIPT_ID: ${{ needs.find-msi.outputs.receipt_id || needs.certify-msi.outputs.receipt_id }}
+        run: |
+          if ($env:ARTIFACT_ID -notmatch '^[1-9][0-9]*$') { throw 'Certified MSI artifact ID is missing or invalid.' }
+          if ($env:RECEIPT_ID -notmatch '^[1-9][0-9]*$') { throw 'Certification receipt ID is missing or invalid.' }
+
+      - name: Download certified installers
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.find-msi.outputs.artifact_id || needs.certify-msi.outputs.artifact_id }}
+          run-id: ${{ needs.find-msi.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: candidate
+
+      - name: Download certification receipt
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.find-msi.outputs.receipt_id || needs.certify-msi.outputs.receipt_id }}
+          run-id: ${{ needs.find-msi.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: certification
+
+      - name: Verify and upload certified MSI
+        shell: pwsh
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./scripts/MsiCandidate.ps1 -Mode Verify -Directory candidate -SourceSha $env:SOURCE_SHA
+          $destination = "candidate/ETL-SQL-$env:TAG_NAME-x64-Setup.msi"
+          Copy-Item candidate/current.msi $destination
+          Copy-Item candidate/candidate.json candidate/msi-certification-inputs.json
+          Copy-Item certification/certification.json candidate/msi-certification.json
+          gh release upload $env:TAG_NAME $destination candidate/msi-certification-inputs.json candidate/msi-certification.json --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot upload certified MSI.' }
+
+  find-deb:
+    name: Find certified candidate DEB
+    needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ steps.find.outputs.artifact_id }}
+      run_id: ${{ steps.find.outputs.run_id }}
+      receipt_id: ${{ steps.find.outputs.receipt_id }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Select exact-candidate DEB certification
+        id: find
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: |
+          . ./scripts/Release.Helpers.ps1
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.VersionPrefix
+          $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve previous stable release.' }
+          $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ } | ForEach-Object { $_ })
+          $previous = Select-PreviousStableRelease -CurrentVersion $version -Releases $releases
+          node scripts/find-certified-deb.mjs $env:GITHUB_REPOSITORY $env:SOURCE_SHA $version $previous deb-selection
+
+  certify-deb:
+    name: Certify release DEB
+    needs: [validate, find-deb]
+    if: needs.find-deb.outputs.artifact_id == ''
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deb-upgrade.yml
+    with:
+      source_sha: ${{ needs.validate.outputs.source_sha }}
+
+  promote-deb:
+    name: Promote Linux candidate packages
+    needs: [validate, prepare-release, find-deb, certify-deb]
+    if: >-
+      ${{ !cancelled() && needs.validate.result == 'success' && needs.prepare-release.result == 'success' &&
+          needs.find-deb.result == 'success' &&
+          ((needs.find-deb.outputs.artifact_id != '' && needs.certify-deb.result == 'skipped') ||
+           (needs.find-deb.outputs.artifact_id == '' && needs.certify-deb.result == 'success')) }}
+    runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require DEB candidate and receipt IDs
+        env:
+          ARTIFACT_ID: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
+          RECEIPT_ID: ${{ needs.find-deb.outputs.receipt_id || needs.certify-deb.outputs.receipt_id }}
+        run: |
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] && [[ "$RECEIPT_ID" =~ ^[1-9][0-9]*$ ]]
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
+          run-id: ${{ needs.find-deb.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: candidate
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.find-deb.outputs.receipt_id || needs.certify-deb.outputs.receipt_id }}
+          run-id: ${{ needs.find-deb.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+          path: certification
+          merge-multiple: true
+      - name: Verify and upload Linux candidate packages
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          ARTIFACT_ID: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
+        run: |
+          set -euo pipefail
+          version="${TAG_NAME#v}"
+          node scripts/check-deb-candidate.mjs candidate/candidate.json certification/certification.json "$SOURCE_SHA" "$version" "$ARTIFACT_ID" candidate/current.deb candidate/current.zip candidate/current.vsix
+          cp candidate/current.deb "candidate/etl-sql_${version}_amd64.deb"
+          cp candidate/current.zip "candidate/ETL-SQL-v${version}-linux-x64.zip"
+          cp candidate/current.vsix "candidate/etl-sql-vscode-${version}-linux-x64.vsix"
+          cp candidate/candidate.json candidate/deb-certification-inputs.json
+          cp certification/certification.json candidate/deb-certification.json
+          gh release upload "$TAG_NAME" "candidate/etl-sql_${version}_amd64.deb" "candidate/ETL-SQL-v${version}-linux-x64.zip" "candidate/etl-sql-vscode-${version}-linux-x64.vsix" candidate/deb-certification-inputs.json candidate/deb-certification.json --clobber
+
+  # Windows ZIP/VSIX packaging runs independently of MSI certification.
+  build-windows:
+    name: Build Windows (ZIP & VSIX)
+    needs: validate
+    runs-on: windows-latest
+    timeout-minutes: 110
+    outputs:
+      artifact_id: ${{ steps.packages.outputs.artifact-id }}
+      manifest_sha256: ${{ steps.identity.outputs.manifest_sha256 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
 
       - name: Set up browser compiler runtime
         uses: actions/setup-node@v7
@@ -109,166 +354,166 @@ jobs:
           npm run build
 
       - name: Build & Publish
+        timeout-minutes: 95
         shell: pwsh
         run: |
           $Version = $env:TAG_NAME.TrimStart('v')
           $env:ETL_SQL_VERSION = $Version
-          .\scripts\publish-release.ps1 -Platforms win-x64
+          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/publish-release.ps1 -ScriptArguments @('-Platforms', 'win-x64') -EvidenceDirectory release-validation/windows-package -TimeoutSeconds 5400
 
-      - name: Install WiX Toolset
-        shell: pwsh
-        run: choco install wixtoolset -y --no-progress --skip-if-installed
-
-      - name: Build MSI
-        shell: pwsh
-        run: |
-          $Version = $env:TAG_NAME.TrimStart('v')
-          $env:ETL_SQL_VERSION = $Version
-          .\scripts\build-msi.ps1
-          if ($LASTEXITCODE -ne 0) { throw "build-msi.ps1 failed with exit code $LASTEXITCODE" }
-          Move-Item "src/ETL-SQL.Installer/ETL-SQL-v$Version.msi" "release/ETL-SQL-v$Version-x64-Setup.msi"
-
-      - name: Upload Windows release assets
-        shell: pwsh
+      - name: Record Windows package identity
+        id: identity
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload $env:TAG_NAME release/*.zip release/*.msi release/*.vsix --clobber
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        shell: pwsh
+        run: |
+          node scripts/windows-release-packages.mjs create release $env:SOURCE_SHA $env:TAG_NAME.TrimStart('v')
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot record Windows package identity.' }
+          $hash = (Get-FileHash release/windows-package-inputs.json -Algorithm SHA256).Hash.ToLowerInvariant()
+          "manifest_sha256=$hash" >> $env:GITHUB_OUTPUT
 
-  # 3. Linux Build (ZIP + DEB)
-  build-linux:
-    name: Build Linux (DEB & ZIP)
-    needs: prepare-release
+      - name: Retain Windows packages before publication
+        id: packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-packages-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release/ETL-SQL-${{ env.TAG_NAME }}-win-x64.zip
+            release/etl-sql-vscode-*-win32-x64.vsix
+            release/windows-package-inputs.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Retain Windows packaging diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-package-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/windows-package/
+          if-no-files-found: warn
+          retention-days: 30
+
+  upload-windows:
+    name: Upload retained Windows packages
+    needs: [validate, prepare-release, build-windows]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      manifest_sha256: ${{ needs.build-windows.outputs.manifest_sha256 }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
-          ref: ${{ env.TAG_NAME }}
-
-      - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
-
-      - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
-
-      - name: Prepare browser assets
-        run: node scripts/sync-assets.js
-      - name: Verify .NET
-        run: dotnet --info
-      - name: Verify Node.js
-        run: node --version
-
-      - name: Build extension UI
-        working-directory: src/etl-sql-vscode/ui
-        run: |
-          npm ci
-          npm run build
-
-      - name: Publish Binaries
-        shell: pwsh
-        run: |
-          $Version = $env:TAG_NAME.TrimStart('v')
-          $env:ETL_SQL_VERSION = $Version
-          ./scripts/publish-release.ps1 -Platforms linux-x64
-          chmod +x scripts/build-linux-packages.sh
-          ./scripts/build-linux-packages.sh $Version release/linux-x64/bin
-          mv "etl-sql_${Version}_amd64.deb" release/
-
-      - name: Upload Linux release assets
-        shell: bash
+      - name: Require retained Windows artifact ID
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG_NAME" release/*.zip release/*.deb release/*.vsix --clobber
-
-  # 4. macOS Build (ZIP + DMG)
-  build-macos:
-    name: Build macOS (DMG & ZIP)
-    needs: prepare-release
-    runs-on: macos-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+          ARTIFACT_ID: ${{ needs.build-windows.outputs.artifact_id }}
+        run: '[[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]'
+      - uses: actions/download-artifact@v8
         with:
-          ref: ${{ env.TAG_NAME }}
+          artifact-ids: ${{ needs.build-windows.outputs.artifact_id }}
+          path: candidate
+          merge-multiple: true
+      - name: Verify and upload Windows release assets
+        timeout-minutes: 10
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          MANIFEST_SHA256: ${{ needs.build-windows.outputs.manifest_sha256 }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${TAG_NAME#v}"
+          node scripts/windows-release-packages.mjs verify candidate "$SOURCE_SHA" "$version" "$MANIFEST_SHA256"
+          gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" \
+            "candidate/ETL-SQL-${TAG_NAME}-win-x64.zip" \
+            "candidate/etl-sql-vscode-${version}-win32-x64.vsix" \
+            candidate/windows-package-inputs.json --clobber
+      - name: Report Windows upload recovery
+        if: failure()
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          PACKAGE_PLATFORM: Windows
+          PACKAGE_ARTIFACT_IDS: ${{ needs.build-windows.outputs.artifact_id }}
+        run: node scripts/report-package-upload-recovery.mjs
 
-      - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+  # Separate calls preserve each architecture's artifact ID and digest across failed-job retries.
+  build-macos-intel:
+    name: Build macOS (osx-x64)
+    needs: validate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/macos-release-package.yml
+    with:
+      source_sha: ${{ needs.validate.outputs.source_sha }}
+      tag: ${{ inputs.tag || github.ref_name }}
+      rid: osx-x64
+
+  build-macos-arm64:
+    name: Build macOS (osx-arm64)
+    needs: validate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/macos-release-package.yml
+    with:
+      source_sha: ${{ needs.validate.outputs.source_sha }}
+      tag: ${{ inputs.tag || github.ref_name }}
+      rid: osx-arm64
+
+  upload-macos:
+    name: Upload retained macOS packages
+    needs: [validate, prepare-release, build-macos-intel, build-macos-arm64]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      intel_manifest_sha256: ${{ needs.build-macos-intel.outputs.manifest_sha256 }}
+      arm64_manifest_sha256: ${{ needs.build-macos-arm64.outputs.manifest_sha256 }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
-
-      - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
-
-      - name: Prepare browser assets
-        run: node scripts/sync-assets.js
-      - name: Verify .NET
-        run: dotnet --info
-      - name: Verify Node.js
-        run: node --version
-
-      - name: Build extension UI
-        working-directory: src/etl-sql-vscode/ui
-        run: |
-          npm ci
-          npm run build
-
-      # Apple Silicon is the priority artifact (most current Macs). Publish and upload it
-      # FIRST so an Intel/R2R failure below can never cost us the arm64 release. Each
-      # publish-release.ps1 run wipes release/, so arm64 is safely uploaded before x64 starts.
-      - name: Publish Apple Silicon (arm64) VSIX + ZIP
-        shell: pwsh
-        run: |
-          $Version = $env:TAG_NAME.TrimStart('v')
-          $env:ETL_SQL_VERSION = $Version
-          ./scripts/publish-release.ps1 -Platforms osx-arm64
-
-      - name: Upload arm64 release assets
-        shell: bash
+      - name: Require retained native artifact IDs
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG_NAME" release/*.zip release/*.vsix --clobber
-
-      # Intel build is best-effort: if osx-x64 R2R cross-gen breaks on the arm64 runner,
-      # the job degrades (arm64 already shipped) instead of failing the whole release.
-      - name: Publish Intel (x64) VSIX + ZIP (best effort)
-        id: macos_x64
-        continue-on-error: true
-        shell: pwsh
+          INTEL_ARTIFACT_ID: ${{ needs.build-macos-intel.outputs.artifact_id }}
+          ARM64_ARTIFACT_ID: ${{ needs.build-macos-arm64.outputs.artifact_id }}
         run: |
-          $Version = $env:TAG_NAME.TrimStart('v')
-          $env:ETL_SQL_VERSION = $Version
-          ./scripts/publish-release.ps1 -Platforms osx-x64
-
-      - name: Upload x64 release assets
-        if: steps.macos_x64.outcome == 'success'
-        shell: bash
+          [[ "$INTEL_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$ARM64_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$INTEL_ARTIFACT_ID" != "$ARM64_ARTIFACT_ID" ]]
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.build-macos-intel.outputs.artifact_id }}
+          path: candidate/intel
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.build-macos-arm64.outputs.artifact_id }}
+          path: candidate/arm64
+          merge-multiple: true
+      - name: Verify and upload native release assets
+        timeout-minutes: 10
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$TAG_NAME" release/*.zip release/*.vsix --clobber
-
-      # DMG is parked at "TUI launcher" parity and fully optional — never block the release.
-      - name: Build & upload macOS DMG (best effort)
-        if: steps.macos_x64.outcome == 'success'
-        continue-on-error: true
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          INTEL_MANIFEST_SHA256: ${{ needs.build-macos-intel.outputs.manifest_sha256 }}
+          ARM64_MANIFEST_SHA256: ${{ needs.build-macos-arm64.outputs.manifest_sha256 }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          Version="${TAG_NAME#v}"
-          chmod +x scripts/build-mac-dmg.sh
-          ./scripts/build-mac-dmg.sh "$Version" release/osx-x64/bin
-          mv "ETL-SQL_v${Version}.dmg" release/
-          gh release upload "$TAG_NAME" release/*.dmg --clobber
-
-      # Make a degraded macOS release visible: the arm64 VSIX/ZIP still shipped, but Intel
-      # (x64 VSIX/ZIP + DMG) was dropped. Surfaces as a ::warning:: annotation on the run
-      # without failing the job (echo exits 0, so the release still publishes).
-      - name: Flag missing Intel (x64) artifacts
-        if: steps.macos_x64.outcome == 'failure'
-        shell: bash
-        run: echo "::warning title=macOS Intel build skipped::osx-x64 publish failed; release ${TAG_NAME} shipped arm64 only (no Intel VSIX/ZIP, no DMG)."
+          set -euo pipefail
+          version="${TAG_NAME#v}"
+          node scripts/macos-release-packages.mjs verify candidate/intel "$SOURCE_SHA" "$version" osx-x64 "$INTEL_MANIFEST_SHA256"
+          node scripts/macos-release-packages.mjs verify candidate/arm64 "$SOURCE_SHA" "$version" osx-arm64 "$ARM64_MANIFEST_SHA256"
+          gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" candidate/intel/* candidate/arm64/* --clobber
+      - name: Report macOS upload recovery
+        if: failure()
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          PACKAGE_PLATFORM: macOS
+          PACKAGE_ARTIFACT_IDS: ${{ needs.build-macos-intel.outputs.artifact_id }},${{ needs.build-macos-arm64.outputs.artifact_id }}
+        run: node scripts/report-package-upload-recovery.mjs
 
   # 5. Build-provenance attestation (SLSA) — runs BEFORE publish and gates it, so no artifact is ever
   # public without provenance. Downloads the still-draft release assets (a draft is invisible with
@@ -278,17 +523,23 @@ jobs:
   # (SBOM = contents, sha256sums = integrity, provenance = authenticity.)
   attest-provenance:
     name: Attest build provenance
-    needs: [build-windows, build-linux, build-macos]
+    needs: [validate, upload-windows, upload-macos, promote-msi, promote-deb]
+    # Reuse intentionally skips certification ancestors. Require every direct gate to pass.
+    if: >-
+      ${{ !cancelled() && needs.validate.result == 'success' && needs.upload-windows.result == 'success' &&
+          needs.upload-macos.result == 'success' && needs.promote-msi.result == 'success' &&
+          needs.promote-deb.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write       # mint the OIDC token that signs the attestation
       attestations: write   # write the attestation to the repository
       contents: write       # required to read/download the still-draft release
+      actions: read        # read the retained hosted-evidence artifact
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.TAG_NAME }}
+          ref: ${{ needs.validate.outputs.source_sha }}
       - name: Download draft release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -296,7 +547,66 @@ jobs:
           mkdir -p dist
           gh release download "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --dir dist \
             --pattern '*.zip' --pattern '*.msi' --pattern '*.deb' \
-            --pattern '*.dmg' --pattern '*.vsix'
+            --pattern '*.dmg' --pattern '*.vsix' --pattern 'msi-certification-inputs.json' --pattern 'msi-certification.json' \
+            --pattern 'deb-certification-inputs.json' --pattern 'deb-certification.json' \
+            --pattern 'windows-package-inputs.json' --pattern 'osx-*-package-inputs.json'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Verify draft Windows packages against retained build
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          MANIFEST_SHA256: ${{ needs.upload-windows.outputs.manifest_sha256 }}
+        run: node scripts/windows-release-packages.mjs verify dist "$SOURCE_SHA" "${TAG_NAME#v}" "$MANIFEST_SHA256"
+      - name: Verify draft macOS packages against retained builds
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          INTEL_MANIFEST_SHA256: ${{ needs.upload-macos.outputs.intel_manifest_sha256 }}
+          ARM64_MANIFEST_SHA256: ${{ needs.upload-macos.outputs.arm64_manifest_sha256 }}
+        run: |
+          node scripts/macos-release-packages.mjs verify dist "$SOURCE_SHA" "${TAG_NAME#v}" osx-x64 "$INTEL_MANIFEST_SHA256"
+          node scripts/macos-release-packages.mjs verify dist "$SOURCE_SHA" "${TAG_NAME#v}" osx-arm64 "$ARM64_MANIFEST_SHA256"
+      - name: Verify draft Linux packages against candidate
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          ARTIFACT_ID: ${{ needs.promote-deb.outputs.artifact_id }}
+        run: node scripts/check-deb-candidate.mjs dist/deb-certification-inputs.json dist/deb-certification.json "$SOURCE_SHA" "${TAG_NAME#v}" "$ARTIFACT_ID" "dist/etl-sql_${TAG_NAME#v}_amd64.deb" "dist/ETL-SQL-${TAG_NAME}-linux-x64.zip" "dist/etl-sql-vscode-${TAG_NAME#v}-linux-x64.vsix"
+      - name: Verify draft MSI against certification
+        shell: pwsh
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: |
+          New-Item -ItemType Directory -Force candidate | Out-Null
+          Copy-Item dist/msi-certification-inputs.json candidate/candidate.json
+          ./scripts/MsiCandidate.ps1 -Mode VerifyPublished -Directory candidate -SourceSha $env:SOURCE_SHA -PublishedMsi "dist/ETL-SQL-$env:TAG_NAME-x64-Setup.msi"
+      - name: Download verified hosted evidence
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.validate.outputs.hosted_evidence_artifact_id }}
+          path: dist
+          merge-multiple: true
+      - name: Attach hosted evidence to draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" dist/hosted-release-evidence.json --clobber
+      - name: Download verified local phase evidence
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.validate.outputs.local_evidence_artifact_id }}
+          path: local-evidence
+          merge-multiple: true
+      - name: Verify and attach local evidence to draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          MANIFEST_SHA256: ${{ needs.validate.outputs.local_manifest_sha256 }}
+        run: |
+          node scripts/local-release-bundle.mjs verify local-evidence/bundle "$SOURCE_SHA"
+          test "$(sha256sum local-evidence/bundle/manifest.json | cut -d ' ' -f 1)" = "$MANIFEST_SHA256"
+          test ! -e local-release-evidence.zip
+          ( cd local-evidence && zip -qr ../local-release-evidence.zip bundle selection.json )
+          mv local-release-evidence.zip dist/local-release-evidence.zip
+          gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" dist/local-release-evidence.zip --clobber
       - name: Attest draft artifacts
         uses: actions/attest-build-provenance@v4
         with:
@@ -319,13 +629,39 @@ jobs:
   # never public without provenance.
   publish-release:
     name: Publish GitHub Release
-    needs: attest-provenance
+    needs: [validate, attest-provenance]
+    if: ${{ !cancelled() && needs.validate.result == 'success' && needs.attest-provenance.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.TAG_NAME }}
+          ref: ${{ needs.validate.outputs.source_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Recheck hosted evidence before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: node scripts/collect-hosted-release-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-hosted-evidence.json
+      - name: Recheck full local evidence before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          MANIFEST_SHA256: ${{ needs.validate.outputs.local_manifest_sha256 }}
+        run: node scripts/collect-hosted-local-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-local-evidence "$MANIFEST_SHA256"
+      - name: Verify draft local evidence attachment
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory current-local-attachment | Out-Null
+          gh release download $env:TAG_NAME --repo $env:GITHUB_REPOSITORY --pattern local-release-evidence.zip --dir current-local-attachment
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot download the draft local evidence attachment.' }
+          [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $PWD 'current-local-attachment/local-release-evidence.zip'), (Join-Path $PWD 'current-local-attachment/contents'))
+          node scripts/collect-hosted-local-evidence.mjs verify-attachment current-local-attachment/contents current-local-evidence/selection.json
+          if ($LASTEXITCODE -ne 0) { throw 'Draft local evidence does not match the current verified selection.' }
       - name: Publish draft release
         shell: pwsh
         env:

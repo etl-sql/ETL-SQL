@@ -14,7 +14,7 @@ public sealed class ControlPlaneDashboardUiTests(PortalAdminFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{fixture.BaseUrl}/control-plane.html");
+        await page.GotoWithDiagnosticsAsync($"{fixture.BaseUrl}/control-plane.html");
 
         // Assert platform header and security boundary banner
         await Expect(page.Locator(".cp-title")).ToContainTextAsync("SaaS Control Plane");

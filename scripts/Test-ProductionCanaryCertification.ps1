@@ -22,6 +22,8 @@ param(
 $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RepoRoot = (Resolve-Path (Join-Path $ScriptRoot "..")).Path
+. (Join-Path $ScriptRoot 'ProductionCanaryEvidence.Helpers.ps1')
+. (Join-Path $ScriptRoot 'Release.Helpers.ps1')
 $PlanPath = Join-Path $RepoRoot "tests/fixtures/production-canary-plan.json"
 $TestProject = "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj"
 $plan = Get-Content -LiteralPath $PlanPath -Raw | ConvertFrom-Json
@@ -42,9 +44,9 @@ if ($Explain) {
 
 Push-Location $RepoRoot
 try {
-    $commit = ((& git rev-parse HEAD) -join "").Trim()
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($commit)) { throw "Could not resolve git commit." }
-    $dirtyLines = @(& git status --short)
+    $source = Get-ReleaseCertificationSource -RepoRoot $RepoRoot
+    $commit = $source.commit
+    $dirtyLines = $source.dirtyPaths
     $runId = Get-Date -Format "yyyyMMdd-HHmmss-fff"
     $resolvedOutputRoot = if ([System.IO.Path]::IsPathRooted($OutputRoot)) {
         [System.IO.Path]::GetFullPath($OutputRoot)
@@ -89,27 +91,18 @@ try {
     foreach ($journey in $plan.journeys) {
         $expectedRuns += $journey.regions.Count * $journey.failureDomains.Count * 5
     }
-    $invalidRuns = if ($null -eq $report) { @("missing-report") } else {
-        @($report.runs | Where-Object {
-            -not $_.passed -or -not $_.isolationSatisfied -or
-            ($_.request.fault -ne "None" -and
-                ([string]::IsNullOrWhiteSpace($_.alertRoute) -or -not $_.alertDelivery.delivered -or
-                    [string]::IsNullOrWhiteSpace($_.alertDelivery.alertId)))
-        })
-    }
+    $runFindings = @(Get-ProductionCanaryRunFindings -Plan $plan -Report $report)
+    $boundaryFindings = @(Get-ProductionCanaryBoundaryFindings -Plan $plan -Provisioning $provisioning -Credential $credential)
     $passed = $exitCode -eq 0 -and $null -ne $report -and
         $report.schema -eq "etl-sql.production-canary-evidence/v1" -and
-        $report.passed -and $report.runs.Count -eq $expectedRuns -and $invalidRuns.Count -eq 0 -and
-        $null -ne $provisioning -and $provisioning.schema -eq "etl-sql.production-canary-provisioning/v1" -and
-        $provisioning.passed -and $provisioning.observed.customerResourceGrants -eq 0 -and
-        $provisioning.observed.customerNetworkRoutes -eq 0 -and $provisioning.observed.usesDedicatedCapacity -and
-        $null -ne $credential -and $credential.schema -eq "etl-sql.production-canary-credential-lifecycle/v1" -and
-        $credential.passed -and $credential.scheduledRotation.previousRevoked -and
-        $credential.compromiseResponse.previousRevoked
+        $report.passed -and $report.runs.Count -eq $expectedRuns -and $runFindings.Count -eq 0 -and
+        $boundaryFindings.Count -eq 0
+    Assert-ReleaseCertificationSourceUnchanged -RepoRoot $RepoRoot -Initial $source
     $evidence = [ordered]@{
         schema = "etl-sql.production-canary-certification/v1"
         runId = $runId
         commit = $commit
+        sourceFingerprint = $source.fingerprint
         dirty = $dirtyLines.Count -gt 0
         dirtyPaths = @($dirtyLines)
         evidenceScope = "DeterministicCanaryContracts"
@@ -127,7 +120,10 @@ try {
         journeyCount = $plan.journeys.Count
         expectedRunCount = $expectedRuns
         actualRunCount = if ($null -eq $report) { 0 } else { $report.runs.Count }
-        invalidRunCount = $invalidRuns.Count
+        runFindingCount = $runFindings.Count
+        runFindings = $runFindings
+        boundaryFindingCount = $boundaryFindings.Count
+        boundaryFindings = $boundaryFindings
         result = if ($passed) { "Passed" } else { "Failed" }
         testExitCode = $exitCode
         testLog = "production-canary-tests.log"

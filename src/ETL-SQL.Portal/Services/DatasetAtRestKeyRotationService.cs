@@ -89,10 +89,9 @@ public sealed class DatasetAtRestKeyRotationService(
 
     private string ResolveSourceVersion(Dataset dataset) =>
         dataset.AtRestKeyVersion
-        ?? config.Dataset.LegacyAtRestKeyVersion
         ?? (keyProvider is null ? config.Dataset.AtRestKeyVersion : null)
         ?? throw new InvalidOperationException(
-            "An unstamped dataset requires LegacyAtRestKeyVersion before provider-backed rotation.");
+            "An unstamped dataset cannot be rotated with a provider-backed key.");
 
     private async Task<string> ResolveKeyAsync(string version, CancellationToken cancellationToken)
     {

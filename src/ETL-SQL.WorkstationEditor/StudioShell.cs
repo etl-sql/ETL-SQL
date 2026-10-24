@@ -114,7 +114,8 @@ internal static class StudioShell
     }
 
     async function exitStudio(state) {
-      await sendHeartbeat();
+      // Ordinary exit refreshes the dirty guard; confirmed forced exit does not need a heartbeat.
+      if (!state?.force) await sendHeartbeat();
       shutdownStarted = true;
       stopHeartbeat();
 

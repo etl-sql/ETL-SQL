@@ -18,4 +18,8 @@
     <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ETL-SQL.Tests, PublicKey=$(AssemblyPublicKey)" />
+  </ItemGroup>
+
 </Project>

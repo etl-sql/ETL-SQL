@@ -39,3 +39,10 @@ tests/fixtures/reporting/designer-round-trip/line-endings-crlf.rptsql  text eol=
 
 # Binary images must retain their bytes even inside LF-pinned browser asset folders.
 *.png -text
+
+# Calibration references retain raw capture hashes. Do not normalize their line endings when
+# staging or checking out on another platform; historical snapshots preserve the previous bytes.
+certification-results/baseline-smoke.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+certification-results/baseline-standard.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+certification-results/historical-baselines/2026-10-04-smoke-shared-host.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+certification-results/historical-baselines/2026-10-04-standard-shared-host.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

@@ -48,21 +48,6 @@ public class ScriptCompatibilityCorpusTests
         Assert.NotEmpty(script.Statements);
     }
 
-    [Fact]
-    public async Task MigrationLinter_DeprecatedFileConnection_ReportsStableDiagnostic()
-    {
-        var linter = new Linter();
-        linter.AddRule(new DeprecatedConnectionSyntaxRule());
-        var script = Parse("CREATE CONNECTION legacy AS FILE('data.csv');");
-
-        var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
-
-        var diagnostic = Assert.Single(results);
-        Assert.Equal(DeprecatedConnectionSyntaxRule.FileConnectorDiagnosticCode, diagnostic.Code);
-        Assert.Equal(LintSeverity.Warning, diagnostic.Severity);
-        Assert.Contains("FLATFILE", diagnostic.Message);
-    }
-
     private static Script Parse(string sql)
     {
         var lexer = new Lexer(sql);

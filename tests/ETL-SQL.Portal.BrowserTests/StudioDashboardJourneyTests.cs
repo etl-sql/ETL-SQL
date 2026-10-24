@@ -42,7 +42,7 @@ public sealed class StudioDashboardJourneyTests(StudioAuthoringFixture fixture)
         await CreateSharedConnectionAsync(page, alias);
         var reportId = await CreateReportAsync(page, alias);
 
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         await WaitForStudioAsync(page);
         await page.Locator("[data-workflow-step='palette']").WaitForAsync(
             new LocatorWaitForOptions { Timeout = 20_000 });
@@ -138,7 +138,7 @@ public sealed class StudioDashboardJourneyTests(StudioAuthoringFixture fixture)
             reloaded);
 
         // And it runs the way a reader runs it: from the report viewer, not from Studio's preview.
-        await page.GotoAsync($"/index.html#report-{reportId}");
+        await page.GotoWithDiagnosticsAsync($"/index.html#report-{reportId}");
         var execute = page.Locator("#execBtn");
         var refresh = page.Locator("#refreshBtn");
         await Assertions.Expect(execute.Or(refresh).First).ToBeVisibleAsync(new() { Timeout = 30_000 });

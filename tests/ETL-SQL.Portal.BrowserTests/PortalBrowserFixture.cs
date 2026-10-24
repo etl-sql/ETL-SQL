@@ -77,7 +77,7 @@ public class PortalBrowserFixture : IAsyncLifetime
         await signInGate.WaitAsync();
         try
         {
-            await page.GotoAsync("/login.html");
+            await page.GotoWithDiagnosticsAsync("/login.html");
             await page.FillAsync("#username", AdminUsername);
             await page.FillAsync("#password", passwordChanged ? AdminPassword : FirstRunPassword);
             await page.ClickAsync("#loginBtn");
@@ -100,7 +100,7 @@ public class PortalBrowserFixture : IAsyncLifetime
 
             try
             {
-                await page.WaitForURLAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
+                await page.WaitForURLWithDiagnosticsAsync("**/index.html", new PageWaitForURLOptions { Timeout = 20_000 });
             }
             catch (TimeoutException ex)
             {
@@ -171,6 +171,7 @@ public class PortalBrowserFixture : IAsyncLifetime
 public sealed class BrowserSession : IAsyncDisposable
 {
     private readonly IBrowserContext context;
+    private readonly BrowserNavigationDiagnostics diagnostics;
     private readonly List<string> pageErrors = [];
 
     private readonly List<string> consoleErrors = [];
@@ -179,6 +180,7 @@ public sealed class BrowserSession : IAsyncDisposable
     private BrowserSession(IBrowserContext context, IPage page)
     {
         this.context = context;
+        diagnostics = new(context);
         Page = page;
         page.PageError += (_, error) => pageErrors.Add(error);
         page.Console += (_, message) =>
@@ -217,5 +219,9 @@ public sealed class BrowserSession : IAsyncDisposable
     internal static async Task<BrowserSession> CreateAsync(IBrowserContext context)
         => new(context, await context.NewPageAsync());
 
-    public async ValueTask DisposeAsync() => await context.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await diagnostics.DisposeAsync();
+        await context.DisposeAsync();
+    }
 }

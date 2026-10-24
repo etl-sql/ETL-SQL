@@ -313,10 +313,10 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
         await db.SaveChangesAsync();
 
         var controller = CreateReportsController(db, userId: 2);
-        Assert.IsType<CreatedAtActionResult>(await controller.CreateShareLink(report.Id, null));
+        var created = Assert.IsType<CreatedAtActionResult>(await controller.CreateShareLink(report.Id, null));
+        var token = Assert.IsType<ReportShareLinkDto>(created.Value).Token!;
 
-        var link = await db.ReportShareLinks.SingleAsync(value => value.ReportId == report.Id);
-        Assert.IsType<OkObjectResult>(await controller.ResolveShareLink(link.Token));
+        Assert.IsType<OkObjectResult>(await controller.ResolveShareLink(token));
     }
 
     [Fact]

@@ -25,7 +25,7 @@ public sealed class GovernanceAdminPageTests(GovernanceAdminFixture fixture)
             ("glossary", "btnAddNewTerm", "glossaryModalBackdrop", "glossaryTerm", "btnCancelGlossaryModal", "btnConfirmGlossaryModal"),
         })
         {
-            await page.GotoAsync($"/index.html#governance/{tab}");
+            await page.GotoWithDiagnosticsAsync($"/index.html#governance/{tab}");
             var open = page.Locator($"#{opener}");
             var dialog = page.Locator($"#{dialogId}");
             var first = page.Locator($"#{firstInput}");
@@ -67,12 +67,12 @@ public sealed class GovernanceAdminPageTests(GovernanceAdminFixture fixture)
         entry.Metadata["steward"] = "admin";
         await fixture.Factory.Services.GetRequiredService<ILineageCatalogStore>()
             .SaveLineageAsync([entry], $"job-{table}", $"loads/{table}.etlsql", DateTime.UtcNow);
-        await page.GotoAsync("/index.html#governance/overview");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/overview");
         await Expect(page.Locator("#btnRunScan")).ToBeEnabledAsync();
         var scan = await WriteAsync(page, () => page.Locator("#btnRunScan").ClickAsync(), "/api/governance/scan");
         Assert.Equal("completed", scan.GetProperty("status").GetString());
 
-        await page.GotoAsync("/index.html#governance/workqueue");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/workqueue");
         var asset = page.Locator(".gov-table tbody tr").Filter(new() { HasText = table });
         await Expect(asset).ToHaveCountAsync(1);
         var review = await WriteAsync(page, () => asset.Locator("[data-review-asset]").ClickAsync(), "/api/governance/assets/review");
@@ -91,12 +91,12 @@ public sealed class GovernanceAdminPageTests(GovernanceAdminFixture fixture)
         var ignored = await WriteAsync(page, () => page.Locator("#btnConfirmDecision").ClickAsync(), "/decide");
         var findingId = ignored.GetProperty("id").GetInt32();
         Assert.Equal("ignored", ignored.GetProperty("status").GetString());
-        await page.GotoAsync("/index.html#governance/exceptions");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/exceptions");
         await Expect(page.Locator(".gov-body")).ToContainTextAsync("do not follow the asset scope");
         var reopened = await WriteAsync(page, () => page.Locator($"[data-reopen-finding='{findingId}']").ClickAsync(), "/decide");
         Assert.Equal("reopened", reopened.GetProperty("status").GetString());
 
-        await page.GotoAsync("/index.html#governance/settings");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/settings");
         await Expect(page.Locator("#btnSaveScoringSettings")).ToBeEnabledAsync();
         await page.Locator("#settingsDeductMeta").FillAsync("7");
         var settings = await WriteAsync(page, () => page.Locator("#btnSaveScoringSettings").ClickAsync(), "/api/governance/settings");
@@ -114,7 +114,7 @@ public sealed class GovernanceAdminPageTests(GovernanceAdminFixture fixture)
         var editedCategory = await WriteAsync(page, () => page.Locator("#btnConfirmCategoryModal").ClickAsync(), "/api/governance/categories");
         Assert.True(editedCategory.GetProperty("disabled").GetBoolean());
 
-        await page.GotoAsync("/index.html#governance/glossary");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/glossary");
         await Expect(page.Locator("#btnAddNewTerm")).ToBeEnabledAsync();
         var term = "native-" + Guid.NewGuid().ToString("N");
         await page.Locator("#btnAddNewTerm").ClickAsync();
@@ -189,7 +189,7 @@ public sealed class GovernanceAdminPageTests(GovernanceAdminFixture fixture)
         }
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync("/login.html");
+        await page.GotoWithDiagnosticsAsync("/login.html");
         await page.Locator("#username").FillAsync(username);
         await page.Locator("#password").FillAsync(initial);
         await page.Locator("#loginBtn").ClickAsync();
@@ -198,8 +198,8 @@ public sealed class GovernanceAdminPageTests(GovernanceAdminFixture fixture)
         await page.Locator("#newPwd").FillAsync(password);
         await page.Locator("#confirmPwd").FillAsync(password);
         await page.Locator("#changeBtn").ClickAsync();
-        await page.WaitForURLAsync("**/index.html");
-        await page.GotoAsync("/index.html#governance/overview");
+        await page.WaitForURLWithDiagnosticsAsync("**/index.html");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/overview");
         await Expect(page.Locator(".gov-kpis")).ToBeVisibleAsync();
         if (canConfigure) await Expect(page.Locator("#btnRunScan")).ToBeEnabledAsync();
         else
@@ -207,7 +207,7 @@ public sealed class GovernanceAdminPageTests(GovernanceAdminFixture fixture)
             await Expect(page.Locator("#btnRunScan")).ToBeDisabledAsync();
             Assert.Equal(403, await page.EvaluateAsync<int>("async () => (await fetch('/api/governance/scan', { method: 'POST', headers: { Authorization: 'Bearer ' + sessionStorage.getItem('etlsql_token') } })).status"));
         }
-        await page.GotoAsync("/index.html#governance/workqueue");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/workqueue");
         var row = page.Locator(".gov-table tbody tr").Filter(new() { HasText = table });
         await Expect(row).ToHaveCountAsync(1);
         var review = row.Locator("[data-review-asset]");
@@ -236,7 +236,7 @@ public sealed class GovernanceAdminPageTests(GovernanceAdminFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/index.html#governance/overview");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/overview");
         await Expect(page.Locator("#btnRunScan")).ToBeEnabledAsync();
 
         // Hold the read that follows the scan, so the tab change lands while it is in flight.
@@ -277,13 +277,13 @@ public sealed class GovernanceAdminPageTests(GovernanceAdminFixture fixture)
             await release.Task;
             await route.FulfillAsync(new() { Status = 200, ContentType = "application/json", Body = "{}" });
         });
-        await page.GotoAsync("/index.html#governance/overview");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/overview");
         await Expect(page.Locator("#btnRunScan")).ToBeEnabledAsync();
         await page.Locator("#btnRunScan").ClickAsync();
         await reached.Task.WaitAsync(TimeSpan.FromSeconds(20));
-        await page.GotoAsync("/index.html#governance/lineage");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/lineage");
         await Expect(page.Locator("#lineageSearchForm")).ToBeVisibleAsync();
-        await page.GotoAsync("/index.html#governance/overview");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/overview");
         await Expect(page.Locator(".gov-kpis")).ToBeVisibleAsync();
         await Expect(page.Locator("#btnRunScan")).ToBeDisabledAsync();
         await Expect(page.Locator("#govMutationStatus")).ToContainTextAsync("Saving");

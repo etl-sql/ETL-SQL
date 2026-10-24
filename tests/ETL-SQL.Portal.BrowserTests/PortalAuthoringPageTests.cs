@@ -25,7 +25,7 @@ public sealed class PortalAuthoringPageTests(StudioSurfaceFixture fixture)
         var page = session.Page;
         await fixture.SignInAsync(page);
         var id = await CreateReportAsync(page);
-        await page.GotoAsync($"/designer.html?id={id}");
+        await page.GotoWithDiagnosticsAsync($"/designer.html?id={id}");
         await Expect(page.Locator("#dsgn-save")).ToBeEnabledAsync();
         await Expect(page.Locator(".etlsql-feedback-toast", new() { HasText = "No snapshot available" })).ToHaveCountAsync(0);
         await page.EvaluateAsync("() => sessionStorage.setItem('etlsql_token', 'expired.access.token')");
@@ -40,7 +40,7 @@ public sealed class PortalAuthoringPageTests(StudioSurfaceFixture fixture)
         var saving = page.WaitForResponseAsync(response => response.Url.EndsWith("/api/designer/save", StringComparison.Ordinal));
         await page.Locator("#dsgn-save").ClickAsync();
         Assert.Equal(200, (await saving).Status);
-        await page.WaitForURLAsync("**/studio.html");
+        await page.WaitForURLWithDiagnosticsAsync("**/studio.html");
         var saved = await page.EvaluateAsync<string>("""
             async id => {
               const { apiFetch } = await import('/js/api.js');
@@ -95,7 +95,7 @@ public sealed class PortalAuthoringPageTests(StudioSurfaceFixture fixture)
                 JsonSerializer.Serialize(manifest.Visuals.Select(visual => new { visual.Name, visual.VisualType, visual.Columns, visual.Rows, visual.NativeSvg })));
         }
         var snapshotResponse = page.WaitForResponseAsync(response => response.Url.EndsWith($"/api/designer/snapshot/{id}", StringComparison.Ordinal));
-        await page.GotoAsync($"/designer.html?id={id}");
+        await page.GotoWithDiagnosticsAsync($"/designer.html?id={id}");
         var snapshot = await snapshotResponse;
         Assert.True(snapshot.Status == 200, $"Designer snapshot returned {snapshot.Status}: {await snapshot.TextAsync()}");
         using var payload = JsonDocument.Parse(await snapshot.TextAsync());
@@ -116,7 +116,7 @@ public sealed class PortalAuthoringPageTests(StudioSurfaceFixture fixture)
         var id = await CreateReportAsync(page);
         var pattern = endpoint == "parse" ? "**/api/designer/parse" : $"**/api/reports/{id}/script-content";
         await page.RouteAsync(pattern, route => route.FulfillAsync(new() { ContentType = "application/json", Body = "{}" }));
-        await page.GotoAsync($"/designer.html?id={id}");
+        await page.GotoWithDiagnosticsAsync($"/designer.html?id={id}");
         await Expect(page.GetByRole(AriaRole.Alert)).ToContainTextAsync("Invalid");
         await Expect(page.Locator("#dsgn-save")).ToHaveCountAsync(0);
         await page.UnrouteAsync(pattern);
@@ -141,7 +141,7 @@ public sealed class PortalAuthoringPageTests(StudioSurfaceFixture fixture)
             ContentType = "application/json",
             Body = endpoint == "catalog" ? """{"items":[{}],"nextAfterId":null}""" : "{}"
         }));
-        await page.GotoAsync("/studio.html");
+        await page.GotoWithDiagnosticsAsync("/studio.html");
         await Expect(page.Locator("#studioHost [role=alert]")).ToContainTextAsync("Invalid Studio");
         Assert.False(await page.EvaluateAsync<bool>("() => Boolean(window.__STUDIO__)"));
         await page.UnrouteAsync(pattern);

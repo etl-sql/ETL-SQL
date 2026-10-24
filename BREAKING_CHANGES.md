@@ -17,6 +17,111 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Connector: An unquoted TRUE turns boolean connection options on
+- **What changed**: `CREATE CONNECTION` stores an unquoted `TRUE` as `ON`, and most connectors only accepted `TRUE`, so `USE_SSL = TRUE` or `ENCRYPT = TRUE` turned the option off. MSSQL connections were built with `Encrypt=False` and Active Directory bound over plain LDAP. Connectors now accept `TRUE`, `ON`, `YES` and `1`.
+- **Who is affected**: Connections that set boolean options without quotes: MSSQL `ENCRYPT`/`USE_SSL`/`TRUST_SERVER_CERTIFICATE`/`TRUSTED_CONNECTION`/`MULTI_SUBNET_FAILOVER`/`POOLING`, Postgres/MySQL/Oracle `POOLING` and `TRUST_SERVER_CERTIFICATE`, MySQL `ALLOW_PUBLIC_KEY_RETRIEVAL`/`ALLOW_USER_VARIABLES`, Active Directory and SMTP `USE_SSL`, S3 `FORCE_PATH_STYLE`, SFTP `ALLOW_UNPINNED_HOST_KEY`, REST `VALIDATE_JSON_BODY`, Neo4j boolean options.
+- **Migration**: A connection that worked only because encryption was silently off now encrypts; a server without TLS needs `USE_SSL = FALSE`, and one with a self-signed certificate needs its certificate trusted or `TRUST_SERVER_CERTIFICATE = TRUE`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Connector: Kafka SECURITY_PROTOCOL applies without SASL and refuses unknown values
+- **What changed**: `SECURITY_PROTOCOL` was read only when SASL credentials were set, so `SECURITY_PROTOCOL = 'Ssl'` alone connected in plaintext, and any unrecognized value (including librdkafka's own `SASL_SSL`) became `SaslPlaintext`. It now always applies, accepts `SASL_SSL`-style names, and an unknown value is an error.
+- **Who is affected**: Kafka connections that set `SECURITY_PROTOCOL` without SASL credentials, or with a misspelled value.
+- **Migration**: Use one of `Plaintext`, `SaslPlaintext`, `SaslSsl`, `Ssl`; a broker without TLS must not be given `Ssl`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Connector: SMTP USE_SSL = TRUE requires TLS on the port's own terms
+- **What changed**: `USE_SSL = TRUE` meant implicit TLS on every port, which fails on 587; `FALSE` meant STARTTLS only if offered. `TRUE` now means implicit TLS on 465 and required STARTTLS on any other port; `FALSE` is unchanged.
+- **Who is affected**: SMTP connections with `USE_SSL = TRUE` on a port other than 465 that speaks implicit TLS.
+- **Migration**: Use port 465 for implicit TLS. A server on a custom implicit-TLS port must move to 465 or offer STARTTLS.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Semantic: LIKE with a NULL operand is UNKNOWN
+- **What changed**: `LIKE` returned false for a NULL operand, so `NOT LIKE` returned true and `WHERE col NOT LIKE 'A%'` kept the rows where `col` is NULL. Both now return NULL, as in SQL and in queries pushed down to a database.
+- **Who is affected**: Engine-side queries using `NOT LIKE` or `NOT (... LIKE ...)` over nullable columns.
+- **Migration**: Add `OR col IS NULL` where the NULL rows were wanted.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — TypeSystem: Arithmetic on doubles outside decimal's range stays numeric
+- **What changed**: A double beyond decimal's range (about 7.9e28), NaN or infinity could not be converted for arithmetic: `+` returned the two values concatenated as text and `-`, `*`, `/`, `%` and unary minus returned NULL. They now compute as doubles; a non-finite result is NULL, as decimal overflow already is.
+- **Who is affected**: Expressions over very large `FLOAT`/`DOUBLE` values.
+- **Migration**: None expected; code that matched the concatenated text must use the numeric value.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Scripts cannot open the application's own files
+- **What changed**: The installers approve the install folder as a safe zone, which let a script read the Portal database, the Data Protection key ring and `appsettings.secrets.json`, or rewrite the service configuration. Configuration, secrets, the Portal and Orchestrator databases and binaries in the application folder, any `appsettings.secrets.json` and any `.portal-keys` folder are now refused in every protection mode.
+- **Who is affected**: Scripts that read or write those files directly.
+- **Migration**: Use `etl-sql admin backup` for the databases and keys; keep script data in a subfolder or another safe zone.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: `${NAME}` in CREATE/ALTER CONNECTION needs an allow-listed variable
+- **What changed**: A `${NAME}` placeholder read any host environment variable. It now reads only names in `Security:AllowedEnvVars`, the list `ENV()` already uses, and any other name is a security error.
+- **Who is affected**: Scripts that build connections from environment variables, such as `PASSWORD='${REDSHIFT_PASSWORD}'`.
+- **Migration**: Add each variable name to `Security:AllowedEnvVars` (or `"*"` on a host where scripts are trusted). Prefer `SECRET:` references for credentials.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: EXECUTE TOOL keeps a parameter value as one argument
+- **What changed**: Parameter values were substituted into the `ARGS` template before it was split on spaces, so a value with spaces became several arguments. The template is now split first; a value is always one argument.
+- **Who is affected**: Tool definitions whose `ARGS` relied on a parameter expanding into several arguments.
+- **Migration**: Give each argument its own placeholder in `ARGS`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: GENERATE JWT_SECRET no longer edits appsettings.json
+- **What changed**: The statement wrote `Security:JwtSecret`, which nothing reads, into the running application's `appsettings.json`. It now only returns the secret and its encrypted value.
+- **Who is affected**: Nobody relied on the written key; operators who expected the file to change.
+- **Migration**: Run `etl-sql config setup-jwt --update` on the Portal host, or set `Portal:Jwt:Secret`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: USE DOCKER accepts official database repositories only
+- **What changed**: The database was picked by a substring of the image name, so any image containing `postgres` or `mssql` was pulled and run. The repository name (registry, tag and digest ignored) must now be `mssql/server`, `postgres`, `mysql`, `mariadb`, `oracle-xe` or `oracle-free`. Containers get generated passwords, Oracle included, and publish ports on loopback only. `<prefix>.CONNECTION_STRING` resolves a partial image name only when it names one container.
+- **Who is affected**: Scripts using a mirrored or custom image under another repository name, scripts that hard-coded `oracle`/`oracle`, and tools that connected to a container from another machine.
+- **Migration**: Mirror the image under its official repository name; read credentials from `<alias>.CONNECTION_STRING`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: LDAP sign-in refuses names qualified with another domain
+- **What changed**: `alice@other.example` and `OTHER\alice` were stripped to `alice` and signed in as this domain's `alice`. With `Identity:Ldap:Domain` set, a qualifier must match it (UPN suffix, or NetBIOS name equal to its first label).
+- **Who is affected**: Multi-domain or trusted-forest directories where users sign in with another domain's qualifier.
+- **Migration**: Sign in with the configured domain or no qualifier. A Portal serving several domains needs one account per domain, which this release does not provide.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Share links and embed tokens are shown once
+- **What changed**: The catalog stored each share link and embed token in plain text and listed it back. It now stores a SHA-256 hash; the token and URL are returned only when the link is created.
+- **Who is affected**: Anyone who copied a link from the Portal list or `eng.share_links()` / `eng.embed_tokens()` after creating it, and API clients that revoke by the listed token.
+- **Migration**: Copy the URL from the create response or `CREATE SHARE LINK ... INTO #t`. Revoke with `DELETE .../share-links/by-id/{id}` (or `REVOKE SHARE LINK ... FOR REPORT`). A lost link is revoked and created again.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Unauthenticated encryption formats are no longer read
+- **What changed**: `ENC:` values (version 1 and unversioned), password-encrypted files, SSH-encrypted files and machine-bound payloads written in the old AES-CBC formats without an authentication tag were still decrypted. They are now refused; only the authenticated formats are read.
+- **Who is affected**: Values and files encrypted by releases before the authenticated formats were introduced.
+- **Migration**: Encrypt the value again with `etl-sql encrypt`, or the file with `ENCRYPT FILE`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Upgrade paths for data written by earlier releases are removed
+- **What changed**: Startup no longer upgrades state written by earlier releases. Removed: the Orchestrator table and column renames and every add-missing-column step (job store, throttle slots, sandbox admission and metering ledgers, security event outbox); plaintext JSON report snapshots and the snapshot migration service; the plaintext PII column upgrade; the plaintext Orchestrator settings sidecar; the Orchestrator database lookup beside the Portal database; the Gateway `outcomes.json` import; `Portal:Dataset:LegacyAtRestKeyVersion`; JSON temp-table session restore; and Studio drafts kept in browser storage.
+- **Who is affected**: Installations with data from an earlier release. There are none.
+- **Migration**: Start from empty state.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Report formats from earlier releases are no longer read
+- **What changed**: The report runtime and the VS Code preview no longer read the pre-v0.19 `interactions` map; a visual without the resolved `interaction` contract takes part in no interaction. Version-one ChartSpec and PlotPlan envelopes are refused instead of migrated. Studio no longer offers to upgrade the single-value selection filter it wrote before v0.20.0. Data-quality trends report only structured per-rule failures; the counts-only rows parsed from the compact history string, and `countsOnly` on `DataQualityRuleFailureDto`, are gone.
+- **Who is affected**: Snapshots, chart contracts and job history produced by earlier releases.
+- **Migration**: Rebuild reports and rerun jobs.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.21.0 — Runtime: Portal and Orchestrator databases use snake_case names
 - **What changed**: Portal and Orchestrator tables and columns were PascalCase (for example `AspNetUsers`). The first v0.21.0 start renames them to snake_case on SQLite and PostgreSQL. Earlier releases cannot open a renamed database.
 - **Who is affected**: Operators who roll back to v0.20.x, and SQL, reports, or tools that query these databases directly.

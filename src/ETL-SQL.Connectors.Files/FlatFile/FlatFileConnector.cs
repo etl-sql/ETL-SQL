@@ -16,7 +16,7 @@ namespace ETL_SQL.Connectors.FlatFile
     public class FlatFileConnector : IConnector
     {
         public string Name => "FLATFILE";
-        public IReadOnlyList<string> Aliases => new[] { "CSV", "FILE" };
+        public IReadOnlyList<string> Aliases => new[] { "CSV" };
         public bool IsFileBased => true;
 
 

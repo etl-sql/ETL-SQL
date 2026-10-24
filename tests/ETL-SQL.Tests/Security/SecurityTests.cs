@@ -32,6 +32,21 @@ namespace ETL_SQL.Tests.Security
         }
 
         [Fact]
+        public void UnauthenticatedEncValue_IsRefused()
+        {
+            const string password = "legacy-master-password";
+            // A version-1 payload: AES-CBC with no authentication tag.
+            var salt = new byte[16];
+            var iv = new byte[16];
+            using var aes = System.Security.Cryptography.Aes.Create();
+            aes.Key = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(password, salt, 600_000, System.Security.Cryptography.HashAlgorithmName.SHA256, 32);
+            var cipher = aes.EncryptCbc(System.Text.Encoding.UTF8.GetBytes("Server=db;"), iv);
+            var legacy = "ENC:" + Convert.ToBase64String(new byte[] { 1 }.Concat(salt).Concat(iv).Concat(cipher).ToArray());
+
+            Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => ETL_SQL.Common.CryptoUtils.Decrypt(legacy, password));
+        }
+
+        [Fact]
         public void TestEncryptedStringTamperDetection()
         {
             string encrypted = CryptoUtils.Encrypt("secret-value", "Secret123!");
@@ -131,18 +146,19 @@ namespace ETL_SQL.Tests.Security
         {
             var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
             security.IsTestMode = false; // Force restriction enforcement for verification
-            var safePath = "C:\\MyProject";
-            var neutralPath = "C:\\Data";
+            var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "etlsql-runaway-" + Guid.NewGuid().ToString("N"));
+            var safePath = System.IO.Path.Combine(root, "MyProject");
+            var neutralPath = System.IO.Path.Combine(root, "Data");
 
             security.ApprovedSafeZones.Add(safePath);
 
             // 1. FileSystem Limit (100)
             // Should allow override in safe zone
-            security.CheckRunawayProtection(OperationType.FileSystem, 101, 1, allowLargeCount: true, allowDeepRecursion: false, path: safePath + "\\file.csv");
+            security.CheckRunawayProtection(OperationType.FileSystem, 101, 1, allowLargeCount: true, allowDeepRecursion: false, path: System.IO.Path.Combine(safePath, "file.csv"));
 
             // Should FAIL override in neutral zone
             Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
-                security.CheckRunawayProtection(OperationType.FileSystem, 101, 1, allowLargeCount: true, allowDeepRecursion: false, path: neutralPath + "\\file.csv")
+                security.CheckRunawayProtection(OperationType.FileSystem, 101, 1, allowLargeCount: true, allowDeepRecursion: false, path: System.IO.Path.Combine(neutralPath, "file.csv"))
             );
 
             // 2. EngineInternal/Mock Limit (100,000)
@@ -167,11 +183,11 @@ namespace ETL_SQL.Tests.Security
             );
 
             // Should allow override in safe zone
-            security.CheckRunawayProtection(OperationType.EngineInternal, 1, 6, allowLargeCount: false, allowDeepRecursion: true, path: safePath + "\\file.csv");
+            security.CheckRunawayProtection(OperationType.EngineInternal, 1, 6, allowLargeCount: false, allowDeepRecursion: true, path: System.IO.Path.Combine(safePath, "file.csv"));
 
             // Should FAIL override in neutral zone
             Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
-                security.CheckRunawayProtection(OperationType.EngineInternal, 1, 6, allowLargeCount: false, allowDeepRecursion: true, path: neutralPath + "\\file.csv")
+                security.CheckRunawayProtection(OperationType.EngineInternal, 1, 6, allowLargeCount: false, allowDeepRecursion: true, path: System.IO.Path.Combine(neutralPath, "file.csv"))
             );
         }
 
@@ -236,9 +252,10 @@ namespace ETL_SQL.Tests.Security
         {
             var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
 
-            // Should block sensitive environment folders
-            Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath("C:\\Users\\chuck\\.ssh\\id_rsa"));
-            Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath("C:\\Users\\chuck\\.aws\\credentials"));
+            // Should block sensitive environment folders, wherever the home folder is
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath(System.IO.Path.Combine(home, ".ssh", "id_rsa")));
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath(System.IO.Path.Combine(home, ".aws", "credentials")));
         }
 
         [Fact]
@@ -257,6 +274,48 @@ namespace ETL_SQL.Tests.Security
         }
 
         [Fact]
+        public void ApplicationFiles_StayProtected_WhenTheInstallFolderIsASafeZone()
+        {
+            // The installers approve the install folder as a safe zone, and the services run
+            // user-authored scripts in-process. The service's own configuration, keys, databases
+            // and binaries must still be out of reach.
+            var installDir = AppDomain.CurrentDomain.BaseDirectory;
+            var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance) { IsTestMode = false };
+            security.ApprovedSafeZones.Add(installDir);
+
+            foreach (var name in new[]
+                     {
+                         "appsettings.json", "appsettings.secrets.json", "appsettings.Production.json",
+                         "portal.db", "portal.db-wal", "etlsql.db", "first-run-password.txt",
+                         "ETL-SQL.Portal.dll", "ETL-SQL.Portal.runtimeconfig.json", "ETL-SQL.Portal.deps.json"
+                     })
+            {
+                Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+                    security.ValidatePath(System.IO.Path.Combine(installDir, name)));
+            }
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+                security.ValidatePath(System.IO.Path.Combine(installDir, ".portal-keys", "key-1.xml")));
+            // The machine key file is protected wherever it lives.
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+                security.ValidatePath(System.IO.Path.Combine(installDir, "home", "etl-sql", "machine.key")));
+            // The secrets file is protected wherever a deployment keeps it.
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+                security.ValidatePath(System.IO.Path.Combine(installDir, "data", "appsettings.secrets.json")));
+
+            // Data the services keep under the install folder stays reachable.
+            security.ValidatePath(System.IO.Path.Combine(installDir, "data", "datasets", "sales.parquet"));
+            security.ValidatePath(System.IO.Path.Combine(installDir, "Reports", "sales.json"));
+            security.ValidatePath(System.IO.Path.Combine(installDir, "export.csv"));
+
+            // Unrestricted mode does not reopen them; only engine-internal operations bypass the check.
+            security.ProtectionMode = ETL_SQL.Services.PathProtectionMode.Unrestricted;
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+                security.ValidatePath(System.IO.Path.Combine(installDir, "appsettings.secrets.json")));
+            security.IsInternalOperation = true;
+            security.ValidatePath(System.IO.Path.Combine(installDir, "appsettings.secrets.json"));
+        }
+
+        [Fact]
         public void TestHardwareLockedEncryption()
         {
             var plainText = "Sensitive Session State Data";
@@ -264,14 +323,15 @@ namespace ETL_SQL.Tests.Security
 
             // 1. Protect data
             var protectedData = ETL_SQL.Common.CryptoUtils.Protect(plainText, entropy);
-            Assert.StartsWith("DPAPI:", protectedData);
+            Assert.StartsWith(OperatingSystem.IsWindows() ? "DPAPI:" : "MACHINE:", protectedData);
 
             // 2. Unprotect data (should work for same user/machine)
             var decryptedData = ETL_SQL.Common.CryptoUtils.Unprotect(protectedData, entropy);
             Assert.Equal(plainText, decryptedData);
 
-            // 3. Fail with wrong entropy
-            Assert.Throws<CryptographicException>(() =>
+            // 3. Fail with wrong entropy (DPAPI raises CryptographicException; the machine key's
+            // authentication check raises ExecutionException)
+            Assert.ThrowsAny<Exception>(() =>
                 ETL_SQL.Common.CryptoUtils.Unprotect(protectedData, "Wrong-Entropy")
             );
         }
@@ -291,7 +351,7 @@ namespace ETL_SQL.Tests.Security
         }
 
         [Fact]
-        public void MachineGenericEncryption_ReadsLegacyCbcOnlyBlob()
+        public void MachineGenericEncryption_RefusesLegacyCbcOnlyBlob()
         {
             var plain = System.Text.Encoding.UTF8.GetBytes("legacy session state");
 
@@ -309,7 +369,7 @@ namespace ETL_SQL.Tests.Security
             }
             var legacyBlob = ms.ToArray();
 
-            Assert.Equal(plain, CryptoUtils.UnprotectGeneric(legacyBlob, entropy: null));
+            Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => CryptoUtils.UnprotectGeneric(legacyBlob, entropy: null));
         }
 
         [Fact]
@@ -382,13 +442,20 @@ namespace ETL_SQL.Tests.Security
             security.IsTestMode = false;
             security.ProtectionMode = PathProtectionMode.Restricted;
 
-            // Should allow common temp paths now
-            security.ValidatePath("C:\\tmp\\data.csv");
-            security.ValidatePath("C:\\temp\\log.txt");
-            security.ValidatePath("/tmp/session.json");
+            // Should allow the temp folder
+            security.ValidatePath(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "data.csv"));
+            if (OperatingSystem.IsWindows())
+            {
+                security.ValidatePath("C:\\tmp\\data.csv");
+                security.ValidatePath("C:\\temp\\log.txt");
+            }
+            else
+            {
+                security.ValidatePath("/tmp/session.json");
+            }
 
             // Should still block OS directories
-            Assert.Throws<SecurityException>(() => security.ValidatePath("C:\\Windows\\system.ini"));
+            Assert.Throws<SecurityException>(() => security.ValidatePath(SystemFile));
             Assert.Throws<SecurityException>(() => security.ValidatePath("/etc/passwd"));
         }
 
@@ -398,15 +465,16 @@ namespace ETL_SQL.Tests.Security
             var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
             security.IsTestMode = false;
             security.ProtectionMode = PathProtectionMode.Defined;
-            var safePath = "C:\\ApprovedZone";
+            var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "etlsql-defined-" + Guid.NewGuid().ToString("N"));
+            var safePath = System.IO.Path.Combine(root, "ApprovedZone");
             security.ApprovedSafeZones.Add(safePath);
 
             // Should allow safe zone
-            security.ValidatePath(safePath + "\\data.csv");
+            security.ValidatePath(System.IO.Path.Combine(safePath, "data.csv"));
 
             // Should block everything else (even temp)
-            Assert.Throws<SecurityException>(() => security.ValidatePath("C:\\tmp\\data.csv"));
-            Assert.Throws<SecurityException>(() => security.ValidatePath("C:\\Data\\file.txt"));
+            Assert.Throws<SecurityException>(() => security.ValidatePath(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "data.csv")));
+            Assert.Throws<SecurityException>(() => security.ValidatePath(System.IO.Path.Combine(root, "Data", "file.txt")));
         }
 
         [Fact]
@@ -429,11 +497,14 @@ namespace ETL_SQL.Tests.Security
             security.IsTestMode = false;
             security.ProtectionMode = PathProtectionMode.Restricted;
 
-            var windowsZone = "C:\\Windows";
-            security.ApprovedSafeZones.Add(windowsZone);
+            var systemZone = System.IO.Path.GetDirectoryName(SystemFile)!;
+            security.ApprovedSafeZones.Add(systemZone);
 
             // Should allow because it's in an Approved Safe Zone, despite being sensitive
-            security.ValidatePath(windowsZone + "\\system.ini");
+            security.ValidatePath(SystemFile);
         }
+
+        /// <summary>A file in this OS's protected system folder.</summary>
+        private static string SystemFile => OperatingSystem.IsWindows() ? "C:\\Windows\\system.ini" : "/etc/hosts";
     }
 }

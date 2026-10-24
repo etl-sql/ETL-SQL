@@ -81,7 +81,7 @@ public sealed class ReleasePolicyHelperTests
             $log = [IO.Path]::GetTempFileName()
             try {
                 Set-Content -LiteralPath $log -Value 'Executed phase output'
-                $phase = @{status='{{status}}'; command='same command'; log=$log; note='Skipped because prerequisite phase failed'}
+                $phase = @{status='{{status}}'; command='same command'; log=$log; completedAt=[datetimeoffset]::UtcNow.ToString('o'); note='Skipped because prerequisite phase failed'}
                 Test-PreReleasePhaseReusable -PreviousPhase $phase -Command '{{command}}'
             } finally { Remove-Item -LiteralPath $log -Force }
             """);
@@ -95,6 +95,24 @@ public sealed class ReleasePolicyHelperTests
         var result = await RunHelper("Test-PreReleasePhaseReusable -PreviousPhase @{status='Passed'; command='same command'; log='missing.log'} -Command 'same command'");
         Assert.True(result.ExitCode == 0, result.Output);
         Assert.Equal("False", result.Output.Trim());
+    }
+
+    [Theory]
+    [InlineData(-1, true)]
+    [InlineData(-8, false)]
+    [InlineData(1, false)]
+    public async Task Resume_RequiresRecentOriginalCompletion(int ageDays, bool expected)
+    {
+        var result = await RunHelper($$"""
+            $log = [IO.Path]::GetTempFileName()
+            try {
+                Set-Content -LiteralPath $log -Value 'Executed phase output'
+                $phase = @{status='Passed'; command='same'; log=$log; completedAt=[datetimeoffset]::UtcNow.AddDays({{ageDays}}).ToString('o')}
+                Test-PreReleasePhaseReusable -PreviousPhase $phase -Command 'same'
+            } finally { Remove-Item -LiteralPath $log -Force }
+            """);
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Equal(expected.ToString(), result.Output.Trim());
     }
 
     private const string PhaseRunnerFixture = """
@@ -178,6 +196,7 @@ public sealed class ReleasePolicyHelperTests
     {
         var result = await RunHelper("""
             function node { Write-Output 'TRACE|prepare'; $global:LASTEXITCODE = 0 }
+            function Get-Content { '{"lanes":["source-preflight","build-and-test"]}' }
             function dotnet { Write-Output 'TRACE|format'; throw 'Stop at the formatting boundary' }
             $script = Join-Path (Split-Path -Parent (Get-Command Test-PreReleasePhaseReusable).ScriptBlock.File) 'Test-PrePush.ps1'
             & $script
@@ -192,7 +211,11 @@ public sealed class ReleasePolicyHelperTests
     public async Task PrePush_StopsBeforeFormatWhenPreparationFails()
     {
         var result = await RunHelper("""
-            function node { Write-Output 'TRACE|prepare'; $global:LASTEXITCODE = 7 }
+            function node {
+                Write-Output 'TRACE|prepare'
+                $global:LASTEXITCODE = if ($args[0].EndsWith('sync-assets.js')) { 7 } else { 0 }
+            }
+            function Get-Content { '{"lanes":["source-preflight","build-and-test"]}' }
             function dotnet { Write-Output 'TRACE|unexpected-format' }
             $script = Join-Path (Split-Path -Parent (Get-Command Test-PreReleasePhaseReusable).ScriptBlock.File) 'Test-PrePush.ps1'
             & $script

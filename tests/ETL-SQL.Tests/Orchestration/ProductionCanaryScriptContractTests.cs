@@ -12,11 +12,21 @@ public sealed class ProductionCanaryScriptContractTests
         Assert.Contains("ETLSQL_CANARY_EVIDENCE_DIR", script, StringComparison.Ordinal);
         Assert.Contains("production-canary-certification/v1", script, StringComparison.Ordinal);
         Assert.Contains("expectedRunCount", script, StringComparison.Ordinal);
-        Assert.Contains("invalidRunCount", script, StringComparison.Ordinal);
-        Assert.Contains("production-canary-provisioning/v1", script, StringComparison.Ordinal);
-        Assert.Contains("production-canary-credential-lifecycle/v1", script, StringComparison.Ordinal);
+        Assert.Contains("runFindingCount", script, StringComparison.Ordinal);
+        Assert.Contains("Get-ProductionCanaryBoundaryFindings", script, StringComparison.Ordinal);
+        Assert.Contains("boundaryFindingCount", script, StringComparison.Ordinal);
         Assert.Contains("dirtyPaths", script, StringComparison.Ordinal);
         Assert.Contains("if (-not $passed) { exit 1 }", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProvisioningAndCredentialEvidenceIsValidatedBeyondSummaryFlags()
+    {
+        var result = await ETL_SQL.Tests.Docs.ReleasePolicyHelperTests.RunHelper(
+            "& './scripts/checks/fixtures/test-production-canary-evidence.ps1'",
+            helperName: "ProductionCanaryEvidence.Helpers.ps1");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains("Canary provisioning and credential details reject corrupt receipts", result.Output, StringComparison.Ordinal);
     }
 
     [Fact]

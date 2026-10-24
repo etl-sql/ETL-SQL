@@ -24,7 +24,19 @@ namespace ETL_SQL.Portal.Services
             if (!_config.Identity.Ldap.Enabled)
                 return null;
 
+            // An empty password is an unauthenticated bind, which many directories accept.
+            if (string.IsNullOrEmpty(password))
+                return null;
+
             var ldapConfig = _config.Identity.Ldap;
+
+            // A name qualified with another domain is refused before any bind: the directory search
+            // and the Portal account both key on the bare account name.
+            if (AccountName(username, ldapConfig.Domain) is null)
+            {
+                _logger.LogWarning("LDAP: refused a sign-in qualified with a domain other than the configured one.");
+                return null;
+            }
 
             // 1. If ServiceUser is configured, perform a search first to find the user's distinguished name (DN)
             if (!string.IsNullOrEmpty(ldapConfig.ServiceUser))
@@ -61,15 +73,7 @@ namespace ETL_SQL.Portal.Services
                     await Task.Run(() => serviceConn.Bind());
 
                     // Clean username
-                    string cleanUsername = username;
-                    if (username.Contains("@"))
-                    {
-                        cleanUsername = username.Split('@')[0];
-                    }
-                    else if (username.Contains("\\"))
-                    {
-                        cleanUsername = username.Split('\\')[1];
-                    }
+                    string cleanUsername = AccountName(username, ldapConfig.Domain)!;
 
                     string escapedUsername = EscapeLdapFilter(cleanUsername);
                     string searchFilter = $"(|(sAMAccountName={escapedUsername})(uid={escapedUsername})(cn={escapedUsername}))";
@@ -182,15 +186,7 @@ namespace ETL_SQL.Portal.Services
                     await Task.Run(() => userConn.Bind());
 
                     // Bind succeeded! Build the result from the entry retrieved earlier.
-                    string cleanUsername = username;
-                    if (username.Contains("@"))
-                    {
-                        cleanUsername = username.Split('@')[0];
-                    }
-                    else if (username.Contains("\\"))
-                    {
-                        cleanUsername = username.Split('\\')[1];
-                    }
+                    string cleanUsername = AccountName(username, ldapConfig.Domain)!;
 
                     var result = new LdapUserResult
                     {
@@ -259,15 +255,7 @@ namespace ETL_SQL.Portal.Services
                 await Task.Run(() => connection.Bind());
 
                 // Find user details
-                string cleanUsername = username;
-                if (username.Contains("@"))
-                {
-                    cleanUsername = username.Split('@')[0];
-                }
-                else if (username.Contains("\\"))
-                {
-                    cleanUsername = username.Split('\\')[1];
-                }
+                string cleanUsername = AccountName(username, ldapConfig.Domain)!;
 
                 string escapedUsername = EscapeLdapFilter(cleanUsername);
                 string searchFilter = $"(|(sAMAccountName={escapedUsername})(uid={escapedUsername})(cn={escapedUsername}))";
@@ -351,6 +339,47 @@ namespace ETL_SQL.Portal.Services
             {
                 connection?.Dispose();
             }
+        }
+
+        /// <summary>
+        /// The bare account name in <c>alice</c>, <c>alice@corp.example.com</c> or <c>CORP\alice</c>.
+        /// Returns null when the name is qualified with a domain other than <paramref name="configuredDomain"/>
+        /// (UPN suffix equal to it, or NetBIOS name equal to its first label). Without a configured
+        /// domain there is nothing to compare, so any qualifier is accepted.
+        /// </summary>
+        /// <remarks>
+        /// The account name alone selects the Portal user and the directory entry, so accepting
+        /// <c>alice@other.example</c> would sign a trusted-domain alice into this domain's alice.
+        /// </remarks>
+        public static string? AccountName(string username, string? configuredDomain)
+        {
+            string account = username;
+            string? qualifier = null;
+            bool isUpn = false;
+            int at = username.IndexOf('@');
+            int slash = username.IndexOf('\\');
+            if (at >= 0)
+            {
+                account = username[..at];
+                qualifier = username[(at + 1)..];
+                isUpn = true;
+            }
+            else if (slash >= 0)
+            {
+                qualifier = username[..slash];
+                account = username[(slash + 1)..];
+            }
+
+            if (account.Length == 0) return null;
+            if (qualifier is null || string.IsNullOrWhiteSpace(configuredDomain)) return account;
+
+            var domain = configuredDomain.Trim();
+            var netBios = domain.Split('.')[0];
+            bool sameDomain = isUpn
+                ? string.Equals(qualifier, domain, StringComparison.OrdinalIgnoreCase)
+                : string.Equals(qualifier, netBios, StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(qualifier, domain, StringComparison.OrdinalIgnoreCase);
+            return sameDomain ? account : null;
         }
 
         private static string? GetAttributeValue(SearchResultEntry entry, string attributeName)

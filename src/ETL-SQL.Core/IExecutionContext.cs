@@ -585,17 +585,31 @@ public interface ILineageTracker
     void Clear();
 }
 
+/// <summary>
+/// Containers started by <c>USE DOCKER</c>. Every member takes a <c>scope</c> (see
+/// <see cref="DockerScope.For"/>): one manager serves a whole host process, and an alias, the last
+/// container or the container itself must never be shared between tenants.
+/// </summary>
 public interface IDockerManager : IAsyncDisposable
 {
     bool HasActiveContainers { get; }
-    string? LastConnectionString { get; }
-    string? LastAlias { get; }
-    Task<string> StartContainer(string imageName, string? alias = null, System.Threading.CancellationToken cancellationToken = default);
-    Task StopContainer(string? alias, System.Threading.CancellationToken cancellationToken = default);
-    Task PauseContainer(string? alias, System.Threading.CancellationToken cancellationToken = default);
-    Task ResumeContainer(string? alias, System.Threading.CancellationToken cancellationToken = default);
-    Task CloseContainers(string? nameOrAlias = null, System.Threading.CancellationToken cancellationToken = default);
-    string? GetConnectionString(string alias);
-    Dictionary<string, string> GetState();
-    void LoadState(Dictionary<string, string> connectionStrings, string? lastConnectionString);
+    string? GetLastConnectionString(string scope);
+    string? GetLastAlias(string scope);
+    Task<string> StartContainer(string scope, string imageName, string? alias = null, System.Threading.CancellationToken cancellationToken = default);
+    Task StopContainer(string scope, string? alias, System.Threading.CancellationToken cancellationToken = default);
+    Task PauseContainer(string scope, string? alias, System.Threading.CancellationToken cancellationToken = default);
+    Task ResumeContainer(string scope, string? alias, System.Threading.CancellationToken cancellationToken = default);
+    Task CloseContainers(string scope, string? nameOrAlias = null, System.Threading.CancellationToken cancellationToken = default);
+    string? GetConnectionString(string scope, string alias);
+    Dictionary<string, string> GetState(string scope);
+    void LoadState(string scope, Dictionary<string, string> connectionStrings, string? lastConnectionString);
+}
+
+/// <summary>The Docker scope of an execution: its tenant, or empty for a single-tenant host.</summary>
+public static class DockerScope
+{
+    public static string For(IExecutionContext context) =>
+        context.StorageCapability?.Tenant.Tenant.Value
+        ?? context.ExecutionIdentity?.TenantId
+        ?? string.Empty;
 }

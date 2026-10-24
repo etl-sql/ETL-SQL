@@ -78,7 +78,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='admin-page']").ClickAsync();
         var frame = page.FrameLocator("#stage iframe");
         await Expect(frame.Locator("body")).ToHaveAttributeAsync("data-admin-sandbox-ready", "true");
@@ -99,7 +99,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='admin-page']").ClickAsync();
         var frame = page.FrameLocator("#stage iframe");
         await Expect(frame.Locator("body")).ToHaveAttributeAsync("data-admin-sandbox-ready", "true");
@@ -277,7 +277,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
     private async Task<IFrameLocator> OpenAdminUsersSandboxAsync(IPage page)
     {
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='admin-page']").ClickAsync();
         var frame = page.FrameLocator("#stage iframe");
         await Expect(frame.Locator("body")).ToHaveAttributeAsync("data-admin-sandbox-ready", "true");
@@ -1894,7 +1894,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
     private async Task<IFrameLocator> OpenAdminSettingsSandboxAsync(IPage page, string fixtureId = "settings")
     {
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='admin-page']").ClickAsync();
         await page.Locator("#fixtureSel").SelectOptionAsync(fixtureId);
         var frame = page.FrameLocator("#stage iframe");
@@ -1925,7 +1925,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
     private async Task<IFrameLocator> OpenAdminSubscriptionsSandboxAsync(IPage page)
     {
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='admin-page']").ClickAsync();
         await page.Locator("#fixtureSel").SelectOptionAsync("subscriptions");
         var frame = page.FrameLocator("#stage iframe");
@@ -1936,7 +1936,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
     private async Task<IFrameLocator> OpenAdminAuditSandboxAsync(IPage page)
     {
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='admin-page']").ClickAsync();
         await page.Locator("#fixtureSel").SelectOptionAsync("audit");
         var frame = page.FrameLocator("#stage iframe");
@@ -1947,7 +1947,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
     private async Task<IFrameLocator> OpenAdminReportsSandboxAsync(IPage page)
     {
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='admin-page']").ClickAsync();
         await page.Locator("#fixtureSel").SelectOptionAsync("reports");
         var frame = page.FrameLocator("#stage iframe");
@@ -1992,7 +1992,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
         await Expect(page.Locator("[data-gov-state='scanned']")).ToBeVisibleAsync();
         await page.EvaluateAsync("() => window.__governance.governanceApi.setMode('bad-receipt')");
@@ -2012,7 +2012,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
         await Expect(page.Locator("[data-gov-state='scanned']")).ToBeVisibleAsync();
         await page.EvaluateAsync("() => window.__governance.governanceApi.pause('scan')");
@@ -2029,7 +2029,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
         await page.Locator("#fixtureSel").SelectOptionAsync("glossary");
         await page.WaitForFunctionAsync("() => window.__governance?.portal.state.tab === 'glossary' && window.__governance.portal.state.load === 'ready'");
@@ -2050,7 +2050,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
         await page.Locator("#fixtureSel").SelectOptionAsync("settings");
         await page.Locator("#btnAddNewCategory").ClickAsync();
@@ -2163,7 +2163,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
     private async Task OpenGovernanceSandboxAsync(IPage page, string fixtureId = "overview")
     {
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
         await page.WaitForFunctionAsync("() => window.__governance?.portal.state.load === 'ready'");
         if (fixtureId != "overview")
@@ -2192,7 +2192,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
                 Body = source.Replace("<h1>Governance</h1>", $"<h1>Sandbox dependency {revision}</h1>", StringComparison.Ordinal)
             });
         });
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=portal-governance&fixture=empty&theme=dark&sidebar=collapsed");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=portal-governance&fixture=empty&theme=dark&sidebar=collapsed");
         await Expect(page.Locator("#stage h1")).ToHaveTextAsync("Sandbox dependency before");
         await page.WaitForFunctionAsync("() => window.__governance?.portal.state.load === 'ready'");
         var originalUrl = page.Url;
@@ -2274,7 +2274,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
                 Body = await File.ReadAllTextAsync(Path.Combine(delivery, name))
             });
         });
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=typed-reload-proof&fixture=two&theme=dark&sidebar=collapsed");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=typed-reload-proof&fixture=two&theme=dark&sidebar=collapsed");
         await Assertions.Expect(page.Locator("#typed-result")).ToHaveTextAsync("before: two");
         await page.ScreenshotAsync(new() { Path = Path.Combine(root, "before.png"), Animations = ScreenshotAnimations.Disabled });
 
@@ -2368,7 +2368,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
         await Expect(page.Locator("[data-gov-state='scanned']")).ToBeVisibleAsync();
         await page.EvaluateAsync("() => { window.__governance.governanceApi.pause('dashboard'); window.__governance.pending = window.__governance.portal.reload(); }");
@@ -2425,7 +2425,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
         await page.Locator("#fixtureSel").SelectOptionAsync("quality");
         await Expect(page.GetByRole(AriaRole.Listitem).Filter(new() { HasText = "Jobs Monitored" })).ToHaveAttributeAsync("aria-label", "Jobs Monitored: 2. Configured orchestrator pipelines");
@@ -2444,7 +2444,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
         await Expect(page.Locator("[data-gov-state='scanned']")).ToBeVisibleAsync();
         await page.EvaluateAsync("async () => { window.__governance.governanceApi.setMode('malformed'); await window.__governance.portal.reload(); }");
@@ -2458,7 +2458,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='portal-governance']").ClickAsync();
         await Expect(page.Locator("[data-gov-state='scanned']")).ToBeVisibleAsync();
         await page.EvaluateAsync("() => { window.__governance.governanceApi.pause('dashboard'); window.__governance.pending = window.__governance.portal.reload(); }");
@@ -2473,7 +2473,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
         await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
         await page.Locator("#fixtureSel").SelectOptionAsync("protected-unavailable");
@@ -2493,7 +2493,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
         await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
         await page.EvaluateAsync("() => window.__lineage.api.pause('lineage')");
@@ -2517,7 +2517,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
         await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
         await page.Locator("[data-lineage-mode='protected']").ClickAsync();
@@ -2531,7 +2531,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
         await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
         await page.EvaluateAsync("() => window.__lineage.api.setMode('malformed')");
@@ -2555,7 +2555,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
         await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
         await page.Locator("[data-lineage-mode='history']").FocusAsync();
@@ -2584,7 +2584,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
         await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
         await page.EvaluateAsync("() => window.__lineage.api.setMode('unavailable')");
@@ -2606,7 +2606,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
         await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
         await page.EvaluateAsync("() => window.__lineage.api.setMode('graph-names')");
@@ -2623,7 +2623,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await page.AddInitScriptAsync("() => sessionStorage.setItem('etlsql_token', 'x.' + btoa(JSON.stringify({iss:'sandbox', tenant_id:'tenant-a', sub:'alice'})) + '.x')");
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='lineage-catalog']").ClickAsync();
         await Expect(page.Locator("#lineageResults .lineage-result-row")).ToHaveCountAsync(4);
         await page.Locator("#lineageQuery").FillAsync("mart.ExecutiveKpis");
@@ -2647,7 +2647,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='datasets-admin']").ClickAsync();
         await Expect(page.Locator("#datasetsTableWrap tbody tr")).ToHaveCountAsync(3);
         await page.Locator("[data-action='view'][data-id='1']").ClickAsync();
@@ -2675,7 +2675,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='datasets-admin']").ClickAsync();
         await Expect(page.Locator("#datasetsTableWrap tbody tr")).ToHaveCountAsync(3);
         await page.EvaluateAsync("() => { window.__datasets.api.setMode('target-distinct'); window.__datasets.api.pause('data'); }");
@@ -2699,7 +2699,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='datasets-admin']").ClickAsync();
         await Expect(page.Locator("#datasetsTableWrap tbody tr")).ToHaveCountAsync(3);
         await page.Locator("[data-action='edit'][data-id='1']").ClickAsync();
@@ -2737,7 +2737,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='datasets-admin']").ClickAsync();
         await Expect(page.Locator("#datasetsTableWrap tbody tr")).ToHaveCountAsync(3);
         await page.Locator("[data-action='view'][data-id='1']").ClickAsync();
@@ -2774,7 +2774,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='datasets-admin']").ClickAsync();
         await page.Locator("[data-action='view'][data-id='1']").ClickAsync();
         await Expect(page.Locator("#dv-totalCount")).ToHaveTextAsync("48");
@@ -2809,7 +2809,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='datasets-admin']").ClickAsync();
         await page.Locator("[data-action='view'][data-id='1']").ClickAsync();
         await Expect(page.Locator("#dv-tableWrap tfoot td")).ToHaveCountAsync(7);
@@ -2838,7 +2838,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='datasets-admin']").ClickAsync();
         await Expect(page.Locator("#datasetsTableWrap tbody tr")).ToHaveCountAsync(3);
         await page.EvaluateAsync("() => window.__datasets.catalog.pause('lineage')");
@@ -2869,7 +2869,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='data-quality-queue']").ClickAsync();
         await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
         await page.EvaluateAsync("() => window.__dataQuality.api.setMode('trend-unavailable')");
@@ -2904,7 +2904,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='data-quality-queue']").ClickAsync();
         await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
         await page.EvaluateAsync("() => window.__dataQuality.api.pause('quarantineRows')");
@@ -2945,7 +2945,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='data-quality-queue']").ClickAsync();
         await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
         await page.EvaluateAsync("() => { window.__dataQuality.api.setMode('invalid-receipt'); window.__dataQuality.api.pause('replayQuarantine'); }");
@@ -2978,7 +2978,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='data-quality-queue']").ClickAsync();
         await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
         await page.EvaluateAsync("() => window.__dataQuality.api.setMode('invalid-status')");
@@ -3004,7 +3004,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='data-quality-queue']").ClickAsync();
         await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
         await page.EvaluateAsync("() => window.__dataQuality.api.setMode('prototype-keys')");
@@ -3037,7 +3037,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='data-quality-queue']").ClickAsync();
         await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
         await page.Locator("[data-review-target='warehouse.quarantine_users']").ClickAsync();
@@ -3066,7 +3066,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='data-quality-queue']").ClickAsync();
         await Expect(page.Locator("#stage .dq-row")).ToHaveCountAsync(5);
         await page.EvaluateAsync("""
@@ -3120,7 +3120,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='connections-admin']").ClickAsync();
         await Expect(page.Locator("#conn-status")).ToHaveTextAsync("4 shared connection(s).");
         var row = page.Locator("#conn-tableWrap tr[data-alias='gateway_sales']");
@@ -3143,7 +3143,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='connections-admin']").ClickAsync();
         await Expect(page.Locator("#conn-status")).ToHaveTextAsync("4 shared connection(s).");
         await page.EvaluateAsync("() => window.__connections.api.pause('detail')");
@@ -3180,7 +3180,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='connections-admin']").ClickAsync();
         await Expect(page.Locator("#conn-status")).ToHaveTextAsync("4 shared connection(s).");
         await page.Locator("#conn-alias").FillAsync("new_connection");
@@ -3218,7 +3218,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='connections-admin']").ClickAsync();
         await Expect(page.Locator("#conn-status")).ToHaveTextAsync("4 shared connection(s).");
         await page.Locator("tr[data-alias='legacy_ftp'] button[data-act='detail']").ClickAsync();
@@ -3246,7 +3246,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='connections-admin']").ClickAsync();
         await Expect(page.Locator("#conn-status")).ToHaveTextAsync("4 shared connection(s).");
         await page.EvaluateAsync("() => window.__connections.wizardApi.setInvalid(true)");
@@ -3274,7 +3274,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='triage-board']").ClickAsync();
         await page.SelectOptionAsync("#fixtureSel", "quiet");
         await Expect(page.Locator("#stage .triage-empty")).ToContainTextAsync("Nothing to triage");
@@ -3297,7 +3297,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='policy-authority-admin']").ClickAsync();
         await Expect(page.Locator("#pa-versionWrap tbody tr")).ToHaveCountAsync(4);
         await page.Locator("#pa-tenant").FillAsync("other-tenant");
@@ -3327,7 +3327,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='policy-authority-admin']").ClickAsync();
         await page.SelectOptionAsync("#fixtureSel", "unavailable");
         await Expect(page.Locator("#pa-status")).ToHaveTextAsync("Signer status unavailable");
@@ -3368,7 +3368,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='policy-authority-admin']").ClickAsync();
         await Expect(page.Locator("#pa-versionWrap tbody tr")).ToHaveCountAsync(4);
         await page.Locator("#pa-version").FillAsync("fixture-new-policy");
@@ -3394,7 +3394,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='policy-authority-admin']").ClickAsync();
         await Expect(page.Locator("#pa-versionWrap tbody tr")).ToHaveCountAsync(4);
         await page.Locator("[data-pa-act='promote']").ClickAsync();
@@ -3425,7 +3425,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='policy-authority-admin']").ClickAsync();
         await Expect(page.Locator("#pa-versionWrap tbody tr")).ToHaveCountAsync(4);
         await page.Locator("#pa-canaryVersion").FillAsync("fractional-cohort");
@@ -3451,7 +3451,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='gateways-admin']").ClickAsync();
         await page.SelectOptionAsync("#fixtureSel", "unavailable");
         await Expect(page.Locator("#gw-tableWrap")).ToContainTextAsync("unavailable or incomplete");
@@ -3485,7 +3485,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='gateways-admin']").ClickAsync();
         await Expect(page.Locator("#gw-status")).ToContainTextAsync("4 Gateways");
         await page.EvaluateAsync("""
@@ -3515,7 +3515,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='gateways-admin']").ClickAsync();
         await page.Locator("#gw-input-id").FillAsync("branch'; Write-Host ignored; '");
         await page.Locator("#gw-input-expiry").FillAsync("5.5");
@@ -3548,7 +3548,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='gateways-admin']").ClickAsync();
         await page.SelectOptionAsync("#fixtureSel", "invalid-revoke");
         var row = page.Locator("#gw-tableWrap tr[data-gw-id='corp-onprem-gw']");
@@ -3574,7 +3574,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='gateways-admin']").ClickAsync();
         await Expect(page.Locator("#gw-status")).ToContainTextAsync("4 Gateways");
         await page.EvaluateAsync("""
@@ -3607,7 +3607,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='gateways-admin']").ClickAsync();
         await Expect(page.Locator("#gw-status")).ToContainTextAsync("4 Gateways");
         var bind = page.Locator("#gw-tableWrap tr[data-gw-id='corp-onprem-gw'] .gw-create-conn-btn");
@@ -3632,7 +3632,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='triage-board']").ClickAsync();
         var checks = page.Locator("#triage-host .triage-incident-check");
         await Expect(checks).ToHaveCountAsync(3);
@@ -3660,7 +3660,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='triage-board']").ClickAsync();
         await Expect(page.Locator("#triage-host .triage-incident")).ToHaveCountAsync(3);
         await page.EvaluateAsync("""
@@ -3692,7 +3692,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='triage-board']").ClickAsync();
         var checks = page.Locator("#triage-host .triage-incident-check");
         await Expect(checks).ToHaveCountAsync(3);
@@ -3724,7 +3724,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='triage-board']").ClickAsync();
         await Expect(page.Locator("#triage-host .triage-incident-toggle")).ToHaveCountAsync(3);
         await page.Locator("#triage-host .triage-incident-toggle").Nth(2).ClickAsync();
@@ -3755,7 +3755,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='triage-board']").ClickAsync();
         await Expect(page.Locator("#triage-host .triage-incident")).ToHaveCountAsync(3);
         Assert.True(await page.EvaluateAsync<bool>("""
@@ -3800,7 +3800,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='control-plane-dashboard']").ClickAsync();
         await page.SelectOptionAsync("#fixtureSel", "unavailable");
         var frame = page.FrameLocator("#stage iframe");
@@ -3826,7 +3826,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
     private async Task<IFrameLocator> MountControlPlaneAsync(IPage page, string fixtureId = "healthy")
     {
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='control-plane-dashboard']").ClickAsync();
         if (fixtureId != "healthy") await page.SelectOptionAsync("#fixtureSel", fixtureId);
         var frame = page.FrameLocator($"#stage iframe[title='Control Plane — {fixtureId}']");
@@ -3994,7 +3994,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='portal-authoring']").ClickAsync();
         await Expect(page.Locator("#stage svg").First).ToBeVisibleAsync();
         await Expect(page.Locator("#stage")).ToContainTextAsync("North");
@@ -4022,7 +4022,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='portal-operational-charts']").ClickAsync();
         await page.SelectOptionAsync("#fixtureSel", "graph");
         await Expect(page.GetByRole(AriaRole.Img, new() { Name = "Jobs: extract, validate, load" })).ToBeVisibleAsync();
@@ -4040,7 +4040,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='secrets-admin']").ClickAsync();
         await Expect(page.Locator("#stage .data-table tbody tr")).ToHaveCountAsync(3);
         await page.Locator("#sec-name").FillAsync("sandbox_password");
@@ -4065,7 +4065,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='secrets-admin']").ClickAsync();
         await page.SelectOptionAsync("#fixtureSel", "invalid-list");
         await Expect(page.Locator("#sec-tableWrap")).ToContainTextAsync("Invalid secret-store list response.");
@@ -4083,7 +4083,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         var result = await page.EvaluateAsync<string[]>("""
             async () => {
               const { createSecretsAdmin } = await import('/src/ETL-SQL.Portal/wwwroot/js/secrets-admin.js');
@@ -4119,7 +4119,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='orchestrator-activity']").ClickAsync();
         var rows = page.Locator("#jobsTableWrap tbody tr");
         await Expect(rows).ToHaveCountAsync(6);
@@ -4170,7 +4170,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='orchestrator-activity']").ClickAsync();
         await page.SelectOptionAsync("#fixtureSel", "paged");
         var rows = page.Locator("#jobsTableWrap tbody tr");
@@ -4203,7 +4203,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.WaitForSelectorAsync(".story-link", new PageWaitForSelectorOptions
         {
             State = WaitForSelectorState.Attached,
@@ -4284,7 +4284,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.WaitForSelectorAsync(".story-link", new PageWaitForSelectorOptions
         {
             State = WaitForSelectorState.Attached,
@@ -4358,7 +4358,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='designer']");
         await page.WaitForSelectorAsync("#dsgn-bookmark-list", new PageWaitForSelectorOptions { Timeout = 30_000 });
 
@@ -4399,7 +4399,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         var page = session.Page;
 
         // Open the fixture directly so it cannot race the default story's asynchronous mount.
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=designer&fixture=syntax-resilience");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=designer&fixture=syntax-resilience");
         var badge = page.Locator("#dsgn-diagnostic-badge");
         await badge.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         Assert.Equal(1, await badge.CountAsync());
@@ -4440,7 +4440,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='designer']");
         await page.WaitForSelectorAsync("#fixtureSel", new PageWaitForSelectorOptions { Timeout = 30_000 });
 
@@ -4495,7 +4495,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='designer']");
         await page.WaitForSelectorAsync("#fixtureSel", new PageWaitForSelectorOptions { Timeout = 30_000 });
 
@@ -4561,7 +4561,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.EvaluateAsync(
             """
             async () => {
@@ -4658,7 +4658,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.EvaluateAsync(
             """
             async () => {
@@ -4764,7 +4764,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.EvaluateAsync(
             """
             async () => {
@@ -4809,7 +4809,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.Locator("button.story-link[data-story-id='portal-operations']").ClickAsync();
         await page.SelectOptionAsync("#fixtureSel", "unavailable");
         var surface = page.FrameLocator("#stage iframe");
@@ -4843,7 +4843,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         var results = await page.EvaluateAsync<string[]>("""
             async () => {
               const { createOperationsAdmin } = await import('/src/ETL-SQL.Portal/wwwroot/js/operations-admin.js');
@@ -4889,7 +4889,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.EvaluateAsync("""
             async () => {
               document.body.innerHTML = '<main id="operations"></main>';
@@ -4945,7 +4945,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.EvaluateAsync(
             """
             async () => {
@@ -5015,7 +5015,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
 
@@ -5048,7 +5048,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
 
@@ -5075,7 +5075,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
 
@@ -5133,7 +5133,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
 
@@ -5147,7 +5147,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=studio&fixture=helper-context");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=studio&fixture=helper-context");
         var helper = page.GetByRole(AriaRole.Region, new() { Name = "Helper preview context example" });
         await Expect(helper.Locator("[data-preview-context]")).ToBeCheckedAsync();
         await helper.Locator("[data-workbench-run]").ClickAsync();
@@ -5159,12 +5159,36 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task Studio_DesktopExitRequiresDiscardConfirmation()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=studio&fixture=desktop-exit");
+        var stage = page.Locator("#stage");
+        var exit = stage.Locator("[data-action='exit']");
+        await exit.ClickAsync();
+        var dialog = page.Locator(".etlsql-feedback-dialog");
+        await Expect(dialog).ToContainTextAsync("unsaved changes");
+        var screenshot = Path.Combine(RepoRoot(), "artifacts", "section1", "desktop-exit", "discard-confirmation.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(screenshot)!);
+        await dialog.ScreenshotAsync(new() { Path = screenshot });
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Stay", Exact = true }).ClickAsync();
+        await Expect(dialog).ToHaveCountAsync(0);
+        Assert.Null(await stage.GetAttributeAsync("data-exit-request"));
+
+        await exit.ClickAsync();
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Exit Without Saving" }).ClickAsync();
+        await Expect(stage).ToHaveAttributeAsync("data-exit-request", "{\"force\":true,\"activeRuns\":0,\"dirtyDocuments\":1}");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
     public async Task Studio_DegradedEditorStoryRetriesWithTheLatestTypedText()
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await page.RouteAsync("**/codemirror-bundle.min.js*", route => route.AbortAsync());
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=studio&fixture=degraded-editor");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=studio&fixture=degraded-editor");
         var textarea = page.GetByRole(AriaRole.Textbox, new() { Name = "Script editor (basic mode)" });
         await textarea.FillAsync("-- kept in the recovery story\nSELECT 8;");
         await page.UnrouteAsync("**/codemirror-bundle.min.js*");
@@ -5178,7 +5202,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=studio&fixture=catalog-paging");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=studio&fixture=catalog-paging");
         await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Next page", Exact = true })).ToBeVisibleAsync();
         await page.GetByRole(AriaRole.Button, new() { Name = "Next page", Exact = true }).ClickAsync();
         await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.catalogReports[0].id === 51");
@@ -5193,7 +5217,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=studio&fixture=large-document");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=studio&fixture=large-document");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state.editorInstance)");
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.editorInstance.analyze()");
         await page.Locator(".etlsql-script-results [data-tab='messages']").ClickAsync();
@@ -5212,7 +5236,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
 
@@ -5236,7 +5260,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
 
@@ -5276,7 +5300,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await page.SelectOptionAsync("#fixtureSel", "pipeline-run");
         await WaitForStudioAsync(page);
@@ -5337,7 +5361,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         if (initialCrlfProjection)
             await page.SelectOptionAsync("#fixtureSel", "crlf-pipeline");
@@ -5457,7 +5481,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
@@ -5523,7 +5547,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
@@ -5613,7 +5637,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
@@ -5711,7 +5735,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
@@ -5827,7 +5851,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
@@ -5898,7 +5922,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
 
@@ -5925,7 +5949,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.ClickAsync("button.etlsql-studio-rail-btn[data-activity='explorer']");
@@ -5990,7 +6014,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
 
         // Wait for studio shell to mount
@@ -6093,7 +6117,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
 
@@ -6225,7 +6249,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.Locator("button[data-activity='git']").ClickAsync();
@@ -6258,7 +6282,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.Locator("button.etlsql-studio-rail-btn[data-activity='catalog']").ClickAsync();
@@ -6303,7 +6327,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.Locator("[data-studio-new-tab]").ClickAsync();
@@ -6326,7 +6350,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('__home__')");
@@ -6384,7 +6408,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
 
@@ -6433,7 +6457,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('__home__')");
@@ -6457,7 +6481,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
 
@@ -6478,7 +6502,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.EvaluateAsync("() => window.__STUDIO_NO_GIT__ = true");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
@@ -6503,7 +6527,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.EvaluateAsync(
             """
             async () => {
@@ -6563,7 +6587,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
 
         var studioShell = page.Locator(".etlsql-studio-shell");
@@ -6619,7 +6643,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='constrained-html-runtime']");
         var frame = page.FrameLocator("iframe[title='Constrained HTML runtime fixture']");
         await frame.Locator(".html-visual-content").WaitForAsync();
@@ -6657,7 +6681,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/filter-controls.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/filter-controls.html");
         var search = page.GetByRole(AriaRole.Searchbox, new() { Name = "CustomerSearch", Exact = true });
         await search.WaitForAsync();
         Assert.Equal("Quarterly sales", await search.InputValueAsync());
@@ -6689,7 +6713,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/date-controls.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/date-controls.html");
         var range = page.Locator(".visual-card[data-name='DateRange']");
         var start = range.Locator("input[type=text]").Nth(0);
         var end = range.Locator("input[type=text]").Nth(1);
@@ -6720,7 +6744,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='design-tokens']");
         var frame = page.FrameLocator("iframe[title='Design tokens runtime fixture']");
 
@@ -6790,7 +6814,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         var requested = new List<string>();
         page.Request += (_, request) => { lock (requested) requested.Add(request.Url); };
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='vscode-webviews']");
         await page.SelectOptionAsync("#fixtureSel", fixtureId);
 
@@ -6913,7 +6937,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
@@ -6949,7 +6973,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
@@ -7020,7 +7044,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         var page = session.Page;
         const string path = "scripts/direct_connect_test.sql";
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
@@ -7125,7 +7149,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.Locator("[data-workflow-step='palette']").WaitForAsync();
@@ -7149,7 +7173,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
 
@@ -7190,7 +7214,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('__home__')");
@@ -7228,7 +7252,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
 
@@ -7267,7 +7291,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.designerInstance)");
@@ -7310,7 +7334,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
@@ -7387,7 +7411,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         // A column with more values than one card can show. The behaviour under test only begins
         // past the first page, and the sandbox's default sample has four regions.
         await page.AddInitScriptAsync("window.__STUDIO_SAMPLE_ROWS__ = 60;");
@@ -7476,7 +7500,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.ClickAsync("button.etlsql-studio-rail-btn[data-activity='catalog']");
@@ -7530,7 +7554,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
@@ -7584,7 +7608,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
@@ -7642,7 +7666,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
@@ -7699,7 +7723,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.designerInstance)");
@@ -7747,7 +7771,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
@@ -7789,7 +7813,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.designerInstance)");
@@ -7844,7 +7868,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.designerInstance)");
@@ -7933,7 +7957,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
@@ -7999,7 +8023,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
@@ -8077,7 +8101,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.GotoWithDiagnosticsAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
         await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");

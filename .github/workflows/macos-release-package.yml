@@ -1,0 +1,112 @@
+name: Build macOS Release Package
+
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+      tag:
+        required: true
+        type: string
+      rid:
+        required: true
+        type: string
+    outputs:
+      artifact_id:
+        value: ${{ jobs.build.outputs.artifact_id }}
+      manifest_sha256:
+        value: ${{ jobs.build.outputs.manifest_sha256 }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ inputs.rid }}
+    runs-on: ${{ inputs.rid == 'osx-x64' && 'macos-15-intel' || 'macos-15' }}
+    timeout-minutes: 110
+    outputs:
+      artifact_id: ${{ steps.packages.outputs.artifact-id }}
+      manifest_sha256: ${{ steps.identity.outputs.manifest_sha256 }}
+    env:
+      PACKAGE_RID: ${{ inputs.rid }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      TAG_NAME: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Require matching candidate and native architecture
+        shell: pwsh
+        run: |
+          $sha = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $sha -cne $env:SOURCE_SHA) { throw 'Candidate checkout mismatch.' }
+          [xml]$props = Get-Content Directory.Build.props
+          if ($env:TAG_NAME -cne "v$($props.Project.PropertyGroup.VersionPrefix)") { throw 'Candidate version mismatch.' }
+          $actual = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+          if ($env:PACKAGE_RID -cne "osx-$actual") { throw 'macOS package must build on its native architecture.' }
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
+      - name: Build extension UI
+        working-directory: src/etl-sql-vscode/ui
+        run: |
+          npm ci
+          npm run build
+      - name: Publish native VSIX and ZIP
+        shell: pwsh
+        timeout-minutes: 95
+        run: |
+          $env:ETL_SQL_VERSION = $env:TAG_NAME.TrimStart('v')
+          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/publish-release.ps1 -ScriptArguments @('-Platforms', $env:PACKAGE_RID) -EvidenceDirectory "release-validation/macos/$env:PACKAGE_RID" -TimeoutSeconds 5400
+      # The existing Intel TUI launcher is optional. Retain it only after a successful build.
+      - name: Build optional Intel DMG
+        id: dmg
+        if: inputs.rid == 'osx-x64'
+        continue-on-error: true
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          version="${TAG_NAME#v}"
+          bash -euo pipefail scripts/build-mac-dmg.sh "$version" release/osx-x64/bin
+          mv "ETL-SQL_v${version}.dmg" release/
+      - name: Record native package identity
+        id: identity
+        shell: pwsh
+        env:
+          DMG_OUTCOME: ${{ steps.dmg.outcome }}
+        run: |
+          $arguments = @('create', 'release', $env:SOURCE_SHA, $env:TAG_NAME.TrimStart('v'), $env:PACKAGE_RID)
+          if ($env:DMG_OUTCOME -ceq 'success') { $arguments += '--include-dmg' }
+          node scripts/macos-release-packages.mjs @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot record macOS package identity.' }
+          $hash = (Get-FileHash "release/$env:PACKAGE_RID-package-inputs.json" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "manifest_sha256=$hash" >> $env:GITHUB_OUTPUT
+      - name: Retain native packages before publication
+        id: packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-packages-${{ inputs.rid }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release/ETL-SQL-${{ inputs.tag }}-${{ inputs.rid }}.zip
+            release/etl-sql-vscode-*.vsix
+            release/${{ inputs.rid }}-package-inputs.json
+            release/*.dmg
+          if-no-files-found: error
+          retention-days: 30
+      - name: Retain native packaging diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-package-logs-${{ inputs.rid }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/macos/
+          if-no-files-found: warn
+          retention-days: 30

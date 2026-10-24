@@ -1,0 +1,24 @@
+name: Release Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact frozen candidate SHA; the selected branch must still point to it
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-certification-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Full CI
+    uses: ./.github/workflows/ci.yml
+    with:
+      release_certification: true
+      candidate_sha: ${{ inputs.candidate_sha }}

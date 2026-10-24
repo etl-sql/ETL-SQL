@@ -5,6 +5,7 @@
 | Page | Description |
 | :--- | :--- |
 | [v0.21.0 bugs and logic audit](v0.21.0-bug-logic-audit.md) | Defect review and validation evidence. |
+| [v0.21.0 performance results](v0.21.0-performance-results.md) | Scale certification measurements and run-order findings. |
 | [v0.21.0 closed TODO audit](v0.21.0-closed-todo-audit.md) | Completed-item review and validation evidence. |
 | [v0.21.0 browser asset acceptance](v0.21.0-browser-asset-acceptance.md) | Packaged runtime, VS Code webview, watcher and native package acceptance evidence. |
 | [v0.21.0 generated assets progress](v0.21.0-generated-assets-progress.md) | Generated browser asset ownership and preparation progress. |

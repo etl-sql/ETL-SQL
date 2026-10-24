@@ -63,7 +63,7 @@ public sealed class StudioCatalogScaleJourneyTests(StudioAuthoringFixture fixtur
         try
         {
             await fixture.SignInAsync(directPage);
-            await directPage.GotoAsync($"/studio.html?reportId={probeId}");
+            await directPage.GotoWithDiagnosticsAsync($"/studio.html?reportId={probeId}");
             await directPage.Locator("[data-choose-workflow='dashboard']").ClickAsync();
             await directPage.WaitForFunctionAsync("id => window.__STUDIO__?.state.documents.some(document => document.reportId === id)", probeId);
             Assert.Equal("SELECT 1;", await directPage.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()"));

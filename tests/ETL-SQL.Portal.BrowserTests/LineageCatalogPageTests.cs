@@ -33,7 +33,7 @@ public sealed class LineageCatalogPageTests(LineageCatalogFixture fixture)
         await catalog.SaveLineageAsync([entry], $"job-{table}", "loads/lineage-browser.etlsql",
             new DateTime(2026, 7, 31, 23, 59, 59, DateTimeKind.Utc).AddTicks(5_000_000));
 
-        await page.GotoAsync("/index.html#governance/lineage");
+        await page.GotoWithDiagnosticsAsync("/index.html#governance/lineage");
         await Expect(page.Locator("#lineageSearchForm")).ToBeVisibleAsync();
         await page.Locator("#lineageQuery").FillAsync(table);
         await page.Locator("#lineageFrom").FillAsync("2026-07-31");

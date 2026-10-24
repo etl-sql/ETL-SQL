@@ -46,7 +46,7 @@ public sealed class DetailSurfacePerformanceTests(DetailSurfaceHarnessFixture fi
     private async Task<IPage> OpenAsync(BrowserSession session, string surface)
     {
         var page = session.Page;
-        await page.GotoAsync($"{fixture.BaseUrl}/tools/ui-sandbox/detail-surface.html?surface={surface}&spacer=3000");
+        await page.GotoWithDiagnosticsAsync($"{fixture.BaseUrl}/tools/ui-sandbox/detail-surface.html?surface={surface}&spacer=3000");
         await page.WaitForSelectorAsync(Mark, new PageWaitForSelectorOptions { Timeout = 30_000 });
         return page;
     }

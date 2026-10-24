@@ -39,7 +39,6 @@ public sealed class SqliteGatewayOutcomeStore : IGatewayOutcomeStore, IDisposabl
                 CREATE INDEX IF NOT EXISTS IX_Outcomes_DetailRetention ON Outcomes(UpdatedUtc) WHERE Effect=1 AND Compacted=0 AND State IN (1,2);
                 CREATE INDEX IF NOT EXISTS IX_Outcomes_Interrupted ON Outcomes(State) WHERE Effect=1 AND State=0;
                 CREATE INDEX IF NOT EXISTS IX_Outcomes_Ambiguous ON Outcomes(TenantId, Effect, State);
-                CREATE TABLE IF NOT EXISTS StoreMetadata (Name TEXT PRIMARY KEY);
                 UPDATE Outcomes SET State=3, Payload=json_set(Payload, '$.State', 3) WHERE Effect=1 AND State=0;
                 """);
             Maintain();
@@ -48,40 +47,6 @@ public sealed class SqliteGatewayOutcomeStore : IGatewayOutcomeStore, IDisposabl
         {
             _connection.Dispose();
             _ownership?.Dispose();
-            throw Refused();
-        }
-    }
-
-    /// <summary>Streams the old JSON array once. The import marker and receipts commit together.</summary>
-    public async Task ImportLegacyAsync(string path, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            using var check = _connection.CreateCommand();
-            check.CommandText = "SELECT COUNT(*) FROM StoreMetadata WHERE Name='legacy-imported'";
-            if (Convert.ToInt64(await check.ExecuteScalarAsync(cancellationToken)) != 0) return;
-            await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
-            using var transaction = _connection.BeginTransaction();
-            await foreach (var item in JsonSerializer.DeserializeAsyncEnumerable<GatewayOperationOutcome>(stream, cancellationToken: cancellationToken))
-            {
-                if (item is null || string.IsNullOrWhiteSpace(item.TenantId) || string.IsNullOrWhiteSpace(item.OperationId))
-                    throw new JsonException("Invalid outcome record.");
-                var restored = item.Effect == GatewayOperationEffect.Mutating && item.State == GatewayOutcomeState.InFlight
-                    ? item with { State = GatewayOutcomeState.Ambiguous } : item;
-                SaveCore(restored, transaction, insertOnly: true);
-            }
-            using var marker = _connection.CreateCommand();
-            marker.Transaction = transaction;
-            marker.CommandText = "INSERT INTO StoreMetadata(Name) VALUES ('legacy-imported')";
-            await marker.ExecuteNonQueryAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-        }
-        catch (FileNotFoundException)
-        {
-            // A new Gateway has no legacy ledger. Access errors must never be treated as absence.
-        }
-        catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException or JsonException)
-        {
             throw Refused();
         }
     }

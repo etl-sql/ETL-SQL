@@ -36,7 +36,7 @@ public sealed class StudioDesktopDatasetWizardTests(StudioAuthoringFixture fixtu
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=wizard-token");
+        await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=wizard-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__?.state?.editorInstance)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
 

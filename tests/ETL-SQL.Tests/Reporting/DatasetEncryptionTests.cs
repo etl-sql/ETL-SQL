@@ -48,6 +48,69 @@ namespace ETL_SQL.Tests.Reporting
         }
 
         [Fact]
+        public void MachineBoundCrypto_UsesTheCurrentFormat()
+        {
+            if (OperatingSystem.IsWindows()) return; // Windows in-memory payloads use DPAPI.
+
+            var protected_ = MachineBoundCrypto.Protect("new payload"u8.ToArray());
+            Assert.Equal("ETLSQLM3", System.Text.Encoding.ASCII.GetString(protected_, 0, 8));
+            Assert.Throws<System.Security.Cryptography.CryptographicException>(
+                () => MachineBoundCrypto.Unprotect("ETLSQLM2"u8.ToArray().Concat(new byte[40]).ToArray()));
+        }
+
+        [Fact]
+        public async Task StreamDecryption_RefusesATamperedFile()
+        {
+            var dir = Path.GetTempPath();
+            var plain = Path.Combine(dir, Path.GetRandomFileName());
+            var machine = Path.Combine(dir, Path.GetRandomFileName());
+            var password = Path.Combine(dir, Path.GetRandomFileName());
+            try
+            {
+                File.WriteAllText(plain, "id,amount\n1,100\n2,200\n");
+                await MachineBoundCrypto.EncryptFileAsync(plain, machine);
+                ETL_SQL.Common.CryptoUtils.EncryptFile(plain, password, "correct horse battery", overwrite: true);
+
+                foreach (var path in new[] { machine, password })
+                {
+                    var bytes = File.ReadAllBytes(path);
+                    bytes[bytes.Length - 40] ^= 0x01; // a ciphertext byte, before the 32-byte tag
+                    File.WriteAllBytes(path, bytes);
+                }
+
+                using (var stream = File.OpenRead(machine))
+                    Assert.ThrowsAny<System.Security.Cryptography.CryptographicException>(() => MachineBoundCrypto.DecryptStream(stream));
+                using (var stream = File.OpenRead(password))
+                    Assert.ThrowsAny<System.Security.Cryptography.CryptographicException>(() => ETL_SQL.Common.CryptoUtils.DecryptStream(stream, "correct horse battery"));
+            }
+            finally
+            {
+                foreach (var f in new[] { plain, machine, password })
+                    if (File.Exists(f)) File.Delete(f);
+            }
+        }
+
+        [Fact]
+        public async Task MachineBoundCrypto_StreamRoundTrip_ReturnsTheContent()
+        {
+            var plain = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            var encrypted = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            try
+            {
+                File.WriteAllText(plain, "id,amount\n1,100\n");
+                await MachineBoundCrypto.EncryptFileAsync(plain, encrypted);
+                using var input = File.OpenRead(encrypted);
+                using var reader = new StreamReader(MachineBoundCrypto.DecryptStream(input));
+                Assert.Equal("id,amount\n1,100\n", reader.ReadToEnd());
+            }
+            finally
+            {
+                foreach (var f in new[] { plain, encrypted })
+                    if (File.Exists(f)) File.Delete(f);
+            }
+        }
+
+        [Fact]
         public async Task MachineBoundCrypto_FileRoundTrip_ProducesIdenticalContent()
         {
             var dir = Path.GetTempPath();

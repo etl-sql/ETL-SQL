@@ -161,6 +161,7 @@ globalThis.DOMParser = class {
     parseFromString(raw) {
         const svg = new MockElement('svg');
         svg.nodeName = 'svg';
+        svg.namespaceURI = 'http://www.w3.org/2000/svg';
         svg._innerHTML = raw;
         return { documentElement: svg, querySelector: () => null };
     }

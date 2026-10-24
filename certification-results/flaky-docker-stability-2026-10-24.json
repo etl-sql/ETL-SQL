@@ -1,0 +1,122 @@
+{
+  "schema": "etl-sql.historical-docker-stability/v1",
+  "observedOn": "2026-10-24",
+  "scope": "Historical consecutive full Docker integration executions; not v0.22.0 candidate certification",
+  "releaseEligible": false,
+  "repository": "etl-sql/ETL-SQL",
+  "fixes": {
+    "ftpMappedPort": "c7586fe26478b418544fd91f7191837d28d44309",
+    "ftpPassiveReadiness": "5344e3e6a199da8deca79a63916df9aab58eb507",
+    "scheduledJobLastAndNextRun": "373cdf980b50c6d6834aea9cc891b105f9170ee7"
+  },
+  "selectedRuns": [
+    {
+      "runId": 39131831664,
+      "runNumber": 247,
+      "jobId": 117688413174,
+      "jobAttempt": 1,
+      "commit": "7141a5df3390178c5aa3b81a9b6dc6eebd52d280",
+      "branch": "release/v0.21.0",
+      "event": "push",
+      "jobUrl": "https://github.com/etl-sql/ETL-SQL/actions/runs/39131831664/job/117688413174",
+      "engineIntegration": {
+        "passed": 224,
+        "failed": 0,
+        "skipped": 0
+      },
+      "portalIntegration": {
+        "passed": 63,
+        "failed": 0,
+        "skipped": 0
+      },
+      "localNormalizedLog": "release-validation/docker-stability-job-117688413174.log",
+      "normalizedLogSha256": "231dcc0ed971a767a48f329046fa0c9b2f75ffe8f31304fc51c2b4f888b2c9cb"
+    },
+    {
+      "runId": 39137736693,
+      "runNumber": 248,
+      "jobId": 117705594862,
+      "jobAttempt": 1,
+      "commit": "e26936db7e6aa07ec90901f3e48fa2d97a647578",
+      "branch": "release/v0.21.0",
+      "event": "push",
+      "jobUrl": "https://github.com/etl-sql/ETL-SQL/actions/runs/39137736693/job/117705594862",
+      "engineIntegration": {
+        "passed": 224,
+        "failed": 0,
+        "skipped": 0
+      },
+      "portalIntegration": {
+        "passed": 63,
+        "failed": 0,
+        "skipped": 0
+      },
+      "localNormalizedLog": "release-validation/docker-stability-job-117705594862.log",
+      "normalizedLogSha256": "7bb80c0fd7b0f11a0ad9d44a2302f316abec503a1b7b473dd81d590dce258f21"
+    },
+    {
+      "runId": 39143534977,
+      "runNumber": 249,
+      "jobId": 117722627004,
+      "jobAttempt": 1,
+      "commit": "cd1770eacd17b988c57b96c6f398af45093ada9a",
+      "branch": "release/v0.21.0",
+      "event": "push",
+      "jobUrl": "https://github.com/etl-sql/ETL-SQL/actions/runs/39143534977/job/117722627004",
+      "engineIntegration": {
+        "passed": 224,
+        "failed": 0,
+        "skipped": 0
+      },
+      "portalIntegration": {
+        "passed": 63,
+        "failed": 0,
+        "skipped": 0
+      },
+      "localNormalizedLog": "release-validation/docker-stability-job-117722627004.log",
+      "normalizedLogSha256": "d13865f8384c17e924cb97174f3126893cf7271176e1845f02226f09a0ea928c"
+    }
+  ],
+  "verification": [
+    "CI run numbers 247, 248 and 249 are consecutive in the complete 21-run API inventory for 2026-10-18T13:00:00Z through 20:00:00Z; the response is unpaginated (21 < 100).",
+    "Each log identifies its exact checkout SHA and executes test-lane.ps1 -Lane integration -Configuration Release -NoRestore -NoBuild.",
+    "The candidate lane selects Category=Integration in both projects. Both named tests are ordinary [Fact] methods on classes carrying that category.",
+    "All three fixes are ancestors of every selected candidate; all three target fixture/test files are unchanged through the current implementation commit.",
+    "Run 249's second-attempt Docker job (117737611472) has the same original execution timestamps and byte-identical decoded log as its first-attempt job; it is carried success, not an additional pass."
+  ],
+  "limitations": [
+    "The retained console summaries prove full category-lane success, not per-test TRX timing; the original workflow did not retain successful Docker TRX artifacts.",
+    "This is three successful consecutive CI executions, not proof that a timing defect can never recur.",
+    "Final-candidate Docker integration remains required for release."
+  ],
+  "sourceComparedAt": "61a7df60f9be28c54d08dfdf867482b5dc195559",
+  "laterCompletedRuns": [
+    {
+      "runNumber": 251,
+      "passed": 287,
+      "runId": 39156281594,
+      "skipped": 0,
+      "failed": 0,
+      "commit": "53a3343d449845c11c7f144cf5b305d07e2e2b7f",
+      "jobId": 117773592295
+    },
+    {
+      "runNumber": 254,
+      "passed": 287,
+      "runId": 39168513212,
+      "skipped": 0,
+      "failed": 0,
+      "commit": "13aaff7011c362bad3de65da42c0c4c20f11a00f",
+      "jobId": 117796463289
+    },
+    {
+      "runNumber": 258,
+      "passed": 287,
+      "runId": 39171524120,
+      "skipped": 0,
+      "failed": 0,
+      "commit": "c2696a2608276e11c1ebb298fd21373853bd784e",
+      "jobId": 117805403570
+    }
+  ]
+}

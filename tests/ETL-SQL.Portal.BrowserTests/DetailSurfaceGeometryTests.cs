@@ -57,7 +57,7 @@ public sealed class DetailSurfaceGeometryTests(DetailSurfaceHarnessFixture fixtu
     private async Task<IPage> HarnessAsync(BrowserSession session)
     {
         var page = session.Page;
-        await page.GotoAsync($"{fixture.BaseUrl}/tools/ui-sandbox/detail-surface.html");
+        await page.GotoWithDiagnosticsAsync($"{fixture.BaseUrl}/tools/ui-sandbox/detail-surface.html");
         await page.WaitForFunctionAsync("() => !!window.__ETLSQL_DETAIL__", null,
             new PageWaitForFunctionOptions { Timeout = 30_000 });
         return page;

@@ -120,6 +120,35 @@ builder.Services.AddEtlSqlEngine(builder.Configuration);
 
 var app = builder.Build();
 
+// The Player listens on loopback with no sign-in, so a web page in the same browser must not be able
+// to drive it. A rebinding attack arrives with the attacker's host name, so only loopback hosts are
+// served; a cross-site request carries a foreign Origin; and a form or no-cors fetch cannot send
+// application/json, which every runtime POST does.
+app.Use(async (ctx, next) =>
+{
+    var host = ctx.Request.Host.Host;
+    if (!(host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || host == "127.0.0.1" || host == "[::1]"))
+    {
+        ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
+        return;
+    }
+    var origin = ctx.Request.Headers.Origin.ToString();
+    if (origin.Length > 0
+        && !(Uri.TryCreate(origin, UriKind.Absolute, out var originUri)
+             && string.Equals(originUri.Authority, ctx.Request.Host.Value, StringComparison.OrdinalIgnoreCase)))
+    {
+        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+    if (HttpMethods.IsPost(ctx.Request.Method)
+        && !(ctx.Request.ContentType ?? "").StartsWith("application/json", StringComparison.OrdinalIgnoreCase))
+    {
+        ctx.Response.StatusCode = StatusCodes.Status415UnsupportedMediaType;
+        return;
+    }
+    await next();
+});
+
 // Disable browser caching for all responses (static files and API alike) to prevent stale report data.
 app.Use(async (ctx, next) =>
 {
@@ -433,7 +462,7 @@ app.MapGet("/maps/custom", async (HttpContext ctx) =>
         return Results.BadRequest("Map path must be relative");
 
     if (!SafePath.TryResolveWithinRoot(baseDir, rawPath, out var fullPath))
-        return Results.Forbid();
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
 
     if (!File.Exists(fullPath))
         return Results.NotFound($"Map file not found: {Path.GetFileName(fullPath)}");
@@ -465,7 +494,7 @@ if (multiMode)
             return Results.BadRequest("Map path must be relative");
 
         if (!SafePath.TryResolveWithinRoot(svc.ScriptDirectory, rawPath, out var fullPath))
-            return Results.Forbid();
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
 
         if (!File.Exists(fullPath))
             return Results.NotFound($"Map file not found: {Path.GetFileName(fullPath)}");

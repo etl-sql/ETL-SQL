@@ -72,12 +72,12 @@ public sealed class GatewayHost(
 
             attempts++;
             SetStatus(GatewayHostStatus.Connecting);
+            var sessionStarted = _time.GetUtcNow();
 
             try
             {
                 var client = new GatewaySessionClient(options.SessionOptions, dispatcher);
                 SetStatus(GatewayHostStatus.Connected);
-                currentBackoff = options.InitialBackoff; // Reset backoff on successful connection
 
                 await client.RunAsync(cancellationToken).ConfigureAwait(false);
             }
@@ -88,25 +88,32 @@ public sealed class GatewayHost(
             catch (Exception ex)
             {
                 ErrorOccurred?.Invoke(ex);
-
-                if (cancellationToken.IsCancellationRequested)
-                    break;
-
-                SetStatus(GatewayHostStatus.BackingOff);
-                try
-                {
-                    await Task.Delay(currentBackoff, _time, cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-
-                // Exponential backoff capped at MaxBackoff
-                currentBackoff = TimeSpan.FromTicks(Math.Min(
-                    currentBackoff.Ticks * 2,
-                    options.MaxBackoff.Ticks));
             }
+
+            if (cancellationToken.IsCancellationRequested)
+                break;
+
+            // A session that stayed up was healthy, so its loss starts the backoff over. One that
+            // failed to connect, or dropped at once, keeps doubling it. Resetting before every attempt
+            // held the delay at twice the initial value, and a session the broker closed cleanly
+            // reconnected with no delay at all.
+            if (_time.GetUtcNow() - sessionStarted >= options.MaxBackoff)
+                currentBackoff = options.InitialBackoff;
+
+            SetStatus(GatewayHostStatus.BackingOff);
+            try
+            {
+                await Task.Delay(currentBackoff, _time, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            // Exponential backoff capped at MaxBackoff
+            currentBackoff = TimeSpan.FromTicks(Math.Min(
+                currentBackoff.Ticks * 2,
+                options.MaxBackoff.Ticks));
         }
 
         SetStatus(GatewayHostStatus.Stopped);

@@ -16,7 +16,7 @@ public sealed class PortalHttpClientBrowserTests(PortalAdminFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/docs.html", new() { WaitUntil = WaitUntilState.NetworkIdle });
+        await page.GotoWithDiagnosticsAsync("/docs.html", new() { WaitUntil = WaitUntilState.NetworkIdle });
         string? previousStamp;
         using (var scope = fixture.Factory.Services.CreateScope())
         {
@@ -37,7 +37,7 @@ public sealed class PortalHttpClientBrowserTests(PortalAdminFixture fixture)
               void authApi.logout();
             }
             """);
-        await page.WaitForURLAsync("**/login.html");
+        await page.WaitForURLWithDiagnosticsAsync("**/login.html");
         Assert.Equal(1, refreshes);
         Assert.True(await page.EvaluateAsync<bool>("""
             () => sessionStorage.getItem('etlsql_token') === null && sessionStorage.getItem('etlsql_refresh') === null
@@ -59,7 +59,7 @@ public sealed class PortalHttpClientBrowserTests(PortalAdminFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/docs.html", new() { WaitUntil = WaitUntilState.NetworkIdle });
+        await page.GotoWithDiagnosticsAsync("/docs.html", new() { WaitUntil = WaitUntilState.NetworkIdle });
         var refreshes = 0;
         page.Request += (_, request) =>
         {
@@ -90,7 +90,7 @@ public sealed class PortalHttpClientBrowserTests(PortalAdminFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/docs.html", new() { WaitUntil = WaitUntilState.NetworkIdle });
+        await page.GotoWithDiagnosticsAsync("/docs.html", new() { WaitUntil = WaitUntilState.NetworkIdle });
         var folderName = $"HTTP client {Guid.NewGuid():N}";
         var mutation = await page.EvaluateAsync<JsonElement>("""
             async name => {
@@ -125,7 +125,7 @@ public sealed class PortalHttpClientBrowserTests(PortalAdminFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/docs.html", new() { WaitUntil = WaitUntilState.NetworkIdle });
+        await page.GotoWithDiagnosticsAsync("/docs.html", new() { WaitUntil = WaitUntilState.NetworkIdle });
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await page.RouteAsync("**/api/auth/refresh", async route =>

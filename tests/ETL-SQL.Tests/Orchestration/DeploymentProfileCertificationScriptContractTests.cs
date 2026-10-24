@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+using System.Text.Json;
 
 namespace ETL_SQL.Tests.Orchestration;
 
@@ -28,12 +28,14 @@ public sealed class DeploymentProfileCertificationScriptContractTests
     {
         var script = File.ReadAllText(Path.Combine(
             RepoRoot(), "scripts", "Test-DeploymentProfileCertification.ps1"));
+        var contracts = File.ReadAllText(Path.Combine(
+            RepoRoot(), "scripts", "DeploymentCertification.Contracts.ps1"));
 
         Assert.Contains("Managed Dedicated", script, StringComparison.Ordinal);
-        Assert.Contains("sharedSaaS = \"NotCertified\"", script, StringComparison.Ordinal);
+        Assert.Contains("sharedSaaS = \"NotCertified\"", contracts, StringComparison.Ordinal);
         Assert.Contains("\"SharedSaaS\"", script, StringComparison.Ordinal);
-        Assert.Contains("claimScope = \"ApplicationAndPolicyContracts\"", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("sharedSaaS = \"Certified\"", script, StringComparison.Ordinal);
+        Assert.Contains("claimScope = \"ApplicationAndPolicyContracts\"", contracts, StringComparison.Ordinal);
+        Assert.DoesNotContain("sharedSaaS = \"Certified\"", contracts, StringComparison.Ordinal);
         Assert.Contains("etl-sql.deployment-profile-release-claims/v1", script, StringComparison.Ordinal);
         Assert.Contains("claims-index.json", script, StringComparison.Ordinal);
         Assert.Contains("claims-index.md", script, StringComparison.Ordinal);
@@ -48,7 +50,7 @@ public sealed class DeploymentProfileCertificationScriptContractTests
     /// name is actually attached to a phase are all pinned here.
     /// </summary>
     [Fact]
-    public void EnterpriseLaneProvesEveryHostedPrerequisiteForTheSaasPhaseAGate()
+    public async Task EnterpriseLaneProvesEveryHostedPrerequisiteForTheSaasPhaseAGate()
     {
         var script = File.ReadAllText(Path.Combine(
             RepoRoot(), "scripts", "Test-DeploymentProfileCertification.ps1"));
@@ -65,14 +67,20 @@ public sealed class DeploymentProfileCertificationScriptContractTests
             "upgrade-and-promotion-evidence"
         ];
 
+        var result = await ETL_SQL.Tests.Docs.ReleasePolicyHelperTests.RunHelper("""
+            [pscustomobject]@{
+                prerequisites = @($EnterpriseHostedPrerequisites)
+                phases = @(Get-DeploymentCertificationPlan -Kind Profile -Names Enterprise)
+                scenarios = @(Get-ExpectedScenarioIds Enterprise)
+            } | ConvertTo-Json -Depth 8
+            """, helperName: "DeploymentCertification.Plan.ps1");
+        Assert.True(result.ExitCode == 0, result.Output);
+        using var plan = JsonDocument.Parse(result.Output);
+        Assert.Equal(prerequisites, plan.RootElement.GetProperty("prerequisites").EnumerateArray().Select(item => item.GetString()));
         foreach (var prerequisite in prerequisites)
         {
-            // Once in $EnterpriseHostedPrerequisites, and at least once more as a phase tag.
-            var occurrences = Regex.Matches(script, Regex.Escape($"\"{prerequisite}\"")).Count;
-            Assert.True(occurrences >= 2,
-                $"The Enterprise certification lane declares the hosted prerequisite '{prerequisite}' " +
-                $"but no phase is tagged with it ({occurrences} occurrence(s)). A declared-but-unproven " +
-                "prerequisite reports as unproven at runtime; wire it to a phase or remove the claim.");
+            Assert.Contains(plan.RootElement.GetProperty("phases").EnumerateArray(), phase =>
+                phase.TryGetProperty("prerequisite", out var value) && value.GetString() == prerequisite);
         }
 
         // An unproven prerequisite must fail the lane, not merely annotate the evidence.
@@ -81,7 +89,7 @@ public sealed class DeploymentProfileCertificationScriptContractTests
         Assert.Contains("hostedPrerequisites = $hostedPrerequisites", script, StringComparison.Ordinal);
 
         // The upgrade prerequisite must land concrete scenario evidence, not just a green phase.
-        Assert.Contains("\"Enterprise\" { $expected.Add(\"EnterpriseUpgrade\") }", script, StringComparison.Ordinal);
+        Assert.Equal(new[] { "EnterpriseUpgrade" }, plan.RootElement.GetProperty("scenarios").EnumerateArray().Select(item => item.GetString()));
     }
 
     private static string RepoRoot()

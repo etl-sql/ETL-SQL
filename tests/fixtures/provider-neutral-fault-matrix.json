@@ -1,5 +1,6 @@
 {
   "schema": "etl-sql.provider-neutral-fault-matrix/v1",
+  "scenarioIds": ["ProcessOrWorkerLoss", "LeaseExpiryAndFencingRace", "DatabaseDisconnect", "PartialArtifactOperation", "StorageOutage", "NetworkPartition", "DuplicateDelivery", "ClockSkew", "DiskExhaustion"],
   "profiles": [
     {
       "profile": "Solo",

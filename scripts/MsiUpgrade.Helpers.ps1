@@ -234,8 +234,12 @@ function Invoke-MsiExec {
     # lost the runner and every piece of evidence. Record what was running, then stop the install.
     if (-not $process.WaitForExit($TimeoutMinutes * 60000)) {
         $diagnostics = [IO.Path]::ChangeExtension($LogPath, '.hung.txt')
-        Write-HungInstallDiagnostics $LogPath $diagnostics
-        Get-Process -Name msiexec -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        try { Write-HungInstallDiagnostics $LogPath $diagnostics }
+        catch { Write-Warning "Could not finish installer diagnostics: $($_.Exception.Message)" }
+        finally {
+            # Stop only the process we launched. A global name-based kill can affect another install.
+            if (-not $process.HasExited) { $process.Kill() }
+        }
         throw [TimeoutException]::new("$Stage did not finish within $TimeoutMinutes minutes. See $diagnostics")
     }
     if ($process.ExitCode -notin @(0, 1641, 3010)) {

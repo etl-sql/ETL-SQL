@@ -29,7 +29,7 @@ if ($explicitEvidenceRoot -or $hasCertificationEvidence) {
     $dirty = & git -C $RepoRoot status --porcelain
     if ($LASTEXITCODE -ne 0 -or $dirty) { throw 'Certification packaging requires the clean candidate worktree.' }
     # Validate before deleting an earlier release output or spending time publishing binaries.
-    $null = @(Get-ReleaseCertificationInputs -EvidenceRoot $CertificationEvidenceRoot -ReleaseVersion $Version -CandidateCommit $CandidateCommit)
+    $null = @(Get-ReleaseCertificationInputs -EvidenceRoot $CertificationEvidenceRoot -ReleaseVersion $Version -CandidateCommit $CandidateCommit -RequireCompleteClaimIndex -RequireValidatedExecutionPlan)
 }
 
 function Join-PathSegments {
@@ -240,7 +240,7 @@ foreach ($Platform in $Platforms) {
 Write-Host "`nPackaging test and certification reports..." -ForegroundColor Yellow
 if ($hasCertificationEvidence) {
     New-ReleaseCertificationArchive -EvidenceRoot $CertificationEvidenceRoot -ReleaseVersion $Version -CandidateCommit $CandidateCommit `
-        -DestinationPath (Join-Path $ReleaseRoot "ETL-SQL-v$Version-certification-results.zip")
+        -DestinationPath (Join-Path $ReleaseRoot "ETL-SQL-v$Version-certification-results.zip") -RequireCompleteClaimIndex -RequireValidatedExecutionPlan
     Write-Host "  Packaged verified release-specific certification bundles." -ForegroundColor Green
 } else {
     Write-Host "  No release-specific certification evidence present; no certification ZIP produced." -ForegroundColor Yellow

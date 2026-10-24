@@ -1,0 +1,45 @@
+name: Nightly Release Checks
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Release branch HEAD selected by the nightly scheduler
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require exact release branch candidate
+        env:
+          REQUESTED_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/release/v* ]]
+          [[ "$REQUESTED_SHA" == "$GITHUB_SHA" ]]
+  broad-ci:
+    name: Full CI
+    needs: candidate
+    uses: ./.github/workflows/ci.yml
+    with:
+      release_certification: true
+      candidate_sha: ${{ inputs.candidate_sha }}
+  msi:
+    needs: candidate
+    uses: ./.github/workflows/msi-upgrade.yml
+    with:
+      source_sha: ${{ inputs.candidate_sha }}
+  deb:
+    needs: candidate
+    uses: ./.github/workflows/deb-upgrade.yml
+    with:
+      source_sha: ${{ inputs.candidate_sha }}

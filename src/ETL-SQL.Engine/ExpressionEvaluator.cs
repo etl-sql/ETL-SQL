@@ -432,6 +432,9 @@ public class ExpressionEvaluator
             }
             catch
             {
+                // A double outside decimal's range negates as a double rather than becoming NULL.
+                if (inner is double dbl && double.IsFinite(dbl)) return -dbl;
+                if (inner is float flt && float.IsFinite(flt)) return -flt;
                 return null;
             }
         }
@@ -1142,12 +1145,12 @@ public class ExpressionEvaluator
         if (id.Name.Contains(".CONNECTION_STRING", StringComparison.OrdinalIgnoreCase))
         {
             var alias = id.Name.Replace(".CONNECTION_STRING", "", StringComparison.OrdinalIgnoreCase);
-            var connStr = _context.DockerManager.GetConnectionString(alias);
+            var connStr = _context.DockerManager.GetConnectionString(DockerScope.For(_context), alias);
             if (connStr != null) return connStr;
 
             // Direct fallback for plain DOCKER.CONNECTION_STRING
             if (alias.Equals("DOCKER", StringComparison.OrdinalIgnoreCase))
-                return _context.DockerManager.LastConnectionString;
+                return _context.DockerManager.GetLastConnectionString(DockerScope.For(_context));
         }
 
         // Existing connections
@@ -1240,7 +1243,7 @@ public class ExpressionEvaluator
             TokenType.LESS_THAN => (leftVal.IsNull() || rightVal.IsNull()) ? null : (object?)(bool)(CompareConstants(leftVal, rightVal) < 0),
             TokenType.GREATER_EQUALS => (leftVal.IsNull() || rightVal.IsNull()) ? null : (object?)(bool)(CompareConstants(leftVal, rightVal) >= 0),
             TokenType.LESS_EQUALS => (leftVal.IsNull() || rightVal.IsNull()) ? null : (object?)(bool)(CompareConstants(leftVal, rightVal) <= 0),
-            TokenType.LIKE => EvaluateLike(leftVal, rightVal),
+            TokenType.LIKE => (leftVal.IsNull() || rightVal.IsNull()) ? null : EvaluateLike(leftVal, rightVal),
             TokenType.REGEX_MATCH => EvaluateRegexMatch(leftVal, rightVal, RegexOptions.None),
             TokenType.REGEX_IMATCH => EvaluateRegexMatch(leftVal, rightVal, RegexOptions.IgnoreCase),
             _ => IsSoftEqual(leftVal, rightVal)
@@ -1280,6 +1283,9 @@ public class ExpressionEvaluator
             var escVal = await EvaluateInternal(like.EscapeChar, context, decryptSensitive);
             escapeStr = escVal?.ToString();
         }
+        // COMPAT_BREAK: 0.22.0 — SQL three-valued logic: LIKE and NOT LIKE with a NULL operand are
+        // UNKNOWN, so a WHERE col NOT LIKE '...' no longer keeps the rows where col is NULL.
+        if (l.IsNull() || r.IsNull()) return null;
         bool res = EvaluateLike(l, r, escapeStr);
         return like.IsNot ? !res : res;
     }

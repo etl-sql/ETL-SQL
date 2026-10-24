@@ -1332,15 +1332,6 @@ public sealed class LocksDataSource : IDataSource
                 );";
             await cmd.ExecuteNonQueryAsync(cancellationToken);
 
-            try
-            {
-                cmd.CommandText = "ALTER TABLE throttle_slots ADD COLUMN machine_name TEXT DEFAULT '';";
-                await cmd.ExecuteNonQueryAsync(cancellationToken);
-            }
-            catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.SqliteErrorCode == 1)
-            {
-                // Column already exists, ignore
-            }
         }
 
         using (var cmd = conn.CreateCommand())

@@ -52,7 +52,7 @@ public sealed class AdminSubscriptionsPageTests(AdminUsersFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/admin.html");
+        await page.GotoWithDiagnosticsAsync("/admin.html");
         await page.Locator(".admin-tab[data-tab='subscriptions']").ClickAsync();
         await page.Locator("#subsFilter").FillAsync(reportName);
         await Expect(page.Locator("#subsTableWrap")).ToHaveAttributeAsync("data-subscriptions-state", "ready");

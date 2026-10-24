@@ -62,7 +62,7 @@ namespace ETL_SQL.Tests.Hardening
             mockFr.Setup(f => f.IsRegistered(It.IsAny<string>())).Returns(false);
             mock.Setup(c => c.FunctionRegistry).Returns(mockFr.Object);
             var mockDocker = new Mock<IDockerManager>();
-            mockDocker.Setup(d => d.GetConnectionString(It.IsAny<string>())).Returns((string?)null);
+            mockDocker.Setup(d => d.GetConnectionString(It.IsAny<string>(), It.IsAny<string>())).Returns((string?)null);
             mock.Setup(c => c.DockerManager).Returns(mockDocker.Object);
             return mock;
         }

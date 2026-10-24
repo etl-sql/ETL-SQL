@@ -13,7 +13,6 @@ etl-sql ui <subcommand>
 | Subcommand | Description |
 | :--- | :--- |
 | [`edit`](ui-edit.md) | Start the modern windowed Terminal IDE (default) |
-| [`old`](ui-old.md) | Start the legacy Spectre-based console editor |
 | [`repl`](ui-repl.md) | Start the JSON-based REPL protocol for IDE integration |
 | [`simple`](ui-simple.md) | Start the simple interactive menu UI |
 

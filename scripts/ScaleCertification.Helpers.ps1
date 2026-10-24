@@ -1,3 +1,100 @@
+function Get-ScaleCapturePlan {
+    param([Parameter(Mandatory)][string]$Tier, [string]$Scenario = '')
+
+    $methods = [ordered]@{
+        ExternalSort = 'Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized'
+        ExternalAggregate = 'Cert_Smoke_ExternalAggregate_100kRows_CorrectSums'
+        ExternalJoin = 'Cert_Smoke_ExternalJoin_50kRows_CorrectResults'
+        TempTableSpill = 'Cert_Smoke_TempTableSpill_50kRows_CorrectCount'
+        StreamingSelect = 'Cert_Smoke_StreamingSelect_ResultCapEnforced'
+        WindowFunction = 'Cert_Smoke_WindowFunction_50kRows_CorrectRankValues'
+        CsvIngest = 'Cert_Smoke_CsvIngest_50kRows_CorrectChecksum'
+        ParquetRoundTrip = 'Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum'
+        ReportDatasetSnapshotReload = 'Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum'
+        CubeGroupingSets = 'Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum'
+        ScalarSubqueryCache = 'Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys'
+        SpillCleanupSuccess = 'Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles'
+        SpillCleanupFailure = 'Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles'
+    }
+    if ($Tier -notin @('Smoke','Standard','Stress','Huge','Provider','All') -or
+        ($Scenario -and -not $methods.Contains($Scenario))) { throw 'Unknown scale tier or scenario.' }
+    if ($Scenario -or $Tier -in @('Smoke','Standard')) {
+        $names = if ($Scenario) { @($methods.Keys | Where-Object { $_ -ieq $Scenario }) } else { @($methods.Keys) }
+        foreach ($name in $names) {
+            [pscustomobject]@{
+                Name = $name
+                Filter = "FullyQualifiedName=ETL_SQL.Tests.Scale.ScaleCertificationTests.$($methods[$name])"
+                MetricPrefix = "${name}_"
+            }
+        }
+    } else {
+        [pscustomobject]@{
+            Name = $Tier
+            Filter = if ($Tier -eq 'All') { 'Category=ScaleCertification' } else { "Category=ScaleCertification&Tier=$Tier" }
+            MetricPrefix = $null
+        }
+    }
+}
+
+function Assert-ScaleChildMetrics {
+    param([Parameter(Mandatory)][object]$Plan, [AllowEmptyCollection()][object[]]$Metrics)
+
+    if (@($Metrics).Count -eq 0 -or ($Plan.MetricPrefix -and
+        (@($Metrics).Count -ne 1 -or -not ([string]$Metrics[0].scenario).StartsWith($Plan.MetricPrefix, [StringComparison]::Ordinal)))) {
+        throw "Scale child $($Plan.Name) did not emit exactly its expected scenario metric."
+    }
+}
+
+function Get-ScaleGcConfigurationKey {
+    param([Parameter(Mandatory)][object]$Configuration)
+
+    $booleans = @('server','concurrent','retainVirtualMemory')
+    $numbers = @('heapCount','dynamicAdaptationMode','heapHardLimitBytes','heapHardLimitPercent','conserveMemory','processorCount')
+    $names = @($booleans + $numbers + 'latencyMode' | Sort-Object)
+    $observedNames = if ($Configuration -is [Collections.IDictionary]) { @($Configuration.Keys | Sort-Object) }
+        else { @($Configuration.PSObject.Properties.Name | Sort-Object) }
+    if (($observedNames -join ',') -cne ($names -join ',')) { throw 'GC configuration fields are missing or unexpected.' }
+    $normalized = [ordered]@{}
+    foreach ($name in $names) {
+        $value = $Configuration.$name
+        if ($name -in $booleans) {
+            if ($value -isnot [bool]) { throw 'GC configuration requires typed Boolean flags.' }
+            $normalized[$name] = $value
+        } elseif ($name -in $numbers) {
+            if ($value -isnot [ValueType] -or $value -is [bool]) { throw 'GC configuration requires numeric settings.' }
+            try { $number = [decimal]$value } catch { throw 'GC configuration requires finite numeric settings.' }
+            if ($number -lt 0 -or [decimal]::Truncate($number) -ne $number -or
+                ($name -in @('heapCount','processorCount') -and $number -le 0)) {
+                throw 'GC configuration requires finite nonnegative integer settings and positive heap/processor counts.'
+            }
+            $normalized[$name] = $number
+        } else {
+            if ($value -cnotin @('Batch','Interactive','LowLatency','SustainedLowLatency','NoGCRegion')) {
+                throw 'GC configuration requires a recognized latency mode.'
+            }
+            $normalized[$name] = $value
+        }
+    }
+    $normalized | ConvertTo-Json -Compress
+}
+
+function Assert-ScaleRuntimeEvidence {
+    param([Parameter(Mandatory)][object]$Metric, [Parameter(Mandatory)][bool]$OwnPathWarmUp)
+
+    if ($Metric.rowCountScale -isnot [ValueType] -or $Metric.rowCountScale -is [bool] -or
+        -not [double]::IsFinite([double]$Metric.rowCountScale) -or $Metric.rowCountScale -le 0) {
+        throw 'Scale metrics require the observed positive row-count scale.'
+    }
+    $expected = if ($OwnPathWarmUp) { [math]::Min([double]$Metric.rowCountScale, 10.0) } else { 0.0 }
+    if ($Metric.warmUpRowScale -isnot [ValueType] -or $Metric.warmUpRowScale -is [bool] -or
+        [double]$Metric.warmUpRowScale -ne $expected) { throw 'Observed warm-up scale does not match the capture protocol.' }
+    if ($null -eq $Metric.gcConfiguration) { throw 'Scale metrics require observed GC configuration.' }
+    $null = Get-ScaleGcConfigurationKey -Configuration $Metric.gcConfiguration
+    if ($Metric.serverGcEnabled -isnot [bool] -or $Metric.serverGcEnabled -ne $Metric.gcConfiguration.server) {
+        throw 'Observed GC configuration disagrees with the measured server-GC flag.'
+    }
+}
+
 # Scale measurements include result formatting and output. Capture bytes without write-through
 # file handles or per-line flushes, so the runner does not inject physical-disk latency into them.
 function Start-ScaleCapturedProcess {
@@ -92,6 +189,43 @@ function Assert-ScaleCaptureCompatibility {
     if (-not $currentStorage) { $currentStorage = 'shared-process-temp-v1' }
     if ($baselineStorage -ne $currentStorage) {
         throw 'Temporary-storage fixtures differ. Calibrate matching measurement fixtures before regression decisions.'
+    }
+    # Reports from before per-scenario warm-up measured whatever earlier scenarios left warm.
+    $baselineWarmUp = $BaselineReport.config.scenarioWarmUp
+    $currentWarmUp = $CurrentReport.config.scenarioWarmUp
+    if (-not $baselineWarmUp) { $baselineWarmUp = 'none' }
+    if (-not $currentWarmUp) { $currentWarmUp = 'none' }
+    if ($baselineWarmUp -ne $currentWarmUp) {
+        throw "Scenario warm-up methods differ ($baselineWarmUp vs $currentWarmUp). Recalibrate the baseline with the same warm-up before regression decisions."
+    }
+    $baselineDiscardedWarmUp = $BaselineReport.config.discardedProcessWarmUp
+    $currentDiscardedWarmUp = $CurrentReport.config.discardedProcessWarmUp
+    if ($null -ne $baselineDiscardedWarmUp -or $null -ne $currentDiscardedWarmUp -or
+        $baselineWarmUp -ceq 'own-path-scaled-untimed-v2' -or
+        $BaselineReport.config.gcConfigurationCapture -or $CurrentReport.config.gcConfigurationCapture) {
+        if ($baselineDiscardedWarmUp -isnot [bool] -or $currentDiscardedWarmUp -isnot [bool] -or
+            -not $baselineDiscardedWarmUp -or -not $currentDiscardedWarmUp -or
+            $baselineWarmUp -cnotin @('own-path-untimed-v1','own-path-scaled-untimed-v2') -or
+            $currentWarmUp -cnotin @('own-path-untimed-v1','own-path-scaled-untimed-v2')) {
+            throw 'Baseline comparisons require recorded discarded-process and own-path warm-up; diagnostic or incomplete captures cannot qualify.'
+        }
+    }
+    $baselineGcCapture = $BaselineReport.config.gcConfigurationCapture
+    $currentGcCapture = $CurrentReport.config.gcConfigurationCapture
+    if ($baselineGcCapture -or $currentGcCapture -or $baselineWarmUp -ceq 'own-path-scaled-untimed-v2') {
+        if ($baselineGcCapture -cne 'runtime-observed-v1' -or $currentGcCapture -cne 'runtime-observed-v1' -or
+            $null -eq $BaselineReport.gcConfiguration -or $null -eq $CurrentReport.gcConfiguration -or
+            (Get-ScaleGcConfigurationKey $BaselineReport.gcConfiguration) -cne
+            (Get-ScaleGcConfigurationKey $CurrentReport.gcConfiguration)) {
+            throw 'Observed GC configurations differ or are incomplete. Calibrate matching GC profiles before regression decisions.'
+        }
+    }
+    $baselineIsolation = $BaselineReport.config.processIsolation
+    $currentIsolation = $CurrentReport.config.processIsolation
+    if (-not $baselineIsolation) { $baselineIsolation = 'shared-testhost-v1' }
+    if (-not $currentIsolation) { $currentIsolation = 'shared-testhost-v1' }
+    if ($baselineIsolation -cne $currentIsolation) {
+        throw 'Scale process isolation differs. Recalibrate matching per-scenario captures before regression decisions.'
     }
     $baselineFixture = $BaselineReport.config.testFixture
     $currentFixture = $CurrentReport.config.testFixture

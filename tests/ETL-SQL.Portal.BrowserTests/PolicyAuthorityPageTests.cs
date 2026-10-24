@@ -40,7 +40,7 @@ public sealed class PolicyAuthorityPageTests(PolicyAuthorityBrowserFixture fixtu
     private async Task<string> OpenScopeAsync(IPage page)
     {
         await fixture.SignInAsync(page);
-        await page.GotoAsync("/admin.html");
+        await page.GotoWithDiagnosticsAsync("/admin.html");
         await page.Locator("[data-tab='policy']").ClickAsync();
         await Expect(page.Locator("#pa-status")).ToHaveTextAsync("Configured");
         var environment = $"browser-{Guid.NewGuid():N}";

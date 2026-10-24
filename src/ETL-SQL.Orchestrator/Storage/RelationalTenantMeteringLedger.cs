@@ -96,8 +96,6 @@ public sealed class RelationalTenantMeteringLedger(
             await using var connection = dialect.CreateConnection();
             await connection.OpenAsync(cancellationToken);
 
-            await MigrateLegacyTableAsync(connection, cancellationToken);
-
             await using var command = connection.CreateCommand();
             command.CommandText = $@"
                 CREATE TABLE IF NOT EXISTS tenant_metering_ledger (
@@ -133,9 +131,6 @@ public sealed class RelationalTenantMeteringLedger(
             _initializeGate.Release();
         }
     }
-
-    private Task MigrateLegacyTableAsync(DbConnection connection, CancellationToken ct) =>
-        OrchestratorSchemaMigration.MigrateLegacyTableAsync(dialect, connection, "TenantMeteringLedger", "tenant_metering_ledger", ct);
 
     private static TenantMeteringRecord Read(DbDataReader reader)
     {

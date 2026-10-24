@@ -795,10 +795,6 @@ AddPortalModuleHostedService<ETL_SQL.Portal.Services.DatasetAtRestKeyValidationS
     builder.Services,
     "Reporting",
     modules => modules.IsEnabled("Reporting"));
-AddPortalModuleHostedService<ETL_SQL.Portal.Services.SnapshotMigrationService>(
-    builder.Services,
-    "Reporting",
-    modules => modules.IsEnabled("Reporting"));
 
 // Phase 5 — subscriptions (backed by Orchestrator jobs)
 
@@ -890,11 +886,6 @@ using (var scope = app.Services.CreateScope())
 
                 if (db.Database.IsSqlite())
                     db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
-                await PiiColumnEncryptionMaintenance.EncryptExistingPlaintextAsync(
-                    db,
-                    scope.ServiceProvider.GetRequiredService<PortalPiiProtector>(),
-                    scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-                        .CreateLogger("PiiColumnEncryptionMaintenance"));
                 if (scope.ServiceProvider.GetRequiredService<PortalModuleRegistry>().IsEnabled("Reporting"))
                 {
                     await DatasetStorageMaintenance.ReconcileAsync(

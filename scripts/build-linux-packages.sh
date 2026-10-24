@@ -255,7 +255,25 @@ else
     echo "[ETL-SQL] NOTE: the Orchestrator binds to a network address and will NOT start without Orchestrator:ApiKey set." >&2
 fi
 
-chown -R etlsql:etlsql /usr/lib/etl-sql
+# Shipped binaries and configuration belong to root: a service account that can rewrite them can
+# change its own code or security settings. The bin folder is group-writable with the sticky bit,
+# so the services still create their databases, logs and data there, but cannot delete or rename a
+# file root owns. Anything the services created before this release stays theirs.
+BIN=/usr/lib/etl-sql/bin
+dpkg-query -L etl-sql 2>/dev/null | while IFS= read -r shipped; do
+    case "$shipped" in
+        /usr/lib/etl-sql|/usr/lib/etl-sql/*)
+            if [ -e "$shipped" ] && [ ! -L "$shipped" ]; then chown root:root "$shipped"; fi ;;
+    esac
+done
+chown root:root /usr/lib/etl-sql
+chmod 755 /usr/lib/etl-sql
+chown root:etlsql "$BIN"
+chmod 1775 "$BIN"
+if [ -f "$CFG" ] && [ ! -L "$CFG" ]; then
+    chown root:root "$CFG"
+    chmod 644 "$CFG"
+fi
 # Readable by the services, not writable by them, and closed to every other account.
 SECRETS=/usr/lib/etl-sql/bin/appsettings.secrets.json
 if [ -f "$SECRETS" ] && [ ! -L "$SECRETS" ]; then
@@ -322,7 +340,7 @@ chmod 755 "$BUILD_ROOT/DEBIAN/postrm"
 # 6. Build .deb
 if command -v dpkg-deb &> /dev/null; then
     echo "Building .deb package..."
-    dpkg-deb --build "$BUILD_ROOT" "${PKG_NAME}_${VERSION}_${ARCH}.deb"
+    dpkg-deb --root-owner-group --build "$BUILD_ROOT" "${PKG_NAME}_${VERSION}_${ARCH}.deb"
     echo "[SUCCESS] Package created: ${PKG_NAME}_${VERSION}_${ARCH}.deb"
 else
     echo "[WARNING] dpkg-deb not found. Skipping .deb creation."

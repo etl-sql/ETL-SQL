@@ -1,0 +1,184 @@
+name: DEB Installed Upgrade
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+    outputs:
+      artifact_id:
+        value: ${{ jobs.installed-upgrade.outputs.artifact_id }}
+      receipt_id:
+        value: ${{ jobs.installed-upgrade.outputs.receipt_id }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deb-certification-${{ inputs.source_sha || github.sha }}
+  cancel-in-progress: false
+
+env:
+  CANDIDATE_SHA: ${{ inputs.source_sha || github.sha }}
+
+jobs:
+  build:
+    name: Build DEB candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Source preflight
+        run: |
+          node scripts/setup-actionlint.mjs
+          node scripts/release-preflight.mjs
+      - name: Prepare browser assets
+        run: |
+          npm ci --prefix scripts/typecheck
+          node scripts/sync-assets.js
+          node scripts/sync-assets.js -Check
+      - name: Publish candidate binaries
+        shell: pwsh
+        timeout-minutes: 45
+        run: |
+          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/publish-release.ps1 -ScriptArguments @('-Platforms', 'linux-x64') -EvidenceDirectory release-validation/deb/publish -TimeoutSeconds 2400
+      - name: Build package and resolve predecessor
+        shell: pwsh
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . ./scripts/Release.Helpers.ps1
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.VersionPrefix
+          $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Release enumeration failed.' }
+          $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ } | ForEach-Object { $_ })
+          $previous = Select-PreviousStableRelease -CurrentVersion $version -Releases $releases
+          New-Item -ItemType Directory -Force candidate/previous | Out-Null
+          gh release download $previous --dir candidate/previous --pattern '*_amd64.deb'
+          if ($LASTEXITCODE -ne 0) { throw 'Previous DEB download failed.' }
+          $files = @(Get-ChildItem candidate/previous -Filter '*.deb')
+          if ($files.Count -ne 1) { throw 'Expected exactly one previous DEB.' }
+          Move-Item -LiteralPath $files[0].FullName -Destination candidate/previous.deb
+          bash -euo pipefail scripts/build-linux-packages.sh $version release/linux-x64/bin
+          if ($LASTEXITCODE -ne 0) { throw 'DEB build failed.' }
+          Move-Item "etl-sql_${version}_amd64.deb" candidate/current.deb
+          Copy-Item "release/ETL-SQL-v$version-linux-x64.zip" candidate/current.zip
+          $vsix = @(Get-ChildItem release -Filter '*-linux-x64.vsix' -File)
+          if ($vsix.Count -ne 1) { throw 'Expected exactly one Linux VSIX.' }
+          Copy-Item -LiteralPath $vsix[0].FullName -Destination candidate/current.vsix
+          $sha = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $sha -cne $env:CANDIDATE_SHA) { throw 'Candidate SHA mismatch.' }
+          @{
+            schemaVersion = 1; sourceSha = $sha; version = $version; previousTag = $previous
+            currentSha256 = (Get-FileHash candidate/current.deb -Algorithm SHA256).Hash
+            previousSha256 = (Get-FileHash candidate/previous.deb -Algorithm SHA256).Hash
+            linuxZipSha256 = (Get-FileHash candidate/current.zip -Algorithm SHA256).Hash
+            linuxVsixSha256 = (Get-FileHash candidate/current.vsix -Algorithm SHA256).Hash
+          } | ConvertTo-Json | Set-Content candidate/candidate.json
+      - name: Retain immutable candidate pair
+        id: artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: deb-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: deb-build-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/
+          retention-days: 30
+
+  installed-upgrade:
+    name: DEB fresh install, upgrade and rollback
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    outputs:
+      artifact_id: ${{ needs.build.outputs.artifact_id }}
+      receipt_id: ${{ steps.receipt.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: candidate
+          merge-multiple: true
+      - name: Verify candidate identity and bytes
+        shell: pwsh
+        run: |
+          $receipt = Get-Content candidate/candidate.json -Raw | ConvertFrom-Json
+          if ($receipt.schemaVersion -ne 1 -or $receipt.sourceSha -cne $env:CANDIDATE_SHA) { throw 'Candidate identity mismatch.' }
+          foreach ($name in @('current', 'previous')) {
+            if ((Get-FileHash "candidate/$name.deb" -Algorithm SHA256).Hash -cne $receipt."${name}Sha256") { throw "Candidate hash mismatch: $name" }
+          }
+          foreach ($extension in @('zip', 'vsix')) {
+            $key = if ($extension -eq 'zip') { 'linuxZipSha256' } else { 'linuxVsixSha256' }
+            if ((Get-FileHash "candidate/current.$extension" -Algorithm SHA256).Hash -cne $receipt.$key) { throw "Candidate hash mismatch: $extension" }
+          }
+      - name: Prepare asset comparison sources
+        run: |
+          npm ci --prefix scripts/typecheck
+          node scripts/sync-assets.js
+      - name: Certify installed packages on disposable runner
+        timeout-minutes: 23
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-validation/deb/installed
+          (while sleep 30; do echo "DEB certification still running: $(date -u +%FT%TZ)"; done) &
+          heartbeat=$!
+          trap 'kill "$heartbeat" 2>/dev/null || true' EXIT
+          sudo env NODE="$(command -v node)" timeout --signal=TERM --kill-after=30s 20m \
+            bash scripts/test-deb-upgrade.sh candidate/previous.deb candidate/current.deb "$PWD" \
+            "$PWD/release-validation/deb/installed" 2>&1 | tee release-validation/deb/console.log
+      - name: Record successful certification
+        shell: pwsh
+        env:
+          CANDIDATE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+        run: |
+          $receipt = Get-Content candidate/candidate.json -Raw | ConvertFrom-Json
+          $receipt | Add-Member status Passed
+          $receipt | Add-Member scope 'DEB fresh install, installed upgrade, rollback and purge'
+          $receipt | Add-Member runId $env:GITHUB_RUN_ID
+          $receipt | Add-Member runAttempt $env:GITHUB_RUN_ATTEMPT
+          $receipt | Add-Member artifactId $env:CANDIDATE_ARTIFACT_ID
+          $receipt | Add-Member completedAt ([datetimeoffset]::UtcNow.ToString('o'))
+          $receipt | ConvertTo-Json | Set-Content release-validation/deb/certification.json
+      - name: Retain installation evidence
+        id: receipt
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: deb-installed-${{ github.run_id }}-${{ github.run_attempt }}
+          # Backups contain disposable installation secrets; retain diagnostic files only.
+          path: |
+            release-validation/deb/console.log
+            release-validation/deb/certification.json
+            release-validation/deb/installed/*.log
+            release-validation/deb/installed/*.txt
+            release-validation/deb/installed/*.json
+          if-no-files-found: error
+          retention-days: 30

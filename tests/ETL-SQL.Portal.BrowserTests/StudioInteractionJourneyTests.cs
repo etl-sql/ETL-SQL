@@ -437,7 +437,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
     {
         await fixture.SignInAsync(page);
         var reportId = await CreateReportAsync(page, editScript);
-        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
         await page.WaitForFunctionAsync(
             "() => (window.__STUDIO__?.state?.designerInstance?.getState()?.pages || []).some(p => (p.visuals || []).length > 0)",
             null, new PageWaitForFunctionOptions { Timeout = 30_000 });
@@ -517,7 +517,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
 
     private static async Task<IFrameLocator> RunReportAsync(IPage page, int reportId)
     {
-        await page.GotoAsync($"/index.html#report-{reportId}");
+        await page.GotoWithDiagnosticsAsync($"/index.html#report-{reportId}");
         var execute = page.Locator("#execBtn");
         var refresh = page.Locator("#refreshBtn");
         await Expect(execute.Or(refresh).First).ToBeVisibleAsync(new() { Timeout = 30_000 });

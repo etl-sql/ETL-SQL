@@ -330,6 +330,18 @@ class load and shared background-service state from its startup/shutdown observa
   waited 10 s for the first host's `ApplicationStopping` after "Exit Without Saving" and timed out.
   It passed 3 of 3 locally the same day (9–11 s each). New, not yet diagnosed; same deferral.
 
+  **v0.22.0 investigation:** an aborted final heartbeat reproduces that shutdown wait timeout in
+  the desktop browser journey. The shell awaited the heartbeat before requesting shutdown, even
+  after the user confirmed a forced exit. Confirmed forced exits now send the shutdown request
+  without that heartbeat. Ordinary exits still refresh dirty state, including when the server's
+  last heartbeat said dirty and the browser has since saved. The deterministic regression fails
+  before the change and passes after it; the original desktop journey and the sandbox's
+  discard/cancel confirmation also pass locally. Shutdown-wait failures retain the existing bounded
+  transport/resource snapshot. The [original job log](https://github.com/etl-sql/ETL-SQL/actions/runs/39131831664/job/117688413031)
+  records only the wait timeout, with no failed-request detail, so it cannot establish that a
+  heartbeat failure caused that hosted incident. Hosted diagnosis and consecutive-run evidence
+  remain required before closure.
+
   The release candidate's first CI attempt (`cd1770eac`, run 39143534977) failed single browser
   tests on timeouts; the rerun of the failed jobs passed. Same deferral.
 
@@ -365,7 +377,7 @@ class load and shared background-service state from its startup/shutdown observa
   timeout cannot tell a refused sign-in from a library page still loading on a starved runner, so
   the helper now reports the URL and the page text when it gives up. Its wait is unchanged.
 
-  **Open: `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds` in the Docker lane.** It failed in
+  **v0.21.0 FTP failure: `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds` in the Docker lane.** It failed in
   2 ms with "Failed to connect to host" in three runs on 2026-10-11 and passed in the two before
   them, while the other FTP tests in the same class passed each time. A 2 ms refusal means nothing
   was accepting on the mapped port when that test, the first to run, connected. The fixture waited
@@ -381,6 +393,67 @@ class load and shared background-service state from its startup/shutdown observa
   writes. The test now waits for the job to carry both values, as
   `JobSchedulingIntegrationTests` already did for the same reason.
 
+## Docker follow-up closure (v0.22.0)
+
+Reviewed the retained GitHub job logs on 2026-10-24. These three consecutive CI run numbers on
+`release/v0.21.0` each executed the full Release integration lane. Counts below are passed/failed/skipped.
+
+| CI Docker job | Candidate | Engine integration | Portal integration |
+| :--- | :--- | :---: | :---: |
+| [247](https://github.com/etl-sql/ETL-SQL/actions/runs/39131831664/job/117688413174) | `7141a5df3390178c5aa3b81a9b6dc6eebd52d280` | 224 / 0 / 0 | 63 / 0 / 0 |
+| [248](https://github.com/etl-sql/ETL-SQL/actions/runs/39137736693/job/117705594862) | `e26936db7e6aa07ec90901f3e48fa2d97a647578` | 224 / 0 / 0 | 63 / 0 / 0 |
+| [249, original attempt](https://github.com/etl-sql/ETL-SQL/actions/runs/39143534977/job/117722627004) | `cd1770eacd17b988c57b96c6f398af45093ada9a` | 224 / 0 / 0 | 63 / 0 / 0 |
+
+Every checkout contains the mapped-port wait (`c7586fe26`), passive sign-in/list readiness
+(`5344e3e6a`) and scheduled-job last/next-run wait (`373cdf980`). The FTP fixture, FTP integration
+tests and platform Docker integration tests are unchanged through this review. The frozen lane
+selects `Category=Integration` in both projects; both named regressions are ordinary facts in that
+category. The original workflow retained console summaries, so these are full-lane results rather
+than individual TRX timings.
+
+Run 249 retried its browser job. Its later Docker job ID has the original execution timestamps and
+a decoded log identical to the first attempt, so it counts once. Later completed Docker executions
+in CI 251 and 254 also passed; [CI 258 at the current base](https://github.com/etl-sql/ETL-SQL/actions/runs/39171524120/job/117805403570)
+passed the same 287 cases without skips. Cancelled executions do not add successful samples.
+
+The [historical evidence record](../../certification-results/flaky-docker-stability-2026-10-24.json)
+retains candidate identities, original job links, log hashes and limitations. This closes the FTP
+and scheduled-job stability follow-up. It does not certify the eventual release candidate or prove
+that a timing defect can never recur. The browser transport and desktop exit investigations remain open.
+
+
+## Browser navigation failure diagnostics (v0.22.0)
+
+Transport failures may never produce an HTTP response, so the existing browser session's 4xx/5xx
+history cannot explain `net::ERR_NO_BUFFER_SPACE`. Each browser context now records up to 100
+transport failures separately. Records include timestamp, method, resource type, navigation flag,
+sanitized URL and Chromium error code. User information, query strings and fragments are removed;
+request headers, bodies and raw provider messages are never collected.
+
+`GotoWithDiagnosticsAsync` and `WaitForURLWithDiagnosticsAsync` preserve Playwright options,
+responses and original exceptions, collecting diagnostics on failures. Failed navigation requests
+also trigger collection, including on additional pages or click-driven navigation. Collection is
+bounded to eight snapshots per context and a four-second collection budget. A failed process lookup
+retains the test host and an explicit unavailable reason. Diagnostic errors cannot replace the
+original navigation failure.
+
+Snapshots identify only the test host and processes reported by that Chromium instance's
+[`SystemInfo.getProcessInfo`](https://chromedevtools.github.io/devtools-protocol/tot/SystemInfo/).
+Windows snapshots collect handle counts and per-owner-PID TCP/UDP endpoint counts for both IPv4 and
+IPv6 using [IP Helper TCP tables](https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable)
+and [UDP tables](https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedudptable).
+Addresses and ports are discarded. An exited/inaccessible process or unavailable table is recorded
+explicitly; unsupported platforms do not report fabricated socket counts.
+
+`Test-BrowserShard.ps1` puts JSON snapshots in its retained evidence directory's
+`navigation-diagnostics/` folder. Records carry candidate/run/attempt/shard identity when available,
+plus the navigation wrapper's caller name. Direct test runs can set `ETLSQL_BROWSER_DIAGNOSTICS_DIR`;
+the default is `TestResults/navigation-diagnostics/` under the test output directory. Synthetic
+diagnostic tests retain their deliberate-failure snapshots under `diagnostic-tests/`.
+
+This instrumentation does not establish the cause or fix the Windows CI flake. Capture the next
+hosted failure, correlate transport errors and process resource counts with its TRX, and retain
+consecutive-run evidence before closing the TODO.
 
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
 diagnostics belong in generated evidence, not a new release-specific tracking file.
