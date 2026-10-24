@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Local release-evidence bundles now reject aliased phase logs/artifacts, orphaned payloads and
+  directories, and unsafe or duplicate directory-entry names even when manifest hashes agree.
+  Verification walks the complete declared artifact tree using the producer's canonical paths.
+
 - Browser navigation failures now retain bounded, sanitized transport-request history and
   Chromium/test-host process resource snapshots. Windows snapshots count handles and owned
   IPv4/IPv6 TCP/UDP endpoints. Shards retain diagnostics with candidate/run/attempt identity;

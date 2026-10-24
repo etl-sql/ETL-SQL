@@ -201,6 +201,10 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   `local-release-bundle.mjs` now retains candidate-bound local state, nonempty phase logs and
   declared artifacts in a new directory, with hashes and directory inventories. Verification
   rejects wrong/stale candidates, changed/missing/unlisted files and incomplete inventories.
+  Verification now also enforces canonical phase ownership and complete artifact-tree reachability,
+  rejecting log/artifact aliases, orphaned payloads and empty directories, and unsafe/duplicate
+  original entry names even when the submitted file hashes agree. Regressions include nested/Unicode
+  artifacts, symbolic links and actual CLI rejection.
   Portable-bundle regression fixtures pass and run in shared preflight. Hosted ingestion,
   trusted provenance and the complete operator/package gate remain open.
 - [ ] **Move the local-only lanes into CI.** That covers Docker integration, the Portal shards, the HA

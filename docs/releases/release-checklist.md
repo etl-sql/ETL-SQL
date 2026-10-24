@@ -550,8 +550,11 @@ node scripts/local-release-bundle.mjs verify $bundlePath $candidateSha
 ```
 
 The destination must be new. The bundle contains candidate-bound state, nonempty phase logs and
-declared artifacts, with file hashes and directory inventories. Verification rejects changed,
-missing or unlisted files and symbolic links. Hashes detect changed contents; trusted hosting or
+declared artifacts, with file hashes and directory inventories. Verification follows the producer's
+canonical phase-log and artifact paths, walks the complete artifact tree, and rejects aliases,
+orphaned payloads, unlisted directories, unsafe/duplicate original entry names, changed or missing
+files and symbolic links. Every listed file must belong to the state, a phase log or a declared
+artifact. Hashes detect changed contents; trusted hosting or
 attestation must establish provenance. This bundle covers local phases only. It does not replace
 the operator/package evidence below or authorize publication, and hosted ingestion is still pending.
 

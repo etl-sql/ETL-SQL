@@ -89,39 +89,59 @@ export function verifyBundle(directory, sha, { now = Date.now() } = {}) {
     if (hash(bytes) !== file.sha256 || bytes.length !== file.bytes) throw new Error(`Evidence hash mismatch: ${file.path}`);
   }
   if (!paths.has('state.json')) throw new Error('State is not covered by the manifest.');
+  const directories = new Set();
+  for (const name of paths) {
+    const parts = name.split('/');
+    for (let i = 1; i < parts.length; i++) directories.add(parts.slice(0, i).join('/'));
+  }
   function checkInventory(folder, prefix = '') {
     for (const name of readdirSync(folder)) {
       const relative = prefix ? `${prefix}/${name}` : name;
       const stat = lstatSync(path.join(folder, name));
       if (stat.isSymbolicLink()) throw new Error('Bundle links are not evidence.');
-      if (stat.isDirectory()) checkInventory(path.join(folder, name), relative);
+      if (stat.isDirectory()) {
+        if (!directories.has(relative)) throw new Error('Unlisted bundle directory.');
+        checkInventory(path.join(folder, name), relative);
+      }
       else if (!stat.isFile() || (relative !== 'manifest.json' && !paths.has(relative))) throw new Error('Unlisted bundle file.');
     }
   }
   checkInventory(directory);
-  for (const name of paths) {
-    if (!name.endsWith('/directory.json')) continue;
-    const marker = readJson(safeFile(directory, name));
-    const prefix = name.slice(0, -'/directory.json'.length);
+  const referenced = new Set(['state.json']);
+  function visitArtifact(prefix) {
+    if (paths.has(prefix)) { referenced.add(prefix); return; }
+    const markerPath = `${prefix}/directory.json`;
+    if (!paths.has(markerPath)) throw new Error('Phase artifact is missing.');
+    referenced.add(markerPath);
+    const marker = readJson(safeFile(directory, markerPath));
     if (!Array.isArray(marker.entries)) throw new Error('Invalid artifact directory inventory.');
+    const names = new Set();
     marker.entries.forEach((entry, i) => {
-      if (typeof entry.name !== 'string' || entry.path !== `${prefix}/${i}` ||
-          (!paths.has(entry.path) && !paths.has(`${entry.path}/directory.json`))) throw new Error('Incomplete artifact directory.');
+      if (typeof entry?.name !== 'string' || !entry.name || /[\0/\\]/.test(entry.name) ||
+          entry.name === '.' || entry.name === '..' || names.has(entry.name) || entry.path !== `${prefix}/${i}`) {
+        throw new Error('Invalid artifact directory inventory.');
+      }
+      names.add(entry.name);
+      visitArtifact(entry.path);
     });
   }
   const state = readJson(safeFile(directory, 'state.json'));
   requireCandidate(state, sha, now);
-  for (const phase of state.phases) {
+  for (const [i, phase] of state.phases.entries()) {
+    if (phase.log !== `logs/${i}.log`) throw new Error('Missing canonical phase log reference.');
     if (!paths.has(phase.log) || !readFileSync(safeFile(directory, phase.log)).length) throw new Error('Phase log is missing or empty.');
+    referenced.add(phase.log);
     if (!Array.isArray(phase.artifacts)) throw new Error('Phase artifact inventory is missing.');
     if (!Array.isArray(phase.artifactNames) || phase.artifactNames.length !== phase.artifacts.length ||
         phase.artifactNames.some(name => typeof name !== 'string' || !name || /[/\\]/.test(name) || name === '.' || name === '..')) {
       throw new Error('Original artifact names are missing or invalid.');
     }
-    for (const artifact of phase.artifacts) {
-      if (!paths.has(artifact) && !paths.has(`${artifact}/directory.json`)) throw new Error('Phase artifact is missing.');
+    for (const [j, artifact] of phase.artifacts.entries()) {
+      if (artifact !== `artifacts/${i}/${j}`) throw new Error('Missing canonical phase artifact reference.');
+      visitArtifact(artifact);
     }
   }
+  if (Array.from(paths).some(name => !referenced.has(name))) throw new Error('Unreferenced bundle evidence.');
   return manifest;
 }
 
