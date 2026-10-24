@@ -6,7 +6,7 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Command')] [string]$Command,
     [Parameter(ParameterSetName = 'Command')] [string[]]$CommandArguments = @(),
     [Parameter(Mandatory)] [string]$EvidenceDirectory,
-    [ValidateRange(1, 7200)] [int]$TimeoutSeconds = 1200,
+    [ValidateRange(1, 25200)] [int]$TimeoutSeconds = 1200,
     [ValidateRange(1, 60)] [int]$HeartbeatSeconds = 15
 )
 $ErrorActionPreference = 'Stop'
@@ -137,7 +137,7 @@ public static class CertificationHandleFlags {
     foreach ($stream in $streams) { $stream.Writer.Dispose() }
     @{
         startedUtc = $startedUtc.ToString('o'); elapsedSeconds = $timer.Elapsed.TotalSeconds
-        timedOut = $timedOut; exitCode = $exitCode
+        timedOut = $timedOut; exitCode = $exitCode; timeoutSeconds = $TimeoutSeconds
     } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence 'result.json')
     $child.Dispose()
 }

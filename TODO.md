@@ -246,8 +246,11 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   Controlled-host retries now verify a closed same-run/runner/workspace checkpoint, unchanged
   toolchain, Docker inputs, cached output bytes and original evidence before phase resume. Original
   passed receipts keep their producing-job windows; failed phases and dependents rerun. The real
-  phase-runner fixture exercises failed-phase and upload-only recovery (43 initial actions, then six
-  and four). Missing checkpoints and changed inputs stop recovery. Hosted acceptance and measured
+  phase-runner fixture exercises failed-phase and upload-only recovery through the actual supervisor
+  (43 initial actions, then six and four). A reproduced parameter-binding failure exposed the old
+  two-hour supervisor cap; its seven-hour bound now accepts the driver's 400-minute execution budget
+  and records the effective timeout. Over-limit requests still stop before work starts.
+  Missing checkpoints and changed inputs stop recovery. Hosted acceptance and measured
   full-run/retry timing remain open before this item closes.
   Enterprise certification now explicitly defaults both test projects to Release, records the
   configuration and keeps Debug evidence ineligible for release. Executed driver fixtures verify

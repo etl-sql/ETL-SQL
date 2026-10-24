@@ -59,6 +59,16 @@ try {
         @(Get-Content (Join-Path $normal.Evidence 'stderr.log')).Count -ne 300) { throw 'Output was lost during draining.' }
     if ($normal.Output -notlike '*out-300*' -or $normal.Output -notlike '*err-300*') { throw 'Output did not reach the live console.' }
     $null = Invoke-Fixture 'failure' '[Console]::Error.WriteLine("fixture failure"); exit 7' 10 7
+    $longBudget = Invoke-Fixture 'full local budget' 'Write-Output "full local deadline accepted"; exit 0' 24000 0
+    if ($longBudget.Result.timeoutSeconds -ne 24000) { throw 'The full local deadline was not recorded.' }
+    $invalidEvidence = Join-Path $fixture 'rejected deadline'
+    $invalid = Start-TestProcess @('-NoProfile', '-File', $supervisor, '-ScriptPath', (Join-Path $fixture 'full local budget script.ps1'),
+        '-EvidenceDirectory', $invalidEvidence, '-TimeoutSeconds', '25201')
+    $invalidOutput = $invalid.StandardOutput.ReadToEndAsync()
+    $invalidError = $invalid.StandardError.ReadToEndAsync()
+    if (-not $invalid.WaitForExit(5000)) { $invalid.Kill(); throw 'Invalid deadline was not rejected promptly.' }
+    if (-not $invalidOutput.Wait(2000) -or -not $invalidError.Wait(2000) -or $invalid.ExitCode -eq 0 -or
+        (Test-Path -LiteralPath $invalidEvidence)) { throw 'An out-of-range deadline started certification work.' }
 
     # Same executable name as the certification child, but not owned by its supervisor.
     $sentinel = Start-TestProcess @('-NoProfile', '-Command', 'Start-Sleep -Seconds 30')

@@ -14,17 +14,11 @@ const execute = (command, args, extra = {}) => spawnSync(command, args, { cwd: r
 const git = args => { const result = execute('git', args); assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout.trim(); };
 try {
   mkdirSync(path.join(root, 'scripts')); mkdirSync(path.join(root, 'tools'));
-  for (const name of ['Invoke-HostedLocalCertification.ps1', 'Release.Helpers.ps1', 'hosted-local-resume.mjs', 'check-release-evidence.mjs']) {
+  for (const name of ['Invoke-HostedLocalCertification.ps1', 'Invoke-CertificationProcess.ps1', 'Release.Helpers.ps1', 'hosted-local-resume.mjs', 'check-release-evidence.mjs']) {
     copyFileSync(path.join(sourceRoot, 'scripts', name), path.join(root, 'scripts', name));
   }
   for (const name of ['node', 'dotnet', 'docker']) writeFileSync(path.join(root, 'tools', `${name}.exe`), 'Synthetic toolchain identity');
   copyFileSync(new URL('./hosted-local-phase-driver.ps1', import.meta.url), path.join(root, 'scripts/Test-PreRelease.ps1'));
-  writeFileSync(path.join(root, 'scripts/Invoke-CertificationProcess.ps1'), `
-param([string]$ScriptPath, [string[]]$ScriptArguments, [string]$EvidenceDirectory, [int]$TimeoutSeconds)
-if ($TimeoutSeconds -lt 23000 -or $TimeoutSeconds -ge 24000) { throw 'Input verification was not charged to the process deadline' }
-& pwsh -NoProfile -File $ScriptPath @ScriptArguments
-exit $LASTEXITCODE
-`);
   const actual = path.join(sourceRoot, 'scripts/Test-PreRelease.ps1').replaceAll("'", "''");
   const extracted = execute('pwsh', ['-NoProfile', '-Command', `
     $tokens=$null; $errors=$null
@@ -49,9 +43,16 @@ exit $LASTEXITCODE
   const stateFile = path.join(root, 'release-validation/hosted-local-state/123/validation/latest/state.json');
   const readState = () => JSON.parse(readFileSync(stateFile, 'utf8').replace(/^\uFEFF/, ''));
   const actions = () => readFileSync(path.join(root, 'release-validation/hosted-local-state/123/validation/actions.txt'), 'utf8').trim().split(/\r?\n/);
+  const supervised = (attempt, expectedExit) => {
+    const result = JSON.parse(readFileSync(path.join(root, `release-validation/hosted-local-state/123/process-${attempt}/result.json`), 'utf8').replace(/^\uFEFF/, ''));
+    assert.equal(result.exitCode, expectedExit);
+    assert.equal(result.timedOut, false);
+    assert.ok(result.timeoutSeconds >= 23000 && result.timeoutSeconds < 24000, 'Verification must consume part of the process budget.');
+  };
   const first = run(1, 'Engine lane');
   assert.equal(first.status, 1, first.stdout + first.stderr);
   assert.ok(existsSync(stateFile), first.stdout + first.stderr);
+  supervised(1, 1);
   const failed = readState();
   assert.equal(failed.status, 'Failed');
   const firstActions = actions();
@@ -60,6 +61,7 @@ exit $LASTEXITCODE
   const failureBytes = readFileSync(failedPhase.log);
   const second = run(2);
   assert.equal(second.status, 0, second.stdout + second.stderr);
+  supervised(2, 0);
   const recovered = readState();
   assert.equal(recovered.status, 'Passed');
   assert.equal(Date.parse(recovered.phases.find(phase => phase.name === 'Dotnet build').completedAt), Date.parse(original.completedAt));
@@ -73,6 +75,7 @@ exit $LASTEXITCODE
   const beforeUploadRetry = actions();
   const third = run(3);
   assert.equal(third.status, 0, third.stdout + third.stderr);
+  supervised(3, 0);
   assert.deepEqual(actions().slice(beforeUploadRetry.length), always);
   assert.equal(actions().filter(name => name === 'Dotnet build').length, 1);
   const changedSdk = run(4, '', { FIXTURE_SDK: '10.0.307' });

@@ -593,7 +593,8 @@ certification. It runs SLT, Docker integration and Standard scale along with eve
 local phase, without diagnostic skips. Per-process watchdogs stream logs; attempt-specific
 diagnostics survive failures. Input verification and the certification process share a 400-minute
 budget within the 425-minute step, reserving time for checkpoint verification. The eight-hour job ceiling is a recovery
-bound, not a measured clean-run time.
+bound, not a measured clean-run time. The shared supervisor accepts this budget within its seven-hour
+parameter bound and records the effective `timeoutSeconds` in `result.json`.
 
 Rerun the failed job in the same workflow run on the same dedicated runner and workspace. A closed
 checkpoint binds the candidate, run, runner, toolchain, Docker image inventory, original evidence and
@@ -622,7 +623,7 @@ uses the current hosted collector receipt as its authority; an arbitrary local r
 This enforces full local phase evidence only. Deployment profiles/transitions, live topology/HA,
 recovery, conditionally applicable suites and complete package promotion still require their own gates.
 Controlled-host rollout, a real full run and hosted retry/timing acceptance remain outstanding.
-Local fixtures execute the real phase runner and recovery driver, including a failed phase, dependent
+Local fixtures execute the real supervisor, phase runner and recovery driver, including a failed phase, dependent
 phase and upload-only retry. They establish recovery behavior, not hosted full-run or timing acceptance.
 
 ### Certification schedule and evidence ledger

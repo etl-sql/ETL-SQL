@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Fixed controlled-host certification rejecting its 400-minute process budget before execution.
+  The shared supervisor now accepts up to seven hours and records the effective timeout. Recovery
+  fixtures exercise the real supervisor, including long-budget binding and out-of-range rejection.
+
 - Verified all 23 security tests on Windows, including DPAPI hardware-locked encryption. Corrected
   the temp-path fixture to check the existing protection of per-user `AppData` directories.
 
