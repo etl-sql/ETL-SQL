@@ -58,15 +58,13 @@ function extractStewardshipTags(source) {
   }
 
   const tags = [];
-  const definitionPattern = /new\("([^"]+)"\s*,\s*StewardshipTagValueKind\.\w+\s*,\s*(?:\w+|\[[^\]]*\])\s*,\s*\[[^\]]*\]\s*,\s*\[([^\]]*)\]/g;
+  const definitionPattern = /new\(\s*"([^"]+)"\s*,\s*StewardshipTagValueKind\.\w+\s*,\s*(?:\w+|\[[^\]]*\])\s*,\s*\[[^\]]*\]\s*\)/g;
   let match;
   while ((match = definitionPattern.exec(definitions[1])) !== null) {
     tags.push(match[1]);
-    const aliasPattern = /"([^"]+)"/g;
-    let alias;
-    while ((alias = aliasPattern.exec(match[2])) !== null) tags.push(alias[1]);
   }
-  if (tags.length === 0) {
+  const expected = [...definitions[1].matchAll(/new\(\s*"/g)].length;
+  if (tags.length === 0 || tags.length !== expected) {
     throw new Error('Unable to extract stewardship tags from StewardshipTagCatalog.cs');
   }
   return tags;
@@ -284,4 +282,5 @@ function main() {
   }
 }
 
-main();
+module.exports = { extractStewardshipTags };
+if (require.main === module) main();

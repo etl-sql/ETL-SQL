@@ -3,6 +3,18 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { runChecks, sourceChecks, releaseAutomationChecks } from '../release-preflight.mjs';
+import syntaxIndex from '../generate-syntax-index.js';
+
+const catalog = readFileSync(new URL('../../src/ETL-SQL.Core/Common/StewardshipTagCatalog.cs', import.meta.url), 'utf8');
+for (const source of [catalog.replaceAll('\r\n', '\n'), catalog.replaceAll('\r\n', '\n').replaceAll('\n', '\r\n')]) {
+  const tags = syntaxIndex.extractStewardshipTags(source);
+  assert.equal(tags.length, 28);
+  assert.equal(new Set(tags).size, tags.length);
+  for (const name of ['owner', 'classification', 'source_column', 'expect', 'fail']) assert.ok(tags.includes(name));
+  for (const name of ['sensitivity', 'public', 'table', 'column']) assert.ok(!tags.includes(name));
+}
+assert.throws(() => syntaxIndex.extractStewardshipTags(catalog.replace('TableColumnScriptScopes, []),', 'TableColumnScriptScopes, [], []),')),
+  /Unable to extract/, 'A changed record shape must fail instead of silently dropping an entry.');
 
 assert.equal(releaseAutomationChecks.length, 24);
 for (const check of releaseAutomationChecks) {

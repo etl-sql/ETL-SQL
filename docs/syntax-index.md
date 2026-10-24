@@ -2675,7 +2675,6 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `@pii` | Tag | Standard governance tag |
 | `@quality` | Tag | Standard governance tag |
 | `@sensitive` | Tag | Standard governance tag |
-| `@sensitivity` | Tag | Standard governance tag |
 | `@sla` | Tag | Standard governance tag |
 | `@source_column` | Tag | Standard governance tag |
 | `@source_system` | Tag | Standard governance tag |
