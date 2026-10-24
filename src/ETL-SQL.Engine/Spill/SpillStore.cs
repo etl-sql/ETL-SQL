@@ -369,13 +369,13 @@ public partial class SpillStore : ISpillStore
         ISpillReader reader;
         if (_context.SpillFormat == "Json")
         {
-            var jsonReader = new SecureSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress);
+            var jsonReader = new SecureSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress, _context.CancellationToken);
             await jsonReader.InitializeAsync();
             reader = jsonReader;
         }
         else
         {
-            var arrowReader = new ArrowSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress, _context.Logger);
+            var arrowReader = new ArrowSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress, _context.Logger, _context.CancellationToken);
             await arrowReader.InitializeAsync();
             reader = arrowReader;
         }
@@ -450,6 +450,8 @@ public partial class SpillStore : ISpillStore
     {
         private readonly FileStream _fileStream;
         private readonly CryptoStream? _cryptoStream;
+        private readonly AuthenticatedSpillEncryption.AuthenticationWriter? _authentication;
+        private bool _disposed;
         private readonly GZipStream? _gzipStream;
         private readonly StreamWriter _writer;
         private readonly IExecutionContext _context;
@@ -470,23 +472,17 @@ public partial class SpillStore : ISpillStore
 
                 if (encrypt)
                 {
-                    using var aes = Aes.Create();
-                    aes.Key = key;
-                    aes.GenerateIV();
-                    _fileStream.Write(aes.IV, 0, aes.IV.Length); // Write IV to start of file
-
-                    var encryptor = aes.CreateEncryptor(key, aes.IV);
-                    _cryptoStream = new CryptoStream(_fileStream, encryptor, CryptoStreamMode.Write);
+                    (_cryptoStream, _authentication) = AuthenticatedSpillEncryption.CreateWriter(_fileStream, key, chunkName, 1, compress, context.CancellationToken);
                     current = _cryptoStream;
                 }
 
                 if (compress)
                 {
-                    _gzipStream = new GZipStream(current, CompressionLevel.Optimal);
+                    _gzipStream = new GZipStream(current, CompressionLevel.Optimal, leaveOpen: true);
                     current = _gzipStream;
                 }
 
-                _writer = new StreamWriter(current, Encoding.UTF8);
+                _writer = new StreamWriter(current, Encoding.UTF8, 1024, leaveOpen: true);
             }
             catch
             {
@@ -518,7 +514,7 @@ public partial class SpillStore : ISpillStore
                 ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
                     _context, _context.Telemetry.TotalSpilledBytes);
             }
-            await _writer.WriteLineAsync(json);
+            await _writer.WriteLineAsync(json.AsMemory(), _context.CancellationToken);
         }
 
         public async Task WriteRowsAsync(IEnumerable<Row> rows)
@@ -528,10 +524,31 @@ public partial class SpillStore : ISpillStore
 
         public async ValueTask DisposeAsync()
         {
-            await _writer.DisposeAsync();
-            if (_gzipStream != null) await _gzipStream.DisposeAsync();
-            if (_cryptoStream != null) await _cryptoStream.DisposeAsync();
-            await _fileStream.DisposeAsync();
+            if (_disposed) return;
+            _disposed = true;
+            try
+            {
+                await _writer.DisposeAsync();
+                if (_gzipStream != null) await _gzipStream.DisposeAsync();
+                if (_cryptoStream != null) await _cryptoStream.DisposeAsync();
+                if (_authentication != null) await _authentication.CompleteAsync();
+            }
+            finally
+            {
+                try
+                {
+                    if (_gzipStream != null) await _gzipStream.DisposeAsync();
+                }
+                finally
+                {
+                    try { if (_cryptoStream != null) await _cryptoStream.DisposeAsync(); }
+                    finally
+                    {
+                        _authentication?.Dispose();
+                        await _fileStream.DisposeAsync();
+                    }
+                }
+            }
         }
     }
 
@@ -541,6 +558,7 @@ public partial class SpillStore : ISpillStore
         private readonly byte[] _key;
         private readonly bool _encrypt;
         private readonly bool _compress;
+        private readonly CancellationToken _cancellationToken;
         private readonly string _chunkName;
         private FileStream? _fileStream;
         private CryptoStream? _cryptoStream;
@@ -549,21 +567,22 @@ public partial class SpillStore : ISpillStore
 
         public string ChunkName => _chunkName;
 
-        public SecureSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress)
+        public SecureSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress, CancellationToken cancellationToken)
         {
             _path = path;
             _chunkName = chunkName;
             _key = key;
             _encrypt = encrypt;
             _compress = compress;
+            _cancellationToken = cancellationToken;
         }
 
         public async Task InitializeAsync()
         {
             if (!File.Exists(_path))
             {
-                _fileStream = null;
-                return;
+                // COMPAT_BREAK: 0.22 — a missing spill chunk must not silently remove rows.
+                throw new ExecutionException("Spill chunk is missing. Rerun the statement or recreate the saved session.");
             }
 
             _fileStream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
@@ -573,12 +592,7 @@ public partial class SpillStore : ISpillStore
 
                 if (_encrypt)
                 {
-                    byte[] iv = new byte[16];
-                    await _fileStream.ReadExactlyAsync(iv, 0, 16);
-
-                    using var aes = Aes.Create();
-                    var decryptor = aes.CreateDecryptor(_key, iv);
-                    _cryptoStream = new CryptoStream(_fileStream, decryptor, CryptoStreamMode.Read);
+                    _cryptoStream = await AuthenticatedSpillEncryption.CreateReaderAsync(_fileStream, _key, _chunkName, 1, _compress, _cancellationToken);
                     current = _cryptoStream;
                 }
 
@@ -643,12 +657,13 @@ public partial class SpillStore : ISpillStore
         private const string SchemaVersion = "1";
         private readonly FileStream _fileStream;
         private readonly CryptoStream? _cryptoStream;
+        private readonly AuthenticatedSpillEncryption.AuthenticationWriter? _authentication;
+        private bool _disposed;
         private readonly GZipStream? _gzipStream;
         private readonly Stream _payloadStream;
         private readonly IExecutionContext _context;
         private readonly string _chunkName;
         private readonly int _flushBatchSize;
-        private readonly string _filePath;
 
         private const string JsonPrefix = "\x1Ejson:";
 
@@ -664,7 +679,6 @@ public partial class SpillStore : ISpillStore
         {
             _chunkName = chunkName;
             _context = context;
-            _filePath = path;
             _flushBatchSize = Math.Max(1, context.EffectiveBatchSize);
             _fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
 
@@ -674,18 +688,13 @@ public partial class SpillStore : ISpillStore
 
                 if (encrypt)
                 {
-                    using var aes = Aes.Create();
-                    aes.Key = key;
-                    aes.GenerateIV();
-                    _fileStream.Write(aes.IV, 0, aes.IV.Length);
-                    var encryptor = aes.CreateEncryptor(key, aes.IV);
-                    _cryptoStream = new CryptoStream(_fileStream, encryptor, CryptoStreamMode.Write);
+                    (_cryptoStream, _authentication) = AuthenticatedSpillEncryption.CreateWriter(_fileStream, key, chunkName, 2, compress, context.CancellationToken);
                     current = _cryptoStream;
                 }
 
                 if (compress)
                 {
-                    _gzipStream = new GZipStream(current, CompressionLevel.Optimal);
+                    _gzipStream = new GZipStream(current, CompressionLevel.Optimal, leaveOpen: true);
                     current = _gzipStream;
                 }
 
@@ -1198,32 +1207,43 @@ public partial class SpillStore : ISpillStore
 
         public async ValueTask DisposeAsync()
         {
+            if (_disposed) return;
+            _disposed = true;
             try
             {
                 await FlushBatchAsync();
+                if (_arrowWriter == null)
+                {
+                    _schema = new Schema.Builder().Build();
+                    _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
+                    await _arrowWriter.WriteStartAsync(_context.CancellationToken);
+                }
                 if (_arrowWriter != null)
                     await _arrowWriter.WriteEndAsync(CancellationToken.None);
+                _arrowWriter?.Dispose();
+                _arrowWriter = null;
+                if (_gzipStream != null) await _gzipStream.DisposeAsync();
+                if (_cryptoStream != null) await _cryptoStream.DisposeAsync();
+                if (_authentication != null) await _authentication.CompleteAsync();
             }
             finally
             {
                 _arrowWriter?.Dispose();
-                if (_gzipStream != null) await _gzipStream.DisposeAsync();
-                if (_cryptoStream != null) await _cryptoStream.DisposeAsync();
-                await _fileStream.DisposeAsync();
-            }
-
-            // Empty partition: delete the file so the reader sees "not found" → null
-            if (_arrowWriter == null)
-            {
                 try
                 {
-                    File.Delete(_filePath);
+                    if (_gzipStream != null) await _gzipStream.DisposeAsync();
                 }
-                catch (Exception ex)
+                finally
                 {
-                    _context.Logger.Warning("Failed to delete empty spill file {Path}: {Message}", _filePath, ex.Message);
+                    try { if (_cryptoStream != null) await _cryptoStream.DisposeAsync(); }
+                    finally
+                    {
+                        _authentication?.Dispose();
+                        await _fileStream.DisposeAsync();
+                    }
                 }
             }
+
         }
     }
 
@@ -1235,6 +1255,7 @@ public partial class SpillStore : ISpillStore
         private readonly byte[] _key;
         private readonly bool _encrypt;
         private readonly bool _compress;
+        private readonly CancellationToken _cancellationToken;
         private readonly string _chunkName;
         private FileStream? _fileStream;
         private CryptoStream? _cryptoStream;
@@ -1254,13 +1275,14 @@ public partial class SpillStore : ISpillStore
         public string ChunkName => _chunkName;
         private readonly ILogger? _logger;
 
-        public ArrowSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress, ILogger? logger = null)
+        public ArrowSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress, ILogger? logger = null, CancellationToken cancellationToken = default)
         {
             _path = path;
             _chunkName = chunkName;
             _key = key;
             _encrypt = encrypt;
             _compress = compress;
+            _cancellationToken = cancellationToken;
             _logger = logger;
         }
 
@@ -1268,8 +1290,8 @@ public partial class SpillStore : ISpillStore
         {
             if (!File.Exists(_path))
             {
-                _fileStream = null;
-                return;
+                // COMPAT_BREAK: 0.22 — empty partitions have files; absence is data loss.
+                throw new ExecutionException("Spill chunk is missing. Rerun the statement or recreate the saved session.");
             }
 
             _fileStream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
@@ -1279,11 +1301,7 @@ public partial class SpillStore : ISpillStore
 
                 if (_encrypt)
                 {
-                    byte[] iv = new byte[16];
-                    await _fileStream.ReadExactlyAsync(iv, 0, 16);
-                    using var aes = Aes.Create();
-                    var decryptor = aes.CreateDecryptor(_key, iv);
-                    _cryptoStream = new CryptoStream(_fileStream, decryptor, CryptoStreamMode.Read);
+                    _cryptoStream = await AuthenticatedSpillEncryption.CreateReaderAsync(_fileStream, _key, _chunkName, 2, _compress, _cancellationToken);
                     current = _cryptoStream;
                 }
 

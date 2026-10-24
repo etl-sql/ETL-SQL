@@ -831,7 +831,9 @@ Four external engines activate when the estimated working set exceeds configured
 
 `RowWidthEstimator` samples up to 100 rows to derive an average row width, then projects total bytes as `count × avgWidth`. If the projection exceeds `OperatorMemoryGrantMB`, the external engine activates even when the row count is below threshold.
 
-All external engines write through `ISpillStore` (AES-256 encrypted, GZip compressed by default) to `%TEMP%\ETL-SQL\Spill\<session-guid>\` and increment `Evaluator.TotalSpilledBytes`. See [SpillStore](#spillstore--encrypted-spill-io) below for the security model.
+External operators write through `ISpillStore` with authenticated AES-256 encryption and GZip
+compression by default, and increment `Evaluator.TotalSpilledBytes`. The store owns the authorized
+scratch or checkpoint directory. See [SpillStore](#spillstore--encrypted-spill-io) for the security model.
 
 **ExternalSortEngine** (`ETL-SQL.Engine/Engines/ExternalSortEngine.cs`)
 
@@ -860,32 +862,53 @@ For the streaming path, rows are buffered until either `JoinSpillThreshold` rows
 
 ### SpillStore — encrypted spill I/O
 
-All four external engines write and read spill data exclusively through `ISpillStore`, which is exposed on `IExecutionContext` and implemented by `SpillStore` in `ETL-SQL.Engine/Spill/SpillStore.cs`.
+External operators write and read spill data through `ISpillStore`, exposed on `IExecutionContext`
+and implemented by `SpillStore` in `ETL-SQL.Engine/Spill/SpillStore.cs`.
 
 **Session key model**
 
-`SpillStore` generates a random 256-bit AES key once at construction (`RandomNumberGenerator.GetBytes(32)`). The key exists only in memory and is never written to disk. It is zeroed via `Array.Clear` in `DisposeAsync`. Because the key is process-scoped, spill files left behind by a crash are unrecoverable by any other process.
+`SpillStore` generates a random 256-bit session key when temporary storage initializes. Persistent
+sessions obtain their key from `ISessionStateManager.GetSpillKey(sessionId)` so a saved session can
+reopen its chunks. The cached key is cleared in `Dispose()`. Each encrypted file has a fresh random
+32-byte salt; HKDF-SHA256 derives separate 256-bit encryption and authentication keys from the session
+key and that salt. Derived key buffers are cleared after the cipher and HMAC have copied them.
 
 **Write path** (`ISpillWriter`)
 
-`SecureSpillWriter` chains the output layers in order:
+The JSON and Arrow writers share `AuthenticatedSpillEncryption`:
 
 ```
-Row data (JSON line)
+Row data (JSON lines or Arrow IPC)
   → GZipStream (if SpillCompressionEnabled)
-  → AES-128-CBC CryptoStream (if SpillEncryptionEnabled)
-  → FileStream (spill file)
+  → AES-256-CBC CryptoStream (if SpillEncryptionEnabled)
+  → incremental HMAC-SHA256 over the envelope and ciphertext
+  → FileStream, followed by the authentication tag when writing completes
 ```
 
-A fresh, randomly generated 16-byte IV is written to the start of every spill file before the encrypted payload. Compression before encryption is intentional — encrypting compressed data is safe and maximises space savings.
+Encrypted format v2 starts with the eight-byte magic `ETLSPL02`, a codec byte, a compression byte,
+the 32-byte salt and a random 16-byte IV. The HMAC binds that complete header, the length-prefixed
+UTF-8 chunk name and every ciphertext byte. The 32-byte tag follows the ciphertext. Compression
+precedes encryption. An interrupted or failed write does not get a successful authentication footer.
 
 **Read path** (`ISpillReader`)
 
-`SecureSpillReader` reverses the chain. If the file does not exist (e.g. an empty partition) the reader returns `null` from `ReadRowAsync()` rather than throwing, so engines can skip empty partitions without special-casing.
+Before constructing the JSON or Arrow decoder, the reader verifies the entire envelope and ciphertext
+with a fixed-size buffer and compares the tag in constant time. Only then does it rewind the same
+open file and decrypt through a bounded ciphertext stream. This adds a verification read pass without
+buffering the whole spill in memory. Changed headers, ciphertext, tags, chunk names or session keys,
+and truncated or appended files fail before a row is exposed.
+
+Both codecs retain valid empty files. A missing chunk is an execution failure, preventing deletion
+from silently turning a populated partition into an empty result. Releases before v0.22.0 wrote
+unauthenticated encrypted chunks; those files are rejected. Recreate affected saved sessions by
+rerunning their source statements. There is no legacy encrypted-file fallback.
 
 **Temp directory lifecycle**
 
-`SpillStore` creates a single temp directory at `%TEMP%\ETL-SQL\Spill\<Guid>\` on first write and deletes it recursively on `DisposeAsync`. The `Evaluator` owns the `SpillStore` instance and disposes it at the end of each script execution, guaranteeing cleanup on both normal exit and unhandled exceptions. Individual `SortExternal()` calls also wrap their work in `try/finally` as a secondary safety net.
+Without an authorized scratch grant, temporary spill initializes under the platform temp directory
+at `ETL-SQL-Spill/<Guid>/`. Persistent spill uses the session's checkpoint grant or
+`<SessionRoot>/<SessionId>/spill/`. `SpillStore.Dispose()` deletes temporary spill and preserves
+persistent chunks. External operators also delete their temporary chunks in `finally` blocks.
 
 **File naming**
 
@@ -895,10 +918,12 @@ All spill files use GUID-based names (`sort_chunk_{Guid}_{n}.tmp`, `win_part_{Gu
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `Security:SpillEncryptionEnabled` | `true` | AES-256 encryption on all spill files. |
+| `Security:SpillEncryptionEnabled` | `true` | AES-256 encryption and HMAC-SHA256 authentication on spill files. |
 | `Security:SpillCompressionEnabled` | `true` | GZip compression before encryption. |
+| `Security:SpillFormat` | `Arrow` | `Arrow` IPC or `Json` lines; both use the authenticated envelope when encryption is enabled. |
 
-Both default to `true`. Setting either to `false` triggers a linter warning (`SpillSecurityRule`) advising that intermediate data will be exposed on disk in plain text.
+Encryption and compression both default to `true`. Disabling encryption also disables spill
+authentication. Disabling compression alone keeps encryption and authentication enabled.
 
 **Engine integration summary**
 

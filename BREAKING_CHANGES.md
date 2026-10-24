@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: Encrypted spill files require authentication
+- **What changed**: JSON and Arrow spill files now use a versioned AES-256-CBC/HMAC-SHA256 envelope with separate derived keys. Readers authenticate the complete file before exposing rows. Earlier unauthenticated encrypted files are rejected, and missing chunks fail instead of returning an empty result.
+- **Who is affected**: Persistent sessions containing encrypted spill files written before v0.22.0, or sessions with missing chunks.
+- **Migration**: Recreate affected sessions by rerunning their source statements. Newly written empty partitions remain readable. `Security:SpillFormat` still supports `Arrow` and `Json`; neither provides a legacy encrypted-file fallback.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Connector: An unquoted TRUE turns boolean connection options on
 - **What changed**: `CREATE CONNECTION` stores an unquoted `TRUE` as `ON`, and most connectors only accepted `TRUE`, so `USE_SSL = TRUE` or `ENCRYPT = TRUE` turned the option off. MSSQL connections were built with `Encrypt=False` and Active Directory bound over plain LDAP. Connectors now accept `TRUE`, `ON`, `YES` and `1`.
 - **Who is affected**: Connections that set boolean options without quotes: MSSQL `ENCRYPT`/`USE_SSL`/`TRUST_SERVER_CERTIFICATE`/`TRUSTED_CONNECTION`/`MULTI_SUBNET_FAILOVER`/`POOLING`, Postgres/MySQL/Oracle `POOLING` and `TRUST_SERVER_CERTIFICATE`, MySQL `ALLOW_PUBLIC_KEY_RETRIEVAL`/`ALLOW_USER_VARIABLES`, Active Directory and SMTP `USE_SSL`, S3 `FORCE_PATH_STYLE`, SFTP `ALLOW_UNPINNED_HOST_KEY`, REST `VALIDATE_JSON_BODY`, Neo4j boolean options.

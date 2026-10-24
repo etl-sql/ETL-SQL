@@ -173,7 +173,9 @@ Add one new key to `appsettings.json`:
 }
 ```
 
-`SpillFormat` accepts `"Arrow"` (default) or `"Json"` (legacy fallback). The `"Json"` path is retained so persistent sessions with existing spill files can still be read.
+`SpillFormat` accepts `"Arrow"` (default) or `"Json"`. As of v0.22.0, both codecs use the authenticated
+encrypted envelope described in [Engine Architecture](../engine.md#spillstore--encrypted-spill-io).
+Older unauthenticated encrypted spill files are rejected; recreate those saved sessions.
 
 ### 4.4 Files Changed
 

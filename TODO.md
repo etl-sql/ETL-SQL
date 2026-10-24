@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 27 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 26 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -605,8 +605,14 @@ here; each one failed a single test per run and passed on rerun.
 - [ ] **Saved-view flat parameters.** Decide whether `Parameters`/`Filters` on the saved-view API
   stay. If not, have `CREATE SAVED VIEW` send the resolved-state envelope and drop `ParametersJson`
   and `FiltersJson`.
-- [ ] **JSON spill format.** `SpillFormat = Json` encrypts with AES-CBC and no authentication tag.
-  Move it to the authenticated format or remove the option.
+- [x] **JSON spill format.** Authenticate encrypted spill data before decoding it.
+  **Verified 2026-10-24:** a modified CBC IV was accepted by the old JSON reader. JSON and Arrow
+  now share a versioned AES-256-CBC/HMAC-SHA256 envelope with separate HKDF-derived keys, binding
+  the header, chunk name and ciphertext. Complete-file verification precedes row decoding.
+  All 116 focused security/persistence/operator regressions pass, including 44 corruption cases,
+  four legacy-envelope rejections, wrong keys, renamed chunks and missing files. Valid empty
+  partitions retain files. Earlier encrypted saved sessions require recreation; the breaking-change
+  record and engine architecture document the migration and bounded verification read pass.
 - [ ] **`ON TYPE … WITH` completion branch** in `LanguageService`. Confirm whether that syntax still
   exists; remove the branch if not.
 - [ ] **Review `scripts/`, the installers and `tests/`.** The v0.22.0 review covered `src/` only.

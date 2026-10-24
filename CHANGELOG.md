@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Authenticate encrypted JSON and Arrow spill files before decoding rows. The new envelope binds
+  the codec, compression, chunk name and ciphertext, rejecting tampering and incomplete files.
+  Missing chunks now fail; valid empty partitions keep their files. Recreate saved sessions whose
+  encrypted spill files were written by earlier releases.
+
 - Track the pre-commit hook as executable and pin its line endings to LF so fresh Linux clones
   run the staged C# and browser-asset checks.
 
