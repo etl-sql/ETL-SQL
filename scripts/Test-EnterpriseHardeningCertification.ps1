@@ -30,7 +30,7 @@ $RepoRoot = Resolve-Path (Join-Path $ScriptRoot '..')
 . (Join-Path $ScriptRoot 'Release.Helpers.ps1')
 
 if ([string]::IsNullOrWhiteSpace($RunId)) {
-    $RunId = 'enterprise-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+    $RunId = 'enterprise-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
 }
 if ([string]::IsNullOrWhiteSpace($Platform)) {
     if ($IsWindows -or [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) {
@@ -54,10 +54,54 @@ if ([string]::IsNullOrWhiteSpace($ArtifactsPath)) {
     }
 }
 
+if (Test-Path -LiteralPath $OutDir) {
+    $existing = Get-Item -LiteralPath $OutDir -Force
+    if (-not $existing.PSIsContainer -or ($existing.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+        @(Get-ChildItem -LiteralPath $OutDir -Force).Count -gt 0) {
+        throw 'Enterprise evidence directory must be new or empty. Select a new OutDir/RunId to preserve earlier attempts.'
+    }
+}
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-New-Item -ItemType Directory -Force -Path $ArtifactsPath | Out-Null
 $OutDir = (Resolve-Path -LiteralPath $OutDir).Path
-$ArtifactsPath = (Resolve-Path -LiteralPath $ArtifactsPath).Path
+# Reserve empty directories exclusively so concurrent invocations cannot overwrite one attempt.
+try {
+    $claim = [IO.File]::Open((Join-Path $OutDir 'enterprise-attempt.json'), [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+} catch { throw 'Cannot exclusively claim enterprise evidence directory. Select a new writable OutDir/RunId.' }
+try {
+    $bytes = [Text.Encoding]::UTF8.GetBytes(([ordered]@{
+        schemaVersion = 1; runId = $RunId; platform = $Platform; configuration = $Configuration
+        startedAt = [DateTimeOffset]::UtcNow.ToString('o')
+    } | ConvertTo-Json))
+    $claim.Write($bytes, 0, $bytes.Length)
+} finally { $claim.Dispose() }
+$ArtifactsPath = [IO.Path]::GetFullPath($ArtifactsPath)
+$privateBuildRoot = ''
+if (-not $NoBuild -and -not $NoRestore) {
+    New-Item -ItemType Directory -Force -Path $ArtifactsPath | Out-Null
+    $privateBuildRoot = Join-Path $ArtifactsPath ('enterprise-build-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $privateBuildRoot | Out-Null
+}
+
+function Remove-OwnedEnterpriseBuildDirectory {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return }
+    if ([string]::IsNullOrWhiteSpace($privateBuildRoot)) { throw 'No private enterprise build directory is owned by this attempt.' }
+    $target = [IO.Path]::GetFullPath($Path)
+    $owned = [IO.Path]::GetFullPath($privateBuildRoot)
+    $base = $ArtifactsPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    if (-not $owned.StartsWith($base, $comparison) -or
+        ($target -cne $owned -and $target -cne (Join-Path $owned 'engine') -and $target -cne (Join-Path $owned 'portal'))) {
+        throw 'Refusing cleanup outside this attempt''s private enterprise build directory.'
+    }
+    foreach ($directory in @($owned, $target)) {
+        if ((Test-Path -LiteralPath $directory) -and
+            ((Get-Item -LiteralPath $directory -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw 'Refusing enterprise build cleanup through a link.'
+        }
+    }
+    if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+}
 
 function Invoke-CertCommand {
     param(
@@ -69,11 +113,8 @@ function Invoke-CertCommand {
     )
 
     $logPath = Join-Path $OutDir $LogName
-    Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $ExpectedResultPath -Force -ErrorAction SilentlyContinue
     if (-not [string]::IsNullOrWhiteSpace($StepArtifactsPath)) {
-        Remove-Item -LiteralPath $StepArtifactsPath -Recurse -Force -ErrorAction SilentlyContinue
-        New-Item -ItemType Directory -Force -Path $StepArtifactsPath | Out-Null
+        New-Item -ItemType Directory -Path $StepArtifactsPath | Out-Null
     }
     $started = Get-Date
     Push-Location $RepoRoot
@@ -126,8 +167,8 @@ function Write-Markdown {
 $source = Get-ReleaseCertificationSource -RepoRoot $RepoRoot
 $commit = $source.commit
 
-$engineArtifactsPath = Join-Path $ArtifactsPath 'engine'
-$portalArtifactsPath = Join-Path $ArtifactsPath 'portal'
+$engineArtifactsPath = if ($privateBuildRoot) { Join-Path $privateBuildRoot 'engine' } else { '' }
+$portalArtifactsPath = if ($privateBuildRoot) { Join-Path $privateBuildRoot 'portal' } else { '' }
 
 $testArgsCommon = @(
     'test',
@@ -156,7 +197,7 @@ if ($NoBuild) {
 $steps = New-Object System.Collections.Generic.List[object]
 $engineResultPath = Join-Path $OutDir 'enterprise-hardening.trx'
 $steps.Add((Invoke-CertCommand -Name 'Engine and connector enterprise hardening tests' -Arguments $testArgsCommon -LogName 'enterprise-hardening-tests.log' -ExpectedResultPath $engineResultPath -StepArtifactsPath $(if ($NoBuild -or $NoRestore) { '' } else { $engineArtifactsPath }))) | Out-Null
-Remove-Item -LiteralPath $engineArtifactsPath -Recurse -Force -ErrorAction SilentlyContinue
+Remove-OwnedEnterpriseBuildDirectory $engineArtifactsPath
 
 if (-not $SkipPortalTests) {
     $portalArgs = @(
@@ -192,8 +233,9 @@ if (-not $SkipPortalTests) {
     } finally {
         [Environment]::SetEnvironmentVariable($outboxVariable, $previousOutboxPath)
     }
-    Remove-Item -LiteralPath $portalArtifactsPath -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-OwnedEnterpriseBuildDirectory $portalArtifactsPath
 }
+Remove-OwnedEnterpriseBuildDirectory $privateBuildRoot
 
 $stepArray = $steps.ToArray()
 $status = if (@($stepArray | Where-Object { -not $_.passed }).Count -gt 0) { 'Failed' }

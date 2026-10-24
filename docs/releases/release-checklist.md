@@ -626,6 +626,9 @@ in top-level and nested certifications. Rerun older producers whose reports omit
       `certification-results/enterprise-hardening/<run-id>/<platform>/`.
       The driver defaults to Release and records the configuration in its summary. Explicit
       `-Configuration Debug` runs are development evidence and cannot support release claims.
+      Use a new run/output directory for each attempt; the driver rejects nonempty evidence directories.
+      `-ArtifactsPath` supplies a base for private fresh-build outputs. Existing `engine`/`portal`
+      caches are preserved, including during `-NoBuild` and `-NoRestore` runs.
 - [ ] **Recovery drill:** `etl-sql admin restore --validate --report` passes against candidate backup
       material, with the report retained under `artifacts/release-evidence/x.y.z/recovery/`.
 - [ ] **HA fault/recovery evidence:** the candidate's fault plan is run and its evidence validates.

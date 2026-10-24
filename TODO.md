@@ -455,6 +455,11 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   after a failed job had already uploaded evidence. Workflow fixtures expand the actual names
   across attempts and matrix executions, reject collisions and prohibit overwriting earlier
   artifacts. Hosted failed-job retry acceptance remains open.
+  Enterprise certification no longer deletes supplied `engine`/`portal` build caches during no-build,
+  no-restore or fresh-build runs. Fresh builds use private attempt directories with bounded cleanup;
+  nonempty evidence directories are rejected before testing to preserve the original attempt.
+  Executed fixtures reproduce the earlier deletion and verify successful/failed builds, cache reuse,
+  evidence preservation and rejection of cleanup escapes/links. Hosted recovery rehearsal remains open.
 
 ### 2. Order-independent scale certification
 

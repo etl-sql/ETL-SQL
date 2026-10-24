@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Enterprise certification preserves supplied build caches and earlier evidence attempts. Fresh builds
+  use a unique private directory; cleanup rejects paths outside that attempt and linked build roots.
+  Nonempty evidence directories now require a new run/output path before testing starts.
+
 - Closed the one-command release-metadata follow-up after public CLI rehearsal verifies preview,
   exactly three metadata writes, repeat safety, invalid-request rejection and LF/CRLF preservation.
   Private v0.22.0 rehearsal metadata agrees; the real release date and version remain unchanged.
