@@ -8,6 +8,7 @@ import path from 'node:path';
 import { collectHostedLocalEvidence, verifyLocalEvidenceAttachment } from '../collect-hosted-local-evidence.mjs';
 import { createBundle } from '../local-release-bundle.mjs';
 import { requiredLocalPhases } from '../check-release-evidence.mjs';
+import { localPhaseFingerprint } from '../hosted-local-resume.mjs';
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'hosted-local-evidence-'));
 const sha = 'a'.repeat(40), now = Date.now(), time = offset => new Date(now + offset).toISOString();
@@ -15,7 +16,7 @@ const run = { id: 123, run_attempt: 1, head_sha: sha, repository: { full_name: '
   head_repository: { full_name: 'owner/repo' }, path: '.github/workflows/local-release-certification.yml',
   head_branch: 'release/v1.2.3', event: 'workflow_dispatch', status: 'completed', conclusion: 'success', created_at: time(-10000) };
 const job = { id: 456, run_id: 123, head_sha: sha, name: 'Full local pre-release certification',
-  status: 'completed', conclusion: 'success', started_at: time(-9000), completed_at: time(-1000) };
+  status: 'completed', conclusion: 'success', runner_name: 'fixture-runner', started_at: time(-9000), completed_at: time(-1000) };
 const artifact = { id: 789, name: 'local-release-evidence-123-1', expired: false,
   created_at: time(-2000), digest: `sha256:${'b'.repeat(64)}`, workflow_run: { id: 123, head_sha: sha } };
 const runsEndpoint = `repos/owner/repo/actions/workflows/local-release-certification.yml/runs?head_sha=${sha}&per_page=100`;
@@ -27,7 +28,7 @@ const fixture = { [runsEndpoint]: [{ total_count: 1, workflow_runs: [run] }],
   [runEndpoint]: [run], [jobsEndpoint]: [{ total_count: 1, jobs: [job] }],
   [artifactsEndpoint]: [{ total_count: 1, artifacts: [artifact] }], [jobEndpoint]: [job] };
 let next = 0;
-async function collect({ mutate = () => {}, mutateState = () => {}, mutateBundle = () => {}, queryTransform, expectedManifestSha256 } = {}) {
+async function collect({ mutate = () => {}, mutateState = () => {}, mutateBundle = () => {}, mutateExecution = () => {}, queryTransform, expectedManifestSha256 } = {}) {
   const data = structuredClone(fixture);
   mutate(data);
   const log = path.join(root, `phase-${next}.log`), stateFile = path.join(root, `state-${next}.json`), directory = path.join(root, `bundle-${next++}`);
@@ -36,8 +37,11 @@ async function collect({ mutate = () => {}, mutateState = () => {}, mutateBundle
     sourceFingerprint: createHash('sha256').update(sha).digest('hex'), generatedAt: time(-2500),
     scope: { quick: false, forceResume: false, skipNode: false, skipScale: false, includeSlt: true,
       includeDockerIntegration: true, includeStandardScale: true }, plannedPhases: requiredLocalPhases,
-    phases: requiredLocalPhases.map(name => ({ name, status: 'Passed', log, completedAt: time(-3000), artifacts: [] })) };
+    phases: requiredLocalPhases.map(name => ({ name, command: `fixture ${name}`, status: 'Passed', log, completedAt: time(-3000), artifacts: [] })) };
   mutateState(state);
+  state.hostedExecution = { schemaVersion: 1, runId: 123, attempt: 1, runnerName: 'fixture-runner',
+    phases: state.phases.map(phase => ({ name: phase.name, attempt: 1, fingerprint: localPhaseFingerprint(root, phase) })) };
+  mutateExecution(state.hostedExecution);
   // Keep malformed bundle tests focused on consumption, not producer rejection.
   const originalState = structuredClone(state);
   writeFileSync(stateFile, JSON.stringify(state));
@@ -107,6 +111,42 @@ try {
   assert.equal(carried.executionAttempt, 1);
   assert.equal(carried.runAttempt, 2);
   assert.equal(carried.jobId, 456, 'Provenance retains the original execution, not GitHub\'s carried copy ID.');
+  const buildIndex = requiredLocalPhases.indexOf('Dotnet build');
+  const resumedOptions = {
+    mutate: data => {
+      for (const value of [data[runsEndpoint][0].workflow_runs[0], data[runEndpoint][0]]) {
+        value.run_attempt = 2; value.created_at = time(-20000);
+      }
+      const previous = { ...job, id: 400, conclusion: 'failure', started_at: time(-19000), completed_at: time(-11000) };
+      data[jobsEndpoint][0].jobs = [previous];
+      data[`${runEndpoint}/attempts/2/jobs?per_page=100`] = [{ total_count: 1, jobs: [job] }];
+      data['repos/owner/repo/actions/jobs/400'] = [previous];
+      data[artifactsEndpoint][0].artifacts[0].name = 'local-release-evidence-123-2';
+    },
+    mutateState: state => { state.phases[buildIndex].completedAt = time(-15000); },
+    mutateExecution: execution => { execution.attempt = 2; execution.phases.forEach((phase, i) => { phase.attempt = i === buildIndex ? 1 : 2; }); },
+  };
+  const recoveredPhases = await collect(resumedOptions);
+  assert.equal(recoveredPhases.phaseExecutions[buildIndex].jobId, 400);
+  assert.equal(recoveredPhases.phaseExecutions[buildIndex].attempt, 1);
+  for (const [name, alter] of [
+    ['different original runner', data => { data['repos/owner/repo/actions/jobs/400'][0].runner_name = 'another-host'; }],
+    ['original job outside run', data => { data['repos/owner/repo/actions/jobs/400'][0].started_at = time(-21000); }],
+    ['overlapping original job', data => { data['repos/owner/repo/actions/jobs/400'][0].completed_at = time(-5000); }],
+  ]) {
+    await assert.rejects(collect({ ...resumedOptions, mutate: data => { resumedOptions.mutate(data); alter(data); } }), undefined, name);
+  }
+  await assert.rejects(collect({ ...resumedOptions, mutateExecution: execution => {
+    resumedOptions.mutateExecution(execution); execution.phases[buildIndex].attempt = 2;
+  } }), /outside its producing job/);
+  for (const mutateExecution of [
+    execution => { execution.phases.pop(); },
+    execution => { execution.phases[1] = execution.phases[0]; },
+    execution => { execution.phases[0].fingerprint = '0'.repeat(64); },
+    execution => { execution.phases[0].attempt = 9; },
+    execution => { execution.runId = 999; },
+    execution => { execution.runnerName = 'other-host'; },
+  ]) await assert.rejects(collect({ mutateExecution }));
   function attachment() {
     const directory = path.join(root, `attachment-${next++}`);
     mkdirSync(directory);
@@ -139,13 +179,16 @@ try {
   const producer = readFileSync(new URL('../../.github/workflows/local-release-certification.yml', import.meta.url), 'utf8');
   const release = readFileSync(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8');
   assert.match(producer, /runs-on: \[self-hosted, Windows, X64, etlsql-release-operator\]/);
-  assert.doesNotMatch(producer, /pull_request:|workflow_call:|cancel-in-progress: true|overwrite: true|'-Resume'|'-Quick'/);
+  assert.doesNotMatch(producer, /pull_request:|workflow_call:|cancel-in-progress: true|overwrite: true|'-Quick'/);
   assert.match(producer, /name: Full local pre-release certification/);
-  assert.match(producer, /-ScriptArguments @\('-IncludeSlt', '-IncludeDockerIntegration', '-IncludeStandardScale'\)/);
-  assert.match(producer, /timeout-minutes: 425[\s\S]+-TimeoutSeconds 25200/);
+  assert.match(producer, /clean: false/);
+  assert.match(producer, /timeout-minutes: 425[\s\S]+Invoke-HostedLocalCertification.ps1/);
+  const resumeDriver = readFileSync(new URL('../Invoke-HostedLocalCertification.ps1', import.meta.url), 'utf8');
+  assert.match(resumeDriver, /'-Configuration', 'Release', '-IncludeSlt', '-IncludeDockerIntegration', '-IncludeStandardScale'/);
+  assert.match(resumeDriver, /-TimeoutSeconds 24000/);
   assert.match(producer, /name: local-release-evidence-\$\{\{ github.run_id \}\}-\$\{\{ github.run_attempt \}\}/);
   assert.match(producer, /name: Retain original process diagnostics\r?\n        if: always\(\)/);
-  assert.match(producer, /'scripts\/local-release-bundle.mjs', 'create', 'release-validation\/latest\/state.json'/);
+  assert.match(producer, /'scripts\/local-release-bundle.mjs', 'create', \$state/);
   assert.match(producer, /Assert-ReleaseCertificationSourceUnchanged/);
   assert.match(release, /local_manifest_sha256: \$\{\{ steps.local-selection.outputs.manifest_sha256 \}\}/);
   assert.match(release, /name: selected-local-evidence-\$\{\{ github.run_id \}\}-\$\{\{ github.run_attempt \}\}/);
@@ -217,7 +260,7 @@ try {
     mkdirSync(path.join(executionRoot, 'current-local-evidence'));
     writeFileSync(path.join(executionRoot, 'current-local-evidence/selection.json'), JSON.stringify(result));
     for (const name of ['collect-hosted-local-evidence.mjs', 'collect-hosted-release-evidence.mjs', 'hosted-release-policy.json',
-      'local-release-bundle.mjs', 'check-release-evidence.mjs']) {
+      'local-release-bundle.mjs', 'check-release-evidence.mjs', 'hosted-local-resume.mjs']) {
       copyFileSync(fileURLToPath(new URL(`../${name}`, import.meta.url)), path.join(executionRoot, 'scripts', name));
     }
     const execution = spawnSync('pwsh', ['-NoProfile', '-Command', `
@@ -237,5 +280,12 @@ try {
     console.log(`Executed draft attachment workflow: ${mode}`);
   }
   console.log('Controlled-host workflow: exact clean candidate guard executed; full lane, attempt-specific artifacts, publication dependency and recheck wiring passed.');
+  for (const fixture of ['test-hosted-local-resume.mjs', 'test-hosted-local-resume-driver.mjs']) {
+    const result = spawnSync(process.execPath, [fileURLToPath(new URL(`./fixtures/${fixture}`, import.meta.url))],
+      { encoding: 'utf8', windowsHide: true, timeout: 20000 });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    console.log(result.stdout.trim());
+  }
   console.log('Hosted local evidence: retained full phase bundles, producing-job windows, immutable selection, latest-run policy and carried attempts passed.');
 } finally { rmSync(root, { recursive: true, force: true }); }

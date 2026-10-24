@@ -578,13 +578,28 @@ gh workflow run local-release-certification.yml --ref release/vx.y.z -f "candida
 
 The workflow rejects a mismatched workflow/checkout SHA, version branch or dirty checkout before
 certification. It runs SLT, Docker integration and Standard scale along with every other mandatory
-local phase, without diagnostic skips or resume. Per-process watchdogs stream logs; attempt-specific
-diagnostics survive failures. Its eight-hour job ceiling is a recovery bound, not a measured clean-run time.
+local phase, without diagnostic skips. Per-process watchdogs stream logs; attempt-specific
+diagnostics survive failures. The certification process has a 400-minute watchdog within its
+425-minute step, reserving time for checkpoint verification. The eight-hour job ceiling is a recovery
+bound, not a measured clean-run time.
+
+Rerun the failed job in the same workflow run on the same dedicated runner and workspace. A closed
+checkpoint binds the candidate, run, runner, toolchain, Docker image inventory, original evidence and
+cached build/compiler outputs. Verification hashes every cached file's bytes with at most four workers.
+Passed phases retain their original timestamps, logs and artifact paths; failed phases, their dependents
+and mandatory source/asset guards run again. An upload-only failure reuses the passed plan after those
+guards pass. Keep the workspace and every attempt's diagnostics until publication finishes.
+
+Missing or unclosed checkpoints, changed inputs, a different runner/workspace or evidence older than
+seven days block recovery. Start a new explicit workflow run to perform a full certification. The
+workflow never silently substitutes a full rerun for rejected resume evidence.
 
 Release requires the latest eligible successful run for the exact candidate and its original job's
 `local-release-evidence-<run-id>-<attempt>` artifact. The collector checks complete API inventories,
 job identity, artifact ownership/digest metadata, freshness, clean source identity, all required local
-phases, retained file hashes and producing-job time windows. Whole-second API timestamps retain that
+phases, retained file hashes and producing-job time windows. Reused phases must match their original
+attempt's job on the same runner, including when that job failed after those phases passed. Their
+fingerprints bind original commands, completion instants, logs and artifact content. Whole-second API timestamps retain that
 precision. Carried success keeps its original job and artifact; newer failed runs, missing/expired
 artifacts and concurrent retries block reuse.
 
@@ -595,8 +610,8 @@ uses the current hosted collector receipt as its authority; an arbitrary local r
 This enforces full local phase evidence only. Deployment profiles/transitions, live topology/HA,
 recovery, conditionally applicable suites and complete package promotion still require their own gates.
 Controlled-host rollout, a real full run and hosted retry/timing acceptance remain outstanding.
-This first workflow version starts fresh on each attempt. Trusted phase resume and failed-upload
-recovery are unfinished; the retained whole-job reuse checks do not provide phase-level recovery.
+Local fixtures execute the real phase runner and recovery driver, including a failed phase, dependent
+phase and upload-only retry. They establish recovery behavior, not hosted full-run or timing acceptance.
 
 ### Certification schedule and evidence ledger
 

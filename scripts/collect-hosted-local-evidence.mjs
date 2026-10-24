@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { collectHostedEvidence } from './collect-hosted-release-evidence.mjs';
 import { verifyBundle } from './local-release-bundle.mjs';
+import { portablePhaseFingerprint } from './hosted-local-resume.mjs';
 
 export const localEvidencePolicy = {
   schemaVersion: 1, maximumAgeHours: 168,
@@ -57,31 +58,59 @@ export async function collectHostedLocalEvidence(repository, sha, {
   const start = Date.parse(execution.started_at), end = Date.parse(execution.completed_at), created = Date.parse(artifact.created_at);
   if (execution.id !== originJobId || execution.run_id !== run.id || execution.head_sha !== sha ||
       execution.name !== job.name || execution.status !== 'completed' || execution.conclusion !== 'success' ||
-      execution.completed_at !== job.completedAt || !Number.isFinite(start) || !Number.isFinite(end) || end < start ||
+      execution.completed_at !== job.completedAt || !Number.isFinite(start) || !Number.isFinite(end) || end < start || start < Date.parse(run.createdAt) ||
       artifact.expired !== false || artifact.workflow_run?.id !== run.id || artifact.workflow_run?.head_sha !== sha ||
       !/^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? '') || !Number.isFinite(created) || created < start || created > timestampUpperBound(execution.completed_at)) {
     throw new Error('Local evidence artifact does not belong to the successful job execution.');
   }
   const directory = await readBundle(run, artifact);
-  verifyBundle(directory, sha, { now });
+  const manifest = verifyBundle(directory, sha, { now });
   const state = JSON.parse(readFileSync(path.join(directory, 'state.json'), 'utf8'));
   if (Date.parse(state.generatedAt) > timestampUpperBound(artifact.created_at)) throw new Error('Local state was generated after its artifact upload began.');
-  // This workflow starts a full run, not a resume of unbound workstation state.
-  for (const value of [state.generatedAt, ...state.phases.map(phase => phase.completedAt)]) {
-    const timestamp = Date.parse(value);
-    if (!Number.isFinite(timestamp) || timestamp < start || timestamp > timestampUpperBound(execution.completed_at)) throw new Error('Local phase evidence falls outside its producing job.');
+  const generated = Date.parse(state.generatedAt), provenance = state.hostedExecution;
+  if (!Number.isFinite(generated) || generated < start || generated > timestampUpperBound(execution.completed_at) ||
+      provenance?.schemaVersion !== 1 || provenance.runId !== run.id || provenance.attempt !== job.attempt ||
+      typeof provenance.runnerName !== 'string' || !provenance.runnerName || provenance.runnerName !== execution.runner_name ||
+      !Array.isArray(provenance.phases) || provenance.phases.length !== state.phases.length ||
+      new Set(provenance.phases.map(phase => phase.name)).size !== state.phases.length) throw new Error('Local phase execution provenance is incomplete or belongs to another job.');
+  const windows = new Map([[job.attempt, execution]]), phaseExecutions = [];
+  for (const phase of state.phases) {
+    const origin = provenance.phases.find(record => record.name === phase.name);
+    if (!origin || !Number.isSafeInteger(origin.attempt) || origin.attempt < 1 || origin.attempt > job.attempt ||
+        origin.fingerprint !== portablePhaseFingerprint(directory, phase, manifest)) throw new Error('Local phase payload differs from its execution provenance.');
+    if (!windows.has(origin.attempt)) {
+      const records = run.history.find(attempt => attempt.attempt === origin.attempt)?.jobs.filter(record => record.name === job.name) ?? [];
+      if (records.length !== 1) throw new Error('Reused phase has no unique original workflow job.');
+      const pages = await query(`repos/${repository}/actions/jobs/${records[0].id}`);
+      const prior = pages?.[0], priorStart = Date.parse(prior?.started_at), priorEnd = Date.parse(prior?.completed_at);
+      if (!Array.isArray(pages) || pages.length !== 1 || prior.id !== records[0].id || prior.run_id !== run.id || prior.head_sha !== sha ||
+          prior.name !== job.name || prior.status !== 'completed' || !['success', 'failure', 'cancelled', 'timed_out'].includes(prior.conclusion) ||
+          prior.conclusion !== records[0].conclusion || prior.runner_name !== provenance.runnerName ||
+          !Number.isFinite(priorStart) || !Number.isFinite(priorEnd) || priorEnd < priorStart || priorEnd > start || priorStart < Date.parse(run.createdAt)) {
+        throw new Error('Reused phase origin does not match this candidate, runner or preceding execution window.');
+      }
+      windows.set(origin.attempt, prior);
+    }
+    const producer = windows.get(origin.attempt), completed = Date.parse(phase.completedAt);
+    if (!Number.isFinite(completed) || completed < Date.parse(producer.started_at) || completed > timestampUpperBound(producer.completed_at)) {
+      throw new Error('Local phase evidence falls outside its producing job.');
+    }
+    phaseExecutions.push({ name: phase.name, attempt: origin.attempt, jobId: producer.id, completedAt: phase.completedAt, fingerprint: origin.fingerprint });
   }
   const manifestSha256 = createHash('sha256').update(readFileSync(path.join(directory, 'manifest.json'))).digest('hex');
   if (expectedManifestSha256 !== undefined && manifestSha256 !== expectedManifestSha256) throw new Error('Local evidence changed after release selection.');
   const current = artifacts(await query(inventoryEndpoint)).filter(record => record.id === artifact.id);
   if (current.length !== 1 || !isDeepStrictEqual(current[0], artifact)) throw new Error('Local artifact changed during collection.');
   const refreshed = (await collect()).workflows[0];
+  const history = value => value.history.map(attempt => [attempt.attempt,
+    attempt.jobs.map(record => [record.id, record.name, record.conclusion]).sort((a, b) => a[0] - b[0])]);
   if (refreshed.id !== run.id || refreshed.attempt !== run.attempt || refreshed.jobs[0].id !== job.id ||
-      refreshed.jobs[0].attempt !== job.attempt) throw new Error('Local certification changed during collection.');
+      refreshed.jobs[0].attempt !== job.attempt || !isDeepStrictEqual(history(refreshed), history(run))) throw new Error('Local certification changed during collection.');
   return { schemaVersion: 1, scope: 'hosted-full-local-phases', fullReleaseCertification: false,
     repository, sourceSha: sha, collectedAt: new Date(now).toISOString(),
     runId: run.id, runAttempt: run.attempt, jobId: originJobId, executionAttempt: job.attempt,
     artifactId: artifact.id, artifactName: artifact.name, artifactDigest: artifact.digest, manifestSha256,
+    phaseExecutions,
     uncovered: ['Deployment/operator and complete package publication requirements remain separate.'] };
 }
 
@@ -95,7 +124,7 @@ export function verifyLocalEvidenceAttachment(directory, expected, { now = Date.
       lstatSync(path.join(directory, 'selection.json')).isSymbolicLink()) throw new Error('Invalid local evidence attachment inventory.');
   const selected = JSON.parse(readFileSync(path.join(directory, 'selection.json'), 'utf8'));
   for (const field of ['schemaVersion', 'scope', 'fullReleaseCertification', 'repository', 'sourceSha', 'runId', 'jobId',
-    'executionAttempt', 'artifactId', 'artifactName', 'artifactDigest', 'manifestSha256', 'uncovered']) {
+    'executionAttempt', 'artifactId', 'artifactName', 'artifactDigest', 'manifestSha256', 'phaseExecutions', 'uncovered']) {
     if (!isDeepStrictEqual(selected[field], expected[field])) throw new Error('Draft local evidence differs from the verified selection.');
   }
   const collected = Date.parse(selected.collectedAt);

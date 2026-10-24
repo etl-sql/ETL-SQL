@@ -25,6 +25,7 @@ jobs:
         with:
           ref: ${{ inputs.candidate_sha }}
           fetch-depth: 0
+          clean: false
       - name: Verify controlled-host candidate identity
         shell: pwsh
         env:
@@ -46,20 +47,17 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - name: Prepare pinned browser compiler
+        if: github.run_attempt == 1
         shell: pwsh
         timeout-minutes: 12
         run: |
-          $node = (Get-Command node -CommandType Application).Source
-          $npm = Join-Path (Split-Path (Get-Command npm.cmd -CommandType Application).Source) 'node_modules/npm/bin/npm-cli.js'
+          $node = (Get-Command node -CommandType Application | Select-Object -First 1).Source
+          $npm = Join-Path (Split-Path (Get-Command npm.cmd -CommandType Application | Select-Object -First 1).Source) 'node_modules/npm/bin/npm-cli.js'
           ./scripts/Invoke-CertificationProcess.ps1 -Command $node -CommandArguments @($npm, 'ci', '--prefix', 'scripts/typecheck') -EvidenceDirectory release-validation/local-bootstrap -TimeoutSeconds 600
       - name: Run every required local phase
         shell: pwsh
         timeout-minutes: 425
-        run: >
-          ./scripts/Invoke-CertificationProcess.ps1
-          -ScriptPath scripts/Test-PreRelease.ps1
-          -ScriptArguments @('-IncludeSlt', '-IncludeDockerIntegration', '-IncludeStandardScale')
-          -EvidenceDirectory release-validation/local-process -TimeoutSeconds 25200
+        run: ./scripts/Invoke-HostedLocalCertification.ps1
       - name: Verify and retain portable phase evidence
         shell: pwsh
         timeout-minutes: 12
@@ -71,8 +69,9 @@ jobs:
           $source = Get-ReleaseCertificationSource -RepoRoot $PWD.Path
           if ($source.commit -cne $env:EXPECTED_SHA -or $source.dirtyPaths.Count -ne 0) { throw 'Candidate source changed before evidence retention.' }
           New-Item -ItemType Directory -Force (Split-Path $env:BUNDLE_DIRECTORY) | Out-Null
-          $node = (Get-Command node -CommandType Application).Source
-          ./scripts/Invoke-CertificationProcess.ps1 -Command $node -CommandArguments @('scripts/local-release-bundle.mjs', 'create', 'release-validation/latest/state.json', $env:EXPECTED_SHA, $env:BUNDLE_DIRECTORY) -EvidenceDirectory release-validation/local-bundle-process -TimeoutSeconds 600
+          $node = (Get-Command node -CommandType Application | Select-Object -First 1).Source
+          $state = "release-validation/hosted-local-state/$env:GITHUB_RUN_ID/validation/latest/state.json"
+          ./scripts/Invoke-CertificationProcess.ps1 -Command $node -CommandArguments @('scripts/local-release-bundle.mjs', 'create', $state, $env:EXPECTED_SHA, $env:BUNDLE_DIRECTORY) -EvidenceDirectory release-validation/local-bundle-process -TimeoutSeconds 600
           if ($LASTEXITCODE -ne 0) { throw 'Full local phase bundle failed validation.' }
           Assert-ReleaseCertificationSourceUnchanged -RepoRoot $PWD.Path -Initial $source
       - name: Retain full local evidence
@@ -89,8 +88,7 @@ jobs:
           name: local-release-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             release-validation/local-bootstrap/
-            release-validation/local-process/
+            release-validation/hosted-local-state/${{ github.run_id }}/
             release-validation/local-bundle-process/
-            release-validation/latest/
           if-no-files-found: warn
           retention-days: 30

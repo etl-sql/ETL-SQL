@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Controlled-host local certification can resume failed phases or recover failed evidence uploads
+  after verifying the same run, runner, workspace, toolchain, cached outputs and original receipts.
+  Reused phases retain their original execution times and job identities. Missing checkpoints or
+  changed inputs block recovery; the workflow retains every attempt's diagnostics.
+
 ### Changed
 
 - Release now requires a verified full local phase bundle from the exact candidate's controlled-host

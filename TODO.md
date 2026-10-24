@@ -243,8 +243,12 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   Windows x64 release host, retaining immutable per-attempt bundles and failure diagnostics.
   Release requires and verifies that artifact before packaging and again before publishing.
   This needs the dedicated host label and workflow rollout; no hosted full-run result is claimed.
-  The initial controlled-host workflow starts a fresh local plan on each attempt. Trusted phase
-  resume and failed-upload recovery still need implementation and rehearsal before this item closes.
+  Controlled-host retries now verify a closed same-run/runner/workspace checkpoint, unchanged
+  toolchain, Docker inputs, cached output bytes and original evidence before phase resume. Original
+  passed receipts keep their producing-job windows; failed phases and dependents rerun. The real
+  phase-runner fixture exercises failed-phase and upload-only recovery (43 initial actions, then six
+  and four). Missing checkpoints and changed inputs stop recovery. Hosted acceptance and measured
+  full-run/retry timing remain open before this item closes.
   Enterprise certification now explicitly defaults both test projects to Release, records the
   configuration and keeps Debug evidence ineligible for release. Executed driver fixtures verify
   configuration propagation. The source-policy audit includes tracked/new authored C# files while
