@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 26 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 25 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -595,8 +595,12 @@ here; each one failed a single test per run and passed on rerun.
 - [ ] **Linux package install and upgrade.** The postinst now leaves shipped files root-owned and
   makes `/usr/lib/etl-sql/bin` `root:etlsql 1775`. Install fresh and upgrade over a previous package;
   confirm the Portal and Orchestrator start and write their databases, logs and data.
-- [ ] **Windows run of the security tests.** `SecurityTests` was rewritten with OS-neutral paths and
-  passes on Linux; confirm it on Windows, including `TestHardwareLockedEncryption` (DPAPI).
+- [x] **Windows run of the security tests.** Confirm the OS-neutral `SecurityTests` on Windows.
+  **Verified 2026-10-24:** all 23 Windows x64 Release cases pass without skips, including
+  `TestHardwareLockedEncryption`'s DPAPI round trip and wrong-entropy rejection. The initial run
+  found an incorrect fixture assumption: per-user Windows temp is under protected `AppData`.
+  The fixture now checks that denial and permits ordinary scratch paths. Production path protection
+  is unchanged; the full default lane and final-candidate security gates remain separate.
 - [ ] **Docker integration lane.** `IDockerManager` now takes a tenant scope and container names carry
   a tenant tag. Run `Category=Integration` Docker tests and `USE DOCKER` scripts end to end.
 - [ ] **Alert inline delivery columns.** `ReportAlert.Recipient` and `SmtpAlias` predate

@@ -442,10 +442,12 @@ namespace ETL_SQL.Tests.Security
             security.IsTestMode = false;
             security.ProtectionMode = PathProtectionMode.Restricted;
 
-            // Should allow the temp folder
-            security.ValidatePath(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "data.csv"));
             if (OperatingSystem.IsWindows())
             {
+                // Per-user Windows temp is under AppData, which Restricted mode protects.
+                var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                Assert.Throws<SecurityException>(() => security.ValidatePath(
+                    System.IO.Path.Combine(profile, "AppData", "Local", "Temp", "data.csv")));
                 security.ValidatePath("C:\\tmp\\data.csv");
                 security.ValidatePath("C:\\temp\\log.txt");
             }

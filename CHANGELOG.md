@@ -12,6 +12,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Verified all 23 security tests on Windows, including DPAPI hardware-locked encryption. Corrected
+  the temp-path fixture to check the existing protection of per-user `AppData` directories.
+
 - Authenticate encrypted JSON and Arrow spill files before decoding rows. The new envelope binds
   the codec, compression, chunk name and ciphertext, rejecting tampering and incomplete files.
   Missing chunks now fail; valid empty partitions keep their files. Recreate saved sessions whose
