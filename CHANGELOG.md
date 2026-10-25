@@ -12,6 +12,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Fix MSI configuration deleting installed secrets before a replacement could be written.
+  Protected staging preserves keys on denied writes and locked-file failures; checked MSI
+  actions stop on settings/configuration errors. Retained protected recovery files block unsafe
+  retries. Successful writes retain SYSTEM/Administrators-only permissions. All 14 focused
+  configuration/upgrade regressions and 34 source checks pass; installed MSI certification remains
+  required.
+
 - Store saved views solely as resolved-state envelopes. APIs reject retired flat maps, while
   `CREATE SAVED VIEW` preserves its string assignments in the envelope. SQLite and PostgreSQL
   migrations retain saved state and backfill old maps before dropping their columns. Unicode

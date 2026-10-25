@@ -44,6 +44,15 @@ shared or split the services.
    - `ETL-SQL-Portal`
 4. Review the service accounts before production use. The installer default is `LocalSystem`; use a least-privilege domain or local service account when the service needs access to network shares, database drivers, certificates, or controlled script roots.
 
+From v0.22.0, the MSI stops if it cannot preserve installed settings or complete service
+configuration. Protected files are staged before replacement, and failed writes retain existing
+keys. Final secret-file permissions allow only SYSTEM and Administrators.
+
+If a failed replacement leaves an `appsettings.secrets.json.*.recovery` file, keep it. Configuration
+will refuse to retry until an administrator reviews that protected recovery copy and restores the
+original secrets file if needed. Do not discard it or generate replacement keys: existing cached
+datasets require their original at-rest key.
+
 ### Linux
 
 Install the package for your distribution, then enable the services you intend to run:

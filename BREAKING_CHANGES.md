@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: MSI configuration failures stop installation
+- **What changed**: MSI settings capture, restoration and service configuration now return checked failures. PowerShell no longer swallows configuration errors. Protected files are fully staged before replacement, existing keys survive failed writes, and retained recovery files block retries that could generate new keys.
+- **Who is affected**: Windows installs/upgrades with inaccessible settings, denied writes, locked key files or incomplete protected-file recovery.
+- **Migration**: Fix the reported installation failure before retrying. Preserve protected `.recovery` files and have an administrator restore the original secrets if needed. Successful installs retain SYSTEM/Administrators-only secret-file permissions. Full installed MSI upgrade certification remains required.
+- **Diagnostic**: `ETL-SQL installer configuration failed.`
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: Saved views store one resolved-state envelope
 - **What changed**: Saved-view APIs reject top-level `parameters`/`filters`, including nulls, and responses no longer contain the flat maps. `CREATE SAVED VIEW` sends a resolved-state envelope and preserves string-literal values. SQLite and PostgreSQL migrations backfill old maps into `StateJson` before dropping `parameters_json`/`filters_json`.
 - **Who is affected**: Clients using flat saved-view fields and catalogs containing old flat-only views.

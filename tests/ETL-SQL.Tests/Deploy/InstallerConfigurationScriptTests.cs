@@ -23,6 +23,101 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
     public void Dispose() => Directory.Delete(_install, recursive: true);
 
     [Fact]
+    [Trait("CompatBreak", "0.22")]
+    public void RetainedRecoveryBlocksRetryWithoutChangingInstalledSecrets()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Stage();
+        Run("");
+        var original = ReadSecrets();
+        var recovery = Path.Combine(_install, "appsettings.secrets.json.fixture.recovery");
+        File.WriteAllText(recovery, "synthetic recovery sentinel");
+        var failure = RunProcess("upgrade-fixture");
+        Assert.NotEqual(0, failure.ExitCode);
+        Assert.DoesNotContain("synthetic recovery sentinel", failure.Error);
+        Assert.True(JsonNode.DeepEquals(original, JsonNode.Parse(File.ReadAllText(Path.Combine(_install, ConfigurationExtensions.InstalledSecretsFileName)))));
+        File.Delete(recovery);
+        Run("upgrade-fixture");
+        Assert.True(JsonNode.DeepEquals(original, ReadSecrets()));
+    }
+
+    [Fact]
+    [Trait("CompatBreak", "0.22")]
+    public void LockedSecretFilePreservesKeysAndAllowsRetryAfterUnlock()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Stage();
+        Run("");
+        var original = ReadSecrets();
+        var path = Path.Combine(_install, ConfigurationExtensions.InstalledSecretsFileName);
+        using (var locked = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            Assert.NotEqual(0, RunProcess("upgrade-fixture").ExitCode);
+        Assert.True(JsonNode.DeepEquals(original, ReadSecrets()));
+        Assert.Empty(Directory.GetFiles(_install, "*.tmp"));
+        Run("upgrade-fixture");
+        Assert.True(JsonNode.DeepEquals(original, ReadSecrets()));
+    }
+
+    [Fact]
+    [Trait("CompatBreak", "0.22")]
+    public void MissingSettingsFailsWithoutGeneratingSecrets()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Stage();
+        File.Delete(Path.Combine(_install, "appsettings.json"));
+        Assert.NotEqual(0, RunProcess("upgrade-fixture").ExitCode);
+        Assert.False(File.Exists(Path.Combine(_install, ConfigurationExtensions.InstalledSecretsFileName)));
+    }
+
+    [Fact]
+    [Trait("CompatBreak", "0.22")]
+    public void FailedSecretReplacementPreservesExistingKeysAndReportsFailure()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Stage();
+        Run(upgradeCode: "");
+        var secretsPath = Path.Combine(_install, ConfigurationExtensions.InstalledSecretsFileName);
+        GrantCurrentUserRead(secretsPath);
+        var original = File.ReadAllBytes(secretsPath);
+        foreach (var name in new[] { "appsettings.json", "configure-portal-jwt.ps1" })
+        {
+            var readable = new FileSecurity();
+            readable.SetAccessRuleProtection(true, false);
+            readable.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!,
+                FileSystemRights.FullControl, AccessControlType.Allow));
+            new FileInfo(Path.Combine(_install, name)).SetAccessControl(readable);
+        }
+        var directory = new DirectoryInfo(_install);
+        var originalSecurity = directory.GetAccessControl();
+        var blocked = new DirectorySecurity();
+        blocked.SetAccessRuleProtection(true, false);
+        blocked.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!,
+            FileSystemRights.FullControl, AccessControlType.Allow));
+        blocked.AddAccessRule(new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!,
+            FileSystemRights.CreateFiles, InheritanceFlags.None, PropagationFlags.None, AccessControlType.Deny));
+        int exitCode;
+        try
+        {
+            directory.SetAccessControl(blocked);
+            exitCode = RunProcess("upgrade-fixture").ExitCode;
+        }
+        finally
+        {
+            var restored = new DirectorySecurity();
+            restored.SetSecurityDescriptorBinaryForm(originalSecurity.GetSecurityDescriptorBinaryForm(), AccessControlSections.Access);
+            directory.SetAccessControl(restored);
+        }
+        Assert.True(File.Exists(secretsPath), "Failed configuration deleted the installed secrets.");
+        Assert.Equal(new HashSet<string> { "S-1-5-18", "S-1-5-32-544" }, Grantees(secretsPath));
+        GrantCurrentUserRead(secretsPath);
+        Assert.True(original.AsSpan().SequenceEqual(File.ReadAllBytes(secretsPath)), "Failed configuration changed the installed secrets.");
+        Assert.NotEqual(0, exitCode);
+        Run("upgrade-fixture");
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(original), ReadSecrets()));
+        Assert.Empty(Directory.GetFiles(_install, "*.tmp"));
+    }
+
+    [Fact]
     public void FreshInstall_GeneratesEveryStartupSecretIntoTheProtectedFile()
     {
         if (!OperatingSystem.IsWindows()) return;
@@ -201,6 +296,12 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
 
     private void Run(string upgradeCode)
     {
+        var result = RunProcess(upgradeCode);
+        Assert.True(result.ExitCode == 0, result.Error);
+    }
+
+    private (int ExitCode, string Error) RunProcess(string upgradeCode)
+    {
         // The MSI passes [INSTALLFOLDER] (with its trailing separator) first, then key=value pairs.
         var customData = $@"{_install}\|UPGRADE={upgradeCode}|INSTALL_PORTAL=1|REPORT_PORTAL=1";
         var start = new ProcessStartInfo("powershell.exe")
@@ -213,7 +314,7 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
         using var process = Process.Start(start)!;
         var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, error);
+        return (process.ExitCode, error);
     }
 
     private JsonNode ReadConfig() =>

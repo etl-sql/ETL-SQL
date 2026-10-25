@@ -24,6 +24,50 @@ function New-Base64Secret {
     return [Convert]::ToBase64String($bytes)
 }
 
+function Write-ProtectedFile {
+    param([string]$Path, [byte[]]$Bytes)
+    $acl = New-Object System.Security.AccessControl.FileSecurity
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($sid in 'S-1-5-18', 'S-1-5-32-544') {
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            (New-Object System.Security.Principal.SecurityIdentifier $sid), 'FullControl', 'Allow')))
+    }
+    # The invoking installer must be able to rename its staged file after closing the handle.
+    # MSI runs as SYSTEM (already present); local fixtures/manual elevated runs may own the file.
+    $workingAcl = New-Object System.Security.AccessControl.FileSecurity
+    $workingAcl.SetSecurityDescriptorBinaryForm($acl.GetSecurityDescriptorBinaryForm(), [System.Security.AccessControl.AccessControlSections]::Access)
+    $workingAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+        ([System.Security.Principal.WindowsIdentity]::GetCurrent().User), 'FullControl', 'Allow')))
+    $temporary = $Path + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
+    $backup = $Path + '.' + [Guid]::NewGuid().ToString('N') + '.recovery'
+    try {
+        # Stage with access limited to SYSTEM, Administrators and this installer identity.
+        $stream = [System.IO.File]::Create($temporary, 4096, [System.IO.FileOptions]::None, $workingAcl)
+        try {
+            $stream.Write($Bytes, 0, $Bytes.Length)
+            $stream.Flush($true)
+        } finally { $stream.Dispose() }
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            # ReplaceFile retains the destination DACL, so restrict it before replacement.
+            [System.IO.File]::SetAccessControl($Path, $workingAcl)
+            [System.IO.File]::Replace($temporary, $Path, $backup)
+            Remove-Item -LiteralPath $backup -Force
+        } else {
+            [System.IO.File]::Move($temporary, $Path)
+        }
+    } finally {
+        if (Test-Path -LiteralPath $temporary) {
+            Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+        }
+        foreach ($published in $Path, $backup) {
+            if (Test-Path -LiteralPath $published -PathType Leaf) {
+                [System.IO.File]::SetAccessControl($published, $acl)
+            }
+        }
+        # A failed replacement can leave the original under .recovery. Never delete that copy.
+    }
+}
+
 # Installed values win; objects merge so keys only the new defaults have are kept.
 function Merge-InstalledSettings {
     param($Target, $Source)
@@ -61,10 +105,10 @@ try {
     $parts = $CustomData.Split('|')
     $installDir = if ($parts.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($parts[0])) { $parts[0] } else { $PSScriptRoot }
     $cfgPath = Join-Path $installDir 'appsettings.json'
-    if (-not (Test-Path -LiteralPath $cfgPath)) {
-        $cfgPath = Join-Path $PSScriptRoot 'appsettings.json'
+    if (-not (Test-Path -LiteralPath $cfgPath -PathType Leaf)) { throw 'Installer settings are missing.' }
+    if (@(Get-ChildItem -LiteralPath $installDir -Filter 'appsettings.secrets.json.*.recovery' -File -Force).Count -gt 0) {
+        throw 'Protected installer recovery requires administrator review before retrying.'
     }
-    if (-not (Test-Path -LiteralPath $cfgPath)) { return }
 
     $moduleOpts = @{}
     foreach ($part in $parts) {
@@ -134,21 +178,8 @@ try {
         $user = if ([string]::IsNullOrWhiteSpace([string]$json.Portal.FirstRun.AdminUsername)) { 'admin' } else { [string]$json.Portal.FirstRun.AdminUsername }
         # Created with its final ACL (SYSTEM and Administrators, nothing inherited) and written through
         # the creating handle, so no other account can ever read it.
-        $acl = New-Object System.Security.AccessControl.FileSecurity
-        $acl.SetAccessRuleProtection($true, $false)
-        foreach ($sid in 'S-1-5-18', 'S-1-5-32-544') {
-            $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
-                (New-Object System.Security.Principal.SecurityIdentifier $sid), 'FullControl', 'Allow')))
-        }
-        $stream = [System.IO.File]::Create($firstRunPath, 4096, [System.IO.FileOptions]::None, $acl)
-        try {
-            $writer = New-Object System.IO.StreamWriter($stream, (New-Object System.Text.ASCIIEncoding))
-            $writer.WriteLine($user)
-            $writer.WriteLine($password)
-            $writer.Flush()
-        } finally {
-            $stream.Dispose()
-        }
+        $passwordBytes = (New-Object System.Text.ASCIIEncoding).GetBytes($user + "`r`n" + $password + "`r`n")
+        Write-ProtectedFile -Path $firstRunPath -Bytes $passwordBytes
         $changed = $true
     }
 
@@ -302,28 +333,16 @@ try {
 
     # Written through a handle opened with the final ACL (SYSTEM and Administrators, nothing
     # inherited from Program Files), so the secrets are never readable by another account.
-    $secretsAcl = New-Object System.Security.AccessControl.FileSecurity
-    $secretsAcl.SetAccessRuleProtection($true, $false)
-    foreach ($sid in 'S-1-5-18', 'S-1-5-32-544') {
-        $secretsAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
-            (New-Object System.Security.Principal.SecurityIdentifier $sid), 'FullControl', 'Allow')))
-    }
-    # Recreated rather than rewritten, so an existing file cannot keep a wider ACL. This step runs
-    # before the services start, so nothing reads the file while it is briefly absent.
-    if (Test-Path -LiteralPath $secretsPath) { Remove-Item -LiteralPath $secretsPath -Force }
-    $stream = [System.IO.File]::Create($secretsPath, 4096, [System.IO.FileOptions]::None, $secretsAcl)
-    try {
-        $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes(($secrets | ConvertTo-Json -Depth 64))
-        $stream.Write($bytes, 0, $bytes.Length)
-    } finally {
-        $stream.Dispose()
-    }
+    $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes(($secrets | ConvertTo-Json -Depth 64))
+    Write-ProtectedFile -Path $secretsPath -Bytes $bytes
 
     if ($changed) {
         ($json | ConvertTo-Json -Depth 64) | Set-Content -LiteralPath $cfgPath -Encoding UTF8
     }
     if (Test-Path -LiteralPath $savedPath) { Remove-Item -LiteralPath $savedPath -Force }
 } catch {
-    # Non-fatal: a genuinely missing secret or safe zone surfaces when the service runs, rather
-    # than aborting the whole installation here.
+    # COMPAT_BREAK: 0.22 — failed configuration must stop installation before services start.
+    # Provider/file exceptions can include secrets or settings; report only a fixed diagnostic.
+    Write-Error 'ETL-SQL installer configuration failed.' -ErrorAction Continue
+    exit 1
 }

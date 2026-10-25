@@ -667,6 +667,13 @@ here; each one failed a single test per run and passed on rerun.
   is removed. Regression cases prove canonical options remain available and both retired forms
   receive no connector-option suggestions. All 459 language-server cases pass without skips.
 - [ ] **Review `scripts/`, the installers and `tests/`.** The v0.22.0 review covered `src/` only.
+  **In progress 2026-10-25:** inventory contains 376 tracked script files and 1,856 test files,
+  plus installer/deployment inputs. The MSI review reproduced P0 key loss when a replacement
+  file could not be created: the old protected file was deleted and errors were ignored.
+  Protected staging now retains keys, failures propagate through checked custom actions,
+  and retained recovery files block unsafe retries. All 14 configuration/upgrade regressions and
+  34 source checks pass. Evidence: `release-validation/installer-hardening-validation.json`.
+  The broader review and native installed MSI certification remain open.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook
   body unchanged. Its repository bytes use LF and `.gitattributes` now pins that checkout form.

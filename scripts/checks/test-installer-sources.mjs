@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import './test-installer-actions.mjs';
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'installer-sources-'));
 const script = fileURLToPath(new URL('../Test-InstallerSources.ps1', import.meta.url));

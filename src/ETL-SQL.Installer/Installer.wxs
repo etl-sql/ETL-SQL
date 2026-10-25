@@ -328,10 +328,10 @@
         <CustomAction Id="SetWriteJwtData" Property="WriteJwt"
                       Value="[INSTALLFOLDER]|UPGRADE=[WIX_UPGRADE_DETECTED]|INSTALL_PORTAL=[INSTALL_ADMIN_PORTAL]|REPORTING=[INSTALL_PORTAL_REPORTING]|DESIGNER=[INSTALL_PORTAL_DESIGNER]|SCHEDULING=[INSTALL_PORTAL_SCHEDULING]|OPERATIONS=[INSTALL_PORTAL_OPERATIONS]|ORCH_SURFACE=[INSTALL_PORTAL_ORCH_SURFACE]|STEWARD_SURFACE=[INSTALL_PORTAL_STEWARD_SURFACE]|REPORT_PORTAL=[INSTALL_REPORT_PORTAL]"
                       Execute="immediate" />
-        <CustomAction Id="WriteJwt" BinaryKey="InstallerActionsJs" JScriptCall="ConfigureJwt" Execute="deferred" Impersonate="no" Return="ignore" />
-        <CustomAction Id="ReadSettings" BinaryKey="InstallerActionsJs" JScriptCall="ReadSettings" Execute="immediate" Return="ignore" HideTarget="yes" />
+        <CustomAction Id="WriteJwt" BinaryKey="InstallerActionsJs" JScriptCall="ConfigureJwt" Execute="deferred" Impersonate="no" Return="check" />
+        <CustomAction Id="ReadSettings" BinaryKey="InstallerActionsJs" JScriptCall="ReadSettings" Execute="immediate" Return="check" HideTarget="yes" />
         <CustomAction Id="SetRestoreSettingsData" Property="RestoreSettings" Value="[INSTALLFOLDER]|[PREVIOUS_SETTINGS]" Execute="immediate" HideTarget="yes" />
-        <CustomAction Id="RestoreSettings" BinaryKey="InstallerActionsJs" JScriptCall="RestoreSettings" Execute="deferred" Impersonate="no" Return="ignore" HideTarget="yes" />
+        <CustomAction Id="RestoreSettings" BinaryKey="InstallerActionsJs" JScriptCall="RestoreSettings" Execute="deferred" Impersonate="no" Return="check" HideTarget="yes" />
         <CustomAction Id="PromptCleanData" BinaryKey="InstallerActionsJs" JScriptCall="PromptCleanData" Execute="immediate" Return="ignore" />
         <CustomAction Id="SetCleanDataDir" Property="CleanData" Value="[INSTALLFOLDER]" Execute="immediate" />
         <CustomAction Id="CleanData" BinaryKey="InstallerActionsJs" JScriptCall="CleanData" Execute="deferred" Impersonate="no" Return="ignore" />
