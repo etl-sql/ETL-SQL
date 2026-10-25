@@ -8,7 +8,7 @@ A physical, copy-pasteable checklist for cutting a release. It wraps the real sc
 > `scripts/Test-PreRelease.ps1`
 > (POSIX: `scripts/test-pre-release.sh`). Version bumping is `scripts/Set-Version.ps1`. Cross-platform
 > packaging is `scripts/Master-Release.ps1`, which calls `scripts/publish-release.ps1`
-> (checksums + SBOM) and `scripts/build-msi.ps1`. The mechanical Phases 3–5 below (gate check →
+> (checksums + SBOM) and the current host's native package builder. The mechanical Phases 3–5 below (gate check →
 > version consistency → notes → push/CI → tag → watch `release.yml` → verify published assets)
 > are driven by `scripts/Invoke-Release.ps1` (POSIX: `scripts/invoke-release.sh`); run it with
 > `-DryRun` first. Existing local/remote tags must resolve to the exact candidate; matching tags
@@ -866,7 +866,7 @@ unversioned `certification-results/` and `coverage/report/` trees are never atta
 - [ ] Build installers via the gate (preferred, logged) **or** the master orchestrator:
       ```powershell
       .\scripts\Test-PreRelease.ps1 -Resume -BuildInstallers -Platforms win-x64
-      # or, full cross-platform packaging:
+      # or, portable bundles plus the current host's native package:
       .\scripts\Master-Release.ps1 -Version x.y.z
       ```
 - [ ] Confirm `release/` contains the platform bundles, `sha256sums.txt`, and `sbom.json`
@@ -877,7 +877,10 @@ unversioned `certification-results/` and `coverage/report/` trees are never atta
       `publish-release.ps1` certification ZIP includes `certification-results/`, not this release
       evidence directory; neither archive substitutes for the Phase 3 evidence review.
 - [ ] Windows MSI built (WiX 3.14 `candle`/`light` on PATH) — `build-msi.ps1`.
-- [ ] Linux/Mac packages built on (or via WSL/native host) as applicable.
+- [ ] Linux/Mac packages built on their native hosts as applicable. The wrapper does not dispatch
+      WSL implicitly. Its packaging-complete message does not replace installed-package certification
+      or publication gates. It collects a fresh nonempty native artifact into `release/`; run the
+      other native platform lanes separately.
 - [ ] Retain the four RID artifacts from
       [Native Package Certification](../../.github/workflows/native-packages.yml) for the final
       candidate. It runs on candidate pull requests and supports manual dispatch once available on
@@ -982,6 +985,6 @@ Stop the bleeding, then fix forward.
 | Billion-row certification | `scripts/Test-BillionRowCertification.ps1` + `Test-BillionRowEvidence.ps1` | Controlled host; changed certified paths or billion-row claims |
 | HA contract/evidence | `scripts/Test-HaSoakContracts.ps1`; native `etl-sql admin ha-soak ...` | Contracts every release; measured fault/recovery evidence validated separately |
 | MSI upgrade certification | `.github/workflows/msi-upgrade.yml` / `scripts/Test-MsiUpgrade.ps1` | Required reusable call from Release; path-aware on branch pushes/PRs; full manual run |
-| Package all platforms | `scripts/Master-Release.ps1 -Version x.y.z` | Calls publish + MSI; `-SkipTests`, `-SkipUI`, `-IncludeSampleValidation` |
+| Build portable bundles and the host's native package | `scripts/Master-Release.ps1 -Version x.y.z` | Checks source/command failures, collects fresh MSI/DEB/Intel DMG output; `-SkipTests`, `-SkipUI`, `-IncludeSampleValidation` |
 | Publish artifacts | `scripts/publish-release.ps1` | Emits `release/`, `sha256sums.txt`, `sbom.json` |
 | Windows MSI | `scripts/build-msi.ps1` | WiX 3.14 |

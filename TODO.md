@@ -679,6 +679,16 @@ here; each one failed a single test per run and passed on rerun.
   installer source gate rejects reintroduced helpers and replaces the release wrapper's no-op check.
   All 41 installer/documentation regressions and 34 source checks pass; the mocked wrapper checks
   prove gate failure cannot print release success. See `release-validation/retired-installers-validation.json`.
+  The release wrapper review then reproduced ignored UI failures and leaked caller version state.
+  It now checks commands and fresh native artifacts, restores caller state, and routes native
+  packaging to the matching host. Thirty-four isolated host/failure cases pass. An actual Linux DEB
+  build with a synthetic payload also passes under strict Bash; this is not installed-product evidence.
+  That fixture exposed non-owner-writable program files in the DEB. Native staging now strips those
+  write bits, preserves executable/read-only modes, requires packaging tools and guards linked
+  cleanup paths. The permanent POSIX regression builds a DEB and app bundle; only DMG creation is
+  mocked. It is wired into DEB candidate CI, with installed/native-host acceptance still open.
+  All 41 focused installer/documentation tests and 34 source checks pass for this round; retained
+  baselines and final results are in `release-validation/packaging-review-validation.json`.
   The broader review and native installed MSI certification remain open.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook

@@ -17,10 +17,24 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: Native package staging protects program permissions
+- **What changed**: DEB payloads and macOS application staging strip group/other write access from program trees without changing executable or read-only bits. Builders use strict Bash, require their native packaging tool, and bind cleanup to repository staging paths, rejecting linked ancestors/outputs.
+- **Who is affected**: Packaging from writable publish directories, from another current directory, with missing packaging tools, or through linked staging directories.
+- **Migration**: Run builds with `dpkg-deb` on Linux or `hdiutil` on macOS and keep staging inside the repository. The permission regression builds a synthetic DEB and app bundle; installed-product and real macOS DMG acceptance still use native release lanes.
+- **Diagnostic**: Missing packaging tools and linked staging paths fail before cleanup.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Packaging checks failures and scopes host output
+- **What changed**: `Master-Release.ps1` validates source inputs before packaging, uses the pinned UI lockfile with `npm ci`, and stops on command or missing-artifact failures. It collects the current host's fresh nonempty MSI/DEB/Intel DMG in `release/`, restores caller location/version environment state, and reports packaging completion. Linux/macOS builders execute on their own hosts; WSL is no longer dispatched implicitly.
+- **Who is affected**: Packaging automation relying on ignored command failures, stale artifacts, source-directory native output, implicit WSL execution, or leaked caller state.
+- **Migration**: Use Node.js 22 and a three-part release version with optional prerelease/build metadata. Run native platform lanes separately and read native packages from `release/`. `-SkipTests` and `-IncludeSampleValidation` cannot be combined. Separate certification and publication gates remain required.
+- **Diagnostic**: The failed command or missing native package produces a nonzero result.
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: Retired source-only installation helpers
 - **What changed**: Removed `scripts/install.ps1`, `scripts/install.sh` and the Orchestrator project's `install-service-windows.ps1`/`install-service-linux.sh`. The workstation templates reported success without downloading or extracting tools. The service helpers used obsolete binary names; the Windows helper could stop/delete an existing service after a failed publish and still report success.
 - **Who is affected**: Source-checkout automation calling these helpers.
-- **Migration**: Use the maintained MSI workstation/server features on Windows, Linux packages and their service units, or native workstation ZIPs/Intel DMG on macOS. See [Installation](docs/administration/platform/installation.md). `Master-Release.ps1` now runs the real installer source gate at its final validation step.
+- **Migration**: Use the maintained MSI workstation/server features on Windows, Linux packages and their service units, or native workstation ZIPs/Intel DMG on macOS. See [Installation](docs/administration/platform/installation.md). `Master-Release.ps1` runs the installer source gate before packaging.
 - **Diagnostic**: Installer source validation rejects any restored retired helper.
 - **Earliest removal**: N/A
 

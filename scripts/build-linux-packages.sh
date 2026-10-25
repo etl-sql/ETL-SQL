@@ -2,12 +2,34 @@
 # ETL-SQL Linux Package Builder
 # Usage: ./build-linux-packages.sh <version>
 
+set -euo pipefail
+if ! command -v dpkg-deb >/dev/null; then
+    echo '[ERROR] dpkg-deb is required to build the Linux package.' >&2
+    exit 1
+fi
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+INSTALLER_ROOT="$(cd "$REPO_ROOT/src/ETL-SQL.Installer" && pwd -P)"
+if [[ "$INSTALLER_ROOT" != "$REPO_ROOT/src/ETL-SQL.Installer" ]]; then
+    echo '[ERROR] Installer staging must stay inside the repository.' >&2
+    exit 1
+fi
+cd "$REPO_ROOT"
+
 VERSION=${1:-"0.21.0"}
 PUBLISHED_BIN_DIR=${2:-"release/linux-x64/bin"}
 ARCH="amd64"
 PKG_NAME="etl-sql"
-BASE_DIR="src/ETL-SQL.Installer/linux"
-BUILD_ROOT="src/ETL-SQL.Installer/linux/build"
+BASE_DIR="$(cd "$INSTALLER_ROOT/linux" && pwd -P)"
+if [[ "$BASE_DIR" != "$INSTALLER_ROOT/linux" ]]; then
+    echo '[ERROR] Linux installer staging must stay inside the repository.' >&2
+    exit 1
+fi
+BUILD_ROOT="$BASE_DIR/build"
+if [[ -L "$BUILD_ROOT" ]]; then
+    echo '[ERROR] Linux staging output must not be a symbolic link.' >&2
+    exit 1
+fi
 
 echo "--- ETL-SQL Linux Package Builder ---"
 
@@ -47,6 +69,9 @@ echo "Copying published linux-x64 binaries from $PUBLISHED_BIN_DIR..."
 # hosts directly from bin/ (see the *.service ExecStart paths) while keeping
 # their own empty working directories below for runtime-writable state.
 cp -a "$PUBLISHED_BIN_DIR/." "$BUILD_ROOT/usr/lib/etl-sql/bin/"
+# COMPAT_BREAK: 0.22 — published program files must not retain group/other write access.
+# Preserve executable/read-only bits while removing write access from non-owner accounts.
+chmod -R go-w "$BUILD_ROOT/usr/lib/etl-sql/bin"
 cp "LICENSE.md" "$BUILD_ROOT/usr/share/doc/etl-sql/LICENSE.md"
 cp "NOTICE.md" "$BUILD_ROOT/usr/share/doc/etl-sql/NOTICE.md"
 cp "THIRD-PARTY-NOTICES.md" "$BUILD_ROOT/usr/share/doc/etl-sql/THIRD-PARTY-NOTICES.md"
@@ -338,12 +363,8 @@ POSTRM
 chmod 755 "$BUILD_ROOT/DEBIAN/postrm"
 
 # 6. Build .deb
-if command -v dpkg-deb &> /dev/null; then
-    echo "Building .deb package..."
-    dpkg-deb --root-owner-group --build "$BUILD_ROOT" "${PKG_NAME}_${VERSION}_${ARCH}.deb"
-    echo "[SUCCESS] Package created: ${PKG_NAME}_${VERSION}_${ARCH}.deb"
-else
-    echo "[WARNING] dpkg-deb not found. Skipping .deb creation."
-fi
+echo "Building .deb package..."
+dpkg-deb --root-owner-group --build "$BUILD_ROOT" "${PKG_NAME}_${VERSION}_${ARCH}.deb"
+echo "[SUCCESS] Package created: ${PKG_NAME}_${VERSION}_${ARCH}.deb"
 
 echo -e "\nLinux package build process complete."

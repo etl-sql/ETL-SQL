@@ -12,6 +12,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Remove non-owner write permissions from DEB program payloads and macOS app bundles. A POSIX
+  regression reproduced world-writable packaged executables before the fix. Builders now stop
+  when native tools are missing, resolve staging from the repository and reject linked staging
+  paths before cleanup. The DEB workflow runs the permanent permissions regression.
+
+- Stop release packaging on failed UI restore/build commands and missing or stale native output.
+  `Master-Release.ps1` validates sources first, uses `npm ci`, restores caller location and version
+  state, and collects the host's native package in `release/`. Linux and macOS now invoke their
+  builders on the host; Windows no longer dispatches WSL implicitly. Completion describes package
+  building, with certification and publication still separate.
+
 - Retire simulated workstation installers and obsolete standalone service-install scripts.
   Setup uses the maintained MSI/Linux packages and their configuration/upgrade lifecycle.
   The Windows source helper could remove an existing service after failed publishing and still

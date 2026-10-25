@@ -1,143 +1,143 @@
 <#
 .SYNOPSIS
-    The Master Release script for ETL-SQL.
-    Automates testing, UI building, cross-platform publishing, and VSIX bundling.
-
+    Builds portable bundles and the current host's native installer packages.
 .DESCRIPTION
-    1. Validates environment (dotnet, node, npm).
-    2. Runs the release smoke lane by default, with optional full sample validation.
-    3. Builds the React UI once.
-    4. Orchestrates platform-specific builds via publish-release.ps1.
-
+    Runs source validation, smoke tests, optional sample validation and the pinned UI build,
+    then publishes bundles and builds the native package supported by this host.
+    Publication and installed-package certification use the separate release workflows.
 .EXAMPLE
     .\Master-Release.ps1 -Version "0.21.0"
 #>
-
 param(
+    [ValidatePattern('^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')]
     [string]$Version = "0.21.0",
     [switch]$SkipTests,
     [switch]$SkipUI,
     [switch]$IncludeSampleValidation
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
 $StartTime = Get-Date
+$RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$ReleaseRoot = Join-Path $RepoRoot 'release'
+$callerLocation = Get-Location
+$hadVersion = Test-Path Env:ETL_SQL_VERSION
+$savedVersion = $env:ETL_SQL_VERSION
 
-Write-Host "=======================================================" -ForegroundColor Cyan
-Write-Host " ETL-SQL MASTER RELEASE ORCHESTRATOR" -ForegroundColor Cyan
-Write-Host " Target Version: $Version" -ForegroundColor Cyan
-Write-Host "=======================================================`n" -ForegroundColor Cyan
+function Assert-CommandSucceeded([string]$Description) {
+    if ($LASTEXITCODE -ne 0) { throw "$Description failed with exit code $LASTEXITCODE." }
+}
 
-# --- STEP 0: Environment Validation ---
-Write-Host "[1/7] Validating build environment..." -ForegroundColor Yellow
-$RequiredTools = @("dotnet", "node", "npm", "npx")
-foreach ($Tool in $RequiredTools) {
-    if (!(Get-Command $Tool -ErrorAction SilentlyContinue)) {
-        Write-Error "Required tool '$Tool' not found in PATH."
-        exit 1
+function Prepare-NativeOutput([string]$Path) {
+    $resolved = [IO.Path]::GetFullPath($Path)
+    if (-not $resolved.StartsWith($RepoRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::Ordinal)) {
+        throw 'Native package output escaped the repository.'
+    }
+    if (Test-Path -LiteralPath $resolved) {
+        if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { throw 'Native package output must be a file.' }
+        Remove-Item -LiteralPath $resolved -Force
     }
 }
-Write-Host "  Environment OK." -ForegroundColor Gray
 
-# --- STEP 1: Testing ---
-if (!$SkipTests) {
-    Write-Host "`n[2/7] Running Release Smoke Test Lane..." -ForegroundColor Yellow
-    & (Join-Path $PSScriptRoot "test-lane.ps1") -Lane smoke -Configuration Release
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Release smoke lane failed. Aborting release."
-        exit 1
-    }
-
-    if ($IncludeSampleValidation) {
-        Write-Host "  Running full sample validation suite in ReleaseMode..." -ForegroundColor Yellow
-        & (Join-Path $PSScriptRoot "Test-AllSamples.ps1") -ReleaseMode
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Sample validation failed. Aborting release."
-            exit 1
+function Collect-NativeOutput([string]$Path) {
+    $resolved = [IO.Path]::GetFullPath($Path)
+    $destination = [IO.Path]::GetFullPath((Join-Path $ReleaseRoot ([IO.Path]::GetFileName($resolved))))
+    foreach ($candidate in $resolved, $destination) {
+        if (-not $candidate.StartsWith($RepoRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::Ordinal)) {
+            throw 'Native package output escaped the repository.'
         }
     }
-    else {
-        Write-Host "  Full sample validation skipped. Use -IncludeSampleValidation for the deployment sample lane." -ForegroundColor Gray
+    if (-not (Test-Path -LiteralPath $resolved -PathType Leaf) -or (Get-Item -LiteralPath $resolved).Length -eq 0) {
+        throw 'Native packaging did not produce a nonempty package.'
     }
-} else {
-    Write-Host "`n[2/7] Skipping tests..." -ForegroundColor Gray
-}
-
-# --- STEP 2: Build VS Code UI ---
-if (!$SkipUI) {
-    Write-Host "`n[3/7] Building React UI for VS Code Extension..." -ForegroundColor Yellow
-    $ExtensionDir = Join-Path $PSScriptRoot "..\src\etl-sql-vscode"
-    $UiDir = Join-Path $ExtensionDir "ui"
-    
-    if (Test-Path $UiDir) {
-        Push-Location $UiDir
-        Write-Host "  Installing UI dependencies..." -ForegroundColor Gray
-        npm install --no-audit --no-fund --legacy-peer-deps | Out-Null
-        Write-Host "  Running UI build..." -ForegroundColor Gray
-        npm run build | Out-Null
-        Pop-Location
-        Write-Host "  UI Build Complete." -ForegroundColor Green
-    } else {
-        Write-Warning "  UI directory not found at $UiDir"
+    New-Item -ItemType Directory -Path $ReleaseRoot -Force | Out-Null
+    if ((Test-Path -LiteralPath $destination) -and -not (Test-Path -LiteralPath $destination -PathType Leaf)) {
+        throw 'Native package destination must be a file.'
     }
-} else {
-    Write-Host "`n[3/7] Skipping UI build..." -ForegroundColor Gray
+    Move-Item -LiteralPath $resolved -Destination $destination -Force
+    Write-Host "  Native package: $destination" -ForegroundColor Green
 }
 
-# --- STEP 3: Platform-Specific Publishing ---
-Write-Host "`n[4/7] Starting Cross-Platform Publishing..." -ForegroundColor Yellow
+try {
+    if ($SkipTests -and $IncludeSampleValidation) { throw 'IncludeSampleValidation cannot be combined with SkipTests.' }
+    if (-not ($IsWindows -or $IsLinux -or $IsMacOS)) { throw 'Native packaging requires Windows, Linux or macOS.' }
+    Set-Location -LiteralPath $RepoRoot
+    $env:ETL_SQL_VERSION = $Version
 
-# We pass the version to the sub-script via environment variable
-$env:ETL_SQL_VERSION = $Version
-& (Join-Path $PSScriptRoot "publish-release.ps1")
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Publishing failed."
-    exit 1
-}
-
-# --- STEP 4: Build Windows MSI Installer ---
-Write-Host "`n[5/7] Building Windows MSI Installer..." -ForegroundColor Yellow
-if ($IsWindows) {
-    # build-msi also resolves WiX installations under Program Files. Missing WiX is a failure.
-    & (Join-Path $PSScriptRoot "build-msi.ps1")
-    if ($LASTEXITCODE -ne 0) { throw "MSI build failed with exit code $LASTEXITCODE." }
-} else {
-    Write-Host "  Windows MSI requires the Windows packaging lane." -ForegroundColor Yellow
-}
-
-# --- STEP 5: Build Linux & Mac Packages ---
-Write-Host "`n[6/7] Building Linux & Mac Packages..." -ForegroundColor Yellow
-if ($IsWindows) {
-    Write-Host "  Note: Linux/Mac package scripts are triggered but may require WSL or native host for full validation." -ForegroundColor Gray
-}
-
-$LinuxScript = Join-Path $PSScriptRoot "build-linux-packages.sh"
-if (Test-Path $LinuxScript) {
-    Write-Host "  Triggering Linux package build..." -ForegroundColor Gray
-    # On Windows, we can trigger via WSL if available, or just acknowledge existence
-    if (Get-Command wsl -ErrorAction SilentlyContinue) {
-        wsl bash -c "./scripts/build-linux-packages.sh $Version release/linux-x64/bin"
-    } else {
-        Write-Warning "  WSL not found. Please run build-linux-packages.sh on a Linux host."
+    Write-Host "ETL-SQL packaging $Version" -ForegroundColor Cyan
+    Write-Host '[1/7] Validating build tools and installer sources...'
+    $requiredTools = @('dotnet', 'node', 'npm', 'npx')
+    if ($IsLinux -or $IsMacOS) { $requiredTools += 'bash' }
+    foreach ($tool in $requiredTools) {
+        if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Required tool '$tool' not found in PATH." }
     }
+    $nodeVersion = & node --version
+    Assert-CommandSucceeded 'Node version check'
+    if ($nodeVersion -notmatch '^v22\.') { throw 'Node.js 22 is required for release packaging.' }
+    & (Join-Path $PSScriptRoot 'Test-InstallerSources.ps1')
+    Assert-CommandSucceeded 'Installer source validation'
+
+    Write-Host '[2/7] Release smoke tests...'
+    if (-not $SkipTests) {
+        & (Join-Path $PSScriptRoot 'test-lane.ps1') -Lane smoke -Configuration Release
+        Assert-CommandSucceeded 'Release smoke tests'
+        if ($IncludeSampleValidation) {
+            & (Join-Path $PSScriptRoot 'Test-AllSamples.ps1') -ReleaseMode
+            Assert-CommandSucceeded 'Sample validation'
+        }
+    } else { Write-Host '  Smoke tests explicitly skipped.' }
+
+    Write-Host '[3/7] VS Code UI...'
+    if (-not $SkipUI) {
+        $uiDir = Join-Path $RepoRoot 'src/etl-sql-vscode/ui'
+        if (-not (Test-Path -LiteralPath $uiDir -PathType Container)) { throw 'VS Code UI directory is missing.' }
+        $buildLocation = Get-Location
+        try {
+            Set-Location -LiteralPath $uiDir
+            # COMPAT_BREAK: 0.22 — locked restore/build failures cannot reach packaging.
+            npm ci --no-audit --no-fund
+            Assert-CommandSucceeded 'UI dependency restore'
+            npm run build
+            Assert-CommandSucceeded 'UI build'
+        } finally { Set-Location -LiteralPath $buildLocation.Path }
+    } else { Write-Host '  UI build explicitly skipped.' }
+
+    Write-Host '[4/7] Publishing portable bundles...'
+    Set-Location -LiteralPath $RepoRoot
+    & (Join-Path $PSScriptRoot 'publish-release.ps1')
+    Assert-CommandSucceeded 'Bundle publishing'
+
+    Write-Host '[5/7] Windows native installer...'
+    if ($IsWindows) {
+        $msi = Join-Path $RepoRoot "src/ETL-SQL.Installer/ETL-SQL-v$Version.msi"
+        Prepare-NativeOutput $msi
+        & (Join-Path $PSScriptRoot 'build-msi.ps1')
+        Assert-CommandSucceeded 'MSI build'
+        Collect-NativeOutput $msi
+    } else { Write-Host '  Windows MSI belongs to the Windows packaging lane.' }
+
+    Write-Host '[6/7] Linux or macOS native package...'
+    Set-Location -LiteralPath $RepoRoot
+    if ($IsLinux) {
+        $package = Join-Path $RepoRoot "etl-sql_${Version}_amd64.deb"
+        Prepare-NativeOutput $package
+        & bash -euo pipefail (Join-Path $PSScriptRoot 'build-linux-packages.sh') $Version (Join-Path $ReleaseRoot 'linux-x64/bin')
+        Assert-CommandSucceeded 'Linux package build'
+        Collect-NativeOutput $package
+    } elseif ($IsMacOS) {
+        $package = Join-Path $RepoRoot "ETL-SQL_v$Version.dmg"
+        Prepare-NativeOutput $package
+        & bash -euo pipefail (Join-Path $PSScriptRoot 'build-mac-dmg.sh') $Version (Join-Path $ReleaseRoot 'osx-x64/bin')
+        Assert-CommandSucceeded 'macOS DMG build'
+        Collect-NativeOutput $package
+    } else { Write-Host '  Linux/macOS packages belong to their native packaging lanes.' }
+
+    # COMPAT_BREAK: 0.22 — only checked build results can report packaging completion.
+    Write-Host '[7/7] PACKAGING COMPLETE' -ForegroundColor Green
+    Write-Host "Version: $Version; output: $ReleaseRoot; elapsed: $((Get-Date) - $StartTime)"
+    Write-Host 'Run the separate release certification and publication gates before shipping.'
+} finally {
+    if ($hadVersion) { $env:ETL_SQL_VERSION = $savedVersion }
+    else { Remove-Item Env:ETL_SQL_VERSION -ErrorAction SilentlyContinue }
+    Set-Location -LiteralPath $callerLocation.Path
 }
-
-$MacScript = Join-Path $PSScriptRoot "build-mac-dmg.sh"
-if (Test-Path $MacScript) {
-    Write-Host "  Triggering Mac DMG build (Requires MacOS host)..." -ForegroundColor Gray
-}
-
-# --- STEP 6: Validate Installer Sources ---
-Write-Host "`n[7/7] Validating installer sources..." -ForegroundColor Yellow
-& (Join-Path $PSScriptRoot 'Test-InstallerSources.ps1')
-if ($LASTEXITCODE -ne 0) { throw 'Installer source validation failed.' }
-
-# --- SUMMARY ---
-$Duration = (Get-Date) - $StartTime
-Write-Host "`n=======================================================" -ForegroundColor Cyan
-Write-Host " RELEASE COMPLETE" -ForegroundColor Cyan
-Write-Host " Version  : $Version"
-Write-Host " Duration : $($Duration.Minutes)m $($Duration.Seconds)s"
-Write-Host " Location : $(Join-Path $PSScriptRoot '..\release')" -ForegroundColor Green
-Write-Host "=======================================================" -ForegroundColor Cyan

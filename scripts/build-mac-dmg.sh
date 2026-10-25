@@ -2,10 +2,28 @@
 # ETL-SQL macOS DMG Builder
 # Usage: ./build-mac-dmg.sh <version>
 
+set -euo pipefail
+if ! command -v hdiutil >/dev/null; then
+    echo '[ERROR] hdiutil is required to build the macOS DMG.' >&2
+    exit 1
+fi
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+INSTALLER_ROOT="$(cd "$REPO_ROOT/src/ETL-SQL.Installer" && pwd -P)"
+if [[ "$INSTALLER_ROOT" != "$REPO_ROOT/src/ETL-SQL.Installer" ]]; then
+    echo '[ERROR] Installer staging must stay inside the repository.' >&2
+    exit 1
+fi
+cd "$REPO_ROOT"
+
 VERSION=${1:-"0.21.0"}
 PUBLISHED_BIN_DIR=${2:-"release/osx-x64/bin"}
 APP_NAME="ETL-SQL"
-BUILD_DIR="src/ETL-SQL.Installer/mac"
+BUILD_DIR="$INSTALLER_ROOT/mac"
+if [[ -L "$BUILD_DIR" ]]; then
+    echo '[ERROR] macOS staging output must not be a symbolic link.' >&2
+    exit 1
+fi
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 
 echo "--- ETL-SQL macOS DMG Builder ---"
@@ -58,14 +76,12 @@ CLI="\$SCRIPT_DIR/../Resources/bin/ETL-SQL"
 osascript -e "tell application \"Terminal\" to do script \"\\\"\$CLI\\\" ui edit\""
 EOF
 chmod +x "$APP_BUNDLE/Contents/MacOS/ETL-SQL"
+# COMPAT_BREAK: 0.22 — a copied application must not retain non-owner write access.
+chmod -R go-w "$APP_BUNDLE"
 
 # 4. Build DMG
-if command -v hdiutil &> /dev/null; then
-    echo "Creating DMG image..."
-    hdiutil create -volname "$APP_NAME" -srcfolder "$BUILD_DIR" -ov -format UDZO "${APP_NAME}_v${VERSION}.dmg"
-    echo "[SUCCESS] DMG created: ${APP_NAME}_v${VERSION}.dmg"
-else
-    echo "[WARNING] hdiutil not found. Skipping DMG creation."
-fi
+echo "Creating DMG image..."
+hdiutil create -volname "$APP_NAME" -srcfolder "$BUILD_DIR" -ov -format UDZO "${APP_NAME}_v${VERSION}.dmg"
+echo "[SUCCESS] DMG created: ${APP_NAME}_v${VERSION}.dmg"
 
 echo -e "\nmacOS bundle process complete."

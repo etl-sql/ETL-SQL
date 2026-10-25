@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import './test-installer-actions.mjs';
+import './test-master-release.mjs';
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'installer-sources-'));
 const script = fileURLToPath(new URL('../Test-InstallerSources.ps1', import.meta.url));
@@ -53,27 +54,6 @@ try {
     rmSync(path.join(root, retired));
   }
   assert.equal(run().status, 0);
-  // Execute the release wrapper with packaging/UI/tool probes replaced by local fixture scripts.
-  write('scripts/Master-Release.ps1', readFileSync(new URL('../Master-Release.ps1', import.meta.url), 'utf8'));
-  write('scripts/Test-InstallerSources.ps1', readFileSync(script, 'utf8'));
-  for (const name of ['publish-release.ps1', 'build-msi.ps1'])
-    write('scripts/' + name, '$global:LASTEXITCODE = 0; Write-Output "Fixture packaging only"');
-  write('run-master.ps1', `
-function Get-Command { param($Name, $ErrorAction) if ($Name -in @('dotnet','node','npm','npx')) { return @{Name=$Name} } }
-& "$PSScriptRoot/scripts/Master-Release.ps1" -Version '0.22.0' -SkipTests -SkipUI
-exit $LASTEXITCODE
-`);
-  const master = () => spawnSync('pwsh', ['-NoProfile', '-File', path.join(root, 'run-master.ps1')], { encoding: 'utf8' });
-  const masterPassed = master();
-  if (masterPassed.error) throw masterPassed.error;
-  assert.equal(masterPassed.status, 0, masterPassed.stdout + masterPassed.stderr);
-  assert.match(masterPassed.stdout, /Installer source checks passed/);
-  write('scripts/install.ps1', 'Retired fixture: must never execute');
-  const masterFailed = master();
-  assert.notEqual(masterFailed.status, 0);
-  assert.match(masterFailed.stdout + masterFailed.stderr, /Retired installer helper/);
-  assert.doesNotMatch(masterFailed.stdout, /RELEASE COMPLETE/);
-  rmSync(path.join(root, 'scripts/install.ps1'));
   console.log('Installer source checks: static validation, retired-helper rejection and mocked release-wrapper failure propagation passed.');
 } finally {
   // Only remove the private fixture created above.

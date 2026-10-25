@@ -49,6 +49,10 @@ jobs:
           npm ci --prefix scripts/typecheck
           node scripts/sync-assets.js
           node scripts/sync-assets.js -Check
+      - name: Check native package file permissions
+        shell: bash
+        timeout-minutes: 2
+        run: bash scripts/checks/test-native-package-permissions.sh
       - name: Publish candidate binaries
         shell: pwsh
         timeout-minutes: 45

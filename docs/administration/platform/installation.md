@@ -72,12 +72,17 @@ sudo systemctl enable etl-sql-portal
 sudo systemctl start etl-sql-portal
 ```
 
-For RPM-based systems, use the matching `.rpm` package and the same `systemctl` service names.
+The current Linux package builder emits Debian `.deb` artifacts.
 
 ### macOS workstation
 
 Use the release ZIP matching `osx-x64` or `osx-arm64`. The Intel DMG contains `ETL-SQL.app`;
 its CLI tools live under `Contents/Resources/bin` inside the application bundle.
+
+From v0.22.0, DEB payloads and macOS application bundles remove group/other write access from
+program trees while preserving executable and read-only bits. Native package builders require
+`dpkg-deb` on Linux or `hdiutil` on macOS and fail when those tools are missing. They resolve staging
+under the repository and reject linked staging ancestors or outputs before cleanup.
 
 ### Docker / Containerized
 
