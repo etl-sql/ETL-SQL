@@ -694,6 +694,12 @@ here; each one failed a single test per run and passed on rerun.
   secret/recovery files, database sidecars, runtime directories and broken links, while hashes
   confirm prior package outputs are preserved. The clean DEB and macOS bundle regression passes;
   DMG creation remains mocked on Linux. See `release-validation/native-runtime-state-validation.json`.
+  Portable ZIP review reproduced deletion on invalid options and acceptance of corrupt/incomplete
+  archives. Input validation now precedes cleanup; ZIP promotion verifies all file names and hashes.
+  Twenty executed producer cases cover those failures, byte changes, duplicates, invalid host files, shared runtime
+  rejection and Unicode/bracketed paths. All 38 native rejection cases still pass against the shared
+  inventory. See `release-validation/portable-packaging-validation.json`. Full-producer retention
+  across a failed rebuild remains unverified: valid inputs still initialize a fresh release folder.
   The broader review and native installed MSI certification remain open.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook

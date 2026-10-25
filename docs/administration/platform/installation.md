@@ -86,6 +86,11 @@ under the repository and reject linked staging ancestors or outputs before clean
 DEB and DMG builds also reject publish folders containing runtime secrets, databases, key rings
 or runtime directories. Publish into a clean folder. Rejection preserves prior staging and packages.
 
+The portable ZIP producer uses the same runtime-state inventory. It validates platforms and
+versions before cleanup and checks archive file names and hashes before promoting each ZIP.
+It still starts a fresh release directory after valid inputs; keep accepted release artifacts
+outside that build directory when retaining them across a complete rebuild.
+
 ### Docker / Containerized
 
 ETL-SQL provides pre-configured Docker Compose configurations to run containerized instances of the Orchestrator and Portal services.

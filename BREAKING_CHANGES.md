@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: Portable release inputs and ZIP contents are verified
+- **What changed**: The portable producer rejects empty, duplicate or unsupported platforms and unsafe version strings before cleanup. Required host files must be nonempty regular files. ZIP promotion requires matching file inventories and SHA-256 hashes, and publish folders cannot contain runtime state. ZIP creation uses .NET and includes hidden files in its verified inventory.
+- **Who is affected**: Release automation using unsupported platforms, malformed versions, contaminated publish output or an archive writer that drops or changes files.
+- **Migration**: Select each supported platform once and use a three-part version. Publish clean binaries and rerun failed packaging. Invalid input leaves release output intact; after valid inputs, the producer still initializes a fresh release directory before building. ZIP-stage failures preserve an existing destination ZIP.
+- **Diagnostic**: Invalid options fail before source preparation. Runtime state and archive inventory/hash mismatches stop packaging; no incomplete ZIP is promoted.
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: Native packaging rejects runtime state
 - **What changed**: DEB and DMG builders reject protected secrets (including staging/recovery copies), saved installer settings, first-run credentials, SQLite databases/sidecars, key rings and runtime directories before staging cleanup. Broken links to these artifacts also fail.
 - **Who is affected**: Native packaging from a publish directory that was used to run a host or installer.

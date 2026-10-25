@@ -18,6 +18,7 @@ unset -f hdiutil dpkg-deb 2>/dev/null || true
 mkdir -p "$FIXTURE/scripts" "$FIXTURE/src/ETL-SQL.Installer/linux" "$FIXTURE/payload"
 mkdir -p "$FIXTURE/scripts/lib"
 cp "$SOURCE_ROOT/scripts/lib/native-publish-input.sh" "$FIXTURE/scripts/lib/"
+cp "$SOURCE_ROOT/scripts/lib/package-runtime-state.patterns" "$FIXTURE/scripts/lib/"
 cp "$SOURCE_ROOT/scripts/build-linux-packages.sh" "$FIXTURE/scripts/"
 cp "$SOURCE_ROOT/scripts/build-mac-dmg.sh" "$FIXTURE/scripts/"
 cp "$SOURCE_ROOT/"{LICENSE.md,NOTICE.md,THIRD-PARTY-NOTICES.md} "$FIXTURE/"

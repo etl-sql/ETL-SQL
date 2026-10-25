@@ -2,19 +2,29 @@
 # Usage: ./publish-release.ps1 [-Platforms win-x64,linux-x64]
 
 param(
+    [ValidateSet('win-x64', 'linux-x64', 'osx-x64', 'osx-arm64')]
     [string[]]$Platforms = @("win-x64", "linux-x64", "osx-x64", "osx-arm64"),
     [switch]$SkipVsix,
     [string]$CertificationEvidenceRoot
 )
 
 $ErrorActionPreference = 'Stop'
+# COMPAT_BREAK: 0.22 — reject unsafe packaging inputs before release output cleanup.
+$Platforms = @($Platforms | ForEach-Object { $_.ToLowerInvariant() })
+if ($Platforms.Count -eq 0 -or @($Platforms | Select-Object -Unique).Count -ne $Platforms.Count) {
+    throw 'Choose at least one supported platform, with no duplicates.'
+}
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else {
     [xml]$versionProps = Get-Content -LiteralPath (Join-Path $RepoRoot 'Directory.Build.props')
     [string]$versionProps.Project.PropertyGroup.VersionPrefix
 }
+if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$') {
+    throw 'Release version must be a file-safe three-part version.'
+}
 $ReleaseRoot = Join-Path $RepoRoot "release"
 $SampleSource = Join-Path $RepoRoot "samples"
+$RuntimeStatePatterns = @(Get-Content -LiteralPath (Join-Path $PSScriptRoot 'lib/package-runtime-state.patterns'))
 & node (Join-Path $RepoRoot 'scripts/sync-assets.js')
 if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed. Run npm ci --prefix scripts/typecheck first.' }
 . (Join-Path $PSScriptRoot 'ReleaseEvidence.Helpers.ps1')
@@ -70,35 +80,61 @@ function Assert-ReleaseBinaries {
 
     $missing = @()
     foreach ($file in $required) {
-        if (-not (Test-Path -LiteralPath (Join-Path $BinFolder $file))) {
+        $binary = Get-Item -LiteralPath (Join-Path $BinFolder $file) -Force -ErrorAction SilentlyContinue
+        if (-not $binary -or $binary.PSIsContainer -or $binary.Length -eq 0 -or
+            ($binary.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
             $missing += $file
         }
     }
 
     if ($missing.Count -gt 0) {
-        throw "Release publish for $Platform is missing required binaries: $($missing -join ', ')"
+        throw "Release publish for $Platform has missing or invalid required binaries: $($missing -join ', ')"
     }
 }
 
 function New-VerifiedArchive {
     param(
-        [Parameter(Mandatory = $true)][string]$SourceGlob,
+        [Parameter(Mandatory = $true)][string]$SourceDirectory,
         [Parameter(Mandatory = $true)][string]$DestinationPath
     )
 
-    $tempPath = "$DestinationPath.tmp.zip"
-    if (Test-Path -LiteralPath $DestinationPath) { Remove-Item -LiteralPath $DestinationPath -Force }
-    if (Test-Path -LiteralPath $tempPath) { Remove-Item -LiteralPath $tempPath -Force }
-
-    Compress-Archive -Path $SourceGlob -DestinationPath $tempPath -Force
-
-    $archive = Get-Item -LiteralPath $tempPath
-    if ($archive.Length -le 0) {
-        Remove-Item -LiteralPath $tempPath -Force
-        throw "Archive creation produced an empty file: $DestinationPath"
+    if (Test-Path -LiteralPath $DestinationPath) {
+        $destination = Get-Item -LiteralPath $DestinationPath -Force
+        if ($destination.PSIsContainer -or ($destination.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw 'Accepted archive destination must be a regular file.'
+        }
     }
-
-    Move-Item -LiteralPath $tempPath -Destination $DestinationPath -Force
+    $expected = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
+    foreach ($item in Get-ChildItem -LiteralPath $SourceDirectory -Recurse -Force) {
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Archive input must not contain links.' }
+        if (-not $item.PSIsContainer) {
+            $relative = [IO.Path]::GetRelativePath($SourceDirectory, $item.FullName).Replace('\', '/')
+            $expected.Add($relative, (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash)
+        }
+    }
+    if ($expected.Count -eq 0) { throw 'Cannot package an empty release directory.' }
+    $tempPath = "$DestinationPath.$([Guid]::NewGuid().ToString('N')).tmp.zip"
+    try {
+        [IO.Compression.ZipFile]::CreateFromDirectory($SourceDirectory, $tempPath)
+        $archive = [IO.Compression.ZipFile]::OpenRead($tempPath)
+        try {
+            $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+            foreach ($entry in $archive.Entries) {
+                if ($entry.FullName.EndsWith('/')) { continue }
+                if (-not $expected.ContainsKey($entry.FullName) -or -not $seen.Add($entry.FullName)) {
+                    throw 'Archive contains an unexpected or duplicate file.'
+                }
+                $stream = $entry.Open()
+                try { $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream)) }
+                finally { $stream.Dispose() }
+                if ($hash -ne $expected[$entry.FullName]) { throw 'Archived file does not match its release input.' }
+            }
+            if ($seen.Count -ne $expected.Count) { throw 'Archive is missing release files.' }
+        } finally { $archive.Dispose() }
+        Move-Item -LiteralPath $tempPath -Destination $DestinationPath -Force
+    } finally {
+        if (Test-Path -LiteralPath $tempPath) { Remove-Item -LiteralPath $tempPath -Force }
+    }
 }
 
 # Projects to publish
@@ -150,11 +186,16 @@ foreach ($Platform in $Platforms) {
     }
 
     Assert-ReleaseBinaries -Platform $Platform -BinFolder $BinFolder
+    foreach ($item in Get-ChildItem -LiteralPath $BinFolder -Force) {
+        foreach ($pattern in $RuntimeStatePatterns) {
+            if ($item.Name -like $pattern) { throw 'Runtime state in the publish folder. Publish again into a clean folder.' }
+        }
+    }
 
     # 3. Cleanup redundant files
     Write-Host "  Cleaning up redundant assets..." -ForegroundColor Gray
-    Get-ChildItem $BinFolder -Filter "appsettings.Development.json" -Recurse | Remove-Item -Force
-    Get-ChildItem $BinFolder -Filter "*.staticwebassets.endpoints.json" -Recurse | Remove-Item -Force
+    Get-ChildItem -LiteralPath $BinFolder -Filter "appsettings.Development.json" -Recurse | Remove-Item -Force
+    Get-ChildItem -LiteralPath $BinFolder -Filter "*.staticwebassets.endpoints.json" -Recurse | Remove-Item -Force
 
     # 4. Docs pointer + compliance files.
     # Full guides/reference live on GitHub and evolve between releases, so we ship a
@@ -172,11 +213,11 @@ foreach ($Platform in $Platforms) {
         "  Issues:          https://github.com/etl-sql/ETL-SQL/issues",
         "",
         "This release bundles LICENSE, NOTICE, third-party notices, and the changelog (below)."
-    ) | Set-Content -Path (Join-Path $DocFolder "DOCS.txt") -Encoding utf8
-    Copy-Item (Join-Path $RepoRoot "CHANGELOG.md") (Join-Path $DocFolder "CHANGELOG.txt") # Rename to txt for portability
-    Copy-Item (Join-Path $RepoRoot "LICENSE.md") (Join-Path $DocFolder "LICENSE.md")
-    Copy-Item (Join-Path $RepoRoot "NOTICE.md") (Join-Path $DocFolder "NOTICE.md")
-    Copy-Item (Join-Path $RepoRoot "THIRD-PARTY-NOTICES.md") (Join-Path $DocFolder "THIRD-PARTY-NOTICES.md")
+    ) | Set-Content -LiteralPath (Join-Path $DocFolder "DOCS.txt") -Encoding utf8
+    Copy-Item -LiteralPath (Join-Path $RepoRoot "CHANGELOG.md") -Destination (Join-Path $DocFolder "CHANGELOG.txt") # Rename to txt for portability
+    Copy-Item -LiteralPath (Join-Path $RepoRoot "LICENSE.md") -Destination (Join-Path $DocFolder "LICENSE.md")
+    Copy-Item -LiteralPath (Join-Path $RepoRoot "NOTICE.md") -Destination (Join-Path $DocFolder "NOTICE.md")
+    Copy-Item -LiteralPath (Join-Path $RepoRoot "THIRD-PARTY-NOTICES.md") -Destination (Join-Path $DocFolder "THIRD-PARTY-NOTICES.md")
     
     # 5. Copy Curated Samples (Top 15)
     $SampleList = @(
@@ -200,16 +241,16 @@ foreach ($Platform in $Platforms) {
     foreach ($Sample in $SampleList) {
         $RelativeSample = Join-PathSegments $Sample
         $Src = Join-Path $SampleSource $RelativeSample
-        if (-not (Test-Path $Src)) {
+        if (-not (Test-Path -LiteralPath $Src)) {
             throw "Curated sample is missing: $RelativeSample"
         }
 
         $Dest = Join-Path $SampleFolder $RelativeSample
         $DestDir = Split-Path $Dest -Parent
-        if (-not (Test-Path $DestDir)) {
+        if (-not (Test-Path -LiteralPath $DestDir)) {
             New-Item -ItemType Directory -Path $DestDir | Out-Null
         }
-        Copy-Item $Src $Dest
+        Copy-Item -LiteralPath $Src -Destination $Dest
     }
 
     if (-not $SkipVsix) {
@@ -217,13 +258,13 @@ foreach ($Platform in $Platforms) {
         $VsixPath = & (Join-Path $PSScriptRoot "publish-vsix.ps1") -Platform $Platform -BinSourceDir $BinFolder
         # Fail loudly instead of silently shipping a release with no extension. publish-vsix.ps1
         # exits non-zero on failure; that leaves $VsixPath empty/invalid here.
-        if (-not $VsixPath -or -not (Test-Path $VsixPath)) {
+        if (-not $VsixPath -or -not (Test-Path -LiteralPath $VsixPath)) {
             throw "VSIX packaging failed for $Platform (no .vsix produced). Re-run with -SkipVsix to bypass."
         }
         # Publish the VSIX as a standalone GitHub release asset (discoverable for VS Code users)
         # rather than burying it inside the platform ZIP.
         $VsixDest = Join-Path $ReleaseRoot ([System.IO.Path]::GetFileName($VsixPath))
-        Move-Item $VsixPath $VsixDest -Force
+        Move-Item -LiteralPath $VsixPath -Destination $VsixDest -Force
         Write-Host "  VSIX asset: $VsixDest" -ForegroundColor Green
     }
 
@@ -231,7 +272,7 @@ foreach ($Platform in $Platforms) {
     Write-Host "  Creating ZIP archive for GitHub..." -ForegroundColor Gray
     $ZipFileName = "ETL-SQL-v$Version-$Platform.zip"
     $ZipDest = Join-Path $ReleaseRoot $ZipFileName
-    New-VerifiedArchive -SourceGlob (Join-Path $PlatformFolder "*") -DestinationPath $ZipDest
+    New-VerifiedArchive -SourceDirectory $PlatformFolder -DestinationPath $ZipDest
 
     Write-Host "  Platform $Platform complete. Archive: $ZipFileName" -ForegroundColor Green
 }
@@ -254,12 +295,12 @@ Assert-NativeCommandSucceeded -Description 'SBOM generation'
 
 # 9. Generate Checksums
 Write-Host "`nGenerating SHA-256 checksums..." -ForegroundColor Yellow
-$Artifacts = Get-ChildItem -Path $ReleaseRoot -File | Where-Object { $_.Name -like "ETL-SQL-*" -or $_.Name -like "*.vsix" -or $_.Name -like "*.msi" -or $_.Name -eq "sbom.json" }
+$Artifacts = Get-ChildItem -LiteralPath $ReleaseRoot -File | Where-Object { $_.Name -like "ETL-SQL-*" -or $_.Name -like "*.vsix" -or $_.Name -like "*.msi" -or $_.Name -eq "sbom.json" }
 $Checksums = foreach ($Artifact in $Artifacts) {
-    $Hash = (Get-FileHash -Path $Artifact.FullName -Algorithm SHA256).Hash.ToLower()
+    $Hash = (Get-FileHash -LiteralPath $Artifact.FullName -Algorithm SHA256).Hash.ToLower()
     "$Hash  $($Artifact.Name)"
 }
-$Checksums | Out-File -FilePath (Join-Path $ReleaseRoot "sha256sums.txt") -Encoding ascii -Force
+$Checksums | Out-File -LiteralPath (Join-Path $ReleaseRoot "sha256sums.txt") -Encoding ascii -Force
 Write-Host "  Checksums file generated: sha256sums.txt" -ForegroundColor Green
 
 Write-Host "`nRelease v$Version ready in $ReleaseRoot" -ForegroundColor Cyan
