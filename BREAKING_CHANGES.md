@@ -17,6 +17,20 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: First-sign-in credentials follow saved configuration
+- **What changed**: MSI and DEB publish the protected sign-in file after saving protected and shared settings. A fresh-install retry reuses a saved bootstrap password when its sign-in file is missing. Configured credentials use UTF-8.
+- **Who is affected**: Fresh installs interrupted by settings or sign-in file write failures, and fresh installs with a configured bootstrap password.
+- **Migration**: Resolve the reported file access failure and retry configuration. Preserve existing protected settings. The sign-in file is also created for a configured bootstrap password when absent; normal upgrades do not create it.
+- **Diagnostic**: A failed write stops configuration. Retrying a failed sign-in write preserves saved service keys and produces credentials matching the saved password.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: Installer configuration requires JSON objects
+- **What changed**: MSI and DEB configuration reject non-object roots in shared, saved and protected settings before writing configuration. Protected documents retain operator-added settings outside the installer's managed key list.
+- **Who is affected**: Installations with empty, malformed, array, scalar or null settings documents.
+- **Migration**: Restore a valid JSON object from a trusted backup before retrying. Preserve installed keys; do not replace protected settings with empty defaults to bypass validation.
+- **Diagnostic**: MSI reports a fixed configuration failure. DEB rejects invalid document roots. Neither path replaces installed keys on these validation failures.
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: Release wrapper retains complete native and portable output
 - **What changed**: `Master-Release.ps1` owns the output transaction across portable and native packaging. The portable child stages into a validated live caller transaction. Existing native build outputs are saved before rebuilding and restored after failure. Final checksums include ZIP, VSIX, MSI, DEB, DMG and SBOM files before the complete directory is promoted.
 - **Who is affected**: Packaging through the release wrapper, especially failures after portable publishing or while replacing an earlier native artifact.

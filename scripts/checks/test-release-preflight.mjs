@@ -16,7 +16,10 @@ for (const source of [catalog.replaceAll('\r\n', '\n'), catalog.replaceAll('\r\n
 assert.throws(() => syntaxIndex.extractStewardshipTags(catalog.replace('TableColumnScriptScopes, []),', 'TableColumnScriptScopes, [], []),')),
   /Unable to extract/, 'A changed record shape must fail instead of silently dropping an entry.');
 
-assert.equal(releaseAutomationChecks.length, 24);
+assert.equal(releaseAutomationChecks.length, 28);
+for (const name of ['release-evidence', 'production-canary-evidence', 'certification-source', 'deployment-claims']) {
+  assert.equal(releaseAutomationChecks.filter(check => check.id === `test-${name}`).length, 1);
+}
 for (const check of releaseAutomationChecks) {
   assert.equal(sourceChecks.filter(candidate => candidate.id === check.id).length, 1);
 }

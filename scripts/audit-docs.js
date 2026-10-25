@@ -126,6 +126,21 @@ function rel(filePath) {
 // ---------------------------------------------------------------------------
 function checkBrokenLinks(mdFiles) {
   const issues = [];
+  const directoryNames = new Map();
+  function existsWithExactCase(target) {
+    if (!fs.existsSync(target)) return false;
+    const relative = path.relative(repoRoot, target);
+    if (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return true;
+    let directory = repoRoot;
+    for (const segment of relative.split(path.sep).filter(Boolean)) {
+      if (!directoryNames.has(directory)) {
+        directoryNames.set(directory, new Set(fs.readdirSync(directory)));
+      }
+      if (!directoryNames.get(directory).has(segment)) return false;
+      directory = path.join(directory, segment);
+    }
+    return true;
+  }
 
   // Pre-build anchor map: filePath → Set<anchor>
   const anchorMap = new Map();
@@ -161,7 +176,8 @@ function checkBrokenLinks(mdFiles) {
       if (!href.endsWith('.md') && !href.includes('.')) continue;
 
       const target = path.resolve(dir, href);
-      if (!fs.existsSync(target)) {
+      // Windows resolves incorrect casing that fails on Linux hosts and published documentation.
+      if (!existsWithExactCase(target)) {
         issues.push(`${rel(file)}: broken link → ${href}`);
         continue;
       }

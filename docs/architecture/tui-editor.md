@@ -2,7 +2,7 @@
 
 This document describes the internal design of the terminal IDE in `ETL-SQL.TUI` — the interactive editor, syntax highlighting, autocomplete, execution pipeline, and results display that runs inside a terminal window.
 
-For the overall presentation layer boundary (output contracts, ANSI rendering), see [Presentation.md](Presentation.md).
+For the overall presentation layer boundary (output contracts, ANSI rendering), see [Presentation.md](presentation.md).
 
 ---
 

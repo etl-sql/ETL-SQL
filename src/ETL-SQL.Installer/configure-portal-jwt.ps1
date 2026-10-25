@@ -101,6 +101,18 @@ function Test-EmptySetting($Value) {
     return $false
 }
 
+function Read-SettingsObject([string]$Path) {
+    $text = Get-Content -LiteralPath $Path -Raw
+    $document = ConvertFrom-Json -InputObject $text
+    # COMPAT_BREAK: 0.22 — invalid document roots must not regenerate installed keys.
+    # Windows PowerShell unwraps JSON arrays; check the source root as well as its parsed type.
+    if (-not $text.TrimStart().StartsWith('{') -or
+        $document -isnot [System.Management.Automation.PSCustomObject]) {
+        throw 'Installer settings must be a JSON object.'
+    }
+    return $document
+}
+
 try {
     $parts = $CustomData.Split('|')
     $installDir = if ($parts.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($parts[0])) { $parts[0] } else { $PSScriptRoot }
@@ -117,7 +129,7 @@ try {
         }
     }
 
-    $json = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
+    $json = Read-SettingsObject $cfgPath
     $changed = $false
 
     # A major upgrade removed the installed appsettings.json and laid down the package's defaults;
@@ -126,7 +138,7 @@ try {
     # make cached datasets unreadable.
     $savedPath = Join-Path $installDir 'appsettings.pre-upgrade.json'
     if (Test-Path -LiteralPath $savedPath -PathType Leaf) {
-        $installed = Get-Content -LiteralPath $savedPath -Raw | ConvertFrom-Json
+        $installed = Read-SettingsObject $savedPath
         Merge-InstalledSettings -Target $json -Source $installed
         $changed = $true
     }
@@ -137,8 +149,9 @@ try {
     # Keep in sync with build-linux-packages.sh (InstallerConfigurationScriptTests compares them).
     $secretPaths = @('Portal:Jwt:Secret', 'Portal:Jwt:PreviousSecrets', 'Portal:Dataset:AtRestKey', 'Portal:Dataset:PreviousAtRestKeys', 'Portal:FirstRun:AdminPassword', 'Orchestrator:ApiKey', 'Orchestrator:PreviousApiKeys', 'Orchestrator:IdentitySigningSecret', 'Portal:Orchestrator:ApiKey', 'Portal:Orchestrator:IdentitySigningSecret')
     $secretsPath = Join-Path $installDir 'appsettings.secrets.json'
+    $existingSecrets = [pscustomobject]@{}
     if (Test-Path -LiteralPath $secretsPath -PathType Leaf) {
-        $existingSecrets = Get-Content -LiteralPath $secretsPath -Raw | ConvertFrom-Json
+        $existingSecrets = Read-SettingsObject $secretsPath
         foreach ($dotted in $secretPaths) {
             $source = Get-JsonParent -Root $existingSecrets -Dotted $dotted
             $target = Get-JsonParent -Root $json -Dotted $dotted
@@ -168,18 +181,19 @@ try {
     # password. Generate a one-time password readable only by Administrators and SYSTEM; the Portal
     # forces a change at first sign-in.
     $firstRunPath = Join-Path $installDir 'first-run-password.txt'
+    $passwordBytes = $null
     if ([string]::IsNullOrWhiteSpace($moduleOpts['UPGRADE']) -and $null -ne $json.Portal -and `
         $null -ne $json.Portal.FirstRun -and `
-        [string]::IsNullOrWhiteSpace([string]$json.Portal.FirstRun.AdminPassword) -and `
         -not (Test-Path -LiteralPath (Join-Path $installDir 'portal.db')) -and `
-        -not (Test-Path -LiteralPath $firstRunPath)) {
-        $password = (New-Base64Secret).Substring(0, 24).Replace('/', 'x').Replace('+', 'y') + '9!'
-        $json.Portal.FirstRun | Add-Member -MemberType NoteProperty -Name 'AdminPassword' -Value $password -Force
+        -not (Test-Path -LiteralPath $firstRunPath -PathType Leaf)) {
+        $password = [string]$json.Portal.FirstRun.AdminPassword
+        if ([string]::IsNullOrWhiteSpace($password)) {
+            $password = (New-Base64Secret).Substring(0, 24).Replace('/', 'x').Replace('+', 'y') + '9!'
+            $json.Portal.FirstRun | Add-Member -MemberType NoteProperty -Name 'AdminPassword' -Value $password -Force
+        }
         $user = if ([string]::IsNullOrWhiteSpace([string]$json.Portal.FirstRun.AdminUsername)) { 'admin' } else { [string]$json.Portal.FirstRun.AdminUsername }
-        # Created with its final ACL (SYSTEM and Administrators, nothing inherited) and written through
-        # the creating handle, so no other account can ever read it.
-        $passwordBytes = (New-Object System.Text.ASCIIEncoding).GetBytes($user + "`r`n" + $password + "`r`n")
-        Write-ProtectedFile -Path $firstRunPath -Bytes $passwordBytes
+        # Publish only after settings persist. A retry reuses the password already saved in secrets.
+        $passwordBytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($user + "`r`n" + $password + "`r`n")
         $changed = $true
     }
 
@@ -304,7 +318,8 @@ try {
     }
 
     # Move every generated secret out of the shared file, leaving its empty default behind.
-    $secrets = [pscustomobject]@{}
+    # Preserve operator-owned protected settings without copying them into the shared document.
+    $secrets = $existingSecrets
     foreach ($dotted in $secretPaths) {
         $node = Get-JsonParent -Root $json -Dotted $dotted
         $key = $dotted.Split(':')[-1]
@@ -338,6 +353,10 @@ try {
 
     if ($changed) {
         ($json | ConvertTo-Json -Depth 64) | Set-Content -LiteralPath $cfgPath -Encoding UTF8
+    }
+    # COMPAT_BREAK: 0.22 — failed settings writes must not publish unusable sign-in credentials.
+    if ($null -ne $passwordBytes) {
+        Write-ProtectedFile -Path $firstRunPath -Bytes $passwordBytes
     }
     if (Test-Path -LiteralPath $savedPath) { Remove-Item -LiteralPath $savedPath -Force }
 } catch {

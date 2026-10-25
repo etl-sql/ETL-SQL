@@ -1,6 +1,6 @@
 param([Parameter(Mandatory)][string]$RepoRoot, [Parameter(Mandatory)][string]$TemplateRoot, [string]$Mutation)
 $ErrorActionPreference = 'Stop'
-$nativeGit = (Get-Command git -CommandType Application).Source
+$nativeGit = (Get-Command git -CommandType Application | Select-Object -First 1).Source
 $global:CertificationGitFailure = if ($Mutation -eq 'initial-status-error') { 'status' } else { '' }
 function git {
     if ($args -ccontains $global:CertificationGitFailure) {

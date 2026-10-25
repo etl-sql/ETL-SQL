@@ -1,7 +1,7 @@
 param([Parameter(Mandatory)][string]$RepoRoot)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $RepoRoot 'scripts/Release.Helpers.ps1')
-$nativeGit = (Get-Command git -CommandType Application).Source
+$nativeGit = (Get-Command git -CommandType Application | Select-Object -First 1).Source
 function Invoke-FixtureGit {
     param([string[]]$Arguments)
     $null = & $nativeGit -C $RepoRoot @Arguments

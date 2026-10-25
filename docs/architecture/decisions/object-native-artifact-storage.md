@@ -106,6 +106,6 @@ publication behavior.
 
 ## References
 
-- [Engine architecture — Artifact Storage](../Engine.md#artifact-storage)
+- [Engine architecture — Artifact Storage](../engine.md#artifact-storage)
 - [State and high availability](../../administration/platform/state-and-ha.md)
 - [Tenant portability architecture](../tenant-portability.md)

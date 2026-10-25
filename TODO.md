@@ -376,6 +376,13 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   branch work is unaffected. Tests cover malformed/mismatched dates, drafts and missing inputs.
   Workflow syntax and expression validation now runs through pinned actionlint in the shared
   preflight; setup verifies upstream archive hashes before extraction.
+  A later pre-push run timed out the nested deployment-claim fixture despite completing its
+  assertions. Canary receipts, source provenance and deployment claims now have independent
+  supervised source checks, with the same fixture assertions and separate failure logs. The
+  manifest registers all four evidence groups exactly once; the shared per-check ceiling stays
+  at 60 seconds. Original failure: `release-validation/preflight/1792966690091-30972/`.
+  All 38 checks pass in 83.8 seconds after the split; deployment claims take 20.1 seconds and
+  source provenance 27.4 seconds. Evidence: `release-validation/preflight/1792966868919-27000/`.
 - [ ] **Make targeted fix runs safe and directly runnable.** Extend the path-filter task above with
   an explicit lane/shard selector and printed rerun command for each failure. Unknown paths and
   shared build, dependency or workflow changes must select all affected consumers conservatively;
@@ -712,7 +719,31 @@ here; each one failed a single test per run and passed on rerun.
   the final collected bytes. Forty-three wrapper cases and 46 portable cases cover all host branches,
   partial native output, failed recovery and validated caller-owned staging. Native tools remain
   mocked. Evidence: `release-validation/native-wrapper-retention-validation.json`.
+  Configuration review also reproduced both installers discarding operator-added protected settings
+  and replacing non-object protected JSON with fresh generated keys. MSI/DEB now preserve the full
+  protected object and reject invalid shared, saved and protected documents before configuration
+  writes. All 23 Windows configuration/upgrade cases and 11 Linux configuration tests pass; Linux
+  checks use real POSIX file operations in a disposable container and now run in DEB candidate CI.
+  Evidence: `release-validation/installer-secret-preservation/validation.json`.
+  Fresh-install failure review then reproduced unusable sign-in files on both platforms: credentials
+  were published before their password was saved, and a retry could skip password generation.
+  Credential publication now follows saved settings; retries reuse the saved password and keys.
+  Windows/POSIX regressions cover failures at protected settings, shared settings and sign-in writes,
+  plus Unicode configured credentials. Evidence: `release-validation/installer-bootstrap-recovery/validation.json`.
+  Read-only review of hosted MSI run `40133366518` found source-preflight failures before any
+  installer build: a stale syntax extractor, seven incorrectly cased links and Git fixture resolution
+  combining `/usr/bin/git` with `/bin/git`. The extractor was already corrected; links and both
+  fixtures are now fixed. The documentation audit enforces exact file/directory casing on Windows,
+  with permanent regressions. Linux Node 22/PowerShell checks pass syntax generation, documentation,
+  casing regressions and the complete release-evidence fixture. This is local recovery evidence;
+  hosted candidate certification remains required. Evidence: `release-validation/hosted-msi-40133366518/recovery.json`.
   The broader review and native installed MSI certification remain open.
+  The full pre-push consumer run passed 122 of 126 checks and exposed two stale legacy-format
+  assertions plus two NuGet restores blocked by the local sandbox. Chart checks now prove resolved
+  interactions take precedence and retired maps are inactive; data-quality checks verify structured
+  target/action/owner rows and absence of counts-only notices. Original results remain in
+  `release-validation/consumer-contracts/1792967317985-43192/`; network fixture recovery logs are
+  retained under `release-validation/pre-push-20261025/`.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook
   body unchanged. Its repository bytes use LF and `.gitattributes` now pins that checkout form.

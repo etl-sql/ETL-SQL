@@ -53,6 +53,10 @@ jobs:
         shell: bash
         timeout-minutes: 2
         run: bash scripts/checks/test-native-package-permissions.sh
+      - name: Check Linux installer configuration
+        shell: bash
+        timeout-minutes: 2
+        run: sudo python3 scripts/checks/test-linux-installer-config.py
       - name: Publish candidate binaries
         shell: pwsh
         timeout-minutes: 45

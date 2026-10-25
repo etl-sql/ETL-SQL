@@ -133,18 +133,3 @@ if ($results.Count -ne 1 -or $results[0].completedAt -cne $completed -or $result
   rmSync(fixture, { recursive: true, force: true });
 }
 console.log('Local evidence scope: full results pass; partial, legacy, forced, missing and unsuccessful evidence fails.');
-const canary = spawnSync('pwsh', ['-NoProfile', '-File', fileURLToPath(new URL('./fixtures/test-production-canary-evidence.ps1', import.meta.url))],
-  { encoding: 'utf8', windowsHide: true, timeout: 15000 });
-assert.equal(canary.status, 0, canary.stdout + canary.stderr);
-console.log(canary.stdout.trim());
-const source = spawnSync(process.execPath, [fileURLToPath(new URL('./fixtures/test-certification-source.mjs', import.meta.url))],
-  { encoding: 'utf8', windowsHide: true, timeout: 45000 });
-assert.equal(source.status, 0, source.stdout + source.stderr);
-console.log(source.stdout.trim());
-const claimsRoot = mkdtempSync(path.join(os.tmpdir(), 'complete-deployment-claims-'));
-try {
-  const claims = spawnSync('pwsh', ['-NoProfile', '-File', fileURLToPath(new URL('./fixtures/test-complete-deployment-claims.ps1', import.meta.url)), '-Root', claimsRoot],
-    { encoding: 'utf8', windowsHide: true, timeout: 25000 });
-  assert.equal(claims.status, 0, claims.stdout + claims.stderr);
-  console.log(claims.stdout.trim());
-} finally { rmSync(claimsRoot, { recursive: true, force: true }); }

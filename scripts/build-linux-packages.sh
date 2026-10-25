@@ -116,6 +116,8 @@ if not stat.S_ISREG(os.lstat(path).st_mode):
     sys.exit(f"[ETL-SQL] {path} is not a regular file; refusing to rewrite it.")
 with open(path, encoding="utf-8-sig") as f:
     data = json.load(f)
+if not isinstance(data, dict):
+    sys.exit("[ETL-SQL] Installer settings must be a JSON object.")
 changed = False
 # An upgrade replaced this file with the package's defaults; preinst kept the installed one. Its
 # values win (the operator's settings and the generated secrets), and keys new in this release are
@@ -129,6 +131,8 @@ def root_owned_file(p):
 if root_owned_file(saved):
     with open(saved, encoding="utf-8-sig") as f:
         installed = json.load(f)
+    if not isinstance(installed, dict):
+        sys.exit("[ETL-SQL] Saved installer settings must be a JSON object.")
     def keep(target, source):
         for key, value in source.items():
             if isinstance(value, dict) and isinstance(target.get(key), dict):
@@ -153,7 +157,10 @@ def read_secrets(p):
     fd = os.open(p, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(fd, encoding="utf-8-sig") as f:
         loaded = json.load(f)
-    return loaded if isinstance(loaded, dict) else {}
+    # COMPAT_BREAK: 0.22 — invalid document roots must not regenerate installed keys.
+    if not isinstance(loaded, dict):
+        sys.exit("[ETL-SQL] Protected installer settings must be a JSON object.")
+    return loaded
 def lookup(root, dotted):
     node = root
     for part in dotted.split(":")[:-1]:
@@ -181,14 +188,15 @@ if isinstance(dataset, dict) and not (dataset.get("AtRestKey") or "").strip():
 # A fresh install has no administrator, and the Portal will not create one without a bootstrap
 # password. Generate a one-time password; the Portal forces a change at first sign-in.
 first_run = portal.get("FirstRun")
+sign_in = None
 if (not previous_version and isinstance(first_run, dict)
-        and not (first_run.get("AdminPassword") or "").strip() and not os.path.exists(first_run_file)):
-    password = base64.urlsafe_b64encode(os.urandom(18)).decode("ascii") + "9!"
+        and not os.path.isfile(first_run_file)):
+    # A retry can have saved its password before publishing the root-only sign-in file.
+    password = first_run.get("AdminPassword") or ""
+    if not password.strip():
+        password = base64.urlsafe_b64encode(os.urandom(18)).decode("ascii") + "9!"
     first_run["AdminPassword"] = password
-    os.makedirs(os.path.dirname(first_run_file), exist_ok=True)
-    fd = os.open(first_run_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(f"{first_run.get('AdminUsername') or 'admin'}\n{password}\n")
+    sign_in = f"{first_run.get('AdminUsername') or 'admin'}\n{password}\n"
     changed = True
 # Portal sub-choices / module enablement via ETLSQL_PORTAL_MODULES env var (e.g. Reporting,Designer,Scheduling,Operations)
 env_modules = os.environ.get("ETLSQL_PORTAL_MODULES")
@@ -242,7 +250,8 @@ if isinstance(sec, dict) and "/usr/lib/etl-sql/bin" not in (zones if isinstance(
     sec["ApprovedSafeZones"] = (zones if isinstance(zones, list) else []) + ["/usr/lib/etl-sql/bin"]
     changed = True
 # Move every generated secret out of the shared file, leaving its empty default behind.
-secrets = {}
+# Preserve operator-owned protected settings without copying them into the shared document.
+secrets = installed_secrets
 for dotted in SECRET_PATHS:
     node, key = lookup(data, dotted)
     if not isinstance(node, dict) or key not in node:
@@ -267,6 +276,12 @@ def write_json(target, document, mode, gid):
 import grp
 write_json(secrets_path, secrets, 0o640, grp.getgrnam("etlsql").gr_gid)
 write_json(path, data, 0o644, 0)
+# COMPAT_BREAK: 0.22 — failed settings writes must not publish unusable sign-in credentials.
+if sign_in is not None:
+    os.makedirs(os.path.dirname(first_run_file), exist_ok=True)
+    fd = os.open(first_run_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(sign_in)
 PY
     rm -rf /var/lib/etl-sql-upgrade
 else

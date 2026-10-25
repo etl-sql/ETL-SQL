@@ -284,6 +284,9 @@ const {
 {
     // Modern resolved manifest
     const modern = resolveInteraction({
+        visualType: 'bar',
+        interactions: { ON_SELECT: 'FILTER', MATCHING: 'RetiredRegion' },
+        options: { 'mapping:y': 'RetiredSales' },
         interaction: {
             key: 'Category',
             valueKey: 'Revenue',
@@ -299,19 +302,18 @@ const {
     assert.equal(modern.highlight, 'CATEGORICAL');
     assert.equal(crossFilterActive(modern), true);
 
-    // Legacy fallback
+    // Retired manifests cannot infer interaction semantics from options or visual type.
     const legacyBar = resolveInteraction({
         visualType: 'bar',
         interactions: { ON_SELECT: 'FILTER', MATCHING: 'Region' },
         options: { 'mapping:y': 'Sales' }
     });
-    assert.equal(legacyBar.key, 'Region');
-    assert.equal(legacyBar.valueKey, 'Sales');
-    assert.equal(legacyBar.select, 'MULTIPLE');
-    assert.equal(legacyBar.effect, 'FILTER');
-    assert.equal(legacyBar.highlight, 'PROPORTIONAL');
-    assert.deepEqual(legacyBar.extent, { axis: 'y', anchor: 'end' });
-    assert.equal(crossFilterActive(legacyBar), true);
+    assert.equal(legacyBar.key, null);
+    assert.equal(legacyBar.valueKey, null);
+    assert.equal(legacyBar.select, 'NONE');
+    assert.equal(legacyBar.highlight, 'NONE');
+    assert.equal(legacyBar.extent, null);
+    assert.equal(crossFilterActive(legacyBar), false);
 
     // Inactive interaction
     const inactive = resolveInteraction(null);

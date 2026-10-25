@@ -12,6 +12,26 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Correct consumer regressions to verify resolved chart interactions and structured data-quality
+  rule failures after the documented legacy-format removal.
+
+- Run canary receipts, source provenance and deployment-claim regressions as independent source
+  checks. Each retains its own log and bounded process result; their assertions no longer share
+  the release-evidence check's deadline. Timeout errors now identify the failed child directly.
+
+- Fix Linux release preflight failures from incorrectly cased documentation links and multiple Git
+  executables on PATH. Documentation checks now enforce exact path casing on Windows too, with
+  permanent file/directory/anchor regressions in the shared source gate.
+
+- Publish MSI/DEB first-sign-in credentials only after configuration is saved. Failed writes stop
+  installation; retries recover the saved bootstrap password without replacing service keys.
+  Protected sign-in files preserve configured Unicode usernames and passwords.
+
+- Preserve operator-added protected configuration during MSI and DEB upgrades, including settings
+  outside the installer's generated-key list. Invalid shared, saved or protected JSON documents
+  now stop configuration before installed keys or settings change. Windows and Linux regressions
+  verify preservation and rejection; Linux configuration checks also run in DEB candidate CI.
+
 - Keep portable bundles and native MSI/DEB/DMG collection under one transaction in the release
   wrapper. Native failures preserve the accepted release and restore prior native build outputs.
   Failed recovery retains its backup and blocks retries. Final checksums include DEB and DMG files

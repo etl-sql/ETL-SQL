@@ -60,6 +60,12 @@ will refuse to retry until an administrator reviews that protected recovery copy
 original secrets file if needed. Do not discard it or generate replacement keys: existing cached
 datasets require their original at-rest key.
 
+From v0.22.0, both MSI and DEB save configuration before publishing the protected first-sign-in
+file. If a fresh installation fails while writing settings or that file, resolve the file access
+failure and retry. Keep `appsettings.secrets.json`: the retry reuses its bootstrap password and
+service keys. If a bootstrap password was configured already, a fresh install also records it in
+the protected sign-in file when that file is absent. Normal upgrades do not create a sign-in file.
+
 ### Linux
 
 Install the package for your distribution, then enable the services you intend to run:

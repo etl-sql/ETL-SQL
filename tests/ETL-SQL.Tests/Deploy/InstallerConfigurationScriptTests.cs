@@ -22,6 +22,159 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
 
     public void Dispose() => Directory.Delete(_install, recursive: true);
 
+    [Theory]
+    [Trait("CompatBreak", "0.22")]
+    [InlineData("[]")]
+    [InlineData("null")]
+    [InlineData("\"synthetic-invalid-document\"")]
+    [InlineData("42")]
+    [InlineData("true")]
+    [InlineData("[{}]")]
+    [InlineData("")]
+    [InlineData("{\"synthetic-invalid-document\":")]
+    public void InvalidProtectedDocumentFailsBeforeChangingConfiguration(string document)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Stage();
+        var path = Path.Combine(_install, ConfigurationExtensions.InstalledSecretsFileName);
+        File.WriteAllText(path, document);
+        var original = File.ReadAllBytes(Path.Combine(_install, "appsettings.json"));
+        var result = RunProcess("");
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal(document, File.ReadAllText(path));
+        Assert.True(original.SequenceEqual(File.ReadAllBytes(Path.Combine(_install, "appsettings.json"))));
+        Assert.False(File.Exists(Path.Combine(_install, "first-run-password.txt")));
+    }
+
+    [Theory]
+    [Trait("CompatBreak", "0.22")]
+    [InlineData("appsettings.json", "null")]
+    [InlineData("appsettings.json", "[{}]")]
+    [InlineData("appsettings.pre-upgrade.json", "null")]
+    [InlineData("appsettings.pre-upgrade.json", "[{}]")]
+    public void InvalidSharedOrSavedDocumentPreservesInstalledSecrets(string name, string document)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Stage();
+        Run("");
+        var installed = ReadSecrets();
+        var secretsPath = Path.Combine(_install, ConfigurationExtensions.InstalledSecretsFileName);
+        var originalGrantees = Grantees(secretsPath);
+        var path = Path.Combine(_install, name);
+        File.WriteAllText(path, document);
+        var original = File.ReadAllBytes(Path.Combine(_install, "appsettings.json"));
+        Assert.NotEqual(0, RunProcess("upgrade-fixture").ExitCode);
+        Assert.Equal(document, File.ReadAllText(path));
+        Assert.True(original.SequenceEqual(File.ReadAllBytes(Path.Combine(_install, "appsettings.json"))));
+        Assert.Equal(originalGrantees, Grantees(secretsPath));
+        Assert.True(JsonNode.DeepEquals(installed, JsonNode.Parse(File.ReadAllText(secretsPath))));
+    }
+
+    [Fact]
+    [Trait("CompatBreak", "0.22")]
+    public void UpgradePreservesOperatorSecretsOutsideInstallerManagedPaths()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Stage();
+        Run("");
+        var installed = ReadSecrets();
+        installed["Smtp"] = new JsonObject { ["Password"] = "synthetic-mail-password" };
+        installed["ConnectionStrings"] = new JsonObject { ["Operator"] = "synthetic-database-password" };
+        installed["Portal"]!["CustomPrivate"] = new JsonObject { ["Values"] = new JsonArray("keep", null, "exact") };
+        File.WriteAllText(Path.Combine(_install, ConfigurationExtensions.InstalledSecretsFileName), installed.ToJsonString());
+        Run("upgrade-fixture");
+        Assert.True(JsonNode.DeepEquals(installed, ReadSecrets()), "Upgrade changed the protected configuration.");
+        var shared = ReadConfig().ToJsonString();
+        Assert.DoesNotContain("synthetic-mail-password", shared);
+        Assert.DoesNotContain("synthetic-database-password", shared);
+        Assert.DoesNotContain("CustomPrivate", shared);
+    }
+
+    [Fact]
+    [Trait("CompatBreak", "0.22")]
+    public void FailedFreshSecretWriteDoesNotPublishUnusableSignInCredentials()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Stage();
+        var secretsPath = Path.Combine(_install, ConfigurationExtensions.InstalledSecretsFileName);
+        Directory.CreateDirectory(secretsPath);
+        Assert.NotEqual(0, RunProcess("").ExitCode);
+        Assert.False(File.Exists(Path.Combine(_install, "first-run-password.txt")));
+        Directory.Delete(secretsPath);
+        Run("");
+        AssertSignInMatchesProtectedPassword();
+    }
+
+    [Fact]
+    [Trait("CompatBreak", "0.22")]
+    public void FailedSignInWriteCanRetryWithoutReplacingPersistedKeys()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Stage();
+        var signIn = Path.Combine(_install, "first-run-password.txt");
+        Directory.CreateDirectory(signIn);
+        Assert.NotEqual(0, RunProcess("").ExitCode);
+        Directory.Delete(signIn);
+        var installed = ReadSecrets();
+        Run("");
+        var preserved = ReadSecrets();
+        Assert.True(JsonNode.DeepEquals(installed, preserved), "Sign-in recovery replaced installed keys.");
+        GrantCurrentUserRead(signIn);
+        Assert.True(File.ReadAllLines(signIn)[1] == (string?)preserved["Portal"]!["FirstRun"]!["AdminPassword"],
+            "Sign-in credentials do not match the configured password.");
+    }
+
+    [Fact]
+    [Trait("CompatBreak", "0.22")]
+    public void FailedFreshSharedWriteCanRetryWithoutPublishingCredentialsOrReplacingKeys()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Stage();
+        var configPath = Path.Combine(_install, "appsettings.json");
+        var original = File.ReadAllBytes(configPath);
+        using (var locked = File.Open(configPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            Assert.NotEqual(0, RunProcess("").ExitCode);
+        Assert.True(original.SequenceEqual(File.ReadAllBytes(configPath)));
+        Assert.False(File.Exists(Path.Combine(_install, "first-run-password.txt")));
+        var installed = ReadSecrets();
+        Run("");
+        var preserved = ReadSecrets();
+        Assert.True(JsonNode.DeepEquals(installed, preserved),
+            "Settings recovery replaced installed keys.");
+        AssertSignInMatchesProtectedPassword(preserved);
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private void AssertSignInMatchesProtectedPassword(JsonNode? installed = null)
+    {
+        installed ??= ReadSecrets();
+        var signIn = Path.Combine(_install, "first-run-password.txt");
+        Assert.Equal(new HashSet<string> { "S-1-5-18", "S-1-5-32-544" }, Grantees(signIn));
+        GrantCurrentUserRead(signIn);
+        Assert.True(File.ReadAllLines(signIn)[1] == (string?)installed["Portal"]!["FirstRun"]!["AdminPassword"],
+            "Sign-in credentials do not match the configured password.");
+    }
+
+    [Fact]
+    public void FreshSignInFilePreservesConfiguredUnicodeCredentials()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Stage();
+        var config = ReadConfig();
+        config["Portal"]!["FirstRun"]!["AdminUsername"] = "synthetic-admin-\u00e9";
+        config["Portal"]!["FirstRun"]!["AdminPassword"] = "synthetic-password-\u03b1-9!";
+        File.WriteAllText(Path.Combine(_install, "appsettings.json"), config.ToJsonString());
+        Run("");
+        var installed = ReadSecrets();
+        var signIn = Path.Combine(_install, "first-run-password.txt");
+        GrantCurrentUserRead(signIn);
+        var lines = File.ReadAllLines(signIn);
+        Assert.True(lines[0] == (string?)config["Portal"]!["FirstRun"]!["AdminUsername"],
+            "Sign-in file changed the configured username.");
+        Assert.True(lines[1] == (string?)installed["Portal"]!["FirstRun"]!["AdminPassword"],
+            "Sign-in file changed the configured password.");
+    }
+
     [Fact]
     [Trait("CompatBreak", "0.22")]
     public void RetainedRecoveryBlocksRetryWithoutChangingInstalledSecrets()
