@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { runChecks, sourceChecks, releaseAutomationChecks } from '../release-preflight.mjs';
 import syntaxIndex from '../generate-syntax-index.js';
 
@@ -16,12 +18,28 @@ for (const source of [catalog.replaceAll('\r\n', '\n'), catalog.replaceAll('\r\n
 assert.throws(() => syntaxIndex.extractStewardshipTags(catalog.replace('TableColumnScriptScopes, []),', 'TableColumnScriptScopes, [], []),')),
   /Unable to extract/, 'A changed record shape must fail instead of silently dropping an entry.');
 
-assert.equal(releaseAutomationChecks.length, 28);
-for (const name of ['release-evidence', 'production-canary-evidence', 'certification-source', 'deployment-claims']) {
+assert.equal(releaseAutomationChecks.length, 32);
+for (const name of ['release-evidence', 'production-canary-evidence', 'certification-source', 'deployment-claims',
+  'installer-sources', 'installer-actions', 'master-release', 'publish-release', 'sbom-output']) {
   assert.equal(releaseAutomationChecks.filter(check => check.id === `test-${name}`).length, 1);
 }
 for (const check of releaseAutomationChecks) {
   assert.equal(sourceChecks.filter(candidate => candidate.id === check.id).length, 1);
+}
+const consumer = fileURLToPath(new URL('../check-consumer-contracts.mjs', import.meta.url));
+const listed = options => {
+  const result = spawnSync(process.execPath, [consumer, '--list', ...options],
+    { encoding: 'utf8', windowsHide: true, timeout: 10000 });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  return new Set(result.stdout.trim().split(/\r?\n/));
+};
+const completeConsumers = listed([]);
+const remainingConsumers = listed(['--exclude-preflight']);
+for (const check of releaseAutomationChecks) {
+  const name = path.basename(check.args[0]);
+  assert.ok(completeConsumers.has(name), `Consumer discovery omitted ${name}.`);
+  assert.ok(!remainingConsumers.has(name), `Preflight fixture would run twice: ${name}.`);
 }
 
 const fixture = mkdtempSync(path.join(os.tmpdir(), 'release-preflight-'));

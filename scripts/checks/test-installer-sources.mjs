@@ -4,10 +4,6 @@ import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import './test-installer-actions.mjs';
-import './test-master-release.mjs';
-import './test-publish-release.mjs';
-import './test-sbom-output.mjs';
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'installer-sources-'));
 const script = fileURLToPath(new URL('../Test-InstallerSources.ps1', import.meta.url));
@@ -56,7 +52,7 @@ try {
     rmSync(path.join(root, retired));
   }
   assert.equal(run().status, 0);
-  console.log('Installer source checks: static validation, retired-helper rejection and mocked release-wrapper failure propagation passed.');
+  console.log('Installer source checks: static validation and retired-helper rejection passed.');
 } finally {
   // Only remove the private fixture created above.
   rmSync(root, { recursive: true, force: true });

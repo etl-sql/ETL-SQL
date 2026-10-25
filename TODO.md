@@ -383,6 +383,16 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   at 60 seconds. Original failure: `release-validation/preflight/1792966690091-30972/`.
   All 38 checks pass in 83.8 seconds after the split; deployment claims take 20.1 seconds and
   source provenance 27.4 seconds. Evidence: `release-validation/preflight/1792966868919-27000/`.
+  Hosted candidate `42e3c2ac86fffe4be5f3d200be9e5862cbcbd572` then passed 37 of 38 checks but
+  timed out the grouped installer fixtures at 60 seconds in CI `40242702631` and MSI `40242702633`.
+  Installer actions, release-wrapper, portable-publisher and SBOM checks now have independent
+  manifest entries and deadlines; consumer exclusion uses that same manifest to avoid running
+  those suites twice. The original hosted timeout is retained in `release-validation/hosted-ci-40242702631/`.
+  All 42 source checks pass on Windows in 83.5 seconds. The six affected Linux source/inventory
+  checks pass in 18.7 seconds with their original 60-second ceiling; installer sources take 2.7,
+  release-wrapper cases 13.3 and portable-publisher cases 15.9 seconds. Consumer-discovery regression
+  verifies every preflight fixture is present in the full inventory and absent from the later
+  exclusion pass. Linux evidence: `release-validation/hosted-ci-40242702631/linux-recovery/`.
 - [ ] **Make targeted fix runs safe and directly runnable.** Extend the path-filter task above with
   an explicit lane/shard selector and printed rerun command for each failure. Unknown paths and
   shared build, dependency or workflow changes must select all affected consumers conservatively;

@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Give installer actions, release-wrapper, portable-publisher and SBOM fixtures independent source
+  checks. Their shared installer-source deadline caused hosted CI/MSI timeouts. The shared manifest
+  also excludes these suites from the later consumer pass, so each runs once.
+
 - Correct consumer regressions to verify resolved chart interactions and structured data-quality
   rule failures after the documented legacy-format removal.
 
