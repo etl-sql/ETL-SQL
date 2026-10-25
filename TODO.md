@@ -698,8 +698,14 @@ here; each one failed a single test per run and passed on rerun.
   archives. Input validation now precedes cleanup; ZIP promotion verifies all file names and hashes.
   Twenty executed producer cases cover those failures, byte changes, duplicates, invalid host files, shared runtime
   rejection and Unicode/bracketed paths. All 38 native rejection cases still pass against the shared
-  inventory. See `release-validation/portable-packaging-validation.json`. Full-producer retention
-  across a failed rebuild remains unverified: valid inputs still initialize a fresh release folder.
+  inventory. See `release-validation/portable-packaging-validation.json`.
+  Complete producer failures then reproduced loss of accepted release output. Builds now stage
+  each attempt, preserve old ZIP/SBOM/checksum bytes, retain previous releases after promotion,
+  restore a failed promotion and block unresolved rollback or concurrent producers. Forty-two
+  producer cases cover late failures, live locks, linked paths, real directory renames, rollback,
+  repeated promotion and fresh output. SBOM generation has a tested bounded staging directory.
+  See `release-validation/release-retention-validation.json`; actual .NET/VSIX builds remain mocked
+  in these producer fixtures, and no installed-product acceptance is claimed.
   The broader review and native installed MSI certification remain open.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook

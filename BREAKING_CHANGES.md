@@ -17,10 +17,17 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: Complete portable builds preserve accepted releases
+- **What changed**: Portable packaging builds under `artifacts/portable-release/<attempt>/output` and replaces `release/` only after ZIP, VSIX, certification, SBOM and checksum work succeeds. Previous releases and failed attempts are retained. Failed promotion restores the previous directory; unresolved rollback and concurrent attempts block a new build.
+- **Who is affected**: Local portable-release producers, especially retries after a partial or failed build.
+- **Migration**: Continue consuming accepted files from `release/`. Inspect each retained attempt's `transaction.json`, `output/` and `previous/` when diagnosing a failure. Resolve `RecoveryRequired` before retrying. Keep enough disk space for staging and retained releases; remove reviewed attempts when no longer needed.
+- **Diagnostic**: Lock acquisition or unresolved recovery stops before publishing binaries. Promotion/rollback errors identify the retained previous directory. SBOM output must exist and its component version must match the release version.
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: Portable release inputs and ZIP contents are verified
 - **What changed**: The portable producer rejects empty, duplicate or unsupported platforms and unsafe version strings before cleanup. Required host files must be nonempty regular files. ZIP promotion requires matching file inventories and SHA-256 hashes, and publish folders cannot contain runtime state. ZIP creation uses .NET and includes hidden files in its verified inventory.
 - **Who is affected**: Release automation using unsupported platforms, malformed versions, contaminated publish output or an archive writer that drops or changes files.
-- **Migration**: Select each supported platform once and use a three-part version. Publish clean binaries and rerun failed packaging. Invalid input leaves release output intact; after valid inputs, the producer still initializes a fresh release directory before building. ZIP-stage failures preserve an existing destination ZIP.
+- **Migration**: Select each supported platform once and use a three-part version. Publish clean binaries and rerun failed packaging. Invalid input and failed build attempts leave accepted release output intact. ZIP-stage failures preserve an existing destination ZIP.
 - **Diagnostic**: Invalid options fail before source preparation. Runtime state and archive inventory/hash mismatches stop packaging; no incomplete ZIP is promoted.
 - **Earliest removal**: N/A
 

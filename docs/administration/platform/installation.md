@@ -88,8 +88,12 @@ or runtime directories. Publish into a clean folder. Rejection preserves prior s
 
 The portable ZIP producer uses the same runtime-state inventory. It validates platforms and
 versions before cleanup and checks archive file names and hashes before promoting each ZIP.
-It still starts a fresh release directory after valid inputs; keep accepted release artifacts
-outside that build directory when retaining them across a complete rebuild.
+Complete builds stage under `artifacts/portable-release/<attempt>/output/` and replace `release/`
+after packaging, SBOM and checksum work succeeds. Failed attempts and previous releases remain
+under the attempt directory with `transaction.json`. Inspect that record and `previous/` before
+resolving a recovery failure. Concurrent builds are blocked by `publish.lock`; a lock left by an
+interrupted producer requires checking that the original process has stopped before removing it.
+Retained attempts use disk space until you remove them after review.
 
 ### Docker / Containerized
 

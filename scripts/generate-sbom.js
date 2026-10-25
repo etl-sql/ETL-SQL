@@ -4,6 +4,24 @@ const path = require('path');
 const crypto = require('crypto');
 
 const repoRoot = path.resolve(__dirname, '..');
+const args = process.argv.slice(2);
+if (args.length && (args.length !== 2 || args[0] !== '--output-dir' || !args[1])) {
+  throw new Error('Usage: node scripts/generate-sbom.js [--output-dir directory]');
+}
+const outputDirectory = path.resolve(repoRoot, args[1] ?? 'release');
+const outputRelative = path.relative(repoRoot, outputDirectory);
+if (!outputRelative || outputRelative === '..' || outputRelative.startsWith('..' + path.sep) || path.isAbsolute(outputRelative)) {
+  throw new Error('SBOM output must be a directory inside the repository.');
+}
+let outputAncestor = repoRoot;
+function outputStat(file) {
+  try { return fs.lstatSync(file); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+}
+for (const segment of outputRelative.split(path.sep)) {
+  outputAncestor = path.join(outputAncestor, segment);
+  if (outputStat(outputAncestor)?.isSymbolicLink()) throw new Error('SBOM output must not follow links.');
+}
 // Read the version from the single source of truth so the SBOM never goes stale on release.
 const version = (() => {
   const props = fs.readFileSync(path.join(repoRoot, 'Directory.Build.props'), 'utf8');
@@ -341,13 +359,16 @@ function generateSbom() {
     components: components
   };
 
-  const outDir = path.join(repoRoot, 'release');
+  const outDir = outputDirectory;
   if (!fs.existsSync(outDir)) {
     fs.mkdirSync(outDir, { recursive: true });
   }
 
-  fs.writeFileSync(path.join(outDir, 'sbom.json'), JSON.stringify(sbom, null, 2), 'utf8');
-  console.log('Wrote sbom.json to release/');
+  const outputFile = path.join(outDir, 'sbom.json');
+  const existing = outputStat(outputFile);
+  if (existing && !existing.isFile()) throw new Error('SBOM output must be a regular file.');
+  fs.writeFileSync(outputFile, JSON.stringify(sbom, null, 2), 'utf8');
+  console.log(`Wrote sbom.json to ${path.relative(repoRoot, outDir)}/`);
 }
 
 generateSbom();

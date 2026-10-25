@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Build portable releases in private attempts under `artifacts/portable-release/`. Failed builds
+  preserve accepted ZIPs, SBOM and checksums. Promotion retains the previous release and rolls back
+  a failed rename; unresolved recovery blocks another attempt. A lock prevents concurrent producers.
+  VSIX and SBOM generation now target staging, and promotion requires matching SBOM versions.
+
 - Validate portable-release platforms and versions before cleaning release output. ZIP creation
   verifies every archived file against the input inventory and SHA-256 before replacing an existing
   destination; failed temporary archives are removed. Packaging supports Unicode and bracketed paths.

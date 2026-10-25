@@ -25,8 +25,6 @@ if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.
 $ReleaseRoot = Join-Path $RepoRoot "release"
 $SampleSource = Join-Path $RepoRoot "samples"
 $RuntimeStatePatterns = @(Get-Content -LiteralPath (Join-Path $PSScriptRoot 'lib/package-runtime-state.patterns'))
-& node (Join-Path $RepoRoot 'scripts/sync-assets.js')
-if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed. Run npm ci --prefix scripts/typecheck first.' }
 . (Join-Path $PSScriptRoot 'ReleaseEvidence.Helpers.ps1')
 $explicitEvidenceRoot = -not [string]::IsNullOrWhiteSpace($CertificationEvidenceRoot)
 if (-not $explicitEvidenceRoot) {
@@ -151,156 +149,163 @@ $Projects = @(
     ,@("..", "src", "ETL-SQL.Orchestrator.Service", "ETL-SQL.Orchestrator.Service.csproj")
 )
 
-# 1. Cleanup
-$ReleaseRoot = [IO.Path]::GetFullPath($ReleaseRoot)
-$expectedReleaseRoot = Join-Path ([IO.Path]::GetFullPath($RepoRoot)) 'release'
-if ($ReleaseRoot -ne $expectedReleaseRoot -or ((Get-Item -LiteralPath $ReleaseRoot -ErrorAction SilentlyContinue).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-    throw 'Release output must be the workspace release directory and must not be a link.'
-}
-if (Test-Path -LiteralPath $ReleaseRoot) {
-    Remove-Item -LiteralPath $ReleaseRoot -Recurse -Force
-}
-New-Item -ItemType Directory -Path $ReleaseRoot | Out-Null
+# COMPAT_BREAK: 0.22 — retain accepted releases throughout a failed complete rebuild.
+. (Join-Path $PSScriptRoot 'ReleaseOutput.Helpers.ps1')
+$transaction = New-ReleaseOutputTransaction -RepoRoot $RepoRoot
+$ReleaseRoot = $transaction.Output
+try {
+    Write-Host "Release attempt retained at $($transaction.Attempt)" -ForegroundColor Gray
+    & node (Join-Path $RepoRoot 'scripts/sync-assets.js')
+    if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed. Run npm ci --prefix scripts/typecheck first.' }
 
-Write-Host "Starting Release Build for v$Version" -ForegroundColor Cyan
+    Write-Host "Starting Release Build for v$Version" -ForegroundColor Cyan
 
-foreach ($Platform in $Platforms) {
-    Write-Host "`nBuilding for platform: $Platform" -ForegroundColor Yellow
-    $PlatformFolder = Join-Path $ReleaseRoot $Platform
-    $BinFolder = Join-Path $PlatformFolder "bin"
-    $DocFolder = Join-Path $PlatformFolder "docs"
-    $SampleFolder = Join-Path $PlatformFolder "samples"
-    
-    New-Item -ItemType Directory -Path $BinFolder | Out-Null
-    New-Item -ItemType Directory -Path $DocFolder | Out-Null
-    New-Item -ItemType Directory -Path $SampleFolder | Out-Null
+    foreach ($Platform in $Platforms) {
+        Write-Host "`nBuilding for platform: $Platform" -ForegroundColor Yellow
+        $PlatformFolder = Join-Path $ReleaseRoot $Platform
+        $BinFolder = Join-Path $PlatformFolder "bin"
+        $DocFolder = Join-Path $PlatformFolder "docs"
+        $SampleFolder = Join-Path $PlatformFolder "samples"
 
-    # 2. Publish Binaries
-    foreach ($Proj in $Projects) {
-        $ProjPath = Join-Path $PSScriptRoot (Join-PathSegments $Proj)
-        $ProjName = [System.IO.Path]::GetFileNameWithoutExtension($ProjPath)
-        
-        Write-Host "  Publishing $ProjName..." -ForegroundColor Gray
-        dotnet publish $ProjPath -c Release -r $Platform --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -o $BinFolder --nologo | Out-Null
-        Assert-NativeCommandSucceeded "dotnet publish $ProjName for $Platform"
-    }
+        New-Item -ItemType Directory -Path $BinFolder | Out-Null
+        New-Item -ItemType Directory -Path $DocFolder | Out-Null
+        New-Item -ItemType Directory -Path $SampleFolder | Out-Null
 
-    Assert-ReleaseBinaries -Platform $Platform -BinFolder $BinFolder
-    foreach ($item in Get-ChildItem -LiteralPath $BinFolder -Force) {
-        foreach ($pattern in $RuntimeStatePatterns) {
-            if ($item.Name -like $pattern) { throw 'Runtime state in the publish folder. Publish again into a clean folder.' }
-        }
-    }
+        # 2. Publish Binaries
+        foreach ($Proj in $Projects) {
+            $ProjPath = Join-Path $PSScriptRoot (Join-PathSegments $Proj)
+            $ProjName = [System.IO.Path]::GetFileNameWithoutExtension($ProjPath)
 
-    # 3. Cleanup redundant files
-    Write-Host "  Cleaning up redundant assets..." -ForegroundColor Gray
-    Get-ChildItem -LiteralPath $BinFolder -Filter "appsettings.Development.json" -Recurse | Remove-Item -Force
-    Get-ChildItem -LiteralPath $BinFolder -Filter "*.staticwebassets.endpoints.json" -Recurse | Remove-Item -Force
-
-    # 4. Docs pointer + compliance files.
-    # Full guides/reference live on GitHub and evolve between releases, so we ship a
-    # version-pinned pointer here instead of bundling drift-prone doc copies. License,
-    # notice, third-party notices, and the changelog travel with the binaries.
-    $DocsUrl = "https://github.com/etl-sql/ETL-SQL/tree/v$Version/docs"
-    @(
-        "ETL-SQL v$Version - Documentation",
-        "",
-        "Full documentation is maintained online and versioned with each release:",
-        "",
-        "  Docs:            $DocsUrl",
-        "  Getting started: https://github.com/etl-sql/ETL-SQL/blob/v$Version/docs/guides/onboarding/getting-started.md",
-        "  Repository:      https://github.com/etl-sql/ETL-SQL",
-        "  Issues:          https://github.com/etl-sql/ETL-SQL/issues",
-        "",
-        "This release bundles LICENSE, NOTICE, third-party notices, and the changelog (below)."
-    ) | Set-Content -LiteralPath (Join-Path $DocFolder "DOCS.txt") -Encoding utf8
-    Copy-Item -LiteralPath (Join-Path $RepoRoot "CHANGELOG.md") -Destination (Join-Path $DocFolder "CHANGELOG.txt") # Rename to txt for portability
-    Copy-Item -LiteralPath (Join-Path $RepoRoot "LICENSE.md") -Destination (Join-Path $DocFolder "LICENSE.md")
-    Copy-Item -LiteralPath (Join-Path $RepoRoot "NOTICE.md") -Destination (Join-Path $DocFolder "NOTICE.md")
-    Copy-Item -LiteralPath (Join-Path $RepoRoot "THIRD-PARTY-NOTICES.md") -Destination (Join-Path $DocFolder "THIRD-PARTY-NOTICES.md")
-    
-    # 5. Copy Curated Samples (Top 15)
-    $SampleList = @(
-        ,@("00_QuickStart", "sample_Hello.etlsql")
-        ,@("01_Basics", "Variables_and_State.etlsql")
-        ,@("04_Orchestration", "Data_Lineage.etlsql")
-        ,@("07_Real_World", "realworld_01_dw_load.etlsql")
-        ,@("07_Real_World", "realworld_02_secure_sftp_alert.etlsql")
-        ,@("07_Real_World", "realworld_04_incremental_merge.etlsql")
-        ,@("07_Real_World", "realworld_09_directory_watcher.etlsql")
-        ,@("03_SQL_Engines", "Docker_Orchestration.etlsql")
-        ,@("01_Basics", "Function_Library.etlsql")
-        ,@("03_SQL_Engines", "ANSI_SQL_Extensions.etlsql")
-        ,@("02_Data_Movement", "Avro_Read_Write.etlsql")
-        ,@("02_Data_Movement", "Parquet_Read_Write.etlsql")
-        ,@("08_Reporting", "sales_report.rptsql")
-        ,@("08_Reporting", "slicer_test.rptsql")
-        ,@("99_Experimental", "verify_env.etlsql")
-    )
-
-    foreach ($Sample in $SampleList) {
-        $RelativeSample = Join-PathSegments $Sample
-        $Src = Join-Path $SampleSource $RelativeSample
-        if (-not (Test-Path -LiteralPath $Src)) {
-            throw "Curated sample is missing: $RelativeSample"
+            Write-Host "  Publishing $ProjName..." -ForegroundColor Gray
+            dotnet publish $ProjPath -c Release -r $Platform --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -o $BinFolder --nologo | Out-Null
+            Assert-NativeCommandSucceeded "dotnet publish $ProjName for $Platform"
         }
 
-        $Dest = Join-Path $SampleFolder $RelativeSample
-        $DestDir = Split-Path $Dest -Parent
-        if (-not (Test-Path -LiteralPath $DestDir)) {
-            New-Item -ItemType Directory -Path $DestDir | Out-Null
+        Assert-ReleaseBinaries -Platform $Platform -BinFolder $BinFolder
+        foreach ($item in Get-ChildItem -LiteralPath $BinFolder -Force) {
+            foreach ($pattern in $RuntimeStatePatterns) {
+                if ($item.Name -like $pattern) { throw 'Runtime state in the publish folder. Publish again into a clean folder.' }
+            }
         }
-        Copy-Item -LiteralPath $Src -Destination $Dest
+
+        # 3. Cleanup redundant files
+        Write-Host "  Cleaning up redundant assets..." -ForegroundColor Gray
+        Get-ChildItem -LiteralPath $BinFolder -Filter "appsettings.Development.json" -Recurse | Remove-Item -Force
+        Get-ChildItem -LiteralPath $BinFolder -Filter "*.staticwebassets.endpoints.json" -Recurse | Remove-Item -Force
+
+        # 4. Docs pointer + compliance files.
+        # Full guides/reference live on GitHub and evolve between releases, so we ship a
+        # version-pinned pointer here instead of bundling drift-prone doc copies. License,
+        # notice, third-party notices, and the changelog travel with the binaries.
+        $DocsUrl = "https://github.com/etl-sql/ETL-SQL/tree/v$Version/docs"
+        @(
+            "ETL-SQL v$Version - Documentation",
+            "",
+            "Full documentation is maintained online and versioned with each release:",
+            "",
+            "  Docs:            $DocsUrl",
+            "  Getting started: https://github.com/etl-sql/ETL-SQL/blob/v$Version/docs/guides/onboarding/getting-started.md",
+            "  Repository:      https://github.com/etl-sql/ETL-SQL",
+            "  Issues:          https://github.com/etl-sql/ETL-SQL/issues",
+            "",
+            "This release bundles LICENSE, NOTICE, third-party notices, and the changelog (below)."
+        ) | Set-Content -LiteralPath (Join-Path $DocFolder "DOCS.txt") -Encoding utf8
+        Copy-Item -LiteralPath (Join-Path $RepoRoot "CHANGELOG.md") -Destination (Join-Path $DocFolder "CHANGELOG.txt") # Rename to txt for portability
+        Copy-Item -LiteralPath (Join-Path $RepoRoot "LICENSE.md") -Destination (Join-Path $DocFolder "LICENSE.md")
+        Copy-Item -LiteralPath (Join-Path $RepoRoot "NOTICE.md") -Destination (Join-Path $DocFolder "NOTICE.md")
+        Copy-Item -LiteralPath (Join-Path $RepoRoot "THIRD-PARTY-NOTICES.md") -Destination (Join-Path $DocFolder "THIRD-PARTY-NOTICES.md")
+
+        # 5. Copy Curated Samples (Top 15)
+        $SampleList = @(
+            ,@("00_QuickStart", "sample_Hello.etlsql")
+            ,@("01_Basics", "Variables_and_State.etlsql")
+            ,@("04_Orchestration", "Data_Lineage.etlsql")
+            ,@("07_Real_World", "realworld_01_dw_load.etlsql")
+            ,@("07_Real_World", "realworld_02_secure_sftp_alert.etlsql")
+            ,@("07_Real_World", "realworld_04_incremental_merge.etlsql")
+            ,@("07_Real_World", "realworld_09_directory_watcher.etlsql")
+            ,@("03_SQL_Engines", "Docker_Orchestration.etlsql")
+            ,@("01_Basics", "Function_Library.etlsql")
+            ,@("03_SQL_Engines", "ANSI_SQL_Extensions.etlsql")
+            ,@("02_Data_Movement", "Avro_Read_Write.etlsql")
+            ,@("02_Data_Movement", "Parquet_Read_Write.etlsql")
+            ,@("08_Reporting", "sales_report.rptsql")
+            ,@("08_Reporting", "slicer_test.rptsql")
+            ,@("99_Experimental", "verify_env.etlsql")
+        )
+
+        foreach ($Sample in $SampleList) {
+            $RelativeSample = Join-PathSegments $Sample
+            $Src = Join-Path $SampleSource $RelativeSample
+            if (-not (Test-Path -LiteralPath $Src)) {
+                throw "Curated sample is missing: $RelativeSample"
+            }
+
+            $Dest = Join-Path $SampleFolder $RelativeSample
+            $DestDir = Split-Path $Dest -Parent
+            if (-not (Test-Path -LiteralPath $DestDir)) {
+                New-Item -ItemType Directory -Path $DestDir | Out-Null
+            }
+            Copy-Item -LiteralPath $Src -Destination $Dest
+        }
+
+        if (-not $SkipVsix) {
+            Write-Host "  Packaging VSIX bundle..." -ForegroundColor Gray
+            $VsixPath = & (Join-Path $PSScriptRoot "publish-vsix.ps1") -Platform $Platform -BinSourceDir $BinFolder -OutputDir (Join-Path $ReleaseRoot 'vsix')
+            Assert-NativeCommandSucceeded -Description 'VSIX packaging'
+            # Fail loudly instead of silently shipping a release with no extension. publish-vsix.ps1
+            # exits non-zero on failure; that leaves $VsixPath empty/invalid here.
+            $vsixFile = if ($VsixPath) { Get-Item -LiteralPath $VsixPath -Force -ErrorAction SilentlyContinue } else { $null }
+            if (-not $vsixFile -or $vsixFile.PSIsContainer -or $vsixFile.Length -eq 0 -or
+                ($vsixFile.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                throw "VSIX packaging failed for $Platform (no .vsix produced). Re-run with -SkipVsix to bypass."
+            }
+            # Publish the VSIX as a standalone GitHub release asset (discoverable for VS Code users)
+            # rather than burying it inside the platform ZIP.
+            $VsixDest = Join-Path $ReleaseRoot ([System.IO.Path]::GetFileName($VsixPath))
+            Move-Item -LiteralPath $VsixPath -Destination $VsixDest -Force
+            Write-Host "  VSIX asset: $VsixDest" -ForegroundColor Green
+        }
+
+        # 7. Zip for GitHub Release
+        Write-Host "  Creating ZIP archive for GitHub..." -ForegroundColor Gray
+        $ZipFileName = "ETL-SQL-v$Version-$Platform.zip"
+        $ZipDest = Join-Path $ReleaseRoot $ZipFileName
+        New-VerifiedArchive -SourceDirectory $PlatformFolder -DestinationPath $ZipDest
+
+        Write-Host "  Platform $Platform complete. Archive: $ZipFileName" -ForegroundColor Green
     }
 
-    if (-not $SkipVsix) {
-        Write-Host "  Packaging VSIX bundle..." -ForegroundColor Gray
-        $VsixPath = & (Join-Path $PSScriptRoot "publish-vsix.ps1") -Platform $Platform -BinSourceDir $BinFolder
-        # Fail loudly instead of silently shipping a release with no extension. publish-vsix.ps1
-        # exits non-zero on failure; that leaves $VsixPath empty/invalid here.
-        if (-not $VsixPath -or -not (Test-Path -LiteralPath $VsixPath)) {
-            throw "VSIX packaging failed for $Platform (no .vsix produced). Re-run with -SkipVsix to bypass."
-        }
-        # Publish the VSIX as a standalone GitHub release asset (discoverable for VS Code users)
-        # rather than burying it inside the platform ZIP.
-        $VsixDest = Join-Path $ReleaseRoot ([System.IO.Path]::GetFileName($VsixPath))
-        Move-Item -LiteralPath $VsixPath -Destination $VsixDest -Force
-        Write-Host "  VSIX asset: $VsixDest" -ForegroundColor Green
+    # 7.5 Retain test and certification reports in release assets
+    Write-Host "`nPackaging test and certification reports..." -ForegroundColor Yellow
+    if ($hasCertificationEvidence) {
+        New-ReleaseCertificationArchive -EvidenceRoot $CertificationEvidenceRoot -ReleaseVersion $Version -CandidateCommit $CandidateCommit `
+            -DestinationPath (Join-Path $ReleaseRoot "ETL-SQL-v$Version-certification-results.zip") -RequireCompleteClaimIndex -RequireValidatedExecutionPlan
+        Write-Host "  Packaged verified release-specific certification bundles." -ForegroundColor Green
+    } else {
+        Write-Host "  No release-specific certification evidence present; no certification ZIP produced." -ForegroundColor Yellow
+        Write-Host "  Release publication still requires the accepted evidence bundles from the checklist." -ForegroundColor Yellow
     }
 
-    # 7. Zip for GitHub Release
-    Write-Host "  Creating ZIP archive for GitHub..." -ForegroundColor Gray
-    $ZipFileName = "ETL-SQL-v$Version-$Platform.zip"
-    $ZipDest = Join-Path $ReleaseRoot $ZipFileName
-    New-VerifiedArchive -SourceDirectory $PlatformFolder -DestinationPath $ZipDest
+    # 8. Generate SBOM
+    Write-Host "`nGenerating Software Bill of Materials (SBOM)..." -ForegroundColor Yellow
+    node (Join-Path $PSScriptRoot "generate-sbom.js") --output-dir $ReleaseRoot
+    Assert-NativeCommandSucceeded -Description 'SBOM generation'
+    $sbom = Get-Content -LiteralPath (Join-Path $ReleaseRoot 'sbom.json') -Raw | ConvertFrom-Json
+    if ($sbom.metadata.component.version -ne $Version) { throw 'SBOM component version must match the release version.' }
 
-    Write-Host "  Platform $Platform complete. Archive: $ZipFileName" -ForegroundColor Green
+    # 9. Generate Checksums
+    Write-Host "`nGenerating SHA-256 checksums..." -ForegroundColor Yellow
+    $Artifacts = Get-ChildItem -LiteralPath $ReleaseRoot -File | Where-Object { $_.Name -like "ETL-SQL-*" -or $_.Name -like "*.vsix" -or $_.Name -like "*.msi" -or $_.Name -eq "sbom.json" }
+    $Checksums = foreach ($Artifact in $Artifacts) {
+        $Hash = (Get-FileHash -LiteralPath $Artifact.FullName -Algorithm SHA256).Hash.ToLower()
+        "$Hash  $($Artifact.Name)"
+    }
+    $Checksums | Out-File -LiteralPath (Join-Path $ReleaseRoot "sha256sums.txt") -Encoding ascii -Force
+    Write-Host "  Checksums file generated: sha256sums.txt" -ForegroundColor Green
+
+    Complete-ReleaseOutputTransaction $transaction
+    Write-Host "`nRelease v$Version ready in $($transaction.Accepted)" -ForegroundColor Cyan
+} finally {
+    Close-ReleaseOutputTransaction $transaction
 }
-
-# 7.5 Retain test and certification reports in release assets
-Write-Host "`nPackaging test and certification reports..." -ForegroundColor Yellow
-if ($hasCertificationEvidence) {
-    New-ReleaseCertificationArchive -EvidenceRoot $CertificationEvidenceRoot -ReleaseVersion $Version -CandidateCommit $CandidateCommit `
-        -DestinationPath (Join-Path $ReleaseRoot "ETL-SQL-v$Version-certification-results.zip") -RequireCompleteClaimIndex -RequireValidatedExecutionPlan
-    Write-Host "  Packaged verified release-specific certification bundles." -ForegroundColor Green
-} else {
-    Write-Host "  No release-specific certification evidence present; no certification ZIP produced." -ForegroundColor Yellow
-    Write-Host "  Release publication still requires the accepted evidence bundles from the checklist." -ForegroundColor Yellow
-}
-
-# 8. Generate SBOM
-Write-Host "`nGenerating Software Bill of Materials (SBOM)..." -ForegroundColor Yellow
-node (Join-Path $PSScriptRoot "generate-sbom.js")
-Assert-NativeCommandSucceeded -Description 'SBOM generation'
-
-# 9. Generate Checksums
-Write-Host "`nGenerating SHA-256 checksums..." -ForegroundColor Yellow
-$Artifacts = Get-ChildItem -LiteralPath $ReleaseRoot -File | Where-Object { $_.Name -like "ETL-SQL-*" -or $_.Name -like "*.vsix" -or $_.Name -like "*.msi" -or $_.Name -eq "sbom.json" }
-$Checksums = foreach ($Artifact in $Artifacts) {
-    $Hash = (Get-FileHash -LiteralPath $Artifact.FullName -Algorithm SHA256).Hash.ToLower()
-    "$Hash  $($Artifact.Name)"
-}
-$Checksums | Out-File -LiteralPath (Join-Path $ReleaseRoot "sha256sums.txt") -Encoding ascii -Force
-Write-Host "  Checksums file generated: sha256sums.txt" -ForegroundColor Green
-
-Write-Host "`nRelease v$Version ready in $ReleaseRoot" -ForegroundColor Cyan

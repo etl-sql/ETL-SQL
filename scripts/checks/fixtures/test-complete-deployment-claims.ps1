@@ -201,14 +201,14 @@ $null = New-Item -ItemType Directory -Path (Join-Path $publisher 'scripts')
 $null = New-Item -ItemType Directory -Path (Join-Path $publisher 'release')
 $sentinel = Join-Path $publisher 'release/keep.txt'
 'keep previous bytes' | Set-Content -LiteralPath $sentinel -NoNewline
-foreach ($name in @('publish-release.ps1', 'ReleaseEvidence.Helpers.ps1', 'DeploymentCertification.Contracts.ps1', 'DeploymentCertification.Plan.ps1', 'DeploymentCertification.Evidence.ps1', 'DeploymentTestEvidence.Helpers.ps1')) {
+foreach ($name in @('publish-release.ps1', 'ReleaseOutput.Helpers.ps1', 'ReleaseEvidence.Helpers.ps1', 'DeploymentCertification.Contracts.ps1', 'DeploymentCertification.Plan.ps1', 'DeploymentCertification.Evidence.ps1', 'DeploymentTestEvidence.Helpers.ps1')) {
     Copy-Item -LiteralPath (Join-Path $scripts $name) -Destination (Join-Path $publisher 'scripts')
 }
 $null = New-Item -ItemType Directory -Path (Join-Path $publisher 'scripts/lib')
 Copy-Item -LiteralPath (Join-Path $scripts 'lib/package-runtime-state.patterns') -Destination (Join-Path $publisher 'scripts/lib')
 $null = New-Item -ItemType Directory -Path (Join-Path $publisher 'tests/fixtures') -Force
 Copy-Item -LiteralPath (Join-Path $scripts '../tests/fixtures/provider-neutral-fault-matrix.json') -Destination (Join-Path $publisher 'tests/fixtures')
-foreach ($probe in @(@{ evidence = $partial; expected = 'Required deployment claim is missing' }, @{ evidence = $complete; expected = 'PUBLISHER_REACHED_OUTPUT_REPLACEMENT' })) {
+foreach ($probe in @(@{ evidence = $partial; expected = 'Required deployment claim is missing' }, @{ evidence = $complete; expected = 'PUBLISHER_REACHED_BUILD_STAGE' })) {
     $output = & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'run-publisher-claim-index-probe.ps1') -PublisherRoot $publisher -EvidenceRoot $probe.evidence.root 2>&1
     if ($LASTEXITCODE -eq 0 -or ($output -join "`n") -notmatch [regex]::Escape($probe.expected) -or
         [IO.File]::ReadAllText($sentinel) -cne 'keep previous bytes') { throw "Publisher evidence preflight probe failed: $($probe.expected)" }

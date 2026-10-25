@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import './test-installer-actions.mjs';
 import './test-master-release.mjs';
 import './test-publish-release.mjs';
+import './test-sbom-output.mjs';
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'installer-sources-'));
 const script = fileURLToPath(new URL('../Test-InstallerSources.ps1', import.meta.url));
