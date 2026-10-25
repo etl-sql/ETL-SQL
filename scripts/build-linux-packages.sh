@@ -33,6 +33,9 @@ fi
 
 echo "--- ETL-SQL Linux Package Builder ---"
 
+source "$REPO_ROOT/scripts/lib/native-publish-input.sh"
+assert_clean_native_publish "$PUBLISHED_BIN_DIR"
+
 # 1. Cleanup and Create Structure
 rm -rf "$BUILD_ROOT"
 mkdir -p "$BUILD_ROOT/usr/bin"
@@ -51,15 +54,6 @@ if [ ! -f "$PUBLISHED_BIN_DIR/ETL-SQL" ]; then
     echo "[ERROR] Required CLI binary not found: $PUBLISHED_BIN_DIR/ETL-SQL"
     exit 1
 fi
-
-# A host that was started from the publish folder leaves its runtime state there. Packaged, a key
-# ring or database would be shared by every installation and overwritten on every upgrade.
-for state in portal.db portal.db-wal portal.db-shm etlsql.db .portal-keys logs data Reports Snapshots; do
-    if [ -e "$PUBLISHED_BIN_DIR/$state" ]; then
-        echo "[ERROR] Runtime state in the publish folder: $PUBLISHED_BIN_DIR/$state. Publish again into a clean folder."
-        exit 1
-    fi
-done
 
 echo "Copying published linux-x64 binaries from $PUBLISHED_BIN_DIR..."
 # The single self-contained publish already contains every host executable

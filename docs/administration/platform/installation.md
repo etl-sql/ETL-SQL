@@ -83,6 +83,8 @@ From v0.22.0, DEB payloads and macOS application bundles remove group/other writ
 program trees while preserving executable and read-only bits. Native package builders require
 `dpkg-deb` on Linux or `hdiutil` on macOS and fail when those tools are missing. They resolve staging
 under the repository and reject linked staging ancestors or outputs before cleanup.
+DEB and DMG builds also reject publish folders containing runtime secrets, databases, key rings
+or runtime directories. Publish into a clean folder. Rejection preserves prior staging and packages.
 
 ### Docker / Containerized
 

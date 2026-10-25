@@ -28,6 +28,9 @@ APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 
 echo "--- ETL-SQL macOS DMG Builder ---"
 
+source "$REPO_ROOT/scripts/lib/native-publish-input.sh"
+assert_clean_native_publish "$PUBLISHED_BIN_DIR"
+
 # 1. Create .app Structure
 rm -rf "$BUILD_DIR"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"

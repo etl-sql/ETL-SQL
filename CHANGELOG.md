@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Refuse DEB and DMG builds from publish folders containing protected secrets, installer recovery
+  files, database sidecars or runtime directories. Validation runs before staging cleanup and leaves
+  prior outputs intact. The shared check never reads runtime file contents.
+
 - Remove non-owner write permissions from DEB program payloads and macOS app bundles. A POSIX
   regression reproduced world-writable packaged executables before the fix. Builders now stop
   when native tools are missing, resolve staging from the repository and reject linked staging

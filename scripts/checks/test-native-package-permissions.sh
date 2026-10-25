@@ -16,6 +16,8 @@ trap cleanup EXIT
 command -v dpkg-deb >/dev/null
 unset -f hdiutil dpkg-deb 2>/dev/null || true
 mkdir -p "$FIXTURE/scripts" "$FIXTURE/src/ETL-SQL.Installer/linux" "$FIXTURE/payload"
+mkdir -p "$FIXTURE/scripts/lib"
+cp "$SOURCE_ROOT/scripts/lib/native-publish-input.sh" "$FIXTURE/scripts/lib/"
 cp "$SOURCE_ROOT/scripts/build-linux-packages.sh" "$FIXTURE/scripts/"
 cp "$SOURCE_ROOT/scripts/build-mac-dmg.sh" "$FIXTURE/scripts/"
 cp "$SOURCE_ROOT/"{LICENSE.md,NOTICE.md,THIRD-PARTY-NOTICES.md} "$FIXTURE/"
@@ -61,6 +63,48 @@ test -f src/ETL-SQL.Installer/mac/sentinel
 grep -F 'hdiutil is required' missing-mac-tool.log
 hdiutil() { printf fixture-dmg > ETL-SQL_v0.22.0.dmg; }
 export -f hdiutil
+# Runtime state must be rejected before replacing prior staging or package outputs.
+printf 'previous image\n' > ETL-SQL_v0.22.0.dmg
+sha256sum "$PACKAGE" ETL-SQL_v0.22.0.dmg > previous-packages.sha256
+for state in appsettings.secrets.json appsettings.secrets.json.fixture.tmp appsettings.secrets.json.fixture.recovery appsettings.pre-upgrade.json first-run-password.txt first-run-password portal.db portal.db-wal portal.db-shm etlsql.db etlsql.db-wal etlsql.db-shm .portal-keys logs data Reports Snapshots; do
+    printf 'synthetic runtime sentinel\n' > "payload/$state"
+    for builder in build-linux-packages.sh build-mac-dmg.sh; do
+        printf keep > src/ETL-SQL.Installer/linux/build/sentinel
+        printf keep > src/ETL-SQL.Installer/mac/sentinel
+        if bash "scripts/$builder" 0.22.0 "$FIXTURE/payload" > runtime-state.log 2>&1; then
+            echo "Runtime state accepted by $builder: $state" >&2
+            exit 1
+        fi
+        grep -qF 'Runtime state in the publish folder' runtime-state.log
+        test -f src/ETL-SQL.Installer/linux/build/sentinel
+        test -f src/ETL-SQL.Installer/mac/sentinel
+        sha256sum -c previous-packages.sha256 >/dev/null
+    done
+    rm "payload/$state"
+done
+# A broken link still represents an unsafe runtime artifact.
+ln -s missing-secret payload/appsettings.secrets.json
+for builder in build-linux-packages.sh build-mac-dmg.sh; do
+    if bash "scripts/$builder" 0.22.0 "$FIXTURE/payload" > runtime-link.log 2>&1; then
+        echo "Linked runtime state accepted by $builder" >&2
+        exit 1
+    fi
+    grep -qF 'Runtime state in the publish folder' runtime-link.log
+done
+rm payload/appsettings.secrets.json
+mkdir payload/.portal-keys
+for builder in build-linux-packages.sh build-mac-dmg.sh; do
+    if bash "scripts/$builder" 0.22.0 "$FIXTURE/payload" > runtime-directory.log 2>&1; then
+        echo "Runtime directory accepted by $builder" >&2
+        exit 1
+    fi
+    grep -qF 'Runtime state in the publish folder' runtime-directory.log
+    test -f src/ETL-SQL.Installer/linux/build/sentinel
+    test -f src/ETL-SQL.Installer/mac/sentinel
+    sha256sum -c previous-packages.sha256 >/dev/null
+done
+rmdir payload/.portal-keys
+echo 'Native runtime inputs: 38 rejection cases passed; prior staging and package outputs retained.'
 # Exercise real bundle construction on POSIX; only image creation is mocked.
 (umask 000; cd caller; bash "$FIXTURE/scripts/build-mac-dmg.sh" 0.22.0 "$FIXTURE/payload")
 test -s ETL-SQL_v0.22.0.dmg

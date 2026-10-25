@@ -17,6 +17,12 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: Native packaging rejects runtime state
+- **What changed**: DEB and DMG builders reject protected secrets (including staging/recovery copies), saved installer settings, first-run credentials, SQLite databases/sidecars, key rings and runtime directories before staging cleanup. Broken links to these artifacts also fail.
+- **Who is affected**: Native packaging from a publish directory that was used to run a host or installer.
+- **Migration**: Publish into a clean directory and build from that output. Preserve runtime state outside packaging inputs; the builder does not delete or inspect its contents.
+- **Diagnostic**: `Runtime state in the publish folder. Publish again into a clean folder.` Prior staging and package outputs remain intact on this rejection.
+
 ### v0.22.0 — Runtime: Native package staging protects program permissions
 - **What changed**: DEB payloads and macOS application staging strip group/other write access from program trees without changing executable or read-only bits. Builders use strict Bash, require their native packaging tool, and bind cleanup to repository staging paths, rejecting linked ancestors/outputs.
 - **Who is affected**: Packaging from writable publish directories, from another current directory, with missing packaging tools, or through linked staging directories.

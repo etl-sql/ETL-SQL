@@ -689,6 +689,11 @@ here; each one failed a single test per run and passed on rerun.
   mocked. It is wired into DEB candidate CI, with installed/native-host acceptance still open.
   All 41 focused installer/documentation tests and 34 source checks pass for this round; retained
   baselines and final results are in `release-validation/packaging-review-validation.json`.
+  Native input review also reproduced packaging of a synthetic protected-secrets file. DEB/DMG
+  builders now share a runtime-state check before cleanup. Thirty-eight rejection cases cover
+  secret/recovery files, database sidecars, runtime directories and broken links, while hashes
+  confirm prior package outputs are preserved. The clean DEB and macOS bundle regression passes;
+  DMG creation remains mocked on Linux. See `release-validation/native-runtime-state-validation.json`.
   The broader review and native installed MSI certification remain open.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook
