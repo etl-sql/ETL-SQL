@@ -18,6 +18,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Run canary receipts, source provenance and deployment-claim regressions as independent source
   checks. Each retains its own log and bounded process result; their assertions no longer share
   the release-evidence check's deadline. Timeout errors now identify the failed child directly.
+  Early no-build fixture failures retain their shell, scenario, exit code and process output.
 
 - Fix Linux release preflight failures from incorrectly cased documentation links and multiple Git
   executables on PATH. Documentation checks now enforce exact path casing on Windows too, with

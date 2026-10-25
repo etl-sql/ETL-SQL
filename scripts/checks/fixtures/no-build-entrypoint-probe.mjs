@@ -99,6 +99,8 @@ if (command === 'dotnet') console.log('Passed: 1');
                         }
                         assert.equal(result.error, undefined);
                         const calls = fs.readFileSync(log, 'utf8').replace(/^\uFEFF/, '').trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
+                        assert.ok(calls.length > 0,
+                            `${shell}/${kind}/${lane} noBuild=${noBuild} outcome=${outcome} exited ${result.status} before preparation:\n${result.stdout}\n${result.stderr}`);
                         const guards = calls.filter(call => call.command === 'node' && call.args[0].endsWith('check-built-browser-assets.mjs'));
                         const tests = calls.filter(call => call.command === 'dotnet');
                         assert.ok(calls[0].args[0].endsWith('sync-assets.js'));

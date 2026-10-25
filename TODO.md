@@ -744,6 +744,11 @@ here; each one failed a single test per run and passed on rerun.
   target/action/owner rows and absence of counts-only notices. Original results remain in
   `release-validation/consumer-contracts/1792967317985-43192/`; network fixture recovery logs are
   retained under `release-validation/pre-push-20261025/`.
+  A network-enabled pre-push then exposed an intermittent no-build fixture exit before its first
+  preparation call. Focused and concurrent scratch-directory probes pass without reproducing it;
+  the cause remains unproven. The fixture now reports shell/scenario/exit/output before accessing
+  the missing call. Original preflight: `release-validation/preflight/1792968080596-30276/`;
+  diagnostic probe: `release-validation/pre-push-20261025/concurrent-source-probe/`.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook
   body unchanged. Its repository bytes use LF and `.gitattributes` now pins that checkout form.
