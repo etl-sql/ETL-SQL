@@ -363,7 +363,7 @@ public class LanguageService : ILanguageService
             var tokens = GetLastTokens(context.ScriptBefore, 12);
             string? connectorType = null;
 
-            // New syntax: CREATE/ALTER CONNECTION name AS TYPE(target?, opts...)
+            // CREATE/ALTER CONNECTION name AS TYPE(target?, opts...)
             var asIdx = tokens.FindLastIndex(t => t.Text.Equals("AS", StringComparison.OrdinalIgnoreCase));
             if (asIdx >= 0 && asIdx + 2 < tokens.Count && tokens[asIdx + 2].Text == "(")
             {
@@ -372,18 +372,7 @@ public class LanguageService : ILanguageService
                     connectorType = tokens[asIdx + 1].Text;
             }
 
-            // Legacy syntax: ON TYPE ... WITH (opts)
-            if (connectorType == null)
-            {
-                var withIdx = tokens.FindLastIndex(t => t.Text.Equals("WITH", StringComparison.OrdinalIgnoreCase));
-                if (withIdx >= 0)
-                {
-                    var onIdx = tokens.FindLastIndex(t => t.Text.Equals("ON", StringComparison.OrdinalIgnoreCase));
-                    if (onIdx >= 0 && onIdx < withIdx && onIdx + 1 < tokens.Count)
-                        connectorType = tokens[onIdx + 1].Text;
-                }
-            }
-
+            // COMPAT_BREAK: 0.22 — retired ON TYPE ... WITH syntax receives no connector options.
             if (connectorType == null) return results;
 
             var connector = _metadata.GetConnector(connectorType);

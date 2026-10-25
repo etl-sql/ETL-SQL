@@ -25,6 +25,15 @@ public class EbnfConformanceTests
     }
 
     [Fact]
+    public void RecursiveGeneration_UsesAFiniteDerivationAtTheDepthLimit()
+    {
+        var rules = EbnfParser.Parse("nested = '(' nested ')' | 'x';");
+        Assert.Equal("( x ) ", rules["nested"].Generate(rules, new Random(1), 6));
+        var cyclic = EbnfParser.Parse("cycle = cycle;");
+        Assert.Throws<InvalidOperationException>(() => cyclic["cycle"].Generate(cyclic, new Random(1), 6));
+    }
+
+    [Fact]
     public void GeneratedValidSequences_ParseWithoutExceptions()
     {
         if (!File.Exists(GrammarPath)) return;
@@ -493,6 +502,41 @@ public abstract class EbnfNode
 {
     public abstract string Generate(Dictionary<string, EbnfRule> rules, Random rnd, int depth);
     public virtual IEnumerable<string> References() => [];
+
+    internal static bool TryFinite(EbnfNode node, Dictionary<string, EbnfRule> rules, HashSet<string> active, out string text)
+    {
+        text = "";
+        switch (node)
+        {
+            case EbnfLiteral literal:
+                text = literal.Value == "EOF" ? "" : literal.Value + " ";
+                return true;
+            case EbnfOptional or EbnfRepetition:
+                return true;
+            case EbnfRef reference:
+                if (!active.Add(reference.Name)) return false;
+                try
+                {
+                    return rules.TryGetValue(reference.Name, out var rule) && TryFinite(rule.Node, rules, active, out text);
+                }
+                finally { active.Remove(reference.Name); }
+            case EbnfChoice choice:
+                foreach (var option in choice.Options)
+                    if (TryFinite(option, rules, active, out text)) return true;
+                return false;
+            case EbnfSequence sequence:
+                var parts = new StringBuilder();
+                foreach (var part in sequence.Nodes)
+                {
+                    if (!TryFinite(part, rules, active, out var value)) return false;
+                    parts.Append(value);
+                }
+                text = parts.ToString();
+                return true;
+            default:
+                return false;
+        }
+    }
 }
 
 public class EbnfLiteral : EbnfNode
@@ -551,6 +595,8 @@ public class EbnfRef : EbnfNode
         if (depth > 5)
         {
             if (Name == "statement") return "PRINT 1 ";
+            if (TryFinite(this, rules, new HashSet<string>(StringComparer.Ordinal), out var finite)) return finite;
+            throw new InvalidOperationException($"EBNF rule '{Name}' has no finite derivation.");
         }
 
         if (rules.TryGetValue(Name, out var rule))

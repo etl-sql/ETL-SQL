@@ -3661,7 +3661,9 @@ public class ReportParser : ParserComponent
             if (ReportCheck(TokenType.STRING_LITERAL))
             {
                 markdown = Advance().Value;
-                Match(TokenType.COMMA);
+                // COMPAT_BREAK: 0.22 — markdown and subsequent TOOLTIP parts require a comma.
+                if (!ReportCheck(TokenType.RPAREN))
+                    Consume(TokenType.COMMA, "Expected ',' between TOOLTIP parts");
             }
 
             // VISUALS (...) and FIELDS (...) follow in either order, separated by commas; each at most once.

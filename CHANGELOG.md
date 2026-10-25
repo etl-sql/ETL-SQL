@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Complete retired-syntax cleanup: reject missing commas after TOOLTIP markdown, remove obsolete
+  connection-option completion and Docker grammar, and document canonical replacements.
+  Grammar test generation now stops recursive expansion at a finite derivation. Documentation
+  link checks use authored Git files while retaining the separate artifact-index scope.
+
 - Fixed controlled-host certification rejecting its 400-minute process budget before execution.
   The shared supervisor now accepts up to seven hours and records the effective timeout. Recovery
   fixtures exercise the real supervisor, including long-budget binding and out-of-range rejection.

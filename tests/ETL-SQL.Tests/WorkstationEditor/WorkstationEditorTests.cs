@@ -1309,6 +1309,7 @@ public sealed class WorkstationEditorTests
     {
         using var temp = new TempWorkspace();
         RunGit(temp.Root, "init");
+        RunGit(temp.Root, "config", "commit.gpgsign", "false");
         RunGit(temp.Root, "config", "user.email", "workstation-tests@example.invalid");
         RunGit(temp.Root, "config", "user.name", "Workstation Tests");
         await File.WriteAllTextAsync(Path.Combine(temp.Root, "pipeline.etlsql"), "SELECT 1 AS Value;\n");
@@ -1357,6 +1358,7 @@ public sealed class WorkstationEditorTests
     {
         using var temp = new TempWorkspace();
         RunGit(temp.Root, "init");
+        RunGit(temp.Root, "config", "commit.gpgsign", "false");
         RunGit(temp.Root, "config", "user.email", "workstation-tests@example.invalid");
         RunGit(temp.Root, "config", "user.name", "Workstation Tests");
         await File.WriteAllTextAsync(Path.Combine(temp.Root, "pipeline.etlsql"), "SELECT 1;");
@@ -1384,6 +1386,7 @@ public sealed class WorkstationEditorTests
     {
         using var temp = new TempWorkspace();
         RunGit(temp.Root, "init");
+        RunGit(temp.Root, "config", "commit.gpgsign", "false");
         RunGit(temp.Root, "config", "user.email", "workstation-tests@example.invalid");
         RunGit(temp.Root, "config", "user.name", "Workstation Tests");
 

@@ -656,9 +656,9 @@ namespace ETL_SQL.Tests.Docs
         }
 
         [Fact]
-        public void MarkdownLinks_AllResolveCleanly()
+        public async Task MarkdownLinks_AllResolveCleanly()
         {
-            var mdFiles = RepositoryMarkdownFiles()
+            var mdFiles = (await RepositoryMarkdownFiles(RepoRoot))
                 .Where(f =>
                 {
                     return !f.EndsWith("TEMPLATE.md", StringComparison.OrdinalIgnoreCase) &&
@@ -730,27 +730,75 @@ namespace ETL_SQL.Tests.Docs
                 string.Join("\n", brokenLinks));
         }
 
-        private static IEnumerable<string> RepositoryMarkdownFiles()
+        [Fact]
+        public async Task MarkdownInventory_IncludesAuthoredFilesAndExcludesIgnoredDiagnostics()
         {
-            var excludedDirectories = new HashSet<string>(StringComparer.Ordinal)
+            var root = Path.Combine(Path.GetTempPath(), "doc-inventory-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(root, "docs"));
+            Directory.CreateDirectory(Path.Combine(root, "cache", "private-ipc"));
+            try
             {
-                "Docs_Legacy", "node_modules", ".git", "bin", "obj", "Help_Legacy", ".claude",
-                ".worktrees", ".vscode-test", "artifacts", ".task-cache"
+                await File.WriteAllTextAsync(Path.Combine(root, ".gitignore"), "cache/\n");
+                var tracked = Path.Combine(root, "docs", "Tracked.md");
+                var added = Path.Combine(root, "docs", "New é.MD");
+                await File.WriteAllTextAsync(tracked, "# Tracked\n");
+                await RunGitAsync(root, "init", "--quiet");
+                await RunGitAsync(root, "add", ".gitignore", "docs/Tracked.md");
+                await File.WriteAllTextAsync(added, "# Candidate documentation\n");
+                Directory.CreateDirectory(Path.Combine(root, "artifacts"));
+                await File.WriteAllTextAsync(Path.Combine(root, "artifacts", "claims-index.md"), "[attachment](external-evidence.json)");
+                await RunGitAsync(root, "add", "artifacts/claims-index.md");
+                await File.WriteAllTextAsync(Path.Combine(root, "cache", "private-ipc", "Generated.md"), "[not authored](missing.md)");
+                Assert.Equal(new[] { tracked, added }.Order(StringComparer.Ordinal),
+                    (await RepositoryMarkdownFiles(root)).Order(StringComparer.Ordinal));
+            }
+            finally
+            {
+                foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+                    File.SetAttributes(file, FileAttributes.Normal);
+                Directory.Delete(root, recursive: true);
+            }
+        }
+
+        private static async Task<string[]> RepositoryMarkdownFiles(string root) =>
+            (await RunGitAsync(root, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", ":(icase)*.md"))
+                .Split('\0', StringSplitOptions.RemoveEmptyEntries)
+                .Distinct(StringComparer.Ordinal)
+                // Retain the existing artifact exclusion: archived indexes reference separately retained attachments.
+                .Where(path => !path.Split('/').Contains("artifacts", StringComparer.Ordinal))
+                .Select(file => Path.GetFullPath(Path.Combine(root, file)))
+                .Where(File.Exists)
+                .ToArray();
+
+        private static async Task<string> RunGitAsync(string root, params string[] arguments)
+        {
+            var start = new System.Diagnostics.ProcessStartInfo("git")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = System.Text.Encoding.UTF8,
+                UseShellExecute = false,
+                CreateNoWindow = true
             };
-            var pending = new Stack<string>();
-            pending.Push(RepoRoot);
-            while (pending.Count > 0)
+            start.ArgumentList.Add("-C");
+            start.ArgumentList.Add(root);
+            foreach (var argument in arguments) start.ArgumentList.Add(argument);
+            using var process = System.Diagnostics.Process.Start(start) ?? throw new InvalidOperationException("Could not start documentation inventory.");
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            try
             {
-                var directory = pending.Pop();
-                foreach (var file in Directory.EnumerateFiles(directory, "*.md", SearchOption.TopDirectoryOnly))
-                    yield return file;
-                foreach (var child in Directory.EnumerateDirectories(directory))
-                {
-                    // Prune generated/cache trees before walking them. Filtering after a recursive
-                    // GetFiles still opens VS Code's private IPC directories and can fail on access.
-                    if (!excludedDirectories.Contains(Path.GetFileName(child)))
-                        pending.Push(child);
-                }
+                var output = process.StandardOutput.ReadToEndAsync(deadline.Token);
+                var error = process.StandardError.ReadToEndAsync(deadline.Token);
+                await process.WaitForExitAsync(deadline.Token);
+                var result = await output;
+                var diagnostics = await error;
+                if (process.ExitCode != 0) throw new InvalidOperationException($"Documentation inventory failed: {diagnostics}");
+                return result;
+            }
+            catch
+            {
+                if (!process.HasExited) process.Kill();
+                throw;
             }
         }
 

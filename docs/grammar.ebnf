@@ -109,7 +109,6 @@ statement = select_statement
           | refresh_report_statement
           | style_statement
           | import_lineage_statement
-          | legacy_docker_statement
           | create_table_statement
           | create_view_statement
           | create_procedure_statement
@@ -357,7 +356,6 @@ add_user_statement = "ADD" "USER" string_literal "TO" "GROUP" string_literal ;
 refresh_report_statement = "REFRESH" "REPORT" string_literal ;
 style_statement = "STYLE" ( "=" identifier | style_body ) ;
 import_lineage_statement = "IMPORT" "LINEAGE" "FOR" [ "TABLE" ] table_reference [ "AS" "OPENLINEAGE" ] "FROM" expression ;
-legacy_docker_statement = "DOCKER" ( "START" | "STOP" | "PAUSE" | "CLOSE" ) [ identifier ] ;
 create_table_statement = "CREATE" [ "OR" "REPLACE" ] "TABLE" [ "IF" "NOT" "EXISTS" ] table_reference "(" table_column { "," table_column } ")" ;
 table_column = identifier table_data_type { column_constraint } ;
 table_data_type = identifier [ "(" ( number | "MAX" ) [ "," ( number | "+" | "-" ) ] ")" ] ;

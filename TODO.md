@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 25 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 24 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -595,6 +595,13 @@ here; each one failed a single test per run and passed on rerun.
   `DOCKER <verb>`, `LINEAGE EXPORT`, `@sensitivity`, comma-less `TOOLTIP` parts and `ui old` was
   built but not tested. Run the default lane, fix what it finds, and add its `BREAKING_CHANGES.md`
   entry.
+  **In progress:** the missing comma after TOOLTIP markdown is now rejected, stale Docker grammar
+  is removed, and the breaking-change entry records all retired forms. All 459 language-server
+  cases and 67 focused parser/documentation/grammar cases pass. The initial main default run
+  aborted after 11,134 passes with an out-of-memory failure; it is not full coverage. An ordinary-OS
+  rerun of its failing classes passes 393 cases. Four purge-fixture failures caused by a Git tree
+  above the user's temp directory are fixed; all 14 purge cases pass. Portal and the remaining default coverage
+  still need completion before this item can close.
 - [ ] **Linux package install and upgrade.** The postinst now leaves shipped files root-owned and
   makes `/usr/lib/etl-sql/bin` `root:etlsql 1775`. Install fresh and upgrade over a previous package;
   confirm the Portal and Orchestrator start and write their databases, logs and data.
@@ -620,8 +627,11 @@ here; each one failed a single test per run and passed on rerun.
   four legacy-envelope rejections, wrong keys, renamed chunks and missing files. Valid empty
   partitions retain files. Earlier encrypted saved sessions require recreation; the breaking-change
   record and engine architecture document the migration and bounded verification read pass.
-- [ ] **`ON TYPE … WITH` completion branch** in `LanguageService`. Confirm whether that syntax still
+- [x] **`ON TYPE … WITH` completion branch** in `LanguageService`. Confirm whether that syntax still
   exists; remove the branch if not.
+  **Verified 2026-10-24:** the parser requires `AS TYPE(...)`; the unsupported completion fallback
+  is removed. Regression cases prove canonical options remain available and both retired forms
+  receive no connector-option suggestions. All 459 language-server cases pass without skips.
 - [ ] **Review `scripts/`, the installers and `tests/`.** The v0.22.0 review covered `src/` only.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook

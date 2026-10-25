@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Syntax: Retired forms use canonical commands
+- **What changed**: The `FILE` connector name, `DROP CHART`, `DOCKER <verb>`, `LINEAGE EXPORT`, `@sensitivity` stewardship alias, comma-less TOOLTIP parts, and `ui old` command are removed. Connection completion no longer offers options for the unsupported `ON TYPE … WITH` constructor.
+- **Who is affected**: Scripts and editor workflows using these retired forms.
+- **Migration**: Use `AS FLATFILE(...)` for file connections (the `FILE` table name remains valid), `DROP VISUAL`, `START/STOP/PAUSE/CLOSE DOCKER`, `EXPORT LINEAGE … AS OPENLINEAGE TO …`, `@classification`, commas between TOOLTIP parts, and `ui edit`. Write connection options inside `AS TYPE(...)`. The supported `LINEAGE <table> EXPORT AS …` query form is unchanged.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: Encrypted spill files require authentication
 - **What changed**: JSON and Arrow spill files now use a versioned AES-256-CBC/HMAC-SHA256 envelope with separate derived keys. Readers authenticate the complete file before exposing rows. Earlier unauthenticated encrypted files are rejected, and missing chunks fail instead of returning an empty result.
 - **Who is affected**: Persistent sessions containing encrypted spill files written before v0.22.0, or sessions with missing chunks.

@@ -139,9 +139,14 @@ public sealed class SecurityBoundaryDocTests
             "evidence below it is attributable to a version.");
 
         var text = Todo();
+        foreach (var reference in new[] { "release-checklist.md", "enterprise-release-evidence-checklist.md" })
+            Assert.Contains(reference, text, System.StringComparison.OrdinalIgnoreCase);
+
+        // TODO delegates release policy to the two canonical checklists instead of copying their inventory.
+        var checklist = System.IO.File.ReadAllText(System.IO.Path.Combine(RepoRoot, "docs", "releases", "release-checklist.md"))
+            + System.IO.File.ReadAllText(System.IO.Path.Combine(RepoRoot, "docs", "architecture", "decisions", "enterprise-release-evidence-checklist.md"));
         string[] evidenceGates =
         [
-            "enterprise-release-evidence-checklist.md",
             "test-lane.ps1",
             "Test-PreRelease.ps1",
             "Test-EnterpriseHardeningCertification.ps1",
@@ -152,9 +157,8 @@ public sealed class SecurityBoundaryDocTests
 
         foreach (var gate in evidenceGates)
         {
-            Assert.True(text.Contains(gate, System.StringComparison.OrdinalIgnoreCase),
-                $"TODO.md tracks release v{release.Groups[1].Value} but does not reference the " +
-                $"'{gate}' evidence gate from Enterprise_Release_Evidence_Checklist.md.");
+            Assert.True(checklist.Contains(gate, System.StringComparison.OrdinalIgnoreCase),
+                $"The checklists for TODO.md release v{release.Groups[1].Value} omit the '{gate}' evidence gate.");
         }
     }
 }

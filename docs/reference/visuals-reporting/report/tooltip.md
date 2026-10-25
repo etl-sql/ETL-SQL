@@ -17,6 +17,8 @@ TOOLTIP ('<markdown>', VISUALS (<visual_name>, ...))
 TOOLTIP = <container_name>
 ```
 
+- **Part separator** — Separate inline markdown, `VISUALS`, and `FIELDS` parts with commas, including the comma after markdown.
+
 ## The Two Detail Surfaces
 
 Which surface a clause produces is decided by what it carries, not by an extra keyword.
