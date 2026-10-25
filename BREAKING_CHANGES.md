@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: Release wrapper retains complete native and portable output
+- **What changed**: `Master-Release.ps1` owns the output transaction across portable and native packaging. The portable child stages into a validated live caller transaction. Existing native build outputs are saved before rebuilding and restored after failure. Final checksums include ZIP, VSIX, MSI, DEB, DMG and SBOM files before the complete directory is promoted.
+- **Who is affected**: Packaging through the release wrapper, especially failures after portable publishing or while replacing an earlier native artifact.
+- **Migration**: Continue reading accepted packages from `release/`. Review `native-previous/`, `native-failed/` and the attempt's `transaction.json` for native recovery. Resolve `RecoveryRequired` before retrying. A closed or forged caller transaction cannot direct portable staging.
+- **Diagnostic**: Native failures do not promote portable output. Recovery failures identify the retained attempt; new attempts reject unresolved native backups and recovery records.
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: Complete portable builds preserve accepted releases
 - **What changed**: Portable packaging builds under `artifacts/portable-release/<attempt>/output` and replaces `release/` only after ZIP, VSIX, certification, SBOM and checksum work succeeds. Previous releases and failed attempts are retained. Failed promotion restores the previous directory; unresolved rollback and concurrent attempts block a new build.
 - **Who is affected**: Local portable-release producers, especially retries after a partial or failed build.

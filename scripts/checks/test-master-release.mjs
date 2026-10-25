@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const source = readFileSync(new URL('../Master-Release.ps1', import.meta.url), 'utf8');
 // Substitute only host sensors in the private copy; all authored command/control flow executes.
@@ -23,6 +24,7 @@ function write(root, name, content) {
   writeFileSync(file, content);
 }
 const step = name => `
+${name === 'publish' ? 'param($OutputTransaction)' : ''}
 $global:MasterCalls.Add(@{step='${name}';location=(Get-Location).Path;version=$env:ETL_SQL_VERSION})
 if ($env:MASTER_CASE -eq '${name}-failure') { $global:LASTEXITCODE=17; return }
 if ('${name}' -eq 'gate' -and $env:MASTER_CASE -eq 'retired-helper') {
@@ -30,16 +32,19 @@ if ('${name}' -eq 'gate' -and $env:MASTER_CASE -eq 'retired-helper') {
   return
 }
 if ('${name}' -eq 'publish') {
-  New-Item -ItemType Directory -Path (Join-Path $PSScriptRoot '../release') -Force | Out-Null
+  $publishRoot=if($OutputTransaction){$OutputTransaction.Output}else{Join-Path $PSScriptRoot '../release'}
+  New-Item -ItemType Directory -Path $publishRoot -Force | Out-Null
+  [IO.File]::WriteAllText((Join-Path $publishRoot 'bundle.zip'),'new portable bundle')
   if ($env:MASTER_CASE -eq 'destination-directory') {
     $name=if($FixtureIsWindows){'ETL-SQL-v0.22.0.msi'}elseif($FixtureIsLinux){'etl-sql_0.22.0_amd64.deb'}else{'ETL-SQL_v0.22.0.dmg'}
-    New-Item -ItemType Directory -Path (Join-Path $PSScriptRoot ('../release/'+$name)) | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $publishRoot $name) -Force | Out-Null
   }
 }
 if ('${name}' -eq 'msi' -and $env:MASTER_CASE -notin @('missing-artifact','stale-artifact')) {
   $contents=if($env:MASTER_CASE -eq 'empty-artifact'){''}else{'fixture-msi'}
   [IO.File]::WriteAllText((Join-Path $PSScriptRoot '../src/ETL-SQL.Installer/ETL-SQL-v0.22.0.msi'), $contents)
 }
+if ('${name}' -eq 'msi' -and $env:MASTER_CASE -in @('native-partial-failure','native-recovery-failure')) { $global:LASTEXITCODE=17; return }
 $global:LASTEXITCODE=0
 `;
 const runner = String.raw`
@@ -75,6 +80,7 @@ function bash {
     [IO.File]::WriteAllText((Join-Path (Get-Location).Path $name),$contents)
   }
   $global:LASTEXITCODE=0
+  if ($env:MASTER_CASE -in @('native-partial-failure','native-recovery-failure')) { $global:LASTEXITCODE=17 }
 }
 function wsl { throw 'The wrapper must not launch WSL implicitly.' }
 $options=@{Version='0.22.0';IncludeSampleValidation=$true}
@@ -88,7 +94,15 @@ try {
   if ($LASTEXITCODE -ne 0) { $exitCode=1 }
 } catch { $exitCode=1; Write-Output ('Caught fixture error: '+$_.Exception.Message) }
 finally {
-  [ordered]@{calls=@($global:MasterCalls);exitCode=$exitCode;locationRestored=((Get-Location).Path -eq $beforeLocation);versionRestored=($env:ETL_SQL_VERSION -ceq $beforeVersion);versionPresenceRestored=((Test-Path Env:ETL_SQL_VERSION) -eq $beforeExists)} |
+  $recoveryRetained=$false; $retryBlocked=$false
+  if($Case -eq 'native-recovery-failure') {
+    $record=Get-ChildItem -LiteralPath (Join-Path $FixtureRoot 'artifacts/portable-release') -Filter transaction.json -Recurse | ForEach-Object {Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json}
+    $recoveryRetained=$record.status -eq 'RecoveryRequired' -and [IO.File]::ReadAllText($record.nativeOutputs[0].Backup) -eq 'stale-fixture'
+    . (Join-Path $FixtureRoot 'scripts/ReleaseOutput.Helpers.ps1')
+    try { $unexpected=New-ReleaseOutputTransaction -RepoRoot $FixtureRoot; Close-ReleaseOutputTransaction $unexpected }
+    catch { $retryBlocked=$_.Exception.Message -like '*Unresolved release recovery*' }
+  }
+  [ordered]@{calls=@($global:MasterCalls);exitCode=$exitCode;locationRestored=((Get-Location).Path -eq $beforeLocation);versionRestored=($env:ETL_SQL_VERSION -ceq $beforeVersion);versionPresenceRestored=((Test-Path Env:ETL_SQL_VERSION) -eq $beforeExists);recoveryRetained=$recoveryRetained;retryBlocked=$retryBlocked} |
     ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $FixtureRoot 'observed.json')
 }
 exit $exitCode
@@ -106,6 +120,9 @@ const cases = [
   ['unsupported-host','Other'], ['retired-helper','Windows'], ['ui-build-throw','Windows'],
   ['skip-ui','Windows'], ['skip-tests','Windows'],
   ['destination-directory','Windows'], ['destination-directory','Linux'], ['destination-directory','MacOS']
+  ,['native-partial-failure','Windows'], ['native-partial-failure','Linux'], ['native-partial-failure','MacOS'],
+  ['native-recovery-failure','Windows'], ['native-recovery-failure','Linux'], ['native-recovery-failure','MacOS']
+  ,['native-save-failure','Windows'], ['native-save-failure','Linux'], ['native-save-failure','MacOS']
 ];
 const failures = [];
 try {
@@ -113,6 +130,11 @@ try {
     const root = path.join(fixture, `${mode}-${host}`), caller = path.join(root, 'caller folder');
     mkdirSync(caller, { recursive: true });
     write(root, 'scripts/Master-Release.ps1', simulated);
+    let helpers = readFileSync(new URL('../ReleaseOutput.Helpers.ps1', import.meta.url), 'utf8');
+    // Fault only the native rename that restores the saved package; recovery remains authored code.
+    if (mode === 'native-recovery-failure') helpers = helpers.replace('[IO.File]::Move($entry.Backup, $entry.Path)', 'throw "Synthetic native restore failure"');
+    if (mode === 'native-save-failure') helpers = helpers.replace('[IO.File]::Move($Path, $backup)', 'throw "Synthetic native save failure"');
+    write(root, 'scripts/ReleaseOutput.Helpers.ps1', helpers);
     write(root, 'runner.ps1', runner);
     for (const [file, name] of [['test-lane.ps1','smoke'],['Test-AllSamples.ps1','samples'],['publish-release.ps1','publish'],['build-msi.ps1','msi'],['Test-InstallerSources.ps1','gate']])
       write(root, 'scripts/' + file, step(name));
@@ -128,7 +150,11 @@ try {
     }
     if (mode !== 'missing-ui') mkdirSync(path.join(root, 'src/etl-sql-vscode/ui'), { recursive: true });
     const nativeName = host === 'Windows' ? 'src/ETL-SQL.Installer/ETL-SQL-v0.22.0.msi' : host === 'Linux' ? 'etl-sql_0.22.0_amd64.deb' : 'ETL-SQL_v0.22.0.dmg';
-    if (mode === 'stale-artifact') write(root, nativeName, 'stale-fixture');
+    write(root, nativeName, 'stale-fixture');
+    write(root, 'release/sentinel', 'accepted release');
+    write(root, 'release/bundle.zip', 'accepted portable bundle');
+    write(root, 'release/' + path.basename(nativeName), 'accepted native bundle');
+    write(root, 'release/sha256sums.txt', 'accepted checksums');
     const result = spawnSync('pwsh', ['-NoProfile','-File',path.join(root,'runner.ps1'),'-FixtureRoot',root,'-Case',mode,'-Platform',host], { cwd:caller, encoding:'utf8', timeout:15000 });
     if (result.error) throw result.error;
     const observed = JSON.parse(readFileSync(path.join(root,'observed.json'),'utf8').replace(/^\uFEFF/,''));
@@ -142,6 +168,11 @@ try {
       if (success) {
         assert.ok(steps.includes(host === 'Windows' ? 'msi' : 'native'), `${host}: native packaging did not run`);
         assert.ok(existsSync(path.join(root,'release',path.basename(nativeName))), `${host}: native artifact not collected`);
+        const manifest = readFileSync(path.join(root,'release/sha256sums.txt'),'utf8');
+        for (const file of ['bundle.zip', path.basename(nativeName)]) {
+          const hash = createHash('sha256').update(readFileSync(path.join(root,'release',file))).digest('hex');
+          assert.ok(manifest.includes(`${hash}  ${file}`), `${host}: collected bytes missing from checksums`);
+        }
         if(mode==='skip-ui') assert.ok(!steps.includes('ui-restore') && !steps.includes('ui-build'));
         else assert.equal(observed.calls.find(item=>item.step==='ui-restore').arguments[0],'ci');
         if(mode==='skip-tests') assert.ok(!steps.includes('smoke') && !steps.includes('samples'));
@@ -153,6 +184,12 @@ try {
           assert.ok(path.isAbsolute(args[2]) && path.isAbsolute(args[4]));
         }
       } else {
+        assert.equal(readFileSync(path.join(root,'release/sentinel'),'utf8'),'accepted release',`${mode}: accepted release lost`);
+        assert.equal(readFileSync(path.join(root,'release/bundle.zip'),'utf8'),'accepted portable bundle',`${mode}: portable bytes changed`);
+        assert.equal(readFileSync(path.join(root,'release',path.basename(nativeName)),'utf8'),'accepted native bundle',`${mode}: native bytes changed`);
+        assert.equal(readFileSync(path.join(root,'release/sha256sums.txt'),'utf8'),'accepted checksums',`${mode}: checksum bytes changed`);
+        if(mode==='native-recovery-failure') assert.ok(observed.recoveryRetained && observed.retryBlocked, `${host}: native recovery was lost or retry allowed`);
+        else assert.equal(readFileSync(path.join(root,nativeName),'utf8'),'stale-fixture',`${mode}: prior native source lost`);
         assert.doesNotMatch(result.stdout, /(?:RELEASE|PACKAGING) COMPLETE/);
         if (['ui-restore-failure','ui-build-failure','ui-build-throw','missing-ui','smoke-failure','samples-failure','gate-failure','retired-helper','invalid-version','contradictory-options','unsupported-host'].includes(mode))
           assert.ok(!steps.includes('publish'), `${mode}: failure still published`);

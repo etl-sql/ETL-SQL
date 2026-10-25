@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Keep portable bundles and native MSI/DEB/DMG collection under one transaction in the release
+  wrapper. Native failures preserve the accepted release and restore prior native build outputs.
+  Failed recovery retains its backup and blocks retries. Final checksums include DEB and DMG files
+  and bind the collected bytes before promotion.
+
 - Build portable releases in private attempts under `artifacts/portable-release/`. Failed builds
   preserve accepted ZIPs, SBOM and checksums. Promotion retains the previous release and rolls back
   a failed rename; unresolved recovery blocks another attempt. A lock prevents concurrent producers.

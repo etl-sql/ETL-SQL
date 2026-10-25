@@ -94,6 +94,9 @@ under the attempt directory with `transaction.json`. Inspect that record and `pr
 resolving a recovery failure. Concurrent builds are blocked by `publish.lock`; a lock left by an
 interrupted producer requires checking that the original process has stopped before removing it.
 Retained attempts use disk space until you remove them after review.
+The release wrapper extends this transaction through native installer collection. Prior native
+build outputs are retained in `native-previous/` and restored after failure; partial replacements
+are retained in `native-failed/`. Final checksums include the native packages before promotion.
 
 ### Docker / Containerized
 

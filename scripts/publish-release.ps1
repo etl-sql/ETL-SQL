@@ -5,7 +5,8 @@ param(
     [ValidateSet('win-x64', 'linux-x64', 'osx-x64', 'osx-arm64')]
     [string[]]$Platforms = @("win-x64", "linux-x64", "osx-x64", "osx-arm64"),
     [switch]$SkipVsix,
-    [string]$CertificationEvidenceRoot
+    [string]$CertificationEvidenceRoot,
+    [psobject]$OutputTransaction
 )
 
 $ErrorActionPreference = 'Stop'
@@ -151,7 +152,12 @@ $Projects = @(
 
 # COMPAT_BREAK: 0.22 — retain accepted releases throughout a failed complete rebuild.
 . (Join-Path $PSScriptRoot 'ReleaseOutput.Helpers.ps1')
-$transaction = New-ReleaseOutputTransaction -RepoRoot $RepoRoot
+$ownsTransaction = $null -eq $OutputTransaction
+if ($ownsTransaction) { $transaction = New-ReleaseOutputTransaction -RepoRoot $RepoRoot }
+else {
+    Assert-ActiveReleaseOutputTransaction -RepoRoot $RepoRoot -Transaction $OutputTransaction
+    $transaction = $OutputTransaction
+}
 $ReleaseRoot = $transaction.Output
 try {
     Write-Host "Release attempt retained at $($transaction.Attempt)" -ForegroundColor Gray
@@ -296,16 +302,13 @@ try {
 
     # 9. Generate Checksums
     Write-Host "`nGenerating SHA-256 checksums..." -ForegroundColor Yellow
-    $Artifacts = Get-ChildItem -LiteralPath $ReleaseRoot -File | Where-Object { $_.Name -like "ETL-SQL-*" -or $_.Name -like "*.vsix" -or $_.Name -like "*.msi" -or $_.Name -eq "sbom.json" }
-    $Checksums = foreach ($Artifact in $Artifacts) {
-        $Hash = (Get-FileHash -LiteralPath $Artifact.FullName -Algorithm SHA256).Hash.ToLower()
-        "$Hash  $($Artifact.Name)"
-    }
-    $Checksums | Out-File -LiteralPath (Join-Path $ReleaseRoot "sha256sums.txt") -Encoding ascii -Force
+    Write-ReleaseChecksums -OutputDirectory $ReleaseRoot
     Write-Host "  Checksums file generated: sha256sums.txt" -ForegroundColor Green
 
-    Complete-ReleaseOutputTransaction $transaction
-    Write-Host "`nRelease v$Version ready in $($transaction.Accepted)" -ForegroundColor Cyan
+    if ($ownsTransaction) {
+        Complete-ReleaseOutputTransaction $transaction
+        Write-Host "`nRelease v$Version ready in $($transaction.Accepted)" -ForegroundColor Cyan
+    } else { Write-Host "Portable bundles staged in $ReleaseRoot" -ForegroundColor Cyan }
 } finally {
-    Close-ReleaseOutputTransaction $transaction
+    if ($ownsTransaction) { Close-ReleaseOutputTransaction $transaction }
 }

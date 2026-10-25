@@ -23,6 +23,7 @@ $ReleaseRoot = Join-Path $RepoRoot 'release'
 $callerLocation = Get-Location
 $hadVersion = Test-Path Env:ETL_SQL_VERSION
 $savedVersion = $env:ETL_SQL_VERSION
+$transaction = $null
 
 function Assert-CommandSucceeded([string]$Description) {
     if ($LASTEXITCODE -ne 0) { throw "$Description failed with exit code $LASTEXITCODE." }
@@ -33,10 +34,7 @@ function Prepare-NativeOutput([string]$Path) {
     if (-not $resolved.StartsWith($RepoRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::Ordinal)) {
         throw 'Native package output escaped the repository.'
     }
-    if (Test-Path -LiteralPath $resolved) {
-        if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { throw 'Native package output must be a file.' }
-        Remove-Item -LiteralPath $resolved -Force
-    }
+    Save-NativeReleaseOutput -Transaction $transaction -Path $resolved
 }
 
 function Collect-NativeOutput([string]$Path) {
@@ -46,6 +44,7 @@ function Collect-NativeOutput([string]$Path) {
         if (-not $candidate.StartsWith($RepoRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::Ordinal)) {
             throw 'Native package output escaped the repository.'
         }
+        Assert-ReleaseOutputPath $RepoRoot $candidate
     }
     if (-not (Test-Path -LiteralPath $resolved -PathType Leaf) -or (Get-Item -LiteralPath $resolved).Length -eq 0) {
         throw 'Native packaging did not produce a nonempty package.'
@@ -103,8 +102,12 @@ try {
     } else { Write-Host '  UI build explicitly skipped.' }
 
     Write-Host '[4/7] Publishing portable bundles...'
+    # COMPAT_BREAK: 0.22 — native and portable work share one retained promotion boundary.
+    . (Join-Path $PSScriptRoot 'ReleaseOutput.Helpers.ps1')
+    $transaction = New-ReleaseOutputTransaction -RepoRoot $RepoRoot
+    $ReleaseRoot = $transaction.Output
     Set-Location -LiteralPath $RepoRoot
-    & (Join-Path $PSScriptRoot 'publish-release.ps1')
+    & (Join-Path $PSScriptRoot 'publish-release.ps1') -OutputTransaction $transaction
     Assert-CommandSucceeded 'Bundle publishing'
 
     Write-Host '[5/7] Windows native installer...'
@@ -132,12 +135,22 @@ try {
         Collect-NativeOutput $package
     } else { Write-Host '  Linux/macOS packages belong to their native packaging lanes.' }
 
+    Write-ReleaseChecksums -OutputDirectory $ReleaseRoot
+    Complete-ReleaseOutputTransaction $transaction
+    $ReleaseRoot = $transaction.Accepted
     # COMPAT_BREAK: 0.22 — only checked build results can report packaging completion.
     Write-Host '[7/7] PACKAGING COMPLETE' -ForegroundColor Green
     Write-Host "Version: $Version; output: $ReleaseRoot; elapsed: $((Get-Date) - $StartTime)"
     Write-Host 'Run the separate release certification and publication gates before shipping.'
 } finally {
-    if ($hadVersion) { $env:ETL_SQL_VERSION = $savedVersion }
-    else { Remove-Item Env:ETL_SQL_VERSION -ErrorAction SilentlyContinue }
-    Set-Location -LiteralPath $callerLocation.Path
+    try {
+        if ($transaction) {
+            try { if ($transaction.Status -ne 'Promoted') { Restore-NativeReleaseOutputs $transaction } }
+            finally { Close-ReleaseOutputTransaction $transaction }
+        }
+    } finally {
+        if ($hadVersion) { $env:ETL_SQL_VERSION = $savedVersion }
+        else { Remove-Item Env:ETL_SQL_VERSION -ErrorAction SilentlyContinue }
+        Set-Location -LiteralPath $callerLocation.Path
+    }
 }

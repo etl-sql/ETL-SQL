@@ -706,6 +706,12 @@ here; each one failed a single test per run and passed on rerun.
   repeated promotion and fresh output. SBOM generation has a tested bounded staging directory.
   See `release-validation/release-retention-validation.json`; actual .NET/VSIX builds remain mocked
   in these producer fixtures, and no installed-product acceptance is claimed.
+  The wrapper review then found promotion still preceded native builds, and DEB/DMG outputs were
+  absent from its checksum filter. The wrapper now owns one transaction through native collection,
+  restores saved native outputs after failures, blocks unresolved native recovery, and checksums
+  the final collected bytes. Forty-three wrapper cases and 46 portable cases cover all host branches,
+  partial native output, failed recovery and validated caller-owned staging. Native tools remain
+  mocked. Evidence: `release-validation/native-wrapper-retention-validation.json`.
   The broader review and native installed MSI certification remain open.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook

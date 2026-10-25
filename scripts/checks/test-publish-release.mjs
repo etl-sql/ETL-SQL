@@ -20,7 +20,7 @@ function node {
     if($args[0] -like '*generate-sbom.js') {
         $index=[Array]::IndexOf($args,'--output-dir')
         $output=if($index -ge 0){$args[$index+1]}else{Join-Path $Root 'release'}
-        if($Case -eq 'sbom-failure') { $global:LASTEXITCODE=23; return }
+        if($Case -in @('sbom-failure','caller-owned-failure')) { $global:LASTEXITCODE=23; return }
         if($Case -ne 'sbom-missing') { [IO.File]::WriteAllText((Join-Path $output 'sbom.json'),'{"metadata":{"component":{"version":"0.22.0"}}}') }
         if($Case -eq 'sbom-wrong-version') { [IO.File]::WriteAllText((Join-Path $output 'sbom.json'),'{"metadata":{"component":{"version":"0.21.0"}}}') }
         if($Case -eq 'sbom-invalid') { [IO.File]::WriteAllText((Join-Path $output 'sbom.json'),'invalid JSON') }
@@ -95,6 +95,14 @@ if($Case -in @('linked-artifacts','linked-release')) {
     else { $null=[IO.Directory]::CreateSymbolicLink($link,$held) }
 }
 $options=@{Platforms=$platforms;SkipVsix=$Case -notlike 'vsix-*'}
+$callerTransaction=$null
+if($Case -in @('success-caller-owned','caller-owned-failure','closed-transaction','forged-transaction')) {
+    . (Join-Path $Root 'scripts/ReleaseOutput.Helpers.ps1')
+    $callerTransaction=New-ReleaseOutputTransaction -RepoRoot $Root
+    $options.OutputTransaction=$callerTransaction
+    if($Case -eq 'closed-transaction'){$callerTransaction.Lock.Dispose()}
+    if($Case -eq 'forged-transaction'){$callerTransaction.Output=Join-Path $Root 'forged-output'}
+}
 if($Case -eq 'certification-failure') {
     $options.CertificationEvidenceRoot=Join-Path $Root 'evidence'
     $null=[IO.Directory]::CreateDirectory($options.CertificationEvidenceRoot)
@@ -103,9 +111,14 @@ if($Case -eq 'certification-failure') {
 $failed=$false
 try {
     & (Join-Path $Root 'scripts/publish-release.ps1') @options
+    if($Case -eq 'success-caller-owned') {
+        if(-not $callerTransaction.Lock.CanWrite -or -not (Test-Path -LiteralPath (Join-Path $Root 'release/sentinel'))) {throw 'Child closed or promoted the caller transaction'}
+        Complete-ReleaseOutputTransaction $callerTransaction
+    }
     if($Case -eq 'success-repeat') { & (Join-Path $Root 'scripts/publish-release.ps1') @options }
 }
 catch { $failed=$true; $problem=$_.Exception.Message + ' ' + $_.ScriptStackTrace }
+if($callerTransaction){Close-ReleaseOutputTransaction $callerTransaction}
 if($heldLock) { $heldLock.Dispose() }
 $retryBlocked=$false
 if($Case -eq 'rollback-failure') {
@@ -135,7 +148,8 @@ try {
     'asset-failure', 'publish-first-failure', 'publish-last-failure', 'sbom-failure', 'sbom-missing',
     'sbom-invalid', 'sbom-wrong-version', 'second-platform-failure', 'checksum-failure', 'certification-failure',
     'vsix-failure', 'vsix-nonzero', 'vsix-missing', 'vsix-empty', 'promotion-failure', 'rollback-failure', 'live-lock', 'linked-artifacts', 'linked-release',
-    'success', 'success-uppercase', 'success Unicode é [literal]', 'success-repeat', 'success-fresh', 'vsix-success']) {
+    'caller-owned-failure', 'closed-transaction', 'forged-transaction',
+    'success', 'success-uppercase', 'success Unicode é [literal]', 'success-repeat', 'success-fresh', 'vsix-success', 'success-caller-owned']) {
     const root = path.join(fixture, name);
     // Replace only the native compression boundary for injected failures. Inventory, hashing,
     // validation, promotion and cleanup execute unchanged; success uses the real .NET ZIP writer.
