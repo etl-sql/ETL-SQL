@@ -444,7 +444,7 @@ public partial class SpillStore : ISpillStore
         GC.SuppressFinalize(this);
     }
 
-    // ── JSON (legacy) ────────────────────────────────────────────────────────
+    // ── Typed JSON ───────────────────────────────────────────────────────────
 
     private class SecureSpillWriter : ISpillWriter
     {
@@ -456,6 +456,7 @@ public partial class SpillStore : ISpillStore
         private readonly StreamWriter _writer;
         private readonly IExecutionContext _context;
         private readonly string _chunkName;
+        private bool _headerWritten;
 
         public string ChunkName => _chunkName;
         public long BytesWritten { get; private set; }
@@ -493,6 +494,7 @@ public partial class SpillStore : ISpillStore
 
         public async Task WriteRowAsync(Row row)
         {
+            await WriteHeaderAsync();
             var dict = row.Columns;
             // Expand schema aliases into real entries so qualified names survive JSON round-trip.
             if (row.Schema != null)
@@ -504,7 +506,7 @@ public partial class SpillStore : ISpillStore
                         dict.TryAdd(alias, row[i]);
                 }
             }
-            var json = JsonSerializer.Serialize(dict);
+            var json = JsonRowCodec.Encode(dict);
             if (_context.Telemetry?.TelemetryEnabled ?? false)
             {
                 // Fast approximation (+2 for newline)
@@ -522,12 +524,20 @@ public partial class SpillStore : ISpillStore
             foreach (var r in rows) await WriteRowAsync(r);
         }
 
+        private async Task WriteHeaderAsync()
+        {
+            if (_headerWritten) return;
+            await _writer.WriteLineAsync(JsonRowCodec.Header.AsMemory(), _context.CancellationToken);
+            _headerWritten = true;
+        }
+
         public async ValueTask DisposeAsync()
         {
             if (_disposed) return;
             _disposed = true;
             try
             {
+                await WriteHeaderAsync();
                 await _writer.DisposeAsync();
                 if (_gzipStream != null) await _gzipStream.DisposeAsync();
                 if (_cryptoStream != null) await _cryptoStream.DisposeAsync();
@@ -564,6 +574,7 @@ public partial class SpillStore : ISpillStore
         private CryptoStream? _cryptoStream;
         private GZipStream? _gzipStream;
         private StreamReader? _reader;
+        private bool _headerRead;
 
         public string ChunkName => _chunkName;
 
@@ -618,14 +629,17 @@ public partial class SpillStore : ISpillStore
         public async Task<Row?> ReadRowAsync()
         {
             if (_reader == null) return null;
-            var line = await _reader.ReadLineAsync();
+            if (!_headerRead)
+            {
+                if (await _reader.ReadLineAsync(_cancellationToken) != JsonRowCodec.Header)
+                    throw new ExecutionException("Unsupported JSON spill format. Rerun the statement or recreate the saved session.");
+                _headerRead = true;
+            }
+            var line = await _reader.ReadLineAsync(_cancellationToken);
             if (line == null) return null;
 
-            var cols = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(line);
-            if (cols == null) return null;
-
             var row = new Row();
-            foreach (var kvp in cols) row[kvp.Key] = UnwrapJsonValue(kvp.Value);
+            foreach (var kvp in JsonRowCodec.Decode(line)) row[kvp.Key] = kvp.Value;
             return row;
         }
 

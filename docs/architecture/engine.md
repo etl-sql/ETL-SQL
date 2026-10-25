@@ -892,6 +892,13 @@ precedes encryption. An interrupted or failed write does not get a successful au
 
 **Read path** (`ISpillReader`)
 
+JSON chunks start with `ETLSQL-JSON-1`, followed by rows with explicit cell type tags. `JsonRowCodec`
+uses a fixed set of scalar types, preserving string contents, decimal scale, floating-point types,
+date/time kinds and offsets, GUIDs and binary values. Structured JSON remains `JsonElement` data;
+the decoder never resolves arbitrary CLR type names. Untyped rows from earlier saved sessions and
+unknown format markers or type tags fail with a recreate-session diagnostic. Empty JSON chunks remain
+valid. Recreate affected saved sessions even if their old JSON chunks were unencrypted.
+
 Before constructing the JSON or Arrow decoder, the reader verifies the entire envelope and ciphertext
 with a fixed-size buffer and compares the tag in constant time. Only then does it rewind the same
 open file and decrypt through a bounded ciphertext stream. This adds a verification read pass without

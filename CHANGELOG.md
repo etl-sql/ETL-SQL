@@ -12,6 +12,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Fix JSON spills silently turning text such as `'001'` into decimal `1`. A versioned format with
+  explicit scalar tags preserves strings and native scalar values, including decimal scale,
+  date/time kinds and offsets, GUIDs and binary data. Recreate saved sessions containing old
+  untyped JSON chunks. All 192 spill regressions pass, including encrypted/compressed reads,
+  persistent reopen, query output and tamper rejection; all 34 source checks pass.
+
 - Remove obsolete inline alert delivery fields from entities, API contracts and both database
   schemas. Alert delivery uses named Orchestrator notification attachments. Create/update
   requests reject retired or unknown fields; supported alert definitions and attachments survive

@@ -646,6 +646,14 @@ here; each one failed a single test per run and passed on rerun.
   four legacy-envelope rejections, wrong keys, renamed chunks and missing files. Valid empty
   partitions retain files. Earlier encrypted saved sessions require recreation; the breaking-change
   record and engine architecture document the migration and bounded verification read pass.
+- [x] **P0: Preserve scalar values across JSON spills.**
+  **Verified 2026-10-25:** all four old JSON encryption/compression combinations changed `'001'`
+  into decimal `1`; Arrow controls retained the text. JSON now has a versioned format marker and
+  explicit scalar tags, preserving text, decimal scale, floating-point values, dates and offsets,
+  GUIDs and binary values. Old untyped chunks fail with a recreate-session diagnostic.
+  All 192 spill regressions pass, including persistent reopen, query projections and length
+  predicates, empty chunks and complete-file authentication. All 34 source checks pass.
+  Local baseline and final evidence: `release-validation/spill-scalar-validation.json`.
 - [x] **`ON TYPE … WITH` completion branch** in `LanguageService`. Confirm whether that syntax still
   exists; remove the branch if not.
   **Verified 2026-10-24:** the parser requires `AS TYPE(...)`; the unsupported completion fallback

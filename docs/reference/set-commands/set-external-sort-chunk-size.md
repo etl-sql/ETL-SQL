@@ -19,7 +19,7 @@ SELECT * INTO #sorted_logs FROM #logs ORDER BY timestamp;
 
 ## Notes
 - Larger chunks reduce the number of merge passes but require more memory per chunk.
-- See also: `SET SORT_SPILL_THRESHOLD`, `SET EXTERNAL_HASH_PARTITIONS`.
+- See also: `SET EXTERNAL_HASH_PARTITIONS`.
 - Default: 50,000.
 
 ## References

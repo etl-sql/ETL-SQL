@@ -19,7 +19,7 @@ SELECT * INTO #all_txns FROM SalesDB.dbo.AllTransactions;
 
 ## Notes
 - Higher thresholds keep more data in memory, improving query performance for large staging tables.
-- See also: `SET JOIN_SPILL_THRESHOLD`, `SET SORT_SPILL_THRESHOLD`, `SET EXTERNAL_SORT_CHUNK_SIZE`.
+- See also: `SET JOIN_SPILL_THRESHOLD`, `SET EXTERNAL_SORT_CHUNK_SIZE`.
 - Default: 1,000,000.
 
 ## References

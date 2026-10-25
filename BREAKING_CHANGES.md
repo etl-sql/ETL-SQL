@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: JSON spill rows carry explicit scalar types
+- **What changed**: JSON spill rows now use a versioned typed representation. Text such as `'001'` and `'2026-10-25'` stays text; native numbers, dates, offsets, GUIDs and binary values retain their types. Earlier untyped JSON rows are rejected instead of inferring types from their contents.
+- **Who is affected**: Persistent sessions containing JSON spill chunks written before this change, including unencrypted chunks.
+- **Migration**: Recreate affected saved sessions by rerunning their source statements. Empty chunks remain readable. Arrow's representation and complete-file authentication are unchanged.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: Alert delivery uses named notifications
 - **What changed**: Alert entities, API responses and create/update requests no longer contain inline `Recipient`/`SmtpAlias` fields. SQLite and PostgreSQL migrations drop the two obsolete columns from `report_alerts`. Requests reject the retired fields, including explicit nulls, and other unknown fields.
 - **Who is affected**: API clients submitting `recipient` or `smtpAlias`, and catalogs retaining old inline alert delivery values.
