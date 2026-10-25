@@ -327,8 +327,6 @@ public class ReportsController : ControllerBase
             alert.VisualName,
             alert.Operator,
             alert.Threshold,
-            alert.Recipient,
-            alert.SmtpAlias,
             alert.IsActive,
             alert.Notifications
                 .OrderBy(n => n.OrchestratorAlias)
@@ -1442,8 +1440,6 @@ public class ReportsController : ControllerBase
             VisualName = req.VisualName,
             Operator = req.Operator,
             Threshold = req.Threshold,
-            Recipient = req.Recipient,
-            SmtpAlias = req.SmtpAlias,
             DisplayName = req.DisplayName,
             Description = req.Description,
             OptionsJson = SerializeDictionary(req.Options)
@@ -1470,8 +1466,6 @@ public class ReportsController : ControllerBase
             alert.Operator = req.Operator;
         }
         if (req.Threshold.HasValue) alert.Threshold = req.Threshold.Value;
-        if (req.Recipient is not null) alert.Recipient = req.Recipient;
-        if (req.SmtpAlias is not null) alert.SmtpAlias = req.SmtpAlias;
         if (req.DisplayName is not null) alert.DisplayName = req.DisplayName;
         if (req.Description is not null) alert.Description = req.Description;
         if (req.Options is not null) alert.OptionsJson = SerializeDictionary(req.Options);
@@ -1608,8 +1602,6 @@ public class ReportsController : ControllerBase
             alert.Operator = req.Operator;
         }
         if (req.Threshold.HasValue) alert.Threshold = req.Threshold.Value;
-        if (req.Recipient is not null) alert.Recipient = req.Recipient;
-        if (req.SmtpAlias is not null) alert.SmtpAlias = req.SmtpAlias;
         if (req.DisplayName is not null) alert.DisplayName = req.DisplayName;
         if (req.Description is not null) alert.Description = req.Description;
         if (req.Options is not null) alert.OptionsJson = SerializeDictionary(req.Options);

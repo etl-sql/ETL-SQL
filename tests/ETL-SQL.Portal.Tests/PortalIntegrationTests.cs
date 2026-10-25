@@ -43,6 +43,71 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
 
     // ── 1. Health endpoint ─────────────────────────────────────────────────────
 
+    [Theory]
+    [Trait("CompatBreak", "0.22")]
+    [InlineData("create", "recipient")]
+    [InlineData("create", "smtpAlias")]
+    [InlineData("update", "recipient")]
+    [InlineData("update", "smtpAlias")]
+    [InlineData("updateById", "recipient")]
+    [InlineData("updateById", "smtpAlias")]
+    public async Task Alerts_RejectInlineDeliveryWithoutChangingNotificationAttachments(string operation, string retiredField)
+    {
+        var token = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N");
+        int reportId;
+        int alertId;
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var owner = await db.Users.SingleAsync(user => user.UserName == "admin", CancellationToken.None);
+            var folder = new Folder { Name = suffix, Path = "/" + suffix, OwnerId = owner.Id };
+            db.Folders.Add(folder);
+            await db.SaveChangesAsync(CancellationToken.None);
+            var report = new Report { FolderId = folder.Id, Name = suffix, ScriptPath = "alert-contract.rptsql", CreatedBy = owner.Id };
+            db.Reports.Add(report);
+            await db.SaveChangesAsync(CancellationToken.None);
+            reportId = report.Id;
+            var alert = new ReportAlert
+            {
+                ReportId = reportId,
+                OwnerId = owner.Id,
+                Name = "Original_" + suffix,
+                VisualName = "Revenue",
+                Operator = ">",
+                Threshold = 10m,
+                Notifications = [new AlertNotification { OrchestratorAlias = "operations", NotificationName = "FinanceOps" }]
+            };
+            db.ReportAlerts.Add(alert);
+            await db.SaveChangesAsync(CancellationToken.None);
+            alertId = alert.Id;
+        }
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["name"] = "Changed_" + suffix,
+            ["visualName"] = "Revenue",
+            ["operator"] = ">",
+            ["threshold"] = 20m,
+            [retiredField] = "retired"
+        };
+        using var response = operation == "create"
+            ? await AuthPost(token, $"/api/reports/{reportId}/alerts", payload)
+            : await AuthPut(token, operation == "update"
+                ? $"/api/reports/{reportId}/alerts/{alertId}"
+                : $"/api/alerts/{alertId}", payload);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        await using var verification = _factory.Services.CreateAsyncScope();
+        var verifyDb = verification.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var retained = await verifyDb.ReportAlerts.Include(alert => alert.Notifications).SingleAsync(alert => alert.ReportId == reportId, CancellationToken.None);
+        Assert.Equal("Original_" + suffix, retained.Name);
+        Assert.Equal(10m, retained.Threshold);
+        var notification = Assert.Single(retained.Notifications);
+        Assert.Equal("operations", notification.OrchestratorAlias);
+        Assert.Equal("FinanceOps", notification.NotificationName);
+    }
+
     [Fact]
     [Trait("Category", "Smoke.Portal")]
     public async Task Health_ReturnsOkWithStatus()

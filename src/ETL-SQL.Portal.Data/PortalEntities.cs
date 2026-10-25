@@ -457,9 +457,7 @@ public class ReportAlert
     public string VisualName { get; set; } = "";
     public string Operator { get; set; } = ">=";
     public decimal Threshold { get; set; }
-    // Legacy inline delivery fields. New scripts use AlertNotifications instead.
-    public string? Recipient { get; set; }
-    public string? SmtpAlias { get; set; }
+    // COMPAT_BREAK: 0.22 — alert delivery is represented only by named notification attachments.
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

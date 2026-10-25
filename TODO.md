@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 23 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 22 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -616,9 +616,25 @@ here; each one failed a single test per run and passed on rerun.
   is unchanged; the full default lane and final-candidate security gates remain separate.
 - [ ] **Docker integration lane.** `IDockerManager` now takes a tenant scope and container names carry
   a tenant tag. Run `Category=Integration` Docker tests and `USE DOCKER` scripts end to end.
-- [ ] **Alert inline delivery columns.** `ReportAlert.Recipient` and `SmtpAlias` predate
+  **In progress:** Windows Docker checks verify 200 engine cases, including a new same-alias,
+  two-tenant `USE DOCKER` scenario covering separate rows, interleaved connection lookup, tagged
+  names and scoped lifecycle actions. All 64 Portal integration cases pass without skips.
+  The original engine run's one ODBC failure is resolved by the test's documented Driver 17
+  override, using the installed driver. Its 24 Linux sandbox lifecycle cases remain skipped on
+  Windows and require Linux evidence before closing this item.
+- [x] **Alert inline delivery columns.** `ReportAlert.Recipient` and `SmtpAlias` predate
   `AlertNotifications`. Removing them needs EF migrations for SQLite and PostgreSQL; with no
   deployments, consider squashing the migration history at the same time.
+  **Verified locally 2026-10-25:** the entity and API fields are removed, with two migrations
+  preserving the existing history. Real SQLite and PostgreSQL upgrade tests preserve definitions
+  and named notification attachments, then update them successfully. All 1,621 Portal default
+  cases pass without skips; coverage verifies every one of its 1,151 methods. Original failures
+  and the complete recovery of both failing shards are retained. Twenty-one focused contract,
+  HTTP, PII and provider-policy checks pass, alongside the two real-provider upgrade cases.
+  The pre-deployment contract exception allows only the two reviewed column drops on each
+  provider; older Portal hosts must stop before applying this migration. API payloads reject
+  retired fields, including explicit nulls. The breaking-change record documents migration and
+  rollback limits; the generated browser contract set and both browser gates pass.
 - [ ] **Saved-view flat parameters.** Decide whether `Parameters`/`Filters` on the saved-view API
   stay. If not, have `CREATE SAVED VIEW` send the resolved-state envelope and drop `ParametersJson`
   and `FiltersJson`.

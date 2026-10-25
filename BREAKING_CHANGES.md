@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: Alert delivery uses named notifications
+- **What changed**: Alert entities, API responses and create/update requests no longer contain inline `Recipient`/`SmtpAlias` fields. SQLite and PostgreSQL migrations drop the two obsolete columns from `report_alerts`. Requests reject the retired fields, including explicit nulls, and other unknown fields.
+- **Who is affected**: API clients submitting `recipient` or `smtpAlias`, and catalogs retaining old inline alert delivery values.
+- **Migration**: Attach a named Orchestrator notification with `ALTER ALERT <name> ADD NOTIFICATION <orchestrator>.<notification>` or the notification attachment API. Remove the retired fields from requests. Stop older Portal hosts before applying this migration; mixed-version rolling operation across it is unsupported. The migration preserves alert definitions and notification attachments. Downgrading recreates empty inline columns; recovering their discarded values requires a pre-upgrade database backup.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Syntax: Retired forms use canonical commands
 - **What changed**: The `FILE` connector name, `DROP CHART`, `DOCKER <verb>`, `LINEAGE EXPORT`, `@sensitivity` stewardship alias, comma-less TOOLTIP parts, and `ui old` command are removed. Connection completion no longer offers options for the unsupported `ON TYPE … WITH` constructor.
 - **Who is affected**: Scripts and editor workflows using these retired forms.

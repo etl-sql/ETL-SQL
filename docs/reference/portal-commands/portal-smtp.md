@@ -1,5 +1,6 @@
-# Portal SMTP Connections
-Register a mail relay in the portal's governed connection catalog inside an `EXECUTE portal` block. SMTP is an ordinary connector, so it uses the ordinary connector grammar — there is no separate SMTP statement family. Subscriptions and alerts reference the connection by alias (`AT <alias>`), so delivery never embeds mail credentials in scripts or job definitions.
+# SMTP
+
+Register a mail relay in the portal's governed connection catalog inside an `EXECUTE portal` block. SMTP uses the ordinary connector grammar. Subscriptions reference the connection with `AT <alias>`; alerts attach named Orchestrator notifications for delivery.
 
 ## Syntax
 ```sql
@@ -38,7 +39,7 @@ EXECUTE portal BEGIN
 END;
 ```
 
-The portal never holds the plaintext: the reference is passed through to the engine, which resolves it when the connection is opened.
+The catalog keeps the reference. The engine resolves the credential when opening the connection.
 
 ## Examples
 ```sql

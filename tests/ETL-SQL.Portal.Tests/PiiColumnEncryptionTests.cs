@@ -76,15 +76,6 @@ public sealed class PiiColumnEncryptionTests : IDisposable
         };
         db.Subscriptions.Add(subscription);
 
-        var alert = new ReportAlert
-        {
-            ReportId = 1,
-            OwnerId = 1,
-            Name = "Alert 1",
-            Recipient = "steward@example.com"
-        };
-        db.ReportAlerts.Add(alert);
-
         await db.SaveChangesAsync();
 
         // 2. Query using a raw ADO.NET connection to verify that data is indeed encrypted on disk
@@ -123,7 +114,12 @@ public sealed class PiiColumnEncryptionTests : IDisposable
         var readSub = await dbRead.Subscriptions.FirstAsync();
         Assert.Equal("alice@example.com;bob@example.com", readSub.Recipients);
 
-        var readAlert = await dbRead.ReportAlerts.FirstAsync();
-        Assert.Equal("steward@example.com", readAlert.Recipient);
+        await dbRead.Database.OpenConnectionAsync(CancellationToken.None);
+        await using var recipientCommand = dbRead.Database.GetDbConnection().CreateCommand();
+        recipientCommand.CommandText = "SELECT recipients FROM subscriptions LIMIT 1";
+        var storedRecipients = Assert.IsType<string>(await recipientCommand.ExecuteScalarAsync(CancellationToken.None));
+        Assert.StartsWith("dp:", storedRecipients, StringComparison.Ordinal);
+        Assert.DoesNotContain("alice@example.com", storedRecipients, StringComparison.Ordinal);
+
     }
 }

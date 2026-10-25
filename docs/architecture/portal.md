@@ -94,6 +94,13 @@ StudioPrivateDraft ──> PortalUser                  (owner; no one else can r
 
 - **Soft-delete on `Report`** — `IsDeleted = true` hides records from all queries. Snapshots are preserved on disk after soft-deletion; hard deletion is a manual operation.
 
+- **Alert delivery uses named notifications** — `ReportAlert` owns the condition and an
+  `AlertNotification` collection naming Orchestrator notifications. v0.22.0 removes the obsolete
+  inline recipient/SMTP columns from both catalog providers. The pre-deployment migration is a
+  deliberate exception to rolling expansion: stop older Portal hosts before applying it.
+  Mixed-version rolling operation across that migration is unsupported. Migration contract tests
+  permit only those two column drops and real provider tests preserve definitions and attachments.
+
 - **Folder and report ACLs** — `FolderAcl` remains group-based for broad catalog access.
   `ReportAcl` adds report-scoped user or group grants for self-service access approvals, so an owner
   can approve one restricted report without granting the entire folder. Effective report permission

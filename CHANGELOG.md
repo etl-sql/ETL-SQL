@@ -12,6 +12,21 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Remove obsolete inline alert delivery fields from entities, API contracts and both database
+  schemas. Alert delivery uses named Orchestrator notification attachments. Create/update
+  requests reject retired or unknown fields; supported alert definitions and attachments survive
+  upgrades on SQLite and PostgreSQL.
+  Verified all 1,621 Portal default cases without failures or skips, plus real-provider upgrades.
+  The pre-deployment policy exception permits only the reviewed column drops; older Portal hosts
+  must stop before applying this migration.
+
+- Verify real `USE DOCKER` scripts for two tenants sharing one alias: rows, interleaved connection
+  lookups, tagged names and lifecycle actions remain separate. Windows integration checks verify
+  200 engine and 64 Portal cases; the 24 Linux sandbox lifecycle cases still require Linux evidence.
+
+- Keep VS Code test caches out of the browser-contract source scan so private IPC endpoints do
+  not block regeneration. Regression fixtures retain detection of changes to actual inputs.
+
 - Verified deprecated-syntax removal across all nine default test projects: 15,213 passes,
   zero failures and six explicit platform/controlled-host skips. Fresh sequential test hosts
   preserve complete discovered-method coverage after the original monolithic run exhausted memory.

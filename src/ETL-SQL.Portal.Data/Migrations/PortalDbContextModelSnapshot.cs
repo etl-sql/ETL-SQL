@@ -1798,17 +1798,9 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("owner_id");
 
-                    b.Property<string>("Recipient")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("recipient");
-
                     b.Property<int>("ReportId")
                         .HasColumnType("INTEGER")
                         .HasColumnName("report_id");
-
-                    b.Property<string>("SmtpAlias")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("smtp_alias");
 
                     b.Property<decimal>("Threshold")
                         .HasColumnType("TEXT")

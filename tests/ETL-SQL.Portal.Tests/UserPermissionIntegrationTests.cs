@@ -325,7 +325,6 @@ namespace ETL_SQL.Portal.Tests
                         VisualName = "Card1",
                         Operator = ">=",
                         Threshold = 10000,
-                        Recipient = "finance_read@test.local",
                         IsActive = true
                     });
 
@@ -857,8 +856,7 @@ namespace ETL_SQL.Portal.Tests
                 name = "Read-only alert",
                 visualName = "Card1",
                 @operator = ">=",
-                threshold = 1,
-                recipient = "finance_read@test.local"
+                threshold = 1
             })).StatusCode);
 
             Assert.Equal(HttpStatusCode.Created, (await AuthPost(tFinPub, $"/api/reports/{rRevenueId}/alerts", new
@@ -866,8 +864,7 @@ namespace ETL_SQL.Portal.Tests
                 name = "Publisher alert",
                 visualName = "Card1",
                 @operator = ">=",
-                threshold = 1,
-                recipient = "finance_pub@test.local"
+                threshold = 1
             })).StatusCode);
 
             Assert.Equal(HttpStatusCode.Created, (await AuthPost(tFinRead, "/api/subscriptions", new

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ETL_SQL.Portal.Models;
 
 public record UploadScriptRequest(string Filename, string ContentBase64);
@@ -145,24 +147,23 @@ public record SavedReportViewDto(
     ETL_SQL.Core.Reporting.ResolvedReportState? State = null,
     string? DriftWarning = null);
 
+// COMPAT_BREAK: 0.22 — retired inline delivery fields are rejected, including explicit nulls.
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record CreateReportAlertRequest(
     string Name,
     string VisualName,
     string Operator,
     decimal Threshold,
-    string? Recipient,
-    string? SmtpAlias,
     string? DisplayName,
     string? Description,
     Dictionary<string, string>? Options);
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record UpdateReportAlertRequest(
     string? Name,
     string? VisualName,
     string? Operator,
     decimal? Threshold,
-    string? Recipient,
-    string? SmtpAlias,
     string? DisplayName,
     string? Description,
     Dictionary<string, string>? Options,
@@ -186,8 +187,6 @@ public record ReportAlertDto(
     string VisualName,
     string Operator,
     decimal Threshold,
-    string? Recipient,
-    string? SmtpAlias,
     bool IsActive,
     IReadOnlyList<AlertNotificationDto> Notifications,
     DateTime CreatedAt,
