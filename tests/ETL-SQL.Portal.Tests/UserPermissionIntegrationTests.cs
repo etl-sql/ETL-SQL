@@ -299,8 +299,7 @@ namespace ETL_SQL.Portal.Tests
                         ReportId = rRevenue.Id,
                         UserId = uFinRead.Id,
                         Name = "Default Finance View",
-                        ParametersJson = "{}",
-                        FiltersJson = "{}",
+                        StateJson = """{"schemaVersion":1,"parameters":{}}""",
                         IsDefault = true
                     });
 
@@ -845,8 +844,7 @@ namespace ETL_SQL.Portal.Tests
             var savedView = await AuthPost(tFinRead, $"/api/reports/{rRevenueId}/saved-views", new
             {
                 name = "Finance workflow view",
-                parameters = new Dictionary<string, string>(),
-                filters = new Dictionary<string, string>(),
+                stateJson = """{"schemaVersion":1,"parameters":{}}""",
                 isDefault = false
             });
             Assert.Equal(HttpStatusCode.Created, savedView.StatusCode);

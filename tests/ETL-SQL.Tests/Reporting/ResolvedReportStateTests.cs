@@ -6,7 +6,7 @@ namespace ETL_SQL.Tests.Reporting;
 
 /// <summary>
 /// Coverage for the shared, versioned resolved-state envelope and its typed value serialization,
-/// including backward-compatible reading of legacy ParametersJson/FiltersJson.
+/// including scalar type fidelity.
 /// </summary>
 public class ResolvedReportStateTests
 {
@@ -37,13 +37,16 @@ public class ResolvedReportStateTests
     }
 
     [Fact]
-    public void ReportStateValue_FromLegacyString_RecoversTypes()
+    public void ReportStateValue_FromObject_PreservesStringsAndNativeKinds()
     {
-        Assert.Equal(ReportStateValueKind.Number, ReportStateValue.FromLegacyString("2026").Kind);
-        Assert.Equal(ReportStateValueKind.Boolean, ReportStateValue.FromLegacyString("true").Kind);
-        Assert.Equal(ReportStateValueKind.String, ReportStateValue.FromLegacyString("West").Kind);
-        // Leading-zero codes must stay strings, not become numbers.
-        Assert.Equal(ReportStateValueKind.String, ReportStateValue.FromLegacyString("007").Kind);
+        Assert.Equal(ReportStateValueKind.Number, ReportStateValue.FromObject(2026m).Kind);
+        Assert.Equal(ReportStateValueKind.Boolean, ReportStateValue.FromObject(true).Kind);
+        foreach (var text in new[] { "2026", "true", "West", "007" })
+        {
+            var value = ReportStateValue.FromObject(text);
+            Assert.Equal(ReportStateValueKind.String, value.Kind);
+            Assert.Equal(text, value.StringValue);
+        }
     }
 
     [Fact]
@@ -89,6 +92,10 @@ public class ResolvedReportStateTests
     [InlineData("[]")]
     [InlineData("{\"schemaVersion\":99}")]
     [InlineData("{\"schemaVersion\":1,\"parameters\":{\"@x\":{\"bad\":true}}}")]
+    [InlineData("{\"parameters\":{\"@é\":\"first\",\"@É\":\"second\"}}")]
+    [InlineData("{\"visible\":{\"Panel\":true,\"panel\":false}}")]
+    [InlineData("{\"collapsed\":{\"Notes\":true,\"notes\":false}}")]
+    [Trait("CompatBreak", "0.22")]
     public void Envelope_TryFromJson_RejectsInvalidClientState(string json)
     {
         Assert.False(ResolvedReportState.TryFromJson(json, out _, out var error));
@@ -96,19 +103,23 @@ public class ResolvedReportStateTests
     }
 
     [Fact]
-    public void Envelope_FromLegacy_ReadsParametersAndFiltersJson()
+    public void Envelope_ParameterProjectionRetainsTextAndNativeValues()
     {
-        var state = ResolvedReportState.FromLegacy(
-            parametersJson: "{\"@region\":\"West\",\"@year\":2026}",
-            filtersJson: "{\"category\":\"Hardware\"}",
-            scriptHash: "hash1");
+        var state = ResolvedReportState.FromJson("""{"parameters":{"@code":"001","@year":2026,"@live":true}}""");
+        var parameters = state.ToParameterStrings();
+        Assert.Equal("001", parameters["@code"]);
+        Assert.Equal("2026", parameters["@year"]);
+        Assert.Equal("TRUE", parameters["@live"]);
+    }
 
-        Assert.Equal("hash1", state.ScriptHash);
-        Assert.Equal(ReportStateValueKind.String, state.Parameters["@region"].Kind);
-        Assert.Equal(ReportStateValueKind.Number, state.Parameters["@year"].Kind);
-        // A filter key without a leading @ is normalized to a parameter name.
-        Assert.True(state.Parameters.ContainsKey("@category"));
-        Assert.Equal("Hardware", state.Parameters["@category"].ToCanonicalString());
+    [Fact]
+    [Trait("CompatBreak", "0.22")]
+    public void PersistedStateResolvesCaseVariantsInSourceOrder()
+    {
+        var state = ResolvedReportState.FromJson("""{"parameters":{"@Region":"West","@region":"East","@é":"001","@É":"002"}}""");
+        Assert.Equal(2, state.Parameters.Count);
+        Assert.Equal("East", state.Parameters["@REGION"].StringValue);
+        Assert.Equal("002", state.Parameters["@é"].StringValue);
     }
 
     [Fact]

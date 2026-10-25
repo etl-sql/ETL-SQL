@@ -235,8 +235,6 @@ public class ReportsController : ControllerBase
             view.Id,
             view.ReportId,
             view.Name,
-            DeserializeDictionary(view.ParametersJson),
-            DeserializeDictionary(view.FiltersJson),
             view.StateJson,
             view.ScriptHash,
             view.IsDefault,
@@ -247,19 +245,13 @@ public class ReportsController : ControllerBase
     }
 
     /// <summary>
-    /// Reads a saved view as the shared resolved-state envelope. Views written before the envelope
-    /// existed carry only <c>ParametersJson</c>/<c>FiltersJson</c>, so they are converted on read and
-    /// converge on the same typed shape without a data migration.
+    /// Reads the single stored resolved-state envelope. The schema migration upgrades flat maps.
     /// </summary>
     private static ResolvedReportState BuildSavedViewEnvelope(SavedReportView view)
     {
-        if (!string.IsNullOrWhiteSpace(view.StateJson))
-        {
-            var parsed = ResolvedReportState.FromJson(view.StateJson);
-            parsed.ScriptHash ??= view.ScriptHash;
-            return parsed;
-        }
-        return ResolvedReportState.FromLegacy(view.ParametersJson, view.FiltersJson, view.ScriptHash);
+        var parsed = ResolvedReportState.FromJson(view.StateJson);
+        parsed.ScriptHash ??= view.ScriptHash;
+        return parsed;
     }
 
     /// <summary>Normalizes a script hash for comparison; Portal stores them as <c>sha256:hex</c>.</summary>
@@ -286,18 +278,15 @@ public class ReportsController : ControllerBase
     }
 
     /// <summary>
-    /// Produces the canonical <c>StateJson</c> to persist. An explicit envelope from the client wins;
-    /// otherwise a legacy parameter/filter map is upgraded so every stored view carries an envelope.
+    /// Produces the canonical <c>StateJson</c> to persist from a client envelope or empty state.
     /// Returns false when the supplied envelope is not valid JSON.
     /// </summary>
     private static bool TryBuildStateJson(
         string? requestedStateJson,
-        Dictionary<string, string>? parameters,
-        Dictionary<string, string>? filters,
         string? scriptHash,
         out string? stateJson)
     {
-        stateJson = null;
+        stateJson = new ResolvedReportState { ScriptHash = scriptHash }.ToJson();
         if (!string.IsNullOrWhiteSpace(requestedStateJson))
         {
             if (!ResolvedReportState.TryFromJson(requestedStateJson, out var envelope, out _))
@@ -307,12 +296,6 @@ public class ReportsController : ControllerBase
             return true;
         }
 
-        if ((parameters is null || parameters.Count == 0) && (filters is null || filters.Count == 0))
-            return true;
-
-        var legacy = ResolvedReportState
-            .FromLegacy(SerializeDictionary(parameters), SerializeDictionary(filters), scriptHash);
-        stateJson = legacy.ToJson();
         return true;
     }
 
@@ -1323,7 +1306,7 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (perm is null) return Forbid();
         if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest(new { error = "Saved view name is required." });
-        if (!TryBuildStateJson(req.StateJson, req.Parameters, req.Filters, report.PublishedScriptHash, out var stateJson))
+        if (!TryBuildStateJson(req.StateJson, report.PublishedScriptHash, out var stateJson))
             return BadRequest(new { error = "State is not valid JSON." });
         if (req.IsDefault) await ClearDefaultSavedViewsAsync(id);
 
@@ -1332,8 +1315,6 @@ public class ReportsController : ControllerBase
             ReportId = id,
             UserId = CurrentUserId,
             Name = req.Name,
-            ParametersJson = SerializeDictionary(req.Parameters),
-            FiltersJson = SerializeDictionary(req.Filters),
             StateJson = stateJson,
             // Stamp the revision the view was captured against so later drift is detectable.
             ScriptHash = report.PublishedScriptHash,
@@ -1356,14 +1337,12 @@ public class ReportsController : ControllerBase
         var view = await catalogScope.SavedReportViews.FirstOrDefaultAsync(v => v.Id == viewId && v.ReportId == id && v.UserId == CurrentUserId);
         if (view is null) return NotFound();
 
-        var stateChanged = req.StateJson is not null || req.Parameters is not null || req.Filters is not null;
+        var stateChanged = req.StateJson is not null;
         string? stateJson = view.StateJson;
-        if (stateChanged && !TryBuildStateJson(req.StateJson, req.Parameters, req.Filters, report.PublishedScriptHash, out stateJson))
+        if (stateChanged && !TryBuildStateJson(req.StateJson, report.PublishedScriptHash, out stateJson))
             return BadRequest(new { error = "State is not valid JSON." });
 
         if (req.Name is not null) view.Name = req.Name;
-        if (req.Parameters is not null) view.ParametersJson = SerializeDictionary(req.Parameters);
-        if (req.Filters is not null) view.FiltersJson = SerializeDictionary(req.Filters);
         if (stateChanged)
         {
             view.StateJson = stateJson;
@@ -2123,7 +2102,7 @@ public class ReportsController : ControllerBase
 
     /// <summary>
     /// Saves (or replaces) the current user's default view for a report. The body carries the shared
-    /// resolved-state envelope; the legacy parameter map is still accepted so older clients keep working.
+    /// resolved-state envelope.
     /// </summary>
     [HttpPost("reports/{id:int}/saved-views/default")]
     public async Task<IActionResult> SaveDefaultView(int id, [FromBody] SaveDefaultReportViewRequest? body)
@@ -2137,16 +2116,13 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectiveReportPermissionAsync(report);
         if (!perm.HasValue) return Forbid();
 
-        var parameters = body?.Parameters;
-        var envelope = body?.State ?? ResolvedReportState.FromLegacy(SerializeDictionary(parameters), null);
+        var envelope = body?.State ?? new ResolvedReportState();
         if (envelope.SchemaVersion != ResolvedReportState.CurrentSchemaVersion)
             return BadRequest(new { error = $"Unsupported report-state schema version '{envelope.SchemaVersion}'." });
         envelope.SchemaVersion = ResolvedReportState.CurrentSchemaVersion;
         // The server, not the client, stamps the revision the view was captured against.
         envelope.ScriptHash = report.PublishedScriptHash;
 
-        var paramsJson = System.Text.Json.JsonSerializer.Serialize(
-            parameters ?? envelope.ToParameterStrings());
         const string defaultName = "My Default View";
         var savedViews = await catalogScope.SavedReportViews
             .Where(v => v.ReportId == id && v.UserId == CurrentUserId
@@ -2175,7 +2151,6 @@ public class ReportsController : ControllerBase
         }
 
         defaultView.Name = defaultName;
-        defaultView.ParametersJson = paramsJson;
         defaultView.StateJson = envelope.ToJson();
         defaultView.ScriptHash = report.PublishedScriptHash;
         defaultView.IsDefault = true;

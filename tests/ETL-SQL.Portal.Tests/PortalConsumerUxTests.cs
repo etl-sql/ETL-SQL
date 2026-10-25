@@ -335,18 +335,19 @@ public class PortalConsumerUxTests : IClassFixture<PortalWebFactory>
         await db.SaveChangesAsync();
 
         var userCtrl = CreateReportsController(db, userId: 1, isAdmin: true);
-        var paramsDict = new Dictionary<string, string> { ["@region"] = "Midwest", ["@year"] = "2026" };
-
-        var saveRes = await userCtrl.SaveDefaultView(report.Id, new SaveDefaultReportViewRequest(Parameters: paramsDict));
+        var state = ETL_SQL.Core.Reporting.ResolvedReportState.FromJson("""{"parameters":{"@region":"Midwest","@year":2026}}""");
+        var saveRes = await userCtrl.SaveDefaultView(report.Id, new SaveDefaultReportViewRequest(State: state));
         Assert.IsType<OkObjectResult>(saveRes);
 
         var secondSaveRes = await userCtrl.SaveDefaultView(report.Id,
-            new SaveDefaultReportViewRequest(Parameters: new Dictionary<string, string> { ["@region"] = "West" }));
+            new SaveDefaultReportViewRequest(State: ETL_SQL.Core.Reporting.ResolvedReportState.FromJson("""{"parameters":{"@region":"West"}}""")));
         Assert.IsType<OkObjectResult>(secondSaveRes);
 
         var getRes = await userCtrl.GetDefaultView(report.Id);
         var getOk = Assert.IsType<OkObjectResult>(getRes);
         Assert.NotNull(getOk.Value);
+        var dto = Assert.IsType<SavedReportViewDto>(getOk.Value);
+        Assert.Equal("West", dto.State!.Parameters["@region"].StringValue);
         Assert.Equal(1, await db.SavedReportViews.CountAsync(v => v.ReportId == report.Id && v.UserId == 1 && v.Name == "My Default View"));
     }
 

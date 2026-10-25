@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: Saved views store one resolved-state envelope
+- **What changed**: Saved-view APIs reject top-level `parameters`/`filters`, including nulls, and responses no longer contain the flat maps. `CREATE SAVED VIEW` sends a resolved-state envelope and preserves string-literal values. SQLite and PostgreSQL migrations backfill old maps into `StateJson` before dropping `parameters_json`/`filters_json`.
+- **Who is affected**: Clients using flat saved-view fields and catalogs containing old flat-only views.
+- **Migration**: Send `stateJson` for create/update or `state` for the default-view route. Stop older Portal hosts before upgrading; mixed-version rolling operation is unsupported. Existing envelopes remain unchanged. Flat string maps gain `@` prefixes and filters override parameters; numeric/boolean-looking strings keep their contents instead of being guessed into native types. Invalid old maps stop the upgrade and must be repaired or replaced with a valid envelope. Downgrading restores empty flat columns while retaining the envelopes.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: JSON spill rows carry explicit scalar types
 - **What changed**: JSON spill rows now use a versioned typed representation. Text such as `'001'` and `'2026-10-25'` stays text; native numbers, dates, offsets, GUIDs and binary values retain their types. Earlier untyped JSON rows are rejected instead of inferring types from their contents.
 - **Who is affected**: Persistent sessions containing JSON spill chunks written before this change, including unencrypted chunks.

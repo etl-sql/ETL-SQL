@@ -12,6 +12,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Store saved views solely as resolved-state envelopes. APIs reject retired flat maps, while
+  `CREATE SAVED VIEW` preserves its string assignments in the envelope. SQLite and PostgreSQL
+  migrations retain saved state and backfill old maps before dropping their columns. Unicode
+  parameter names use engine comparison rules; malformed old maps stop the upgrade. Stop older
+  Portal hosts before migrating. All 1,636 Portal default cases and 140 selected core/bookmark
+  cases pass, alongside real PostgreSQL upgrades. Corrected saved-view guides to describe private
+  ownership and parser-supported scripting forms.
+
 - Fix JSON spills silently turning text such as `'001'` into decimal `1`. A versioned format with
   explicit scalar tags preserves strings and native scalar values, including decimal scale,
   date/time kinds and offsets, GUIDs and binary data. Recreate saved sessions containing old

@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 22 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 21 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -635,9 +635,16 @@ here; each one failed a single test per run and passed on rerun.
   provider; older Portal hosts must stop before applying this migration. API payloads reject
   retired fields, including explicit nulls. The breaking-change record documents migration and
   rollback limits; the generated browser contract set and both browser gates pass.
-- [ ] **Saved-view flat parameters.** Decide whether `Parameters`/`Filters` on the saved-view API
-  stay. If not, have `CREATE SAVED VIEW` send the resolved-state envelope and drop `ParametersJson`
-  and `FiltersJson`.
+- [x] **Saved-view flat parameters.** Store one resolved-state envelope and remove the flat maps.
+  **Verified 2026-10-25:** create/update/default APIs reject retired fields, including nulls;
+  `CREATE SAVED VIEW` sends an envelope with string-literal values preserved. SQLite and PostgreSQL
+  migrations preserve existing envelopes and backfill valid old maps before dropping both columns.
+  Unicode case variants resolve in source order through the engine's ordinal comparison, without
+  relying on provider case folding. Invalid old maps stop the transactional upgrade. Stop older
+  Portal hosts first; mixed-version operation is unsupported. All 1,636 Portal default cases pass,
+  covering every one of 1,154 discovered methods once. Both real PostgreSQL upgrade cases and all
+  140 selected core/bookmark/syntax/documentation cases pass. Browser contracts are regenerated;
+  browser type/lint gates are clean. Local evidence: `release-validation/saved-view-validation.json`.
 - [x] **JSON spill format.** Authenticate encrypted spill data before decoding it.
   **Verified 2026-10-24:** a modified CBC IV was accepted by the old JSON reader. JSON and Arrow
   now share a versioned AES-256-CBC/HMAC-SHA256 envelope with separate HKDF-derived keys, binding

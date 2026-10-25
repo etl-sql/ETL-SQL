@@ -434,8 +434,6 @@ public class SavedReportView
     public int UserId { get; set; }
     public PortalUser User { get; set; } = null!;
     public string Name { get; set; } = "";
-    public string? ParametersJson { get; set; }
-    public string? FiltersJson { get; set; }
     public string? StateJson { get; set; }
     public string? ScriptHash { get; set; }
     public bool IsDefault { get; set; }

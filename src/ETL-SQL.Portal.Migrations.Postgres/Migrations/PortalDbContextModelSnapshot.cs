@@ -2290,10 +2290,6 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<string>("FiltersJson")
-                        .HasColumnType("text")
-                        .HasColumnName("filters_json");
-
                     b.Property<bool>("IsDefault")
                         .HasColumnType("boolean")
                         .HasColumnName("is_default");
@@ -2302,10 +2298,6 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("name");
-
-                    b.Property<string>("ParametersJson")
-                        .HasColumnType("text")
-                        .HasColumnName("parameters_json");
 
                     b.Property<int>("ReportId")
                         .HasColumnType("integer")

@@ -109,36 +109,32 @@ public record AnonymousReportAccessDto(
     DateTime? RevokedAt,
     string Status);
 
+// COMPAT_BREAK: 0.22 — saved views accept only the shared resolved-state envelope.
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record CreateSavedReportViewRequest(
     string Name,
-    Dictionary<string, string>? Parameters,
-    Dictionary<string, string>? Filters,
     string? StateJson = null,
     string? ScriptHash = null,
     bool IsDefault = false);
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record UpdateSavedReportViewRequest(
     string? Name,
-    Dictionary<string, string>? Parameters,
-    Dictionary<string, string>? Filters,
     bool? IsDefault,
     string? StateJson = null,
     string? ScriptHash = null);
 
 /// <summary>
-/// Body for saving the caller's default view. <c>State</c> is the shared resolved-state envelope;
-/// <c>Parameters</c> is the legacy flat map, still accepted so pre-envelope clients keep working.
+/// Body for saving the caller's default view as the shared resolved-state envelope.
 /// </summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record SaveDefaultReportViewRequest(
-    ETL_SQL.Core.Reporting.ResolvedReportState? State = null,
-    Dictionary<string, string>? Parameters = null);
+    ETL_SQL.Core.Reporting.ResolvedReportState? State = null);
 
 public record SavedReportViewDto(
     int Id,
     int ReportId,
     string Name,
-    Dictionary<string, string>? Parameters,
-    Dictionary<string, string>? Filters,
     string? StateJson,
     string? ScriptHash,
     bool IsDefault,

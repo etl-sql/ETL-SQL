@@ -17,6 +17,7 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Reporting;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.Portal
@@ -1071,11 +1072,17 @@ namespace ETL_SQL.Connectors.Portal
         private async Task CreateSavedViewAsync(CreatePortalSavedViewStatement stmt, IExecutionContext context)
         {
             var reportId = await LookupReportIdAsync(stmt.ReportName);
+            var state = new ResolvedReportState();
+            foreach (var parameter in stmt.Parameters)
+            {
+                var name = "@" + parameter.Name.TrimStart('@');
+                if (!state.Parameters.TryAdd(name, ReportStateValue.FromString(parameter.Value)))
+                    throw new ExecutionException($"Saved view repeats parameter '{name}'.");
+            }
             var json = await SendJsonAsync(HttpMethod.Post, $"api/reports/{reportId}/saved-views", new
             {
                 Name = stmt.Name,
-                Parameters = BuildParameterDictionary(stmt.Parameters),
-                Filters = (Dictionary<string, string>?)null,
+                StateJson = state.ToJson(),
                 IsDefault = stmt.IsDefault
             });
             await PublishJsonResultAsync(json, stmt.IntoTable, context);

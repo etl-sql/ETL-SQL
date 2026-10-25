@@ -586,9 +586,7 @@ public class ExecutionController(
         if (!PortalPathGuard.TryResolveScript(portalConfig, _datasetScope.TenantId, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
-        var state = string.IsNullOrWhiteSpace(view.StateJson)
-            ? ETL_SQL.Core.Reporting.ResolvedReportState.FromLegacy(view.ParametersJson, view.FiltersJson, view.ScriptHash)
-            : ETL_SQL.Core.Reporting.ResolvedReportState.FromJson(view.StateJson);
+        var state = ETL_SQL.Core.Reporting.ResolvedReportState.FromJson(view.StateJson);
         state.ScriptHash = view.ScriptHash;
 
         var svc = await GetOrRebuildSessionAsync(id, resolvedScriptPath);

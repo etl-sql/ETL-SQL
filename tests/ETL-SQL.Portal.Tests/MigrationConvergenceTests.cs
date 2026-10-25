@@ -118,6 +118,21 @@ public sealed class MigrationConvergenceTests : IDisposable
                 continue;
 
             var migration = migrations.CreateMigration(typeInfo, provider);
+            if (id is "20261025130738_ConsolidateSavedViewState" or "20261025130743_ConsolidateSavedViewState")
+            {
+                // Pre-deployment consolidation backfills the authoritative envelope, then drops
+                // only its two obsolete flat maps. Mixed-version operation is unsupported.
+                Assert.Equal(4, migration.UpOperations.Count);
+                Assert.All(migration.UpOperations.Take(2), operation => Assert.IsType<SqlOperation>(operation));
+                var drops = migration.UpOperations.Skip(2).Select(operation => Assert.IsType<DropColumnOperation>(operation)).ToArray();
+                Assert.All(drops, column =>
+                {
+                    Assert.Equal("saved_report_views", column.Table);
+                    Assert.Null(column.Schema);
+                });
+                Assert.Equal(new[] { "filters_json", "parameters_json" }, drops.Select(column => column.Name).Order(StringComparer.Ordinal).ToArray());
+                continue;
+            }
             if (id is "20261025111254_RemoveAlertInlineDelivery" or "20261025111259_RemoveAlertInlineDelivery")
             {
                 // Pre-deployment v0.22 contract cleanup: retaining unused recipient/SMTP fields

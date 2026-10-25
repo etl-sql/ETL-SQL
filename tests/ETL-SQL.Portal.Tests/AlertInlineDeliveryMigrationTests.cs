@@ -46,9 +46,10 @@ internal static class AlertInlineDeliveryMigrationContract
     {
         await using var db = new PortalDbContext(options);
         var migrations = db.Database.GetMigrations().ToArray();
-        Assert.EndsWith("_RemoveAlertInlineDelivery", migrations[^1], StringComparison.Ordinal);
+        var alertMigrationIndex = Array.FindIndex(migrations, value => value.EndsWith("_RemoveAlertInlineDelivery", StringComparison.Ordinal));
+        Assert.True(alertMigrationIndex > 0);
         var migrator = db.GetService<IMigrator>();
-        await migrator.MigrateAsync(migrations[^2], CancellationToken.None);
+        await migrator.MigrateAsync(migrations[alertMigrationIndex - 1], CancellationToken.None);
         var oldColumns = await ColumnsAsync(db);
         Assert.Contains("recipient", oldColumns);
         Assert.Contains("smtp_alias", oldColumns);

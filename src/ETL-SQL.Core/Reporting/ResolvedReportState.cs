@@ -12,8 +12,7 @@ namespace ETL_SQL.Core.Reporting;
 /// The versioned, serializable resolved-state envelope shared by author bookmarks and Portal saved
 /// views. It captures typed parameter values, the active page, and named-object VISIBLE/COLLAPSED
 /// state, together with a schema version and (for saved views) the report script hash used to detect
-/// revision drift. Reading tolerates older payloads and the legacy <c>ParametersJson</c>/<c>FiltersJson</c>
-/// shape so existing saved views keep working.
+/// revision drift.
 /// </summary>
 public sealed class ResolvedReportState
 {
@@ -62,7 +61,7 @@ public sealed class ResolvedReportState
     public string ToJson() => JsonSerializer.Serialize(this, SerializerOptions);
 
     /// <summary>
-    /// Strictly validates a client-supplied envelope. Persisted legacy data is still read through
+    /// Strictly validates a client-supplied envelope. Persisted envelopes are read through
     /// <see cref="FromJson"/>, but new writes must be an object using the current schema and scalar
     /// parameter values so corrupt or forward-incompatible state is never stored silently.
     /// </summary>
@@ -120,7 +119,7 @@ public sealed class ResolvedReportState
         {
             var state = JsonSerializer.Deserialize<ResolvedReportState>(json, SerializerOptions);
             if (state == null) return new ResolvedReportState();
-            Normalize(state);
+            Normalize(state, allowCaseVariants: true);
             return state;
         }
         catch (JsonException)
@@ -129,55 +128,26 @@ public sealed class ResolvedReportState
         }
     }
 
-    private static void Normalize(ResolvedReportState state)
+    private static void Normalize(ResolvedReportState state, bool allowCaseVariants = false)
     {
-        state.Parameters ??= new(StringComparer.OrdinalIgnoreCase);
-        state.Visible ??= new(StringComparer.OrdinalIgnoreCase);
-        state.Collapsed ??= new(StringComparer.OrdinalIgnoreCase);
-        state.Parameters = new(state.Parameters, StringComparer.OrdinalIgnoreCase);
-        state.Visible = new(state.Visible, StringComparer.OrdinalIgnoreCase);
-        state.Collapsed = new(state.Collapsed, StringComparer.OrdinalIgnoreCase);
+        state.Parameters = NormalizeNames(state.Parameters, allowCaseVariants);
+        state.Visible = NormalizeNames(state.Visible, allowCaseVariants);
+        state.Collapsed = NormalizeNames(state.Collapsed, allowCaseVariants);
     }
 
-    /// <summary>
-    /// Builds an envelope from the legacy saved-view columns. <paramref name="parametersJson"/> is a
-    /// <c>{"@name":"value"}</c> string map; <paramref name="filtersJson"/>, when present, is merged as
-    /// additional string parameters. Values are best-effort typed so a legacy view converges on the
-    /// same typed shape as a freshly-saved one.
-    /// </summary>
-    public static ResolvedReportState FromLegacy(string? parametersJson, string? filtersJson, string? scriptHash = null)
+    private static Dictionary<string, T> NormalizeNames<T>(Dictionary<string, T>? values, bool allowCaseVariants)
     {
-        var state = new ResolvedReportState { ScriptHash = scriptHash };
-        MergeLegacyMap(state, parametersJson);
-        MergeLegacyMap(state, filtersJson);
-        return state;
-    }
-
-    private static void MergeLegacyMap(ResolvedReportState state, string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return;
-        try
+        var normalized = new Dictionary<string, T>(StringComparer.OrdinalIgnoreCase);
+        if (values == null) return normalized;
+        foreach (var (name, value) in values)
         {
-            var map = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json);
-            if (map == null) return;
-            foreach (var (key, element) in map)
-            {
-                var name = key.StartsWith('@') ? key : "@" + key;
-                state.Parameters[name] = element.ValueKind switch
-                {
-                    JsonValueKind.Number => ReportStateValue.FromNumber(element.GetDecimal()),
-                    JsonValueKind.True => ReportStateValue.FromBoolean(true),
-                    JsonValueKind.False => ReportStateValue.FromBoolean(false),
-                    JsonValueKind.Null => ReportStateValue.Null,
-                    JsonValueKind.String => ReportStateValue.FromLegacyString(element.GetString()),
-                    _ => ReportStateValue.FromLegacyString(element.ToString())
-                };
-            }
+            // COMPAT_BREAK: 0.22 — new envelopes reject ambiguous names; migrated maps retain
+            // their original assignment order and resolve with the engine's ordinal comparison.
+            if (allowCaseVariants) normalized[name] = value;
+            else if (!normalized.TryAdd(name, value))
+                throw new JsonException("Report-state names must be unique ignoring case.");
         }
-        catch (JsonException)
-        {
-            // Ignore an unreadable legacy blob; the base report still opens.
-        }
+        return normalized;
     }
 
     /// <summary>Projects the typed parameters to the string dictionary the runtime/engine consumes.</summary>

@@ -2221,10 +2221,6 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
-                    b.Property<string>("FiltersJson")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("filters_json");
-
                     b.Property<bool>("IsDefault")
                         .HasColumnType("INTEGER")
                         .HasColumnName("is_default");
@@ -2233,10 +2229,6 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
-
-                    b.Property<string>("ParametersJson")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("parameters_json");
 
                     b.Property<int>("ReportId")
                         .HasColumnType("INTEGER")
