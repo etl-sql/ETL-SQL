@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Verified deprecated-syntax removal across all nine default test projects: 15,213 passes,
+  zero failures and six explicit platform/controlled-host skips. Fresh sequential test hosts
+  preserve complete discovered-method coverage after the original monolithic run exhausted memory.
+  Updated the legacy Orchestrator schema fixture to prove refusal preserves original job data.
+
 - Complete retired-syntax cleanup: reject missing commas after TOOLTIP markdown, remove obsolete
   connection-option completion and Docker grammar, and document canonical replacements.
   Grammar test generation now stops recursive expansion at a finite derivation. Documentation
