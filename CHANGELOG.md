@@ -12,6 +12,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Retire simulated workstation installers and obsolete standalone service-install scripts.
+  Setup uses the maintained MSI/Linux packages and their configuration/upgrade lifecycle.
+  The Windows source helper could remove an existing service after failed publishing and still
+  report success. Installer source checks reject restored retired helpers; `Master-Release.ps1`
+  now runs that gate in its final validation step.
+
 - Fix MSI configuration deleting installed secrets before a replacement could be written.
   Protected staging preserves keys on denied writes and locked-file failures; checked MSI
   actions stop on settings/configuration errors. Retained protected recovery files block unsafe

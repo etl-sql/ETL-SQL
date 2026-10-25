@@ -673,6 +673,12 @@ here; each one failed a single test per run and passed on rerun.
   Protected staging now retains keys, failures propagate through checked custom actions,
   and retained recovery files block unsafe retries. All 14 configuration/upgrade regressions and
   34 source checks pass. Evidence: `release-validation/installer-hardening-validation.json`.
+  A mocked standalone service install also proved that failed publishing still stopped/deleted
+  the old service and reported success. Retired its obsolete Windows/Linux helpers and the
+  simulated workstation installers; setup now routes through the maintained packages. The
+  installer source gate rejects reintroduced helpers and replaces the release wrapper's no-op check.
+  All 41 installer/documentation regressions and 34 source checks pass; the mocked wrapper checks
+  prove gate failure cannot print release success. See `release-validation/retired-installers-validation.json`.
   The broader review and native installed MSI certification remain open.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook

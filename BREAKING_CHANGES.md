@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: Retired source-only installation helpers
+- **What changed**: Removed `scripts/install.ps1`, `scripts/install.sh` and the Orchestrator project's `install-service-windows.ps1`/`install-service-linux.sh`. The workstation templates reported success without downloading or extracting tools. The service helpers used obsolete binary names; the Windows helper could stop/delete an existing service after a failed publish and still report success.
+- **Who is affected**: Source-checkout automation calling these helpers.
+- **Migration**: Use the maintained MSI workstation/server features on Windows, Linux packages and their service units, or native workstation ZIPs/Intel DMG on macOS. See [Installation](docs/administration/platform/installation.md). `Master-Release.ps1` now runs the real installer source gate at its final validation step.
+- **Diagnostic**: Installer source validation rejects any restored retired helper.
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: MSI configuration failures stop installation
 - **What changed**: MSI settings capture, restoration and service configuration now return checked failures. PowerShell no longer swallows configuration errors. Protected files are fully staged before replacement, existing keys survive failed writes, and retained recovery files block retries that could generate new keys.
 - **Who is affected**: Windows installs/upgrades with inaccessible settings, denied writes, locked key files or incomplete protected-file recovery.

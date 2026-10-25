@@ -3,6 +3,10 @@
 Build, test, utility, and release packaging scripts for ETL-SQL. Windows workflows use PowerShell;
 Linux and macOS workflows also have Bash entry points.
 
+For workstation or service setup, use the packaged installation paths in the
+[Installation guide](../docs/administration/platform/installation.md). The simulated workstation
+bootstrap scripts and obsolete standalone service helpers were retired in v0.22.0.
+
 ## CI impact selection
 
 `ci-impact.json` owns the initial change-to-lane mapping. `select-ci-lanes.mjs` reports affected
@@ -286,7 +290,6 @@ Candidate artifacts are not product claims until the public certification matrix
 | **[`Test-VulnerablePackages.ps1`](./Test-VulnerablePackages.ps1)** | PowerShell | Cross-platform | CI gate that fails when any NuGet package (direct or transitive) has a known vulnerability. Requires a prior `dotnet restore`; response procedure in `SECURITY.md` §13. |
 | **[`sync-assets.ps1`](./sync-assets.ps1)** / **[`sync-assets.js`](./sync-assets.js)** | PowerShell / JavaScript | Cross-platform | Synchronizes canonical shared browser assets from `src/ETL-SQL.ReportRuntime` to dependent shell host directories (VS Code extension, portal, player). |
 | **[`generate-syntax-index.js`](./generate-syntax-index.js)** | JavaScript | Cross-platform | Regenerates the canonical token inventory appendix inside `docs/syntax-index.md` from `LanguageMetadata.cs`. |
-| **[`install.ps1`](./install.ps1)** / **[`install.sh`](./install.sh)** | PowerShell / Bash | Cross-platform | Boostrapping workstation installers that download, unpack, and register the ETL-SQL SDK to the user's `PATH`. |
 | **[`Master-Release.ps1`](./Master-Release.ps1)** | PowerShell | Windows | Orchestrator script to validate tools, compile release binaries, execute smoke tests, build the UI, bundle cross-platform packages, and construct installer setups. |
 | **[`publish-release.ps1`](./publish-release.ps1)** | PowerShell | Windows | Publishes the CLI applications for different platforms (Windows, Linux, macOS) targeting x64 and arm64 architectures. |
 | **[`build-msi.ps1`](./build-msi.ps1)** | PowerShell | Windows | Bundles Windows published binaries into an MSI setup package using the WiX candle/light compilation toolset. |

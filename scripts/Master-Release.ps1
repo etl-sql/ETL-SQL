@@ -128,12 +128,10 @@ if (Test-Path $MacScript) {
     Write-Host "  Triggering Mac DMG build (Requires MacOS host)..." -ForegroundColor Gray
 }
 
-# --- STEP 6: Check Installation Scripts ---
-Write-Host "`n[7/7] Checking Installation Bootstrap Scripts..." -ForegroundColor Yellow
-$InstallPs1 = Join-Path $PSScriptRoot "install.ps1"
-if (Test-Path $InstallPs1) {
-    Write-Host "  install.ps1 is a bootstrap template and was not modified." -ForegroundColor Gray
-}
+# --- STEP 6: Validate Installer Sources ---
+Write-Host "`n[7/7] Validating installer sources..." -ForegroundColor Yellow
+& (Join-Path $PSScriptRoot 'Test-InstallerSources.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Installer source validation failed.' }
 
 # --- SUMMARY ---
 $Duration = (Get-Date) - $StartTime

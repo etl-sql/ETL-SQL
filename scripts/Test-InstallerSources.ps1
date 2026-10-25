@@ -4,6 +4,14 @@ param([string]$Root = (Split-Path $PSScriptRoot -Parent))
 
 $ErrorActionPreference = 'Stop'
 $findings = [System.Collections.Generic.List[string]]::new()
+# COMPAT_BREAK: 0.22 — setup uses maintained packages; retired source helpers must stay removed.
+foreach ($relative in @('scripts/install.ps1', 'scripts/install.sh',
+    'src/ETL-SQL.Orchestrator.Service/install-service-windows.ps1',
+    'src/ETL-SQL.Orchestrator.Service/install-service-linux.sh')) {
+    if (Test-Path -LiteralPath (Join-Path $Root $relative)) {
+        $findings.Add("Retired installer helper: $relative. Use the maintained MSI or Linux package installer.")
+    }
+}
 $installer = Join-Path $Root 'src/ETL-SQL.Installer'
 try {
     [xml]$manifest = Get-Content (Join-Path $installer 'Installer.wxs') -Raw
@@ -48,4 +56,4 @@ try {
 
 foreach ($finding in $findings) { Write-Output "FAIL $finding" }
 if ($findings.Count -gt 0) { exit 1 }
-Write-Output 'Installer source checks passed: XML, static source files and PowerShell/JavaScript syntax. WiX compilation and installation remain required.'
+Write-Output 'Installer source checks passed: XML, static source files, retired-helper policy and PowerShell/JavaScript syntax. WiX compilation and installation remain required.'

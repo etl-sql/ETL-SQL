@@ -35,6 +35,13 @@ shared or split the services.
 
 ## Production Installation
 
+Use the packaged installers below. From v0.22.0, the source-only `scripts/install.ps1`,
+`scripts/install.sh` and `install-service-windows.ps1`/`install-service-linux.sh` helpers are
+removed. The workstation templates never downloaded binaries; the separate service helpers did
+not implement the packaged installation's configuration and upgrade lifecycle. Use the MSI's
+workstation/server feature selection on Windows and the Linux package's service units on Linux.
+On macOS, use the native ZIP or Intel DMG described below.
+
 ### Windows
 
 1. Run the `ETL-SQL-Enterprise-v0.21.0.msi` installer.
@@ -66,6 +73,11 @@ sudo systemctl start etl-sql-portal
 ```
 
 For RPM-based systems, use the matching `.rpm` package and the same `systemctl` service names.
+
+### macOS workstation
+
+Use the release ZIP matching `osx-x64` or `osx-arm64`. The Intel DMG contains `ETL-SQL.app`;
+its CLI tools live under `Contents/Resources/bin` inside the application bundle.
 
 ### Docker / Containerized
 
