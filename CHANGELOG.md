@@ -12,6 +12,21 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Verify Linux Docker integration on candidate `8941ea449`: all 224 engine and 65 Portal cases
+  pass without skips, including the 24 Linux lifecycle cases. The hosted job prepares gVisor and
+  the pinned worker digest. Final-candidate integration certification remains required.
+
+- Prepare and verify the browser inventory in each isolated MSI certification job before
+  checking installed assets. The build job's generated inventory is absent from fresh workers.
+
+- Update the VS Code acceptance runner to resolve current macOS bundle executables, fixing
+  startup failures caused by the retired `Electron` path. Keep the Ctrl+click browser journey on
+  Studio's current list-filter authoring flow while checking the selected report rows.
+
+- Update extension/UI test and build dependencies and VSIX authentication tooling to patched
+  releases. Clean installs with the pinned npm 10 toolchain report no audit findings; extension
+  and UI compile/build, lint and 403 unit tests pass.
+
 - Give installer actions, release-wrapper, portable-publisher and SBOM fixtures independent source
   checks. Their shared installer-source deadline caused hosted CI/MSI timeouts. The shared manifest
   also excludes these suites from the later consumer pass, so each runs once.

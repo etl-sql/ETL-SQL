@@ -75,17 +75,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
-        // Detail starts with the single-value filter Studio wrote before selections could hold
-        // several values.
-        var reportId = await OpenStudioAsync(page, script =>
-        {
-            const string plain = "CREATE VISUAL Detail AS TABLE (\n  SOURCE = #sales\n)";
-            script = script.ReplaceLineEndings("\n");
-            Assert.Contains(plain, script, StringComparison.Ordinal);
-            return "DECLARE @Region VARCHAR(20) = 'All';\n" + script.Replace(plain,
-                "CREATE VISUAL Detail AS TABLE (\n  SOURCE = (SELECT * FROM #sales WHERE @Region = 'All' OR Region = @Region)\n)",
-                StringComparison.Ordinal);
-        });
+        var reportId = await OpenStudioAsync(page);
 
         await SelectVisualAsync(page, "ByRegion");
         await page.SelectOptionAsync("#pp-interaction-on-select", "HIGHLIGHT");
@@ -94,11 +84,11 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         await SelectVisualAsync(page, "Detail");
         await page.SelectOptionAsync("#pp-interaction-on-select", "FILTER");
         await WaitForScriptAsync(page, "CREATE VISUAL Detail", "INTERACTIONS (ON_SELECT = FILTER)");
-        await Expect(page.Locator("[data-single-pick='Region']")).ToContainTextAsync("one selected Region at a time");
-        await page.Locator("[data-filter-several='Region']").ClickAsync();
+        await Expect(page.Locator("[data-unread-key='Region']")).ToContainTextAsync("arrives as @Region");
+        await page.Locator("[data-filter-on='Region']").ClickAsync();
         await WaitForScriptAsync(page, "CREATE VISUAL Detail", "WHERE 'All' IN @Region OR Region IN @Region");
         await WaitForScriptAsync(page, "DECLARE @Region", "LIST = 'All'");
-        await Expect(page.Locator("[data-single-pick]")).ToHaveCountAsync(0);
+        await Expect(page.Locator("[data-filter-on='Region']")).ToHaveCountAsync(0);
 
         await SaveAsync(page, reportId);
 

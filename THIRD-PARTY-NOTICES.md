@@ -123,6 +123,8 @@ BenchmarkDotNet, coverlet.collector, ESLint, jsdom, Microsoft.Playwright, Moq,
 TypeScript, Vite, Vitest, xUnit, and VS Code test tooling. These should be
 included in a generated dependency report for source distributions and CI
 artifacts, but they are usually not shown in product UI acknowledgements.
+`@vscode/test-electron` 3.1.0 (MIT) resolves current macOS VS Code bundle executables
+from their bundle metadata; it requires the existing Node.js 22 build toolchain.
 
 The pinned browser lint toolchain in `scripts/lint/package.json` uses `@eslint/js`,
 `eslint`, and `globals`, each under MIT. The dependency inventory records their
@@ -136,9 +138,13 @@ The unsigned VSIX toolchain in `scripts/vsix/package.json` pins `@vscode/vsce` 4
 module authored in this repository supplies that import and rejects all signing and
 signature-verification requests. It contains no Microsoft signing implementation.
 These tools run during builds and archive checks; they do not ship inside the extension.
+The toolchain overrides its transitive `@azure/msal-node` to 7.1.1 (MIT) for the
+[authorization-code origin validation fix](https://github.com/advisories/GHSA-xcx6-jx8p-x3h5). Its unsigned archive workflow does not use interactive
+authentication. MSAL is maintained at https://github.com/AzureAD/microsoft-authentication-library-for-js.
 
-The extension and UI use Vitest 4.1.11 (MIT). The extension's security overrides also use patched
-brace-expansion, Undici and js-yaml releases, all under MIT. The webview's single-file build uses
+The extension and UI use Vitest 4.1.12 and Vite 8.3.5 (MIT). The extension's security overrides also use patched
+brace-expansion, Undici and js-yaml releases, all under MIT, and serialize-javascript 7.1.4
+(BSD-3-Clause). Vite's transitive Lightning CSS is MPL-2.0. The webview's single-file build uses
 the existing Vite plugin API in repository code; vite-plugin-singlefile and its micromatch/braces
 dependency chain are removed from the UI lockfile. No replacement third-party dependency is added.
 

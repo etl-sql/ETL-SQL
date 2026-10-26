@@ -29,6 +29,33 @@ if (-not $mixedBrowser.ShouldRun -or $mixedBrowser.RelevantPaths[0] -cne 'src/ET
 # Exercise the workflow's real comparison/fallback block with an unavailable base.
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $workflow = Get-Content (Join-Path $root '.github/workflows/msi-upgrade.yml') -Raw
+# Each isolated profile starts from a checkout without generated browser assets. Exercise the
+# preparation commands and their failure guards before the installer can mutate the machine.
+$preparation = [regex]::Match($workflow, '(?s)- name: Prepare candidate browser inventory\s+shell: pwsh\s+run: \|\r?\n(.*?)\r?\n      - name: Certify installer profile')
+if (-not $preparation.Success) { throw 'Isolated MSI jobs do not prepare their browser inventory before certification.' }
+$prepareScript = [scriptblock]::Create(($preparation.Groups[1].Value -replace '(?m)^          ', ''))
+& {
+    function npm { $script:prepareCalls.Add('restore'); $global:LASTEXITCODE = if ($script:prepareFailure -eq 'restore') { 1 } else { 0 } }
+    function node {
+        $stage = if ($args -contains '-Check') { 'verify' } else { 'prepare' }
+        $script:prepareCalls.Add($stage)
+        $global:LASTEXITCODE = if ($script:prepareFailure -eq $stage) { 1 } else { 0 }
+    }
+    foreach ($case in @(
+        @{ Failure = ''; Calls = 'restore,prepare,verify' },
+        @{ Failure = 'restore'; Calls = 'restore' },
+        @{ Failure = 'prepare'; Calls = 'restore,prepare' },
+        @{ Failure = 'verify'; Calls = 'restore,prepare,verify' }
+    )) {
+        $script:prepareCalls = [Collections.Generic.List[string]]::new()
+        $script:prepareFailure = $case.Failure
+        $rejected = $false
+        try { & $prepareScript } catch { $rejected = $true }
+        if ($rejected -ne ($case.Failure -ne '') -or ($script:prepareCalls -join ',') -cne $case.Calls) {
+            throw "MSI browser preparation failed to stop at '$($case.Failure)'."
+        }
+    }
+}
 $start = $workflow.IndexOf('          if ([string]::IsNullOrWhiteSpace($baseSha)')
 $end = $workflow.IndexOf('          if ($shouldRun)', $start)
 if ($start -lt 0 -or $end -le $start) { throw 'Cannot locate workflow impact block.' }

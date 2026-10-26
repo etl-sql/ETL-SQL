@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 21 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 20 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -631,14 +631,19 @@ here; each one failed a single test per run and passed on rerun.
   found an incorrect fixture assumption: per-user Windows temp is under protected `AppData`.
   The fixture now checks that denial and permits ordinary scratch paths. Production path protection
   is unchanged; the full default lane and final-candidate security gates remain separate.
-- [ ] **Docker integration lane.** `IDockerManager` now takes a tenant scope and container names carry
+- [x] **Docker integration lane.** `IDockerManager` now takes a tenant scope and container names carry
   a tenant tag. Run `Category=Integration` Docker tests and `USE DOCKER` scripts end to end.
   **In progress:** Windows Docker checks verify 200 engine cases, including a new same-alias,
   two-tenant `USE DOCKER` scenario covering separate rows, interleaved connection lookup, tagged
   names and scoped lifecycle actions. All 64 Portal integration cases pass without skips.
   The original engine run's one ODBC failure is resolved by the test's documented Driver 17
-  override, using the installed driver. Its 24 Linux sandbox lifecycle cases remain skipped on
-  Windows and require Linux evidence before closing this item.
+  override, using the installed driver.
+  **Verified on Linux 2026-10-25:** CI `40244460394`, job `121323423315`, passes all 224 engine
+  and 65 Portal integration cases without skips on SHA `8941ea4499f99f9af65318e12bc8c4449bc67d6e`.
+  The engine run includes the 24 lifecycle cases skipped on Windows. The job installs and verifies
+  gVisor, then runs against the pinned worker digest; Standard evidence remains distinct from
+  Hardened evidence. Retained original logs and supervisor receipts:
+  `release-validation/pre-push-20261025/integration/`. Final-candidate certification remains required.
 - [x] **Alert inline delivery columns.** `ReportAlert.Recipient` and `SmtpAlias` predate
   `AlertNotifications`. Removing them needs EF migrations for SQLite and PostgreSQL; with no
   deployments, consider squashing the migration history at the same time.
@@ -759,6 +764,19 @@ here; each one failed a single test per run and passed on rerun.
   the cause remains unproven. The fixture now reports shell/scenario/exit/output before accessing
   the missing call. Original preflight: `release-validation/preflight/1792968080596-30276/`;
   diagnostic probe: `release-validation/pre-push-20261025/concurrent-source-probe/`.
+  Candidate `8941ea449` passes the full local pre-push (42 source checks, 122 consumer checks,
+  11 Portal contracts and 142 smoke cases). Hosted certification exposes dependency audit findings,
+  missing generated browser inventories in isolated MSI jobs, macOS VS Code test-host startup,
+  one retired Studio control assertion and two governance HTTP 500 failures.
+  The dependency updates pass pinned npm 10 clean installs without audit findings, extension/UI
+  compile/build and lint, 403 unit tests, four real target VSIX archive checks and the SDK/SQLite
+  packaging coordinator. MSI workers now prepare/verify assets before installation, with failure
+  guards exercised. The current list-filter Ctrl+click journey and all three governance roles pass
+  in isolation; the hosted governance cause remains unproven. Original diagnostics and recovery
+  logs remain under `release-validation/pre-push-20261025/` and `release-validation/npm-security-20261025/`.
+  The recovery batch passes the full pre-push in 738.1 seconds: 42 source checks, 122 consumer
+  checks, 11 Portal contracts and 142 smoke cases. The complete seven-case governance browser
+  class also passes locally. New-SHA hosted MSI, browser and macOS acceptance evidence remains required.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook
   body unchanged. Its repository bytes use LF and `.gitattributes` now pins that checkout form.

@@ -257,6 +257,16 @@ jobs:
         with:
           node-version: 22
 
+      - name: Prepare candidate browser inventory
+        shell: pwsh
+        run: |
+          npm ci --prefix scripts/typecheck
+          if ($LASTEXITCODE -ne 0) { throw 'Browser compiler restore failed.' }
+          node scripts/sync-assets.js
+          if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed.' }
+          node scripts/sync-assets.js -Check
+          if ($LASTEXITCODE -ne 0) { throw 'Browser inventory verification failed.' }
+
       - name: Certify installer profile with bounded supervision
         timeout-minutes: 25
         shell: pwsh

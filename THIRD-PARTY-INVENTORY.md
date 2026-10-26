@@ -131,8 +131,8 @@ Downloaded for workflow validation only; not redistributed with the application.
 | @typescript-eslint/eslint-plugin | ^8.62.0 | development | MIT | https://www.npmjs.com/package/@typescript-eslint/eslint-plugin | src/etl-sql-vscode/package.json |
 | @typescript-eslint/parser | ^8.62.0 | development | MIT | https://www.npmjs.com/package/@typescript-eslint/parser | src/etl-sql-vscode/package.json |
 | @vitejs/plugin-react | ^6.0.3 | development | MIT | https://www.npmjs.com/package/@vitejs/plugin-react | src/etl-sql-vscode/ui/package.json |
-| @vitest/coverage-v8 | ^4.1.11 | development | MIT | https://www.npmjs.com/package/@vitest/coverage-v8 | src/etl-sql-vscode/package.json |
-| @vscode/test-electron | ^2.5.2 | development | MIT | https://www.npmjs.com/package/@vscode/test-electron | src/etl-sql-vscode/package.json |
+| @vitest/coverage-v8 | ^4.1.12 | development | MIT | https://www.npmjs.com/package/@vitest/coverage-v8 | src/etl-sql-vscode/package.json |
+| @vscode/test-electron | ^3.1.0 | development | MIT | https://www.npmjs.com/package/@vscode/test-electron | src/etl-sql-vscode/package.json |
 | @vscode/vsce | 4.0.0 | development | MIT | https://www.npmjs.com/package/@vscode/vsce | scripts/vsix/package.json |
 | @vscode/webview-ui-toolkit | ^1.4.0 | runtime | MIT | https://www.npmjs.com/package/@vscode/webview-ui-toolkit | src/etl-sql-vscode/ui/package.json |
 | clsx | ^2.1.1 | runtime | MIT | https://www.npmjs.com/package/clsx | src/etl-sql-vscode/ui/package.json |
@@ -151,8 +151,8 @@ Downloaded for workflow validation only; not redistributed with the application.
 | tailwindcss | ^4.3.1 | runtime | MIT | https://www.npmjs.com/package/tailwindcss | src/etl-sql-vscode/ui/package.json |
 | typescript | ^6.0.3; ^5.7.3; 6.0.3 | development | Apache-2.0 | https://www.npmjs.com/package/typescript | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json; scripts/typecheck/package.json |
 | typescript-eslint | ^8.62.0 | development | MIT | https://www.npmjs.com/package/typescript-eslint | src/etl-sql-vscode/ui/package.json |
-| vite | ^8.1.5 | development | MIT | https://www.npmjs.com/package/vite | src/etl-sql-vscode/ui/package.json |
-| vitest | ^4.1.11 | development | MIT | https://www.npmjs.com/package/vitest | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json |
+| vite | ^8.3.5 | development | MIT | https://www.npmjs.com/package/vite | src/etl-sql-vscode/ui/package.json |
+| vitest | ^4.1.12 | development | MIT | https://www.npmjs.com/package/vitest | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json |
 | vscode-languageclient | ^10.0.1 | runtime | MIT | https://www.npmjs.com/package/vscode-languageclient | src/etl-sql-vscode/package.json |
 | xml2js | 0.6.2 | development | MIT | https://www.npmjs.com/package/xml2js | scripts/vsix/package.json |
 | yauzl | 3.4.0 | development | MIT | https://www.npmjs.com/package/yauzl | scripts/vsix/package.json |

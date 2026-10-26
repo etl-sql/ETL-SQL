@@ -13,7 +13,8 @@
     "@vscode/vsce-sign": "file:./unsigned-signing"
   },
   "overrides": {
-    "@vscode/vsce-sign": "$@vscode/vsce-sign"
+    "@vscode/vsce-sign": "$@vscode/vsce-sign",
+    "@azure/msal-node": "7.1.1"
   },
   "description": "Locked unsigned VSIX packager and archive verification tools. Signing is disabled by a repository-owned replacement.",
   "license": "Apache-2.0"
