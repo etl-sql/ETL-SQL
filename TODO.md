@@ -846,6 +846,12 @@ here; each one failed a single test per run and passed on rerun.
   names and byte-identical preservation of a neighboring checkout. The old compiler fails the new
   untracked-source regression. Original reproductions, controls and recovery logs:
   `release-validation/changelog-coverage-review/`. The broader review remains open.
+  The same review also reproduces coverage from whitespace-only fragments, missed source removal
+  through rename detection, and duplicate Unreleased headings compiling notes twice before deleting
+  their fragment. Coverage now needs nonempty content or a changed changelog and includes both rename
+  paths. Compilation requires one Unreleased heading in both input and proposed output, preserving
+  documents/fragments on rejection. Staged/committed renames, empty-fragment check/compile calls and
+  duplicate input/fragment headings have executed public-command regressions.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook
   body unchanged. Its repository bytes use LF and `.gitattributes` now pins that checkout form.

@@ -36,6 +36,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Keep changelog compilation inside the literal checkout path, including bracketed directories
   and fragment names. Coverage now includes untracked and Unicode source paths, rejects invalid
   comparison commits and failed Git queries, and refuses to inspect a parent repository.
+  Renames retain the removed source path, whitespace-only fragments cannot supply coverage,
+  and ambiguous Unreleased headings stop compilation before any write or fragment deletion.
 
 - Reject invalid stable versions before the PowerShell or Bash version-bump command changes
   files. Leading zeroes, non-ASCII digits, whitespace and prerelease labels cannot become build

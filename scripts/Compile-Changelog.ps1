@@ -115,9 +115,9 @@ function Get-ChangedFilesForChangelogCoverage {
         throw 'Changelog comparison base is not a valid commit.'
     }
     $queries = @(
-        @('diff', '--name-only', '-z', '--no-ext-diff', $resolved.Output.Trim(), 'HEAD', '--'),
-        @('diff', '--name-only', '-z', '--no-ext-diff', '--'),
-        @('diff', '--cached', '--name-only', '-z', '--no-ext-diff', '--'),
+        @('diff', '--name-only', '-z', '--no-ext-diff', '--no-renames', $resolved.Output.Trim(), 'HEAD', '--'),
+        @('diff', '--name-only', '-z', '--no-ext-diff', '--no-renames', '--'),
+        @('diff', '--cached', '--name-only', '-z', '--no-ext-diff', '--no-renames', '--'),
         @('ls-files', '--others', '--exclude-standard', '-z', '--')
     )
     foreach ($query in $queries) {
@@ -140,7 +140,9 @@ function Test-ChangelogCoverage {
         return
     }
 
-    $hasFragment = $Fragments.Count -gt 0
+    $hasFragment = @($Fragments | Where-Object {
+        -not [string]::IsNullOrWhiteSpace((Get-Content -LiteralPath $_.FullName -Raw))
+    }).Count -gt 0
     $hasChangelogChange = @($changedFiles | Where-Object { ($_ -replace '\\', '/') -eq "CHANGELOG.md" }).Count -gt 0
     if ($hasFragment -or $hasChangelogChange) {
         Write-Output "Changelog coverage present for $($coveredFiles.Count) changed feature-surface file(s)."
@@ -181,6 +183,11 @@ foreach ($file in $fragments) {
     }
 }
 
+$changelogLines = Get-Content -LiteralPath $ChangelogFile
+if (@($changelogLines | Where-Object { $_.Trim() -eq '## [Unreleased]' }).Count -ne 1) {
+    throw "CHANGELOG.md must contain exactly one '## [Unreleased]' section."
+}
+
 if ($combinedContent.Count -eq 0) {
     Write-Output "All fragments were empty. Deleting them."
     foreach ($file in $fragments) {
@@ -189,10 +196,8 @@ if ($combinedContent.Count -eq 0) {
     exit 0
 }
 
-$changelogLines = Get-Content -LiteralPath $ChangelogFile
 $newLines = New-Object System.Collections.Generic.List[string]
 
-$inserted = $false
 foreach ($line in $changelogLines) {
     $newLines.Add($line)
     if ($line.Trim() -eq "## [Unreleased]") {
@@ -203,12 +208,12 @@ foreach ($line in $changelogLines) {
                 $newLines.Add($subLine)
             }
         }
-        $inserted = $true
     }
 }
 
-if (-not $inserted) {
-    throw "Could not find '## [Unreleased]' section in CHANGELOG.md."
+$unreleasedHeadings = @($newLines | Where-Object { $_.Trim() -eq '## [Unreleased]' }).Count
+if ($unreleasedHeadings -ne 1) {
+    throw "CHANGELOG.md must contain exactly one '## [Unreleased]' section."
 }
 
 # Write the updated CHANGELOG.md

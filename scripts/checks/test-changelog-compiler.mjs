@@ -75,7 +75,24 @@ try {
   assert.equal(readFileSync(changelog, 'utf8'), '# Missing Unreleased heading\n');
   assert.equal(readFileSync(fragment, 'utf8'), entry);
 
+  const duplicateHeading = original + '\n## [Unreleased]\n\n- Second section.\n';
+  for (const fragmentContent of [entry, '  \n']) {
+    writeFileSync(changelog, duplicateHeading);
+    writeFileSync(fragment, fragmentContent);
+    const duplicate = compile('-SkipCoverageCheck');
+    assert.notEqual(duplicate.status, 0);
+    assert.equal(readFileSync(changelog, 'utf8'), duplicateHeading);
+    assert.equal(readFileSync(fragment, 'utf8'), fragmentContent);
+  }
+
   writeFileSync(changelog, original);
+  const headingFragment = '## [Unreleased]\n\n- Invalid fragment heading.\n';
+  writeFileSync(fragment, headingFragment);
+  const invalidFragment = compile('-SkipCoverageCheck');
+  assert.notEqual(invalidFragment.status, 0);
+  assert.equal(readFileSync(changelog, 'utf8'), original);
+  assert.equal(readFileSync(fragment, 'utf8'), headingFragment);
+  writeFileSync(fragment, entry);
   const compiled = compile('-SkipCoverageCheck');
   assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
   const result = readFileSync(changelog, 'utf8');
@@ -123,6 +140,35 @@ try {
   assert.notEqual(validBase.status, 0);
   assert.match(validBase.stdout + validBase.stderr, /require changelog coverage/);
 
+  const emptyFragment = coverageFixture('empty-fragment');
+  writeFileSync(path.join(emptyFragment, 'src/Feature.cs'), '// changed feature\n');
+  mkdirSync(path.join(emptyFragment, 'changelog.d'));
+  writeFileSync(path.join(emptyFragment, 'changelog.d/empty.md'), '  \n');
+  for (const args of [['-CheckCoverageOnly'], []]) {
+    const rejected = compileAt(emptyFragment, '-CoverageBase', 'HEAD', ...args);
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stdout + rejected.stderr, /require changelog coverage/);
+    assert.equal(readFileSync(path.join(emptyFragment, 'CHANGELOG.md'), 'utf8'), original);
+    assert.equal(readFileSync(path.join(emptyFragment, 'changelog.d/empty.md'), 'utf8'), '  \n');
+  }
+  const cleanup = compileAt(emptyFragment, '-SkipCoverageCheck');
+  assert.equal(cleanup.status, 0, cleanup.stdout + cleanup.stderr);
+  assert.equal(existsSync(path.join(emptyFragment, 'changelog.d/empty.md')), false);
+  assert.equal(readFileSync(path.join(emptyFragment, 'CHANGELOG.md'), 'utf8'), original);
+
+  for (const status of ['staged', 'committed']) {
+    const renamed = coverageFixture(`renamed-${status}`);
+    const base = gitAt(renamed, 'rev-parse', 'HEAD');
+    gitAt(renamed, 'config', 'diff.renames', 'true');
+    mkdirSync(path.join(renamed, 'misc'));
+    gitAt(renamed, 'mv', '--', 'src/Feature.cs', 'misc/Feature.cs');
+    if (status === 'committed') gitAt(renamed, '-c', 'user.name=Changelog fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'move out of source');
+    const rejected = compileAt(renamed, '-CoverageBase', base, '-CheckCoverageOnly');
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stdout + rejected.stderr, /require changelog coverage/);
+    assert.equal(readFileSync(path.join(renamed, 'CHANGELOG.md'), 'utf8'), original);
+  }
+
   const missingBase = coverageFixture('missing-base');
   gitAt(missingBase, 'branch', '-M', 'fixture');
   const unresolved = compileAt(missingBase, '-CheckCoverageOnly');
@@ -156,7 +202,7 @@ try {
   assert.equal(readFileSync(path.join(neighbor, 'CHANGELOG.md'), 'utf8'), original);
   assert.equal(readFileSync(path.join(neighbor, 'changelog.d/neighbor.md'), 'utf8'), '- Keep neighbor fragment.\n');
   console.log('Changelog compiler: check-only preserves files/directories, conflicting switches and invalid headings fail before writes, normal compilation retains content.');
-  console.log('Coverage: committed/staged/unstaged/untracked Unicode and literal paths, invalid references, missing bases, tag fallback and parent-repository refusal verified.');
+  console.log('Coverage: committed/staged/unstaged/untracked Unicode and literal paths, invalid references, missing bases, tag fallback, parent-repository refusal, empty fragments, source renames and duplicate headings verified.');
 } finally {
   // Only this private fixture, created above, is removed.
   rmSync(root, { recursive: true, force: true });
