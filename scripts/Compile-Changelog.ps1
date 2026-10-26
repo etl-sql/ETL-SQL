@@ -5,6 +5,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ($SkipCoverageCheck -and $CheckCoverageOnly) {
+    throw 'SkipCoverageCheck and CheckCoverageOnly are mutually exclusive.'
+}
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RepoRoot = Resolve-Path (Join-Path $ScriptRoot "..")
 $ChangelogDir = Join-Path $RepoRoot "changelog.d"
@@ -126,10 +129,6 @@ function Test-ChangelogCoverage {
     throw "Feature-surface changes require changelog coverage. Add a changelog.d/<feature>.md fragment or update CHANGELOG.md. Changed files include: $examples"
 }
 
-if (-not (Test-Path $ChangelogDir)) {
-    New-Item -ItemType Directory -Force -Path $ChangelogDir | Out-Null
-}
-
 $fragments = @(Get-ChangelogFragments)
 
 if (-not $SkipCoverageCheck) {
@@ -137,6 +136,10 @@ if (-not $SkipCoverageCheck) {
     if ($CheckCoverageOnly) {
         exit 0
     }
+}
+
+if (-not (Test-Path $ChangelogDir)) {
+    New-Item -ItemType Directory -Force -Path $ChangelogDir | Out-Null
 }
 
 if ($fragments.Count -eq 0) {

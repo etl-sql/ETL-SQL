@@ -148,6 +148,11 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   discovery/filter checks partition all 986 cases into 329/329/328 with exact method matches.
   Local shard 1 passed all 329 cases in 1.46 minutes and its TRX coverage receipt passed through
   the supervisor. This is local functional evidence, not the hosted critical-path measurement.
+  **Hosted duration verified 2026-10-26:** CI `40312449895` on `b0bc52f615cf2b35d0c51e62bbab93d0a1bb6708`
+  passes all three shards and the aggregate gate. Retained TRX records contain 336/336/336 passed
+  cases without skips; inventory union verification covers 549 methods without overlap. The
+  longest shard job takes 15.1 minutes including setup/build. Original artifacts and verification:
+  `release-validation/hosted-ci-40312449895/`. Failed-shard-only recovery remains open.
 - [ ] **Watchdogs and log streaming** on every long CI step, with the console streamed to an artifact
   and diagnostics uploaded on failure.
   **In progress:** MSI workstation and Portal jobs use the shared bounded supervisor. Other long
@@ -777,6 +782,20 @@ here; each one failed a single test per run and passed on rerun.
   The recovery batch passes the full pre-push in 738.1 seconds: 42 source checks, 122 consumer
   checks, 11 Portal contracts and 142 smoke cases. The complete seven-case governance browser
   class also passes locally. New-SHA hosted MSI, browser and macOS acceptance evidence remains required.
+  Version-bump review reproduced both public commands accepting leading-zero versions and
+  changing canonical metadata. PowerShell and Bash now reject invalid stable SemVer before
+  writes. Executed command cases cover all three leading-zero positions, non-ASCII digits,
+  whitespace, prerelease/short/negative inputs, valid zero and ordinary versions, dependency
+  preservation and Portal cache keys. Evidence: `release-validation/version-bump-repro/`.
+  Changelog review also reproduced `-CheckCoverageOnly -SkipCoverageCheck` compiling the
+  changelog and deleting fragments. Conflicting switches now fail before writes, and a check
+  cannot create a fragments directory. Real Git/public-command regressions cover both cases,
+  invalid headings and normal compilation, with their own shared source-preflight check.
+  Original failure and focused recovery: `release-validation/changelog-check-only-repro/`.
+  Both review fixes pass in PowerShell/Bash on Windows and native Linux. The combined full
+  pre-push passes in 741.2 seconds: 43 source checks, 122 consumer checks, 11 Portal contracts
+  and 142 smoke cases. Source inventory regression verifies the new changelog check runs once.
+  Retained pre-push: `release-validation/version-bump-repro/combined-pre-push-recovery.log`.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook
   body unchanged. Its repository bytes use LF and `.gitattributes` now pins that checkout form.

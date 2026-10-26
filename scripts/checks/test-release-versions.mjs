@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -95,6 +95,56 @@ try {
   write('Directory.Build.props', '<Project><PropertyGroup><VersionPrefix>$(Other)</VersionPrefix></PropertyGroup></Project>');
   assert.equal(run().status, 1);
   console.log('Release versions: consistent sources pass; partial bumps and invalid metadata fail.');
+
+  // Public bump commands must reject invalid versions before changing even the first file.
+  const bumpRoot = path.join(root, 'bump-fixture');
+  mkdirSync(path.join(bumpRoot, 'scripts'), { recursive: true });
+  for (const name of ['Set-Version.ps1', 'set-version.sh']) {
+    copyFileSync(fileURLToPath(new URL(`../${name}`, import.meta.url)), path.join(bumpRoot, 'scripts', name));
+  }
+  const bumpInputs = {
+    'Directory.Build.props': '<Project><PropertyGroup><VersionPrefix>1.2.3</VersionPrefix></PropertyGroup></Project>',
+    'src/etl-sql-vscode/package.json': JSON.stringify({ name: 'etl-sql-vscode', version: '1.2.3' }, null, 2),
+    'src/etl-sql-vscode/package-lock.json': JSON.stringify({ name: 'etl-sql-vscode', version: '1.2.3', packages: {
+      '': { name: 'etl-sql-vscode', version: '1.2.3' }, 'node_modules/fixture': { version: '9.8.7' },
+    } }, null, 2),
+    'src/ETL-SQL.Portal/wwwroot/index.html': '<script src="/js/app.js?v=1.2.3"></script>\n',
+    'unrelated.txt': 'Preserve unrelated bytes.\n',
+  };
+  const bash = process.platform === 'win32' ? path.join(process.env.ProgramFiles ?? 'C:/Program Files', 'Git/bin/bash.exe') : 'bash';
+  const commands = [['pwsh', ['-NoProfile', '-File', path.join(bumpRoot, 'scripts/Set-Version.ps1'), '-Version']]];
+  if (process.platform !== 'win32' || existsSync(bash)) commands.push([bash, [path.join(bumpRoot, 'scripts/set-version.sh').replaceAll('\\', '/')]]);
+  for (const [executable, args] of commands) {
+    // MSYS command-line parsing drops a bare trailing newline on Windows. Pass the Bash
+    // argument through a quoted environment expansion so the script receives the exact bytes.
+    const bump = version => spawnSync(executable, executable === 'pwsh' ? [...args, version]
+      : ['-c', 'exec bash "$1" "$ETLSQL_BUMP_VERSION"', 'version-bump-test', args[0]], {
+      cwd: root, encoding: 'utf8', env: { ...process.env, ETLSQL_BUMP_VERSION: version },
+    });
+    for (const [name, value] of Object.entries(bumpInputs)) write(path.join('bump-fixture', name), value);
+    const bumpSnapshot = () => Object.fromEntries(Object.keys(bumpInputs).map(name => [name, readFileSync(path.join(bumpRoot, name))]));
+    const beforeBump = bumpSnapshot();
+    for (const version of ['01.2.3', '1.02.3', '1.2.03', '١.2.3', '1.2.3\n', '1.2.3-rc.1', '1.2', '-1.2.3']) {
+      const rejected = bump(version);
+      if (rejected.error) throw rejected.error;
+      assert.notEqual(rejected.status, 0, `${executable} accepted ${JSON.stringify(version)}`);
+      assert.deepEqual(bumpSnapshot(), beforeBump, 'Rejected bump must preserve all fixture bytes.');
+    }
+    for (const version of ['0.0.0', '0.22.0', '12.34.56']) {
+      const bumped = bump(version);
+      if (bumped.error) throw bumped.error;
+      assert.equal(bumped.status, 0, bumped.stdout + bumped.stderr);
+      assert.ok(readFileSync(path.join(bumpRoot, 'Directory.Build.props'), 'utf8').includes(`<VersionPrefix>${version}</VersionPrefix>`));
+      assert.equal(JSON.parse(readFileSync(path.join(bumpRoot, 'src/etl-sql-vscode/package.json'), 'utf8')).version, version);
+      const updatedLock = JSON.parse(readFileSync(path.join(bumpRoot, 'src/etl-sql-vscode/package-lock.json'), 'utf8'));
+      assert.equal(updatedLock.version, version);
+      assert.equal(updatedLock.packages[''].version, version);
+      assert.equal(updatedLock.packages['node_modules/fixture'].version, '9.8.7');
+      assert.ok(readFileSync(path.join(bumpRoot, 'src/ETL-SQL.Portal/wwwroot/index.html'), 'utf8').includes(`?v=${version}`));
+      assert.deepEqual(readFileSync(path.join(bumpRoot, 'unrelated.txt')), beforeBump['unrelated.txt']);
+    }
+  }
+  console.log(`Public version bump: ${commands.length} shells reject invalid stable versions without writes and preserve dependency versions on valid bumps.`);
 
   // Execute the public command from outside a private candidate checkout. Its own location,
   // not the caller's working directory, must own every metadata read and write.

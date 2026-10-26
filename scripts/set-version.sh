@@ -17,7 +17,7 @@ usage() {
 
 VERSION="${1:-}"
 if [[ -z "$VERSION" ]]; then usage; fi
-if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
     echo "ERROR: version must be Major.Minor.Patch, got: $VERSION"
     exit 1
 fi

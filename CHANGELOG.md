@@ -12,6 +12,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Reject conflicting changelog check/skip switches before changing files. Check-only mode no
+  longer creates a fragments directory. Executed public-command regressions verify preservation,
+  invalid headings and normal compilation; the shared source preflight runs them independently.
+
+- Reject invalid stable versions before the PowerShell or Bash version-bump command changes
+  files. Leading zeroes, non-ASCII digits, whitespace and prerelease labels cannot become build
+  metadata. Executed command regressions also verify valid bumps preserve dependency versions.
+
 - Verify Linux Docker integration on candidate `8941ea449`: all 224 engine and 65 Portal cases
   pass without skips, including the 24 Linux lifecycle cases. The hosted job prepares gVisor and
   the pinned worker digest. Final-candidate integration certification remains required.

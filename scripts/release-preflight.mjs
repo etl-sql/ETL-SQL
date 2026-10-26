@@ -21,7 +21,7 @@ sourceChecks.push({ id: 'installer-sources', command: 'pwsh', args: ['-NoProfile
 // These fixtures require no restore, build, network or installed product. Each runs in its own
 // process so a failing policy test cannot hide the other source or recovery findings.
 export const releaseAutomationChecks = [
-  'nightly-release', 'workflows', 'windows-release-packages', 'macos-release-packages', 'package-upload-recovery', 'msi-candidate', 'deb-candidate', 'deb-reuse', 'certification-process', 'release-preflight', 'release-versions',
+  'nightly-release', 'workflows', 'windows-release-packages', 'macos-release-packages', 'package-upload-recovery', 'msi-candidate', 'deb-candidate', 'deb-reuse', 'certification-process', 'release-preflight', 'release-versions', 'changelog-compiler',
   'installer-sources', 'installer-actions', 'master-release', 'publish-release', 'sbom-output', 'docs-audit', 'release-evidence', 'production-canary-evidence', 'certification-source', 'deployment-claims', 'local-release-bundle', 'release-driver-gates', 'release-run-wait', 'release-tag', 'release-timeline', 'ci-impact', 'browser-shards', 'built-browser-assets', 'hosted-release-evidence', 'hosted-local-evidence', 'release-certification',
 ].map(name => ({ id: `test-${name}`, command: process.execPath, args: [`scripts/checks/test-${name}.mjs`] }));
 sourceChecks.push(...releaseAutomationChecks);
