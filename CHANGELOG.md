@@ -12,6 +12,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Resolve activated VS Code module identities through canonical filesystem paths during packaged
+  webview acceptance. Filesystem aliases retain the loaded panel instance; another extension's
+  copy cannot substitute for it. The portable identity regression runs before native builds.
+
+- Upload MSI profile summaries and supervisor diagnostics before the complete evidence bundle.
+  Separate upload deadlines and a profile-job deadline bound diagnostics collection after tests
+  finish, while preserving the full evidence upload and attempt-specific artifact names.
+
 - Reject conflicting changelog check/skip switches before changing files. Check-only mode no
   longer creates a fragments directory. Executed public-command regressions verify preservation,
   invalid headings and normal compilation; the shared source preflight runs them independently.

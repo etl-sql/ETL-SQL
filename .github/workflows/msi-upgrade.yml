@@ -231,6 +231,7 @@ jobs:
     name: MSI certification (${{ matrix.profile }})
     needs: build-msi
     runs-on: windows-latest
+    timeout-minutes: 65
     strategy:
       fail-fast: false
       matrix:
@@ -276,8 +277,24 @@ jobs:
           $script = if ($env:PROFILE -eq 'portal') { 'scripts/Test-MsiPortalUpgrade.ps1' } else { 'scripts/Test-MsiUpgrade.ps1' }
           ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath $script -ScriptArguments @('-PreviousMsi', 'candidate/previous.msi', '-CurrentMsi', 'candidate/current.msi') -EvidenceDirectory "release-validation/msi-supervisor/$env:PROFILE" -TimeoutSeconds 1200
 
+      - name: Upload profile diagnostics first
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: msi-diagnostics-${{ matrix.profile }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            candidate/candidate.json
+            release-validation/msi-portal-upgrade/summary.txt
+            release-validation/msi-supervisor/${{ matrix.profile }}/result.json
+            release-validation/msi-supervisor/${{ matrix.profile }}/heartbeat.log
+            release-validation/msi-supervisor/${{ matrix.profile }}/stderr.log
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Upload upgrade evidence
         if: always()
+        timeout-minutes: 20
         uses: actions/upload-artifact@v7
         with:
           name: msi-upgrade-${{ matrix.profile }}-${{ github.run_id }}-${{ github.run_attempt }}

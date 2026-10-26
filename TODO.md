@@ -161,6 +161,14 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   continuing independent checks. Their serial ordering is preserved because fixtures can mutate
   prepared assets. A runner that disappears cannot be relied on to upload artifacts;
   heartbeat and certification output also stream directly to the Actions console.
+  Portal run `40312449960` failed certification then remained live in its full evidence upload
+  for more than 15 minutes, with job logs unavailable through the API. MSI profiles now upload
+  candidate identity, Portal summary, supervisor result/heartbeat/stderr first under a five-minute
+  deadline. The complete bundle has a 20-minute upload deadline and each profile job a 65-minute
+  outer limit. Hosted early-diagnostic/deadline acceptance and the Portal failure cause remain open.
+  That run ultimately records hosted-runner communication loss 44.8 minutes after its upload
+  starts. No Portal artifact or job-log blob survives; the workstation evidence and pinned MSI
+  pair are retained. Original job metadata and annotation: `release-validation/hosted-msi-40312449960/`.
   A local pre-push run exposed an unbounded wait after Windows tree shutdown failed in the
   VSIX command helper. That failure now rejects promptly with a direct-child cleanup fallback;
   the cancellation fixture and an injected missing-terminator regression pass.
@@ -796,6 +804,17 @@ here; each one failed a single test per run and passed on rerun.
   pre-push passes in 741.2 seconds: 43 source checks, 122 consumer checks, 11 Portal contracts
   and 142 smoke cases. Source inventory regression verifies the new changelog check runs once.
   Retained pre-push: `release-validation/version-bump-repro/combined-pre-push-recovery.log`.
+  Candidate `b0bc52f61` passes full hosted CI, including all three browser shards. Its Apple
+  Silicon native run now launches VS Code but fails the fixture's loaded-panel lookup. The
+  fixture compared path strings. A real filesystem alias reproduces that miss when module-cache
+  keys use canonical paths; canonical identity now returns the original activated instance and
+  rejects another extension's copy. Windows and Linux regressions pass and run independently in
+  source preflight. New-candidate hosted macOS acceptance remains required. Original log and
+  recovery proof: `release-validation/native-40312582254/`.
+  The combined diagnostics/module-identity batch passes full pre-push in 711.2 seconds: 44 source
+  checks, 122 consumer checks, 11 Portal contracts and 142 smoke cases. Source preflight verifies
+  the identity regression runs once before expensive builds. Retained result:
+  `release-validation/native-40312582254/combined-pre-push-recovery.log`.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook
   body unchanged. Its repository bytes use LF and `.gitattributes` now pins that checkout form.

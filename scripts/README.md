@@ -116,6 +116,9 @@ request record and trying again. A failed existing run requires diagnosis and an
 retry, not a new dispatch. The new dispatch workflow must be available on the repository's default
 branch before hosted rollout; see [GitHub's dispatch requirements](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch).
 MSI diagnostics use `msi-upgrade.yml` directly, not the regular CI lane selector.
+Each profile uploads candidate identity, the Portal summary and supervisor result/heartbeat/stderr
+before its full evidence bundle. The focused upload has a five-minute deadline, the full upload
+20 minutes, and the profile job 65 minutes. Both artifacts retain their original run attempt.
 Full local/operator and package certification requirements remain.
 
 `local-release-certification.yml` runs the full local phase gate on a dedicated Windows release
@@ -288,6 +291,7 @@ Candidate artifacts are not product claims until the public certification matrix
 | **[`Publish-TenantValidator.ps1`](./Publish-TenantValidator.ps1)** | PowerShell | Windows / Linux / macOS targets | Publishes the offline, self-contained tenant-bundle validator for customer-held signature and recipient keys. |
 | **[`Compile-Changelog.ps1`](./Compile-Changelog.ps1)** | PowerShell | Cross-platform | Compiles `changelog.d/*.md` fragments into `CHANGELOG.md` and fails the release gate when feature-surface changes have no changelog coverage. `-CheckCoverageOnly` preserves files and directories; it is mutually exclusive with `-SkipCoverageCheck`. |
 | **[`test-changelog-compiler.mjs`](./checks/test-changelog-compiler.mjs)** | Node.js / PowerShell | Cross-platform | Exercises check-only preservation, conflicting switches, invalid headings and normal fragment compilation in a private Git fixture. Runs in the shared source preflight. |
+| **[`test-vsix-module-identity.mjs`](./checks/test-vsix-module-identity.mjs)** | Node.js | Cross-platform | Verifies that packaged-webview acceptance finds the activated module through filesystem aliases and rejects other copies. Runs in the shared source preflight. |
 | **[`Test-VulnerablePackages.ps1`](./Test-VulnerablePackages.ps1)** | PowerShell | Cross-platform | CI gate that fails when any NuGet package (direct or transitive) has a known vulnerability. Requires a prior `dotnet restore`; response procedure in `SECURITY.md` §13. |
 | **[`sync-assets.ps1`](./sync-assets.ps1)** / **[`sync-assets.js`](./sync-assets.js)** | PowerShell / JavaScript | Cross-platform | Synchronizes canonical shared browser assets from `src/ETL-SQL.ReportRuntime` to dependent shell host directories (VS Code extension, portal, player). |
 | **[`generate-syntax-index.js`](./generate-syntax-index.js)** | JavaScript | Cross-platform | Regenerates the canonical token inventory appendix inside `docs/syntax-index.md` from `LanguageMetadata.cs`. |

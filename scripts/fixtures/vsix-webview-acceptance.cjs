@@ -6,6 +6,7 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const {createHash} = require('node:crypto');
 const {spawn} = require('node:child_process');
+const {getLoadedExtensionModule} = require('../lib/loaded-extension-module.cjs');
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 exports.run = async function () {
     const result = {startedAt: new Date().toISOString(), passed: false, views: {}, errors: []};
@@ -23,14 +24,8 @@ exports.run = async function () {
         }
         result.installedAssets = media.length;
         await extension.activate();
-        const loadedModule = name => {
-            const expected = path.join(extension.extensionPath, 'out', name).toLowerCase();
-            const loaded = Object.keys(require.cache).find(file => file.toLowerCase() === expected);
-            assert.ok(loaded, `Activated extension did not load ${name}`);
-            return require.cache[loaded].exports;
-        };
-        const {ReportDesignerPanel} = loadedModule('reportDesignerPanel.js');
-        const {ReportPreviewPanel} = loadedModule('reportPreviewPanel.js');
+        const {ReportDesignerPanel} = getLoadedExtensionModule(require.cache, extension.extensionPath, 'reportDesignerPanel.js');
+        const {ReportPreviewPanel} = getLoadedExtensionModule(require.cache, extension.extensionPath, 'reportPreviewPanel.js');
         const lspDeadline = Date.now() + 45000;
         while (!ReportDesignerPanel._lspClient && Date.now() < lspDeadline)
             await new Promise(resolve => setTimeout(resolve, 100));
