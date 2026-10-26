@@ -252,6 +252,14 @@ jobs:
         shell: pwsh
         run: ./scripts/MsiCandidate.ps1 -Mode Verify -Directory candidate -SourceSha $env:CERTIFICATION_SHA
 
+      - name: Rehearsal Portal failure on first attempt
+        if: matrix.profile == 'portal' && github.run_attempt == '1'
+        timeout-minutes: 1
+        shell: pwsh
+        run: |
+          'Deliberate Portal recovery rehearsal: preserve the MSI pair and workstation result, then rerun failed jobs on this unchanged candidate.' >> $env:GITHUB_STEP_SUMMARY
+          throw 'Deliberate first-attempt Portal failure for failed-job-only recovery acceptance.'
+
       - name: Set up browser verification runtime
         uses: actions/setup-node@v7
         with:
