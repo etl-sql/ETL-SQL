@@ -836,6 +836,16 @@ here; each one failed a single test per run and passed on rerun.
   checks, 122 consumer checks, 11 Portal contracts and 142 smoke cases. Source preflight verifies
   the identity regression runs once before expensive builds. Retained result:
   `release-validation/native-40312582254/combined-pre-push-recovery.log`.
+  Further changelog review reproduced compilation of a neighboring checkout when the requested
+  checkout contains brackets, plus coverage false passes for untracked/Unicode sources and an
+  invalid comparison reference after a committed feature change. Literal path operations now keep
+  writes and fragment deletion in the requested checkout. NUL-delimited Git inventories cover
+  committed/staged/unstaged/untracked paths; bounded Git queries reject invalid commits, missing
+  bases and parent-repository discovery before writes. Public-command regressions pass on Windows
+  and native Linux, including a POSIX newline filename, tag fallback, separate bracketed fragment
+  names and byte-identical preservation of a neighboring checkout. The old compiler fails the new
+  untracked-source regression. Original reproductions, controls and recovery logs:
+  `release-validation/changelog-coverage-review/`. The broader review remains open.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook
   body unchanged. Its repository bytes use LF and `.gitattributes` now pins that checkout form.

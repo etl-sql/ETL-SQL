@@ -33,6 +33,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   longer creates a fragments directory. Executed public-command regressions verify preservation,
   invalid headings and normal compilation; the shared source preflight runs them independently.
 
+- Keep changelog compilation inside the literal checkout path, including bracketed directories
+  and fragment names. Coverage now includes untracked and Unicode source paths, rejects invalid
+  comparison commits and failed Git queries, and refuses to inspect a parent repository.
+
 - Reject invalid stable versions before the PowerShell or Bash version-bump command changes
   files. Leading zeroes, non-ASCII digits, whitespace and prerelease labels cannot become build
   metadata. Executed command regressions also verify valid bumps preserve dependency versions.
