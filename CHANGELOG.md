@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Verify hosted real-browser timeout recovery on retained, hash-checked inputs. The watchdog stops
+  its child while preserving an unrelated process, failure diagnostics upload, and failed-job-only
+  recovery reuses the original driver build. The disposable rehearsal recovers in 58.7 seconds.
+
 - Verify hosted MSI failed-job recovery on an unchanged disposable candidate. Portal certification
   resumes against the original hash-verified installer pair while preserving the successful build
   and workstation execution. The installed fresh/upgrade/rollback checks and final receipt pass;

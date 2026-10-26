@@ -201,6 +201,17 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   existing per-attempt shard artifact; the 50-minute job ceiling and test coverage gate remain.
   A duplicate Node setup is removed. Executed workflow fixtures verify original arguments,
   failing exits and both log channels. Hosted timing and failure uploads remain unverified.
+  **Hosted browser watchdog verified 2026-10-26:** disposable candidate
+  `ca5eb7d1623fd2aa8afbf1e9b78d480620fba474`, run `40407383754`, deliberately waits forever in
+  real Chromium. The 30-second supervisor returns 124 after 30.1 seconds; the tracked child and
+  recorded Chromium processes exit, an unrelated sentinel survives, and failure diagnostics upload.
+  Failed-job-only recovery passes the real browser probe in 5.3 seconds, reusing the original
+  build execution and artifact `12691449322` with identical ZIP digest and all 110 driver-file hashes.
+  Recovery takes 58.7 seconds from request to green. Original attempts, manifests, logs, cleanup
+  reports and executable acceptance audit: `release-validation/browser-watchdog-rehearsal/`;
+  timeline: `release-validation/timelines/1793052009643-13344/`.
+  This proves the isolated browser watchdog/upload/retry path. Actual Portal-shard recovery,
+  other long-step coverage and the MSI runner-loss cause remain separate requirements.
 - [x] **One-command release metadata.** One step flips the CHANGELOG date, release-notes status and
   releases index together.
   **Verified locally 2026-10-24:** `finalize-release-metadata.mjs` previews or writes all three files
