@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 20 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 19 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -326,15 +326,25 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   The workflow's actual upload commands also pass a local mock-GitHub failure/retry rehearsal:
   unchanged retained bytes survive the retry, and tampering stops before any upload command runs.
   Hosted architecture-only retry, failed-upload recovery and elapsed-time evidence remain open.
-- [ ] **Split MSI build and certification into resumable jobs.** Persist the built MSI before any
+- [x] **Split MSI build and certification into resumable jobs.** Persist the built MSI before any
   install test. Run workstation and Portal certification on separate clean runners against that
   artifact and one pinned previous-release MSI. A Portal failure should allow only that job to
   rerun, without rebuilding or repeating a successful workstation check. Prove this by deliberately
   failing the Portal job, resuming it and verifying the input hashes and retained results. Reuse is
   limited to the same candidate and inputs; a source fix creates a new candidate.
-  **In progress:** workflow now persists a SHA/hash-bound installer pair and runs each profile on
-  its own runner. Local artifact verification checks cover retries, changed SHA, tampered bytes,
-  duplicate records and missing files. Hosted failure/retry rehearsal remains required before closure.
+  **Verified 2026-10-26:** disposable candidate `8fb47fc20dd9d66500be6511bdd5bfe57e948374`,
+  run `40323294594`, deliberately fails Portal after installer verification on attempt 1. Failed-job-only
+  recovery runs actual Portal fresh-install, upgrade, rollback and cleanup checks successfully on
+  attempt 2. Both attempts download artifact `12650738838` with the same ZIP digest and installer
+  hashes. The build and successful workstation execution retain their original timestamps; neither
+  repeats. The final receipt binds both successes to that artifact and unchanged candidate.
+  Request-to-green recovery takes 490.2 seconds; the new job span is 8.1 minutes, with no build time.
+  Original failure, successful workstation evidence, retry diagnostics, receipt and acceptance audit
+  are retained under `release-validation/msi-recovery-rehearsal/`; timing report:
+  `release-validation/timelines/1793049410677-40692/`. The production workflow differs from the
+  rehearsal only by its deliberate failure step. Local guards still reject changed candidates,
+  tampered bytes, duplicate records and missing files. Runner-loss diagnosis and final-candidate
+  certification remain separate open requirements.
 - [ ] **One release gate must own publication.** `release.yml` currently publishes after its own
   build/attestation jobs; the separate MSI workflow is not a publication dependency. Extend the
   evidence manifest above into an enforced gate covering every required lane, package hash and

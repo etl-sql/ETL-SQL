@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Verify hosted MSI failed-job recovery on an unchanged disposable candidate. Portal certification
+  resumes against the original hash-verified installer pair while preserving the successful build
+  and workstation execution. The installed fresh/upgrade/rollback checks and final receipt pass;
+  recovery takes 8.2 minutes from request to green without rebuilding the installers.
+
 - Resolve activated VS Code module identities through canonical filesystem paths during packaged
   webview acceptance. Filesystem aliases retain the loaded panel instance; another extension's
   copy cannot substitute for it. The portable identity regression runs before native builds.
