@@ -1,6 +1,8 @@
 name: DEB Installed Upgrade
 
 on:
+  push:
+    branches: [rehearsal/deb-installed-upgrade]
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -146,6 +148,21 @@ jobs:
             $key = if ($extension -eq 'zip') { 'linuxZipSha256' } else { 'linuxVsixSha256' }
             if ((Get-FileHash "candidate/current.$extension" -Algorithm SHA256).Hash -cne $receipt.$key) { throw "Candidate hash mismatch: $extension" }
           }
+      - name: Rehearsal installed DEB failure on first attempt
+        if: github.ref == 'refs/heads/rehearsal/deb-installed-upgrade' && github.run_attempt == '1'
+        timeout-minutes: 1
+        shell: pwsh
+        env:
+          INPUT_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+        run: |
+          New-Item -ItemType Directory -Force release-validation/deb/installed | Out-Null
+          $candidate = Get-Content candidate/candidate.json -Raw | ConvertFrom-Json
+          @{
+            status = 'DeliberateFailure'; sourceSha = $env:CANDIDATE_SHA
+            inputArtifactId = $env:INPUT_ARTIFACT_ID; candidate = $candidate
+            failedAt = [datetimeoffset]::UtcNow.ToString('o')
+          } | ConvertTo-Json -Depth 6 | Set-Content release-validation/deb/installed/rehearsal.json
+          throw 'Deliberate first-attempt DEB failure after input verification. Rerun failed jobs on this unchanged candidate.'
       - name: Prepare asset comparison sources
         run: |
           npm ci --prefix scripts/typecheck
