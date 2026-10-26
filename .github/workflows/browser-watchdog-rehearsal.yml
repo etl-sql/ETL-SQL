@@ -1,0 +1,158 @@
+name: Browser watchdog recovery rehearsal
+
+on:
+  push:
+    branches: [rehearsal/browser-watchdog]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: browser-watchdog-rehearsal-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  CANDIDATE_SHA: ${{ github.sha }}
+
+jobs:
+  build-driver:
+    name: Preserve browser probe inputs
+    runs-on: windows-latest
+    timeout-minutes: 30
+    outputs:
+      artifact_id: ${{ steps.inputs.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Prepare browser assets
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          npm ci --prefix scripts/typecheck
+          if ($LASTEXITCODE -ne 0) { throw 'Compiler restore failed.' }
+          node scripts/sync-assets.js
+          if ($LASTEXITCODE -ne 0) { throw 'Asset preparation failed.' }
+      - name: Build the existing Playwright driver
+        timeout-minutes: 17
+        shell: pwsh
+        run: |
+          ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj', '--configuration', 'Release') -EvidenceDirectory release-validation/browser-watchdog/build -TimeoutSeconds 900
+      - name: Bind the driver to this candidate
+        shell: pwsh
+        run: |
+          $output = 'tests/ETL-SQL.Portal.BrowserTests/bin/Release/net10.0'
+          New-Item -ItemType Directory driver | Out-Null
+          Copy-Item -LiteralPath "$output/Microsoft.Playwright.dll", "$output/playwright.ps1" -Destination driver
+          Copy-Item -LiteralPath "$output/.playwright" -Destination driver/.playwright -Recurse -Force
+          $root = (Resolve-Path driver).Path
+          $files = @(Get-ChildItem driver -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
+            @{ path = [IO.Path]::GetRelativePath($root, $_.FullName).Replace('\', '/'); sha256 = (Get-FileHash -LiteralPath $_.FullName).Hash }
+          })
+          @{ schemaVersion = 1; sourceSha = $env:CANDIDATE_SHA; files = $files } | ConvertTo-Json -Depth 5 | Set-Content driver/candidate.json
+      - name: Preserve probe inputs
+        id: inputs
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-driver-${{ github.run_id }}-${{ github.run_attempt }}
+          path: driver/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preserve build diagnostics
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-watchdog-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/browser-watchdog/build/
+          if-no-files-found: warn
+          retention-days: 30
+
+  browser-probe:
+    name: Browser watchdog probe
+    needs: build-driver
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download the retained driver
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.build-driver.outputs.artifact_id }}
+          path: driver
+          merge-multiple: true
+      - name: Verify unchanged probe inputs
+        shell: pwsh
+        run: |
+          $manifest = Get-Content driver/candidate.json -Raw | ConvertFrom-Json
+          if ($manifest.schemaVersion -ne 1 -or $manifest.sourceSha -cne $env:CANDIDATE_SHA) { throw 'Driver candidate mismatch.' }
+          $files = @(Get-ChildItem driver -File -Recurse -Force | Where-Object FullName -NE (Resolve-Path driver/candidate.json).Path)
+          if ($files.Count -ne $manifest.files.Count) { throw 'Driver inventory mismatch.' }
+          foreach ($file in $manifest.files) {
+            if ((Get-FileHash -LiteralPath (Join-Path driver $file.path)).Hash -cne $file.sha256) { throw "Driver hash mismatch: $($file.path)" }
+          }
+      - name: Install the pinned Chromium build
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File driver/playwright.ps1 install chromium
+          if ($LASTEXITCODE -ne 0) { throw 'Chromium installation failed.' }
+      - name: Exercise the real browser watchdog
+        timeout-minutes: 3
+        shell: pwsh
+        env:
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          INPUT_ARTIFACT_ID: ${{ needs.build-driver.outputs.artifact_id }}
+        run: |
+          $evidence = 'release-validation/browser-watchdog'
+          New-Item -ItemType Directory -Force $evidence | Out-Null
+          $info = [Diagnostics.ProcessStartInfo]::new('pwsh')
+          $info.UseShellExecute = $false
+          $info.CreateNoWindow = $true
+          foreach ($argument in @('-NoProfile', '-Command', 'Start-Sleep -Seconds 120')) { $info.ArgumentList.Add($argument) }
+          $sentinel = [Diagnostics.Process]::Start($info)
+          try {
+            $arguments = @('-NoProfile', '-File', 'scripts/fixtures/browser-watchdog-probe.ps1', '-Supervise', '-AssemblyPath', 'driver/Microsoft.Playwright.dll', '-EvidenceDirectory', "$evidence/browser", '-SupervisorEvidenceDirectory', "$evidence/supervisor", '-TimeoutSeconds', '30')
+            $expectHang = $env:RUN_ATTEMPT -eq '1'
+            if ($expectHang) { $arguments += '-Hang' }
+            & pwsh @arguments
+            $probeExit = $LASTEXITCODE
+            $result = Get-Content "$evidence/supervisor/result.json" -Raw | ConvertFrom-Json
+            $ready = Get-Content "$evidence/browser/browser-ready.json" -Raw | ConvertFrom-Json
+            $processes = Get-Content "$evidence/browser/browser-processes.json" -Raw | ConvertFrom-Json
+            foreach ($process in $processes.processInfo) {
+              $tracked = Get-Process -Id $process.id -ErrorAction SilentlyContinue
+              if ($tracked) { $null = $tracked.WaitForExit(10000); $tracked.Dispose() }
+            }
+            $remaining = @($processes.processInfo | Where-Object { Get-Process -Id $_.id -ErrorAction SilentlyContinue })
+            $sentinel.Refresh()
+            $alive = -not $sentinel.HasExited
+            @{ sourceSha = $env:CANDIDATE_SHA; inputArtifactId = $env:INPUT_ARTIFACT_ID; attempt = $env:RUN_ATTEMPT; probeExit = $probeExit; timedOut = $result.timedOut; sentinelSurvived = $alive; remainingBrowserProcesses = $remaining; verifiedUtc = [DateTimeOffset]::UtcNow.ToString('o') } | ConvertTo-Json -Depth 6 | Set-Content "$evidence/cleanup.json"
+            if (-not $alive -or $remaining.Count -ne 0 -or (Get-Process -Id $ready.probePid -ErrorAction SilentlyContinue)) { throw 'Watchdog cleanup did not preserve process isolation.' }
+            if ($expectHang) {
+              if ($probeExit -ne 124 -or -not $result.timedOut -or -not $ready.intentionalHang) { throw 'The deliberate real-browser timeout was not observed.' }
+              throw 'Deliberate first-attempt browser hang recovered by the watchdog. Rerun failed jobs on this unchanged candidate.'
+            }
+            if ($probeExit -ne 0 -or $result.timedOut -or -not (Test-Path "$evidence/browser/browser-completed.json")) { throw 'The real-browser recovery probe failed.' }
+          } finally {
+            if (-not $sentinel.HasExited) { $sentinel.Kill(); $null = $sentinel.WaitForExit(2000) }
+            $sentinel.Dispose()
+          }
+      - name: Upload every probe attempt
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-watchdog-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            driver/candidate.json
+            release-validation/browser-watchdog/
+          if-no-files-found: error
+          retention-days: 30
