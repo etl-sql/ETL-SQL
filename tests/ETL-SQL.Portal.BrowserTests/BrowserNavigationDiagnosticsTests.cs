@@ -70,7 +70,14 @@ public sealed class BrowserNavigationDiagnosticsTests(DetailSurfaceHarnessFixtur
                 if (process.GetProperty("HandleCount").ValueKind == JsonValueKind.Null)
                     Assert.NotEmpty(process.GetProperty("Unavailable").EnumerateArray());
                 else
-                    Assert.True(process.GetProperty("HandleCount").GetInt32() > 0);
+                {
+                    var handles = process.GetProperty("HandleCount").GetInt32();
+                    Assert.InRange(handles, 0, int.MaxValue);
+                    // A child can exit between CDP discovery and the native snapshot. The fixture
+                    // keeps only the main browser and test host alive throughout this check.
+                    if (process.GetProperty("Role").GetString() is "test-host" or "browser")
+                        Assert.True(handles > 0);
+                }
             }
             var host = Assert.Single(processes, process => process.GetProperty("Role").GetString() == "test-host");
             Assert.Equal(JsonValueKind.Number, host.GetProperty("TcpV4Endpoints").ValueKind);

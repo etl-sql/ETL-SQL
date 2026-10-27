@@ -9,16 +9,51 @@ if ($SkipCoverageCheck -and $CheckCoverageOnly) {
     throw 'SkipCoverageCheck and CheckCoverageOnly are mutually exclusive.'
 }
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$RepoRoot = Resolve-Path (Join-Path $ScriptRoot "..")
+$RepoRoot = (Resolve-Path -LiteralPath (Join-Path $ScriptRoot "..")).Path
 $ChangelogDir = Join-Path $RepoRoot "changelog.d"
 $ChangelogFile = Join-Path $RepoRoot "CHANGELOG.md"
 
 function Get-ChangelogFragments {
-    if (-not (Test-Path $ChangelogDir)) {
+    if (-not (Test-Path -LiteralPath $ChangelogDir)) {
         return @()
     }
 
-    return @(Get-ChildItem -Path $ChangelogDir -Filter "*.md" | Where-Object { $_.Name -ne "README.md" })
+    return @(Get-ChildItem -LiteralPath $ChangelogDir -File -Filter "*.md" | Where-Object { $_.Name -ne "README.md" })
+}
+
+function Invoke-ChangelogGit {
+    param([string[]]$Arguments, [switch]$AllowFailure)
+
+    $git = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    $start = [Diagnostics.ProcessStartInfo]::new($git)
+    $start.WorkingDirectory = $RepoRoot
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    $start.StandardOutputEncoding = [Text.UTF8Encoding]::new($false, $true)
+    $start.StandardErrorEncoding = [Text.UTF8Encoding]::new($false, $true)
+    $start.ArgumentList.Add('--no-pager')
+    foreach ($argument in $Arguments) { $start.ArgumentList.Add($argument) }
+    $process = [Diagnostics.Process]::Start($start)
+    try {
+        $output = $process.StandardOutput.ReadToEndAsync()
+        $errorOutput = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(30000)) {
+            $process.Kill()
+            throw 'Git inspection timed out; changelog coverage could not be verified.'
+        }
+        if (-not $output.Wait(5000) -or -not $errorOutput.Wait(5000)) {
+            throw 'Git inspection output did not close; changelog coverage could not be verified.'
+        }
+        if ($process.ExitCode -ne 0 -and -not $AllowFailure) {
+            throw "Git inspection failed (exit $($process.ExitCode)); changelog coverage could not be verified."
+        }
+        return [pscustomobject]@{ ExitCode = $process.ExitCode; Output = $output.GetAwaiter().GetResult() }
+    }
+    finally {
+        $process.Dispose()
+    }
 }
 
 function Resolve-ChangelogCoverageBase {
@@ -26,25 +61,18 @@ function Resolve-ChangelogCoverageBase {
         return $CoverageBase
     }
 
-    Push-Location $RepoRoot
-    try {
-        foreach ($candidate in @("origin/main", "main")) {
-            $base = (& git merge-base HEAD $candidate 2>$null) -join ""
-            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($base)) {
-                return $base.Trim()
-            }
-        }
-
-        $tag = (& git describe --tags --abbrev=0 HEAD 2>$null) -join ""
-        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($tag)) {
-            return $tag.Trim()
+    foreach ($candidate in @("origin/main", "main")) {
+        $base = Invoke-ChangelogGit -Arguments @('merge-base', 'HEAD', $candidate) -AllowFailure
+        if ($base.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($base.Output)) {
+            return $base.Output.Trim()
         }
     }
-    finally {
-        Pop-Location
-    }
 
-    return ""
+    $tag = Invoke-ChangelogGit -Arguments @('describe', '--tags', '--abbrev=0', 'HEAD') -AllowFailure
+    if ($tag.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($tag.Output)) {
+        return $tag.Output.Trim()
+    }
+    throw 'No changelog comparison base could be resolved. Supply CoverageBase with a valid comparison commit.'
 }
 
 function Test-RequiresChangelogCoverage {
@@ -77,32 +105,26 @@ function Test-RequiresChangelogCoverage {
 
 function Get-ChangedFilesForChangelogCoverage {
     $files = New-Object System.Collections.Generic.HashSet[string]
-    $base = Resolve-ChangelogCoverageBase
-
-    Push-Location $RepoRoot
-    try {
-        if (-not [string]::IsNullOrWhiteSpace($base)) {
-            foreach ($file in (& git diff --name-only $base HEAD 2>$null)) {
-                if (-not [string]::IsNullOrWhiteSpace($file)) {
-                    [void]$files.Add($file.Trim())
-                }
-            }
-        }
-
-        foreach ($file in (& git diff --name-only 2>$null)) {
-            if (-not [string]::IsNullOrWhiteSpace($file)) {
-                [void]$files.Add($file.Trim())
-            }
-        }
-
-        foreach ($file in (& git diff --cached --name-only 2>$null)) {
-            if (-not [string]::IsNullOrWhiteSpace($file)) {
-                [void]$files.Add($file.Trim())
-            }
-        }
+    $prefix = Invoke-ChangelogGit -Arguments @('rev-parse', '--show-prefix')
+    if (-not [string]::IsNullOrWhiteSpace($prefix.Output)) {
+        throw 'Changelog coverage must inspect the compiler checkout, not a parent repository.'
     }
-    finally {
-        Pop-Location
+    $base = Resolve-ChangelogCoverageBase
+    $resolved = Invoke-ChangelogGit -Arguments @('rev-parse', '--verify', '--end-of-options', "$base^{commit}") -AllowFailure
+    if ($resolved.ExitCode -ne 0 -or $resolved.Output.Trim() -cnotmatch '\A[0-9a-f]{40}([0-9a-f]{24})?\z') {
+        throw 'Changelog comparison base is not a valid commit.'
+    }
+    $queries = @(
+        @('diff', '--name-only', '-z', '--no-ext-diff', '--no-renames', $resolved.Output.Trim(), 'HEAD', '--'),
+        @('diff', '--name-only', '-z', '--no-ext-diff', '--no-renames', '--'),
+        @('diff', '--cached', '--name-only', '-z', '--no-ext-diff', '--no-renames', '--'),
+        @('ls-files', '--others', '--exclude-standard', '-z', '--')
+    )
+    foreach ($query in $queries) {
+        $result = Invoke-ChangelogGit -Arguments $query
+        foreach ($file in $result.Output.Split([char]0, [StringSplitOptions]::RemoveEmptyEntries)) {
+            [void]$files.Add($file)
+        }
     }
 
     return @($files)
@@ -118,7 +140,9 @@ function Test-ChangelogCoverage {
         return
     }
 
-    $hasFragment = $Fragments.Count -gt 0
+    $hasFragment = @($Fragments | Where-Object {
+        -not [string]::IsNullOrWhiteSpace((Get-Content -LiteralPath $_.FullName -Raw))
+    }).Count -gt 0
     $hasChangelogChange = @($changedFiles | Where-Object { ($_ -replace '\\', '/') -eq "CHANGELOG.md" }).Count -gt 0
     if ($hasFragment -or $hasChangelogChange) {
         Write-Output "Changelog coverage present for $($coveredFiles.Count) changed feature-surface file(s)."
@@ -138,8 +162,8 @@ if (-not $SkipCoverageCheck) {
     }
 }
 
-if (-not (Test-Path $ChangelogDir)) {
-    New-Item -ItemType Directory -Force -Path $ChangelogDir | Out-Null
+if (-not (Test-Path -LiteralPath $ChangelogDir)) {
+    [IO.Directory]::CreateDirectory($ChangelogDir) | Out-Null
 }
 
 if ($fragments.Count -eq 0) {
@@ -152,25 +176,28 @@ Write-Output "Found $($fragments.Count) changelog fragment(s). Compiling..."
 $combinedContent = New-Object System.Collections.Generic.List[string]
 foreach ($file in $fragments) {
     Write-Output "Processing fragment: $($file.Name)"
-    $content = Get-Content $file.FullName -Raw
+    $content = Get-Content -LiteralPath $file.FullName -Raw
     if (-not [string]::IsNullOrWhiteSpace($content)) {
         $combinedContent.Add($content.Trim())
         $combinedContent.Add("") # Space between fragments
     }
 }
 
+$changelogLines = Get-Content -LiteralPath $ChangelogFile
+if (@($changelogLines | Where-Object { $_.Trim() -eq '## [Unreleased]' }).Count -ne 1) {
+    throw "CHANGELOG.md must contain exactly one '## [Unreleased]' section."
+}
+
 if ($combinedContent.Count -eq 0) {
     Write-Output "All fragments were empty. Deleting them."
     foreach ($file in $fragments) {
-        Remove-Item $file.FullName -Force
+        Remove-Item -LiteralPath $file.FullName -Force
     }
     exit 0
 }
 
-$changelogLines = Get-Content $ChangelogFile
 $newLines = New-Object System.Collections.Generic.List[string]
 
-$inserted = $false
 foreach ($line in $changelogLines) {
     $newLines.Add($line)
     if ($line.Trim() -eq "## [Unreleased]") {
@@ -181,20 +208,20 @@ foreach ($line in $changelogLines) {
                 $newLines.Add($subLine)
             }
         }
-        $inserted = $true
     }
 }
 
-if (-not $inserted) {
-    throw "Could not find '## [Unreleased]' section in CHANGELOG.md."
+$unreleasedHeadings = @($newLines | Where-Object { $_.Trim() -eq '## [Unreleased]' }).Count
+if ($unreleasedHeadings -ne 1) {
+    throw "CHANGELOG.md must contain exactly one '## [Unreleased]' section."
 }
 
 # Write the updated CHANGELOG.md
-$newLines | Set-Content -Path $ChangelogFile -Encoding UTF8
+$newLines | Set-Content -LiteralPath $ChangelogFile -Encoding UTF8
 
 # Delete the processed fragments
 foreach ($file in $fragments) {
-    Remove-Item $file.FullName -Force
+    Remove-Item -LiteralPath $file.FullName -Force
     Write-Output "Deleted fragment: $($file.Name)"
 }
 
