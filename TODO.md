@@ -791,7 +791,13 @@ here; each one failed a single test per run and passed on rerun.
   11 Portal contracts and 142 smoke cases). Hosted certification exposes dependency audit findings,
   missing generated browser inventories in isolated MSI jobs, macOS VS Code test-host startup,
   one retired Studio control assertion and two governance HTTP 500 failures.
-  The dependency updates pass pinned npm 10 clean installs without audit findings, extension/UI
+  Hosted run `40552006993` later exposed the newly updated `qs` advisory in the VSIX toolchain.
+  An explicit 6.16.1 override now fixes its four reproduced comma-array crash inputs; a clean
+  Node 22/npm 10 install and real audit report zero vulnerabilities, and all four target archive
+  regressions pass. The BSD-3-Clause license and notices were checked; the generated inventory
+  remains current. Evidence: `release-validation/qs-audit.json`, `qs-advisory-probe-fixed.log`
+  and `qs-vsix-toolchain.log`. Hosted acceptance on the fixed candidate remains required.
+  The earlier dependency updates pass pinned npm 10 clean installs without audit findings, extension/UI
   compile/build and lint, 403 unit tests, four real target VSIX archive checks and the SDK/SQLite
   packaging coordinator. MSI workers now prepare/verify assets before installation, with failure
   guards exercised. The current list-filter Ctrl+click journey and all three governance roles pass

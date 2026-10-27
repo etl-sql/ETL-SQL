@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Pin the unsigned VSIX packager's transitive `qs` dependency to patched version 6.16.1.
+  Advisory crash inputs pass, the toolchain audit reports no vulnerabilities, and all four
+  target archive regressions pass with the existing unsigned packager.
+
 - Verify hosted MSI failed-job recovery on an unchanged disposable candidate. Portal certification
   resumes against the original hash-verified installer pair while preserving the successful build
   and workstation execution. The installed fresh/upgrade/rollback checks and final receipt pass;
