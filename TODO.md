@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 19 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 18 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -110,6 +110,11 @@ aim for one full certification on the frozen candidate, with no more than two fu
   the supervisor's output pipe open after exit; clearing supervisor standard-handle inheritance
   before launch fixes that fixture. This is a possible cause, not proof of the historical runner
   loss. Hosted timeout/recovery evidence is still required.
+  Hosted MSI now emits bounded phase and free-memory notices, including backup start/end,
+  with explicit supervisor forwarding for that diagnostic prefix only. Local runs emit no
+  workflow commands; unrelated/stderr/oversized commands remain prefixed and original evidence
+  is preserved. Production-function and public-supervisor fixtures pass. Hosted notice retention
+  is an experiment still requiring verification; it does not establish the runner-loss cause.
 - [ ] **Nightly release-branch lanes.** Run the installed-upgrade checks (DEB and the MSI Portal
   profile) and the Portal shards nightly from the day the release branch is cut.
   **In progress:** the nightly scheduler discovers version branches newer than the latest stable
@@ -272,7 +277,11 @@ aim for one full certification on the frozen candidate, with no more than two fu
   The independent run on `d9e137c52715e533a40bfe5db51a37a4fbb61079` finished in 115 minutes:
   40 phases passed, three failed (smoke GC comparison, nested-repository Git fixture and Portal
   testhost OOM), and coverage was skipped after engine failure. Original evidence is retained at
-  `release-validation/workstation-certification/`. A separate unpublished diagnostic draft retains
+  `release-validation/workstation-certification/`. A later fixed-binary runtime control passes all
+  40 correctness/memory cases but finds similar GC medians on .NET 10.0.13 and 10.0.14; the runtime
+  update alone does not explain the stored-reference gap. Its
+  [audit](certification-results/gc-runtime-control-2026-10-27.json) retains every sample and hash.
+  The GC blocker remains unresolved and no reference or comparison band changed. A separate unpublished diagnostic draft retains
   selected failed-run results (release `425732082`, asset `682217474`); uploaded/downloaded SHA-256
   matches `2b8b4f22e2ac9415fc3c7f1ac0c7f9a5af761b82b2603e199a1914d66d1866d6`.
   This proves diagnostic transport only. Raw dumps remain local. The isolated Git fixture fix
@@ -704,10 +713,19 @@ here; each one failed a single test per run and passed on rerun.
   test fixtures are fixed. Regression cases cover the retired statements and canonical replacements;
   `BREAKING_CHANGES.md` records their migration paths. Original failures and final TRX evidence are
   retained under `release-validation/`; final-candidate certification remains required below.
-- [ ] **Linux package install and upgrade.** The postinst now leaves shipped files root-owned and
+- [x] **Linux package install and upgrade.** The postinst now leaves shipped files root-owned and
   makes `/usr/lib/etl-sql/bin` `root:etlsql 1775`. Install fresh and upgrade over a previous package;
   confirm the Portal and Orchestrator start and write their databases, logs and data.
-  **In progress:** installed acceptance checks now explicitly verify the sticky directory mode,
+  **Verified 2026-10-27:** [hosted run 40594065837](https://github.com/etl-sql/ETL-SQL/actions/runs/40594065837)
+  passes all 45 fresh-install, upgrade, rollback and purge checks on candidate `755fe3fb3`.
+  Both services run the installed executable and write nonempty databases and open application
+  logs as `etlsql`; the service account creates, reads and removes runtime data. All 481 shipped
+  paths are protected and the install directory is `root:etlsql 1775` after both installation paths.
+  The installed evidence upload/download digest matches. The
+  [acceptance record](certification-results/linux-installed-acceptance-2026-10-27.json) retains
+  candidate, package and evidence hashes. Installed acceptance took 6.2 minutes; the build took
+  41 minutes. The package still reports 0.21.0; final v0.22 delivery-path certification stays open.
+  Assertion coverage explicitly verifies the sticky directory mode,
   root-owned protected package paths, service-owned nonempty databases, each service's open
   application log and service-account data writes. The upgrade sentinel is created by the service
   account and checked for preserved ownership. Linux rejection fixtures cover wrong ownership,
@@ -723,13 +741,12 @@ here; each one failed a single test per run and passed on rerun.
   and `no`; injected assertion failure preserves exit 17 and removes both fixture accounts.
   Evidence: `release-validation/installed-linux-cleanup-policy-test.log` and
   `release-validation/installed-linux-cleanup-failure-test.log`. The original hosted failure is retained.
-  Real fresh-install and upgrade acceptance of these checks remains required.
 
   Installed-service assertion review reproduced a false pass for inactive services. The assertion
   now requires an active service, a positive numeric PID and the exact installed executable;
   failed lookups, missing/unrelated executables and deleted binaries fail. All ten deterministic
-  cases pass in Windows/Git Bash and a Linux Node 22 container. Hosted installation and retry
-  evidence are being collected separately; these assertion regressions do not certify a package.
+  cases pass in Windows/Git Bash and a Linux Node 22 container. They complement the real installed
+  acceptance above; failed-job-only recovery evidence is tracked in its separate release item.
 - [x] **Windows run of the security tests.** Confirm the OS-neutral `SecurityTests` on Windows.
   **Verified 2026-10-24:** all 23 Windows x64 Release cases pass without skips, including
   `TestHardwareLockedEncryption`'s DPAPI round trip and wrong-entropy rejection. The initial run
@@ -886,6 +903,16 @@ here; each one failed a single test per run and passed on rerun.
   fails the earlier probe and passes with the fix; all ten Studio interaction cases pass.
   Original and corrected TRX evidence: `release-validation/chart-redraw-before/`,
   `chart-redraw-after/` and `language-server-complete/`. These fixes still need hosted acceptance.
+  Candidate `755fe3fb3` passes all three hosted browser shards, consumer contracts, extension and
+  Studio performance checks, but its CI fails one Portal smoke assertion: a report job becomes
+  `Completed` before its manifest is built. Three deterministic barrier cases reproduce premature
+  completion, cancellation exclusion and lost preparation failure. Terminal state/payload now
+  publish together after preparation and scope cleanup; all 14 focused real-report, cancellation,
+  failure and authorization cases pass. An unsupported report executor fails explicitly, with its
+  runtime compatibility change recorded. Evidence: `release-validation/report-completion-before/`
+  and `report-completion-real-executor/`. The original hosted failure remains retained.
+  Local pre-push now includes `Smoke.Portal` in its existing Portal test invocation, so the
+  report execution and completion regressions run before paying for another hosted round.
   The earlier dependency updates pass pinned npm 10 clean installs without audit findings, extension/UI
   compile/build and lint, 403 unit tests, four real target VSIX archive checks and the SDK/SQLite
   packaging coordinator. MSI workers now prepare/verify assets before installation, with failure

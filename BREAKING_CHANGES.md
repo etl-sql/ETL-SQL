@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: Report jobs require a manifest-capable executor
+- **What changed**: Ad-hoc report jobs stay running through manifest and snapshot preparation. Preparation errors fail the job. An executor without an in-process report context now reports failure instead of a completed job with no manifest.
+- **Who is affected**: Clients submitting `IsReport=true` ad-hoc jobs, especially hosts using process-spawned script execution.
+- **Migration**: Check terminal status before consuming the manifest. Route report jobs to a report-capable execution host; retain the isolation boundary required by the deployment profile. The service does not silently fall back to less isolated execution.
+- **Diagnostic**: `Report manifests require an in-process execution context.` This host capability is not detectable by script linting.
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: First-sign-in credentials follow saved configuration
 - **What changed**: MSI and DEB publish the protected sign-in file after saving protected and shared settings. A fresh-install retry reuses a saved bootstrap password when its sign-in file is missing. Configured credentials use UTF-8.
 - **Who is affected**: Fresh installs interrupted by settings or sign-in file write failures, and fresh installs with a configured bootstrap password.

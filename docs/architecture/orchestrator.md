@@ -78,6 +78,18 @@ The HTTP API has two independent trust checks. `X-Orchestrator-Key` authenticate
 
 Authorization is enforced twice: minimal-API endpoints filter reads and protect mutations, while engine catalog statement handlers resolve `IOrchestratorObjectAuthorizer` from the execution host. Ad-hoc scripts receive only the cryptographically verified `ExecutionIdentity`, so submitting `CREATE OR ALTER` cannot bypass shared-name ownership. Solo/local hosts that do not register an authorizer retain script-first local administration semantics.
 
+### 1.3 Ad-hoc report completion
+
+An ad-hoc job submitted with `IsReport=true` stays `Running` while its report manifest and snapshot
+are prepared. The status endpoint publishes terminal status and its manifest/error payload through
+the same state lock after output preparation and execution-scope disposal. A successful `Completed`
+report has its manifest ready; preparation failures produce `Failed`. Cancellation remains terminal
+and prevents a later completion from publishing output.
+
+Manifest construction currently requires `ScriptExecutorAdapter.LastEvaluator`. A process-spawned
+executor without that context fails the report job explicitly. It never falls back to in-process
+execution. The status endpoint continues to require its API key and caller authorization.
+
 ---
 
 ## 2. Session Lifecycle — `ExecutionSession`

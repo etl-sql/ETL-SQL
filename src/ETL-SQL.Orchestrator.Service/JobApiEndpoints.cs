@@ -224,10 +224,11 @@ namespace ETL_SQL.Orchestrator.Service
                 _ = RunJobAsync(entry, request, ToExecutionIdentity(caller), scopeFactory, logger, cts.Token)
                     .ContinueWith(t =>
                     {
-                        if (t.IsFaulted && entry.TryFinish(JobRunStatus.Failed))
+                        if (t.IsFaulted)
                         {
-                            entry.ErrorMessage = SecretRedactor.Redact(t.Exception?.InnerException?.Message ?? "Unexpected job execution fault.");
-                            logger.LogError("Job {JobId} faulted: {Message}", entry.JobId, entry.ErrorMessage);
+                            var error = SecretRedactor.Redact(t.Exception?.InnerException?.Message ?? "Unexpected job execution fault.");
+                            if (entry.TryFinish(JobRunStatus.Failed, error))
+                                logger.LogError("Job {JobId} faulted: {Message}", entry.JobId, error);
                         }
                     }, TaskContinuationOptions.OnlyOnFaulted);
 
@@ -2856,7 +2857,7 @@ namespace ETL_SQL.Orchestrator.Service
                 .Replace("\n", "\\n", StringComparison.Ordinal)
                 .Replace("\"", "\\\"", StringComparison.Ordinal);
 
-        // ── Ad-hoc job runner (unchanged) ─────────────────────────────────────
+        // ── Ad-hoc job runner ────────────────────────────────────────────────
 
         private static async Task RunJobAsync(JobEntry entry, JobSubmitRequest request,
             ExecutionIdentity executionIdentity,
@@ -2871,6 +2872,9 @@ namespace ETL_SQL.Orchestrator.Service
             }
             var sw = System.Diagnostics.Stopwatch.StartNew();
             Activity? activity = null;
+            var outcome = JobRunStatus.Failed;
+            string? errorMessage = null;
+            string? reportManifestJson = null;
             try
             {
                 activity = OrchestratorObservability.StartAdHocJobActivity(entry.JobId, entry.CorrelationId);
@@ -2885,55 +2889,54 @@ namespace ETL_SQL.Orchestrator.Service
                 entry.RowsProcessed = result.RowsProcessed;
                 entry.PeakMemoryBytes = result.PeakMemoryBytes;
                 entry.CpuTimeSeconds = result.CpuTimeSeconds;
-                // A job cancelled while its last statement was finishing stays cancelled.
-                if (entry.TryFinish(result.Success ? JobRunStatus.Completed : JobRunStatus.Failed))
-                    entry.ErrorMessage = result.ErrorMessage;
+                outcome = result.Success ? JobRunStatus.Completed : JobRunStatus.Failed;
+                errorMessage = result.ErrorMessage;
 
-                if (result.Success && entry.Status == JobRunStatus.Completed && request.Metadata != null &&
+                if (result.Success && entry.Status == JobRunStatus.Running && request.Metadata != null &&
                     request.Metadata.TryGetValue("IsReport", out var isReport) && isReport == "true")
                 {
                     logger.LogInformation("Job {JobId} is a report; building manifest", entry.JobId);
-                    if (executor is ScriptExecutorAdapter adapter)
+                    ct.ThrowIfCancellationRequested();
+                    if (executor is not ScriptExecutorAdapter adapter || adapter.LastEvaluator is not { } evaluator)
                     {
-                        var evaluator = adapter.LastEvaluator;
-                        if (evaluator != null)
-                        {
-                            var builder = new ManifestBuilder(evaluator);
-                            var manifest = await builder.BuildAsync("remote_script.rptsql");
-                            entry.ReportManifestJson = JsonSerializer.Serialize(manifest);
-
-                            var snapshotDir = "Snapshots";
-                            Directory.CreateDirectory(snapshotDir);
-                            var reportId = request.Metadata.GetValueOrDefault("ReportId", "unknown");
-                            var sessionId = request.SessionId ?? entry.JobId;
-                            if (reportId.Contains("..") || reportId.Contains('/') || reportId.Contains('\\') ||
-                                sessionId.Contains("..") || sessionId.Contains('/') || sessionId.Contains('\\'))
-                            {
-                                throw new SecurityException("Invalid character or traversal sequence in ReportId or SessionId.");
-                            }
-                            var manifestPath = Path.Combine(snapshotDir, $"report_{reportId}_{sessionId}.snapshot.json");
-
-                            var store = new SnapshotStore();
-                            await store.SaveAsync(manifest, manifestPath);
-                            logger.LogInformation("Manifest saved to {Path}", ETL_SQL.Core.Common.LogSanitizer.Clean(manifestPath));
-                        }
+                        // COMPAT_BREAK: 0.22 — an unsupported report executor cannot publish an empty success.
+                        throw new InvalidOperationException("Report manifests require an in-process execution context.");
                     }
-                }
+                    var builder = new ManifestBuilder(evaluator);
+                    var manifest = await builder.BuildAsync("remote_script.rptsql");
+                    reportManifestJson = JsonSerializer.Serialize(manifest);
 
-                logger.LogInformation("Job {JobId} {Status} in {ElapsedMs}ms, rows={Rows}",
-                    entry.JobId, entry.Status, sw.ElapsedMilliseconds, result.RowsProcessed);
+                    var snapshotDir = "Snapshots";
+                    Directory.CreateDirectory(snapshotDir);
+                    var reportId = request.Metadata.GetValueOrDefault("ReportId", "unknown");
+                    var sessionId = request.SessionId ?? entry.JobId;
+                    if (reportId.Contains("..") || reportId.Contains('/') || reportId.Contains('\\') ||
+                        sessionId.Contains("..") || sessionId.Contains('/') || sessionId.Contains('\\'))
+                    {
+                        throw new SecurityException("Invalid character or traversal sequence in ReportId or SessionId.");
+                    }
+                    var manifestPath = Path.Combine(snapshotDir, $"report_{reportId}_{sessionId}.snapshot.json");
+
+                    var store = new SnapshotStore();
+                    ct.ThrowIfCancellationRequested();
+                    await store.SaveAsync(manifest, manifestPath);
+                    logger.LogInformation("Manifest saved to {Path}", ETL_SQL.Core.Common.LogSanitizer.Clean(manifestPath));
+                }
             }
             catch (OperationCanceledException)
             {
-                entry.TryFinish(JobRunStatus.Cancelled);
+                outcome = JobRunStatus.Cancelled;
+                errorMessage = null;
+                reportManifestJson = null;
                 logger.LogInformation("Job {JobId} was cancelled", entry.JobId);
             }
             catch (Exception ex)
             {
-                if (entry.TryFinish(JobRunStatus.Failed))
-                    entry.ErrorMessage = SecretRedactor.Redact(ex.Message);
+                outcome = JobRunStatus.Failed;
+                errorMessage = SecretRedactor.Redact(ex.Message);
+                reportManifestJson = null;
                 logger.LogError("Job {JobId} failed unexpectedly: {Message}. StackTrace: {Stack}",
-                    entry.JobId, entry.ErrorMessage, SecretRedactor.Redact(ex.StackTrace));
+                    entry.JobId, errorMessage, SecretRedactor.Redact(ex.StackTrace));
             }
             finally
             {
@@ -2941,6 +2944,11 @@ namespace ETL_SQL.Orchestrator.Service
                 entry.ExecutionTimeMs = sw.ElapsedMilliseconds;
                 entry.Cts.Dispose();
                 entry.CompletedAt = DateTimeOffset.UtcNow;
+                // Publish terminal status only after output preparation and scope cleanup. A
+                // concurrent cancellation keeps its terminal state and receives no late payload.
+                entry.TryFinish(outcome, errorMessage, reportManifestJson);
+                logger.LogInformation("Job {JobId} {Status} in {ElapsedMs}ms, rows={Rows}",
+                    entry.JobId, entry.Status, entry.ExecutionTimeMs, entry.RowsProcessed);
                 using (activity)
                 {
                     OrchestratorObservability.CompleteAdHocJobActivity(
@@ -3291,11 +3299,13 @@ namespace ETL_SQL.Orchestrator.Service
                 }
             }
 
-            public bool TryFinish(JobRunStatus outcome)
+            public bool TryFinish(JobRunStatus outcome, string? errorMessage = null, string? reportManifestJson = null)
             {
                 lock (gate)
                 {
                     if (IsTerminal(status)) return false;
+                    ErrorMessage = errorMessage;
+                    ReportManifestJson = reportManifestJson;
                     status = outcome;
                     return true;
                 }

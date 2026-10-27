@@ -46,13 +46,11 @@ if (command === 'node' && args[0]?.endsWith('check-built-browser-assets.mjs')) {
 }
 if (command === 'dotnet') console.log('Passed: 1');
 `);
-        const shim = path.join(temporary, 'bin');
-        fs.mkdirSync(shim);
-        for (const name of ['node', 'dotnet']) {
-            const file = path.join(shim, name);
-            fs.writeFileSync(file, `#!/bin/sh\n"$ETLSQL_PROBE_NODE" "$ETLSQL_PROBE_LOGGER" ${name} "$@"\n`);
-            fs.chmodSync(file, 0o755);
-        }
+        const bashEnvironment = path.join(temporary, 'probe-env.sh');
+        // Every non-interactive child reads this private environment. A startup script or PATH
+        // lookup must never substitute the real toolchain for the fixture's recording commands.
+        fs.writeFileSync(bashEnvironment, 'node() { "$ETLSQL_PROBE_NODE" "$ETLSQL_PROBE_LOGGER" node "$@"; }\n' +
+            'dotnet() { "$ETLSQL_PROBE_NODE" "$ETLSQL_PROBE_LOGGER" dotnet "$@"; }\n');
         let bash = '/bin/bash';
         if (process.platform === 'win32') {
             const git = spawnSync('git', ['--exec-path'], { encoding: 'utf8', windowsHide: true });
@@ -63,7 +61,7 @@ if (command === 'dotnet') console.log('Passed: 1');
         const posix = value => {
             if (process.platform !== 'win32') return value;
             const converted = spawnSync(bash, ['--noprofile', '--norc', '-c', 'cygpath -u "$1"', 'convert', value],
-                { encoding: 'utf8', windowsHide: true, timeout: 10000 });
+                { env: { ...process.env, BASH_ENV: '', ENV: '' }, encoding: 'utf8', windowsHide: true, timeout: 10000 });
             assert.equal(converted.status, 0, converted.stderr);
             return converted.stdout.trim();
         };
@@ -95,8 +93,10 @@ if (command === 'dotnet') console.log('Passed: 1');
                             result = spawnSync('pwsh', ['-NoProfile', '-File', driver],
                                 { env, encoding: 'utf8', windowsHide: true, cwd: temporary, timeout: 15000 });
                         } else {
-                            const command = `export PATH=${quote(posix(shim))}:$PATH; export ETLSQL_PROBE_NODE=${quote(posix(process.execPath))}; ` +
-                                `export ETLSQL_PROBE_LOGGER=${quote(posix(logger))}; /bin/bash ${quote(posix(script))} ` +
+                            env.BASH_ENV = posix(bashEnvironment);
+                            env.ENV = '';
+                            const command = `export ETLSQL_PROBE_NODE=${quote(posix(process.execPath))}; ` +
+                                `export ETLSQL_PROBE_LOGGER=${quote(logger.replaceAll('\\', '/'))}; /bin/bash ${quote(posix(script))} ` +
                                 `--lane ${lane} --configuration Release --no-restore${noBuild ? ' --no-build' : ''}`;
                             result = spawnSync(bash, ['--noprofile', '--norc', '-c', command],
                                 { env, encoding: 'utf8', windowsHide: true, cwd: temporary, timeout: 15000 });

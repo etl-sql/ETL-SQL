@@ -53,6 +53,26 @@ Core, Engine, App and the test fixture between the normal and captured builds. R
 and application-config bytes match too. This excludes obvious stale/debug-build or config
 differences in those inspected files; it does not establish identical live process state.
 
+## Fixed-binary runtime control
+
+A separate control runs the same test binary and VSTest 18.7.0 console with .NET 10.0.13 and
+10.0.14. Five `A,B,B,A` blocks give ten samples per runtime and scenario. Each arm has a discarded
+process run and the original own-path warm-up. All 40 correctness/memory cases pass, with matching
+observed GC configuration. Interval CPU readings before capture were 0–7.6%.
+
+| Scenario | .NET 10.0.13 GC median | .NET 10.0.14 GC median |
+| :--- | ---: | ---: |
+| Spill cleanup | 15.55 ms | 15.4 ms |
+| Temp-table spill | 13.2 ms | 12.55 ms |
+
+Switching the selected runtime does not explain the stored-reference gap in this capture context.
+The [runtime-control audit](../../certification-results/gc-runtime-control-2026-10-27.json) retains
+all 40 samples, raw-output hashes, fixed test/console hashes and the GC configuration. A subsequent
+dependency audit finds no binary/config file timestamp after capture began; its closure hashes
+were recorded after capture. The older runtime uses a private workspace directory, with no change
+to the installed workstation runtime. Raw control data and the executable audit remain under
+`release-validation/runtime13-control/` and the integration checkout's `release-validation/`.
+
 ## Method and retained evidence
 
 Each scenario uses the predetermined sequence `A,B,B,A,A,B` in one worktree, rebuilding after
@@ -89,8 +109,8 @@ The main checkout also retains `release-validation/workstation-certification/`:
 ## Release status
 
 The original gate's three failures and skipped coverage stay recorded. These paired captures do
-not authorize publication or replace any reference. The experiments do not isolate runtime
-effects from other workstation or capture-context conditions. Keep the stored baselines and comparison bands
+not authorize publication or replace any reference. The fixed-binary runtime control does not
+explain the gap; workstation and capture-context conditions remain unresolved. Keep the stored baselines and comparison bands
 unchanged and run the complete gate on the final clean candidate.
 
 References:

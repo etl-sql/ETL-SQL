@@ -59,12 +59,12 @@ $systemData = Join-Path $env:SystemRoot 'System32\config\systemprofile\AppData\L
 function Write-Line([string]$Text) {
     Write-Host $Text
     Add-Content -LiteralPath $summary -Value $Text
-    if ($Text.StartsWith('== ')) { Write-ResourceSnapshot }
+    if ($Text.StartsWith('== ')) { Write-ResourceSnapshot $Text }
 }
 
 # The first CI run lost its runner with no log. Record what was running at each stage, so a
 # starved or crash-looping service shows up in the evidence.
-function Write-ResourceSnapshot {
+function Write-ResourceSnapshot([string]$Stage) {
     $os = Get-CimInstance Win32_OperatingSystem
     Add-Content -LiteralPath $summary -Value ("   free memory {0:N0} MB of {1:N0} MB" -f ($os.FreePhysicalMemory / 1KB), ($os.TotalVisibleMemorySize / 1KB))
     Get-Process | Sort-Object CPU -Descending | Select-Object -First 6 | ForEach-Object {
@@ -73,6 +73,15 @@ function Write-ResourceSnapshot {
     foreach ($name in 'ETL-SQL-Orchestrator', 'ETL-SQL-Portal') {
         $svc = Get-Service -Name $name -ErrorAction SilentlyContinue
         if ($svc) { Add-Content -LiteralPath $summary -Value "   service $name $($svc.Status)" }
+    }
+    if ($env:GITHUB_ACTIONS -eq 'true') {
+        $checkpoint = [ordered]@{ stage = $Stage; utc = [datetimeoffset]::UtcNow.ToString('o')
+            freeMemoryMiB = [math]::Round($os.FreePhysicalMemory / 1KB)
+            totalMemoryMiB = [math]::Round($os.TotalVisibleMemorySize / 1KB) } | ConvertTo-Json -Compress
+        # Runner issue records are queued during the step; artifact upload only runs after it.
+        # Hosted retention is checked separately. A notice is diagnostic, never certification.
+        $escaped = $checkpoint.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+        Write-Host "::notice title=MSI checkpoint::$escaped"
     }
 }
 
@@ -222,6 +231,7 @@ try {
     # `admin backup` runs as the operator, not LocalSystem, so it must be told where the service's
     # job history is. Before v0.21.0 it silently backed up no Orchestrator database.
     Test-Step 'fresh: admin backup includes the job history the service writes' {
+        Write-ResourceSnapshot 'fresh backup start'
         $jobHistory = Join-Path $systemData 'etlsql.db'
         if ((Get-Setting 'Portal:Orchestrator:DatabasePath') -ne $jobHistory) { throw "Portal:Orchestrator:DatabasePath is '$(Get-Setting 'Portal:Orchestrator:DatabasePath')', expected $jobHistory." }
         if (-not (Test-Path -LiteralPath $jobHistory)) { throw "The Orchestrator wrote no $jobHistory." }
@@ -250,6 +260,7 @@ try {
         foreach ($name in 'db/portal.db', 'db/etlsql.db') {
             if ($entries -notcontains $name) { throw "The backup has no $name ($($entries -join ', '))." }
         }
+        Write-ResourceSnapshot 'fresh backup complete'
     }
     Uninstall-All '00-fresh-uninstall.log'
     Remove-Item -LiteralPath $installDir, $systemData -Recurse -Force -ErrorAction SilentlyContinue

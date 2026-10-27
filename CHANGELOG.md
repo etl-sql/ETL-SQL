@@ -12,6 +12,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Verify Linux fresh installation, upgrade from v0.20.1, rollback and purge on a real hosted
+  machine. All 45 checks pass, including protected payload ownership, service-written databases
+  and logs, runtime data, secret preservation and installed browser assets. Final release
+  delivery-path certification remains separate.
+
+- Keep ad-hoc report jobs running until their manifest and snapshot are ready. Publish terminal
+  status and payload together; report preparation failures stay failed and cancellation wins
+  over late completion.
+  Local pre-push now runs Portal smoke cases alongside generated browser contracts so this
+  execution path is checked before a hosted CI round.
+
 - Keep Studio interaction checks attached to the current chart during redraws. A deterministic
   browser regression reproduces the earlier failure; all ten interaction journeys pass with the
   bounded data probe. Foreground CSV metadata tests now isolate background refresh and dispose

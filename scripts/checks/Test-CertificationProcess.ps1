@@ -18,13 +18,14 @@ function Start-TestProcess([string[]]$Arguments) {
     return $process
 }
 
-function Invoke-Fixture([string]$Name, [string]$Body, [int]$TimeoutSeconds, [int]$ExpectedExit) {
+function Invoke-Fixture([string]$Name, [string]$Body, [int]$TimeoutSeconds, [int]$ExpectedExit, [string[]]$Extra = @()) {
     $scriptPath = Join-Path $fixture "$Name script.ps1"
     $evidence = Join-Path $fixture "$Name evidence"
     Set-Content -LiteralPath $scriptPath -Value $Body
     $timer = [Diagnostics.Stopwatch]::StartNew()
-    $process = Start-TestProcess @('-NoProfile', '-File', $supervisor, '-ScriptPath', $scriptPath,
-        '-EvidenceDirectory', $evidence, '-TimeoutSeconds', [string]$TimeoutSeconds, '-HeartbeatSeconds', '1')
+    $arguments = @('-NoProfile', '-File', $supervisor, '-ScriptPath', $scriptPath,
+        '-EvidenceDirectory', $evidence, '-TimeoutSeconds', [string]$TimeoutSeconds, '-HeartbeatSeconds', '1') + $Extra
+    $process = Start-TestProcess $arguments
     $stdout = $process.StandardOutput.ReadToEndAsync()
     $stderr = $process.StandardError.ReadToEndAsync()
     if (-not $process.WaitForExit(15000)) { $process.Kill(); throw "$Name exceeded the test deadline." }
@@ -59,6 +60,25 @@ try {
         @(Get-Content (Join-Path $normal.Evidence 'stderr.log')).Count -ne 300) { throw 'Output was lost during draining.' }
     if ($normal.Output -notlike '*out-300*' -or $normal.Output -notlike '*err-300*') { throw 'Output did not reach the live console.' }
     $null = Invoke-Fixture 'failure' '[Console]::Error.WriteLine("fixture failure"); exit 7' 10 7
+    $previousActions = $env:GITHUB_ACTIONS
+    try {
+        $noticeBody = @'
+[Console]::Out.WriteLine('::notice title=MSI checkpoint::{"stage":"fixture"}')
+[Console]::Out.WriteLine('::error::not-a-checkpoint')
+[Console]::Error.WriteLine('::notice title=MSI checkpoint::stderr is not forwarded')
+[Console]::Out.WriteLine('::notice title=MSI checkpoint::' + ('x' * 2050))
+'@
+        $env:GITHUB_ACTIONS = 'true'
+        $forwarded = Invoke-Fixture 'hosted checkpoints' $noticeBody 10 0 @('-ForwardMsiCheckpoints')
+        $raw = @($forwarded.Output -split '\r?\n' | Where-Object { $_.StartsWith('::') })
+        if ($raw.Count -ne 1 -or $raw[0] -cne '::notice title=MSI checkpoint::{"stage":"fixture"}') { throw 'Checkpoint forwarding was not limited to the exact stdout diagnostic.' }
+        if (@(Get-Content (Join-Path $forwarded.Evidence 'stdout.log')).Count -ne 3) { throw 'Forwarded diagnostics changed original evidence.' }
+        $disabled = Invoke-Fixture 'disabled checkpoints' $noticeBody 10 0
+        if (@($disabled.Output -split '\r?\n' | Where-Object { $_.StartsWith('::') }).Count) { throw 'Checkpoint forwarding requires explicit opt-in.' }
+        $env:GITHUB_ACTIONS = 'false'
+        $local = Invoke-Fixture 'independent local checkpoints' $noticeBody 10 0 @('-ForwardMsiCheckpoints')
+        if (@($local.Output -split '\r?\n' | Where-Object { $_.StartsWith('::') }).Count) { throw 'Local checks emitted workflow commands.' }
+    } finally { $env:GITHUB_ACTIONS = $previousActions }
     $longBudget = Invoke-Fixture 'full local budget' 'Write-Output "full local deadline accepted"; exit 0' 24000 0
     if ($longBudget.Result.timeoutSeconds -ne 24000) { throw 'The full local deadline was not recorded.' }
     $invalidEvidence = Join-Path $fixture 'rejected deadline'
