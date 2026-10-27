@@ -128,6 +128,14 @@ This is separate from ordinary CI selection and does not certify the remaining o
 scope. Host setup, dispatch and evidence rules are in the
 [release checklist](../docs/releases/release-checklist.md#controlled-host-full-local-certification).
 
+## Portal test processes
+
+The PowerShell `portal` lane uses 12 sequential testhosts by default. Whole classes stay together;
+exact method filters, per-method discovered case counts and retained TRX results verify that every
+test ran without overlapping shards. Hosted-service tests keep their separate process. The 8 GB
+managed heap limit still applies to each host. `-PortalShardCount 1` reproduces the previous single
+host for diagnosis. Each host releases its retained factory and EF state when its class group finishes.
+
 ## Browser CI shards
 
 CI discovers the `Category=Browser` inventory and assigns whole classes to three runners by

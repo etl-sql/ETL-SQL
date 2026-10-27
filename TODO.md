@@ -252,6 +252,19 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   failed or mismatched evidence. This validates archive recovery prerequisites, not live HA
   continuity or measured recovery time. Hosted execution and full package promotion remain open;
   local release requirements stay in place until that evidence passes.
+  The independent Windows gate on `d9e137c52715e533a40bfe5db51a37a4fbb61079` reached managed OOM
+  in its single Portal testhost (20 failed, 1,106 passed before termination). Raw diagnostics remain
+  at `release-validation/workstation-certification/portal-diagnostics/`. The two classes reporting
+  OOM pass all 20 tests in a fresh host under the same 8 GB ceiling, which supports accumulated
+  process state as the immediate test-lane issue without proving its allocation source.
+  The proposed Portal lane uses 12 sequential hosts, preserving all classes and the memory ceiling.
+  TRX verification rejects missing methods/theory rows and unplanned identities; all negative
+  fixtures pass. Full Portal execution now passes all 1,631 default cases plus six hosted-service
+  cases and UI smoke checks under the original 8 GB ceiling, with zero skips. The retained manifest
+  and all 12 TRX files audit every method/case, all 199 classes and zero overlap. Evidence:
+  `release-validation/portal-lane-20261027-115113/`, `portal-default-inventory-audit.json` and
+  `portal-sharded-result.json`. A focused engine probe also passes all 11 cases across two shards.
+  These are dirty-tree development results; the final clean-candidate gate remains required.
   A manual-only `local-release-certification.yml` now runs the full local gate on a controlled
   Windows x64 release host, retaining immutable per-attempt bundles and failure diagnostics.
   Release requires and verifies that artifact before packaging and again before publishing.

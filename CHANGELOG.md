@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Run the PowerShell Portal test lane in fresh sequential testhosts to bound accumulated factory
+  state. Keep every class together and verify each discovered method and case count from TRX.
+  All 1,631 default and six hosted-service cases pass locally under the original 8 GB ceiling,
+  without skips; final-candidate certification remains required.
+
 - Verify hosted MSI failed-job recovery on an unchanged disposable candidate. Portal certification
   resumes against the original hash-verified installer pair while preserving the successful build
   and workstation execution. The installed fresh/upgrade/rollback checks and final receipt pass;
