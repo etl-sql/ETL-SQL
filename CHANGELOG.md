@@ -18,6 +18,31 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 - Bound the negative Git API fixture to its temporary workspace. Exercise a nested parent
   repository explicitly so test placement under a checkout cannot change the expected result.
+- Check installed DEB directory permissions and root ownership of shipped files after fresh install
+  and upgrade. Verify service-owned databases, each running service's open application log, and
+  service-account data writes. Upgrade diagnostics no longer print secret prefixes.
+  Fixture account cleanup handles hosts that automatically remove a user's matching group and
+  also runs when an assertion fails, preserving the failed check's status.
+
+- Require DEB installation checks to observe an active service, a valid main PID and the exact
+  installed executable. Inactive services and failed or unrelated executable lookups can no longer
+  pass certification. Ten deterministic cases pass on Windows/Git Bash and Linux.
+
+- Give the DEB workflow's runner ownership of the recovery diagnostic before evidence upload,
+  preserving its owner-only mode and root-only backup archives. A hosted rehearsal passed all
+  39 lifecycle checks but failed upload on that root-owned report; Linux permission regressions
+  cover report readability, unchanged backup permissions, missing reports and linked paths.
+
+- Keep PowerShell version bumps and consistency checks inside literal checkout and page paths.
+  Brackets no longer redirect version writes to a wildcard-matching neighboring checkout or hide
+  stale Portal cache versions. Public-command regressions cover both shells and preserve neighbor bytes.
+
+- Retain release-wrapper fixture process output before reading observations. Failures now identify
+  the scenario, exit, output and observed state instead of reporting only a missing artifact.
+
+- Verify hosted real-browser timeout recovery on retained, hash-checked inputs. The watchdog stops
+  its child while preserving an unrelated process, failure diagnostics upload, and failed-job-only
+  recovery reuses the original driver build. The disposable rehearsal recovers in 58.7 seconds.
 
 - Verify hosted MSI failed-job recovery on an unchanged disposable candidate. Portal certification
   resumes against the original hash-verified installer pair while preserving the successful build
@@ -35,6 +60,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Reject conflicting changelog check/skip switches before changing files. Check-only mode no
   longer creates a fragments directory. Executed public-command regressions verify preservation,
   invalid headings and normal compilation; the shared source preflight runs them independently.
+
+- Keep changelog compilation inside the literal checkout path, including bracketed directories
+  and fragment names. Coverage now includes untracked and Unicode source paths, rejects invalid
+  comparison commits and failed Git queries, and refuses to inspect a parent repository.
+  Renames retain the removed source path, whitespace-only fragments cannot supply coverage,
+  and ambiguous Unreleased headings stop compilation before any write or fragment deletion.
 
 - Reject invalid stable versions before the PowerShell or Bash version-bump command changes
   files. Leading zeroes, non-ASCII digits, whitespace and prerelease labels cannot become build

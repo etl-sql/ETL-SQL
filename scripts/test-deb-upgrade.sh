@@ -20,6 +20,7 @@ CFG=$INSTALL/appsettings.json
 FIRST_RUN=/etc/etl-sql/first-run-password
 URL=http://localhost:5002
 CHECKER=$CHECKOUT/scripts/test-installed-portal-assets.mjs
+. "$CHECKOUT/scripts/lib/installed-linux-checks.sh"
 
 [ "$(id -u)" -eq 0 ] || { echo "Run as root." >&2; exit 2; }
 dpkg -s etl-sql >/dev/null 2>&1 && { echo "etl-sql is already installed; use a clean host." >&2; exit 2; }
@@ -83,20 +84,27 @@ wait_portal() {
 
 # A running service whose executable was replaced underneath it reports the old inode as deleted.
 service_runs_installed_binary() {
-    local pid; pid=$(systemctl show -p MainPID --value "$1")
-    if [ -z "$pid" ] || [ "$pid" = 0 ]; then
+    local service=$1 expected=$2 pid exe
+    if ! systemctl is-active --quiet "$service"; then
+        echo "$service is not active"
+        return 1
+    fi
+    if ! pid=$(systemctl show -p MainPID --value "$service") || [[ ! "$pid" =~ ^[1-9][0-9]*$ ]]; then
         echo "$1 has no main process"
         journalctl -u "$1" --no-pager -n 80 > "$OUT/${1%.service}-$(date +%s)-journal.txt" 2>&1
         return 1
     fi
-    local exe; exe=$(readlink "/proc/$pid/exe"); echo "$1 pid $pid exe $exe"
-    [[ "$exe" != *"(deleted)"* ]]
+    if ! exe=$(readlink "/proc/$pid/exe"); then
+        echo "$service executable could not be inspected"
+        return 1
+    fi
+    echo "$service pid $pid exe $exe"
+    [[ "$exe" == "$expected" ]]
 }
 
 cli_reports() { local out; out=$(etl-sql --version 2>&1); echo "$out"; grep -q -- "${1%%[-~+]*}" <<<"$out"; }
-mask() { [ -n "$1" ] && echo "${1:0:4}…(${#1})" || echo "<empty>"; }
-setting_is() { local value; value=$(setting "$1"); echo "$1: was $(mask "$2") now $(mask "$value")"; [ -n "$value" ] && [ "$value" = "$2" ]; }
-setting_present() { local value; value=$(setting "$1"); echo "$1: $(mask "$value")"; [ -n "$value" ]; }
+setting_is() { local value; value=$(setting "$1"); [ -n "$value" ] && [ "$value" = "$2" ]; }
+setting_present() { local value; value=$(setting "$1"); [ -n "$value" ]; }
 root_only_file() { local mode; mode=$(stat -c '%a %U' "$1" 2>&1); echo "$1: $mode"; [ "$mode" = "600 root" ] && [ -s "$1" ]; }
 # postinst writes generated secrets into appsettings.json, so dpkg reports it as modified by design.
 # Packages up to v0.20.1 also shipped Portal snapshot files that the running Portal later prunes.
@@ -164,8 +172,10 @@ log "checkout $(git -C "$CHECKOUT" rev-parse HEAD 2>/dev/null || echo unknown)"
 log "== fresh install of $CUR_V"
 check "fresh: dpkg install" dpkg -i "$CURRENT_DEB"
 check "fresh: Portal healthy" wait_portal fresh
-check "fresh: Portal runs the installed executable" service_runs_installed_binary etl-sql-portal.service
-check "fresh: Orchestrator runs the installed executable" service_runs_installed_binary etl-sql-orchestrator.service
+check "fresh: Portal runs the installed executable" service_runs_installed_binary etl-sql-portal.service "$INSTALL/ETL-SQL-Portal"
+check "fresh: Orchestrator runs the installed executable" service_runs_installed_binary etl-sql-orchestrator.service "$INSTALL/ETL-SQL-Service"
+check "fresh: shipped paths are root-owned and protected" installed_package_permissions
+check "fresh: services write databases and logs; service account writes data" installed_service_writes
 check "fresh: one-time sign-in written for root only" root_only_file "$FIRST_RUN"
 check "fresh: dataset at-rest key generated" setting_present Portal:Dataset:AtRestKey
 check "fresh: secrets readable by the service account only" secrets_file_protected
@@ -187,7 +197,8 @@ operator_workaround_if_needed previous
 configure_previous
 check "previous: Portal healthy" wait_portal previous
 SECRET=$(setting Portal:Jwt:Secret); API_KEY=$(setting Orchestrator:ApiKey); AT_REST=$(setting Portal:Dataset:AtRestKey)
-echo kept > "$INSTALL/data-upgrade-sentinel.txt"
+check "previous: service account creates runtime data" \
+    runuser -u etlsql -- sh -c 'printf "%s\n" kept > "$1/data-upgrade-sentinel.txt"' sh "$INSTALL"
 check "previous: served assets recorded as a browser cache" assets --record "$OUT/cache-previous.json" --out "$OUT/previous-assets.json"
 # The pre-upgrade backup a rollback needs: v0.21.0 renames the database schema on first start, and a
 # previous release cannot open the renamed tables. SQLite files are copied with the services stopped.
@@ -207,8 +218,10 @@ log "== upgrade to $CUR_V"
 remove_operator_workaround
 check "upgrade: dpkg install" dpkg -i "$CURRENT_DEB"
 check "upgrade: Portal healthy" wait_portal upgrade
-check "upgrade: Portal runs the upgraded executable" service_runs_installed_binary etl-sql-portal.service
-check "upgrade: Orchestrator runs the upgraded executable" service_runs_installed_binary etl-sql-orchestrator.service
+check "upgrade: Portal runs the upgraded executable" service_runs_installed_binary etl-sql-portal.service "$INSTALL/ETL-SQL-Portal"
+check "upgrade: Orchestrator runs the upgraded executable" service_runs_installed_binary etl-sql-orchestrator.service "$INSTALL/ETL-SQL-Service"
+check "upgrade: shipped paths are root-owned and protected" installed_package_permissions
+check "upgrade: services write databases and logs; service account writes data" installed_service_writes
 check "upgrade: CLI reports $CUR_V" cli_reports "$CUR_V"
 check "upgrade: installed files match the package" dpkg_verify_clean
 check "upgrade: Portal JWT secret preserved" setting_is Portal:Jwt:Secret "$SECRET"
@@ -219,6 +232,7 @@ check "upgrade: secrets moved to the service-only file" secrets_file_protected
 check "upgrade: shared appsettings.json holds no generated secret" shared_config_holds_no_secrets
 check "upgrade: no one-time sign-in for an existing Portal" test ! -e "$FIRST_RUN"
 check "upgrade: runtime data preserved" grep -qx kept "$INSTALL/data-upgrade-sentinel.txt"
+check "upgrade: preserved runtime data still belongs to the service" service_owned_nonempty_file "$INSTALL/data-upgrade-sentinel.txt"
 check "upgrade: served assets match the candidate; cached browser refetches changes" \
     assets --inventory-root "$CHECKOUT" --revalidate "$OUT/cache-previous.json" --record "$OUT/cache-current.json" --out "$OUT/upgrade-assets.json"
 
@@ -234,7 +248,7 @@ databases | xargs -r rm -f
 tar -xpPf "$BACKUP/databases.tar"; cp -p "$BACKUP/appsettings.json" "$CFG"; chown etlsql:etlsql "$CFG"
 systemctl start etl-sql-orchestrator.service etl-sql-portal.service
 check "rollback: Portal healthy on the restored database" wait_portal rollback
-check "rollback: Portal runs the reinstalled executable" service_runs_installed_binary etl-sql-portal.service
+check "rollback: Portal runs the reinstalled executable" service_runs_installed_binary etl-sql-portal.service "$INSTALL/ETL-SQL-Portal"
 check "rollback: CLI reports $PREV_V" cli_reports "$PREV_V"
 check "rollback: installed files match the previous package" dpkg_verify_clean
 check "rollback: served assets are the previous release's; cached browser refetches changes" \

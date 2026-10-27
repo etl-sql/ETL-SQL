@@ -5,7 +5,7 @@ param([string]$Root = (Split-Path $PSScriptRoot -Parent))
 $ErrorActionPreference = 'Stop'
 $findings = [System.Collections.Generic.List[string]]::new()
 try {
-    [xml]$props = Get-Content (Join-Path $Root 'Directory.Build.props') -Raw
+    [xml]$props = Get-Content -LiteralPath (Join-Path $Root 'Directory.Build.props') -Raw
     $versions = @($props.SelectNodes('/Project/PropertyGroup/VersionPrefix'))
     if ($versions.Count -ne 1 -or $versions[0].InnerText -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
         throw 'Expected exactly one literal Major.Minor.Patch VersionPrefix.'
@@ -24,7 +24,7 @@ function Test-VersionValue([string]$Location, $Value) {
 
 foreach ($relative in @('src/etl-sql-vscode/package.json', 'src/etl-sql-vscode/package-lock.json')) {
     try {
-        $json = Get-Content (Join-Path $Root $relative) -Raw | ConvertFrom-Json -AsHashtable
+        $json = Get-Content -LiteralPath (Join-Path $Root $relative) -Raw | ConvertFrom-Json -AsHashtable
         Test-VersionValue "$relative version" $json.version
         if ($relative.EndsWith('package-lock.json')) {
             Test-VersionValue "$relative packages[''].version" $json.packages[''].version
@@ -33,10 +33,10 @@ foreach ($relative in @('src/etl-sql-vscode/package.json', 'src/etl-sql-vscode/p
 }
 
 try {
-    $pages = @(Get-ChildItem (Join-Path $Root 'src/ETL-SQL.Portal/wwwroot') -Filter '*.html' -File)
+    $pages = @(Get-ChildItem -LiteralPath (Join-Path $Root 'src/ETL-SQL.Portal/wwwroot') -Filter '*.html' -File)
     if ($pages.Count -eq 0) { throw 'No Portal HTML pages found.' }
     foreach ($page in $pages) {
-        foreach ($match in [regex]::Matches((Get-Content $page.FullName -Raw), '\?v=([^\s"''<>]+)')) {
+        foreach ($match in [regex]::Matches((Get-Content -LiteralPath $page.FullName -Raw), '\?v=([^\s"''<>]+)')) {
             Test-VersionValue "Portal/$($page.Name) cache version" $match.Groups[1].Value
         }
     }

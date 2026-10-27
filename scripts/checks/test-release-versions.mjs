@@ -65,6 +65,8 @@ for (const change of planReleaseMetadata('v1.2.3', '2026-10-18', name => crlf[na
 console.log('Metadata finalization: preview, complete update, idempotency, historical-date protection, rollback and line endings passed.');
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'release-versions espaces-é-$-'));
+const checkerDirectory = 'checker[1]';
+const checkerRoot = path.join(root, checkerDirectory);
 const script = fileURLToPath(new URL('../Test-ReleaseVersions.ps1', import.meta.url));
 function write(name, value) {
   const target = path.join(root, name);
@@ -72,32 +74,40 @@ function write(name, value) {
   writeFileSync(target, value);
 }
 function run() {
-  const result = spawnSync('pwsh', ['-NoProfile', '-File', script, '-Root', root], { encoding: 'utf8' });
+  const result = spawnSync('pwsh', ['-NoProfile', '-File', script, '-Root', checkerRoot], { encoding: 'utf8' });
   if (result.error) throw result.error;
   return result;
 }
 try {
-  write('Directory.Build.props', '<Project><PropertyGroup><VersionPrefix>1.2.3</VersionPrefix></PropertyGroup></Project>');
-  write('src/etl-sql-vscode/package.json', JSON.stringify({ version: '1.2.3' }));
+  const writeChecker = (name, value) => write(path.join(checkerDirectory, name), value);
+  writeChecker('Directory.Build.props', '<Project><PropertyGroup><VersionPrefix>1.2.3</VersionPrefix></PropertyGroup></Project>');
+  writeChecker('src/etl-sql-vscode/package.json', JSON.stringify({ version: '1.2.3' }));
   const lock = { version: '1.2.3', packages: { '': { version: '1.2.3' }, dependency: { version: '9.8.7' } } };
-  write('src/etl-sql-vscode/package-lock.json', JSON.stringify(lock));
-  write('src/ETL-SQL.Portal/wwwroot/index.html', '<script src="/js/app.js?v=1.2.3"></script>');
+  writeChecker('src/etl-sql-vscode/package-lock.json', JSON.stringify(lock));
+  writeChecker('src/ETL-SQL.Portal/wwwroot/index.html', '<script src="/js/app.js?v=1.2.3"></script>');
   assert.equal(run().status, 0);
+  writeChecker('src/ETL-SQL.Portal/wwwroot/dashboard[2].html', '<script src="/js/app.js?v=1.2.2"></script>');
+  const staleBracketedPage = run();
+  assert.equal(staleBracketedPage.status, 1);
+  assert.ok(staleBracketedPage.stdout.includes('dashboard[2].html'), staleBracketedPage.stdout);
+  rmSync(path.join(checkerRoot, 'src/ETL-SQL.Portal/wwwroot/dashboard[2].html'));
   lock.packages[''].version = '1.2.2';
-  write('src/etl-sql-vscode/package-lock.json', JSON.stringify(lock));
-  write('src/etl-sql-vscode/package.json', JSON.stringify({ version: '1.2.1' }));
-  write('src/ETL-SQL.Portal/wwwroot/index.html', '<script src="/js/app.js?v=1.2.0"></script>');
+  writeChecker('src/etl-sql-vscode/package-lock.json', JSON.stringify(lock));
+  writeChecker('src/etl-sql-vscode/package.json', JSON.stringify({ version: '1.2.1' }));
+  writeChecker('src/ETL-SQL.Portal/wwwroot/index.html', '<script src="/js/app.js?v=1.2.0"></script>');
   const failed = run();
   assert.equal(failed.status, 1);
   for (const version of ['1.2.2', '1.2.1', '1.2.0']) assert.ok(failed.stdout.includes(version), failed.stdout);
-  write('src/etl-sql-vscode/package.json', '{invalid');
+  writeChecker('src/etl-sql-vscode/package.json', '{invalid');
   assert.equal(run().status, 1);
-  write('Directory.Build.props', '<Project><PropertyGroup><VersionPrefix>$(Other)</VersionPrefix></PropertyGroup></Project>');
+  writeChecker('Directory.Build.props', '<Project><PropertyGroup><VersionPrefix>$(Other)</VersionPrefix></PropertyGroup></Project>');
   assert.equal(run().status, 1);
   console.log('Release versions: consistent sources pass; partial bumps and invalid metadata fail.');
 
   // Public bump commands must reject invalid versions before changing even the first file.
-  const bumpRoot = path.join(root, 'bump-fixture');
+  const bumpDirectory = 'bump-fixture[1]';
+  const bumpRoot = path.join(root, bumpDirectory);
+  const neighboringDirectory = 'bump-fixture1';
   mkdirSync(path.join(bumpRoot, 'scripts'), { recursive: true });
   for (const name of ['Set-Version.ps1', 'set-version.sh']) {
     copyFileSync(fileURLToPath(new URL(`../${name}`, import.meta.url)), path.join(bumpRoot, 'scripts', name));
@@ -109,6 +119,7 @@ try {
       '': { name: 'etl-sql-vscode', version: '1.2.3' }, 'node_modules/fixture': { version: '9.8.7' },
     } }, null, 2),
     'src/ETL-SQL.Portal/wwwroot/index.html': '<script src="/js/app.js?v=1.2.3"></script>\n',
+    'src/ETL-SQL.Portal/wwwroot/dashboard[2].html': '<script src="/js/app.js?v=1.2.3"></script>\n',
     'unrelated.txt': 'Preserve unrelated bytes.\n',
   };
   const bash = process.platform === 'win32' ? path.join(process.env.ProgramFiles ?? 'C:/Program Files', 'Git/bin/bash.exe') : 'bash';
@@ -121,7 +132,13 @@ try {
       : ['-c', 'exec bash "$1" "$ETLSQL_BUMP_VERSION"', 'version-bump-test', args[0]], {
       cwd: root, encoding: 'utf8', env: { ...process.env, ETLSQL_BUMP_VERSION: version },
     });
-    for (const [name, value] of Object.entries(bumpInputs)) write(path.join('bump-fixture', name), value);
+    for (const [name, value] of Object.entries(bumpInputs)) {
+      write(path.join(bumpDirectory, name), value);
+      write(path.join(neighboringDirectory, name), value);
+    }
+    const neighboringSnapshot = () => Object.fromEntries(Object.keys(bumpInputs)
+      .map(name => [name, readFileSync(path.join(root, neighboringDirectory, name))]));
+    const beforeNeighbor = neighboringSnapshot();
     const bumpSnapshot = () => Object.fromEntries(Object.keys(bumpInputs).map(name => [name, readFileSync(path.join(bumpRoot, name))]));
     const beforeBump = bumpSnapshot();
     for (const version of ['01.2.3', '1.02.3', '1.2.03', '١.2.3', '1.2.3\n', '1.2.3-rc.1', '1.2', '-1.2.3']) {
@@ -129,6 +146,7 @@ try {
       if (rejected.error) throw rejected.error;
       assert.notEqual(rejected.status, 0, `${executable} accepted ${JSON.stringify(version)}`);
       assert.deepEqual(bumpSnapshot(), beforeBump, 'Rejected bump must preserve all fixture bytes.');
+      assert.deepEqual(neighboringSnapshot(), beforeNeighbor, 'Rejected bump must preserve the neighboring checkout.');
     }
     for (const version of ['0.0.0', '0.22.0', '12.34.56']) {
       const bumped = bump(version);
@@ -141,10 +159,12 @@ try {
       assert.equal(updatedLock.packages[''].version, version);
       assert.equal(updatedLock.packages['node_modules/fixture'].version, '9.8.7');
       assert.ok(readFileSync(path.join(bumpRoot, 'src/ETL-SQL.Portal/wwwroot/index.html'), 'utf8').includes(`?v=${version}`));
+      assert.ok(readFileSync(path.join(bumpRoot, 'src/ETL-SQL.Portal/wwwroot/dashboard[2].html'), 'utf8').includes(`?v=${version}`));
       assert.deepEqual(readFileSync(path.join(bumpRoot, 'unrelated.txt')), beforeBump['unrelated.txt']);
+      assert.deepEqual(neighboringSnapshot(), beforeNeighbor, 'Version bump must not change a wildcard-matching neighboring checkout.');
     }
   }
-  console.log(`Public version bump: ${commands.length} shells reject invalid stable versions without writes and preserve dependency versions on valid bumps.`);
+  console.log(`Public version bump: ${commands.length} shells reject invalid stable versions without writes, update bracketed checkout/page paths, preserve dependency versions and leave the neighboring checkout byte-identical.`);
 
   // Execute the public command from outside a private candidate checkout. Its own location,
   // not the caller's working directory, must own every metadata read and write.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -72,3 +72,50 @@ try {
   rmSync(directory, { recursive: true, force: true });
 }
 console.log('Linux promotion: candidate/receipt/DEB/ZIP/VSIX bytes match; failed, skipped, missing, stale, wrong-input and rebuilt evidence is rejected.');
+
+// Execute the installed-service assertion without installing packages or reading host processes.
+const upgradeSource = readFileSync(new URL('../test-deb-upgrade.sh', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+const serviceCheck = upgradeSource.match(/^service_runs_installed_binary\(\) \{\n[\s\S]*?^\}/m)?.[0];
+assert.ok(serviceCheck, 'Installed upgrade service assertion must be available.');
+const bash = process.platform === 'win32'
+  ? path.join(process.env.ProgramFiles ?? 'C:/Program Files', 'Git/bin/bash.exe') : 'bash';
+if (process.platform === 'win32') assert.ok(existsSync(bash), 'Git Bash is required for DEB service assertion checks.');
+const probe = `
+set -uo pipefail
+systemctl() {
+  if [[ "$1" == is-active ]]; then return "$FIXTURE_ACTIVE_EXIT"; fi
+  printf '%s' "$FIXTURE_PID"
+  return "$FIXTURE_PID_EXIT"
+}
+readlink() { printf '%s' "$FIXTURE_EXE"; return "$FIXTURE_READLINK_EXIT"; }
+journalctl() { return 0; }
+OUT="$FIXTURE_OUT"
+${serviceCheck}
+service_runs_installed_binary etl-sql-portal.service /usr/lib/etl-sql/bin/ETL-SQL-Portal
+`;
+const serviceDirectory = mkdtempSync(path.join(os.tmpdir(), 'deb-service-check-'));
+try {
+  const script = path.join(serviceDirectory, 'probe.sh');
+  writeFileSync(script, probe);
+  const valid = { FIXTURE_ACTIVE_EXIT: '0', FIXTURE_PID: '123', FIXTURE_PID_EXIT: '0',
+    FIXTURE_EXE: '/usr/lib/etl-sql/bin/ETL-SQL-Portal', FIXTURE_READLINK_EXIT: '0', FIXTURE_OUT: serviceDirectory };
+  for (const [name, overrides, passed] of [
+    ['installed binary', {}, true],
+    ['inactive service', { FIXTURE_ACTIVE_EXIT: '3' }, false],
+    ['failed PID lookup', { FIXTURE_PID_EXIT: '1' }, false],
+    ['missing PID', { FIXTURE_PID: '' }, false],
+    ['zero PID', { FIXTURE_PID: '0' }, false],
+    ['invalid PID', { FIXTURE_PID: 'unknown' }, false],
+    ['failed executable lookup', { FIXTURE_READLINK_EXIT: '1' }, false],
+    ['missing executable', { FIXTURE_EXE: '' }, false],
+    ['unrelated executable', { FIXTURE_EXE: '/usr/bin/sleep' }, false],
+    ['replaced executable', { FIXTURE_EXE: valid.FIXTURE_EXE + ' (deleted)' }, false],
+  ]) {
+    const result = spawnSync(bash, [script.replaceAll('\\', '/')], {
+      encoding: 'utf8', timeout: 10000, windowsHide: true, env: { ...process.env, ...valid, ...overrides },
+    });
+    assert.equal(result.error, undefined, name);
+    assert.equal(result.status === 0, passed, `${name}: ${result.stdout}${result.stderr}`);
+  }
+} finally { rmSync(serviceDirectory, { recursive: true, force: true }); }
+console.log('Installed DEB service checks: only an active service with a valid PID and the exact installed executable passes.');

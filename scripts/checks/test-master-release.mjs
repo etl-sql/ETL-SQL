@@ -156,7 +156,11 @@ try {
     write(root, 'release/' + path.basename(nativeName), 'accepted native bundle');
     write(root, 'release/sha256sums.txt', 'accepted checksums');
     const result = spawnSync('pwsh', ['-NoProfile','-File',path.join(root,'runner.ps1'),'-FixtureRoot',root,'-Case',mode,'-Platform',host], { cwd:caller, encoding:'utf8', timeout:15000 });
-    if (result.error) throw result.error;
+    const diagnostic = JSON.stringify({ mode, host, status: result.status, signal: result.signal,
+      error: result.error?.message, stdout: result.stdout, stderr: result.stderr });
+    if (evidence) write(evidence, `${mode}-${host}.process.json`, diagnostic);
+    if (result.error) throw new Error(`Release wrapper fixture process failed: ${diagnostic}`, { cause: result.error });
+    if (!existsSync(path.join(root,'observed.json'))) throw new Error(`Release wrapper fixture did not record observations: ${diagnostic}`);
     const observed = JSON.parse(readFileSync(path.join(root,'observed.json'),'utf8').replace(/^\uFEFF/,''));
     if (evidence) write(evidence, `${mode}-${host}.json`, JSON.stringify({ status:result.status, stdout:result.stdout, stderr:result.stderr, observed }, null, 2));
     try {
@@ -197,7 +201,7 @@ try {
         if (mode==='publish-failure') assert.ok(!steps.includes('msi') && !steps.includes('native'));
         if (mode==='gate-failure' || mode==='retired-helper') assert.deepEqual(steps,['gate']);
       }
-    } catch (error) { failures.push(error.message); }
+    } catch (error) { failures.push(`${error.message}\nRelease wrapper fixture: ${diagnostic}\nObserved: ${JSON.stringify(observed)}`); }
   }
   if (failures.length) throw new Error(failures.join('\n'));
   console.log(`Master release: ${cases.length} isolated host/failure/state/artifact scenarios passed; no native build or install commands executed.`);
