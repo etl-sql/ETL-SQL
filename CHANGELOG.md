@@ -17,6 +17,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   path output; failed commands retain their diagnostics. Preparation failure restores the original
   branch and stops measurement.
 
+- Retain the GC regression investigation with 48 measured cases. Ten-sample normal-project probes
+  reproduce both reference failures; the old source control is elevated too. Baselines and bands
+  remain unchanged, and the original workstation gate remains failed.
+
 - Verify hosted MSI failed-job recovery on an unchanged disposable candidate. Portal certification
   resumes against the original hash-verified installer pair while preserving the successful build
   and workstation execution. The installed fresh/upgrade/rollback checks and final receipt pass;

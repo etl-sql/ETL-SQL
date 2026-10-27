@@ -583,7 +583,18 @@ the runtime changed from .NET 10.0.13 to 10.0.14. No cause or baseline replaceme
 The commit-comparison runner now prepares/verifies each checkout's browser assets before building.
 Real Git/Node/PowerShell fixtures verify interleaved ordering, preparation/verification failure,
 original-branch restoration, plan-only preservation and separation of successful Git stderr.
-Paired quiet-host measurements remain pending; baseline files and bands are unchanged.
+Paired quiet-host measurements now pass twelve correctness/memory checks on the same captured
+fixture and .NET 10.0.14 runtime. Control/candidate GC medians are 9.2/7.7 ms for cleanup and
+8.3/10.2 ms for temp-table spill, both below a 35% candidate/control increase. Elapsed medians
+are 51/50 ms and 63/65 ms. Three samples per arm and overlapping GC ranges do not prove the
+original cause. Ten-sample normal-project probes reproduce both reference failures at 14.7/11.6 ms.
+A normal-project paired control also places the old code above its stored reference: 12.1 ms
+control versus 15.5 ms candidate for temp-table GC, compared with the stored 4.7 ms. Inspection
+finds matching Release revisions and method IL for Core, Engine, App and the test fixture between
+normal/captured builds. Runtime, workstation and execution-context causality remain unproven.
+[Measurement record](docs/benchmarks/gc-paired-comparison-2026-10-27.md) and its curated audit retain
+all 48 measured cases, failed comparisons and branch restoration. The original gate stays failed; baseline files and
+bands are unchanged, and the final clean-candidate gate remains required.
 
 ### 3. Flaky tests — the dedicated fix
 

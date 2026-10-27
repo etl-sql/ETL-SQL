@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'scale-comparison-assets-'));
 const env = { ...process.env, PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH}`,
-  GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(root, 'no-global-config') };
+  GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(root, 'no-global-config'), LC_ALL: 'C' };
 function run(command, args, extra = {}) {
   const result = spawnSync(command, args, { cwd: root, env, encoding: 'utf8', windowsHide: true, timeout: 30000, ...extra });
   assert.ifError(result.error);
