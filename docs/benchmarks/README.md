@@ -10,7 +10,8 @@ This directory contains execution baseline reports and test result datasets for 
 
 | Document | Description |
 | :--- | :--- |
-| [Scale Baseline Calibration](scale-baseline-calibration-2026-10-23.md) | Clean Smoke/Standard control and candidate captures; reference replacement rejected after a control-repeat GC-pause failure. |
+| [Paired GC Investigation](gc-paired-comparison-2026-10-27.md) | Same-runtime source-control/candidate captures investigate a failed workstation gate; original failures and baselines remain retained. |
+| [Scale Baseline Calibration](scale-baseline-calibration-2026-10-23.md) | Accepted Smoke/Standard calibration and promoted references, with earlier failed controls retained. |
 | [Smoke Scale Order Independence](scale-order-independence-2026-10-22.md) | Fresh-process Smoke captures pass all directional timing checks; earlier failed experiments remain recorded. |
 | [Studio Performance Budgets](studio-performance-budgets.md) | Cross-platform browser fixture, checked-in regression ceilings, and measurement workflow for Studio startup, heap, editing, aggregation, and canvas redraw. |
 | [Studio Delivery Budgets](studio-delivery-budgets.md) | Production asset inventory and transfer ceilings, uncached Portal/desktop editor measurements, and the large-document character contract. |

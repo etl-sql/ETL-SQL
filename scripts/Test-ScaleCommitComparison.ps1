@@ -59,7 +59,9 @@ function Invoke-Git {
         throw "git $($Arguments -join ' ') failed: $($output -join [Environment]::NewLine)"
     }
     if ($LASTEXITCODE -ne 0) { return $null }
-    return (($output | Out-String).Trim())
+    # Native stderr can contain a warning even when Git succeeds. Keep it in failed-command
+    # diagnostics above, but do not mistake it for a revision or a dirty-path record.
+    return (($output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] } | Out-String).Trim())
 }
 
 function Get-Median {
@@ -156,6 +158,14 @@ try {
 
         Write-Host "[$($index + 1)/$($sequence.Count)] $arm $label sample $armSample" -ForegroundColor Yellow
         Invoke-Git @('switch', '--quiet', '--detach', $sha) | Out-Null
+
+        # The manifest binds the current checkout's sources. Preparing another arm cannot satisfy
+        # the next build, even when the measured operation does not use browser assets itself.
+        $assetScript = Join-Path $RepoRoot 'scripts/sync-assets.js'
+        & node $assetScript
+        if ($LASTEXITCODE -ne 0) { throw "$label sample $armSample asset preparation failed." }
+        & node $assetScript -Check
+        if ($LASTEXITCODE -ne 0) { throw "$label sample $armSample asset verification failed." }
 
         & pwsh -NoProfile -File $runnerCopy -RepositoryRoot $RepoRoot -Tier $Tier -Scenario $Scenario `
             -FixtureRoot $fixtureCopy -Samples 1 -RowCountScale $RowCountScale -OutDir $runOut

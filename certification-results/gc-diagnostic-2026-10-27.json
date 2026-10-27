@@ -1,0 +1,549 @@
+{
+  "schemaVersion": 1,
+  "scope": "development-paired-gc-diagnostic",
+  "auditPassed": true,
+  "certificationPassed": false,
+  "baselineSha": "040d2c217774bb02223ed4bc078990d09871b956",
+  "candidateSha": "d9e137c52715e533a40bfe5db51a37a4fbb61079",
+  "runtime": ".NET 10.0.14",
+  "referenceRuntime": ".NET 10.0.13",
+  "fixtureDefinitionSha256": "dc848d37fae4a1725dec9a3e6f24a2caf27fcc51d18ea908328dbefc4a99b723",
+  "referenceSha256": "de59e4e11bf0b29b3e2dda1214316a3303771da1e9bc573bd2f81e30aa41e004",
+  "originalReportSha256": "2268699b124bcf36920c24dfa23b26a8bfe2e7a35dc8c791463e432984070c0f",
+  "measuredCases": 48,
+  "results": [
+    {
+      "scenario": "SpillCleanupSuccess_50000",
+      "samplesPerArm": 3,
+      "storedGcPauseMs": 4.8,
+      "originalGateGcPauseMs": 15.1,
+      "baseline": {
+        "samples": 3,
+        "elapsedMsMedian": 51,
+        "elapsedMsMin": 48,
+        "elapsedMsMax": 51,
+        "elapsedMsSpread": 3,
+        "rowsPerSecondMedian": 980392.2,
+        "allocatedMBMedian": 29.6,
+        "gcPauseMsMedian": 9.2
+      },
+      "candidate": {
+        "samples": 3,
+        "elapsedMsMedian": 50,
+        "elapsedMsMin": 46,
+        "elapsedMsMax": 52,
+        "elapsedMsSpread": 6,
+        "rowsPerSecondMedian": 1000000,
+        "allocatedMBMedian": 29.3,
+        "gcPauseMsMedian": 7.7
+      },
+      "elapsedDeltaPct": -1.961,
+      "gcPauseRanges": {
+        "baseline": [
+          7.2,
+          10
+        ],
+        "candidate": [
+          4.2,
+          10.2
+        ]
+      },
+      "sourceSummarySha256": "35b451a15bc471988cfdf32fbec66ad25540a873769043a1e5b49ac763fbe155",
+      "samples": [
+        {
+          "sequence": 1,
+          "arm": "A",
+          "sha": "040d2c217774bb02223ed4bc078990d09871b956",
+          "gcPauseMs": 10,
+          "allocatedMB": 29.6,
+          "elapsedMs": 51,
+          "reportSha256": "70cae82377a1e4918ccaa3adac977a3e0293731c6602ea4fadf9078156d46d63"
+        },
+        {
+          "sequence": 2,
+          "arm": "B",
+          "sha": "d9e137c52715e533a40bfe5db51a37a4fbb61079",
+          "gcPauseMs": 4.2,
+          "allocatedMB": 29.3,
+          "elapsedMs": 46,
+          "reportSha256": "e2207075fecfdd0ea88823a5f65285abdf69a8c525ba02fbfe910893ff78617e"
+        },
+        {
+          "sequence": 3,
+          "arm": "B",
+          "sha": "d9e137c52715e533a40bfe5db51a37a4fbb61079",
+          "gcPauseMs": 10.2,
+          "allocatedMB": 29.3,
+          "elapsedMs": 52,
+          "reportSha256": "a06016317e07ef30d51b2ad6c5e37a676e4e2bc729fdcdcd644233a019159fb1"
+        },
+        {
+          "sequence": 4,
+          "arm": "A",
+          "sha": "040d2c217774bb02223ed4bc078990d09871b956",
+          "gcPauseMs": 7.2,
+          "allocatedMB": 29.3,
+          "elapsedMs": 48,
+          "reportSha256": "43e667d957801b0c30a5c16c2d1a5ac37c61d0c4ad52532f25b86356acec0d76"
+        },
+        {
+          "sequence": 5,
+          "arm": "A",
+          "sha": "040d2c217774bb02223ed4bc078990d09871b956",
+          "gcPauseMs": 9.2,
+          "allocatedMB": 29.6,
+          "elapsedMs": 51,
+          "reportSha256": "6694499bfccd846c57e1c7cf27d2a9b366be4f4b5ae592e3f2da2c52ba01a50f"
+        },
+        {
+          "sequence": 6,
+          "arm": "B",
+          "sha": "d9e137c52715e533a40bfe5db51a37a4fbb61079",
+          "gcPauseMs": 7.7,
+          "allocatedMB": 29.6,
+          "elapsedMs": 50,
+          "reportSha256": "f330d03b4081f03314b7544b51b00d62ab36faa61f6c8167705f9ab1393d99fc"
+        }
+      ]
+    },
+    {
+      "scenario": "TempTableSpill_50000_SELECT_INTO",
+      "samplesPerArm": 3,
+      "storedGcPauseMs": 4.7,
+      "originalGateGcPauseMs": 11.1,
+      "baseline": {
+        "samples": 3,
+        "elapsedMsMedian": 63,
+        "elapsedMsMin": 59,
+        "elapsedMsMax": 68,
+        "elapsedMsSpread": 9,
+        "rowsPerSecondMedian": 793650.8,
+        "allocatedMBMedian": 30.4,
+        "gcPauseMsMedian": 8.3
+      },
+      "candidate": {
+        "samples": 3,
+        "elapsedMsMedian": 65,
+        "elapsedMsMin": 56,
+        "elapsedMsMax": 66,
+        "elapsedMsSpread": 10,
+        "rowsPerSecondMedian": 769230.8,
+        "allocatedMBMedian": 30.3,
+        "gcPauseMsMedian": 10.2
+      },
+      "elapsedDeltaPct": 3.175,
+      "gcPauseRanges": {
+        "baseline": [
+          4.5,
+          9.8
+        ],
+        "candidate": [
+          4.1,
+          10.6
+        ]
+      },
+      "sourceSummarySha256": "6734219b578aa0fe775bde3b55c7876adb895615f8fe0c627d119788bffe55b1",
+      "samples": [
+        {
+          "sequence": 1,
+          "arm": "A",
+          "sha": "040d2c217774bb02223ed4bc078990d09871b956",
+          "gcPauseMs": 8.3,
+          "allocatedMB": 30.4,
+          "elapsedMs": 63,
+          "reportSha256": "64eea02a6e50dba9064010a0c3eae45406144e6727656b0e2cec76c80a9df42b"
+        },
+        {
+          "sequence": 2,
+          "arm": "B",
+          "sha": "d9e137c52715e533a40bfe5db51a37a4fbb61079",
+          "gcPauseMs": 10.2,
+          "allocatedMB": 30.3,
+          "elapsedMs": 65,
+          "reportSha256": "cf6607eaf5dc99db2663f60b862f22c49f7ebabfd9da4eaf446c811f7c73fe6d"
+        },
+        {
+          "sequence": 3,
+          "arm": "B",
+          "sha": "d9e137c52715e533a40bfe5db51a37a4fbb61079",
+          "gcPauseMs": 10.6,
+          "allocatedMB": 30.2,
+          "elapsedMs": 66,
+          "reportSha256": "8a4352820fb6eeda46373c42445f7eebd754a98dbc8d40406158554570295a8d"
+        },
+        {
+          "sequence": 4,
+          "arm": "A",
+          "sha": "040d2c217774bb02223ed4bc078990d09871b956",
+          "gcPauseMs": 9.8,
+          "allocatedMB": 30.3,
+          "elapsedMs": 68,
+          "reportSha256": "cd97d55426214b5a23343544569a1d487b354637f35fa3928ed76045525e758f"
+        },
+        {
+          "sequence": 5,
+          "arm": "A",
+          "sha": "040d2c217774bb02223ed4bc078990d09871b956",
+          "gcPauseMs": 4.5,
+          "allocatedMB": 30.7,
+          "elapsedMs": 59,
+          "reportSha256": "9850313230d1cfa472ffb708db751c836bd77f412ffecaab88c4e9faf57f324f"
+        },
+        {
+          "sequence": 6,
+          "arm": "B",
+          "sha": "d9e137c52715e533a40bfe5db51a37a4fbb61079",
+          "gcPauseMs": 4.1,
+          "allocatedMB": 30.5,
+          "elapsedMs": 56,
+          "reportSha256": "6ac70fa17afebf9bed2275134636233948391fd284772355a3e41e0c17b9c8c0"
+        }
+      ]
+    }
+  ],
+  "followupProbes": [
+    {
+      "scenario": "SpillCleanupSuccess_50000",
+      "samples": 10,
+      "captureExitCode": 0,
+      "comparisonExitCode": 1,
+      "gcPauseMs": 14.7,
+      "elapsedMs": 55,
+      "allocatedMB": 29.6,
+      "reportSha256": "ff1a1eb14a7c7aecce847fe697cd2287f4ae0488dc7b2362b5aab0dcadc97498",
+      "samplesData": [
+        {
+          "gcPauseMs": 15.5,
+          "elapsedMs": 56,
+          "allocatedMB": 29.3,
+          "gen0": 2,
+          "gen1": 1,
+          "gen2": 1
+        },
+        {
+          "gcPauseMs": 14.8,
+          "elapsedMs": 55,
+          "allocatedMB": 29.6,
+          "gen0": 2,
+          "gen1": 1,
+          "gen2": 1
+        },
+        {
+          "gcPauseMs": 14.8,
+          "elapsedMs": 56,
+          "allocatedMB": 29.6,
+          "gen0": 2,
+          "gen1": 1,
+          "gen2": 1
+        },
+        {
+          "gcPauseMs": 13.6,
+          "elapsedMs": 55,
+          "allocatedMB": 29.3,
+          "gen0": 2,
+          "gen1": 1,
+          "gen2": 1
+        },
+        {
+          "gcPauseMs": 14.4,
+          "elapsedMs": 55,
+          "allocatedMB": 29.6,
+          "gen0": 2,
+          "gen1": 1,
+          "gen2": 1
+        },
+        {
+          "gcPauseMs": 14.3,
+          "elapsedMs": 55,
+          "allocatedMB": 29.6,
+          "gen0": 2,
+          "gen1": 1,
+          "gen2": 1
+        },
+        {
+          "gcPauseMs": 14.8,
+          "elapsedMs": 55,
+          "allocatedMB": 29.6,
+          "gen0": 2,
+          "gen1": 1,
+          "gen2": 1
+        },
+        {
+          "gcPauseMs": 14.1,
+          "elapsedMs": 55,
+          "allocatedMB": 29.6,
+          "gen0": 2,
+          "gen1": 1,
+          "gen2": 1
+        },
+        {
+          "gcPauseMs": 15.4,
+          "elapsedMs": 58,
+          "allocatedMB": 29.3,
+          "gen0": 2,
+          "gen1": 1,
+          "gen2": 1
+        },
+        {
+          "gcPauseMs": 14.6,
+          "elapsedMs": 56,
+          "allocatedMB": 29.6,
+          "gen0": 2,
+          "gen1": 1,
+          "gen2": 1
+        }
+      ]
+    },
+    {
+      "scenario": "TempTableSpill_50000_SELECT_INTO",
+      "samples": 10,
+      "captureExitCode": 0,
+      "comparisonExitCode": 1,
+      "gcPauseMs": 11.6,
+      "elapsedMs": 70,
+      "allocatedMB": 30.75,
+      "reportSha256": "79196659e0d17a5f12a62ff454d22c926bd3fa2891816d59e4ee385ba0c586fe",
+      "samplesData": [
+        {
+          "gcPauseMs": 11.6,
+          "elapsedMs": 68,
+          "allocatedMB": 30.2,
+          "gen0": 1,
+          "gen1": 0,
+          "gen2": 0
+        },
+        {
+          "gcPauseMs": 11.6,
+          "elapsedMs": 69,
+          "allocatedMB": 30.3,
+          "gen0": 1,
+          "gen1": 0,
+          "gen2": 0
+        },
+        {
+          "gcPauseMs": 11,
+          "elapsedMs": 70,
+          "allocatedMB": 31.1,
+          "gen0": 1,
+          "gen1": 1,
+          "gen2": 1
+        },
+        {
+          "gcPauseMs": 15.9,
+          "elapsedMs": 74,
+          "allocatedMB": 30.9,
+          "gen0": 2,
+          "gen1": 1,
+          "gen2": 1
+        },
+        {
+          "gcPauseMs": 11.1,
+          "elapsedMs": 68,
+          "allocatedMB": 30.8,
+          "gen0": 1,
+          "gen1": 1,
+          "gen2": 1
+        },
+        {
+          "gcPauseMs": 15.4,
+          "elapsedMs": 74,
+          "allocatedMB": 30.9,
+          "gen0": 2,
+          "gen1": 1,
+          "gen2": 1
+        },
+        {
+          "gcPauseMs": 11.5,
+          "elapsedMs": 69,
+          "allocatedMB": 30.5,
+          "gen0": 1,
+          "gen1": 0,
+          "gen2": 0
+        },
+        {
+          "gcPauseMs": 15.3,
+          "elapsedMs": 73,
+          "allocatedMB": 30.8,
+          "gen0": 2,
+          "gen1": 1,
+          "gen2": 1
+        },
+        {
+          "gcPauseMs": 11.2,
+          "elapsedMs": 70,
+          "allocatedMB": 30.4,
+          "gen0": 1,
+          "gen1": 0,
+          "gen2": 0
+        },
+        {
+          "gcPauseMs": 15.1,
+          "elapsedMs": 79,
+          "allocatedMB": 30.7,
+          "gen0": 2,
+          "gen1": 1,
+          "gen2": 1
+        }
+      ]
+    }
+  ],
+  "nativeProjectControl": {
+    "summary": {
+      "A": {
+        "samples": 3,
+        "gcPauseMsMedian": 12.1,
+        "gcRange": [
+          9.8,
+          18.6
+        ],
+        "elapsedMsMedian": 70
+      },
+      "B": {
+        "samples": 3,
+        "gcPauseMsMedian": 15.5,
+        "gcRange": [
+          12.9,
+          15.9
+        ],
+        "elapsedMsMedian": 73
+      }
+    },
+    "samples": [
+      {
+        "arm": "A",
+        "sha": "040d2c217774bb02223ed4bc078990d09871b956",
+        "gcPauseMs": 9.8,
+        "elapsedMs": 65,
+        "reportSha256": "05413af62b4ae6c00dcc324ee748a715e74b57e55112f5e2c4dd2a48ca30036a"
+      },
+      {
+        "arm": "B",
+        "sha": "d9e137c52715e533a40bfe5db51a37a4fbb61079",
+        "gcPauseMs": 15.5,
+        "elapsedMs": 74,
+        "reportSha256": "79bc91564169f883a23518a212dc8576417ee8e71bb8276d26751269498ba05e"
+      },
+      {
+        "arm": "B",
+        "sha": "d9e137c52715e533a40bfe5db51a37a4fbb61079",
+        "gcPauseMs": 15.9,
+        "elapsedMs": 71,
+        "reportSha256": "1d194abcff691af5cd69291c6c8f9bfd9f98b9aca00013eb66db6fda620e07aa"
+      },
+      {
+        "arm": "A",
+        "sha": "040d2c217774bb02223ed4bc078990d09871b956",
+        "gcPauseMs": 18.6,
+        "elapsedMs": 72,
+        "reportSha256": "23f1c6205abf39c928585fc99cf963a579c26f59bb932bf731761248736eebcb"
+      },
+      {
+        "arm": "A",
+        "sha": "040d2c217774bb02223ed4bc078990d09871b956",
+        "gcPauseMs": 12.1,
+        "elapsedMs": 70,
+        "reportSha256": "f0666e4f0781b8fd44ffede8c800b939e309fac2fa67d65389b3dc881b93e3f1"
+      },
+      {
+        "arm": "B",
+        "sha": "d9e137c52715e533a40bfe5db51a37a4fbb61079",
+        "gcPauseMs": 12.9,
+        "elapsedMs": 73,
+        "reportSha256": "1fb2eb4f9ae36a634fdde2e376f9f72da044fac0789600cb56db5b2e837443c4"
+      }
+    ],
+    "processResultSha256": "23d922484970343039655dfd0c7f42cf767daa18770d147f0deaa84f77ed774b"
+  },
+  "capturedFixtureControl": {
+    "scenario": "TempTableSpill_50000_SELECT_INTO",
+    "samples": 10,
+    "gcPauseMs": 8.65,
+    "elapsedMs": 65.5,
+    "reportSha256": "49db1bdff253879dda6f9ed4d80f60bc12e1530ce164189aa3c5746215b22c70",
+    "referenceComparison": "Not executed for this context control.",
+    "samplesData": [
+      {
+        "gcPauseMs": 4.4,
+        "elapsedMs": 59,
+        "allocatedMB": 30.4,
+        "gen0": 1,
+        "gen1": 1,
+        "gen2": 1
+      },
+      {
+        "gcPauseMs": 8.7,
+        "elapsedMs": 67,
+        "allocatedMB": 31.2,
+        "gen0": 2,
+        "gen1": 1,
+        "gen2": 1
+      },
+      {
+        "gcPauseMs": 9.4,
+        "elapsedMs": 68,
+        "allocatedMB": 30.2,
+        "gen0": 2,
+        "gen1": 1,
+        "gen2": 1
+      },
+      {
+        "gcPauseMs": 8.6,
+        "elapsedMs": 64,
+        "allocatedMB": 30.4,
+        "gen0": 2,
+        "gen1": 1,
+        "gen2": 1
+      },
+      {
+        "gcPauseMs": 9.5,
+        "elapsedMs": 65,
+        "allocatedMB": 30.9,
+        "gen0": 2,
+        "gen1": 1,
+        "gen2": 1
+      },
+      {
+        "gcPauseMs": 8.5,
+        "elapsedMs": 66,
+        "allocatedMB": 30.8,
+        "gen0": 2,
+        "gen1": 1,
+        "gen2": 1
+      },
+      {
+        "gcPauseMs": 4.5,
+        "elapsedMs": 59,
+        "allocatedMB": 30.4,
+        "gen0": 1,
+        "gen1": 1,
+        "gen2": 1
+      },
+      {
+        "gcPauseMs": 8.7,
+        "elapsedMs": 66,
+        "allocatedMB": 30.8,
+        "gen0": 2,
+        "gen1": 1,
+        "gen2": 1
+      },
+      {
+        "gcPauseMs": 4.4,
+        "elapsedMs": 60,
+        "allocatedMB": 30.8,
+        "gen0": 1,
+        "gen1": 1,
+        "gen2": 1
+      },
+      {
+        "gcPauseMs": 9,
+        "elapsedMs": 68,
+        "allocatedMB": 30.7,
+        "gen0": 2,
+        "gen1": 1,
+        "gen2": 1
+      }
+    ]
+  },
+  "referenceComparisonPassed": false,
+  "conclusion": "Both normal-project ten-sample probes reproduce the unchanged-reference GC failures. The normal-project old-source control median is also elevated (12.1 ms versus the stored 4.7 ms), so source changes alone do not explain the reference gap. Runtime/workstation/capture-context causality remains unproven. The original full gate remains failed; no reference or band is replaced."
+}
