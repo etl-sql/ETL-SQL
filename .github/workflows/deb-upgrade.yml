@@ -57,6 +57,15 @@ jobs:
         shell: bash
         timeout-minutes: 2
         run: sudo python3 scripts/checks/test-linux-installer-config.py
+      - name: Check installed Linux acceptance assertions
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          sudo groupadd --system etlsql
+          sudo useradd --system --gid etlsql --no-create-home etlsql
+          sudo bash scripts/checks/test-installed-linux-checks.sh
+          sudo userdel etlsql
+          sudo groupdel etlsql
       - name: Publish candidate binaries
         shell: pwsh
         timeout-minutes: 45

@@ -648,6 +648,17 @@ here; each one failed a single test per run and passed on rerun.
 - [ ] **Linux package install and upgrade.** The postinst now leaves shipped files root-owned and
   makes `/usr/lib/etl-sql/bin` `root:etlsql 1775`. Install fresh and upgrade over a previous package;
   confirm the Portal and Orchestrator start and write their databases, logs and data.
+  **In progress:** installed acceptance checks now explicitly verify the sticky directory mode,
+  root-owned protected package paths, service-owned nonempty databases, each service's open
+  application log and service-account data writes. The upgrade sentinel is created by the service
+  account and checked for preserved ownership. Linux rejection fixtures cover wrong ownership,
+  writable or missing payload, missing sticky bit, empty inventory, empty/missing/linked state and
+  denied data writes. The complete service-write assertion also passes against a real service-UID
+  process and open log descriptor in a disposable Linux container; wrong/zero PIDs, root-owned or
+  empty logs and deleted open logs reject. Only systemctl's PID lookup is substituted. Container
+  execution needs SYS_PTRACE for cross-UID /proc reads; denied reads fail explicitly, without
+  weakening acceptance. Evidence: `release-validation/installed-linux-runtime-process-fixture-verified.log`.
+  Real fresh-install and upgrade acceptance of these checks remains required.
 - [x] **Windows run of the security tests.** Confirm the OS-neutral `SecurityTests` on Windows.
   **Verified 2026-10-24:** all 23 Windows x64 Release cases pass without skips, including
   `TestHardwareLockedEncryption`'s DPAPI round trip and wrong-entropy rejection. The initial run

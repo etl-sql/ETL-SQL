@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Check installed DEB directory permissions and root ownership of shipped files after fresh install
+  and upgrade. Verify service-owned databases, each running service's open application log, and
+  service-account data writes. Upgrade diagnostics no longer print secret prefixes.
+
 - Verify hosted MSI failed-job recovery on an unchanged disposable candidate. Portal certification
   resumes against the original hash-verified installer pair while preserving the successful build
   and workstation execution. The installed fresh/upgrade/rollback checks and final receipt pass;
