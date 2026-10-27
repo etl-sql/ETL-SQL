@@ -12,6 +12,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Run the full Windows release check independently on the workstation. Upload its verified
+  evidence separately; publication checks the candidate, payload digest and complete local phase
+  results without registering the workstation as a GitHub runner.
+
+- Bound the negative Git API fixture to its temporary workspace. Exercise a nested parent
+  repository explicitly so test placement under a checkout cannot change the expected result.
+
 - Verify hosted MSI failed-job recovery on an unchanged disposable candidate. Portal certification
   resumes against the original hash-verified installer pair while preserving the successful build
   and workstation execution. The installed fresh/upgrade/rollback checks and final receipt pass;

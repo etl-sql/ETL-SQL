@@ -1262,12 +1262,31 @@ public sealed class WorkstationEditorTests
         Assert.Contains("from", formatBody.Script);
     }
 
-    [Fact]
-    public async Task GitStatus_GetAndPost_ReturnsStatusAndCommitResponse()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GitStatus_GetAndPost_ReturnsStatusAndCommitResponse(bool enclosingRepository)
     {
         using var temp = new TempWorkspace();
+        var workspaceRoot = temp.Root;
+        if (enclosingRepository)
+        {
+            RunGit(temp.Root, "init");
+            RunGit(temp.Root, "config", "commit.gpgsign", "false");
+            RunGit(temp.Root, "config", "user.email", "workstation-tests@example.invalid");
+            RunGit(temp.Root, "config", "user.name", "Workstation Tests");
+            await File.WriteAllTextAsync(Path.Combine(temp.Root, "fixture.txt"), "Private parent repository.", CancellationToken.None);
+            RunGit(temp.Root, "add", "fixture.txt");
+            RunGit(temp.Root, "commit", "-m", "Fixture parent");
+            workspaceRoot = Path.Combine(temp.Root, "non-repository-workspace");
+            Directory.CreateDirectory(workspaceRoot);
+            Assert.Equal("non-repository-workspace/", RunGitCapture(workspaceRoot, "rev-parse", "--show-prefix").Trim());
+        }
+        // A test temp directory may live inside the checkout. Bound discovery to the private
+        // fixture area so its negative Git case cannot inherit the real parent repository.
+        using var gitBoundary = new GitDiscoveryBoundary(Path.GetDirectoryName(workspaceRoot)!);
         await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
-            temp.Root, null, 0, false, "test-token"));
+            workspaceRoot, null, 0, false, "test-token"));
         await app.StartAsync();
 
         using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
@@ -1451,6 +1470,17 @@ public sealed class WorkstationEditorTests
         }
 
         return output;
+    }
+
+    private sealed class GitDiscoveryBoundary : IDisposable
+    {
+        private readonly string? _previous = Environment.GetEnvironmentVariable("GIT_CEILING_DIRECTORIES");
+
+        public GitDiscoveryBoundary(string boundary)
+            => Environment.SetEnvironmentVariable("GIT_CEILING_DIRECTORIES", boundary);
+
+        public void Dispose()
+            => Environment.SetEnvironmentVariable("GIT_CEILING_DIRECTORIES", _previous);
     }
 
     private sealed class TempWorkspace : IDisposable

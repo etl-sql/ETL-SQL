@@ -252,19 +252,21 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   failed or mismatched evidence. This validates archive recovery prerequisites, not live HA
   continuity or measured recovery time. Hosted execution and full package promotion remain open;
   local release requirements stay in place until that evidence passes.
-  A manual-only `local-release-certification.yml` now runs the full local gate on a controlled
-  Windows x64 release host, retaining immutable per-attempt bundles and failure diagnostics.
-  Release requires and verifies that artifact before packaging and again before publishing.
-  This needs the dedicated host label and workflow rollout; no hosted full-run result is claimed.
-  Controlled-host retries now verify a closed same-run/runner/workspace checkpoint, unchanged
-  toolchain, Docker inputs, cached output bytes and original evidence before phase resume. Original
-  passed receipts keep their producing-job windows; failed phases and dependents rerun. The real
-  phase-runner fixture exercises failed-phase and upload-only recovery through the actual supervisor
-  (43 initial actions, then six and four). A reproduced parameter-binding failure exposed the old
-  two-hour supervisor cap; its seven-hour bound now accepts the driver's 400-minute execution budget
-  and records the effective timeout. Over-limit requests still stop before work starts.
-  Missing checkpoints and changed inputs stop recovery. Hosted acceptance and measured
-  full-run/retry timing remain open before this item closes.
+  The owner requires the full Windows check to run independently on the workstation. The
+  self-hosted Actions producer is removed. The manual driver retains original diagnostics and
+  produces a verified bundle only after every mandatory phase passes. A separate draft upload
+  transports evidence; Release checks its candidate, digest and manifest before publication.
+  Historical hosted checkpoint fixtures remain regression coverage, not manual-run provenance.
+  The independent run on `d9e137c52715e533a40bfe5db51a37a4fbb61079` finished in 115 minutes:
+  40 phases passed, three failed (smoke GC comparison, nested-repository Git fixture and Portal
+  testhost OOM), and coverage was skipped after engine failure. Original evidence is retained at
+  `release-validation/workstation-certification/`. A separate unpublished diagnostic draft retains
+  selected failed-run results (release `425732082`, asset `682217474`); uploaded/downloaded SHA-256
+  matches `2b8b4f22e2ac9415fc3c7f1ac0c7f9a5af761b82b2603e199a1914d66d1866d6`.
+  This proves diagnostic transport only. Raw dumps remain local. The isolated Git fixture fix
+  passes both nested and ordinary temporary-directory cases; no full passing run or live evidence
+  upload/publication acceptance is claimed. Resume support for the independent driver remains open;
+  it never silently substitutes a full rerun for failed or missing checkpoints.
   Enterprise certification now explicitly defaults both test projects to Release, records the
   configuration and keeps Debug evidence ineligible for release. Executed driver fixtures verify
   configuration propagation. The source-policy audit includes tracked/new authored C# files while
@@ -361,7 +363,7 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
     blocks publication; successful jobs from earlier attempts of the same run are reused.
     A live read-only check rejected the latest cancelled candidate CI instead of accepting
     earlier success. The complete local/operator checklist manifest is not yet enforced.
-    Full local phase evidence now has its own controlled-host workflow and mandatory publication
+    Full local phase evidence now uses an independent workstation check and mandatory publication
     check, including the actual draft ZIP. The remaining operator checklist manifest is still open.
     Local evidence now explicitly requires Standard scale and all 44 mandatory phases, even when
     a saved plan omits one. Tests compare policy with the producer's actual full plan and remove

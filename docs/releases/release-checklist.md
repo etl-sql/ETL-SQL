@@ -27,7 +27,7 @@ A physical, copy-pasteable checklist for cutting a release. It wraps the real sc
 > `Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale` in Release configuration. A normal
 > resume cannot reuse a legacy or forced-resume state; start a fresh run. Release drivers provide
 > no local-gate or CI-wait bypass. Source fingerprints cannot be overridden.
-> CI/CodeQL jobs and the controlled-host full local phase bundle are enforced by Release. The
+> CI/CodeQL jobs and the independently uploaded workstation phase bundle are enforced by Release. The
 > complete operator/package evidence manifest is not yet enforced. Complete every applicable checkbox before tagging;
 > a green local gate alone is necessary but not sufficient.
 
@@ -555,76 +555,55 @@ Native Linux/macOS packaging and cross-platform certifications still require the
 - [ ] Final report shows **Status: Passed** — `release-validation/latest/state.json` and the run's
       `pre-release-report.md`.
 
-Retain a portable copy of the local phase evidence outside the candidate commit:
+### Independent Windows workstation certification
+
+Run this check manually on the Windows x64 workstation. No GitHub runner registration or workflow
+dispatch is needed. Prepare Node 22, .NET 10, PowerShell 7, Git, the pinned browser compiler and a
+working Linux-container Docker engine first. Use a clean candidate checkout and leave its source
+unchanged until the run finishes:
 
 ```powershell
 $candidateSha = (git rev-parse HEAD).Trim()
-$bundlePath = "release-validation/local-evidence-$candidateSha-$(Get-Date -Format yyyyMMddHHmmss)"
-node scripts/local-release-bundle.mjs create release-validation/latest/state.json $candidateSha $bundlePath
-node scripts/local-release-bundle.mjs verify $bundlePath $candidateSha
+$evidence = "release-validation/workstation-$candidateSha-$(Get-Date -Format yyyyMMddHHmmss)"
+.\scripts\Invoke-WorkstationCertification.ps1 -EvidenceDirectory $evidence
 ```
 
-The destination must be new. The bundle contains candidate-bound state, nonempty phase logs and
-declared artifacts, with file hashes and directory inventories. Verification follows the producer's
-canonical phase-log and artifact paths, walks the complete artifact tree, and rejects aliases,
-orphaned payloads, unlisted directories, unsafe/duplicate original entry names, changed or missing
-files and symbolic links. Every listed file must belong to the state, a phase log or a declared
-artifact. Hashes detect changed contents; trusted hosting or
-attestation must establish provenance. This bundle covers local phases only. Release accepts its
-hosted origin through the controlled-host workflow below; a manually created bundle alone cannot
-authorize publication or replace the remaining operator/package evidence.
+The command runs every mandatory local phase in Release configuration, including SLT, Docker
+integration and Standard scale. It records invocation and process results, streams diagnostics
+through the supervisor, and bounds execution to 400 minutes. Failure retains original logs and
+cannot produce a passing bundle. The directory must be new; the wrapper never silently retries
+or resumes work. Inspect the failed phase before choosing recovery. Historical controlled-host
+checkpoints do not authorize manual evidence or reuse across execution modes.
 
-### Controlled-host full local certification
+Success produces `windows-workstation-evidence.zip`. Its portable state records the manual
+execution window and Windows x64 host, exact clean candidate, all required phase results, original
+completion timestamps and payload hashes. It rejects stale, skipped, partial, changed or wrong-SHA
+evidence. Raw diagnostic dumps stay local; review logs before sharing.
 
-The `Full Local Release Certification` workflow runs the full pre-release command on a controlled
-Windows x64 host labelled `etlsql-release-operator`. Register a dedicated release host with that label
-and the prerequisites for `Test-PreRelease.ps1`, including PowerShell 7, Git and a working Linux-container
-Docker engine. The workflow installs Node 22, .NET 10 and the pinned browser compiler. It has no PR or
-reusable-workflow trigger. Deploy the workflow to the default branch before dispatching it from the
-frozen candidate's matching `release/vx.y.z` branch:
+Uploading is a separate operator step after the check finishes. Create a separate **draft** evidence
+release. This does not publish a product release or connect the workstation as a runner:
 
 ```powershell
-$candidateSha = (git rev-parse HEAD).Trim()
-gh workflow run local-release-certification.yml --ref release/vx.y.z -f "candidate_sha=$candidateSha"
+$evidenceTag = "workstation-check-$candidateSha"
+gh release create $evidenceTag --draft --target $candidateSha --title "Independent Windows check $candidateSha" --notes "Manual workstation check. Local phases only; package and operator evidence are separate."
+gh release upload $evidenceTag "$evidence/windows-workstation-evidence.zip"
 ```
 
-The workflow rejects a mismatched workflow/checkout SHA, version branch or dirty checkout before
-certification. It runs SLT, Docker integration and Standard scale along with every other mandatory
-local phase, without diagnostic skips. Per-process watchdogs stream logs; attempt-specific
-diagnostics survive failures. Input verification and the certification process share a 400-minute
-budget within the 425-minute step, reserving time for checkpoint verification. The eight-hour job ceiling is a recovery
-bound, not a measured clean-run time. The shared supervisor accepts this budget within its seven-hour
-parameter bound and records the effective `timeoutSeconds` in `result.json`.
+Keep the evidence release in draft form and do not replace its asset. Duplicate create/upload fails
+visibly; inspect the existing draft instead of overwriting it. GitHub CLI authentication is needed
+only for this transport step. It is not needed to execute the local check.
 
-Rerun the failed job in the same workflow run on the same dedicated runner and workspace. A closed
-checkpoint binds the candidate, run, runner, toolchain, Docker image inventory, original evidence and
-cached build/compiler outputs. Verification hashes every cached file's bytes with at most four workers.
-Passed phases retain their original timestamps, logs and artifact paths; failed phases, their dependents
-and mandatory source/asset guards run again. An upload-only failure reuses the passed plan after those
-guards pass. Keep the workspace and every attempt's diagnostics until publication finishes.
+Release requires this separate draft's asset before publication. The collector checks its exact
+candidate target, complete asset inventory, uploaded asset ID and SHA-256 digest, seven-day
+freshness, full Windows phase scope and retained payload hashes. It pins the bundle manifest,
+attaches a verified copy as `local-release-evidence.zip` to the product draft, then recollects the
+source and compares the actual product attachment before publication. GitHub verifies uploaded
+evidence; it neither starts nor controls the workstation run. The upload records the operator's
+submitted evidence, not a GitHub-hosted execution attestation.
 
-Missing or unclosed checkpoints, changed inputs, a different runner/workspace or evidence older than
-seven days block recovery. Start a new explicit workflow run to perform a full certification. The
-workflow never silently substitutes a full rerun for rejected resume evidence.
-
-Release requires the latest eligible successful run for the exact candidate and its original job's
-`local-release-evidence-<run-id>-<attempt>` artifact. The collector checks complete API inventories,
-job identity, artifact ownership/digest metadata, freshness, clean source identity, all required local
-phases, retained file hashes and producing-job time windows. Reused phases must match their original
-attempt's job on the same runner, including when that job failed after those phases passed. Their
-fingerprints bind original commands, completion instants, logs and artifact content. Whole-second API timestamps retain that
-precision. Carried success keeps its original job and artifact; newer failed runs, missing/expired
-artifacts and concurrent retries block reuse.
-
-Release pins the verified manifest hash, attaches and attests `local-release-evidence.zip`, then
-recollects the hosted evidence and verifies the actual draft ZIP before publication. Changed bundles,
-selection identities or unlisted payloads leave the release unpublished. The attachment comparator
-uses the current hosted collector receipt as its authority; an arbitrary local receipt is not provenance.
-This enforces full local phase evidence only. Deployment profiles/transitions, live topology/HA,
-recovery, conditionally applicable suites and complete package promotion still require their own gates.
-Controlled-host rollout, a real full run and hosted retry/timing acceptance remain outstanding.
-Local fixtures execute the real supervisor, phase runner and recovery driver, including a failed phase, dependent
-phase and upload-only retry. They establish recovery behavior, not hosted full-run or timing acceptance.
+This covers local phases only. CI/CodeQL, installed-package certification, deployment transitions,
+HA, recovery and conditionally applicable suites retain their separate requirements. The first
+successful full workstation run and real upload/publication acceptance remain outstanding.
 
 ### Certification schedule and evidence ledger
 
@@ -648,9 +627,9 @@ in top-level and nested certifications. Rerun older producers whose reports omit
       .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
       Evidence: `release-validation/<run-id>/` and `release-validation/latest/state.json`.
-      Publication requires the controlled-host workflow bundle above. Its full run satisfies this
-      local-phase component; repeating it manually is unnecessary. An ad-hoc workstation state or
-      bundle cannot replace the workflow's verified artifact origin.
+      Publication requires the independent workstation bundle above. Upload its verified ZIP
+      separately after the manual check completes. Incomplete evidence cannot replace it.
+
 - [ ] **Deployment profiles:** all Solo, Team, Enterprise, and Managed Dedicated profile lanes pass:
       ```powershell
       .\scripts\Test-DeploymentProfileCertification.ps1 -Profile All -ReleaseVersion x.y.z

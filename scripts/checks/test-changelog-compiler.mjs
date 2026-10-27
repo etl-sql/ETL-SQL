@@ -13,7 +13,8 @@ const fragment = path.join(fragments, 'feature.md');
 const original = '# Changelog\n\n## [Unreleased]\n\n- Existing entry.\n';
 const entry = '- A new feature.\n';
 function run(command, args) {
-  const result = spawnSync(command, args, { cwd: root, encoding: 'utf8' });
+  const result = spawnSync(command, args, { cwd: root, encoding: 'utf8',
+    env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(root, 'no-global-config') } });
   if (result.error) throw result.error;
   return result;
 }
