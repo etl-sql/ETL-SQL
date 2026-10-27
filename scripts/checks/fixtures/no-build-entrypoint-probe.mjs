@@ -74,6 +74,7 @@ if (command === 'dotnet') console.log('Passed: 1');
         for (const shell of shells) {
             for (const { kind, lane, expected } of [
                 { kind: 'lane', lane: 'engine', expected: 1 },
+                { kind: 'lane', lane: 'portal', expected: 2 },
                 { kind: 'smoke', lane: 'security', expected: 2 },
                 { kind: 'smoke', lane: 'all', expected: 5 },
             ]) {
@@ -87,7 +88,10 @@ if (command === 'dotnet') console.log('Passed: 1');
                         if (shell === 'powershell') {
                             env.ETLSQL_PROBE_SCRIPT = script;
                             env.ETLSQL_PROBE_PARAMETERS = JSON.stringify({ Lane: lane, Configuration: 'Release', NoRestore: true,
-                                NoBuild: noBuild, ...(kind === 'lane' ? { EngineShardCount: reject ? 2 : 1 } : {}) });
+                                NoBuild: noBuild, ...(kind === 'lane' ? {
+                                    EngineShardCount: outcome === 'reject' ? 2 : 1,
+                                    PortalShardCount: outcome === 'reject' ? 2 : 1,
+                                } : {}) });
                             result = spawnSync('pwsh', ['-NoProfile', '-File', driver],
                                 { env, encoding: 'utf8', windowsHide: true, cwd: temporary, timeout: 15000 });
                         } else {
