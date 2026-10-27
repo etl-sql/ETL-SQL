@@ -97,7 +97,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         var first = await ClickChartMarkAsync(report, "ByRegion");
         await WaitForRegionsAsync(report, "Detail", regions => regions.SetEquals([first]),
             $"Detail should show only {first} after the first click");
-        var second = await RegionOfMarkAsync(marks.Nth(1));
+        var second = await RegionOfMarkAsync(report, "ByRegion", 1);
         await marks.Nth(1).ClickAsync(new() { Modifiers = [KeyboardModifier.Control], Force = true });
 
         await WaitForRegionsAsync(report, "Detail", regions => regions.SetEquals([first, second]),
@@ -169,7 +169,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         var report = await RunReportAsync(page, reportId);
         Assert.True((await RegionsShownAsync(report, "Orders")).Count > 1, "Orders should start unfiltered.");
         var mark = report.Locator("[data-visual-name='RegionDrill'] [data-row-index]").First;
-        var region = await RegionOfMarkAsync(mark);
+        var region = await RegionOfMarkAsync(report, "RegionDrill");
         await mark.ClickAsync(new() { Button = MouseButton.Right, Force = true });
         await report.Locator(".report-ctx-menu [data-click-action='SET_PARAMETER']").ClickAsync();
 
@@ -244,7 +244,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
 
         var report = await RunReportAsync(studio, reportId);
         var mark = report.Locator("[data-visual-name='ByRegion'] [data-row-index]").First;
-        var region = await RegionOfMarkAsync(mark);
+        var region = await RegionOfMarkAsync(report, "ByRegion");
         await mark.HoverAsync(new() { Force = true });
         var tooltip = report.Locator(".report-chart-tooltip");
         await Expect(tooltip).ToBeVisibleAsync(new() { Timeout = 15_000 });
@@ -275,7 +275,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
 
         var report = await RunReportAsync(studio, reportId);
         var mark = report.Locator("[data-visual-name='RegionDrill'] [data-row-index]").First;
-        var region = await RegionOfMarkAsync(mark);
+        var region = await RegionOfMarkAsync(report, "RegionDrill");
         await mark.ClickAsync(new() { Force = true });
         var popover = report.Locator(".report-chart-tooltip.report-chart-detail-pinned");
         await Expect(popover).ToBeVisibleAsync(new() { Timeout = 15_000 });
@@ -406,20 +406,61 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         ["West"] = "240",
     };
 
-    private static Task<string> RegionOfMarkAsync(ILocator mark) =>
-        // Resolve the mark and read its card in one browser evaluation. A retained element handle
-        // can be detached by a chart redraw between locator resolution and EvaluateAsync.
-        mark.EvaluateAllAsync<string>(
+    [Fact]
+    public async Task ChartRegionProbeWaitsForTheAttachedMarkAfterRedraw()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        await session.Page.SetContentAsync("<iframe id='region-probe'></iframe>");
+        var report = session.Page.FrameLocator("#region-probe");
+        await report.Locator("body").EvaluateAsync(
             """
-            marks => {
-                const mark = marks[0];
-                if (!mark) throw new Error('The chart mark is not rendered.');
-                const card = mark.closest('[data-visual-name]');
-                const data = card._visualData || card.closest('.visual-card')?._visualData;
-                const index = (data.columns || []).findIndex(c => c.toLowerCase() === 'region');
-                return String(data.rows[Number(mark.dataset.rowIndex)][index]);
+            body => {
+                body.innerHTML = '<div class="visual-card" data-visual-name="Probe"><svg><rect data-row-index="0" /></svg></div>';
+                window.regionProbeFirstRead = new Promise(resolve => {
+                    Object.defineProperty(body.firstElementChild, '_visualData', {
+                        get() { resolve(); return undefined; }
+                    });
+                });
             }
             """);
+        var region = RegionOfMarkAsync(report, "Probe");
+        await report.Locator("body").EvaluateAsync("() => window.regionProbeFirstRead")
+            .WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(await report.Locator("body").EvaluateAsync<bool>(
+            """
+            body => {
+                const originalMark = body.querySelector('[data-row-index]');
+                body.innerHTML = '<div class="visual-card" data-visual-name="Probe"><svg><rect data-row-index="0" /></svg></div>';
+                body.firstElementChild._visualData = { columns: ['Region'], rows: [['West']] };
+                return !originalMark.isConnected;
+            }
+            """));
+        Assert.Equal("West", await region);
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static async Task<string> RegionOfMarkAsync(IFrameLocator report, string visual, int markIndex = 0)
+    {
+        // Query and read inside one synchronous browser callback. Locator resolution can retain
+        // a mark that a redraw detaches before a second browser command reads its parent.
+        return (await ETL_SQL.TestSupport.LoadAwareWait.UntilAsync<string?>(
+            $"{visual} mark {markIndex} to have attached region data",
+            cancellationToken => report.Locator("body").EvaluateAsync<string?>(
+                """
+                (body, { visual, markIndex }) => {
+                    const card = body.querySelector(`[data-visual-name="${CSS.escape(visual)}"]`);
+                    const mark = card?.querySelectorAll('[data-row-index]')[markIndex];
+                    const data = card?._visualData || card?.closest('.visual-card')?._visualData;
+                    if (!body.isConnected || !mark?.isConnected || !data) return null;
+                    const index = (data.columns || []).findIndex(c => c.toLowerCase() === 'region');
+                    const row = data.rows?.[Number(mark.dataset.rowIndex)];
+                    return index >= 0 && row ? String(row[index]) : null;
+                }
+                """, new { visual, markIndex }).WaitAsync(cancellationToken),
+            region => region is not null,
+            TimeSpan.FromSeconds(15),
+            describe: region => region ?? "Chart is re-rendering"))!;
+    }
 
     // ── Studio ───────────────────────────────────────────────────────────────
 
@@ -524,7 +565,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
     private static async Task<string> ClickChartMarkAsync(IFrameLocator report, string visual)
     {
         var mark = report.Locator($"[data-visual-name='{visual}'] [data-row-index]").First;
-        var region = await RegionOfMarkAsync(mark);
+        var region = await RegionOfMarkAsync(report, visual);
         await mark.ClickAsync(new() { Force = true });
         return region;
     }

@@ -94,14 +94,15 @@ that does not schedule their proposed implementation.
 **Problem and Intended Outcome:** Certifying v0.21.0 took more than 24 hours of active work, spread over two days.
 The release branch ran 14 CI rounds (8 failed), 14 MSI upgrade rounds (10 failed) and 14 CodeQL
 rounds. Most of that time went on waiting for a full round to finish after a one-line fix. The
-outcome: the same evidence, with roughly two hours from candidate cut to tag-ready on a clean run.
-Eight hours is the recovery ceiling. Aim for one full certification on the frozen candidate,
-with no more than two full rounds.
+outcome: the same evidence, with a full release in four hours or less from frozen candidate cut
+through publication, and ordinary PR validation in about 30 minutes. Include queueing, builds,
+tests, installation, evidence handling and publication. Aim for one full certification on the
+frozen candidate, with no more than two full rounds.
 
 **First priority — separate regular CI from release certification:**
 
 - Share a tested impact manifest between focused local pre-push and regular push/PR CI. Run cheap
-  checks plus affected builds, tests and dependent consumers; target 10–20 minutes for ordinary
+  checks plus affected builds, tests and dependent consumers; target 30 minutes or less for ordinary
   scoped changes. Unknown paths, missing diff bases and shared inputs expand coverage conservatively.
 - Run explicit full pre-tag certification on a frozen candidate, with independent resumable jobs
   and retained artifacts. Nightly broad checks catch integration defects before release day.
@@ -195,8 +196,9 @@ supplies the performance reference. The v0.22.0 flaky-test work remains required
 5. A one-command metadata flip and the evidence manifest.
 6. Move the local-only lanes into CI, then trim the checklist to match.
 
-**Acceptance Evidence:** measure a clean run against the roughly two-hour tag-ready target and
-recovery against the eight-hour ceiling, with no more than two full CI rounds on the final candidate.
+**Acceptance Evidence:** measure the full release against the four-hour ceiling and ordinary PR
+validation against the 30-minute target. Record clean and recovery timings separately, with no
+more than two full CI rounds on the final candidate.
 Demonstrate affected-lane selection, conservative fallback, failed-job-only recovery and publication
 without rebuilding certified packages. Its evidence manifest covers every gate v0.21.0 covered.
 

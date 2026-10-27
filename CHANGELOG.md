@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Keep Studio interaction checks attached to the current chart during redraws. A deterministic
+  browser regression reproduces the earlier failure; all ten interaction journeys pass with the
+  bounded data probe. Foreground CSV metadata tests now isolate background refresh and dispose
+  their service providers; all 459 language-server tests pass, including background-refresh tests.
+
 - Run the full Windows release check independently on the workstation. Upload its verified
   evidence separately; publication checks the candidate, payload digest and complete local phase
   results without registering the workstation as a GitHub runner.

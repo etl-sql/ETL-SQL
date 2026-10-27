@@ -22,13 +22,14 @@ Deferred initiatives stay in `ROADMAP.md` until selected.
 ### 1. Faster release certification
 
 **Design:** [`ROADMAP.md`](ROADMAP.md#release-engineering--faster-release-certification), which also
-records the v0.21.0 lessons. **Goal:** roughly two hours from candidate cut to tag-ready on a clean
-run. Eight hours is the recovery ceiling, not the normal budget. Aim for one full certification
-on the frozen candidate, with no more than two full rounds and the same evidence as v0.21.0.
+records the v0.21.0 lessons. **Goal:** a full release in four hours or less, from frozen candidate
+cut through publication, and ordinary PR validation in about 30 minutes. Count queueing, builds,
+tests, installation, evidence handling and publication. Preserve the same evidence as v0.21.0;
+aim for one full certification on the frozen candidate, with no more than two full rounds.
 
 - [ ] **First priority: separate regular CI from release certification.** Use one tested impact
   manifest for local pre-push and regular push/PR CI. Run cheap source checks plus affected builds,
-  tests and dependent consumers; target 10–20 minutes for ordinary scoped changes. Unknown paths,
+  tests and dependent consumers; target 30 minutes or less for ordinary scoped changes. Unknown paths,
   missing diff bases and shared build/dependency/workflow changes expand selection conservatively.
   Explicit pre-tag release certification runs every required lane on the frozen SHA, regardless
   of impact selection. Nightly broad checks find integration problems before release day.
@@ -302,7 +303,7 @@ on the frozen candidate, with no more than two full rounds and the same evidence
 #### Codex review — stop paying for successful work again
 
 The owner reports **26 hours across two days**, mostly waiting for CI/MSI and restarting after a
-failure. The eight-hour goal above is a ceiling; it should not become the normal release ceremony.
+failure. The current target is four hours or less for a full release, including publication.
 These additions are based on the checked-in workflows and release scripts, not a new timing audit
 of the GitHub runs. Implement the first three together, alongside the MSI runner diagnosis above.
 
@@ -878,6 +879,13 @@ here; each one failed a single test per run and passed on rerun.
   regressions pass. The BSD-3-Clause license and notices were checked; the generated inventory
   remains current. Evidence: `release-validation/qs-audit.json`, `qs-advisory-probe-fixed.log`
   and `qs-vsix-toolchain.log`. Hosted acceptance on the fixed candidate remains required.
+  The combined candidate also repairs two other failures retained from that run: foreground CSV
+  metadata fixtures no longer leave background refresh reading their temporary file, and the
+  Studio chart probe reads attached marks/data together during redraw. All 459 language-server
+  tests pass, including the separate background-refresh tests. A deterministic browser regression
+  fails the earlier probe and passes with the fix; all ten Studio interaction cases pass.
+  Original and corrected TRX evidence: `release-validation/chart-redraw-before/`,
+  `chart-redraw-after/` and `language-server-complete/`. These fixes still need hosted acceptance.
   The earlier dependency updates pass pinned npm 10 clean installs without audit findings, extension/UI
   compile/build and lint, 403 unit tests, four real target VSIX archive checks and the SDK/SQLite
   packaging coordinator. MSI workers now prepare/verify assets before installation, with failure
