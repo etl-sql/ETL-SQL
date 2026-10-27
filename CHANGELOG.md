@@ -12,6 +12,22 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Require DEB installation checks to observe an active service, a valid main PID and the exact
+  installed executable. Inactive services and failed or unrelated executable lookups can no longer
+  pass certification. Ten deterministic cases pass on Windows/Git Bash and Linux.
+
+- Give the DEB workflow's runner ownership of the recovery diagnostic before evidence upload,
+  preserving its owner-only mode and root-only backup archives. A hosted rehearsal passed all
+  39 lifecycle checks but failed upload on that root-owned report; Linux permission regressions
+  cover report readability, unchanged backup permissions, missing reports and linked paths.
+
+- Keep PowerShell version bumps and consistency checks inside literal checkout and page paths.
+  Brackets no longer redirect version writes to a wildcard-matching neighboring checkout or hide
+  stale Portal cache versions. Public-command regressions cover both shells and preserve neighbor bytes.
+
+- Retain release-wrapper fixture process output before reading observations. Failures now identify
+  the scenario, exit, output and observed state instead of reporting only a missing artifact.
+
 - Verify hosted real-browser timeout recovery on retained, hash-checked inputs. The watchdog stops
   its child while preserving an unrelated process, failure diagnostics upload, and failed-job-only
   recovery reuses the original driver build. The disposable rehearsal recovers in 58.7 seconds.

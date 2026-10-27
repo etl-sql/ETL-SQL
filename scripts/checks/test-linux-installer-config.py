@@ -140,6 +140,71 @@ class LinuxInstallerConfigTests(unittest.TestCase):
                     self.assertEqual(invalid.read_text(), document)
 
 
+class LinuxInstallerEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="etlsql-linux-evidence-")
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.root.chmod(0o755)
+        self.report = self.root / "release-validation/deb/installed/recovery-report.json"
+        self.report.parent.mkdir(parents=True)
+        workflow = (SOURCE.parent.parent / ".github/workflows/deb-upgrade.yml").read_text()
+        step = re.search(r"      - name: Prepare installation diagnostics\n(.*?)(?=      - name:)", workflow, re.S)
+        self.assertIsNotNone(step, "DEB diagnostics must be prepared before artifact upload")
+        self.assertIn("if: always()", step.group(1))
+        self.program = "\n".join(line[10:] for line in step.group(1).split("        run: |\n", 1)[1].splitlines())
+
+    def stage(self):
+        # Only sudo and the runner identity are supplied. Real Linux test/chown operations execute.
+        prelude = 'sudo() { "$@"; }\nid() { printf "65534\\n"; }\n'
+        return subprocess.run(["bash", "-c", prelude + self.program], cwd=self.root,
+                              capture_output=True, text=True)
+
+    def runner_read(self, path):
+        return subprocess.run([sys.executable, "-c", "from pathlib import Path; import sys; Path(sys.argv[1]).read_bytes()", str(path)],
+                              cwd=self.root, user=65534, group=65534, capture_output=True)
+
+    def test_only_report_becomes_readable_by_runner(self):
+        self.report.write_text('{"synthetic":"diagnostic report"}')
+        self.report.chmod(0o600)
+        backup = self.report.parent / "fresh-backup/etl-sql-keys-fixture.zip"
+        backup.parent.mkdir()
+        backup.write_bytes(b"synthetic protected backup")
+        backup.chmod(0o600)
+        original = self.report.read_bytes()
+        self.assertNotEqual(self.runner_read(self.report).returncode, 0)
+        result = self.stage()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.runner_read(self.report).returncode, 0)
+        self.assertEqual(self.report.read_bytes(), original)
+        self.assertEqual(self.report.stat().st_uid, 65534)
+        self.assertEqual(self.report.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(backup.stat().st_uid, 0)
+        self.assertEqual(backup.stat().st_mode & 0o777, 0o600)
+        self.assertNotEqual(self.runner_read(backup).returncode, 0)
+
+    def test_missing_report_preserves_earlier_diagnostics(self):
+        diagnostic = self.report.parent / "summary.txt"
+        diagnostic.write_text("synthetic earlier failure")
+        self.assertEqual(self.stage().returncode, 0)
+        self.assertEqual(diagnostic.stat().st_uid, 0)
+
+    def test_linked_report_cannot_change_target_ownership(self):
+        target = self.root / "protected.json"
+        target.write_text("synthetic protected data")
+        self.report.symlink_to(target)
+        self.assertNotEqual(self.stage().returncode, 0)
+        self.assertEqual(target.stat().st_uid, 0)
+
+    def test_broken_link_is_rejected(self):
+        self.report.symlink_to(self.root / "missing.json")
+        self.assertNotEqual(self.stage().returncode, 0)
+
+    def test_directory_is_rejected(self):
+        self.report.mkdir()
+        self.assertNotEqual(self.stage().returncode, 0)
+
+
 def invalid_document_test(document):
     def test(self):
         self.secrets.write_text(document)

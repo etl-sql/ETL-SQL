@@ -535,6 +535,19 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   nonempty evidence directories are rejected before testing to preserve the original attempt.
   Executed fixtures reproduce the earlier deletion and verify successful/failed builds, cache reuse,
   evidence preservation and rejection of cleanup escapes/links. Hosted recovery rehearsal remains open.
+  **DEB hosted follow-up 2026-10-27:** disposable candidate `51f8ed238cd386c59298ef82a823c0a90bb8e37f`,
+  run `40418888777`, preserves its original successful build on failed-job-only recovery. Attempt 2
+  downloads artifact `12698147912` with the original ZIP digest and verifies its package hashes.
+  All 39 real fresh-install/upgrade/rollback/purge assertions pass in 138 seconds, but evidence
+  upload fails with EACCES on root-owned `recovery-report.json`. The workflow now transfers only
+  that diagnostic to the runner, retaining mode 0600; backup archives stay root-only. All 20 Linux
+  configuration/evidence cases pass, including real cross-user readability and link rejection.
+  Original attempts, console assertions and local recovery: `release-validation/deb-recovery-rehearsal/`;
+  timing: `release-validation/timelines/1793097917034-1992/`. The failed run is not certification;
+  the corrected workflow and stricter service assertion still require new-candidate hosted acceptance.
+  Final source preflight passes 43 checks; its saved historical shell snapshot was normalized to LF
+  and the remaining check passes on recovery. Reports: `release-validation/preflight/1793097976890-19064/`
+  and `release-validation/deb-recovery-rehearsal/source-recovery/`.
 
 ### 2. Order-independent scale certification
 
@@ -659,6 +672,11 @@ here; each one failed a single test per run and passed on rerun.
 - [ ] **Linux package install and upgrade.** The postinst now leaves shipped files root-owned and
   makes `/usr/lib/etl-sql/bin` `root:etlsql 1775`. Install fresh and upgrade over a previous package;
   confirm the Portal and Orchestrator start and write their databases, logs and data.
+  Installed-service assertion review reproduced a false pass for inactive services. The assertion
+  now requires an active service, a positive numeric PID and the exact installed executable;
+  failed lookups, missing/unrelated executables and deleted binaries fail. All ten deterministic
+  cases pass in Windows/Git Bash and a Linux Node 22 container. Hosted installation and retry
+  evidence are being collected separately; these assertion regressions do not certify a package.
 - [x] **Windows run of the security tests.** Confirm the OS-neutral `SecurityTests` on Windows.
   **Verified 2026-10-24:** all 23 Windows x64 Release cases pass without skips, including
   `TestHardwareLockedEncryption`'s DPAPI round trip and wrong-entropy rejection. The initial run
@@ -852,6 +870,22 @@ here; each one failed a single test per run and passed on rerun.
   paths. Compilation requires one Unreleased heading in both input and proposed output, preserving
   documents/fragments on rejection. Staged/committed renames, empty-fragment check/compile calls and
   duplicate input/fragment headings have executed public-command regressions.
+  Version-tool review also reproduced PowerShell reporting a successful bump while a bracketed
+  checkout retained its old version. Version bumps and consistency checks now use literal paths
+  for metadata and Portal page enumeration/reads. Executed public-command regressions cover
+  bracketed checkouts and page names, reject a stale bracketed page, and verify that a
+  wildcard-matching neighboring checkout stays byte-identical in both PowerShell and Bash.
+  Original-command failures and focused recovery: `release-validation/version-literal-path-review/`.
+  Source preflight also exposed an intermittent wrapper fixture failure restoring its synthetic
+  macOS package. A focused Node 22 run passes all 43 cases; the original cause remains unproven.
+  The fixture now retains process diagnostics before reading observations and includes scenario,
+  exit/output and observed state in assertion failures. Original failed preflight:
+  `release-validation/preflight/1793096626266-19888/`; focused diagnostics are retained beside
+  the version-tool review evidence.
+  Final source preflight passes 41 checks, including both changed fixtures; three checks time out
+  during a long tool pause and pass unchanged under the same deadlines on failed-check-only
+  recovery (21.8 seconds). Full report: `release-validation/preflight/1793096789722-3012/`;
+  recovery: `release-validation/version-literal-path-review/preflight-recovery/`.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook
   body unchanged. Its repository bytes use LF and `.gitattributes` now pins that checkout form.

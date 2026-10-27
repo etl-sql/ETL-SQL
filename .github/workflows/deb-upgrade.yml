@@ -175,6 +175,18 @@ jobs:
           $receipt | Add-Member artifactId $env:CANDIDATE_ARTIFACT_ID
           $receipt | Add-Member completedAt ([datetimeoffset]::UtcNow.ToString('o'))
           $receipt | ConvertTo-Json | Set-Content release-validation/deb/certification.json
+      - name: Prepare installation diagnostics
+        if: always()
+        timeout-minutes: 1
+        shell: bash
+        run: |
+          set -euo pipefail
+          report=release-validation/deb/installed/recovery-report.json
+          if sudo test -e "$report" || sudo test -L "$report"; then
+            sudo test -f "$report"
+            sudo test ! -L "$report"
+            sudo chown -- "$(id -u):$(id -g)" "$report"
+          fi
       - name: Retain installation evidence
         id: receipt
         if: always()

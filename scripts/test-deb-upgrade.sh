@@ -83,14 +83,22 @@ wait_portal() {
 
 # A running service whose executable was replaced underneath it reports the old inode as deleted.
 service_runs_installed_binary() {
-    local pid; pid=$(systemctl show -p MainPID --value "$1")
-    if [ -z "$pid" ] || [ "$pid" = 0 ]; then
+    local service=$1 expected=$2 pid exe
+    if ! systemctl is-active --quiet "$service"; then
+        echo "$service is not active"
+        return 1
+    fi
+    if ! pid=$(systemctl show -p MainPID --value "$service") || [[ ! "$pid" =~ ^[1-9][0-9]*$ ]]; then
         echo "$1 has no main process"
         journalctl -u "$1" --no-pager -n 80 > "$OUT/${1%.service}-$(date +%s)-journal.txt" 2>&1
         return 1
     fi
-    local exe; exe=$(readlink "/proc/$pid/exe"); echo "$1 pid $pid exe $exe"
-    [[ "$exe" != *"(deleted)"* ]]
+    if ! exe=$(readlink "/proc/$pid/exe"); then
+        echo "$service executable could not be inspected"
+        return 1
+    fi
+    echo "$service pid $pid exe $exe"
+    [[ "$exe" == "$expected" ]]
 }
 
 cli_reports() { local out; out=$(etl-sql --version 2>&1); echo "$out"; grep -q -- "${1%%[-~+]*}" <<<"$out"; }
@@ -164,8 +172,8 @@ log "checkout $(git -C "$CHECKOUT" rev-parse HEAD 2>/dev/null || echo unknown)"
 log "== fresh install of $CUR_V"
 check "fresh: dpkg install" dpkg -i "$CURRENT_DEB"
 check "fresh: Portal healthy" wait_portal fresh
-check "fresh: Portal runs the installed executable" service_runs_installed_binary etl-sql-portal.service
-check "fresh: Orchestrator runs the installed executable" service_runs_installed_binary etl-sql-orchestrator.service
+check "fresh: Portal runs the installed executable" service_runs_installed_binary etl-sql-portal.service "$INSTALL/ETL-SQL-Portal"
+check "fresh: Orchestrator runs the installed executable" service_runs_installed_binary etl-sql-orchestrator.service "$INSTALL/ETL-SQL-Service"
 check "fresh: one-time sign-in written for root only" root_only_file "$FIRST_RUN"
 check "fresh: dataset at-rest key generated" setting_present Portal:Dataset:AtRestKey
 check "fresh: secrets readable by the service account only" secrets_file_protected
@@ -207,8 +215,8 @@ log "== upgrade to $CUR_V"
 remove_operator_workaround
 check "upgrade: dpkg install" dpkg -i "$CURRENT_DEB"
 check "upgrade: Portal healthy" wait_portal upgrade
-check "upgrade: Portal runs the upgraded executable" service_runs_installed_binary etl-sql-portal.service
-check "upgrade: Orchestrator runs the upgraded executable" service_runs_installed_binary etl-sql-orchestrator.service
+check "upgrade: Portal runs the upgraded executable" service_runs_installed_binary etl-sql-portal.service "$INSTALL/ETL-SQL-Portal"
+check "upgrade: Orchestrator runs the upgraded executable" service_runs_installed_binary etl-sql-orchestrator.service "$INSTALL/ETL-SQL-Service"
 check "upgrade: CLI reports $CUR_V" cli_reports "$CUR_V"
 check "upgrade: installed files match the package" dpkg_verify_clean
 check "upgrade: Portal JWT secret preserved" setting_is Portal:Jwt:Secret "$SECRET"
@@ -234,7 +242,7 @@ databases | xargs -r rm -f
 tar -xpPf "$BACKUP/databases.tar"; cp -p "$BACKUP/appsettings.json" "$CFG"; chown etlsql:etlsql "$CFG"
 systemctl start etl-sql-orchestrator.service etl-sql-portal.service
 check "rollback: Portal healthy on the restored database" wait_portal rollback
-check "rollback: Portal runs the reinstalled executable" service_runs_installed_binary etl-sql-portal.service
+check "rollback: Portal runs the reinstalled executable" service_runs_installed_binary etl-sql-portal.service "$INSTALL/ETL-SQL-Portal"
 check "rollback: CLI reports $PREV_V" cli_reports "$PREV_V"
 check "rollback: installed files match the previous package" dpkg_verify_clean
 check "rollback: served assets are the previous release's; cached browser refetches changes" \
