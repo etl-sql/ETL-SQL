@@ -577,6 +577,14 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   cases across Smoke and Standard, including actual warm-up scale, GC snapshots and absolute
   memory gates. The clean follow-up above completes calibration for this protocol.
 
+The independent Windows gate on `d9e137c52715e533a40bfe5db51a37a4fbb61079` fails the existing Smoke
+GC-pause band for spill cleanup and temp-table spill. Allocations and checksums match the reference;
+the runtime changed from .NET 10.0.13 to 10.0.14. No cause or baseline replacement is claimed.
+The commit-comparison runner now prepares/verifies each checkout's browser assets before building.
+Real Git/Node/PowerShell fixtures verify interleaved ordering, preparation/verification failure,
+original-branch restoration, plan-only preservation and separation of successful Git stderr.
+Paired quiet-host measurements remain pending; baseline files and bands are unchanged.
+
 ### 3. Flaky tests — the dedicated fix
 
 **Record:** [flaky-test stability](docs/releases/flaky-test-stability.md). v0.21.0 deferred these

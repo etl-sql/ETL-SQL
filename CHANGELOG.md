@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Prepare and verify browser assets after every checkout in the scale commit comparison before
+  building or measuring that arm. Successful Git warnings stay separate from revision and dirty
+  path output; failed commands retain their diagnostics. Preparation failure restores the original
+  branch and stops measurement.
+
 - Verify hosted MSI failed-job recovery on an unchanged disposable candidate. Portal certification
   resumes against the original hash-verified installer pair while preserving the successful build
   and workstation execution. The installed fresh/upgrade/rollback checks and final receipt pass;

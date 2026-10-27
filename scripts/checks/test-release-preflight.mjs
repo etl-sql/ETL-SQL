@@ -18,7 +18,7 @@ for (const source of [catalog.replaceAll('\r\n', '\n'), catalog.replaceAll('\r\n
 assert.throws(() => syntaxIndex.extractStewardshipTags(catalog.replace('TableColumnScriptScopes, []),', 'TableColumnScriptScopes, [], []),')),
   /Unable to extract/, 'A changed record shape must fail instead of silently dropping an entry.');
 
-assert.equal(releaseAutomationChecks.length, 34);
+assert.equal(releaseAutomationChecks.length, 35);
 for (const name of ['release-evidence', 'production-canary-evidence', 'certification-source', 'deployment-claims',
   'installer-sources', 'installer-actions', 'master-release', 'publish-release', 'sbom-output', 'changelog-compiler', 'vsix-module-identity']) {
   assert.equal(releaseAutomationChecks.filter(check => check.id === `test-${name}`).length, 1);
