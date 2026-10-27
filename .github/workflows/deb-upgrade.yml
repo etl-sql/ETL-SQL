@@ -63,9 +63,13 @@ jobs:
         run: |
           sudo groupadd --system etlsql
           sudo useradd --system --gid etlsql --no-create-home etlsql
+          cleanup_fixture_account() {
+            sudo userdel etlsql
+            # userdel can remove the matching group under USERGROUPS_ENAB.
+            if getent group etlsql >/dev/null; then sudo groupdel etlsql; fi
+          }
+          trap cleanup_fixture_account EXIT
           sudo bash scripts/checks/test-installed-linux-checks.sh
-          sudo userdel etlsql
-          sudo groupdel etlsql
       - name: Publish candidate binaries
         shell: pwsh
         timeout-minutes: 45

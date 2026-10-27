@@ -15,6 +15,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Check installed DEB directory permissions and root ownership of shipped files after fresh install
   and upgrade. Verify service-owned databases, each running service's open application log, and
   service-account data writes. Upgrade diagnostics no longer print secret prefixes.
+  Fixture account cleanup handles hosts that automatically remove a user's matching group and
+  also runs when an assertion fails, preserving the failed check's status.
 
 - Require DEB installation checks to observe an active service, a valid main PID and the exact
   installed executable. Inactive services and failed or unrelated executable lookups can no longer

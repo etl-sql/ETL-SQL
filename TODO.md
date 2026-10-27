@@ -682,6 +682,12 @@ here; each one failed a single test per run and passed on rerun.
   empty logs and deleted open logs reject. Only systemctl's PID lookup is substituted. Container
   execution needs SYS_PTRACE for cross-UID /proc reads; denied reads fail explicitly, without
   weakening acceptance. Evidence: `release-validation/installed-linux-runtime-process-fixture-verified.log`.
+  Hosted run `40551540783` passed the rejection fixtures but stopped during fixture account cleanup:
+  Ubuntu's `userdel` had already removed the matching group. Cleanup now checks group existence
+  and runs on failure too. The exact workflow block passes locally with `USERGROUPS_ENAB=yes`
+  and `no`; injected assertion failure preserves exit 17 and removes both fixture accounts.
+  Evidence: `release-validation/installed-linux-cleanup-policy-test.log` and
+  `release-validation/installed-linux-cleanup-failure-test.log`. The original hosted failure is retained.
   Real fresh-install and upgrade acceptance of these checks remains required.
 
   Installed-service assertion review reproduced a false pass for inactive services. The assertion
