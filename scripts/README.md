@@ -644,6 +644,9 @@ complete bundle, host copies, and build manifest.
 For source editing, run `node scripts\compile-browser.mjs --watch` and reload after a successful
 preparation. The watcher refreshes host copies and the manifest too. Failed compilation keeps the
 last successful output. Concurrent preparation is refused with a clear lock diagnostic.
+Compilation shares a program for compatible shared-runtime and Portal module graphs. Surfaces
+with independent classic globals, ambient augmentations or library directives keep separate
+programs. Each surface retains its import resolution and strict diagnostics.
 If sources change during preparation, rerun it before building; a manifest is certified only for
 unchanged inputs. The watcher schedules a follow-up for edits made while preparing. Temporary
 consumer-test modules named `*.__test-*.mjs` never enter the sync inventory or product packages.

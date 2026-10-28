@@ -211,7 +211,26 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   retaining the original failure and the other 121 successful checks.
   The retained control's consumer artifact identifies 996.2 seconds in asset-generation checks
   inside the 24.5-minute job; its source SHA and archive digest are retained with this evidence.
-  Hosted elapsed-time and failed-group-only recovery acceptance for this topology remain open.
+  **Hosted build/test timing verified 2026-10-28:** diagnostic run `40742484305` on
+  `09fd6bdf7ef66b5c1095369d5666cc566cf16155` passes every selected worker and the aggregate.
+  Request-to-green takes 27.44 minutes; the longest worker takes 19.73 minutes. Independent archive
+  verification covers 13,101 passed cases, the existing Linux-only skip, matching inventories and
+  every recorded coverage hash; the canonical gate passes at 77%. Original archives and executable
+  audit: `release-validation/critical-path/hosted-40742484305/`; timeline:
+  `release-validation/timelines/1793212751519-34560/`. This diagnostic selects the build/test lane;
+  full-CI timing and final-candidate certification remain required.
+  A compiler prototype preserves all 200 production emits while reducing median local compilation
+  from 3.73 to 2.45 seconds. Global-scope counterexamples reject an unconditional combined program;
+  the guarded implementation preserves the original accepted scopes and strict error handling.
+  The complete diagnostic asset fixture passes in 278.3 seconds versus 358.2 seconds for the
+  original. The guarded production implementation passes the complete local pre-push gate in
+  742.0 seconds: 50 source checks, 122 consumer checks, 53 Portal contracts/smoke cases and 142
+  engine smoke cases. Its complete asset-generation check passes in 305.6 seconds; the added
+  classic/global-augmentation regressions pass. Hosted compiler timing remains unverified.
+  Failed-group-only recovery is being rehearsed separately. Its first source check times out in
+  `test-ci-impact` before workers start; that original failure is retained and does not prove group
+  recovery. The revised probe keys its deliberate failure to the first group execution, preserving
+  later recovery after an earlier source-preflight retry.
 - [ ] **Watchdogs and log streaming** on every long CI step, with the console streamed to an artifact
   and diagnostics uploaded on failure.
   **In progress:** MSI workstation and Portal jobs use the shared bounded supervisor. Other long

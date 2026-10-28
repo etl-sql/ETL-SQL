@@ -65,9 +65,8 @@ export function compileBrowser({ root = repo, check = false, toolchain = repo, p
     if (converted.errors.length) throw new Error('Invalid browser compiler options');
     const expected = new Map();
     const declarations = files(path.join(root, 'types')).filter(p => p.endsWith('.d.ts'));
-    for (const group of groups) {
-        if (!group.inputs.length) continue;
-        const options = { ...converted.options, rootDirs: [group.sourceRoot, group.outputRoot],
+    const createProgram = (inputs, rootDirs) => {
+        const options = { ...converted.options, rootDirs,
             rootDir: root, outDir: path.join(root, 'artifacts/browser-emit') };
         const host = ts.createCompilerHost(options);
         const exists = host.fileExists.bind(host);
@@ -91,7 +90,32 @@ export function compileBrowser({ root = repo, check = false, toolchain = repo, p
                 rootDirs: [dependencyGroup.sourceRoot, dependencyGroup.outputRoot] } : options;
             return ts.resolveModuleName(name, containingFile, dependencyOptions, host).resolvedModule;
         });
-        const program = ts.createProgram([...group.inputs, ...declarations], options, host);
+        return ts.createProgram([...inputs, ...declarations], options, host);
+    };
+    const commonDeclarations = new Set(declarations.map(key));
+    const hasSurfaceGlobals = program => {
+        const checker = program.getTypeChecker();
+        return program.getSourceFiles().some(file => {
+            if (commonDeclarations.has(key(file.fileName))) return false;
+            if (ownership.has(key(file.fileName)) && (file.hasNoDefaultLib || file.referencedFiles.length ||
+                file.libReferenceDirectives.length || file.typeReferenceDirectives.length)) return true;
+            if (program.isSourceFileDefaultLibrary(file)) return false;
+            if (file.statements.some(node => ts.isModuleDeclaration(node) &&
+                ((node.flags & ts.NodeFlags.GlobalAugmentation) || ts.isStringLiteral(node.name)))) return true;
+            if (ts.isExternalModule(file)) return false;
+            if (!file.isDeclarationFile && !file.fileName.endsWith('.ts')) return true;
+            return checker.getSymbolsInScope(file, ts.SymbolFlags.Value | ts.SymbolFlags.Type | ts.SymbolFlags.Namespace)
+                .some(symbol => symbol.declarations?.some(declaration => declaration.getSourceFile() === file));
+        });
+    };
+    const activeGroups = groups.filter(group => group.inputs.length);
+    const together = createProgram(activeGroups.flatMap(group => group.inputs),
+        activeGroups.flatMap(group => [group.sourceRoot, group.outputRoot]));
+    // Preserve each surface's global declarations while sharing the module graph when scopes allow it.
+    const programs = activeGroups.length > 1 && hasSurfaceGlobals(together)
+        ? activeGroups.map(group => createProgram(group.inputs, [group.sourceRoot, group.outputRoot]))
+        : [together];
+    for (const program of programs) {
         const diagnostics = ts.getPreEmitDiagnostics(program);
         if (diagnostics.length) throw new Error(ts.formatDiagnosticsWithColorAndContext(diagnostics, {
             getCurrentDirectory: () => root, getCanonicalFileName: p => p, getNewLine: () => '\n',
