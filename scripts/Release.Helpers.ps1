@@ -1,5 +1,37 @@
 # Side-effect-free release policy shared by the tag and MSI workflows.
 
+function Get-ReleaseCertificationToolchain {
+    function Read-Tool([string]$Name, [string[]]$Arguments) {
+        $output = & $Name @Arguments 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "Cannot snapshot certification $Name inputs." }
+        return ($output -join "`n").Trim()
+    }
+    function Get-TextHash([string]$Value) {
+        return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($Value))).ToLowerInvariant()
+    }
+    $executables = foreach ($name in @('node', 'dotnet', 'docker', 'pwsh')) {
+        $command = Get-Command $name -CommandType Application | Select-Object -First 1
+        "$name=$((Get-FileHash -LiteralPath $command.Source -Algorithm SHA256).Hash)"
+    }
+    $images = (Read-Tool docker @('image', 'ls', '--no-trunc', '--digests', '--format', '{{.Repository}}:{{.Tag}}@{{.Digest}}#{{.ID}}')) -split "`n"
+    $loaderEnvironment = Get-ChildItem Env: | Where-Object {
+        ($_.Name -match '^(NODE_|DOTNET_|COMPlus_|COREHOST_|MSBUILD)' -or
+            $_.Name -in @('PATH', 'NUGET_PACKAGES', 'NUGET_CONFIG_FILE', 'NUGET_FALLBACK_PACKAGES')) -and
+        $_.Name -notmatch 'TOKEN|PASSWORD|SECRET|TELEMETRY_SESSION'
+    } | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" }
+    return [ordered]@{
+        nodeVersion = Read-Tool node @('--version')
+        dotnetVersion = Read-Tool dotnet @('--version')
+        runtimesHash = Get-TextHash (Read-Tool dotnet @('--list-runtimes'))
+        dockerVersionHash = Get-TextHash (Read-Tool docker @('version', '--format', '{{json .Server}}'))
+        dockerImagesHash = Get-TextHash (($images | Sort-Object) -join "`n")
+        executablesHash = Get-TextHash ($executables -join "`n")
+        environmentHash = Get-TextHash ($loaderEnvironment -join "`n")
+        operatingSystem = [Environment]::OSVersion.VersionString
+        architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
+    }
+}
+
 function Test-ReleaseTestOutputExecuted {
     param([AllowEmptyString()][string]$Output)
 

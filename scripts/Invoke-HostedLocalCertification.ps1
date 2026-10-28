@@ -13,41 +13,10 @@ if ($source.commit -cne $env:GITHUB_SHA -or $source.dirtyPaths.Count -ne 0) { th
 $sessionRoot = Join-Path $RepoRoot "release-validation/hosted-local-state/$env:GITHUB_RUN_ID"
 New-Item -ItemType Directory -Force -Path $sessionRoot | Out-Null
 
-function Get-ControlledToolchain {
-    function Read-Tool([string]$Name, [string[]]$Arguments) {
-        $output = & $Name @Arguments 2>&1
-        if ($LASTEXITCODE -ne 0) { throw "Cannot snapshot controlled $Name inputs." }
-        return ($output -join "`n").Trim()
-    }
-    function Get-TextHash([string]$Value) {
-        return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($Value))).ToLowerInvariant()
-    }
-    $executables = foreach ($name in @('node', 'dotnet', 'docker')) {
-        $command = Get-Command $name -CommandType Application | Select-Object -First 1
-        "$name=$((Get-FileHash -LiteralPath $command.Source -Algorithm SHA256).Hash)"
-    }
-    $images = (Read-Tool docker @('image', 'ls', '--no-trunc', '--digests', '--format', '{{.Repository}}:{{.Tag}}@{{.Digest}}#{{.ID}}')) -split "`n"
-    $loaderEnvironment = Get-ChildItem Env: | Where-Object {
-        ($_.Name -match '^(NODE_|DOTNET_|COMPlus_|COREHOST_|MSBUILD)' -or
-            $_.Name -in @('PATH', 'NUGET_PACKAGES', 'NUGET_CONFIG_FILE', 'NUGET_FALLBACK_PACKAGES')) -and
-        $_.Name -notmatch 'TOKEN|PASSWORD|SECRET|TELEMETRY_SESSION'
-    } | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" }
-    return [ordered]@{
-        nodeVersion = Read-Tool node @('--version')
-        dotnetVersion = Read-Tool dotnet @('--version')
-        runtimesHash = Get-TextHash (Read-Tool dotnet @('--list-runtimes'))
-        dockerVersionHash = Get-TextHash (Read-Tool docker @('version', '--format', '{{json .Server}}'))
-        dockerImagesHash = Get-TextHash (($images | Sort-Object) -join "`n")
-        executablesHash = Get-TextHash ($executables -join "`n")
-        environmentHash = Get-TextHash ($loaderEnvironment -join "`n")
-        operatingSystem = [Environment]::OSVersion.VersionString
-        architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
-    }
-}
 $identity = [ordered]@{
     repository = $env:GITHUB_REPOSITORY; sha = $env:GITHUB_SHA
     runId = [long]$env:GITHUB_RUN_ID; attempt = [int]$env:GITHUB_RUN_ATTEMPT
-    runnerName = $env:RUNNER_NAME; toolchain = Get-ControlledToolchain
+    runnerName = $env:RUNNER_NAME; toolchain = Get-ReleaseCertificationToolchain
 }
 $identityPath = Join-Path $sessionRoot "attempt-$env:GITHUB_RUN_ATTEMPT.inputs.json"
 if (Test-Path -LiteralPath $identityPath) { throw 'This controlled attempt already has inputs; preserve them and use a new workflow attempt.' }
@@ -67,7 +36,7 @@ try {
     $exitCode = $LASTEXITCODE
 } finally {
     Assert-ReleaseCertificationSourceUnchanged -RepoRoot $RepoRoot -Initial $source
-    $identity.toolchain = Get-ControlledToolchain
+    $identity.toolchain = Get-ReleaseCertificationToolchain
     $finalInputs = Join-Path $sessionRoot "attempt-$env:GITHUB_RUN_ATTEMPT.final-inputs.json"
     $identity | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $finalInputs -Encoding utf8
     $checkpointText = & node (Join-Path $PSScriptRoot 'hosted-local-resume.mjs') finish $RepoRoot $finalInputs $exitCode

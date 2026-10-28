@@ -358,8 +358,19 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   matches `2b8b4f22e2ac9415fc3c7f1ac0c7f9a5af761b82b2603e199a1914d66d1866d6`.
   This proves diagnostic transport only. Raw dumps remain local. The isolated Git fixture fix
   passes both nested and ordinary temporary-directory cases; no full passing run or live evidence
-  upload/publication acceptance is claimed. Resume support for the independent driver remains open;
-  it never silently substitutes a full rerun for failed or missing checkpoints.
+  upload/publication acceptance is claimed. The independent driver now supports explicit `-Resume`
+  on an unchanged candidate. It verifies the original state/log/artifact hashes, host, toolchain,
+  Docker images and cached outputs before work. Each attempt keeps separate process/results;
+  failed state and failed artifact payloads are copied before reuse can overwrite producer paths;
+  successful phases retain original timestamps and logs, and portable evidence retains the original
+  attempt windows. Real driver/supervisor fixtures exercise failed-child recovery and preserve all
+  43 successful synthetic phases; 19 changed/missing/stale/linked inputs reject reuse before work. Evidence
+  validation rejects inconsistent attempt windows. These are regression fixtures, not a full
+  passing workstation run; missing or unfinished checkpoints never trigger an automatic full rerun.
+  Local validation covers 50 source checks, 122 consumer checks, 53 Portal cases and 142 engine
+  smoke cases. Two sandbox-blocked NuGet restores pass on failed-check-only recovery with network
+  access; the other 120 successes and both original failures remain retained. Evidence:
+  `release-validation/critical-path/workstation-resume-*`.
   The independent Windows gate on `d9e137c52715e533a40bfe5db51a37a4fbb61079` reached managed OOM
   in its single Portal testhost (20 failed, 1,106 passed before termination). Raw diagnostics remain
   at `release-validation/workstation-certification/portal-diagnostics/`. The two classes reporting

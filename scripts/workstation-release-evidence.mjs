@@ -30,6 +30,20 @@ function requireWorkstation(state, sha, now) {
       state.phases.some(phase => Date.parse(phase.completedAt) < start || Date.parse(phase.completedAt) > end)) {
     throw new Error('Workstation evidence falls outside its recorded execution window.');
   }
+  if (execution.attempts !== undefined) {
+    const attempts = execution.attempts;
+    if (!Array.isArray(attempts) || !attempts.length || attempts.some((attempt, index) => {
+      const began = Date.parse(attempt.startedAt), finished = Date.parse(attempt.completedAt);
+      return attempt.attempt !== index + 1 || !Number.isInteger(attempt.exitCode) ||
+        attempt.status !== (attempt.exitCode === 0 ? 'passed' : 'failed') ||
+        !Number.isFinite(began) || !Number.isFinite(finished) || began < start || finished < began || finished > end ||
+        index > 0 && began < Date.parse(attempts[index - 1].completedAt);
+    }) || attempts.at(-1).status !== 'passed' || Date.parse(attempts.at(-1).completedAt) !== end ||
+      state.phases.some(phase => !attempts.some(attempt => Date.parse(phase.completedAt) >= Date.parse(attempt.startedAt) &&
+        Date.parse(phase.completedAt) <= Date.parse(attempt.completedAt)))) {
+      throw new Error('Workstation phase timestamps do not match the retained original attempts.');
+    }
+  }
 }
 
 export function createWorkstationEvidence(stateFile, invocationFile, resultFile, directory,
@@ -43,7 +57,8 @@ export function createWorkstationEvidence(stateFile, invocationFile, resultFile,
     throw new Error('A successful independent workstation invocation and matching original state are required.');
   }
   const portable = { ...state, workstationExecution: { schemaVersion: 1, mode: 'manual-workstation',
-    sourceSha: invocation.sourceSha, startedAt: invocation.startedUtc, completedAt: result.completedUtc, host } };
+    sourceSha: invocation.sourceSha, startedAt: invocation.startedUtc, completedAt: result.completedUtc, host,
+    ...(result.attempts === undefined ? {} : { attempts: result.attempts }) } };
   requireWorkstation(portable, invocation.sourceSha, now);
   // Preserve the producer's original state and all phase timestamps. Only the portable copy gains
   // the manual execution record; this cannot turn a failed phase into successful certification.

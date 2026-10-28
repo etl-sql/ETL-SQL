@@ -71,6 +71,24 @@ try {
     assert.notEqual(created.status, 0);
     assert.equal(existsSync(cliTarget), false, 'Non-Windows execution must not manufacture Windows evidence.');
   }
+  const attempts = [
+    { attempt: 1, startedAt: time(-9000), completedAt: time(-2500), exitCode: 23, status: 'failed' },
+    { attempt: 2, startedAt: time(-2000), completedAt: time(-1000), exitCode: 0, status: 'passed' },
+  ];
+  const resumed = produce(x => { x.result.attempts = attempts; });
+  assert.deepEqual(resumed.receipt.execution.attempts, attempts);
+  for (const [name, mutate] of [
+    ['empty attempts', x => { x.result.attempts = []; }],
+    ['missing attempt', x => { x.result.attempts[1].attempt = 3; }],
+    ['overlapping attempts', x => { x.result.attempts[1].startedAt = time(-3000); }],
+    ['phase between attempts', x => { x.state.phases[0].completedAt = time(-2300); }],
+    ['failed final attempt', x => { x.result.attempts[1].exitCode = 1; x.result.attempts[1].status = 'failed'; }],
+    ['different final completion', x => { x.result.attempts[1].completedAt = time(-1100); }],
+    ['missing original start', x => { delete x.result.attempts[0].startedAt; }],
+  ]) {
+    assert.throws(() => produce(x => { x.result.attempts = structuredClone(attempts); mutate(x); }), undefined, name);
+    rejected++;
+  }
   for (const [name, mutate] of [
     ['failed process', x => { x.result.exitCode = 1; x.result.status = 'failed'; }],
     ['failed phase', x => { x.state.phases[0].status = 'Failed'; }],

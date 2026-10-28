@@ -144,6 +144,12 @@ Full local/operator and package certification requirements remain.
 
 Run `Invoke-WorkstationCertification.ps1 -EvidenceDirectory <new-directory>` manually on the Windows
 x64 workstation for the full local phase gate. It requires no GitHub runner or workflow connection.
+After inspecting a failure, use the same command with `-Resume` and the original evidence directory.
+Resume verifies the same clean candidate, host, toolchain, Docker images, cached outputs and original
+state/log/artifact hashes. It keeps every attempt's state, result, process logs and failed artifact
+payloads, and preserves reused
+phase timestamps. Missing, changed, active or older-than-seven-day checkpoints stop before testing;
+they never trigger an automatic full rerun. A source fix requires a new candidate and directory.
 After success, uploading its verified ZIP to a separate draft evidence release is an independent
 operator step. Release uses `collect-workstation-release-evidence.mjs` to verify that uploaded bundle
 and checks the product draft's evidence ZIP before publication. CI and package certifications remain

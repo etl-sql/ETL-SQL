@@ -580,13 +580,24 @@ $evidence = "release-validation/workstation-$candidateSha-$(Get-Date -Format yyy
 The command runs every mandatory local phase in Release configuration, including SLT, Docker
 integration and Standard scale. It records invocation and process results, streams diagnostics
 through the supervisor, and bounds execution to 400 minutes. Failure retains original logs and
-cannot produce a passing bundle. The directory must be new; the wrapper never silently retries
-or resumes work. Inspect the failed phase before choosing recovery. Historical controlled-host
-checkpoints do not authorize manual evidence or reuse across execution modes.
+cannot produce a passing bundle. The first directory must be new. After inspecting the failed
+phase, explicitly resume unchanged inputs:
+
+```powershell
+.\scripts\Invoke-WorkstationCertification.ps1 -EvidenceDirectory $evidence -Resume
+```
+
+Resume requires the same clean candidate, workstation, toolchain, Docker images and cached build
+outputs. It verifies the original state, logs and artifacts before testing, retains each failed
+attempt's state, process logs and failed artifact payloads separately, and preserves successful
+phase timestamps. Do not build or alter the cached
+outputs between attempts. Missing, changed, active, stale or future-dated checkpoints stop before
+work; no automatic full rerun occurs. Source fixes require a new candidate and evidence directory.
+Historical controlled-host checkpoints do not authorize manual evidence or reuse across execution modes.
 
 Success produces `windows-workstation-evidence.zip`. Its portable state records the manual
 execution window and Windows x64 host, exact clean candidate, all required phase results, original
-completion timestamps and payload hashes. It rejects stale, skipped, partial, changed or wrong-SHA
+completion timestamps, original attempt windows and payload hashes. It rejects stale, skipped, partial, changed or wrong-SHA
 evidence. Raw diagnostic dumps stay local; review logs before sharing.
 
 Uploading is a separate operator step after the check finishes. Create a separate **draft** evidence
