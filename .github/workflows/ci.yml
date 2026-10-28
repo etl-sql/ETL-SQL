@@ -91,10 +91,10 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  build-and-test:
+  build-verification:
     needs: source-preflight
     if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
-    name: Build & Test
+    name: Build Verification
     runs-on: windows-latest
     timeout-minutes: 90
 
@@ -141,38 +141,152 @@ jobs:
         timeout-minutes: 17
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'ETL-SQL.slnx', '--no-restore', '--configuration', 'Release') -EvidenceDirectory release-validation/build/compile -TimeoutSeconds 900
 
-      - name: Verify generated browser contracts against registered hosts
-        run: dotnet test tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj --no-restore --no-build --configuration Release --filter FullyQualifiedName~BrowserContractsGeneratorTests
+      - name: Run engine smoke tests using the existing build
+        shell: pwsh
+        env:
+          DOTNET_GCHeapHardLimit: '200000000'
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-smoke.ps1 -ScriptArguments @('-Lane', 'all', '-ProjectGroup', 'engine', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/build/engine-smoke -TimeoutSeconds 1200
 
-      - name: Run fast test lanes (Pull Requests)
+      - name: Run language server tests (Pull Requests)
         if: github.event_name == 'pull_request'
         shell: pwsh
-        run: .\scripts\test-lane.ps1 -Lane fast -Configuration Release -NoRestore -NoBuild
+        timeout-minutes: 22
+        env:
+          DOTNET_GCHeapHardLimit: '200000000'
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('test', 'tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj', '--no-restore', '--no-build', '--configuration', 'Release', '--logger', 'trx;LogFileName=language-server.trx', '--results-directory', 'release-validation/build/language-server') -EvidenceDirectory release-validation/build/language-server-process -TimeoutSeconds 1200
 
-      - name: Run release smoke tests using the existing build
-        if: github.event_name != 'pull_request'
-        shell: pwsh
-        run: .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
-
-      - name: Run engine tests and enforce coverage (Main & Release Push)
-        if: github.event_name != 'pull_request'
-        shell: pwsh
-        timeout-minutes: 42
-        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-CoverageGate.ps1 -ScriptArguments @('-RunEngineLane', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-CoverageDirectory', 'coverage', '-MinimumLineCoverage', '70') -EvidenceDirectory release-validation/build/coverage -TimeoutSeconds 2400
-
-      - name: Print coverage summary
-        if: github.event_name != 'pull_request'
-        run: cat ./coverage/report/Summary.txt
-        shell: bash
-
-      - name: Retain build and coverage diagnostics
+      - name: Retain build diagnostics
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             release-validation/build/
+          if-no-files-found: warn
+          retention-days: 30
+
+  portal-smoke:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
+    name: Portal Smoke & Security
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/prepare-test-project
+        with:
+          project: tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj
+          evidence: release-validation/portal-smoke/prepare
+      - name: Verify generated browser contracts against registered hosts
+        shell: pwsh
+        timeout-minutes: 7
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('test', 'tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj', '--no-restore', '--no-build', '--configuration', 'Release', '--filter', 'FullyQualifiedName~BrowserContractsGeneratorTests') -EvidenceDirectory release-validation/portal-smoke/contracts -TimeoutSeconds 300
+      - name: Run every Portal smoke and security case
+        shell: pwsh
+        timeout-minutes: 27
+        env:
+          DOTNET_GCHeapHardLimit: '200000000'
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-smoke.ps1 -ScriptArguments @('-Lane', 'all', '-ProjectGroup', 'portal', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/portal-smoke/tests -TimeoutSeconds 1500
+      - name: Retain Portal smoke diagnostics
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: portal-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/portal-smoke/
+          if-no-files-found: error
+          retention-days: 30
+
+  engine-coverage:
+    needs: source-preflight
+    if: github.event_name != 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
+    name: Engine Coverage (${{ matrix.group }}/3)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/prepare-test-project
+        with:
+          project: tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj
+          evidence: release-validation/engine-prepare
+      - name: Run assigned engine shards with coverage
+        shell: pwsh
+        timeout-minutes: 27
+        env:
+          ENGINE_GROUP: ${{ matrix.group }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'engine', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-CollectCoverage', '-EngineShardCount', '12', '-EngineShardGroup', $env:ENGINE_GROUP, '-EngineShardGroupCount', '3', '-ResultsDirectory', 'release-validation/engine-coverage') -EvidenceDirectory release-validation/engine-process -TimeoutSeconds 1500
+      - name: Retain engine group results
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: engine-coverage-group-${{ matrix.group }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/engine-coverage/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Retain engine group diagnostics
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: engine-coverage-diagnostics-${{ matrix.group }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release-validation/engine-prepare/
+            release-validation/engine-process/
+          if-no-files-found: error
+          retention-days: 30
+
+  build-and-test:
+    needs: [source-preflight, build-verification, portal-smoke, engine-coverage]
+    if: always() && needs.source-preflight.result == 'success' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')
+    name: Build & Test
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Require all selected build and test workers
+        shell: pwsh
+        env:
+          BUILD_RESULT: ${{ needs.build-verification.result }}
+          PORTAL_RESULT: ${{ needs.portal-smoke.result }}
+          ENGINE_RESULT: ${{ needs.engine-coverage.result }}
+          CI_EVENT: ${{ github.event_name }}
+        run: |
+          if ($env:BUILD_RESULT -cne 'success' -or $env:PORTAL_RESULT -cne 'success') { throw 'Build or Portal smoke worker did not pass.' }
+          $expectedEngine = if ($env:CI_EVENT -ceq 'pull_request') { 'skipped' } else { 'success' }
+          if ($env:ENGINE_RESULT -cne $expectedEngine) { throw 'Engine coverage workers did not reach the required state.' }
+      - uses: actions/checkout@v6
+      - name: Download all retained engine group attempts
+        if: github.event_name != 'pull_request'
+        uses: actions/download-artifact@v8
+        with:
+          pattern: engine-coverage-group-*-${{ github.run_id }}-*
+          path: release-validation/engine-groups
+      - name: Verify the complete engine inventory and merge coverage
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        timeout-minutes: 7
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Merge-EngineCoverage.ps1 -ScriptArguments @('-InputDirectory', 'release-validation/engine-groups', '-OutputDirectory', 'coverage', '-Commit', $env:GITHUB_SHA, '-RunId', $env:GITHUB_RUN_ID) -EvidenceDirectory release-validation/coverage-merge -TimeoutSeconds 300
+      - name: Restore coverage reporter
+        if: github.event_name != 'pull_request'
+        run: dotnet tool restore
+      - name: Enforce the unchanged engine coverage threshold
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        timeout-minutes: 7
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-CoverageGate.ps1 -ScriptArguments @('-CoverageDirectory', 'coverage', '-MinimumLineCoverage', '70') -EvidenceDirectory release-validation/coverage-aggregate -TimeoutSeconds 300
+      - name: Retain aggregate coverage evidence
+        if: always() && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: engine-coverage-aggregate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
             coverage/
+            release-validation/coverage-merge/
+            release-validation/coverage-aggregate/
           if-no-files-found: warn
           retention-days: 30
 

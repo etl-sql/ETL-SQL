@@ -7,7 +7,10 @@ param(
 
     [switch]$NoRestore,
 
-    [switch]$NoBuild
+    [switch]$NoBuild,
+
+    [ValidateSet('all', 'engine', 'portal')]
+    [string]$ProjectGroup = 'all'
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,6 +67,7 @@ $lanes = [ordered]@{
 }
 
 $selected = if ($Lane -eq "all") { @("core", "security", "reporting", "portal") } else { @($Lane) }
+$executedSuites = 0
 
 foreach ($name in $selected) {
     $laneInfo = $lanes[$name]
@@ -71,6 +75,9 @@ foreach ($name in $selected) {
     Write-Host "==> Smoke lane: $($laneInfo.Label) [$name]"
 
     foreach ($test in $laneInfo.Tests) {
+        $isPortal = $test.Project -like '*ETL-SQL.Portal.Tests*'
+        if (($ProjectGroup -eq 'engine' -and $isPortal) -or ($ProjectGroup -eq 'portal' -and -not $isPortal)) { continue }
+        $executedSuites++
         $projectPath = Join-Path $repoRoot $test.Project
         if ($NoBuild) {
             & node (Join-Path $PSScriptRoot 'check-built-browser-assets.mjs') --configuration $Configuration --project $projectPath
@@ -93,3 +100,4 @@ foreach ($name in $selected) {
         }
     }
 }
+if ($executedSuites -eq 0) { throw 'The selected smoke lane and project group contain no test suites.' }

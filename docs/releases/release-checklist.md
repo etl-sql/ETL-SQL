@@ -298,8 +298,12 @@ in this repository. Explicit full CI uses `release-certification.yml`, which cal
 implementation with all lanes enabled and an exact candidate-SHA check. If no explicit certification
 run exists, a regular CI push may supply evidence only when every required job passed.
 CodeQL also accepts manual dispatch. Diagnostic manual `ci.yml` runs cannot certify a release.
-The CI build job includes the complete smoke pass against its existing Release binaries. Tag
-validation consumes that passed job evidence and no longer builds the solution just to repeat smoke.
+CI retains the complete smoke pass against Release binaries, with Portal security/smoke on an
+independent worker. `Build & Test` requires solution verification and Portal smoke, and full
+certification also requires all three engine coverage groups. The aggregate verifies all 12
+shards and their retained TRX/coverage attachments before enforcing 70% coverage. The policy names
+every worker as well as the aggregate. Failed-job retries preserve successful groups and verify
+the latest artifact for each group. Tag validation consumes those passed jobs and certified bytes.
 PR/fork runs cannot satisfy this gate. The newest eligible run owns the verdict, including when
 it failed, was cancelled or is still running; an older success cannot hide it. Runs older than
 seven days cannot certify a candidate.
@@ -526,7 +530,7 @@ Native Linux/macOS packaging and cross-platform certifications still require the
       If a phase is killed, the report's note names the stall or the cap rather than a bare exit code
       — treat that as a real failure to diagnose, not as a watchdog to widen.
 - [ ] Confirm the **Engine lane** and **Coverage gate** phases passed with line coverage **>= 70%**.
-      `Test-PreRelease.ps1` runs engine tests across 8 deterministic shards with timeout protection, then invokes `Test-CoverageGate.ps1` to enforce the fail-closed 70% line-coverage threshold. Retain `coverage/report/Summary.txt`, `Cobertura.xml`, and
+      `Test-PreRelease.ps1` runs engine tests across 12 deterministic shards with timeout protection, then invokes `Test-CoverageGate.ps1` to enforce the fail-closed 70% line-coverage threshold. Retain `coverage/report/Summary.txt`, `Cobertura.xml`, and
       `coverage-gate.json` beneath the timestamped release-validation run.
 - [ ] Confirm the **Test structure audit** phase passed. This proves expensive/release-only categories
       still have targeted ownership and that file reorganization did not change lane membership.

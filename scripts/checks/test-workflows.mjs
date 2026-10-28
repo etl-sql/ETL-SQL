@@ -26,13 +26,15 @@ for (let index = 1; index < ciSections.length; index += 2) {
   const id = ciSections[index], job = ciSections[index + 1];
   const platforms = [...job.matchAll(/^            platform: ([\w-]+)/gm)].map(match => match[1]);
   const shardList = job.match(/^        shard: \[([^\]]+)\]/m)?.[1];
+  const groupList = job.match(/^        group: \[([^\]]+)\]/m)?.[1];
   const shardExpression = job.match(/^        shard: \$\{\{(.+)\}\}/m)?.[1];
   const dynamicShards = shardExpression ? runInNewContext(shardExpression.replaceAll('needs.source-preflight', 'needs.source'), {
     needs: { source: { outputs: { browser_shards: '[1,2,3]' } } }, fromJSON: JSON.parse,
   }, { timeout: 1000 }) : null;
   const matrices = platforms.length ? platforms.map(platform => ({ platform })) :
     dynamicShards ? Array.from(dynamicShards, shard => ({ shard })) :
-      shardList ? shardList.split(',').map(shard => ({ shard: Number(shard.trim()) })) : [{}];
+      shardList ? shardList.split(',').map(shard => ({ shard: Number(shard.trim()) })) :
+        groupList ? groupList.split(',').map(group => ({ group: Number(group.trim()) })) : [{}];
   for (const step of job.split(/^      - /m).filter(block => block.includes('uses: actions/upload-artifact@'))) {
     const template = step.match(/^          name: (.+)$/m)?.[1];
     assert.ok(template?.includes('github.run_attempt'), `${id} upload must preserve earlier attempts.`);

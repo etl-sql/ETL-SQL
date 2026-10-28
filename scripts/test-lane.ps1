@@ -37,10 +37,24 @@ param(
     # Portal factories and EF state also accumulate in a long-lived test host. Keep whole classes
     # together in fresh sequential hosts without excluding any tests. Use 1 only for reproduction.
     [ValidateRange(1, 32)]
-    [int]$PortalShardCount = 12
+    [int]$PortalShardCount = 12,
+
+    # CI distributes the existing engine shards across independent workers. Local runs keep
+    # every shard by default; a partial group cannot satisfy the aggregate coverage gate.
+    [ValidateRange(1, 32)]
+    [int]$EngineShardGroup = 1,
+    [ValidateRange(1, 32)]
+    [int]$EngineShardGroupCount = 1
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($EngineShardGroup -gt $EngineShardGroupCount -or $EngineShardGroupCount -gt $EngineShardCount) {
+    throw 'Engine shard groups must partition the configured shard count.'
+}
+if ($EngineShardGroupCount -gt 1 -and $Lane -ne 'engine') {
+    throw 'Engine shard groups are only valid for the engine lane.'
+}
 
 if ($MemoryLimitGB -gt 0) {
     # DOTNET_GCHeapHardLimit is a hex byte count, no 0x prefix.
@@ -56,6 +70,7 @@ $script:LaneExitCode = 0
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'Release.Helpers.ps1')
+. (Join-Path $PSScriptRoot 'TestLane.Helpers.ps1')
 if ($NoBuild) {
     & node (Join-Path $PSScriptRoot 'sync-assets.js') -Check
 } else {
@@ -120,40 +135,15 @@ function Invoke-DotNetTest {
     }
 }
 
-function Read-ShardTestResults {
-    param([string]$TrxPath, [object[]]$ExpectedMethodCounts)
-    [xml]$trx = Get-Content -LiteralPath $TrxPath -Raw
-    $namespace = [System.Xml.XmlNamespaceManager]::new($trx.NameTable)
-    $namespace.AddNamespace('trx', 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010')
-    $results = @($trx.SelectNodes('//trx:UnitTestResult', $namespace))
-    $identities = @{}
-    foreach ($definition in $trx.SelectNodes('//trx:TestDefinitions/trx:UnitTest', $namespace)) {
-        $identities[$definition.id] = "$($definition.TestMethod.className).$($definition.TestMethod.name)"
-    }
-    $actualCounts = [System.Collections.Generic.Dictionary[string, int]]::new([StringComparer]::Ordinal)
-    $unexpectedMethods = [System.Collections.Generic.List[string]]::new()
-    foreach ($result in $results) {
-        $method = $identities[$result.testId]
-        if (-not $method -or $method -cnotin @($ExpectedMethodCounts.method)) {
-            $unexpectedMethods.Add("$($result.testId):$method")
-            continue
-        }
-        if (-not $actualCounts.ContainsKey($method)) { $actualCounts[$method] = 0 }
-        $actualCounts[$method]++
-    }
-    $missingMethods = @($ExpectedMethodCounts | Where-Object {
-            -not $actualCounts.ContainsKey($_.method) -or $actualCounts[$_.method] -lt $_.count
-        })
-    return [pscustomobject]@{ results = $results; missingMethods = $missingMethods; unexpectedMethods = @($unexpectedMethods) }
-}
-
 function Invoke-ShardedTests {
     param(
         [string]$Project,
         [string]$Filter,
         [int]$ShardCount,
         [string]$EvidenceDirectory,
-        [string]$LaneName
+        [string]$LaneName,
+        [int]$Group = 1,
+        [int]$GroupCount = 1
     )
 
     $projectPath = Join-Path $repoRoot $Project
@@ -207,6 +197,14 @@ function Invoke-ShardedTests {
 
     New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
     $manifest = [ordered]@{
+        schemaVersion = 1
+        commit = (& git -C $repoRoot rev-parse HEAD) -join ''
+        runId = $env:GITHUB_RUN_ID
+        runAttempt = $env:GITHUB_RUN_ATTEMPT
+        shardGroup = $Group
+        shardGroupCount = $GroupCount
+        shardCount = $ShardCount
+        configuration = $Configuration
         generatedUtc = [DateTimeOffset]::UtcNow.ToString('O')
         project = $Project
         filter = $Filter
@@ -238,6 +236,7 @@ function Invoke-ShardedTests {
         Set-Content -LiteralPath $settingsPath -Value $settings -Encoding utf8NoBOM
         $entry = [ordered]@{
             number = $number
+            group = [int][Math]::Floor($shard * $GroupCount / $ShardCount) + 1
             expectedTests = $loads[$shard]
             classes = @($buckets[$shard])
             methods = @($methods)
@@ -257,6 +256,7 @@ function Invoke-ShardedTests {
     for ($shard = 0; $shard -lt $ShardCount; $shard++) {
         if ($buckets[$shard].Count -eq 0) { continue }
         $number = $shard + 1
+        if ($shardEntries[$number].group -ne $Group) { continue }
         Write-Host ("$LaneName shard {0}/{1}: {2} expected tests in {3} classes" -f $number, $ShardCount, $loads[$shard], $buckets[$shard].Count) -ForegroundColor Yellow
         $args = @(
             "test", $projectPath,
@@ -298,6 +298,11 @@ function Invoke-ShardedTests {
 
         $verification = Read-ShardTestResults -TrxPath $trxPath -ExpectedMethodCounts $shardEntries[$number].expectedMethodCounts
         $results = @($verification.results)
+        $shardEntries[$number]['coverageFiles'] = @(Get-ShardCoverageFiles -TrxPath $trxPath)
+        if ($CollectCoverage -and $shardEntries[$number].coverageFiles.Count -ne 1) {
+            $script:LaneFailures += "$LaneName shard $number has missing or ambiguous coverage"
+            $script:LaneExitCode = 1
+        }
         $shardEntries[$number]['missingOrIncompleteMethods'] = @($verification.missingMethods)
         $shardEntries[$number]['unexpectedMethods'] = @($verification.unexpectedMethods)
         if ($verification.missingMethods.Count -gt 0 -or $verification.unexpectedMethods.Count -gt 0) {
@@ -320,12 +325,13 @@ function Invoke-ShardedTests {
     $crossShardTestIds = @($testIdShards.GetEnumerator() | Where-Object { $_.Value.Count -gt 1 })
     $manifest["executionSummary"] = [ordered]@{
         actualResults = $executedTotal
-        discoveryDelta = $executedTotal - $testNames.Count
+        expectedTests = ($manifest.shards | Where-Object { $_.group -eq $Group } | ForEach-Object { $_.expectedTests } | Measure-Object -Sum).Sum
+        discoveryDelta = $executedTotal - ($manifest.shards | Where-Object { $_.group -eq $Group } | ForEach-Object { $_.expectedTests } | Measure-Object -Sum).Sum
         crossShardTestIdCount = $crossShardTestIds.Count
     }
     $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $EvidenceDirectory 'manifest.json') -Encoding utf8NoBOM
 
-    Write-Host "$LaneName execution: $executedTotal results ($($executedTotal - $testNames.Count) runtime-expanded theory rows); cross-shard test identities: $($crossShardTestIds.Count)." -ForegroundColor Cyan
+    Write-Host "$LaneName group $Group/$GroupCount execution: $executedTotal results; cross-shard test identities: $($crossShardTestIds.Count)." -ForegroundColor Cyan
     if ($crossShardTestIds.Count -gt 0) {
         $script:LaneFailures += "$LaneName shard overlap ($($crossShardTestIds.Count) test identities)"
         $script:LaneExitCode = 1
@@ -432,7 +438,7 @@ switch ($Lane) {
             } else {
                 Join-Path $repoRoot ("release-validation\engine-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
             }
-            Invoke-ShardedTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $evidenceDir engine
+            Invoke-ShardedTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $evidenceDir engine -Group $EngineShardGroup -GroupCount $EngineShardGroupCount
         } else {
             Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter
         }

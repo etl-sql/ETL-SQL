@@ -193,6 +193,25 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   Step attribution retains 1648 seconds for engine coverage and 1006 seconds for smoke checks;
   the latter includes 228 Portal security cases taking 13 minutes. Original step metadata and
   console output are retained beside that timing control. These are the next measured bottlenecks.
+  CI now schedules Portal smoke/security independently from solution verification and distributes
+  the same 12 engine coverage shards across three workers. The unchanged `Build & Test` aggregate
+  requires every worker, verifies matching complete inventories and TRX-linked coverage hashes,
+  then enforces the same 70% coverage policy. Full release policy names every new worker. Source
+  fixtures cover complete/expanded theories, retained successful groups and fail-closed recovery.
+  Local functional verification passes all 12 real shards: 13,100 passed cases and the existing
+  Linux-only skip on Windows, with matching plans and no overlap. The aggregate verifies every
+  TRX attachment in 72.9 seconds, then the canonical coverage gate passes at 77.0% (minimum 70%).
+  Original attachment-resolution and fixture-cleanup failures remain retained alongside recovery.
+  The source audit now prunes its existing output/dependency exclusions before descending; its
+  focused source-scope regression passes. Evidence: `release-validation/critical-path/`.
+  These are dirty-tree development checks, not clean-candidate certification.
+  Final local validation passes 50 source checks, 122 consumer checks, 53 Portal contracts/smoke
+  cases and 144 engine smoke/audit cases. Pre-push catches a missing shared helper in the copied
+  asset-generation fixture; failed-check-only recovery passes after correcting its inventory,
+  retaining the original failure and the other 121 successful checks.
+  The retained control's consumer artifact identifies 996.2 seconds in asset-generation checks
+  inside the 24.5-minute job; its source SHA and archive digest are retained with this evidence.
+  Hosted elapsed-time and failed-group-only recovery acceptance for this topology remain open.
 - [ ] **Watchdogs and log streaming** on every long CI step, with the console streamed to an artifact
   and diagnostics uploaded on failure.
   **In progress:** MSI workstation and Portal jobs use the shared bounded supervisor. Other long

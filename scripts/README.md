@@ -94,6 +94,24 @@ the driver. The publication gate checks
 the complete job inventory, not merely a green workflow badge. Diagnostic manual runs of `ci.yml`
 cannot qualify.
 
+The `build-and-test` impact lane runs solution verification and Portal smoke/security on separate
+workers. Push/full-certification CI also divides the existing 12 engine coverage shards into three
+groups of four. Each worker builds its focused test project from the same checkout; solution-wide
+build, formatting and dependency audit remain in `Build Verification`. PRs retain engine smoke,
+Portal smoke/security, generated contracts and the complete language-server suite.
+
+`Build & Test` remains the aggregate required check. Full certification additionally requires
+`Build Verification`, `Portal Smoke & Security` and all three `Engine Coverage (n/3)` jobs.
+The aggregate selects the latest retained artifact for each group, including successful groups
+from earlier attempts, verifies the candidate/run/configuration, identical full discovery plans,
+complete theory results, nonoverlapping methods and TRX-linked coverage hashes, then invokes
+`Test-CoverageGate.ps1` with the unchanged 70% threshold. A broken latest artifact fails the gate.
+Existing engine skips remain visible in the merged inventory. Local `test-lane.ps1 -Lane engine`
+still runs every shard; `-EngineShardGroup 1 -EngineShardGroupCount 3` runs only the first group.
+Run `node scripts\checks\test-engine-coverage.mjs` for source-only recovery regressions.
+Additional focused builds consume runner time to remove serial test work; hosted elapsed-time
+acceptance remains in `TODO.md` until measured.
+
 For manual use:
 
 ```powershell

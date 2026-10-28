@@ -13,7 +13,7 @@ export function verifyNoBuildEntrypoints() {
     const originals = fileURLToPath(new URL('../../', import.meta.url));
     fs.mkdirSync(scripts, { recursive: true });
     try {
-        for (const name of ['test-lane.ps1', 'test-lane.sh', 'test-smoke.ps1', 'test-smoke.sh', 'Release.Helpers.ps1'])
+        for (const name of ['test-lane.ps1', 'test-lane.sh', 'test-smoke.ps1', 'test-smoke.sh', 'Release.Helpers.ps1', 'TestLane.Helpers.ps1'])
             fs.copyFileSync(path.join(originals, name), path.join(scripts, name));
         const log = path.join(temporary, 'calls.jsonl');
         const driver = path.join(temporary, 'driver.ps1');
@@ -70,11 +70,15 @@ if (command === 'dotnet') console.log('Passed: 1');
         else if (process.platform !== 'win32') throw new Error('Bash is required to validate the POSIX entry points.');
         const shared = { ...process.env, ETLSQL_PROBE_LOG: log };
         for (const shell of shells) {
-            for (const { kind, lane, expected } of [
+            for (const { kind, lane, expected, projectGroup } of [
                 { kind: 'lane', lane: 'engine', expected: 1 },
                 { kind: 'lane', lane: 'portal', expected: 2 },
                 { kind: 'smoke', lane: 'security', expected: 2 },
                 { kind: 'smoke', lane: 'all', expected: 5 },
+                ...(shell === 'powershell' ? [
+                    { kind: 'smoke', lane: 'all', projectGroup: 'engine', expected: 3 },
+                    { kind: 'smoke', lane: 'all', projectGroup: 'portal', expected: 2 },
+                ] : []),
             ]) {
                 for (const noBuild of [false, true]) {
                     for (const outcome of noBuild ? (expected > 1 ? ['accept', 'reject', 'reject-second'] : ['accept', 'reject']) : ['accept']) {
@@ -89,7 +93,7 @@ if (command === 'dotnet') console.log('Passed: 1');
                                 NoBuild: noBuild, ...(kind === 'lane' ? {
                                     EngineShardCount: outcome === 'reject' ? 2 : 1,
                                     PortalShardCount: outcome === 'reject' ? 2 : 1,
-                                } : {}) });
+                                } : {}), ...(projectGroup ? { ProjectGroup: projectGroup } : {}) });
                             result = spawnSync('pwsh', ['-NoProfile', '-File', driver],
                                 { env, encoding: 'utf8', windowsHide: true, cwd: temporary, timeout: 15000 });
                         } else {
@@ -117,6 +121,8 @@ if (command === 'dotnet') console.log('Passed: 1');
                         } else {
                             assert.equal(result.status, 0, result.stdout + result.stderr);
                             assert.equal(tests.length, expected);
+                            if (projectGroup) for (const test of tests)
+                                assert.equal(test.args[1].includes('ETL-SQL.Portal.Tests'), projectGroup === 'portal');
                             assert.equal(guards.length, noBuild ? tests.length : 0);
                             for (const [i, test] of tests.entries()) {
                                 assert.equal(test.args.includes('--no-build'), noBuild);
@@ -133,7 +139,17 @@ if (command === 'dotnet') console.log('Passed: 1');
                 }
             }
         }
-        console.log(`No-build entry points: ${shells.join(', ')} lane/smoke scopes, aggregate projects and rejection before test/discovery passed.`);
+        fs.writeFileSync(log, '');
+        const empty = spawnSync('pwsh', ['-NoProfile', '-File', driver], {
+            env: { ...shared, ETLSQL_PROBE_GUARD: 'accept', ETLSQL_PROBE_SCRIPT: path.join(scripts, 'test-smoke.ps1'),
+                ETLSQL_PROBE_PARAMETERS: JSON.stringify({ Lane: 'core', ProjectGroup: 'portal', Configuration: 'Release', NoBuild: true }) },
+            encoding: 'utf8', windowsHide: true, cwd: temporary, timeout: 15000,
+        });
+        assert.ifError(empty.error);
+        assert.notEqual(empty.status, 0, 'An empty smoke selection must not pass.');
+        assert.match(empty.stderr, /contain no test suites/);
+        assert.ok(!fs.readFileSync(log, 'utf8').includes('"command":"dotnet"'));
+        console.log(`No-build entry points: ${shells.join(', ')} lane/smoke scopes, aggregate projects, empty selection and rejection before test/discovery passed.`);
     } finally {
         assert.equal(path.dirname(temporary), base);
         assert.ok(path.basename(temporary).startsWith('no-build-lanes-'));

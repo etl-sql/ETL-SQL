@@ -101,8 +101,8 @@ for (const selection of [selectLanes(['src/etl-sql-vscode/ui/src/App.tsx']), sel
       const job = ciSource.split(new RegExp(`^  ${lane}:\\r?\\n`, 'm'))[1]?.split(/^  [\w-]+:\r?\n/m)[0];
       assert.ok(job, `Missing workflow job for ${lane}`);
       const expression = job.match(/^    if: (.+)$/m)[1].replaceAll('needs.source-preflight', 'needs.source');
-      const selected = runInNewContext(expression, { needs: { source: { outputs: { lanes: JSON.stringify(selection.lanes) } } },
-        github: { event_name: event }, fromJSON: JSON.parse, contains: (items, value) => items.includes(value) }, { timeout: 1000 });
+      const selected = runInNewContext(expression, { needs: { source: { result: 'success', outputs: { lanes: JSON.stringify(selection.lanes) } } },
+        github: { event_name: event }, always: () => true, fromJSON: JSON.parse, contains: (items, value) => items.includes(value) }, { timeout: 1000 });
       const excludedOnPr = event === 'pull_request' && ['enterprise-certification', 'docker-integration-tests'].includes(lane);
       assert.equal(selected, selection.lanes.includes(lane) && !excludedOnPr, `${lane}/${event}`);
     }

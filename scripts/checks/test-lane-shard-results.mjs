@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'lane-shard-results-'));
-const source = fileURLToPath(new URL('../test-lane.ps1', import.meta.url));
+const source = fileURLToPath(new URL('../TestLane.Helpers.ps1', import.meta.url));
 const expected = [{ method: 'ETL_SQL.Fixture.A.Theory', count: 2 }, { method: 'ETL_SQL.Fixture.B.Test', count: 1 }];
 function verify(rows, definitions = rows) {
   writeFileSync(path.join(root, 'results.trx'), `<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010"><Results>${rows.map(([id]) => `<UnitTestResult testId="${id}"/>`).join('')}</Results><TestDefinitions>${definitions.map(([id, method]) => `<UnitTest id="${id}"><TestMethod className="${method.slice(0, method.lastIndexOf('.'))}" name="${method.slice(method.lastIndexOf('.') + 1)}"/></UnitTest>`).join('')}</TestDefinitions></TestRun>`);

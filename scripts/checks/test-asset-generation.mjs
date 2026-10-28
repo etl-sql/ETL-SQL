@@ -480,7 +480,7 @@ try {
     // Exercise the public wrappers with real preparation. Build spies prove that failed preparation
     // cannot reach downstream tools; they also record argument boundaries from an unrelated cwd.
     for (const script of ['build-debug.ps1', 'build-debug.sh', 'sync-assets.ps1', 'check-built-browser-assets.mjs',
-        'test-smoke.ps1', 'test-smoke.sh', 'test-lane.ps1', 'test-lane.sh', 'Release.Helpers.ps1'])
+        'test-smoke.ps1', 'test-smoke.sh', 'test-lane.ps1', 'test-lane.sh', 'Release.Helpers.ps1', 'TestLane.Helpers.ps1'])
         fs.copyFileSync(path.join(repo, 'scripts', script), path.join(root, 'scripts', script));
     const callsFile = path.join(root, 'entrypoint-calls.jsonl');
     const driver = path.join(root, 'entrypoint-driver.ps1');
