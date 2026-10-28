@@ -219,10 +219,21 @@ jobs:
         env:
           ENGINE_GROUP: ${{ matrix.group }}
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'engine', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-CollectCoverage', '-EngineShardCount', '12', '-EngineShardGroup', $env:ENGINE_GROUP, '-EngineShardGroupCount', '3', '-ResultsDirectory', 'release-validation/engine-coverage') -EvidenceDirectory release-validation/engine-process -TimeoutSeconds 1500
+      - name: Inspect prior group 1 rehearsal artifacts
+        if: github.event_name == 'workflow_dispatch' && matrix.group == 1
+        timeout-minutes: 5
+        uses: actions/download-artifact@v8
+        with:
+          pattern: engine-coverage-group-1-${{ github.run_id }}-*
+          path: release-validation/recovery-prior-group-1
       - name: Controlled failed-group recovery rehearsal
-        if: github.event_name == 'workflow_dispatch' && matrix.group == 1 && github.run_attempt == 1
+        if: github.event_name == 'workflow_dispatch' && matrix.group == 1
         shell: pwsh
-        run: throw 'Controlled rehearsal failure after engine group 1 completed; use failed-job-only recovery on this unchanged commit.'
+        run: |
+          $prior = @(Get-ChildItem -LiteralPath release-validation/recovery-prior-group-1 -Recurse -File -Filter manifest.json -ErrorAction SilentlyContinue)
+          if ($prior.Count -eq 0) {
+            throw 'Controlled rehearsal failure after engine group 1 completed; use failed-job-only recovery on this unchanged commit.'
+          }
       - name: Retain engine group results
         if: always()
         timeout-minutes: 5
