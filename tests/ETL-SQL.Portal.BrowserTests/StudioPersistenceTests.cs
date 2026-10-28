@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using ETL_SQL.Common;
 using ETL_SQL.Portal.Data;
@@ -763,9 +764,18 @@ public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
             .SingleAsync();
     }
 
-    private static async Task WaitForStudioAsync(IPage page)
+    internal static async Task WaitForStudioAsync(IPage page, float timeout = 20_000,
+        [CallerMemberName] string caller = "")
     {
-        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
-            new PageWaitForFunctionOptions { Timeout = 20_000 });
+        await page.WaitForFunctionWithDiagnosticsAsync("""
+            () => {
+                const state = window.__STUDIO__?.state;
+                if (!state?.editorInstance) return false;
+                const reportId = Number.parseInt(new URLSearchParams(window.location.search).get('reportId') || '', 10);
+                if (!Number.isInteger(reportId) || reportId <= 0) return true;
+                const document = state.documents.find(doc => doc.id === state.activeDocId && doc.reportId === reportId);
+                return !!document && state.editorInstance.getValue().replace(/\r\n?/g, '\n') === document.content.replace(/\r\n?/g, '\n');
+            }
+            """, null, new PageWaitForFunctionOptions { Timeout = timeout }, caller);
     }
 }

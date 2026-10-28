@@ -36,6 +36,7 @@ internal sealed class BrowserNavigationDiagnostics : IAsyncDisposable
     private void OnRequestFailed(object? sender, IRequest request)
     {
         if (request.IsNavigationRequest) _ = CaptureAsync("transport-navigation", request.Url);
+        else if (request.ResourceType == "script") _ = CaptureAsync("transport-script", request.Url);
     }
 
     internal Task CaptureAsync(string trigger, string url, string? caller = null, string? targetUrl = null)
@@ -161,6 +162,17 @@ internal sealed class BrowserNavigationDiagnostics : IAsyncDisposable
 
 internal static class BrowserNavigationExtensions
 {
+    internal static async Task WaitForFunctionWithDiagnosticsAsync(this IPage page, string expression, object? arg = null,
+        PageWaitForFunctionOptions? options = null, [CallerMemberName] string caller = "")
+    {
+        try { await using var result = await page.WaitForFunctionAsync(expression, arg, options); }
+        catch (Exception exception) when (exception is PlaywrightException or TimeoutException)
+        {
+            await BrowserNavigationDiagnostics.CaptureAsync(page, "function-wait-failure", caller, page.Url);
+            throw;
+        }
+    }
+
     internal static async Task<IResponse?> GotoWithDiagnosticsAsync(this IPage page, string url, PageGotoOptions? options = null,
         [CallerMemberName] string caller = "")
     {

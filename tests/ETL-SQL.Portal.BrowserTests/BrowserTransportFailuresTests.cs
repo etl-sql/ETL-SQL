@@ -6,6 +6,34 @@ namespace ETL_SQL.Portal.BrowserTests;
 [Collection(DetailSurfaceCollection.Name)]
 public sealed class BrowserTransportFailuresTests(DetailSurfaceHarnessFixture fixture)
 {
+    [Fact]
+    public async Task HttpHistory_IsBoundedSanitizedAndSeparateFromTransportFailures()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        using var failures = new BrowserTransportFailures(session.Page.Context);
+        failures.RecordHttp("GET", "fetch", false, "https://example.invalid/success", 200);
+        failures.RecordHttp("GET", "fetch", false, "https://example.invalid/redirect", 302);
+        for (var index = 0; index < 101; index++)
+            failures.RecordHttp(new string('M', 1000), new string('R', 1000), false,
+                $"https://user:password@example.invalid/{index}?token=private-token#private-fragment", 503);
+        var history = failures.Snapshot();
+        Assert.Empty(history.Requests);
+        Assert.Equal(0, history.Dropped);
+        Assert.False(history.NavigationFailed);
+        Assert.Equal(100, history.HttpErrors.Count);
+        Assert.Equal(1, history.HttpErrorsDropped);
+        Assert.Equal("https://example.invalid/1", history.HttpErrors[0].Url);
+        Assert.Equal("https://example.invalid/100", history.HttpErrors[^1].Url);
+        Assert.All(history.HttpErrors, failure =>
+        {
+            Assert.Equal(24, failure.Method.Length);
+            Assert.Equal(32, failure.ResourceType.Length);
+            Assert.Equal(503, failure.Status);
+            Assert.DoesNotContain("private-", failure.Url);
+            Assert.DoesNotContain("password", failure.Url);
+        });
+    }
+
     [Theory]
     [InlineData("https://user:password@example.test:8443/path?token=secret#fragment", "https://example.test:8443/path")]
     [InlineData("http://example.test/path?q=secret", "http://example.test/path")]

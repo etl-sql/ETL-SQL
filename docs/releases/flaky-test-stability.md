@@ -73,6 +73,17 @@ class load and shared background-service state from its startup/shutdown observa
 
 ## History and outcomes
 
+- **v0.22.0 — Studio startup and reload evidence:** hosted Portal-shard rehearsal `40609095598`
+  on `c9003c12dfb5d8d7914f0bc7b6a32e4e9da58227` includes two startup timeouts in
+  `StudioPersistenceTests` and one empty editor read after reload. Existing snapshots cover failed
+  navigation, but successful document navigation can still leave a failed module or startup API.
+  Studio persistence now waits for its requested active report and editor text. Failed condition
+  waits and script transport failures retain bounded process/transport/HTTP evidence, with URL
+  credentials, queries, fragments and response bodies excluded. Three controlled browser probes
+  fail against the previous helper and pass with this behavior; the full focused slice passes
+  32 cases. The hosted cause remains unproven. A local baseline passes all three hosted cases but
+  separately records a dataset-picker timeout after which Users appears in the failure text.
+  Original failures and recovery: `release-validation/studio-hosted-failures/`.
 - **v0.15.0:** Eight scheduler tests used a fixed 500 ms delay before positive assertions. They
   moved to condition polling. A cluster-lock failure was separately diagnosed as a production
   lock-release defect and fixed with bounded release retry and ownership verification.

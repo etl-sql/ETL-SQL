@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Capture browser process resources and sanitized HTTP/transport failures when Studio startup
+  waits or module loads fail. Studio persistence checks also require the requested active report
+  and matching editor text before reading it. Controlled failures verify diagnostics and readiness.
+
 - Run both selected test suites for combined extension/browser-test edits during local pre-push.
   This path now checks both extension/UI packages and the complete browser inventory with Studio
   performance evidence, avoiding the broad route that previously skipped those suites.

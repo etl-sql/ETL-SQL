@@ -627,6 +627,19 @@ here; each one failed a single test per run and passed on rerun.
   failure/resource checks and four desktop/critical/compiler journeys pass locally. Shard fixtures
   verify environment propagation/restoration for success, failed exits and launch exceptions.
   Hosted failure capture, diagnosis and consecutive-run evidence remain required before closure.
+  Hosted rehearsal `40609095598` also exposes two Studio startup timeouts and an empty editor
+  read after reload. The old helper accepts a mounted workbench without the requested report;
+  startup waits and failed module loads retain no snapshot. Deterministic probes reproduce all
+  three gaps. Studio persistence now waits for the requested active report and matching editor
+  text, while failed waits/modules retain process resources and bounded, sanitized HTTP/transport
+  history. All 32 focused cases pass. This improves failure attribution; it does not prove the
+  hosted cause. Evidence: `release-validation/studio-hosted-failures/`.
+  All 44 source-preflight checks pass in 93.2 seconds. Readiness also accepts matching editor
+  text after normalizing CR, CRLF and LF endings; its controlled browser check passes.
+  A baseline local shard passes 335/336 cases, including all three hosted Studio failures.
+  `StudioDesktopDatasetWizardTests.AConnectionDeclaredAMomentAgo_ListsItsTables` separately times
+  out at 15 seconds, then its failure text contains the Users table. That timing remains open;
+  it also reproduces in isolation. The original TRX and both console logs are retained there.
 - [ ] **`DesktopStudioJourneyTests` exit timeout:** waited 10 s for `ApplicationStopping` after "Exit
   Without Saving" on CI; passes 3 of 3 locally in 9–11 s.
   **In progress:** aborting the final heartbeat now deterministically reproduces the same shutdown
