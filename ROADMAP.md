@@ -94,9 +94,10 @@ that does not schedule their proposed implementation.
 **Problem and Intended Outcome:** Certifying v0.21.0 took more than 24 hours of active work, spread over two days.
 The release branch ran 14 CI rounds (8 failed), 14 MSI upgrade rounds (10 failed) and 14 CodeQL
 rounds. Most of that time went on waiting for a full round to finish after a one-line fix. The
-outcome: the same evidence, with roughly two hours from candidate cut to tag-ready on a clean run.
-Eight hours is the recovery ceiling. Aim for one full certification on the frozen candidate,
-with no more than two full rounds.
+outcome: the same evidence, with a release within four hours from candidate cut through publication
+and ordinary PR validation within 30 minutes. Aim for one full certification on the frozen candidate,
+with no more than two full rounds. Measure clean and recovery runs separately; watchdog ceilings
+are not timing targets.
 
 **First priority — separate regular CI from release certification:**
 
@@ -195,8 +196,9 @@ supplies the performance reference. The v0.22.0 flaky-test work remains required
 5. A one-command metadata flip and the evidence manifest.
 6. Move the local-only lanes into CI, then trim the checklist to match.
 
-**Acceptance Evidence:** measure a clean run against the roughly two-hour tag-ready target and
-recovery against the eight-hour ceiling, with no more than two full CI rounds on the final candidate.
+**Acceptance Evidence:** measure release elapsed time from candidate cut through publication against
+the four-hour target, recording clean and recovery runs separately, with no more than two full CI
+rounds on the final candidate. Measure ordinary PR validation against the 30-minute target.
 Demonstrate affected-lane selection, conservative fallback, failed-job-only recovery and publication
 without rebuilding certified packages. Its evidence manifest covers every gate v0.21.0 covered.
 

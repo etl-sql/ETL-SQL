@@ -15,7 +15,10 @@ after source checks for explicitly classified documentation-only changes. Extens
 run the engine integration build and both extension/UI package checks. Browser-test-only edits
 build and format the browser test project, then run its complete browser inventory in one shard.
 That run also captures the Studio performance result for the local platform under a unique
-`release-validation/pre-push-browser/` directory. Other local selections retain broader checks.
+`release-validation/pre-push-browser/` directory. Combined extension/browser-test changes run both
+targeted paths, including the engine prerequisite and both extension/UI packages, then the complete
+browser inventory and Studio performance receipt. They avoid unrelated broad checks. Shared,
+unknown and incomplete selections retain broader checks.
 A selection report is never release certification.
 
 VS Code UI files under `src/etl-sql-vscode/ui/src/` select extension checks, browser/consumer

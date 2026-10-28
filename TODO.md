@@ -22,9 +22,10 @@ Deferred initiatives stay in `ROADMAP.md` until selected.
 ### 1. Faster release certification
 
 **Design:** [`ROADMAP.md`](ROADMAP.md#release-engineering--faster-release-certification), which also
-records the v0.21.0 lessons. **Goal:** roughly two hours from candidate cut to tag-ready on a clean
-run. Eight hours is the recovery ceiling, not the normal budget. Aim for one full certification
-on the frozen candidate, with no more than two full rounds and the same evidence as v0.21.0.
+records the v0.21.0 lessons. **Goal:** a release within four hours from candidate cut through
+publication, and ordinary PR validation within 30 minutes. Aim for one full certification on the
+frozen candidate, with no more than two full rounds and the same evidence as v0.21.0. Measure clean
+and recovery runs separately; workflow watchdog ceilings are not timing targets.
 
 - [ ] **First priority: separate regular CI from release certification.** Use one tested impact
   manifest for local pre-push and regular push/PR CI. Run cheap source checks plus affected builds,
@@ -77,6 +78,15 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   targeted selection, and hosted timing/recovery/rollout evidence is outstanding.
   Release smoke checks now run against CI's existing Release build; tag validation no longer
   rebuilds the solution for smoke tests.
+  Mixed extension/browser-test edits now compose both targeted local paths. The old route
+  reported success after broad checks without running either selected suite. Executed routing
+  fixtures reproduce that miss and verify the engine prerequisite, both extension/UI packages,
+  complete browser inventory and Studio performance receipt, with 17 failure paths. Shared,
+  unknown and incomplete selections retain broad fallback. Actual mixed-run timing remains open.
+  Reproduction and Node 22 recovery: `release-validation/mixed-pre-push-routing/`.
+  Validation passes 44 source checks, 122 consumer checks, 11 Portal contracts and 142 smoke
+  cases. Two NuGet restores fail under sandbox network restrictions and pass on failed-check-only
+  recovery with network access; successful checks are preserved in the original report.
 
 - [ ] **Release timeline.** Record the v0.22.0 candidate cut, each CI/MSI round, its cause and the
   tag time as the release runs, so the goal is measured rather than remembered.
@@ -287,7 +297,7 @@ on the frozen candidate, with no more than two full rounds and the same evidence
 #### Codex review — stop paying for successful work again
 
 The owner reports **26 hours across two days**, mostly waiting for CI/MSI and restarting after a
-failure. The eight-hour goal above is a ceiling; it should not become the normal release ceremony.
+failure. The four-hour target above includes certification, recovery and publication.
 These additions are based on the checked-in workflows and release scripts, not a new timing audit
 of the GitHub runs. Implement the first three together, alongside the MSI runner diagnosis above.
 

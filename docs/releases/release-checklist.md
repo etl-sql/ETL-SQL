@@ -4,6 +4,11 @@ A physical, copy-pasteable checklist for cutting a release. It wraps the real sc
 `scripts/` so a release is reproducible and auditable. Strategy and rationale live in
 [`Release_Workflows.md`](../architecture/roadmaps/release-workflows.md); this file is the step list.
 
+Timing targets: complete a release within four hours from candidate cut through publication, and
+ordinary PR validation within 30 minutes. Record clean and recovery elapsed time separately,
+including queue waits and publication. Larger process/job watchdog limits are recovery safeguards;
+they do not establish that either target has been met.
+
 > **Tooling note.** This checklist is the authoritative release policy. The local validation driver is
 > `scripts/Test-PreRelease.ps1`
 > (POSIX: `scripts/test-pre-release.sh`). Version bumping is `scripts/Set-Version.ps1`. Cross-platform

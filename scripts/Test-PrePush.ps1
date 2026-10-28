@@ -148,14 +148,18 @@ function Invoke-PrePushBrowserConsumerValidation {
 }
 
 $selectedLanes = @($impact.lanes | Sort-Object) -join ','
-if ($selectedLanes -ceq 'portal-browser-journey,source-preflight,studio-performance-budgets') {
-    Invoke-PrePushBrowserValidation
-    Write-Host 'Browser pre-push passed. Full release certification remains required before tagging.' -ForegroundColor Green
-    exit 0
-}
-if ($selectedLanes -ceq 'build-vscode,source-preflight') {
-    Invoke-PrePushExtensionValidation
-    Write-Host 'Extension pre-push passed. Full release certification remains required before tagging.' -ForegroundColor Green
+$targetedSelections = @(
+    'build-vscode,source-preflight',
+    'portal-browser-journey,source-preflight,studio-performance-budgets',
+    'build-vscode,portal-browser-journey,source-preflight,studio-performance-budgets'
+)
+if ($selectedLanes -cin $targetedSelections) {
+    $validateExtension = 'build-vscode' -cin $impact.lanes
+    $validateBrowser = 'portal-browser-journey' -cin $impact.lanes
+    if ($validateExtension) { Invoke-PrePushExtensionValidation }
+    if ($validateBrowser) { Invoke-PrePushBrowserValidation }
+    $scope = if ($validateExtension -and $validateBrowser) { 'Extension and browser' } elseif ($validateExtension) { 'Extension' } else { 'Browser' }
+    Write-Host "$scope pre-push passed. Full release certification remains required before tagging." -ForegroundColor Green
     exit 0
 }
 $validateUiConsumers = $selectedLanes -ceq 'browser-consumer-contracts,build-vscode,portal-browser-journey,source-preflight,studio-performance-budgets'

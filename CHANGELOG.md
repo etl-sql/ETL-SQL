@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Run both selected test suites for combined extension/browser-test edits during local pre-push.
+  This path now checks both extension/UI packages and the complete browser inventory with Studio
+  performance evidence, avoiding the broad route that previously skipped those suites.
+
 - Require DEB installation checks to observe an active service, a valid main PID and the exact
   installed executable. Inactive services and failed or unrelated executable lookups can no longer
   pass certification. Ten deterministic cases pass on Windows/Git Bash and Linux.
