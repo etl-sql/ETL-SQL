@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "scope": "diagnostic-engine-failed-group-recovery",
+  "certificationPassed": false,
+  "candidateSha": "cd600510d3b933151e6b86d59a93758f4425e7f8",
+  "productionBaseSha": "09fd6bdf7ef66b5c1095369d5666cc566cf16155",
+  "probeChangedOnlyWorkflow": true,
+  "runUrl": "https://github.com/etl-sql/ETL-SQL/actions/runs/40754693409",
+  "runId": "40754693409",
+  "retries": 1,
+  "recoverySeconds": 874.9769023,
+  "initialRequestedUtc": "2026-10-28T19:29:00.2627354+00:00",
+  "firstActionableFailureUtc": "2026-10-28T19:50:23Z",
+  "firstActionableFailureSeconds": 1282.7372646,
+  "passed": 13101,
+  "skipped": [
+    "ETL_SQL.Tests.Orchestration.SandboxWorkspaceProviderTests.WritableLeavesAcceptAnUnprivilegedSandboxUidWhileEnclosingRootsStayPrivate"
+  ],
+  "coverage": 77.0,
+  "coverageMinimum": 70,
+  "originalGroupPassedBeforeControlledFault": 4548,
+  "originalFailuresRetained": true,
+  "successfulExecutionsPreserved": [
+    {
+      "originalJobId": 123050381339,
+      "startedAt": "2026-10-28T19:29:05Z",
+      "completedAt": "2026-10-28T19:35:35Z",
+      "name": "Source preflight",
+      "carriedRecordId": 123067241086
+    },
+    {
+      "originalJobId": 123053817376,
+      "startedAt": "2026-10-28T19:35:38Z",
+      "completedAt": "2026-10-28T19:47:03Z",
+      "name": "Build Verification",
+      "carriedRecordId": 123067293751
+    },
+    {
+      "originalJobId": 123053816992,
+      "startedAt": "2026-10-28T19:35:37Z",
+      "completedAt": "2026-10-28T20:00:25Z",
+      "name": "Portal Smoke & Security",
+      "carriedRecordId": 123067306216
+    },
+    {
+      "originalJobId": 123053817093,
+      "startedAt": "2026-10-28T19:35:37Z",
+      "completedAt": "2026-10-28T19:52:05Z",
+      "name": "Engine Coverage (2/3)",
+      "carriedRecordId": 123067295823
+    },
+    {
+      "originalJobId": 123053816996,
+      "startedAt": "2026-10-28T19:35:38Z",
+      "completedAt": "2026-10-28T19:52:08Z",
+      "name": "Engine Coverage (3/3)",
+      "carriedRecordId": 123067309941
+    }
+  ],
+  "originalArtifactsPreserved": [
+    {
+      "id": 12846886471,
+      "digest": "sha256:89b86c5f4ceb96a55514e1f6021d65817ca0668ac0c18c41368ea51948e00180",
+      "group": 1
+    },
+    {
+      "id": 12847820634,
+      "digest": "sha256:b527441683d1b241f9c136ad4a6f9527b0e0822b9391c11143bac961e9db1302",
+      "group": 2
+    },
+    {
+      "id": 12847246606,
+      "digest": "sha256:716346e50aad1c9b19bc5e07137cca68be406179d2e66a4a823882d4fd44f9cc",
+      "group": 3
+    }
+  ],
+  "recoveredJobs": [
+    {
+      "name": "Engine Coverage (1/3)",
+      "startedAt": "2026-10-28T20:01:16Z",
+      "completedAt": "2026-10-28T20:13:06Z"
+    },
+    {
+      "name": "Build & Test",
+      "startedAt": "2026-10-28T20:13:09Z",
+      "completedAt": "2026-10-28T20:15:45Z"
+    }
+  ],
+  "metadataNote": "GitHub assigns new database IDs to carried job records; original job and every step execution timestamp/conclusion are unchanged.",
+  "rawEvidence": "release-validation/critical-path/hosted-40754693409/",
+  "auditScripts": [
+    "release-validation/critical-path/audit-hosted-engine.ps1",
+    "release-validation/critical-path/audit-engine-recovery.ps1"
+  ],
+  "timeline": "release-validation/timelines/1793218915921-28492/",
+  "limitations": [
+    "Diagnostic build/test selection; no full release or later-SHA certification.",
+    "Portal worker took 24.8 minutes in attempt 1; the overall longest-job target remains open.",
+    "Earlier probe 40750772070 failed source preflight before workers; it remains a separate failed experiment."
+  ]
+}

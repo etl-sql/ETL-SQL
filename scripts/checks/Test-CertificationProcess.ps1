@@ -82,13 +82,19 @@ try {
     $longBudget = Invoke-Fixture 'full local budget' 'Write-Output "full local deadline accepted"; exit 0' 24000 0
     if ($longBudget.Result.timeoutSeconds -ne 24000) { throw 'The full local deadline was not recorded.' }
     $invalidEvidence = Join-Path $fixture 'rejected deadline'
-    $invalid = Start-TestProcess @('-NoProfile', '-File', $supervisor, '-ScriptPath', (Join-Path $fixture 'full local budget script.ps1'),
-        '-EvidenceDirectory', $invalidEvidence, '-TimeoutSeconds', '25201')
-    $invalidOutput = $invalid.StandardOutput.ReadToEndAsync()
-    $invalidError = $invalid.StandardError.ReadToEndAsync()
-    if (-not $invalid.WaitForExit(5000)) { $invalid.Kill(); throw 'Invalid deadline was not rejected promptly.' }
-    if (-not $invalidOutput.Wait(2000) -or -not $invalidError.Wait(2000) -or $invalid.ExitCode -eq 0 -or
-        (Test-Path -LiteralPath $invalidEvidence)) { throw 'An out-of-range deadline started certification work.' }
+    # Parameter binding rejects this input before the script body starts. Exercise the public
+    # script in this host so unrelated process startup cannot turn validation into a timeout.
+    $deadlineRejected = $false
+    try {
+        & $supervisor -ScriptPath (Join-Path $fixture 'full local budget script.ps1') `
+            -EvidenceDirectory $invalidEvidence -TimeoutSeconds 25201
+    } catch [System.Management.Automation.ParameterBindingException] {
+        if ($_.Exception.ParameterName -cne 'TimeoutSeconds' -or $_.Exception.ErrorId -cne 'ParameterArgumentValidationError') { throw }
+        $deadlineRejected = $true
+    }
+    if (-not $deadlineRejected -or (Test-Path -LiteralPath $invalidEvidence)) {
+        throw 'An out-of-range deadline started certification work.'
+    }
 
     # Same executable name as the certification child, but not owned by its supervisor.
     $sentinel = Start-TestProcess @('-NoProfile', '-Command', 'Start-Sleep -Seconds 30')

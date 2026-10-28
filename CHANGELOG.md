@@ -12,6 +12,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Keep all 64 CI-impact routing cases in independent native processes and private directories,
+  running at most four concurrently. Preserve the existing deadlines and assertions while reducing
+  serial startup cost behind repeated hosted source-preflight timeouts.
+  Verify invalid supervisor arguments before execution without a process-startup timing assertion,
+  and preserve Windows PATH when preparing the workstation driver fixture.
+
 - Resume the independent Windows workstation gate explicitly on unchanged inputs. Verify the
   original evidence, toolchain and cached outputs before reusing passed phases; retain failed
   attempts and original phase timestamps. Changed or missing checkpoints stop before work.
@@ -27,6 +33,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   Source retirement audits prune excluded build/dependency trees before traversal while retaining
   nested and untracked source coverage.
   A hosted diagnostic verifies the complete build/test path in 27.44 minutes, with 77% coverage.
+  A separate unchanged-commit rehearsal verifies failed-group-only engine recovery in 14.6 minutes,
+  retaining every original successful execution and artifact.
 
 - Verify hosted failed-shard-only recovery with 1,010 passed browser cases. Successful shard,
   source and performance executions retain their original evidence; recovery completes in

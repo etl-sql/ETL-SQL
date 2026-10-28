@@ -85,6 +85,17 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   complete browser inventory and Studio performance receipt, with 17 failure paths. Shared,
   unknown and incomplete selections retain broad fallback. Actual mixed-run timing remains open.
   Reproduction and Node 22 recovery: `release-validation/mixed-pre-push-routing/`.
+  A later PR source preflight times out the CI-impact fixture at its 60-second watchdog while all
+  other 49 source checks pass. Its 64 native PowerShell routing cases now use independent private
+  directories and at most four concurrent processes, bounded by available CPUs. All original
+  selection, ordering and failure assertions remain, with the same overall/per-case deadlines.
+  Local control/candidate captures pass in 26.9/12.0 seconds. Hosted acceptance remains open;
+  original timeout evidence: `release-validation/critical-path/pr-44-cfe4f53c9-source/`.
+  Native preflight separately hits a startup-sensitive five-second argument-validation fixture.
+  That check now invokes the public script in its current host and verifies rejection of the exact
+  invalid timeout before any evidence is created. The workstation fixture reuses the existing
+  Node environment helper to preserve Windows `Path` spelling; its failed Git lookup and both
+  focused recoveries are retained under `release-validation/critical-path/`.
   Validation passes 44 source checks, 122 consumer checks, 11 Portal contracts and 142 smoke
   cases. Two NuGet restores fail under sandbox network restrictions and pass on failed-check-only
   recovery with network access; successful checks are preserved in the original report.
@@ -227,10 +238,18 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   742.0 seconds: 50 source checks, 122 consumer checks, 53 Portal contracts/smoke cases and 142
   engine smoke cases. Its complete asset-generation check passes in 305.6 seconds; the added
   classic/global-augmentation regressions pass. Hosted compiler timing remains unverified.
-  Failed-group-only recovery is being rehearsed separately. Its first source check times out in
-  `test-ci-impact` before workers start; that original failure is retained and does not prove group
-  recovery. The revised probe keys its deliberate failure to the first group execution, preserving
-  later recovery after an earlier source-preflight retry.
+  **Engine recovery verified 2026-10-28:** disposable workflow-only candidate
+  `cd600510d3b933151e6b86d59a93758f4425e7f8`, run `40754693409`, deliberately fails group 1 after all
+  its tests pass. One failed-job-only retry reaches green in 875 seconds (14.6 minutes), with 13,101
+  passed cases, the existing Linux-only skip and 77% coverage. Independent archive/TRX/hash audits
+  verify all five successful worker executions retain their original step times, and every original
+  engine archive retains its ID, digest and payload. The aggregate uses recovered group 1 plus the
+  original groups 2 and 3. Original failures remain retained. This diagnostic is not final-candidate
+  certification. Historical record: `certification-results/engine-coverage-recovery-2026-10-28.json`;
+  executable audits/archives: `release-validation/critical-path/hosted-40754693409/`; timeline:
+  `release-validation/timelines/1793218915921-28492/`. This run's Portal worker takes 24.8 minutes,
+  so the overall longest-job condition remains open. An earlier probe times out in `test-ci-impact`
+  before workers start; that separate original failure is retained and does not prove group recovery.
 - [ ] **Watchdogs and log streaming** on every long CI step, with the console streamed to an artifact
   and diagnostics uploaded on failure.
   **In progress:** MSI workstation and Portal jobs use the shared bounded supervisor. Other long
@@ -247,6 +266,13 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   That run ultimately records hosted-runner communication loss 44.8 minutes after its upload
   starts. No Portal artifact or job-log blob survives; the workstation evidence and pinned MSI
   pair are retained. Original job metadata and annotation: `release-validation/hosted-msi-40312449960/`.
+  **Failed-profile recovery verified 2026-10-28:** run `40760871492` succeeds after one
+  failed-job-only retry in 453 seconds. Original installer inputs and successful workstation/build
+  executions are retained; 32 Portal and seven workstation assertions pass. Both retry uploads
+  complete in one second, and seven completed-job checkpoint notices survive. The tested PR merge
+  has the same tree as head `cfe4f53c9`; this does not certify later candidates or final v0.22.0
+  metadata. Original runner-loss cause and notice survival during loss remain unproven.
+  Historical record: `certification-results/msi-profile-recovery-2026-10-28.json`.
   A local pre-push run exposed an unbounded wait after Windows tree shutdown failed in the
   VSIX command helper. That failure now rejects promptly with a direct-child cleanup fallback;
   the cancellation fixture and an injected missing-terminator regression pass.

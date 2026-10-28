@@ -6,9 +6,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { extractWorkstationArchive } from '../collect-workstation-release-evidence.mjs';
 import { verifyWorkstationEvidence } from '../workstation-release-evidence.mjs';
+import { nodeCommandEnvironment } from '../lib/node-command-environment.mjs';
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'workstation-driver-'));
-const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(root, 'no-global-config') };
+const env = { ...nodeCommandEnvironment(), GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(root, 'no-global-config') };
 delete env.GITHUB_ACTIONS; delete env.GITHUB_RUN_ID;
 function run(command, args, extra = {}) {
   const result = spawnSync(command, args, { cwd: root, env, windowsHide: true, encoding: 'utf8', timeout: 20000, ...extra });
