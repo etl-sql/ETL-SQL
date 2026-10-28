@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.MockDb
@@ -40,7 +41,7 @@ namespace ETL_SQL.Connectors.MockDb
         public bool SupportsSqlPushdown => false;
 
         private readonly IMockDataSeeder _seeder;
-        private readonly Task _initTask;
+        private readonly Lazy<Task> _initTask;
 
         public MockSqlDataSource(IExecutionContext context, string connectionString, string dialect, Dictionary<string, string>? options = null, IMockDataSeeder? seeder = null)
         {
@@ -51,14 +52,29 @@ namespace ETL_SQL.Connectors.MockDb
             _logger = context.Logger;
             _seeder = seeder ?? new MockDataSeeder();
 
-            // Correctly capture and await the async seeding task
-            _initTask = _seeder.SeedDataAsync(_mockTables, new Random(42));
+            // Schema discovery must not generate the million-row fixture.
+            _initTask = new(() => _seeder.SeedDataAsync(_mockTables, new Random(42)),
+                LazyThreadSafetyMode.ExecutionAndPublication);
         }
 
 
-        private async Task EnsureInitialized()
+        private async Task EnsureInitialized(CancellationToken cancellationToken = default)
         {
-            if (!_initTask.IsCompleted) await _initTask;
+            cancellationToken = EffectiveCancellationToken(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                // COMPAT_BREAK: 0.22 — a completed failed seed must never expose partial rows.
+                await _initTask.Value.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                throw new ExecutionException("MOCKDB data initialization failed.");
+            }
         }
 
         public Task<string> GetVersionAsync() => Task.FromResult("Mock SQL Server 2022 v16.0");
@@ -72,7 +88,7 @@ namespace ETL_SQL.Connectors.MockDb
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
-            await EnsureInitialized();
+            await EnsureInitialized(effectiveCancellationToken);
             effectiveCancellationToken.ThrowIfCancellationRequested();
             if (!string.IsNullOrEmpty(_activeTable) && _mockTables.TryGetValue(_activeTable, out var table))
             {
@@ -124,7 +140,7 @@ namespace ETL_SQL.Connectors.MockDb
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
-            await EnsureInitialized();
+            await EnsureInitialized(effectiveCancellationToken);
             effectiveCancellationToken.ThrowIfCancellationRequested();
             var trimmedSql = sql.Trim();
             var normSql = trimmedSql.Replace("[", "").Replace("]", "").Replace("\r", " ").Replace("\n", " ");
@@ -261,6 +277,7 @@ namespace ETL_SQL.Connectors.MockDb
         public void Restore(object? snapshot) { }
         public async Task TruncateAsync()
         {
+            await EnsureInitialized();
             if (!string.IsNullOrEmpty(_activeTable) && _mockTables.TryGetValue(_activeTable, out var table))
             {
                 table.Rows.Clear();

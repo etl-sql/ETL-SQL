@@ -100,6 +100,12 @@ This document describes the internal mechanics of the ETL-SQL data access layer.
 
 ## 2. Core Interface Contracts
 
+MOCKDB table lists and table-specific declared columns use `IMockDataSeeder.GetDeclaredSchema()`
+without generating rows. It shares one deferred initialization across data reads and truncation.
+Metadata requests that require inferred schema also initialize rows. Every data read observes initialization
+failure as `ExecutionException("MOCKDB data initialization failed.")`; partial rows and provider
+details do not escape. Cancelling a waiting reader leaves shared initialization available to others.
+
 ### 2.1 `IConnector` — The Stateless Factory
 
 `IConnector` is the stateless factory and metadata provider for a connector type. One singleton instance lives in the DI container for the lifetime of the application.

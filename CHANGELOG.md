@@ -12,6 +12,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Verify hosted failed-shard-only recovery with 1,010 passed browser cases. Successful shard,
+  source and performance executions retain their original evidence; recovery completes in
+  19.7 minutes and the longest recovered shard job takes 19.3 minutes.
+
+- Defer MOCKDB row seeding until data is needed. Schema discovery no longer repeatedly generates
+  the million-row fixture; the desktop dataset-picker regression passes with an empty private cache.
+  Concurrent reads share initialization, and failed seeding raises a sanitized error instead of
+  exposing partial rows.
+
 - Capture browser process resources and sanitized HTTP/transport failures when Studio startup
   waits or module loads fail. Studio persistence checks also require the requested active report
   and matching editor text before reading it. Controlled failures verify diagnostics and readiness.

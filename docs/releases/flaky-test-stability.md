@@ -84,6 +84,16 @@ class load and shared background-service state from its startup/shutdown observa
   32 cases. The hosted cause remains unproven. A local baseline passes all three hosted cases but
   separately records a dataset-picker timeout after which Users appears in the failure text.
   Original failures and recovery: `release-validation/studio-hosted-failures/`.
+- **v0.22.0 — desktop dataset-picker schema work:** the existing picker regression fails both in
+  a 335/336 baseline shard and in isolation. Bounded request timings show completed analysis calls
+  followed by a schema request that outlasts the 15-second wait. Constructing each MOCKDB source
+  eagerly generated the million-row fixture even for declared-schema lookups. Row initialization
+  is now deferred and shared; declared metadata does not start it. The same picker passes in about
+  three seconds, or five seconds with a private empty schema cache, alongside all 33 focused browser
+  cases and 31 connector cases. Initialization
+  regressions cover concurrent/cancelled readers, metadata fallback and truncation before reading.
+  They also expose and fix a P0: completed failed seeding could return partial rows. Failed seeds
+  now reject reads with a sanitized error. Hosted verification of this source change remains open.
 - **v0.15.0:** Eight scheduler tests used a fixed 500 ms delay before positive assertions. They
   moved to condition polling. A cluster-lock failure was separately diagnosed as a production
   lock-release defect and fixed with bounded release retry and ownership verification.

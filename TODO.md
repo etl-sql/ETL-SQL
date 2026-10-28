@@ -131,7 +131,13 @@ and recovery runs separately; workflow watchdog ceilings are not timing targets.
 - [ ] **Path-filtered fix rounds.** A fix commit runs only the lanes its paths touch, using a manifest
   of which lanes cover which paths. The final round still runs everything.
   **In progress:** regular CI consumes the shared impact selection. Unknown/shared changes expand
-  to all lanes. Full certification ignores the diff. Hosted path-selection proof remains required.
+  to all lanes. Full certification ignores the diff. Browser-only hosted selection is verified;
+  other path families and full-candidate certification remain open.
+  PR 47's retained impact report selects only source preflight, all three browser shards and the
+  three-platform performance lane, with native package impact false. Unrelated CI jobs skip.
+  Checkout logs confirm the same PR merge `7b55576ba0046e52dd9676e849962f505600d9bb` across
+  failed-job recovery, with a Git tree identical to head `c9003c12dfb5d8d7914f0bc7b6a32e4e9da58227`.
+  The report remains explicitly non-certifying. Evidence: `release-validation/portal-shard-recovery/`.
   Native package PR checks now consume the same manifest's explicit package-impact metadata.
   Classified planning/release documentation and browser-test-only edits skip native builds;
   shipped extension/runtime inputs, unknown paths, missing bases and manual certification select
@@ -147,14 +153,14 @@ and recovery runs separately; workflow watchdog ceilings are not timing targets.
   certification. Hosted selection and elapsed-time proof remain open.
 - [ ] **Split the Portal browser lane** across parallel jobs, so the longest CI job falls from about 60
   minutes to about 20.
-  **In progress:** CI now defines three independent browser jobs plus a coverage gate retaining
+  **Implemented:** CI defines three independent browser jobs plus a coverage gate retaining
   the original check name. Test discovery generates a deterministic partition by class, balanced
   by case count; exact method filters keep theory cases together. TRX verification rejects
   failed/skipped, omitted and unexpected methods; the aggregate gate verifies matching inventories
   and nonoverlapping coverage. Retry selection uses the latest artifact for each shard without
   falling back from incomplete evidence. Each shard streams through a 30-minute supervisor under
-  a 35-minute step limit and retains per-attempt logs, inventory and TRX. Hosted duration and
-  failed-shard-only recovery still need verification. Local Release build passes; actual VSTest
+  a 35-minute step limit and retains per-attempt logs, inventory and TRX. Initial local evidence:
+  Release build passes; actual VSTest
   discovery/filter checks partition all 986 cases into 329/329/328 with exact method matches.
   Local shard 1 passed all 329 cases in 1.46 minutes and its TRX coverage receipt passed through
   the supervisor. This is local functional evidence, not the hosted critical-path measurement.
@@ -162,7 +168,25 @@ and recovery runs separately; workflow watchdog ceilings are not timing targets.
   passes all three shards and the aggregate gate. Retained TRX records contain 336/336/336 passed
   cases without skips; inventory union verification covers 549 methods without overlap. The
   longest shard job takes 15.1 minutes including setup/build. Original artifacts and verification:
-  `release-validation/hosted-ci-40312449895/`. Failed-shard-only recovery remains open.
+  `release-validation/hosted-ci-40312449895/`.
+  **Recovery verified 2026-10-28:** disposable candidate `c9003c12dfb5d8d7914f0bc7b6a32e4e9da58227`,
+  run `40609095598`, fails shard 1 deliberately and shard 3 on three unexpected Studio cases in
+  attempt 1. Failed-job-only recovery passes both and the coverage gate in attempt 2. Source
+  preflight, all three performance jobs and successful shard 2 retain their original executions.
+  Shard 2 keeps artifact `12782572402`, the same archive digest and every payload hash. Retained
+  TRX verification covers 337/337/336 passed cases and a nonoverlapping union of 551 methods.
+  Request-to-green recovery takes 1183.2 seconds; the longest new shard job takes 19.3 minutes.
+  Original failures remain retained, and their flaky-test causes remain separate open work.
+  Executable audit and original artifacts: `release-validation/portal-shard-recovery/`;
+  timeline: `release-validation/timelines/1793186050339-16076/`. Final-candidate certification
+  remains required; this rehearsal does not certify later source changes.
+  **Overall timing still open:** the full-CI control `40312449895` retains a 55.1-minute Build &
+  Test job, plus 24.5-minute consumer and Docker jobs. Browser splitting and failed-job recovery
+  meet their measured targets; the literal longest-CI-job condition is not yet proven. Retained
+  full-CI timing control: `release-validation/portal-shard-recovery/hosted-40609095598/full-ci-duration-control.json`.
+  Step attribution retains 1648 seconds for engine coverage and 1006 seconds for smoke checks;
+  the latter includes 228 Portal security cases taking 13 minutes. Original step metadata and
+  console output are retained beside that timing control. These are the next measured bottlenecks.
 - [ ] **Watchdogs and log streaming** on every long CI step, with the console streamed to an artifact
   and diagnostics uploaded on failure.
   **In progress:** MSI workstation and Portal jobs use the shared bounded supervisor. Other long
@@ -638,8 +662,20 @@ here; each one failed a single test per run and passed on rerun.
   text after normalizing CR, CRLF and LF endings; its controlled browser check passes.
   A baseline local shard passes 335/336 cases, including all three hosted Studio failures.
   `StudioDesktopDatasetWizardTests.AConnectionDeclaredAMomentAgo_ListsItsTables` separately times
-  out at 15 seconds, then its failure text contains the Users table. That timing remains open;
-  it also reproduces in isolation. The original TRX and both console logs are retained there.
+  out at 15 seconds, then its failure text contains the Users table. It also reproduces in
+  isolation. The original TRX and both console logs are retained there.
+  **Dataset-picker cause fixed locally:** bounded timings isolate the schema request. MOCKDB
+  constructors generate the million-row fixture even for metadata reads, repeatedly blocking schema
+  discovery. Declared metadata now avoids seeding; data reads share one deferred initialization.
+  The original picker passes in about three seconds, and a private empty-schema-cache run passes
+  in about five seconds; all 33 focused browser cases and 31 connector cases pass. Eight
+  initialization regressions cover metadata-only access, concurrent reads,
+  cancellation, undeclared schemas, first-operation truncation and sanitized failure propagation.
+  The same review fixes a P0: completed failed seeding previously returned partial rows. A failed
+  seed now blocks every read. New-candidate hosted behavior and the other flaky causes remain open.
+  Full local pre-push passes in 794.6 seconds: 44 source checks, 122 consumer checks, 11 Portal
+  contracts and 142 smoke cases. The private cold-cache picker control also passes. Final log:
+  `release-validation/studio-hosted-failures/final-pre-push.log`.
 - [ ] **`DesktopStudioJourneyTests` exit timeout:** waited 10 s for `ApplicationStopping` after "Exit
   Without Saving" on CI; passes 3 of 3 locally in 9–11 s.
   **In progress:** aborting the final heartbeat now deterministically reproduces the same shutdown
