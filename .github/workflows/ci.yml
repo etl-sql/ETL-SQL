@@ -219,6 +219,10 @@ jobs:
         env:
           ENGINE_GROUP: ${{ matrix.group }}
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'engine', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-CollectCoverage', '-EngineShardCount', '12', '-EngineShardGroup', $env:ENGINE_GROUP, '-EngineShardGroupCount', '3', '-ResultsDirectory', 'release-validation/engine-coverage') -EvidenceDirectory release-validation/engine-process -TimeoutSeconds 1500
+      - name: Controlled failed-group recovery rehearsal
+        if: github.event_name == 'workflow_dispatch' && matrix.group == 1 && github.run_attempt == 1
+        shell: pwsh
+        run: throw 'Controlled rehearsal failure after engine group 1 completed; use failed-job-only recovery on this unchanged commit.'
       - name: Retain engine group results
         if: always()
         timeout-minutes: 5
