@@ -124,12 +124,21 @@ before its full evidence bundle. The focused upload has a five-minute deadline, 
 20 minutes, and the profile job 65 minutes. Both artifacts retain their original run attempt.
 Full local/operator and package certification requirements remain.
 
-`local-release-certification.yml` runs the full local phase gate on a dedicated Windows release
-host. Release uses `collect-hosted-local-evidence.mjs` to require the exact candidate's successful
-workflow execution and verified portable bundle, then checks the attached ZIP before publication.
-This is separate from ordinary CI selection and does not certify the remaining operator/package
-scope. Host setup, dispatch and evidence rules are in the
-[release checklist](../docs/releases/release-checklist.md#controlled-host-full-local-certification).
+Run `Invoke-WorkstationCertification.ps1 -EvidenceDirectory <new-directory>` manually on the Windows
+x64 workstation for the full local phase gate. It requires no GitHub runner or workflow connection.
+After success, uploading its verified ZIP to a separate draft evidence release is an independent
+operator step. Release uses `collect-workstation-release-evidence.mjs` to verify that uploaded bundle
+and checks the product draft's evidence ZIP before publication. CI and package certifications remain
+separate. Commands and evidence rules are in the
+[release checklist](../docs/releases/release-checklist.md#independent-windows-workstation-certification).
+
+## Portal test processes
+
+The PowerShell `portal` lane uses 12 sequential testhosts by default. Whole classes stay together;
+exact method filters, per-method discovered case counts and retained TRX results verify that every
+test ran without overlapping shards. Hosted-service tests keep their separate process. The 8 GB
+managed heap limit still applies to each host. `-PortalShardCount 1` reproduces the previous single
+host for diagnosis. Each host releases its retained factory and EF state when its class group finishes.
 
 ## Browser CI shards
 
@@ -230,7 +239,7 @@ than the operator front door.
 | **[`Test-DeploymentProfileCertification.ps1`](./Test-DeploymentProfileCertification.ps1)** | PowerShell | Cross-platform | Composes Solo, Team, Enterprise, SaaS, transition, and upgrade proof from focused suites; fails closed and writes commit-bound JSON/Markdown evidence with phase logs. |
 | **[`Test-ProviderNeutralFaultCertification.ps1`](./Test-ProviderNeutralFaultCertification.ps1)** | PowerShell | Cross-platform | Repeats the provider-neutral failure matrix through local, Docker, and cloud adapters and writes invariant/checkpoint evidence for each supported profile. |
 | **[`Test-ProductionCanaryCertification.ps1`](./Test-ProductionCanaryCertification.ps1)** | PowerShell | Cross-platform | Certifies deterministic canary journey/fault contracts, exact region/domain coverage, isolation, alert attribution and credential lifecycle. Rejects source drift during the run. Live hosted behavior needs separate operator evidence. |
-| **[`Invoke-HostedLocalCertification.ps1`](./Invoke-HostedLocalCertification.ps1)** | PowerShell + Node.js 22 | Controlled Windows release runner | Runs the complete local release plan with same-run checkpoint recovery, full-byte cache verification and original phase provenance. Requires GitHub workflow identity. See [controlled-host certification](../docs/releases/release-checklist.md#controlled-host-full-local-certification) for dispatch and recovery. |
+| **[`Invoke-WorkstationCertification.ps1`](./Invoke-WorkstationCertification.ps1)** | PowerShell + Node.js 22 | Independent Windows x64 workstation | Runs every mandatory local phase and prepares a verified portable ZIP. Uploading evidence is a separate operator step. See [workstation certification](../docs/releases/release-checklist.md#independent-windows-workstation-certification). |
 | **[`Measure-LeanWorkerProfile.ps1`](./Measure-LeanWorkerProfile.ps1)** | PowerShell | Cross-platform; Docker optional | Compares the unified CLI with the non-shipping engine-worker fixture across published size, dependency closure, startup latency/working set, loaded assemblies, sandbox lifetime, and startup cost sensitivity. `-TrimExperiment` records a rejected trim contract as evidence; it never authorizes publication. |
 | **[`Measure-StudioPerformance.ps1`](./Measure-StudioPerformance.ps1)** | PowerShell | Cross-platform | Measures the canonical Studio browser fixture against OS-specific startup, JavaScript heap, keystroke, 250-row aggregation, and canvas-redraw budgets and writes JSON evidence. |
 | **[`typecheck-browser.mjs`](./typecheck-browser.mjs)** | Node.js | Cross-platform | The browser type gate. Runs `tsc --checkJs` over the canonical browser sources and fails on any finding not in `browser-typecheck-baseline.txt`, and on any baseline entry that no longer reproduces. `--summary` prints what is left by file and code; `--update` rewrites the baseline. Needs `npm ci --prefix scripts/typecheck` once. |
@@ -246,7 +255,7 @@ than the operator front door.
 | **[`test-portal-consumer-home.mjs`](./checks/test-portal-consumer-home.mjs)** | Node.js | Cross-platform | Pins the favorites/recent/featured/popular home, fuzzy global catalog search, intentional report icons, and one concise activity line per report card. |
 | **[`test-portal-studio.mjs`](./checks/test-portal-studio.mjs)** | Node.js | Cross-platform | Pins the capability-aware catalog Studio home, catalog-native report creation, equal Code/Design modes, hidden navigation, and disabled-authoring route fences. |
 | **[`Test-ScaleBaseline.ps1`](./Test-ScaleBaseline.ps1)** | PowerShell | Windows / macOS / Linux | Captures resumable 10M or 50M core baselines with one Release/server-GC test host per scenario, avoiding cross-scenario memory contamination. |
-| **[`Test-ScaleCommitComparison.ps1`](./Test-ScaleCommitComparison.ps1)** | PowerShell | Windows / macOS / Linux | Compares two commits in one clean worktree with interleaved A/B arms, a rebuild and discarded warm-up per sample, within-arm spread, and commit-bound JSON/Markdown evidence. |
+| **[`Test-ScaleCommitComparison.ps1`](./Test-ScaleCommitComparison.ps1)** | PowerShell | Windows / macOS / Linux | Compares two commits in one clean worktree with interleaved A/B arms, prepared/verified assets, a rebuild and discarded warm-up per sample, within-arm spread, and commit-bound JSON/Markdown evidence. Asset failures stop measurement and restore the original branch. |
 | **[`Test-BillionRowCertification.ps1`](./Test-BillionRowCertification.ps1)** | PowerShell | Windows | Runs the resumable 1B operator certification matrix with disk preflight, isolated child logs, heartbeat/status JSON, and per-scenario restart. |
 | **[`Test-BillionRowEvidence.ps1`](./Test-BillionRowEvidence.ps1)** | PowerShell | Windows / macOS / Linux | Validates that an operator-run billion-row certification report passed, contains required scenario evidence, and belongs to the current commit before citing performance claims. |
 | **[`Test-GateF.ps1`](./Test-GateF.ps1)** / **[`Test-GateFEvidence.ps1`](./Test-GateFEvidence.ps1)** | PowerShell | Compatibility | Historical aliases retained for existing automation; prefer the `Test-BillionRow*` script names in new docs and workflows. |

@@ -29,6 +29,34 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   This path now checks both extension/UI packages and the complete browser inventory with Studio
   performance evidence, avoiding the broad route that previously skipped those suites.
 
+- Verify Linux fresh installation, upgrade from v0.20.1, rollback and purge on a real hosted
+  machine. All 45 checks pass, including protected payload ownership, service-written databases
+  and logs, runtime data, secret preservation and installed browser assets. Final release
+  delivery-path certification remains separate.
+
+- Keep ad-hoc report jobs running until their manifest and snapshot are ready. Publish terminal
+  status and payload together; report preparation failures stay failed and cancellation wins
+  over late completion.
+  Local pre-push now runs Portal smoke cases alongside generated browser contracts so this
+  execution path is checked before a hosted CI round.
+
+- Keep Studio interaction checks attached to the current chart during redraws. A deterministic
+  browser regression reproduces the earlier failure; all ten interaction journeys pass with the
+  bounded data probe. Foreground CSV metadata tests now isolate background refresh and dispose
+  their service providers; all 459 language-server tests pass, including background-refresh tests.
+
+- Run the full Windows release check independently on the workstation. Upload its verified
+  evidence separately; publication checks the candidate, payload digest and complete local phase
+  results without registering the workstation as a GitHub runner.
+
+- Bound the negative Git API fixture to its temporary workspace. Exercise a nested parent
+  repository explicitly so test placement under a checkout cannot change the expected result.
+- Check installed DEB directory permissions and root ownership of shipped files after fresh install
+  and upgrade. Verify service-owned databases, each running service's open application log, and
+  service-account data writes. Upgrade diagnostics no longer print secret prefixes.
+  Fixture account cleanup handles hosts that automatically remove a user's matching group and
+  also runs when an assertion fails, preserving the failed check's status.
+
 - Require DEB installation checks to observe an active service, a valid main PID and the exact
   installed executable. Inactive services and failed or unrelated executable lookups can no longer
   pass certification. Ten deterministic cases pass on Windows/Git Bash and Linux.
@@ -48,6 +76,24 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Verify hosted real-browser timeout recovery on retained, hash-checked inputs. The watchdog stops
   its child while preserving an unrelated process, failure diagnostics upload, and failed-job-only
   recovery reuses the original driver build. The disposable rehearsal recovers in 58.7 seconds.
+
+- Run the PowerShell Portal test lane in fresh sequential testhosts to bound accumulated factory
+  state. Keep every class together and verify each discovered method and case count from TRX.
+  All 1,631 default and six hosted-service cases pass locally under the original 8 GB ceiling,
+  without skips; final-candidate certification remains required.
+
+- Prepare and verify browser assets after every checkout in the scale commit comparison before
+  building or measuring that arm. Successful Git warnings stay separate from revision and dirty
+  path output; failed commands retain their diagnostics. Preparation failure restores the original
+  branch and stops measurement.
+
+- Retain the GC regression investigation with 48 measured cases. Ten-sample normal-project probes
+  reproduce both reference failures; the old source control is elevated too. Baselines and bands
+  remain unchanged, and the original workstation gate remains failed.
+
+- Pin the unsigned VSIX packager's transitive `qs` dependency to patched version 6.16.1.
+  Advisory crash inputs pass, the toolchain audit reports no vulnerabilities, and all four
+  target archive regressions pass with the existing unsigned packager.
 
 - Verify hosted MSI failed-job recovery on an unchanged disposable candidate. Portal certification
   resumes against the original hash-verified installer pair while preserving the successful build

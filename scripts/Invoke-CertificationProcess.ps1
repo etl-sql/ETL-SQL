@@ -7,7 +7,8 @@ param(
     [Parameter(ParameterSetName = 'Command')] [string[]]$CommandArguments = @(),
     [Parameter(Mandatory)] [string]$EvidenceDirectory,
     [ValidateRange(1, 25200)] [int]$TimeoutSeconds = 1200,
-    [ValidateRange(1, 60)] [int]$HeartbeatSeconds = 15
+    [ValidateRange(1, 60)] [int]$HeartbeatSeconds = 15,
+    [switch]$ForwardMsiCheckpoints
 )
 $ErrorActionPreference = 'Stop'
 $evidence = [IO.Path]::GetFullPath($EvidenceDirectory)
@@ -97,7 +98,12 @@ public static class CertificationHandleFlags {
                 $line = $stream.Pending.GetAwaiter().GetResult()
                 if ($null -eq $line) { $stream.Pending = $null; break }
                 $stream.Writer.WriteLine($line)
-                Write-Host "[$($stream.Name)] $line"
+                if ($ForwardMsiCheckpoints -and $env:GITHUB_ACTIONS -eq 'true' -and $stream.Name -eq 'stdout' -and
+                    $line.Length -le 2048 -and $line.StartsWith('::notice title=MSI checkpoint::', [StringComparison]::Ordinal)) {
+                    Write-Host $line
+                } else {
+                    Write-Host "[$($stream.Name)] $line"
+                }
                 $lastOutputSeconds = $timer.Elapsed.TotalSeconds
                 $stream.Pending = $stream.Reader.ReadLineAsync()
             }

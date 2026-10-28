@@ -37,7 +37,7 @@ public class CrossHostConsistencyTests : IDisposable
 
     // A deterministic fixture with no external dependencies.
     // Produces: one TABLE visual (3 rows × 3 columns) + one CARD visual (1 row).
-    private const string FixtureScript = """
+    internal const string FixtureScript = """
         /* @owner: Test; @tags: cross-host-smoke; @category: Test */
         SET REPORT TITLE = 'Cross-Host Consistency';
 
@@ -271,6 +271,34 @@ public class CrossHostConsistencyTests : IDisposable
         using var unauthenticatedClient = orchestratorFactory.CreateClient();
         var unauthenticatedResponse = await unauthenticatedClient.GetAsync($"/jobs/{jobId}");
         Assert.Equal(HttpStatusCode.Unauthorized, unauthenticatedResponse.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("../outside")]
+    [InlineData("bad/name")]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task ManifestPreparationFailure_IsFailedWithoutPublishingAPartialManifest(string reportId)
+    {
+        using var factory = new OrchestratorWebFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Orchestrator-Key", "test-orch-key-12345");
+        var response = await client.PostAsJsonAsync("/jobs", new JobSubmitRequest
+        {
+            ScriptText = FixtureScript,
+            SessionId = "manifest-failure-" + Guid.NewGuid().ToString("N"),
+            Metadata = new() { ["IsReport"] = "true", ["ReportId"] = reportId }
+        });
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var jobId = (await response.Content.ReadFromJsonAsync<JsonObject>(_json))!["jobId"]!.GetValue<string>();
+        var status = await ETL_SQL.TestSupport.LoadAwareWait.UntilAsync(
+            "report output preparation to reach its terminal outcome",
+            async cancellationToken => (await client.GetFromJsonAsync<ETL_SQL.Orchestrator.Channels.JobStatusResponse>(
+                $"/jobs/{jobId}", _json, cancellationToken))!,
+            job => job.Status is JobRunStatus.Completed or JobRunStatus.Failed or JobRunStatus.Cancelled,
+            TimeSpan.FromSeconds(30));
+        Assert.Equal(JobRunStatus.Failed, status.Status);
+        Assert.Contains("Invalid character or traversal sequence", status.ErrorMessage);
+        Assert.Null(status.ReportManifestJson);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

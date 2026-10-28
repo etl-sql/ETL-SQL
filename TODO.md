@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 19 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 18 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -22,14 +22,15 @@ Deferred initiatives stay in `ROADMAP.md` until selected.
 ### 1. Faster release certification
 
 **Design:** [`ROADMAP.md`](ROADMAP.md#release-engineering--faster-release-certification), which also
-records the v0.21.0 lessons. **Goal:** a release within four hours from candidate cut through
-publication, and ordinary PR validation within 30 minutes. Aim for one full certification on the
-frozen candidate, with no more than two full rounds and the same evidence as v0.21.0. Measure clean
-and recovery runs separately; workflow watchdog ceilings are not timing targets.
+records the v0.21.0 lessons. **Goal:** a full release in four hours or less, from frozen candidate
+cut through publication, and ordinary PR validation in about 30 minutes. Count queueing, builds,
+tests, installation, evidence handling and publication. Preserve the same evidence as v0.21.0;
+aim for one full certification on the frozen candidate, with no more than two full rounds.
+Measure clean and recovery runs separately; workflow watchdog ceilings are not timing targets.
 
 - [ ] **First priority: separate regular CI from release certification.** Use one tested impact
   manifest for local pre-push and regular push/PR CI. Run cheap source checks plus affected builds,
-  tests and dependent consumers; target 10–20 minutes for ordinary scoped changes. Unknown paths,
+  tests and dependent consumers; target 30 minutes or less for ordinary scoped changes. Unknown paths,
   missing diff bases and shared build/dependency/workflow changes expand selection conservatively.
   Explicit pre-tag release certification runs every required lane on the frozen SHA, regardless
   of impact selection. Nightly broad checks find integration problems before release day.
@@ -119,6 +120,11 @@ and recovery runs separately; workflow watchdog ceilings are not timing targets.
   the supervisor's output pipe open after exit; clearing supervisor standard-handle inheritance
   before launch fixes that fixture. This is a possible cause, not proof of the historical runner
   loss. Hosted timeout/recovery evidence is still required.
+  Hosted MSI now emits bounded phase and free-memory notices, including backup start/end,
+  with explicit supervisor forwarding for that diagnostic prefix only. Local runs emit no
+  workflow commands; unrelated/stderr/oversized commands remain prefixed and original evidence
+  is preserved. Production-function and public-supervisor fixtures pass. Hosted notice retention
+  is an experiment still requiring verification; it does not establish the runner-loss cause.
 - [ ] **Nightly release-branch lanes.** Run the installed-upgrade checks (DEB and the MSI Portal
   profile) and the Portal shards nightly from the day the release branch is cut.
   **In progress:** the nightly scheduler discovers version branches newer than the latest stable
@@ -297,19 +303,38 @@ and recovery runs separately; workflow watchdog ceilings are not timing targets.
   failed or mismatched evidence. This validates archive recovery prerequisites, not live HA
   continuity or measured recovery time. Hosted execution and full package promotion remain open;
   local release requirements stay in place until that evidence passes.
-  A manual-only `local-release-certification.yml` now runs the full local gate on a controlled
-  Windows x64 release host, retaining immutable per-attempt bundles and failure diagnostics.
-  Release requires and verifies that artifact before packaging and again before publishing.
-  This needs the dedicated host label and workflow rollout; no hosted full-run result is claimed.
-  Controlled-host retries now verify a closed same-run/runner/workspace checkpoint, unchanged
-  toolchain, Docker inputs, cached output bytes and original evidence before phase resume. Original
-  passed receipts keep their producing-job windows; failed phases and dependents rerun. The real
-  phase-runner fixture exercises failed-phase and upload-only recovery through the actual supervisor
-  (43 initial actions, then six and four). A reproduced parameter-binding failure exposed the old
-  two-hour supervisor cap; its seven-hour bound now accepts the driver's 400-minute execution budget
-  and records the effective timeout. Over-limit requests still stop before work starts.
-  Missing checkpoints and changed inputs stop recovery. Hosted acceptance and measured
-  full-run/retry timing remain open before this item closes.
+  The owner requires the full Windows check to run independently on the workstation. The
+  self-hosted Actions producer is removed. The manual driver retains original diagnostics and
+  produces a verified bundle only after every mandatory phase passes. A separate draft upload
+  transports evidence; Release checks its candidate, digest and manifest before publication.
+  Historical hosted checkpoint fixtures remain regression coverage, not manual-run provenance.
+  The independent run on `d9e137c52715e533a40bfe5db51a37a4fbb61079` finished in 115 minutes:
+  40 phases passed, three failed (smoke GC comparison, nested-repository Git fixture and Portal
+  testhost OOM), and coverage was skipped after engine failure. Original evidence is retained at
+  `release-validation/workstation-certification/`. A later fixed-binary runtime control passes all
+  40 correctness/memory cases but finds similar GC medians on .NET 10.0.13 and 10.0.14; the runtime
+  update alone does not explain the stored-reference gap. Its
+  [audit](certification-results/gc-runtime-control-2026-10-27.json) retains every sample and hash.
+  The GC blocker remains unresolved and no reference or comparison band changed. A separate unpublished diagnostic draft retains
+  selected failed-run results (release `425732082`, asset `682217474`); uploaded/downloaded SHA-256
+  matches `2b8b4f22e2ac9415fc3c7f1ac0c7f9a5af761b82b2603e199a1914d66d1866d6`.
+  This proves diagnostic transport only. Raw dumps remain local. The isolated Git fixture fix
+  passes both nested and ordinary temporary-directory cases; no full passing run or live evidence
+  upload/publication acceptance is claimed. Resume support for the independent driver remains open;
+  it never silently substitutes a full rerun for failed or missing checkpoints.
+  The independent Windows gate on `d9e137c52715e533a40bfe5db51a37a4fbb61079` reached managed OOM
+  in its single Portal testhost (20 failed, 1,106 passed before termination). Raw diagnostics remain
+  at `release-validation/workstation-certification/portal-diagnostics/`. The two classes reporting
+  OOM pass all 20 tests in a fresh host under the same 8 GB ceiling, which supports accumulated
+  process state as the immediate test-lane issue without proving its allocation source.
+  The proposed Portal lane uses 12 sequential hosts, preserving all classes and the memory ceiling.
+  TRX verification rejects missing methods/theory rows and unplanned identities; all negative
+  fixtures pass. Full Portal execution now passes all 1,631 default cases plus six hosted-service
+  cases and UI smoke checks under the original 8 GB ceiling, with zero skips. The retained manifest
+  and all 12 TRX files audit every method/case, all 199 classes and zero overlap. Evidence:
+  `release-validation/portal-lane-20261027-115113/`, `portal-default-inventory-audit.json` and
+  `portal-sharded-result.json`. A focused engine probe also passes all 11 cases across two shards.
+  These are dirty-tree development results; the final clean-candidate gate remains required.
   Enterprise certification now explicitly defaults both test projects to Release, records the
   configuration and keeps Debug evidence ineligible for release. Executed driver fixtures verify
   configuration propagation. The source-policy audit includes tracked/new authored C# files while
@@ -406,7 +431,7 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
     blocks publication; successful jobs from earlier attempts of the same run are reused.
     A live read-only check rejected the latest cancelled candidate CI instead of accepting
     earlier success. The complete local/operator checklist manifest is not yet enforced.
-    Full local phase evidence now has its own controlled-host workflow and mandatory publication
+    Full local phase evidence now uses an independent workstation check and mandatory publication
     check, including the actual draft ZIP. The remaining operator checklist manifest is still open.
     Local evidence now explicitly requires Standard scale and all 44 mandatory phases, even when
     a saved plan omits one. Tests compare policy with the producer's actual full plan and remove
@@ -635,6 +660,25 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   cases across Smoke and Standard, including actual warm-up scale, GC snapshots and absolute
   memory gates. The clean follow-up above completes calibration for this protocol.
 
+The independent Windows gate on `d9e137c52715e533a40bfe5db51a37a4fbb61079` fails the existing Smoke
+GC-pause band for spill cleanup and temp-table spill. Allocations and checksums match the reference;
+the runtime changed from .NET 10.0.13 to 10.0.14. No cause or baseline replacement is claimed.
+The commit-comparison runner now prepares/verifies each checkout's browser assets before building.
+Real Git/Node/PowerShell fixtures verify interleaved ordering, preparation/verification failure,
+original-branch restoration, plan-only preservation and separation of successful Git stderr.
+Paired quiet-host measurements now pass twelve correctness/memory checks on the same captured
+fixture and .NET 10.0.14 runtime. Control/candidate GC medians are 9.2/7.7 ms for cleanup and
+8.3/10.2 ms for temp-table spill, both below a 35% candidate/control increase. Elapsed medians
+are 51/50 ms and 63/65 ms. Three samples per arm and overlapping GC ranges do not prove the
+original cause. Ten-sample normal-project probes reproduce both reference failures at 14.7/11.6 ms.
+A normal-project paired control also places the old code above its stored reference: 12.1 ms
+control versus 15.5 ms candidate for temp-table GC, compared with the stored 4.7 ms. Inspection
+finds matching Release revisions and method IL for Core, Engine, App and the test fixture between
+normal/captured builds. Runtime, workstation and execution-context causality remain unproven.
+[Measurement record](docs/benchmarks/gc-paired-comparison-2026-10-27.md) and its curated audit retain
+all 48 measured cases, failed comparisons and branch restoration. The original gate stays failed; baseline files and
+bands are unchanged, and the final clean-candidate gate remains required.
+
 ### 3. Flaky tests — the dedicated fix
 
 **Record:** [flaky-test stability](docs/releases/flaky-test-stability.md). v0.21.0 deferred these
@@ -728,14 +772,40 @@ here; each one failed a single test per run and passed on rerun.
   test fixtures are fixed. Regression cases cover the retired statements and canonical replacements;
   `BREAKING_CHANGES.md` records their migration paths. Original failures and final TRX evidence are
   retained under `release-validation/`; final-candidate certification remains required below.
-- [ ] **Linux package install and upgrade.** The postinst now leaves shipped files root-owned and
+- [x] **Linux package install and upgrade.** The postinst now leaves shipped files root-owned and
   makes `/usr/lib/etl-sql/bin` `root:etlsql 1775`. Install fresh and upgrade over a previous package;
   confirm the Portal and Orchestrator start and write their databases, logs and data.
+  **Verified 2026-10-27:** [hosted run 40594065837](https://github.com/etl-sql/ETL-SQL/actions/runs/40594065837)
+  passes all 45 fresh-install, upgrade, rollback and purge checks on candidate `755fe3fb3`.
+  Both services run the installed executable and write nonempty databases and open application
+  logs as `etlsql`; the service account creates, reads and removes runtime data. All 481 shipped
+  paths are protected and the install directory is `root:etlsql 1775` after both installation paths.
+  The installed evidence upload/download digest matches. The
+  [acceptance record](certification-results/linux-installed-acceptance-2026-10-27.json) retains
+  candidate, package and evidence hashes. Installed acceptance took 6.2 minutes; the build took
+  41 minutes. The package still reports 0.21.0; final v0.22 delivery-path certification stays open.
+  Assertion coverage explicitly verifies the sticky directory mode,
+  root-owned protected package paths, service-owned nonempty databases, each service's open
+  application log and service-account data writes. The upgrade sentinel is created by the service
+  account and checked for preserved ownership. Linux rejection fixtures cover wrong ownership,
+  writable or missing payload, missing sticky bit, empty inventory, empty/missing/linked state and
+  denied data writes. The complete service-write assertion also passes against a real service-UID
+  process and open log descriptor in a disposable Linux container; wrong/zero PIDs, root-owned or
+  empty logs and deleted open logs reject. Only systemctl's PID lookup is substituted. Container
+  execution needs SYS_PTRACE for cross-UID /proc reads; denied reads fail explicitly, without
+  weakening acceptance. Evidence: `release-validation/installed-linux-runtime-process-fixture-verified.log`.
+  Hosted run `40551540783` passed the rejection fixtures but stopped during fixture account cleanup:
+  Ubuntu's `userdel` had already removed the matching group. Cleanup now checks group existence
+  and runs on failure too. The exact workflow block passes locally with `USERGROUPS_ENAB=yes`
+  and `no`; injected assertion failure preserves exit 17 and removes both fixture accounts.
+  Evidence: `release-validation/installed-linux-cleanup-policy-test.log` and
+  `release-validation/installed-linux-cleanup-failure-test.log`. The original hosted failure is retained.
+
   Installed-service assertion review reproduced a false pass for inactive services. The assertion
   now requires an active service, a positive numeric PID and the exact installed executable;
   failed lookups, missing/unrelated executables and deleted binaries fail. All ten deterministic
-  cases pass in Windows/Git Bash and a Linux Node 22 container. Hosted installation and retry
-  evidence are being collected separately; these assertion regressions do not certify a package.
+  cases pass in Windows/Git Bash and a Linux Node 22 container. They complement the real installed
+  acceptance above; failed-job-only recovery evidence is tracked in its separate release item.
 - [x] **Windows run of the security tests.** Confirm the OS-neutral `SecurityTests` on Windows.
   **Verified 2026-10-24:** all 23 Windows x64 Release cases pass without skips, including
   `TestHardwareLockedEncryption`'s DPAPI round trip and wrong-entropy rejection. The initial run
@@ -879,7 +949,30 @@ here; each one failed a single test per run and passed on rerun.
   11 Portal contracts and 142 smoke cases). Hosted certification exposes dependency audit findings,
   missing generated browser inventories in isolated MSI jobs, macOS VS Code test-host startup,
   one retired Studio control assertion and two governance HTTP 500 failures.
-  The dependency updates pass pinned npm 10 clean installs without audit findings, extension/UI
+  Hosted run `40552006993` later exposed the newly updated `qs` advisory in the VSIX toolchain.
+  An explicit 6.16.1 override now fixes its four reproduced comma-array crash inputs; a clean
+  Node 22/npm 10 install and real audit report zero vulnerabilities, and all four target archive
+  regressions pass. The BSD-3-Clause license and notices were checked; the generated inventory
+  remains current. Evidence: `release-validation/qs-audit.json`, `qs-advisory-probe-fixed.log`
+  and `qs-vsix-toolchain.log`. Hosted acceptance on the fixed candidate remains required.
+  The combined candidate also repairs two other failures retained from that run: foreground CSV
+  metadata fixtures no longer leave background refresh reading their temporary file, and the
+  Studio chart probe reads attached marks/data together during redraw. All 459 language-server
+  tests pass, including the separate background-refresh tests. A deterministic browser regression
+  fails the earlier probe and passes with the fix; all ten Studio interaction cases pass.
+  Original and corrected TRX evidence: `release-validation/chart-redraw-before/`,
+  `chart-redraw-after/` and `language-server-complete/`. These fixes still need hosted acceptance.
+  Candidate `755fe3fb3` passes all three hosted browser shards, consumer contracts, extension and
+  Studio performance checks, but its CI fails one Portal smoke assertion: a report job becomes
+  `Completed` before its manifest is built. Three deterministic barrier cases reproduce premature
+  completion, cancellation exclusion and lost preparation failure. Terminal state/payload now
+  publish together after preparation and scope cleanup; all 14 focused real-report, cancellation,
+  failure and authorization cases pass. An unsupported report executor fails explicitly, with its
+  runtime compatibility change recorded. Evidence: `release-validation/report-completion-before/`
+  and `report-completion-real-executor/`. The original hosted failure remains retained.
+  Local pre-push now includes `Smoke.Portal` in its existing Portal test invocation, so the
+  report execution and completion regressions run before paying for another hosted round.
+  The earlier dependency updates pass pinned npm 10 clean installs without audit findings, extension/UI
   compile/build and lint, 403 unit tests, four real target VSIX archive checks and the SDK/SQLite
   packaging coordinator. MSI workers now prepare/verify assets before installation, with failure
   guards exercised. The current list-filter Ctrl+click journey and all three governance roles pass

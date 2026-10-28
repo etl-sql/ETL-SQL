@@ -1,0 +1,522 @@
+{
+  "scope": "Fixed-binary runtime diagnostic control",
+  "sourceSha": "d9e137c52715e533a40bfe5db51a37a4fbb61079",
+  "certificationPassed": false,
+  "referenceComparisonRun": false,
+  "referenceOrBandsChanged": false,
+  "method": "Five ABBA blocks per scenario; fresh process per sample; one discarded process run and own-path untimed warm-up for each arm",
+  "runtimeVersions": [
+    "10.0.13",
+    "10.0.14"
+  ],
+  "measuredCases": 40,
+  "fixedConsoleVersion": "VSTest 18.7.0 from SDK 10.0.403",
+  "assemblySha256": "2b05d59a1dbeefdfd796de8f3d0957f4f5cfa56c95846aa8b34c3db24ce14007",
+  "consoleSha256": "8d485345ab1b1a48036cd8082c4731f5abbb2e7971f1edb5dbd88e366141bb01",
+  "gcConfiguration": {
+    "server": true,
+    "concurrent": true,
+    "heapCount": 24,
+    "dynamicAdaptationMode": 1,
+    "heapHardLimitBytes": 0,
+    "heapHardLimitPercent": 0,
+    "conserveMemory": 0,
+    "retainVirtualMemory": false,
+    "processorCount": 24,
+    "latencyMode": "Interactive"
+  },
+  "medians": [
+    {
+      "scenario": "TempTableSpill",
+      "runtime": "10.0.13",
+      "samples": 10,
+      "gcPauseMedianMs": 13.2,
+      "gcPauseRangeMs": [
+        10.4,
+        16.6
+      ]
+    },
+    {
+      "scenario": "TempTableSpill",
+      "runtime": "10.0.14",
+      "samples": 10,
+      "gcPauseMedianMs": 12.55,
+      "gcPauseRangeMs": [
+        8,
+        16.2
+      ]
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "runtime": "10.0.13",
+      "samples": 10,
+      "gcPauseMedianMs": 15.55,
+      "gcPauseRangeMs": [
+        14.6,
+        16.4
+      ]
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "runtime": "10.0.14",
+      "samples": 10,
+      "gcPauseMedianMs": 15.4,
+      "gcPauseRangeMs": [
+        14.8,
+        16.8
+      ]
+    }
+  ],
+  "samples": [
+    {
+      "scenario": "TempTableSpill",
+      "arm": 0,
+      "runtime": "10.0.13",
+      "gcPauseMs": 11.9,
+      "elapsedMs": 70,
+      "allocatedMB": 30.6,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "d1380df5229c141c5d2baf77e8131d316cbf42630ff321e65f7fbe112ce4edec"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 1,
+      "runtime": "10.0.14",
+      "gcPauseMs": 11.1,
+      "elapsedMs": 71,
+      "allocatedMB": 31.1,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "51cfe67bcb77b6b290dad626d6ebd97f3fc8447dfc95825e7021862f3fe22ad1"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 2,
+      "runtime": "10.0.14",
+      "gcPauseMs": 12.5,
+      "elapsedMs": 71,
+      "allocatedMB": 30.5,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "1be9d68f43c7d895c769e9c042dcb1934369b0adb0c1ae70afeeed912275dd6b"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 3,
+      "runtime": "10.0.13",
+      "gcPauseMs": 16.6,
+      "elapsedMs": 70,
+      "allocatedMB": 30.8,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "5423074c7cfd528d6ee91b637d1c2866e267b01a4e3dd57ad9863a627a032a00"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 4,
+      "runtime": "10.0.13",
+      "gcPauseMs": 15.6,
+      "elapsedMs": 85,
+      "allocatedMB": 30.8,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "cb136efa385978befdba1a6d45b61148f9bd39c52b348d85a13b2e30d9847d84"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 5,
+      "runtime": "10.0.14",
+      "gcPauseMs": 14.2,
+      "elapsedMs": 69,
+      "allocatedMB": 30.9,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "4c1c24e0a570eec15b5b4bbbda18b3fc25c8ed6b567d101852a7ac886f631648"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 6,
+      "runtime": "10.0.14",
+      "gcPauseMs": 16.2,
+      "elapsedMs": 78,
+      "allocatedMB": 30.7,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "64295bc2bc9c9da3dc68c257f9ff19389d32a70d799921d99893667b9f162139"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 7,
+      "runtime": "10.0.13",
+      "gcPauseMs": 13.9,
+      "elapsedMs": 71,
+      "allocatedMB": 30.5,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "fc2cbb850e3c21ce8488cb37660aa95202cdd5549813aeec89279dc15e9fc1df"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 8,
+      "runtime": "10.0.13",
+      "gcPauseMs": 14.2,
+      "elapsedMs": 71,
+      "allocatedMB": 30.5,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "5fc6c8e2f109f89a3c66928aad2b7786ff41756ec956b73170aab87e1aac2df7"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 9,
+      "runtime": "10.0.14",
+      "gcPauseMs": 13.1,
+      "elapsedMs": 73,
+      "allocatedMB": 30.3,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "57d8f14b8bb730b22cb6933ef9bcf1f5231d690ba4d572f163b7fe64bd349503"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 10,
+      "runtime": "10.0.14",
+      "gcPauseMs": 12.6,
+      "elapsedMs": 72,
+      "allocatedMB": 30.5,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "1c42c6b564b39b4e5ac9866f92e90468235458955a62ccfffffdec20f78c7e01"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 11,
+      "runtime": "10.0.13",
+      "gcPauseMs": 12.4,
+      "elapsedMs": 71,
+      "allocatedMB": 30.5,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "043cbf06fa1380b22b4a5edf343556a835d5018926988df9926676b7f1fd2293"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 12,
+      "runtime": "10.0.13",
+      "gcPauseMs": 13.2,
+      "elapsedMs": 69,
+      "allocatedMB": 30.7,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "95c882b094563a58e7013f8641485cbd4873e7f73aebaf14ad00b55afe4eef43"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 13,
+      "runtime": "10.0.14",
+      "gcPauseMs": 12.2,
+      "elapsedMs": 73,
+      "allocatedMB": 30.1,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "9f0577acf92c5cff1f389db27fdc8c2200e26afef1988e40e4f71c7a0af091a9"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 14,
+      "runtime": "10.0.14",
+      "gcPauseMs": 14.1,
+      "elapsedMs": 72,
+      "allocatedMB": 30.4,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "7a2ba5c4ca575e7c3ba6f3ca6136385c1824c0db97df30860f6a0c0dc63847cc"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 15,
+      "runtime": "10.0.13",
+      "gcPauseMs": 13.2,
+      "elapsedMs": 70,
+      "allocatedMB": 30.4,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "eed054f8bd72db54988fa4eaebb0cbb5ae898319c1871f133472c791e5af9fc0"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 16,
+      "runtime": "10.0.13",
+      "gcPauseMs": 10.4,
+      "elapsedMs": 70,
+      "allocatedMB": 30.8,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "37f956675701523606e6f5181840137bfa0ebc23f953ebc8f78a2b22879b18ed"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 17,
+      "runtime": "10.0.14",
+      "gcPauseMs": 12.3,
+      "elapsedMs": 86,
+      "allocatedMB": 30.5,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "c88478ee16878a070fe51680ad185edd0257c586e3faac9eeb52928ff36e85c6"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 18,
+      "runtime": "10.0.14",
+      "gcPauseMs": 8,
+      "elapsedMs": 63,
+      "allocatedMB": 30.5,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "c623c02b0643ce4292c99659e7f4319bedfee8be78390580abb1e13ac5f8c122"
+    },
+    {
+      "scenario": "TempTableSpill",
+      "arm": 19,
+      "runtime": "10.0.13",
+      "gcPauseMs": 13.2,
+      "elapsedMs": 67,
+      "allocatedMB": 30.6,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "df6f8fce855a92f6279c9e524b9d330402d41ddd86b2cd42eebc80270971604e"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 0,
+      "runtime": "10.0.13",
+      "gcPauseMs": 15.1,
+      "elapsedMs": 59,
+      "allocatedMB": 29.6,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "48cae64cbf6671ef65ba56c0e29032880e658ba82eccf5b3b7b1338c6a1b937c"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 1,
+      "runtime": "10.0.14",
+      "gcPauseMs": 16.8,
+      "elapsedMs": 62,
+      "allocatedMB": 29.3,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "c97c0341a89eef92a80dae5e66528b637a40f3875a13e240f55bd8f4a4588735"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 2,
+      "runtime": "10.0.14",
+      "gcPauseMs": 15.2,
+      "elapsedMs": 59,
+      "allocatedMB": 30,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "07d783dc21888e8415158c9ddb7f2796c5bd25969bf14e2260393302c5bf1003"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 3,
+      "runtime": "10.0.13",
+      "gcPauseMs": 16.2,
+      "elapsedMs": 59,
+      "allocatedMB": 29.6,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "c3ec1859033cf681f37abd7e36f63ce7b85e037cf827b0fe4e5192e0cecdf756"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 4,
+      "runtime": "10.0.13",
+      "gcPauseMs": 16.4,
+      "elapsedMs": 59,
+      "allocatedMB": 29.3,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "bd416287317027bdba3950dc18593b9e0d779da8a42c81f98c9c34811357bc30"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 5,
+      "runtime": "10.0.14",
+      "gcPauseMs": 15.8,
+      "elapsedMs": 58,
+      "allocatedMB": 29.6,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "9ea05ee64b57f4899b6861ee94a3d829a7d2b58863e4d3265df8121ebd826087"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 6,
+      "runtime": "10.0.14",
+      "gcPauseMs": 14.9,
+      "elapsedMs": 58,
+      "allocatedMB": 29.3,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "049ba792790e9718554b7d689324aebc6089d84c93ca41345b66a79e1b5d1fa9"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 7,
+      "runtime": "10.0.13",
+      "gcPauseMs": 15.7,
+      "elapsedMs": 58,
+      "allocatedMB": 29.6,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "4028300b3241d9b2b6094a7c36cd9dea55725eee6cd3b0a97374282bfc436c8f"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 8,
+      "runtime": "10.0.13",
+      "gcPauseMs": 15.9,
+      "elapsedMs": 59,
+      "allocatedMB": 29.3,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "3c8c685f4f9be9f3bc4261fd44a910e1e31dc4d1422d9beab025f2bc3e939042"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 9,
+      "runtime": "10.0.14",
+      "gcPauseMs": 16,
+      "elapsedMs": 59,
+      "allocatedMB": 29.3,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "4b7fcde04be1fc0046dfcc3f79ae4c079988d644cf0757c9ed5ecdc914ad5dfd"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 10,
+      "runtime": "10.0.14",
+      "gcPauseMs": 15,
+      "elapsedMs": 58,
+      "allocatedMB": 29.6,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "c75d9d236b21641096cf2624b8171251530eee4f4daa11c15edabec74d1c6dc0"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 11,
+      "runtime": "10.0.13",
+      "gcPauseMs": 14.6,
+      "elapsedMs": 58,
+      "allocatedMB": 29.3,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "405043cea31ed19de38bd0b828e690e9d5ded3ef23b001a85b04a742593be777"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 12,
+      "runtime": "10.0.13",
+      "gcPauseMs": 15.1,
+      "elapsedMs": 58,
+      "allocatedMB": 29.6,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "730275f9f3ee30046a50fce42d37e5f1bbf25960716b4a29f2d4949a3d32746e"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 13,
+      "runtime": "10.0.14",
+      "gcPauseMs": 15.4,
+      "elapsedMs": 59,
+      "allocatedMB": 29.6,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "8f8dff4113aa91bfab8ed8ea34792eb2b3b9705ba9ecd81e7af5fc4ea5f8bca5"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 14,
+      "runtime": "10.0.14",
+      "gcPauseMs": 14.8,
+      "elapsedMs": 59,
+      "allocatedMB": 29.6,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "95b540c01c8df3e94566fc26beeb21fdb695f8ffe2fbef287b6d8279d981e101"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 15,
+      "runtime": "10.0.13",
+      "gcPauseMs": 15.4,
+      "elapsedMs": 57,
+      "allocatedMB": 29.9,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "a10a8f6aed0f6f90fc3aa8c5a554db9212233cce646229e2d6477fa92aff17f9"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 16,
+      "runtime": "10.0.13",
+      "gcPauseMs": 15.8,
+      "elapsedMs": 57,
+      "allocatedMB": 29.6,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "2d0988b0004dbf9a24be2a54559fde2f1d7f97762aee38c450344bd9142ceb01"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 17,
+      "runtime": "10.0.14",
+      "gcPauseMs": 15.4,
+      "elapsedMs": 57,
+      "allocatedMB": 29.6,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "cec6897d62f244f651f3a8367df1b27ca46cca34020975b30864b0f26c3c34a1"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 18,
+      "runtime": "10.0.14",
+      "gcPauseMs": 16.1,
+      "elapsedMs": 59,
+      "allocatedMB": 29.6,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "9458b90f4687396a5cc8c5eee1754241de63e1173e4b484c2df3a24b47a9ea3e"
+    },
+    {
+      "scenario": "SpillCleanupSuccess",
+      "arm": 19,
+      "runtime": "10.0.13",
+      "gcPauseMs": 15,
+      "elapsedMs": 58,
+      "allocatedMB": 29.6,
+      "correctnessPassed": true,
+      "memoryPassed": true,
+      "stdoutSha256": "83847da7805d71a5e44fc743134c52fe4b9361b7d760435c9009dc76d2293d6b"
+    }
+  ],
+  "closureAudit": {
+    "files": 310,
+    "allFileTimestampsPredateCapture": true,
+    "hashesRecordedAfterCapture": true,
+    "manifestSha256": "aaf83219f12600fb432355f758e7f1491120e1be8620cd375518644bb7b7bdf0"
+  },
+  "interpretation": "Switching only the selected runtime does not explain the stored GC-reference gap in this capture context. Workstation and capture-context causes remain unresolved.",
+  "rawEvidenceRoot": "release-validation/runtime13-control/",
+  "originalResultsSha256": "0f8f9c07e20f05e8bd4e11c50e915b4df6e31e64179ece8bfec33fc0eb58965e",
+  "controllerSha256": "6f5f5d454f068347bcd7d8aee27e568da7be6b9b4ffb1302592afba628485953"
+}

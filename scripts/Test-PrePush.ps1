@@ -185,12 +185,12 @@ if (-not $SkipSmoke) {
     & dotnet test (Join-Path $RepoRoot "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj") `
         -m:1 `
         -nr:false `
-        --filter "FullyQualifiedName~BrowserContractsGeneratorTests" `
+        --filter "FullyQualifiedName~BrowserContractsGeneratorTests|Category=Smoke.Portal" `
         --configuration $Configuration `
         --no-restore `
         --logger "console;verbosity=minimal"
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Generated browser contracts differ from the registered server endpoints or DTOs."
+        Write-Error "Portal smoke tests or generated browser contracts failed."
         exit $LASTEXITCODE
     }
     $filter = "Category=Architecture|Category=Docs|Category=Smoke.Core|Category=Smoke.Reporting|Category=Smoke.Security"

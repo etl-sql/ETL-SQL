@@ -274,7 +274,7 @@ function dotnet {
     if ($env:IMPACT_UI -eq '1' -and $args[0] -eq 'test') {
         $key = if ($args[1].EndsWith('ETL-SQL.Portal.Tests.csproj')) { 'generated-contracts' } elseif ($args[1].EndsWith('ETL-SQL.Tests.csproj')) { 'smoke' } else { throw 'UNEXPECTED_TEST_PROJECT' }
         $filter = $args[[Array]::IndexOf($args, '--filter') + 1]
-        $expectedFilter = if ($key -eq 'generated-contracts') { 'FullyQualifiedName~BrowserContractsGeneratorTests' } else { 'Category=Architecture|Category=Docs|Category=Smoke.Core|Category=Smoke.Reporting|Category=Smoke.Security' }
+        $expectedFilter = if ($key -eq 'generated-contracts') { 'FullyQualifiedName~BrowserContractsGeneratorTests|Category=Smoke.Portal' } else { 'Category=Architecture|Category=Docs|Category=Smoke.Core|Category=Smoke.Reporting|Category=Smoke.Security' }
         if ($filter -cne $expectedFilter -or $args -notcontains '--no-restore' -or $args -notcontains 'Release') { throw 'WRONG_SMOKE_ARGS' }
         $key | Add-Content (Join-Path $env:IMPACT_FIXTURE_ROOT 'commands.txt')
         $global:LASTEXITCODE = if ($env:IMPACT_FAIL_TASK -eq $key) { 1 } else { 0 }
