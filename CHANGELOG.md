@@ -12,6 +12,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Keep MSI certification backup archives outside uploaded evidence. The backups include generated
+  service secrets; retain certification logs and assertions without publishing those archives.
+
 - Measure Studio startup readiness independently of headless animation-frame delivery. Keep the
   same editor-ready condition and performance budgets, and retain navigation/resource timing
   alongside the result to distinguish loading delays from delayed observation.

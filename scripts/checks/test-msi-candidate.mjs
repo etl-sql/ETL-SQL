@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-for (const name of ['Test-MsiCandidate.ps1', 'Test-MsiReuse.ps1', 'Test-FindCertifiedMsi.ps1', 'Test-MsiImpact.ps1', 'Test-MsiCheckpoint.ps1']) {
+for (const name of ['Test-MsiCandidate.ps1', 'Test-MsiReuse.ps1', 'Test-FindCertifiedMsi.ps1', 'Test-MsiImpact.ps1', 'Test-MsiCheckpoint.ps1', 'Test-MsiBackupEvidence.ps1']) {
   const script = fileURLToPath(new URL(name, import.meta.url));
   const result = spawnSync('pwsh', ['-NoProfile', '-File', script], { stdio: 'inherit' });
   if (result.error) throw result.error;
