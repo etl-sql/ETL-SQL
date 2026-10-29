@@ -89,7 +89,8 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   other 49 source checks pass. Its 64 native PowerShell routing cases now use independent private
   directories and at most four concurrent processes, bounded by available CPUs. All original
   selection, ordering and failure assertions remain, with the same overall/per-case deadlines.
-  Local control/candidate captures pass in 26.9/12.0 seconds. Hosted acceptance remains open;
+  Local control/candidate captures pass in 26.9/12.0 seconds. PR 44's hosted source preflight
+  passes the routing fixture in 35.2–35.3 seconds under the unchanged 60-second deadline;
   original timeout evidence: `release-validation/critical-path/pr-44-cfe4f53c9-source/`.
   Native preflight separately hits a startup-sensitive five-second argument-validation fixture.
   That check now invokes the public script in its current host and verifies rejection of the exact
@@ -99,6 +100,14 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   Validation passes 44 source checks, 122 consumer checks, 11 Portal contracts and 142 smoke
   cases. Two NuGet restores fail under sandbox network restrictions and pass on failed-check-only
   recovery with network access; successful checks are preserved in the original report.
+
+  **Scoped PR timing verified 2026-10-29:** PR 48, head `e6f68ea28644e1b0a705482e3dcc64f4fcc86c17`,
+  passes CI `40872610604` on its first attempt in 19 minutes 21 seconds from run creation to
+  completion. Source checks, three browser shards and all three Studio performance jobs pass;
+  unrelated CI lanes and native/MSI package builds correctly skip. CodeQL passes separately.
+  This meets the ordinary scoped-PR target for this browser-test change, not full release
+  certification or every path family. Historical receipt:
+  `release-validation/critical-path/scoped-pr-acceptance-2026-10-29.json`.
 
 - [ ] **Release timeline.** Record the v0.22.0 candidate cut, each CI/MSI round, its cause and the
   tag time as the release runs, so the goal is measured rather than remembered.
@@ -134,8 +143,14 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   Hosted MSI now emits bounded phase and free-memory notices, including backup start/end,
   with explicit supervisor forwarding for that diagnostic prefix only. Local runs emit no
   workflow commands; unrelated/stderr/oversized commands remain prefixed and original evidence
-  is preserved. Production-function and public-supervisor fixtures pass. Hosted notice retention
-  is an experiment still requiring verification; it does not establish the runner-loss cause.
+  is preserved. Production-function and public-supervisor fixtures pass. Completed hosted jobs
+  retain these notices, but that does not establish retention during runner loss or its cause.
+  **Runner-loss recurrence 2026-10-29:** release-branch run `40831673137` passes the MSI build
+  and workstation profile, but loses the Portal runner during supervised certification. The
+  job has no downloadable log or retained checkpoint notices, only GitHub's runner-communication
+  failure annotation. Thus notices from a running step do not provide the required durable
+  diagnostic evidence. Original metadata and annotation are retained under
+  `release-validation/critical-path/release-5b6c6abd-msi-*`; the cause remains unresolved.
 - [ ] **Nightly release-branch lanes.** Run the installed-upgrade checks (DEB and the MSI Portal
   profile) and the Portal shards nightly from the day the release branch is cut.
   **In progress:** the nightly scheduler discovers version branches newer than the latest stable
@@ -161,13 +176,15 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   packaging. Source preflight precedes builds, and an aggregate gate accepts only successful
   required builds or an explicit no-impact skip. PR revisions cancel superseded package work;
   manual candidate identities remain separate. Executed selection/gate/concurrency fixtures and
-  actionlint pass; hosted skip/cancellation/timing proof remains open.
+  actionlint pass; hosted skip/timing acceptance is recorded below. Cancellation proof remains open.
   MSI selection now reads the same package-impact rules instead of a separate documentation
   allowlist. Browser-test-only fixes can skip regular installer builds and installation tests;
   runtime, service, installer, shared and unknown inputs still certify. Cross-runtime fixtures
   verify JavaScript/PowerShell parity, invalid-policy rejection and mixed changes. Executed
   workflow guards prove missing bases, manual dispatch and release calls still require full MSI
-  certification. Hosted selection and elapsed-time proof remain open.
+  certification. PR 48 verifies native/MSI no-impact skips on hosted runners; its CI completes
+  in 19 minutes 21 seconds without retry. Cancellation, other path families and full-candidate
+  certification remain open. See `release-validation/critical-path/scoped-pr-acceptance-2026-10-29.json`.
 - [ ] **Split the Portal browser lane** across parallel jobs, so the longest CI job falls from about 60
   minutes to about 20.
   **Implemented:** CI defines three independent browser jobs plus a coverage gate retaining
@@ -765,7 +782,9 @@ CPU/ready-state probe finds the editor ready at 167 ms while default animation-f
 returns at 2.44 seconds. Timer polling observes the same condition at 191 ms. The measurement now
 uses 50 ms polling and retains post-timer navigation/resource attribution. The real fixture passes
 at 211 ms, and a regression with animation frames withheld verifies editor readiness still controls
-completion. Render/input budgets remain separate and unchanged. Hosted acceptance is pending;
+completion. Render/input budgets remain separate and unchanged. Hosted PR 48 acceptance passes
+on Windows at 1,672 ms against the unchanged 5,000 ms budget, with 974 ms navigation and 698 ms
+readiness observation. Linux/macOS performance and all browser shards also pass on attempt 1;
 this does not explain or close the separate `ERR_NO_BUFFER_SPACE` transport failure. Original
 failure, profiles and local reports: `release-validation/critical-path/`.
 

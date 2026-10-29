@@ -15,6 +15,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Measure Studio startup readiness independently of headless animation-frame delivery. Keep the
   same editor-ready condition and performance budgets, and retain navigation/resource timing
   alongside the result to distinguish loading delays from delayed observation.
+  Hosted acceptance passes the unchanged Windows startup budget at 1.67 seconds. The scoped
+  browser-test PR passes CI in 19 minutes 21 seconds on its first attempt, with native/MSI
+  package builds correctly skipped. Full release certification remains separate.
 
 - Keep all 64 CI-impact routing cases in independent native processes and private directories,
   running at most four concurrently. Preserve the existing deadlines and assertions while reducing
