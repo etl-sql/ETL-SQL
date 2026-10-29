@@ -151,6 +151,11 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   failure annotation. Thus notices from a running step do not provide the required durable
   diagnostic evidence. Original metadata and annotation are retained under
   `release-validation/critical-path/release-5b6c6abd-msi-*`; the cause remains unresolved.
+  The review also finds fresh-install backup archives, including the generated keys archive,
+  inside the uploaded evidence directory. Both fresh and pre-upgrade backups now use unique
+  temporary storage outside that tree; overlapping evidence roots reject before backup creation.
+  Production-path regression checks verify both destinations and cleanup after success/failure.
+  This fixes evidence isolation, not the runner-loss cause; hosted acceptance remains required.
 - [ ] **Nightly release-branch lanes.** Run the installed-upgrade checks (DEB and the MSI Portal
   profile) and the Portal shards nightly from the day the release branch is cut.
   **In progress:** the nightly scheduler discovers version branches newer than the latest stable

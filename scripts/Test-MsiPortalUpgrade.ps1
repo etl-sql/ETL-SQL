@@ -49,6 +49,9 @@ $out = [IO.Path]::GetFullPath($OutDir)
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $summary = Join-Path $out 'summary.txt'
 Set-Content -LiteralPath $summary -Value "previous $($contract.PreviousVersion) current $($contract.CurrentVersion)"
+$privateBackupRoot = Join-Path ([IO.Path]::GetTempPath()) ('etlsql-msi-backup-' + [guid]::NewGuid().ToString('N'))
+if ($privateBackupRoot.StartsWith($out.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Backup scratch must be outside uploaded evidence.' }
+New-Item -ItemType Directory -Path $privateBackupRoot | Out-Null
 $script:failed = 0
 $url = 'http://localhost:5002'
 $checker = Join-Path $repoRoot 'scripts/test-installed-portal-assets.mjs'
@@ -236,7 +239,7 @@ try {
         if ((Get-Setting 'Portal:Orchestrator:DatabasePath') -ne $jobHistory) { throw "Portal:Orchestrator:DatabasePath is '$(Get-Setting 'Portal:Orchestrator:DatabasePath')', expected $jobHistory." }
         if (-not (Test-Path -LiteralPath $jobHistory)) { throw "The Orchestrator wrote no $jobHistory." }
         Set-ServicesState 'Stopped'
-        $backupDir = Join-Path $out 'fresh-backup'
+        $backupDir = Join-Path $privateBackupRoot 'fresh-backup'
         New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
         # Bounded like msiexec: run 39131831623 lost its runner at the step timeout once this call was
         # reached. No console input exists here, so stdin is empty rather than inherited.
@@ -285,7 +288,7 @@ try {
     $atRest = Get-Setting 'Portal:Dataset:AtRestKey'
     $cachePrevious = Join-Path $out 'cache-previous.json'
     Test-Step 'previous: served assets recorded as a browser cache' { Invoke-Assets @('--record', $cachePrevious, '--out', (Join-Path $out 'previous-assets.json')) }
-    $backup = Join-Path $out 'pre-upgrade-backup'
+    $backup = Join-Path $privateBackupRoot 'pre-upgrade-backup'
     Set-ServicesState Stopped
     New-Item -ItemType Directory -Force -Path $backup | Out-Null
     $saved = @(Get-DatabaseFiles | ForEach-Object {
@@ -342,7 +345,7 @@ try {
 } finally {
     # The backup holds the test install's databases and generated secrets; it must not reach the
     # uploaded evidence.
-    if ($backup) { Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue }
+    Remove-Item -LiteralPath $privateBackupRoot -Recurse -Force -ErrorAction SilentlyContinue
     Uninstall-All '04-cleanup-uninstall.log'
     Test-Step 'cleanup: no product remains' { [void](Assert-EntryCount 0 'Cleanup') }
 }
