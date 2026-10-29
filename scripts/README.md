@@ -15,7 +15,10 @@ after source checks for explicitly classified documentation-only changes. Extens
 run the engine integration build and both extension/UI package checks. Browser-test-only edits
 build and format the browser test project, then run its complete browser inventory in one shard.
 That run also captures the Studio performance result for the local platform under a unique
-`release-validation/pre-push-browser/` directory. Other local selections retain broader checks.
+`release-validation/pre-push-browser/` directory. Combined extension/browser-test changes run both
+targeted paths, including the engine prerequisite and both extension/UI packages, then the complete
+browser inventory and Studio performance receipt. They avoid unrelated broad checks. Shared,
+unknown and incomplete selections retain broader checks.
 A selection report is never release certification.
 
 VS Code UI files under `src/etl-sql-vscode/ui/src/` select extension checks, browser/consumer
@@ -91,6 +94,24 @@ the driver. The publication gate checks
 the complete job inventory, not merely a green workflow badge. Diagnostic manual runs of `ci.yml`
 cannot qualify.
 
+The `build-and-test` impact lane runs solution verification and Portal smoke/security on separate
+workers. Push/full-certification CI also divides the existing 12 engine coverage shards into three
+groups of four. Each worker builds its focused test project from the same checkout; solution-wide
+build, formatting and dependency audit remain in `Build Verification`. PRs retain engine smoke,
+Portal smoke/security, generated contracts and the complete language-server suite.
+
+`Build & Test` remains the aggregate required check. Full certification additionally requires
+`Build Verification`, `Portal Smoke & Security` and all three `Engine Coverage (n/3)` jobs.
+The aggregate selects the latest retained artifact for each group, including successful groups
+from earlier attempts, verifies the candidate/run/configuration, identical full discovery plans,
+complete theory results, nonoverlapping methods and TRX-linked coverage hashes, then invokes
+`Test-CoverageGate.ps1` with the unchanged 70% threshold. A broken latest artifact fails the gate.
+Existing engine skips remain visible in the merged inventory. Local `test-lane.ps1 -Lane engine`
+still runs every shard; `-EngineShardGroup 1 -EngineShardGroupCount 3` runs only the first group.
+Run `node scripts\checks\test-engine-coverage.mjs` for source-only recovery regressions.
+Additional focused builds consume runner time to remove serial test work; hosted elapsed-time
+acceptance remains in `TODO.md` until measured.
+
 For manual use:
 
 ```powershell
@@ -121,12 +142,27 @@ before its full evidence bundle. The focused upload has a five-minute deadline, 
 20 minutes, and the profile job 65 minutes. Both artifacts retain their original run attempt.
 Full local/operator and package certification requirements remain.
 
-`local-release-certification.yml` runs the full local phase gate on a dedicated Windows release
-host. Release uses `collect-hosted-local-evidence.mjs` to require the exact candidate's successful
-workflow execution and verified portable bundle, then checks the attached ZIP before publication.
-This is separate from ordinary CI selection and does not certify the remaining operator/package
-scope. Host setup, dispatch and evidence rules are in the
-[release checklist](../docs/releases/release-checklist.md#controlled-host-full-local-certification).
+Run `Invoke-WorkstationCertification.ps1 -EvidenceDirectory <new-directory>` manually on the Windows
+x64 workstation for the full local phase gate. It requires no GitHub runner or workflow connection.
+After inspecting a failure, use the same command with `-Resume` and the original evidence directory.
+Resume verifies the same clean candidate, host, toolchain, Docker images, cached outputs and original
+state/log/artifact hashes. It keeps every attempt's state, result, process logs and failed artifact
+payloads, and preserves reused
+phase timestamps. Missing, changed, active or older-than-seven-day checkpoints stop before testing;
+they never trigger an automatic full rerun. A source fix requires a new candidate and directory.
+After success, uploading its verified ZIP to a separate draft evidence release is an independent
+operator step. Release uses `collect-workstation-release-evidence.mjs` to verify that uploaded bundle
+and checks the product draft's evidence ZIP before publication. CI and package certifications remain
+separate. Commands and evidence rules are in the
+[release checklist](../docs/releases/release-checklist.md#independent-windows-workstation-certification).
+
+## Portal test processes
+
+The PowerShell `portal` lane uses 12 sequential testhosts by default. Whole classes stay together;
+exact method filters, per-method discovered case counts and retained TRX results verify that every
+test ran without overlapping shards. Hosted-service tests keep their separate process. The 8 GB
+managed heap limit still applies to each host. `-PortalShardCount 1` reproduces the previous single
+host for diagnosis. Each host releases its retained factory and EF state when its class group finishes.
 
 ## Browser CI shards
 
@@ -227,7 +263,7 @@ than the operator front door.
 | **[`Test-DeploymentProfileCertification.ps1`](./Test-DeploymentProfileCertification.ps1)** | PowerShell | Cross-platform | Composes Solo, Team, Enterprise, SaaS, transition, and upgrade proof from focused suites; fails closed and writes commit-bound JSON/Markdown evidence with phase logs. |
 | **[`Test-ProviderNeutralFaultCertification.ps1`](./Test-ProviderNeutralFaultCertification.ps1)** | PowerShell | Cross-platform | Repeats the provider-neutral failure matrix through local, Docker, and cloud adapters and writes invariant/checkpoint evidence for each supported profile. |
 | **[`Test-ProductionCanaryCertification.ps1`](./Test-ProductionCanaryCertification.ps1)** | PowerShell | Cross-platform | Certifies deterministic canary journey/fault contracts, exact region/domain coverage, isolation, alert attribution and credential lifecycle. Rejects source drift during the run. Live hosted behavior needs separate operator evidence. |
-| **[`Invoke-HostedLocalCertification.ps1`](./Invoke-HostedLocalCertification.ps1)** | PowerShell + Node.js 22 | Controlled Windows release runner | Runs the complete local release plan with same-run checkpoint recovery, full-byte cache verification and original phase provenance. Requires GitHub workflow identity. See [controlled-host certification](../docs/releases/release-checklist.md#controlled-host-full-local-certification) for dispatch and recovery. |
+| **[`Invoke-WorkstationCertification.ps1`](./Invoke-WorkstationCertification.ps1)** | PowerShell + Node.js 22 | Independent Windows x64 workstation | Runs every mandatory local phase and prepares a verified portable ZIP. Uploading evidence is a separate operator step. See [workstation certification](../docs/releases/release-checklist.md#independent-windows-workstation-certification). |
 | **[`Measure-LeanWorkerProfile.ps1`](./Measure-LeanWorkerProfile.ps1)** | PowerShell | Cross-platform; Docker optional | Compares the unified CLI with the non-shipping engine-worker fixture across published size, dependency closure, startup latency/working set, loaded assemblies, sandbox lifetime, and startup cost sensitivity. `-TrimExperiment` records a rejected trim contract as evidence; it never authorizes publication. |
 | **[`Measure-StudioPerformance.ps1`](./Measure-StudioPerformance.ps1)** | PowerShell | Cross-platform | Measures the canonical Studio browser fixture against OS-specific startup, JavaScript heap, keystroke, 250-row aggregation, and canvas-redraw budgets and writes JSON evidence. |
 | **[`typecheck-browser.mjs`](./typecheck-browser.mjs)** | Node.js | Cross-platform | The browser type gate. Runs `tsc --checkJs` over the canonical browser sources and fails on any finding not in `browser-typecheck-baseline.txt`, and on any baseline entry that no longer reproduces. `--summary` prints what is left by file and code; `--update` rewrites the baseline. Needs `npm ci --prefix scripts/typecheck` once. |
@@ -243,7 +279,7 @@ than the operator front door.
 | **[`test-portal-consumer-home.mjs`](./checks/test-portal-consumer-home.mjs)** | Node.js | Cross-platform | Pins the favorites/recent/featured/popular home, fuzzy global catalog search, intentional report icons, and one concise activity line per report card. |
 | **[`test-portal-studio.mjs`](./checks/test-portal-studio.mjs)** | Node.js | Cross-platform | Pins the capability-aware catalog Studio home, catalog-native report creation, equal Code/Design modes, hidden navigation, and disabled-authoring route fences. |
 | **[`Test-ScaleBaseline.ps1`](./Test-ScaleBaseline.ps1)** | PowerShell | Windows / macOS / Linux | Captures resumable 10M or 50M core baselines with one Release/server-GC test host per scenario, avoiding cross-scenario memory contamination. |
-| **[`Test-ScaleCommitComparison.ps1`](./Test-ScaleCommitComparison.ps1)** | PowerShell | Windows / macOS / Linux | Compares two commits in one clean worktree with interleaved A/B arms, a rebuild and discarded warm-up per sample, within-arm spread, and commit-bound JSON/Markdown evidence. |
+| **[`Test-ScaleCommitComparison.ps1`](./Test-ScaleCommitComparison.ps1)** | PowerShell | Windows / macOS / Linux | Compares two commits in one clean worktree with interleaved A/B arms, prepared/verified assets, a rebuild and discarded warm-up per sample, within-arm spread, and commit-bound JSON/Markdown evidence. Asset failures stop measurement and restore the original branch. |
 | **[`Test-BillionRowCertification.ps1`](./Test-BillionRowCertification.ps1)** | PowerShell | Windows | Runs the resumable 1B operator certification matrix with disk preflight, isolated child logs, heartbeat/status JSON, and per-scenario restart. |
 | **[`Test-BillionRowEvidence.ps1`](./Test-BillionRowEvidence.ps1)** | PowerShell | Windows / macOS / Linux | Validates that an operator-run billion-row certification report passed, contains required scenario evidence, and belongs to the current commit before citing performance claims. |
 | **[`Test-GateF.ps1`](./Test-GateF.ps1)** / **[`Test-GateFEvidence.ps1`](./Test-GateFEvidence.ps1)** | PowerShell | Compatibility | Historical aliases retained for existing automation; prefer the `Test-BillionRow*` script names in new docs and workflows. |
@@ -289,8 +325,8 @@ Candidate artifacts are not product claims until the public certification matrix
 | **[`test-service-capacity-smoke.mjs`](./checks/test-service-capacity-smoke.mjs)** | Node.js | Cross-platform | Runs the capacity harness against local mock endpoints to verify report generation without deployed services. |
 | **[`Test-PreRelease.ps1`](./Test-PreRelease.ps1)** / **[`test-pre-release.sh`](./test-pre-release.sh)** | PowerShell / Bash | Cross-platform | Runs the local-first pre-release validation gate with resumable phases, optional Docker/Standard-scale/installer checks, and JSON/Markdown reports under `release-validation/`. |
 | **[`Publish-TenantValidator.ps1`](./Publish-TenantValidator.ps1)** | PowerShell | Windows / Linux / macOS targets | Publishes the offline, self-contained tenant-bundle validator for customer-held signature and recipient keys. |
-| **[`Compile-Changelog.ps1`](./Compile-Changelog.ps1)** | PowerShell | Cross-platform | Compiles `changelog.d/*.md` fragments into `CHANGELOG.md` and fails the release gate when feature-surface changes have no changelog coverage. `-CheckCoverageOnly` preserves files and directories; it is mutually exclusive with `-SkipCoverageCheck`. |
-| **[`test-changelog-compiler.mjs`](./checks/test-changelog-compiler.mjs)** | Node.js / PowerShell | Cross-platform | Exercises check-only preservation, conflicting switches, invalid headings and normal fragment compilation in a private Git fixture. Runs in the shared source preflight. |
+| **[`Compile-Changelog.ps1`](./Compile-Changelog.ps1)** | PowerShell | Cross-platform | Compiles literal `changelog.d/*.md` paths into the checkout's `CHANGELOG.md`, requiring one Unreleased heading before and after compilation. Coverage includes committed, staged, unstaged and untracked feature paths, both rename paths, Unicode and embedded newlines; empty fragments cannot provide it. Invalid/missing comparison commits, failed Git queries and parent-repository discovery stop verification. `-CoverageBase` supplies a commit when no main-branch merge base or release tag is available. `-CheckCoverageOnly` preserves files and directories; it is mutually exclusive with `-SkipCoverageCheck`. |
+| **[`test-changelog-compiler.mjs`](./checks/test-changelog-compiler.mjs)** | Node.js / PowerShell | Cross-platform | Exercises read-only checking, conflicting switches, invalid headings, literal checkout/fragment names, neighboring-checkout preservation, Unicode/untracked coverage, comparison failures and tag fallback through public commands in private unsigned Git fixtures. Runs in the shared source preflight. |
 | **[`test-vsix-module-identity.mjs`](./checks/test-vsix-module-identity.mjs)** | Node.js | Cross-platform | Verifies that packaged-webview acceptance finds the activated module through filesystem aliases and rejects other copies. Runs in the shared source preflight. |
 | **[`Test-VulnerablePackages.ps1`](./Test-VulnerablePackages.ps1)** | PowerShell | Cross-platform | CI gate that fails when any NuGet package (direct or transitive) has a known vulnerability. Requires a prior `dotnet restore`; response procedure in `SECURITY.md` §13. |
 | **[`sync-assets.ps1`](./sync-assets.ps1)** / **[`sync-assets.js`](./sync-assets.js)** | PowerShell / JavaScript | Cross-platform | Synchronizes canonical shared browser assets from `src/ETL-SQL.ReportRuntime` to dependent shell host directories (VS Code extension, portal, player). |
@@ -614,6 +650,9 @@ complete bundle, host copies, and build manifest.
 For source editing, run `node scripts\compile-browser.mjs --watch` and reload after a successful
 preparation. The watcher refreshes host copies and the manifest too. Failed compilation keeps the
 last successful output. Concurrent preparation is refused with a clear lock diagnostic.
+Compilation shares a program for compatible shared-runtime and Portal module graphs. Surfaces
+with independent classic globals, ambient augmentations or library directives keep separate
+programs. Each surface retains its import resolution and strict diagnostics.
 If sources change during preparation, rerun it before building; a manifest is certified only for
 unchanged inputs. The watcher schedules a follow-up for edits made while preparing. Temporary
 consumer-test modules named `*.__test-*.mjs` never enter the sync inventory or product packages.

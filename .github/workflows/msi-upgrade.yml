@@ -275,7 +275,8 @@ jobs:
           PROFILE: ${{ matrix.profile }}
         run: |
           $script = if ($env:PROFILE -eq 'portal') { 'scripts/Test-MsiPortalUpgrade.ps1' } else { 'scripts/Test-MsiUpgrade.ps1' }
-          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath $script -ScriptArguments @('-PreviousMsi', 'candidate/previous.msi', '-CurrentMsi', 'candidate/current.msi') -EvidenceDirectory "release-validation/msi-supervisor/$env:PROFILE" -TimeoutSeconds 1200
+          Write-Host '::notice title=MSI checkpoint::{"stage":"supervisor starting"}'
+          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath $script -ScriptArguments @('-PreviousMsi', 'candidate/previous.msi', '-CurrentMsi', 'candidate/current.msi') -EvidenceDirectory "release-validation/msi-supervisor/$env:PROFILE" -TimeoutSeconds 1200 -ForwardMsiCheckpoints
 
       - name: Upload profile diagnostics first
         if: always()

@@ -1,4 +1,9 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Services;
 using ETL_SQL.WorkstationEditor;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
 
 namespace ETL_SQL.Portal.BrowserTests;
@@ -32,10 +37,24 @@ public sealed class StudioDesktopDatasetWizardTests(StudioAuthoringFixture fixtu
         await using var host = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
             workspace.Root, file, 0, false, "wizard-token",
             StudioMode: true, InstanceId: Guid.NewGuid().ToString("D")));
+        var metadata = Assert.IsType<MetadataManager>(host.Services.GetRequiredService<IMetadataManager>());
+        metadata.SchemaCacheDirectory = Path.Combine(workspace.Root, "schema-cache");
+        Assert.False(Directory.Exists(metadata.SchemaCacheDirectory));
         await host.StartAsync();
 
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
+        var timer = Stopwatch.StartNew();
+        var requests = new ConcurrentQueue<string>();
+        void RecordRequest(string kind, IRequest request, int? status = null)
+        {
+            if (requests.Count >= 100 || !Uri.TryCreate(request.Url, UriKind.Absolute, out var url)
+                || url.AbsolutePath is not ("/api/designer/analyze" or "/api/designer/schema")) return;
+            requests.Enqueue($"{timer.ElapsedMilliseconds}ms {kind} {BrowserTransportFailures.SanitizeUrl(request.Url)} {status}");
+        }
+        page.Request += (_, request) => RecordRequest("start", request);
+        page.Response += (_, response) => RecordRequest("response", response.Request, response.Status);
+        page.RequestFailed += (_, request) => RecordRequest("failed", request);
         await page.GotoWithDiagnosticsAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=wizard-token");
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__?.state?.editorInstance)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
@@ -65,9 +84,30 @@ public sealed class StudioDesktopDatasetWizardTests(StudioAuthoringFixture fixtu
         }
         catch (TimeoutException exception)
         {
+            await BrowserNavigationDiagnostics.CaptureAsync(page, "dataset-picker-wait-failure",
+                nameof(AConnectionDeclaredAMomentAgo_ListsItsTables), page.Url);
+            var observation = "unavailable";
+            try
+            {
+                observation = await page.EvaluateAsync<string>("""
+                    () => JSON.stringify({
+                        tables: document.querySelectorAll('[data-pick-table]').length,
+                        users: Array.from(document.querySelectorAll('[data-pick-table="Users"]')).map(button => {
+                            const bounds = button.getBoundingClientRect();
+                            return { hidden: button.hidden, width: bounds.width, height: bounds.height,
+                                display: getComputedStyle(button).display, visibility: getComputedStyle(button).visibility };
+                        })
+                    })
+                    """).WaitAsync(TimeSpan.FromSeconds(1));
+            }
+            catch (Exception snapshotFailure) when (snapshotFailure is PlaywrightException or TimeoutException)
+            {
+                observation = snapshotFailure.GetType().Name;
+            }
             var dialog = await page.Locator("[data-modal-backdrop]").InnerTextAsync();
             throw new Xunit.Sdk.XunitException(
-                $"fresh_db's tables never listed. The dialog said:{Environment.NewLine}{dialog}", exception);
+                $"fresh_db's tables never listed. State: {observation}{Environment.NewLine}"
+                + string.Join(Environment.NewLine, requests) + $"{Environment.NewLine}The dialog said:{Environment.NewLine}{dialog}", exception);
         }
         Assert.Empty(session.PageErrors);
     }

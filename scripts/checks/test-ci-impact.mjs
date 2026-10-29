@@ -6,10 +6,12 @@ import path from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { manifest, selectLanes, changedPaths, runSelection, validateManifest } from '../select-ci-lanes.mjs';
+import { runPrepushCases } from './fixtures/parallel-prepush-cases.mjs';
 
 const all = manifest.lanes;
-assert.ok(process.argv.length === 2 || (process.argv.length === 4 && process.argv[2] === '--legacy-prepush' && /^[a-f0-9]{7,40}$/.test(process.argv[3])));
-const legacyPrePush = process.argv[3];
+assert.ok(process.argv.length === 2 || (process.argv.length === 4 && ['--legacy-prepush', '--legacy-mixed-prepush'].includes(process.argv[2]) && /^[a-f0-9]{7,40}$/.test(process.argv[3])));
+const legacyPrePush = process.argv[2] === '--legacy-prepush' ? process.argv[3] : null;
+const legacyMixedPrePush = process.argv[2] === '--legacy-mixed-prepush' ? process.argv[3] : null;
 assert.equal(selectLanes(['TODO.md']).nativePackages, false);
 assert.equal(selectLanes(['tests/ETL-SQL.Portal.BrowserTests/Journey.cs']).nativePackages, false);
 assert.equal(selectLanes(['TODO.md', 'tests/ETL-SQL.Portal.BrowserTests/Journey.cs']).nativePackages, false);
@@ -21,6 +23,8 @@ assert.throws(() => validateManifest({ ...manifest, rules: manifest.rules.map((r
 assert.throws(() => validateManifest({ ...manifest, rules: manifest.rules.map(rule => rule.lanes === '*' ? { ...rule, nativePackages: false } : rule) }), /Invalid CI impact rule/);
 assert.deepEqual(selectLanes(['TODO.md']).lanes, ['source-preflight']);
 assert.deepEqual(selectLanes(['src/etl-sql-vscode/src/extension.ts']).lanes, ['source-preflight', 'build-vscode']);
+const mixedLanes = ['source-preflight', 'build-vscode', 'portal-browser-journey', 'studio-performance-budgets'];
+assert.deepEqual(selectLanes(['src/etl-sql-vscode/src/extension.ts', 'tests/ETL-SQL.Portal.BrowserTests/Journey.cs', 'TODO.md']).lanes, mixedLanes);
 const uiLanes = ['source-preflight', 'browser-consumer-contracts', 'build-vscode', 'portal-browser-journey', 'studio-performance-budgets'];
 for (const file of ['src/etl-sql-vscode/ui/src/App.tsx', 'src/etl-sql-vscode/ui/src/components/Results.test.tsx',
   'src/etl-sql-vscode/ui/src/styles.css', 'src/etl-sql-vscode/ui/src/assets/icon.svg']) {
@@ -98,8 +102,8 @@ for (const selection of [selectLanes(['src/etl-sql-vscode/ui/src/App.tsx']), sel
       const job = ciSource.split(new RegExp(`^  ${lane}:\\r?\\n`, 'm'))[1]?.split(/^  [\w-]+:\r?\n/m)[0];
       assert.ok(job, `Missing workflow job for ${lane}`);
       const expression = job.match(/^    if: (.+)$/m)[1].replaceAll('needs.source-preflight', 'needs.source');
-      const selected = runInNewContext(expression, { needs: { source: { outputs: { lanes: JSON.stringify(selection.lanes) } } },
-        github: { event_name: event }, fromJSON: JSON.parse, contains: (items, value) => items.includes(value) }, { timeout: 1000 });
+      const selected = runInNewContext(expression, { needs: { source: { result: 'success', outputs: { lanes: JSON.stringify(selection.lanes) } } },
+        github: { event_name: event }, always: () => true, fromJSON: JSON.parse, contains: (items, value) => items.includes(value) }, { timeout: 1000 });
       const excludedOnPr = event === 'pull_request' && ['enterprise-certification', 'docker-integration-tests'].includes(lane);
       assert.equal(selected, selection.lanes.includes(lane) && !excludedOnPr, `${lane}/${event}`);
     }
@@ -107,6 +111,8 @@ for (const selection of [selectLanes(['src/etl-sql-vscode/ui/src/App.tsx']), sel
 }
 
 const fixture = mkdtempSync(path.join(os.tmpdir(), 'ci-impact-'));
+const routingCases = [];
+const queueRouting = (env, verify) => routingCases.push({ env, verify });
 function git(...args) {
   const result = spawnSync('git', args, { cwd: fixture, encoding: 'utf8', windowsHide: true });
   assert.equal(result.status, 0, result.stderr);
@@ -222,7 +228,8 @@ ConvertTo-Json -InputObject @($results)
       if (full === 'true') assert.deepEqual(JSON.parse(values.lanes), all);
     }
   }
-  const old = legacyPrePush ? spawnSync('git', ['show', `${legacyPrePush}:scripts/Test-PrePush.ps1`],
+  const historicalPrePush = legacyPrePush ?? legacyMixedPrePush;
+  const old = historicalPrePush ? spawnSync('git', ['show', `${historicalPrePush}:scripts/Test-PrePush.ps1`],
     { cwd: fileURLToPath(new URL('../../', import.meta.url)), encoding: 'utf8', windowsHide: true }) : null;
   if (old) assert.equal(old.status, 0, old.stderr);
   file('scripts/Test-PrePush.ps1', old?.stdout ?? readFileSync(new URL('../Test-PrePush.ps1', import.meta.url), 'utf8'));
@@ -270,7 +277,7 @@ function dotnet {
     if ($env:IMPACT_UI -eq '1' -and $args[0] -eq 'test') {
         $key = if ($args[1].EndsWith('ETL-SQL.Portal.Tests.csproj')) { 'generated-contracts' } elseif ($args[1].EndsWith('ETL-SQL.Tests.csproj')) { 'smoke' } else { throw 'UNEXPECTED_TEST_PROJECT' }
         $filter = $args[[Array]::IndexOf($args, '--filter') + 1]
-        $expectedFilter = if ($key -eq 'generated-contracts') { 'FullyQualifiedName~BrowserContractsGeneratorTests' } else { 'Category=Architecture|Category=Docs|Category=Smoke.Core|Category=Smoke.Reporting|Category=Smoke.Security' }
+        $expectedFilter = if ($key -eq 'generated-contracts') { 'FullyQualifiedName~BrowserContractsGeneratorTests|Category=Smoke.Portal' } else { 'Category=Architecture|Category=Docs|Category=Smoke.Core|Category=Smoke.Reporting|Category=Smoke.Security' }
         if ($filter -cne $expectedFilter -or $args -notcontains '--no-restore' -or $args -notcontains 'Release') { throw 'WRONG_SMOKE_ARGS' }
         $key | Add-Content (Join-Path $env:IMPACT_FIXTURE_ROOT 'commands.txt')
         $global:LASTEXITCODE = if ($env:IMPACT_FAIL_TASK -eq $key) { 1 } else { 0 }
@@ -316,98 +323,121 @@ try { & (Join-Path $env:IMPACT_FIXTURE_ROOT 'scripts/Test-PrePush.ps1') }
 finally { $env:ETLSQL_STUDIO_PERF_OUTPUT | Set-Content (Join-Path $env:IMPACT_FIXTURE_ROOT 'restored-performance-output.txt') }
 `);
   for (const [lanes, expected] of [['source-preflight', 0], ['source-preflight,build-and-test', 1],
-    ['source-preflight,portal-browser-journey,studio-performance-budgets,build-vscode', 1], [uiLanes.join(','), 1]]) {
-    const local = spawnSync('pwsh', ['-NoProfile', '-File', path.join(fixture, 'prepush-fixture.ps1')], {
-      encoding: 'utf8', windowsHide: true, cwd: fixture,
-      env: { ...process.env, IMPACT_FIXTURE_ROOT: fixture, IMPACT_FIXTURE_LANES: lanes },
+    [uiLanes.join(','), 1]]) {
+    queueRouting({ IMPACT_FIXTURE_LANES: lanes }, local => {
+      assert.ifError(local.error);
+      assert.equal(local.status, expected, local.stdout + local.stderr);
+      if (expected) assert.match(local.stderr, /EXPENSIVE_VALIDATION_REACHED/);
     });
-    assert.equal(local.status, expected, local.stdout + local.stderr);
-    if (expected) assert.match(local.stderr, /EXPENSIVE_VALIDATION_REACHED/);
   }
   for (const failure of ['', 'build', 'format', 'tests', 'missing-performance', 'invalid-performance', 'wrong-platform', 'missing-method', 'assets']) {
-    file('commands.txt', '');
-    const local = spawnSync('pwsh', ['-NoProfile', '-File', path.join(fixture, 'prepush-fixture.ps1')], {
-      encoding: 'utf8', windowsHide: true, cwd: fixture,
-      env: { ...process.env, IMPACT_FIXTURE_ROOT: fixture,
-        IMPACT_FIXTURE_LANES: 'source-preflight,portal-browser-journey,studio-performance-budgets',
-        IMPACT_BROWSER: '1', IMPACT_FAIL_TASK: failure, ETLSQL_STUDIO_PERF_OUTPUT: 'original-performance-output' },
+    queueRouting({ IMPACT_FIXTURE_LANES: 'source-preflight,portal-browser-journey,studio-performance-budgets',
+      IMPACT_BROWSER: '1', IMPACT_FAIL_TASK: failure, ETLSQL_STUDIO_PERF_OUTPUT: 'original-performance-output' }, local => {
+      assert.ifError(local.error);
+      assert.equal(local.status, failure ? 1 : 0, local.stdout + local.stderr);
+      const commands = local.commands.trim().split(/\r?\n/);
+      assert.deepEqual(commands, failure === 'build' ? ['browser-build'] : failure === 'format' ?
+        ['browser-build', 'browser-format'] : ['browser-build', 'browser-format', 'browser-tests']);
+      assert.equal(local.restoredPerformance.trim(), 'original-performance-output');
+      if (failure) assert.ok(!(local.stdout + local.stderr).includes('Browser pre-push passed'));
+      else assert.match(local.stdout, /Browser pre-push passed/);
     });
-    assert.equal(local.status, failure ? 1 : 0, local.stdout + local.stderr);
-    const commands = readFileSync(path.join(fixture, 'commands.txt'), 'utf8').trim().split(/\r?\n/);
-    assert.deepEqual(commands, failure === 'build' ? ['browser-build'] : failure === 'format' ?
-      ['browser-build', 'browser-format'] : ['browser-build', 'browser-format', 'browser-tests']);
-    assert.equal(readFileSync(path.join(fixture, 'restored-performance-output.txt'), 'utf8').trim(), 'original-performance-output');
-    if (failure) assert.ok(!(local.stdout + local.stderr).includes('Browser pre-push passed'));
-    else assert.match(local.stdout, /Browser pre-push passed/);
   }
   for (const failure of ['', 'compile', 'test:unit']) {
-    file('commands.txt', '');
-    const local = spawnSync('pwsh', ['-NoProfile', '-File', path.join(fixture, 'prepush-fixture.ps1')], {
-      encoding: 'utf8', windowsHide: true, cwd: fixture,
-      env: { ...process.env, IMPACT_FIXTURE_ROOT: fixture, IMPACT_FIXTURE_LANES: 'source-preflight,build-vscode',
-        IMPACT_EXTENSION: '1', IMPACT_FAIL_TASK: failure },
+    queueRouting({ IMPACT_FIXTURE_LANES: 'source-preflight,build-vscode', IMPACT_EXTENSION: '1', IMPACT_FAIL_TASK: failure }, local => {
+      assert.ifError(local.error);
+      assert.equal(local.status, failure ? 1 : 0, local.stdout + local.stderr);
+      if (failure) assert.match(local.stderr, /Extension validation failed/);
+      else {
+        const commands = local.commands.trim().split(/\r?\n/);
+        assert.equal(commands[0], 'engine');
+        assert.deepEqual(commands.slice(1).map(line => line.split(' / ')[1]),
+          ['compile', 'lint', 'test:unit', 'lint', 'build', 'test:unit']);
+        assert.match(commands[4], /etl-sql-vscode[/\\]ui/);
+      }
     });
-    assert.equal(local.status, failure ? 1 : 0, local.stdout + local.stderr);
-    if (failure) assert.match(local.stderr, /Extension validation failed/);
-    else {
-      const commands = readFileSync(path.join(fixture, 'commands.txt'), 'utf8').trim().split(/\r?\n/);
-      assert.equal(commands[0], 'engine');
-      assert.deepEqual(commands.slice(1).map(line => line.split(' / ')[1]),
-        ['compile', 'lint', 'test:unit', 'lint', 'build', 'test:unit']);
-      assert.match(commands[4], /etl-sql-vscode[/\\]ui/);
-    }
   }
   const uiCommands = ['prepare-assets', 'engine', 'extension-compile', 'extension-lint', 'extension-test:unit',
     'ui-lint', 'ui-build', 'ui-test:unit', 'assets-1', 'solution-format', 'assets-2', 'ownership', 'types', 'browser-lint',
     'consumers', 'assets-3', 'generated-contracts', 'smoke', 'browser-build', 'browser-format', 'browser-tests', 'assets-4'];
+  const mixedCommands = ['prepare-assets', 'engine', 'extension-compile', 'extension-lint', 'extension-test:unit',
+    'ui-lint', 'ui-build', 'ui-test:unit', 'assets-1', 'browser-build', 'browser-format', 'browser-tests', 'assets-2'];
+  const mixedFailures = ['', 'prepare-assets', 'engine-build', 'extension-compile', 'extension-lint', 'extension-test:unit',
+    'ui-lint', 'ui-build', 'ui-test:unit', 'assets-1', 'browser-build', 'browser-format', 'tests', 'missing-performance',
+    'invalid-performance', 'wrong-platform', 'missing-method', 'assets-2'];
+  if (!legacyPrePush) for (const failure of legacyMixedPrePush ? [''] : mixedFailures) {
+    queueRouting({ IMPACT_FIXTURE_LANES: (failure ? mixedLanes : mixedLanes.toReversed()).join(','),
+        IMPACT_EXTENSION: '1', IMPACT_BROWSER: '1', IMPACT_UI: '1', IMPACT_FAIL_TASK: failure,
+        ETLSQL_STUDIO_PERF_OUTPUT: 'original-performance-output' }, local => {
+      assert.ifError(local.error);
+      assert.equal(local.status, failure ? 1 : 0, local.stdout + local.stderr);
+      const commands = local.commands.trim().split(/\r?\n/).filter(Boolean).map(line => {
+        if (!line.includes(' / ')) return line;
+        const [packagePath, task] = line.split(' / ');
+        return `${/[/\\]ui$/.test(packagePath) ? 'ui' : 'extension'}-${task}`;
+      });
+      if (legacyMixedPrePush) {
+        assert.deepEqual(commands, ['prepare-assets', 'solution-format', 'assets-1', 'ownership', 'types', 'browser-lint',
+          'consumers', 'assets-2', 'generated-contracts', 'smoke']);
+        assert.match(local.stdout, /PRE-PUSH VALIDATION SUCCEEDED/);
+        console.log('Reproduced mixed extension/browser pre-push success without either selected test suite.');
+        return;
+      }
+      const stop = !failure ? mixedCommands.length : mixedCommands.indexOf(failure === 'engine-build' ? 'engine' :
+        ['tests', 'missing-performance', 'invalid-performance', 'wrong-platform', 'missing-method'].includes(failure) ? 'browser-tests' : failure) + 1;
+      assert.ok(stop > 0);
+      assert.deepEqual(commands, mixedCommands.slice(0, stop), failure);
+      assert.equal(local.restoredPerformance.trim(), 'original-performance-output');
+      assert.equal(local.stdout.includes('Extension and browser pre-push passed'), !failure);
+    });
+  }
   const uiFailures = ['', 'prepare-assets', 'engine-build', 'extension-compile', 'extension-lint', 'extension-test:unit',
     'ui-lint', 'ui-build', 'ui-test:unit', 'assets-1', 'solution-format', 'assets-2', 'ownership', 'types', 'browser-lint',
     'consumers', 'assets-3', 'generated-contracts', 'smoke', 'browser-build', 'browser-format', 'tests', 'missing-performance', 'invalid-performance',
     'wrong-platform', 'missing-method', 'assets-4'];
   for (const failure of legacyPrePush ? [''] : uiFailures) {
-    file('commands.txt', '');
-    const local = spawnSync('pwsh', ['-NoProfile', '-File', path.join(fixture, 'prepush-fixture.ps1')], {
-      encoding: 'utf8', windowsHide: true, cwd: fixture, timeout: 15000,
-      env: { ...process.env, IMPACT_FIXTURE_ROOT: fixture, IMPACT_FIXTURE_LANES: (failure ? uiLanes : uiLanes.toReversed()).join(','),
+    queueRouting({ IMPACT_FIXTURE_LANES: (failure ? uiLanes : uiLanes.toReversed()).join(','),
         IMPACT_EXTENSION: '1', IMPACT_BROWSER: '1', IMPACT_UI: '1', IMPACT_FAIL_TASK: failure,
-        ETLSQL_STUDIO_PERF_OUTPUT: 'original-performance-output' },
+        ETLSQL_STUDIO_PERF_OUTPUT: 'original-performance-output' }, local => {
+      assert.ifError(local.error);
+      const commands = local.commands.trim().split(/\r?\n/).filter(Boolean).map(line => {
+        if (!line.includes(' / ')) return line;
+        const [packagePath, task] = line.split(' / ');
+        return `${/[/\\]ui$/.test(packagePath) ? 'ui' : 'extension'}-${task}`;
+      });
+      if (legacyPrePush) {
+        assert.equal(local.status, 0, local.stdout + local.stderr);
+        assert.deepEqual(commands, ['prepare-assets', 'solution-format', 'assets-1', 'ownership', 'types', 'browser-lint',
+          'consumers', 'assets-2', 'generated-contracts', 'smoke']);
+        assert.match(local.stdout, /PRE-PUSH VALIDATION SUCCEEDED/);
+        console.log('Reproduced UI pre-push success without selected extension/browser validation.');
+        return;
+      }
+      assert.equal(local.status, failure ? 1 : 0, local.stdout + local.stderr);
+      const stop = !failure ? uiCommands.length : uiCommands.indexOf(failure === 'engine-build' ? 'engine' :
+        ['tests', 'missing-performance', 'invalid-performance', 'wrong-platform', 'missing-method'].includes(failure) ? 'browser-tests' : failure) + 1;
+      assert.ok(stop > 0);
+      assert.deepEqual(commands, uiCommands.slice(0, stop), failure);
+      assert.equal(local.restoredPerformance.trim(), 'original-performance-output');
+      assert.equal(local.stdout.includes('UI pre-push passed'), !failure);
     });
-    assert.ifError(local.error);
-    const commands = readFileSync(path.join(fixture, 'commands.txt'), 'utf8').trim().split(/\r?\n/).filter(Boolean).map(line => {
-      if (!line.includes(' / ')) return line;
-      const [packagePath, task] = line.split(' / ');
-      return `${/[/\\]ui$/.test(packagePath) ? 'ui' : 'extension'}-${task}`;
-    });
-    if (legacyPrePush) {
-      assert.equal(local.status, 0, local.stdout + local.stderr);
-      assert.deepEqual(commands, ['prepare-assets', 'solution-format', 'assets-1', 'ownership', 'types', 'browser-lint',
-        'consumers', 'assets-2', 'generated-contracts', 'smoke']);
-      assert.match(local.stdout, /PRE-PUSH VALIDATION SUCCEEDED/);
-      console.log('Reproduced UI pre-push success without selected extension/browser validation.');
-      continue;
-    }
-    assert.equal(local.status, failure ? 1 : 0, local.stdout + local.stderr);
-    const stop = !failure ? uiCommands.length : uiCommands.indexOf(failure === 'engine-build' ? 'engine' :
-      ['tests', 'missing-performance', 'invalid-performance', 'wrong-platform', 'missing-method'].includes(failure) ? 'browser-tests' : failure) + 1;
-    assert.ok(stop > 0);
-    assert.deepEqual(commands, uiCommands.slice(0, stop), failure);
-    assert.equal(readFileSync(path.join(fixture, 'restored-performance-output.txt'), 'utf8').trim(), 'original-performance-output');
-    assert.equal(local.stdout.includes('UI pre-push passed'), !failure);
   }
-  for (const lanes of [all, [...uiLanes, 'enterprise-certification'], uiLanes.filter(lane => lane !== 'browser-consumer-contracts')]) {
-    file('commands.txt', '');
-    const local = spawnSync('pwsh', ['-NoProfile', '-File', path.join(fixture, 'prepush-fixture.ps1')], {
-      encoding: 'utf8', windowsHide: true, cwd: fixture, timeout: 15000,
-      env: { ...process.env, IMPACT_FIXTURE_ROOT: fixture, IMPACT_FIXTURE_LANES: lanes.join(','),
-        IMPACT_EXTENSION: '1', IMPACT_BROWSER: '1', IMPACT_UI: '1', IMPACT_EXPECT_BROAD: '1', IMPACT_FAIL_TASK: '' },
+  for (const lanes of [all, [...uiLanes, 'enterprise-certification'], mixedLanes.filter(lane => lane !== 'studio-performance-budgets'),
+    [...mixedLanes, 'unrecognized-lane']]) {
+    queueRouting({ IMPACT_FIXTURE_LANES: lanes.join(','), IMPACT_EXTENSION: '1', IMPACT_BROWSER: '1',
+      IMPACT_UI: '1', IMPACT_EXPECT_BROAD: '1', IMPACT_FAIL_TASK: '' }, local => {
+      assert.ifError(local.error);
+      assert.equal(local.status, 1, local.stdout + local.stderr);
+      assert.match(local.stderr, /BROAD_VALIDATION_REACHED/);
+      assert.deepEqual(local.commands.trim().split(/\r?\n/), ['prepare-assets']);
+      assert.ok(!local.stdout.includes('UI pre-push passed'));
     });
-    assert.ifError(local.error);
-    assert.equal(local.status, 1, local.stdout + local.stderr);
-    assert.match(local.stderr, /BROAD_VALIDATION_REACHED/);
-    assert.deepEqual(readFileSync(path.join(fixture, 'commands.txt'), 'utf8').trim().split(/\r?\n/), ['prepare-assets']);
-    assert.ok(!local.stdout.includes('UI pre-push passed'));
   }
+  assert.equal(routingCases.length, legacyPrePush ? 20 : legacyMixedPrePush ? 47 : 64, 'Every original routing case must remain selected.');
+  const routingResults = await runPrepushCases(fixture, routingCases.map(test => test.env));
+  for (const [index, result] of routingResults.entries()) routingCases[index].verify(result);
   console.log(`UI pre-push: ${legacyPrePush ? 'legacy gap reproduced' : 'all selected consumers, retained broad checks and 26 failure paths verified'}.`);
+  if (!legacyPrePush) console.log(`Mixed extension/browser pre-push: ${legacyMixedPrePush ? 'legacy gap reproduced' : 'both selected suites, no broad detour and 17 failure paths verified'}.`);
   console.log('CI impact: narrow changes, shared consumers, unknown paths, full override, real Git comparisons, renames, local changes and missing bases passed.');
 } finally {
   // Only the private fixture created by mkdtemp is removed.

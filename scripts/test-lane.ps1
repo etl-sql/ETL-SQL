@@ -32,10 +32,29 @@ param(
     # This bounds retained process state and leaves one TRX per shard, while a value of 1 remains
     # available for reproducing behavior in the former all-in-one host.
     [ValidateRange(1, 32)]
-    [int]$EngineShardCount = 12
+    [int]$EngineShardCount = 12,
+
+    # Portal factories and EF state also accumulate in a long-lived test host. Keep whole classes
+    # together in fresh sequential hosts without excluding any tests. Use 1 only for reproduction.
+    [ValidateRange(1, 32)]
+    [int]$PortalShardCount = 12,
+
+    # CI distributes the existing engine shards across independent workers. Local runs keep
+    # every shard by default; a partial group cannot satisfy the aggregate coverage gate.
+    [ValidateRange(1, 32)]
+    [int]$EngineShardGroup = 1,
+    [ValidateRange(1, 32)]
+    [int]$EngineShardGroupCount = 1
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($EngineShardGroup -gt $EngineShardGroupCount -or $EngineShardGroupCount -gt $EngineShardCount) {
+    throw 'Engine shard groups must partition the configured shard count.'
+}
+if ($EngineShardGroupCount -gt 1 -and $Lane -ne 'engine') {
+    throw 'Engine shard groups are only valid for the engine lane.'
+}
 
 if ($MemoryLimitGB -gt 0) {
     # DOTNET_GCHeapHardLimit is a hex byte count, no 0x prefix.
@@ -51,6 +70,7 @@ $script:LaneExitCode = 0
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'Release.Helpers.ps1')
+. (Join-Path $PSScriptRoot 'TestLane.Helpers.ps1')
 if ($NoBuild) {
     & node (Join-Path $PSScriptRoot 'sync-assets.js') -Check
 } else {
@@ -115,12 +135,15 @@ function Invoke-DotNetTest {
     }
 }
 
-function Invoke-ShardedEngineTests {
+function Invoke-ShardedTests {
     param(
         [string]$Project,
         [string]$Filter,
         [int]$ShardCount,
-        [string]$EvidenceDirectory
+        [string]$EvidenceDirectory,
+        [string]$LaneName,
+        [int]$Group = 1,
+        [int]$GroupCount = 1
     )
 
     $projectPath = Join-Path $repoRoot $Project
@@ -135,19 +158,19 @@ function Invoke-ShardedEngineTests {
     if ($NoRestore) { $listArgs += "--no-restore" }
     if ($NoBuild) { $listArgs += "--no-build" }
 
-    Write-Host "Discovering engine tests for deterministic sharding..." -ForegroundColor Cyan
+    Write-Host "Discovering $LaneName tests for deterministic sharding..." -ForegroundColor Cyan
     $listing = @(& dotnet @listArgs 2>&1)
     if ($LASTEXITCODE -ne 0) {
         $listing | ForEach-Object { Write-Host $_ }
-        throw "Engine test discovery failed with exit code $LASTEXITCODE."
+        throw "$LaneName test discovery failed with exit code $LASTEXITCODE."
     }
 
     $marker = [Array]::FindIndex($listing, [Predicate[object]] { param($line) "$line" -match '^The following Tests are available:' })
-    if ($marker -lt 0) { throw "Engine test discovery did not emit its test-list marker." }
+    if ($marker -lt 0) { throw "$LaneName test discovery did not emit its test-list marker." }
     $testNames = @($listing[($marker + 1)..($listing.Count - 1)] |
         ForEach-Object { "$($_)".Trim() } |
         Where-Object { $_ -match '^ETL_SQL\.' })
-    if ($testNames.Count -eq 0) { throw "Engine test discovery returned no runnable tests." }
+    if ($testNames.Count -eq 0) { throw "$LaneName test discovery returned no runnable tests." }
 
     # Keep all cases of one test class in the same host. Greedy placement by discovered case count
     # is deterministic and avoids one theory-heavy class making a shard much larger than the rest.
@@ -174,6 +197,14 @@ function Invoke-ShardedEngineTests {
 
     New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
     $manifest = [ordered]@{
+        schemaVersion = 1
+        commit = (& git -C $repoRoot rev-parse HEAD) -join ''
+        runId = $env:GITHUB_RUN_ID
+        runAttempt = $env:GITHUB_RUN_ATTEMPT
+        shardGroup = $Group
+        shardGroupCount = $GroupCount
+        shardCount = $ShardCount
+        configuration = $Configuration
         generatedUtc = [DateTimeOffset]::UtcNow.ToString('O')
         project = $Project
         filter = $Filter
@@ -205,9 +236,13 @@ function Invoke-ShardedEngineTests {
         Set-Content -LiteralPath $settingsPath -Value $settings -Encoding utf8NoBOM
         $entry = [ordered]@{
             number = $number
+            group = [int][Math]::Floor($shard * $GroupCount / $ShardCount) + 1
             expectedTests = $loads[$shard]
             classes = @($buckets[$shard])
             methods = @($methods)
+            expectedMethodCounts = @($testNames | ForEach-Object { ($_ -split '\(', 2)[0] } |
+                Where-Object { $_ -cin $methods } | Group-Object |
+                ForEach-Object { [ordered]@{ method = $_.Name; count = $_.Count } })
             results = ("shard-{0:D2}.trx" -f $number)
         }
         $manifest.shards += $entry
@@ -215,13 +250,14 @@ function Invoke-ShardedEngineTests {
     }
     $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $EvidenceDirectory 'manifest.json') -Encoding utf8NoBOM
 
-    Write-Host "Engine inventory: $($testNames.Count) tests in $($classes.Count) classes across $ShardCount shards." -ForegroundColor Cyan
+    Write-Host "$LaneName inventory: $($testNames.Count) tests in $($classes.Count) classes across $ShardCount shards." -ForegroundColor Cyan
     $executedTotal = 0
     $testIdShards = @{}
     for ($shard = 0; $shard -lt $ShardCount; $shard++) {
         if ($buckets[$shard].Count -eq 0) { continue }
         $number = $shard + 1
-        Write-Host ("Engine shard {0}/{1}: {2} expected tests in {3} classes" -f $number, $ShardCount, $loads[$shard], $buckets[$shard].Count) -ForegroundColor Yellow
+        if ($shardEntries[$number].group -ne $Group) { continue }
+        Write-Host ("$LaneName shard {0}/{1}: {2} expected tests in {3} classes" -f $number, $ShardCount, $loads[$shard], $buckets[$shard].Count) -ForegroundColor Yellow
         $args = @(
             "test", $projectPath,
             "--configuration", $Configuration,
@@ -243,27 +279,36 @@ function Invoke-ShardedEngineTests {
         $completed = $process.WaitForExit($timeoutMs)
         if (-not $completed) {
             try { $process.Kill($true) } catch { }
-            Write-Warning "Engine shard $number timed out after $($timeoutMs / 1000)s and was terminated."
-            $script:LaneFailures += "engine shard $number/$ShardCount (timed out)"
+            Write-Warning "$LaneName shard $number timed out after $($timeoutMs / 1000)s and was terminated."
+            $script:LaneFailures += "$LaneName shard $number/$ShardCount (timed out)"
             $script:LaneExitCode = 1
             continue
         }
         if ($process.ExitCode -ne 0) {
-            $script:LaneFailures += "engine shard $number/$ShardCount"
+            $script:LaneFailures += "$LaneName shard $number/$ShardCount"
             $script:LaneExitCode = $process.ExitCode
         }
 
         $trxPath = Join-Path $EvidenceDirectory ("shard-{0:D2}.trx" -f $number)
         if (-not (Test-Path -LiteralPath $trxPath)) {
-            $script:LaneFailures += "engine shard $number/$ShardCount missing TRX"
+            $script:LaneFailures += "$LaneName shard $number/$ShardCount missing TRX"
             $script:LaneExitCode = 1
             continue
         }
 
-        [xml]$trx = Get-Content -LiteralPath $trxPath -Raw
-        $namespace = [System.Xml.XmlNamespaceManager]::new($trx.NameTable)
-        $namespace.AddNamespace("trx", "http://microsoft.com/schemas/VisualStudio/TeamTest/2010")
-        $results = @($trx.SelectNodes("//trx:UnitTestResult", $namespace))
+        $verification = Read-ShardTestResults -TrxPath $trxPath -ExpectedMethodCounts $shardEntries[$number].expectedMethodCounts
+        $results = @($verification.results)
+        $shardEntries[$number]['coverageFiles'] = @(Get-ShardCoverageFiles -TrxPath $trxPath)
+        if ($CollectCoverage -and $shardEntries[$number].coverageFiles.Count -ne 1) {
+            $script:LaneFailures += "$LaneName shard $number has missing or ambiguous coverage"
+            $script:LaneExitCode = 1
+        }
+        $shardEntries[$number]['missingOrIncompleteMethods'] = @($verification.missingMethods)
+        $shardEntries[$number]['unexpectedMethods'] = @($verification.unexpectedMethods)
+        if ($verification.missingMethods.Count -gt 0 -or $verification.unexpectedMethods.Count -gt 0) {
+            $script:LaneFailures += "$LaneName shard $number has incomplete or unplanned test cases"
+            $script:LaneExitCode = 1
+        }
         if ($shardEntries.ContainsKey($number)) {
             $shardEntries[$number]["actualResults"] = $results.Count
         }
@@ -280,14 +325,15 @@ function Invoke-ShardedEngineTests {
     $crossShardTestIds = @($testIdShards.GetEnumerator() | Where-Object { $_.Value.Count -gt 1 })
     $manifest["executionSummary"] = [ordered]@{
         actualResults = $executedTotal
-        discoveryDelta = $executedTotal - $testNames.Count
+        expectedTests = ($manifest.shards | Where-Object { $_.group -eq $Group } | ForEach-Object { $_.expectedTests } | Measure-Object -Sum).Sum
+        discoveryDelta = $executedTotal - ($manifest.shards | Where-Object { $_.group -eq $Group } | ForEach-Object { $_.expectedTests } | Measure-Object -Sum).Sum
         crossShardTestIdCount = $crossShardTestIds.Count
     }
     $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $EvidenceDirectory 'manifest.json') -Encoding utf8NoBOM
 
-    Write-Host "Engine execution: $executedTotal results ($($executedTotal - $testNames.Count) runtime-expanded theory rows); cross-shard test identities: $($crossShardTestIds.Count)." -ForegroundColor Cyan
+    Write-Host "$LaneName group $Group/$GroupCount execution: $executedTotal results; cross-shard test identities: $($crossShardTestIds.Count)." -ForegroundColor Cyan
     if ($crossShardTestIds.Count -gt 0) {
-        $script:LaneFailures += "engine shard overlap ($($crossShardTestIds.Count) test identities)"
+        $script:LaneFailures += "$LaneName shard overlap ($($crossShardTestIds.Count) test identities)"
         $script:LaneExitCode = 1
     }
 }
@@ -392,13 +438,22 @@ switch ($Lane) {
             } else {
                 Join-Path $repoRoot ("release-validation\engine-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
             }
-            Invoke-ShardedEngineTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $evidenceDir
+            Invoke-ShardedTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $evidenceDir engine -Group $EngineShardGroup -GroupCount $EngineShardGroupCount
         } else {
             Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter
         }
     }
     "portal" {
-        Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter
+        if ($PortalShardCount -gt 1) {
+            $evidenceDir = if ($CollectCoverage) {
+                Join-Path $repoRoot $ResultsDirectory
+            } else {
+                Join-Path $repoRoot ("release-validation\portal-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+            }
+            Invoke-ShardedTests "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter $PortalShardCount $evidenceDir portal
+        } else {
+            Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" $portalFilter
+        }
         # The real IHostedService pipeline gets its own process so unrelated Portal classes cannot
         # consume its startup/shutdown budget or share its background-service state.
         Invoke-DotNetTest "tests\ETL-SQL.Portal.Tests\ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"
@@ -488,7 +543,7 @@ switch ($Lane) {
             }
 
             $spillEvidence = Join-Path $repoRoot ("release-validation\spill-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
-            Invoke-ShardedEngineTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $spillEvidence
+            Invoke-ShardedTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $spillEvidence engine
 
             $previousRunSlt = $env:ETL_SQL_RUN_SLT
             try {

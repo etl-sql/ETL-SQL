@@ -176,6 +176,33 @@ try {
     console.log('browser compiler: shared-to-Portal imports resolve to typed owners before host generation');
 } finally { fs.rmSync(root, { recursive: true, force: true }); }
 
+for (const scope of ['classic', 'augmentation']) {
+    const isolated = fs.mkdtempSync(path.join(os.tmpdir(), 'etlsql-browser-scope-'));
+    const sharedSource = path.join(isolated, 'src/ETL-SQL.ReportRuntime/Resources/TypeScript/shared-scope.ts');
+    const portalSource = path.join(isolated, 'src/ETL-SQL.Portal/BrowserSources/portal-scope.ts');
+    try {
+        fs.copyFileSync(path.join(repo, 'tsconfig.browser-build.json'), path.join(isolated, 'tsconfig.browser-build.json'));
+        const declaration = type => scope === 'classic' ? `let independentSurfaceValue: ${type};\n` :
+            `export {};\ndeclare global { var independentSurfaceValue: ${type}; }\n`;
+        write(sharedSource, declaration('number'));
+        write(portalSource, declaration('string'));
+        const compileScopes = () => compileBrowser({ root: isolated, toolchain: repo });
+        compileScopes();
+        const sharedOutput = path.join(isolated, 'src/ETL-SQL.ReportRuntime/Resources/Shared/shared-scope.js');
+        const portalOutput = path.join(isolated, 'src/ETL-SQL.Portal/wwwroot/js/portal-scope.js');
+        const expectedShared = fs.readFileSync(sharedOutput), expectedPortal = fs.readFileSync(portalOutput);
+        compileScopes();
+        assert.deepEqual(fs.readFileSync(sharedOutput), expectedShared);
+        assert.deepEqual(fs.readFileSync(portalOutput), expectedPortal);
+        write(sharedSource, declaration('number') + (scope === 'classic' ? 'independentSurfaceValue = "invalid";\n' :
+            'globalThis.independentSurfaceValue = "invalid";\n'));
+        assert.throws(compileScopes, /not assignable/, 'Each independent surface must still receive strict type checking.');
+        assert.deepEqual(fs.readFileSync(sharedOutput), expectedShared);
+        assert.deepEqual(fs.readFileSync(portalOutput), expectedPortal);
+    } finally { fs.rmSync(isolated, { recursive: true, force: true }); }
+}
+console.log('browser compiler: independent classic globals and global augmentations retain separate scopes and strict diagnostics.');
+
 const utilPath = path.join(repo, 'src/ETL-SQL.ReportRuntime/Resources/Shared/rt-util.js');
 const util = await import(`data:text/javascript;base64,${Buffer.from(fs.readFileSync(utilPath, 'utf8')).toString('base64')}`);
 assert.equal(util.safeUrl(' javascript:alert(1) '), '#');

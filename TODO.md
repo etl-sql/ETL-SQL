@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 19 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 18 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -22,13 +22,15 @@ Deferred initiatives stay in `ROADMAP.md` until selected.
 ### 1. Faster release certification
 
 **Design:** [`ROADMAP.md`](ROADMAP.md#release-engineering--faster-release-certification), which also
-records the v0.21.0 lessons. **Goal:** roughly two hours from candidate cut to tag-ready on a clean
-run. Eight hours is the recovery ceiling, not the normal budget. Aim for one full certification
-on the frozen candidate, with no more than two full rounds and the same evidence as v0.21.0.
+records the v0.21.0 lessons. **Goal:** a full release in four hours or less, from frozen candidate
+cut through publication, and ordinary PR validation in about 30 minutes. Count queueing, builds,
+tests, installation, evidence handling and publication. Preserve the same evidence as v0.21.0;
+aim for one full certification on the frozen candidate, with no more than two full rounds.
+Measure clean and recovery runs separately; workflow watchdog ceilings are not timing targets.
 
 - [ ] **First priority: separate regular CI from release certification.** Use one tested impact
   manifest for local pre-push and regular push/PR CI. Run cheap source checks plus affected builds,
-  tests and dependent consumers; target 10–20 minutes for ordinary scoped changes. Unknown paths,
+  tests and dependent consumers; target 30 minutes or less for ordinary scoped changes. Unknown paths,
   missing diff bases and shared build/dependency/workflow changes expand selection conservatively.
   Explicit pre-tag release certification runs every required lane on the frozen SHA, regardless
   of impact selection. Nightly broad checks find integration problems before release day.
@@ -77,6 +79,26 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   targeted selection, and hosted timing/recovery/rollout evidence is outstanding.
   Release smoke checks now run against CI's existing Release build; tag validation no longer
   rebuilds the solution for smoke tests.
+  Mixed extension/browser-test edits now compose both targeted local paths. The old route
+  reported success after broad checks without running either selected suite. Executed routing
+  fixtures reproduce that miss and verify the engine prerequisite, both extension/UI packages,
+  complete browser inventory and Studio performance receipt, with 17 failure paths. Shared,
+  unknown and incomplete selections retain broad fallback. Actual mixed-run timing remains open.
+  Reproduction and Node 22 recovery: `release-validation/mixed-pre-push-routing/`.
+  A later PR source preflight times out the CI-impact fixture at its 60-second watchdog while all
+  other 49 source checks pass. Its 64 native PowerShell routing cases now use independent private
+  directories and at most four concurrent processes, bounded by available CPUs. All original
+  selection, ordering and failure assertions remain, with the same overall/per-case deadlines.
+  Local control/candidate captures pass in 26.9/12.0 seconds. Hosted acceptance remains open;
+  original timeout evidence: `release-validation/critical-path/pr-44-cfe4f53c9-source/`.
+  Native preflight separately hits a startup-sensitive five-second argument-validation fixture.
+  That check now invokes the public script in its current host and verifies rejection of the exact
+  invalid timeout before any evidence is created. The workstation fixture reuses the existing
+  Node environment helper to preserve Windows `Path` spelling; its failed Git lookup and both
+  focused recoveries are retained under `release-validation/critical-path/`.
+  Validation passes 44 source checks, 122 consumer checks, 11 Portal contracts and 142 smoke
+  cases. Two NuGet restores fail under sandbox network restrictions and pass on failed-check-only
+  recovery with network access; successful checks are preserved in the original report.
 
 - [ ] **Release timeline.** Record the v0.22.0 candidate cut, each CI/MSI round, its cause and the
   tag time as the release runs, so the goal is measured rather than remembered.
@@ -109,6 +131,11 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   the supervisor's output pipe open after exit; clearing supervisor standard-handle inheritance
   before launch fixes that fixture. This is a possible cause, not proof of the historical runner
   loss. Hosted timeout/recovery evidence is still required.
+  Hosted MSI now emits bounded phase and free-memory notices, including backup start/end,
+  with explicit supervisor forwarding for that diagnostic prefix only. Local runs emit no
+  workflow commands; unrelated/stderr/oversized commands remain prefixed and original evidence
+  is preserved. Production-function and public-supervisor fixtures pass. Hosted notice retention
+  is an experiment still requiring verification; it does not establish the runner-loss cause.
 - [ ] **Nightly release-branch lanes.** Run the installed-upgrade checks (DEB and the MSI Portal
   profile) and the Portal shards nightly from the day the release branch is cut.
   **In progress:** the nightly scheduler discovers version branches newer than the latest stable
@@ -121,7 +148,13 @@ on the frozen candidate, with no more than two full rounds and the same evidence
 - [ ] **Path-filtered fix rounds.** A fix commit runs only the lanes its paths touch, using a manifest
   of which lanes cover which paths. The final round still runs everything.
   **In progress:** regular CI consumes the shared impact selection. Unknown/shared changes expand
-  to all lanes. Full certification ignores the diff. Hosted path-selection proof remains required.
+  to all lanes. Full certification ignores the diff. Browser-only hosted selection is verified;
+  other path families and full-candidate certification remain open.
+  PR 47's retained impact report selects only source preflight, all three browser shards and the
+  three-platform performance lane, with native package impact false. Unrelated CI jobs skip.
+  Checkout logs confirm the same PR merge `7b55576ba0046e52dd9676e849962f505600d9bb` across
+  failed-job recovery, with a Git tree identical to head `c9003c12dfb5d8d7914f0bc7b6a32e4e9da58227`.
+  The report remains explicitly non-certifying. Evidence: `release-validation/portal-shard-recovery/`.
   Native package PR checks now consume the same manifest's explicit package-impact metadata.
   Classified planning/release documentation and browser-test-only edits skip native builds;
   shipped extension/runtime inputs, unknown paths, missing bases and manual certification select
@@ -137,14 +170,14 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   certification. Hosted selection and elapsed-time proof remain open.
 - [ ] **Split the Portal browser lane** across parallel jobs, so the longest CI job falls from about 60
   minutes to about 20.
-  **In progress:** CI now defines three independent browser jobs plus a coverage gate retaining
+  **Implemented:** CI defines three independent browser jobs plus a coverage gate retaining
   the original check name. Test discovery generates a deterministic partition by class, balanced
   by case count; exact method filters keep theory cases together. TRX verification rejects
   failed/skipped, omitted and unexpected methods; the aggregate gate verifies matching inventories
   and nonoverlapping coverage. Retry selection uses the latest artifact for each shard without
   falling back from incomplete evidence. Each shard streams through a 30-minute supervisor under
-  a 35-minute step limit and retains per-attempt logs, inventory and TRX. Hosted duration and
-  failed-shard-only recovery still need verification. Local Release build passes; actual VSTest
+  a 35-minute step limit and retains per-attempt logs, inventory and TRX. Initial local evidence:
+  Release build passes; actual VSTest
   discovery/filter checks partition all 986 cases into 329/329/328 with exact method matches.
   Local shard 1 passed all 329 cases in 1.46 minutes and its TRX coverage receipt passed through
   the supervisor. This is local functional evidence, not the hosted critical-path measurement.
@@ -152,7 +185,71 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   passes all three shards and the aggregate gate. Retained TRX records contain 336/336/336 passed
   cases without skips; inventory union verification covers 549 methods without overlap. The
   longest shard job takes 15.1 minutes including setup/build. Original artifacts and verification:
-  `release-validation/hosted-ci-40312449895/`. Failed-shard-only recovery remains open.
+  `release-validation/hosted-ci-40312449895/`.
+  **Recovery verified 2026-10-28:** disposable candidate `c9003c12dfb5d8d7914f0bc7b6a32e4e9da58227`,
+  run `40609095598`, fails shard 1 deliberately and shard 3 on three unexpected Studio cases in
+  attempt 1. Failed-job-only recovery passes both and the coverage gate in attempt 2. Source
+  preflight, all three performance jobs and successful shard 2 retain their original executions.
+  Shard 2 keeps artifact `12782572402`, the same archive digest and every payload hash. Retained
+  TRX verification covers 337/337/336 passed cases and a nonoverlapping union of 551 methods.
+  Request-to-green recovery takes 1183.2 seconds; the longest new shard job takes 19.3 minutes.
+  Original failures remain retained, and their flaky-test causes remain separate open work.
+  Executable audit and original artifacts: `release-validation/portal-shard-recovery/`;
+  timeline: `release-validation/timelines/1793186050339-16076/`. Final-candidate certification
+  remains required; this rehearsal does not certify later source changes.
+  **Overall timing still open:** the full-CI control `40312449895` retains a 55.1-minute Build &
+  Test job, plus 24.5-minute consumer and Docker jobs. Browser splitting and failed-job recovery
+  meet their measured targets; the literal longest-CI-job condition is not yet proven. Retained
+  full-CI timing control: `release-validation/portal-shard-recovery/hosted-40609095598/full-ci-duration-control.json`.
+  Step attribution retains 1648 seconds for engine coverage and 1006 seconds for smoke checks;
+  the latter includes 228 Portal security cases taking 13 minutes. Original step metadata and
+  console output are retained beside that timing control. These are the next measured bottlenecks.
+  CI now schedules Portal smoke/security independently from solution verification and distributes
+  the same 12 engine coverage shards across three workers. The unchanged `Build & Test` aggregate
+  requires every worker, verifies matching complete inventories and TRX-linked coverage hashes,
+  then enforces the same 70% coverage policy. Full release policy names every new worker. Source
+  fixtures cover complete/expanded theories, retained successful groups and fail-closed recovery.
+  Local functional verification passes all 12 real shards: 13,100 passed cases and the existing
+  Linux-only skip on Windows, with matching plans and no overlap. The aggregate verifies every
+  TRX attachment in 72.9 seconds, then the canonical coverage gate passes at 77.0% (minimum 70%).
+  Original attachment-resolution and fixture-cleanup failures remain retained alongside recovery.
+  The source audit now prunes its existing output/dependency exclusions before descending; its
+  focused source-scope regression passes. Evidence: `release-validation/critical-path/`.
+  These are dirty-tree development checks, not clean-candidate certification.
+  Final local validation passes 50 source checks, 122 consumer checks, 53 Portal contracts/smoke
+  cases and 144 engine smoke/audit cases. Pre-push catches a missing shared helper in the copied
+  asset-generation fixture; failed-check-only recovery passes after correcting its inventory,
+  retaining the original failure and the other 121 successful checks.
+  The retained control's consumer artifact identifies 996.2 seconds in asset-generation checks
+  inside the 24.5-minute job; its source SHA and archive digest are retained with this evidence.
+  **Hosted build/test timing verified 2026-10-28:** diagnostic run `40742484305` on
+  `09fd6bdf7ef66b5c1095369d5666cc566cf16155` passes every selected worker and the aggregate.
+  Request-to-green takes 27.44 minutes; the longest worker takes 19.73 minutes. Independent archive
+  verification covers 13,101 passed cases, the existing Linux-only skip, matching inventories and
+  every recorded coverage hash; the canonical gate passes at 77%. Original archives and executable
+  audit: `release-validation/critical-path/hosted-40742484305/`; timeline:
+  `release-validation/timelines/1793212751519-34560/`. This diagnostic selects the build/test lane;
+  full-CI timing and final-candidate certification remain required.
+  A compiler prototype preserves all 200 production emits while reducing median local compilation
+  from 3.73 to 2.45 seconds. Global-scope counterexamples reject an unconditional combined program;
+  the guarded implementation preserves the original accepted scopes and strict error handling.
+  The complete diagnostic asset fixture passes in 278.3 seconds versus 358.2 seconds for the
+  original. The guarded production implementation passes the complete local pre-push gate in
+  742.0 seconds: 50 source checks, 122 consumer checks, 53 Portal contracts/smoke cases and 142
+  engine smoke cases. Its complete asset-generation check passes in 305.6 seconds; the added
+  classic/global-augmentation regressions pass. Hosted compiler timing remains unverified.
+  **Engine recovery verified 2026-10-28:** disposable workflow-only candidate
+  `cd600510d3b933151e6b86d59a93758f4425e7f8`, run `40754693409`, deliberately fails group 1 after all
+  its tests pass. One failed-job-only retry reaches green in 875 seconds (14.6 minutes), with 13,101
+  passed cases, the existing Linux-only skip and 77% coverage. Independent archive/TRX/hash audits
+  verify all five successful worker executions retain their original step times, and every original
+  engine archive retains its ID, digest and payload. The aggregate uses recovered group 1 plus the
+  original groups 2 and 3. Original failures remain retained. This diagnostic is not final-candidate
+  certification. Historical record: `certification-results/engine-coverage-recovery-2026-10-28.json`;
+  executable audits/archives: `release-validation/critical-path/hosted-40754693409/`; timeline:
+  `release-validation/timelines/1793218915921-28492/`. This run's Portal worker takes 24.8 minutes,
+  so the overall longest-job condition remains open. An earlier probe times out in `test-ci-impact`
+  before workers start; that separate original failure is retained and does not prove group recovery.
 - [ ] **Watchdogs and log streaming** on every long CI step, with the console streamed to an artifact
   and diagnostics uploaded on failure.
   **In progress:** MSI workstation and Portal jobs use the shared bounded supervisor. Other long
@@ -169,6 +266,13 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   That run ultimately records hosted-runner communication loss 44.8 minutes after its upload
   starts. No Portal artifact or job-log blob survives; the workstation evidence and pinned MSI
   pair are retained. Original job metadata and annotation: `release-validation/hosted-msi-40312449960/`.
+  **Failed-profile recovery verified 2026-10-28:** run `40760871492` succeeds after one
+  failed-job-only retry in 453 seconds. Original installer inputs and successful workstation/build
+  executions are retained; 32 Portal and seven workstation assertions pass. Both retry uploads
+  complete in one second, and seven completed-job checkpoint notices survive. The tested PR merge
+  has the same tree as head `cfe4f53c9`; this does not certify later candidates or final v0.22.0
+  metadata. Original runner-loss cause and notice survival during loss remain unproven.
+  Historical record: `certification-results/msi-profile-recovery-2026-10-28.json`.
   A local pre-push run exposed an unbounded wait after Windows tree shutdown failed in the
   VSIX command helper. That failure now rejects promptly with a direct-child cleanup fallback;
   the cancellation fixture and an injected missing-terminator regression pass.
@@ -201,6 +305,17 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   existing per-attempt shard artifact; the 50-minute job ceiling and test coverage gate remain.
   A duplicate Node setup is removed. Executed workflow fixtures verify original arguments,
   failing exits and both log channels. Hosted timing and failure uploads remain unverified.
+  **Hosted browser watchdog verified 2026-10-26:** disposable candidate
+  `ca5eb7d1623fd2aa8afbf1e9b78d480620fba474`, run `40407383754`, deliberately waits forever in
+  real Chromium. The 30-second supervisor returns 124 after 30.1 seconds; the tracked child and
+  recorded Chromium processes exit, an unrelated sentinel survives, and failure diagnostics upload.
+  Failed-job-only recovery passes the real browser probe in 5.3 seconds, reusing the original
+  build execution and artifact `12691449322` with identical ZIP digest and all 110 driver-file hashes.
+  Recovery takes 58.7 seconds from request to green. Original attempts, manifests, logs, cleanup
+  reports and executable acceptance audit: `release-validation/browser-watchdog-rehearsal/`;
+  timeline: `release-validation/timelines/1793052009643-13344/`.
+  This proves the isolated browser watchdog/upload/retry path. Actual Portal-shard recovery,
+  other long-step coverage and the MSI runner-loss cause remain separate requirements.
 - [x] **One-command release metadata.** One step flips the CHANGELOG date, release-notes status and
   releases index together.
   **Verified locally 2026-10-24:** `finalize-release-metadata.mjs` previews or writes all three files
@@ -252,19 +367,49 @@ on the frozen candidate, with no more than two full rounds and the same evidence
   failed or mismatched evidence. This validates archive recovery prerequisites, not live HA
   continuity or measured recovery time. Hosted execution and full package promotion remain open;
   local release requirements stay in place until that evidence passes.
-  A manual-only `local-release-certification.yml` now runs the full local gate on a controlled
-  Windows x64 release host, retaining immutable per-attempt bundles and failure diagnostics.
-  Release requires and verifies that artifact before packaging and again before publishing.
-  This needs the dedicated host label and workflow rollout; no hosted full-run result is claimed.
-  Controlled-host retries now verify a closed same-run/runner/workspace checkpoint, unchanged
-  toolchain, Docker inputs, cached output bytes and original evidence before phase resume. Original
-  passed receipts keep their producing-job windows; failed phases and dependents rerun. The real
-  phase-runner fixture exercises failed-phase and upload-only recovery through the actual supervisor
-  (43 initial actions, then six and four). A reproduced parameter-binding failure exposed the old
-  two-hour supervisor cap; its seven-hour bound now accepts the driver's 400-minute execution budget
-  and records the effective timeout. Over-limit requests still stop before work starts.
-  Missing checkpoints and changed inputs stop recovery. Hosted acceptance and measured
-  full-run/retry timing remain open before this item closes.
+  The owner requires the full Windows check to run independently on the workstation. The
+  self-hosted Actions producer is removed. The manual driver retains original diagnostics and
+  produces a verified bundle only after every mandatory phase passes. A separate draft upload
+  transports evidence; Release checks its candidate, digest and manifest before publication.
+  Historical hosted checkpoint fixtures remain regression coverage, not manual-run provenance.
+  The independent run on `d9e137c52715e533a40bfe5db51a37a4fbb61079` finished in 115 minutes:
+  40 phases passed, three failed (smoke GC comparison, nested-repository Git fixture and Portal
+  testhost OOM), and coverage was skipped after engine failure. Original evidence is retained at
+  `release-validation/workstation-certification/`. A later fixed-binary runtime control passes all
+  40 correctness/memory cases but finds similar GC medians on .NET 10.0.13 and 10.0.14; the runtime
+  update alone does not explain the stored-reference gap. Its
+  [audit](certification-results/gc-runtime-control-2026-10-27.json) retains every sample and hash.
+  The GC blocker remains unresolved and no reference or comparison band changed. A separate unpublished diagnostic draft retains
+  selected failed-run results (release `425732082`, asset `682217474`); uploaded/downloaded SHA-256
+  matches `2b8b4f22e2ac9415fc3c7f1ac0c7f9a5af761b82b2603e199a1914d66d1866d6`.
+  This proves diagnostic transport only. Raw dumps remain local. The isolated Git fixture fix
+  passes both nested and ordinary temporary-directory cases; no full passing run or live evidence
+  upload/publication acceptance is claimed. The independent driver now supports explicit `-Resume`
+  on an unchanged candidate. It verifies the original state/log/artifact hashes, host, toolchain,
+  Docker images and cached outputs before work. Each attempt keeps separate process/results;
+  failed state and failed artifact payloads are copied before reuse can overwrite producer paths;
+  successful phases retain original timestamps and logs, and portable evidence retains the original
+  attempt windows. Real driver/supervisor fixtures exercise failed-child recovery and preserve all
+  43 successful synthetic phases; 19 changed/missing/stale/linked inputs reject reuse before work. Evidence
+  validation rejects inconsistent attempt windows. These are regression fixtures, not a full
+  passing workstation run; missing or unfinished checkpoints never trigger an automatic full rerun.
+  Local validation covers 50 source checks, 122 consumer checks, 53 Portal cases and 142 engine
+  smoke cases. Two sandbox-blocked NuGet restores pass on failed-check-only recovery with network
+  access; the other 120 successes and both original failures remain retained. Evidence:
+  `release-validation/critical-path/workstation-resume-*`.
+  The independent Windows gate on `d9e137c52715e533a40bfe5db51a37a4fbb61079` reached managed OOM
+  in its single Portal testhost (20 failed, 1,106 passed before termination). Raw diagnostics remain
+  at `release-validation/workstation-certification/portal-diagnostics/`. The two classes reporting
+  OOM pass all 20 tests in a fresh host under the same 8 GB ceiling, which supports accumulated
+  process state as the immediate test-lane issue without proving its allocation source.
+  The proposed Portal lane uses 12 sequential hosts, preserving all classes and the memory ceiling.
+  TRX verification rejects missing methods/theory rows and unplanned identities; all negative
+  fixtures pass. Full Portal execution now passes all 1,631 default cases plus six hosted-service
+  cases and UI smoke checks under the original 8 GB ceiling, with zero skips. The retained manifest
+  and all 12 TRX files audit every method/case, all 199 classes and zero overlap. Evidence:
+  `release-validation/portal-lane-20261027-115113/`, `portal-default-inventory-audit.json` and
+  `portal-sharded-result.json`. A focused engine probe also passes all 11 cases across two shards.
+  These are dirty-tree development results; the final clean-candidate gate remains required.
   Enterprise certification now explicitly defaults both test projects to Release, records the
   configuration and keeps Debug evidence ineligible for release. Executed driver fixtures verify
   configuration propagation. The source-policy audit includes tracked/new authored C# files while
@@ -276,7 +421,7 @@ on the frozen candidate, with no more than two full rounds and the same evidence
 #### Codex review — stop paying for successful work again
 
 The owner reports **26 hours across two days**, mostly waiting for CI/MSI and restarting after a
-failure. The eight-hour goal above is a ceiling; it should not become the normal release ceremony.
+failure. The four-hour target above includes certification, recovery and publication.
 These additions are based on the checked-in workflows and release scripts, not a new timing audit
 of the GitHub runs. Implement the first three together, alongside the MSI runner diagnosis above.
 
@@ -361,7 +506,7 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
     blocks publication; successful jobs from earlier attempts of the same run are reused.
     A live read-only check rejected the latest cancelled candidate CI instead of accepting
     earlier success. The complete local/operator checklist manifest is not yet enforced.
-    Full local phase evidence now has its own controlled-host workflow and mandatory publication
+    Full local phase evidence now uses an independent workstation check and mandatory publication
     check, including the actual draft ZIP. The remaining operator checklist manifest is still open.
     Local evidence now explicitly requires Standard scale and all 44 mandatory phases, even when
     a saved plan omits one. Tests compare policy with the producer's actual full plan and remove
@@ -524,6 +669,19 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   nonempty evidence directories are rejected before testing to preserve the original attempt.
   Executed fixtures reproduce the earlier deletion and verify successful/failed builds, cache reuse,
   evidence preservation and rejection of cleanup escapes/links. Hosted recovery rehearsal remains open.
+  **DEB hosted follow-up 2026-10-27:** disposable candidate `51f8ed238cd386c59298ef82a823c0a90bb8e37f`,
+  run `40418888777`, preserves its original successful build on failed-job-only recovery. Attempt 2
+  downloads artifact `12698147912` with the original ZIP digest and verifies its package hashes.
+  All 39 real fresh-install/upgrade/rollback/purge assertions pass in 138 seconds, but evidence
+  upload fails with EACCES on root-owned `recovery-report.json`. The workflow now transfers only
+  that diagnostic to the runner, retaining mode 0600; backup archives stay root-only. All 20 Linux
+  configuration/evidence cases pass, including real cross-user readability and link rejection.
+  Original attempts, console assertions and local recovery: `release-validation/deb-recovery-rehearsal/`;
+  timing: `release-validation/timelines/1793097917034-1992/`. The failed run is not certification;
+  the corrected workflow and stricter service assertion still require new-candidate hosted acceptance.
+  Final source preflight passes 43 checks; its saved historical shell snapshot was normalized to LF
+  and the remaining check passes on recovery. Reports: `release-validation/preflight/1793097976890-19064/`
+  and `release-validation/deb-recovery-rehearsal/source-recovery/`.
 
 ### 2. Order-independent scale certification
 
@@ -577,6 +735,25 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   cases across Smoke and Standard, including actual warm-up scale, GC snapshots and absolute
   memory gates. The clean follow-up above completes calibration for this protocol.
 
+The independent Windows gate on `d9e137c52715e533a40bfe5db51a37a4fbb61079` fails the existing Smoke
+GC-pause band for spill cleanup and temp-table spill. Allocations and checksums match the reference;
+the runtime changed from .NET 10.0.13 to 10.0.14. No cause or baseline replacement is claimed.
+The commit-comparison runner now prepares/verifies each checkout's browser assets before building.
+Real Git/Node/PowerShell fixtures verify interleaved ordering, preparation/verification failure,
+original-branch restoration, plan-only preservation and separation of successful Git stderr.
+Paired quiet-host measurements now pass twelve correctness/memory checks on the same captured
+fixture and .NET 10.0.14 runtime. Control/candidate GC medians are 9.2/7.7 ms for cleanup and
+8.3/10.2 ms for temp-table spill, both below a 35% candidate/control increase. Elapsed medians
+are 51/50 ms and 63/65 ms. Three samples per arm and overlapping GC ranges do not prove the
+original cause. Ten-sample normal-project probes reproduce both reference failures at 14.7/11.6 ms.
+A normal-project paired control also places the old code above its stored reference: 12.1 ms
+control versus 15.5 ms candidate for temp-table GC, compared with the stored 4.7 ms. Inspection
+finds matching Release revisions and method IL for Core, Engine, App and the test fixture between
+normal/captured builds. Runtime, workstation and execution-context causality remain unproven.
+[Measurement record](docs/benchmarks/gc-paired-comparison-2026-10-27.md) and its curated audit retain
+all 48 measured cases, failed comparisons and branch restoration. The original gate stays failed; baseline files and
+bands are unchanged, and the final clean-candidate gate remains required.
+
 ### 3. Flaky tests — the dedicated fix
 
 **Record:** [flaky-test stability](docs/releases/flaky-test-stability.md). v0.21.0 deferred these
@@ -593,6 +770,31 @@ here; each one failed a single test per run and passed on rerun.
   failure/resource checks and four desktop/critical/compiler journeys pass locally. Shard fixtures
   verify environment propagation/restoration for success, failed exits and launch exceptions.
   Hosted failure capture, diagnosis and consecutive-run evidence remain required before closure.
+  Hosted rehearsal `40609095598` also exposes two Studio startup timeouts and an empty editor
+  read after reload. The old helper accepts a mounted workbench without the requested report;
+  startup waits and failed module loads retain no snapshot. Deterministic probes reproduce all
+  three gaps. Studio persistence now waits for the requested active report and matching editor
+  text, while failed waits/modules retain process resources and bounded, sanitized HTTP/transport
+  history. All 32 focused cases pass. This improves failure attribution; it does not prove the
+  hosted cause. Evidence: `release-validation/studio-hosted-failures/`.
+  All 44 source-preflight checks pass in 93.2 seconds. Readiness also accepts matching editor
+  text after normalizing CR, CRLF and LF endings; its controlled browser check passes.
+  A baseline local shard passes 335/336 cases, including all three hosted Studio failures.
+  `StudioDesktopDatasetWizardTests.AConnectionDeclaredAMomentAgo_ListsItsTables` separately times
+  out at 15 seconds, then its failure text contains the Users table. It also reproduces in
+  isolation. The original TRX and both console logs are retained there.
+  **Dataset-picker cause fixed locally:** bounded timings isolate the schema request. MOCKDB
+  constructors generate the million-row fixture even for metadata reads, repeatedly blocking schema
+  discovery. Declared metadata now avoids seeding; data reads share one deferred initialization.
+  The original picker passes in about three seconds, and a private empty-schema-cache run passes
+  in about five seconds; all 33 focused browser cases and 31 connector cases pass. Eight
+  initialization regressions cover metadata-only access, concurrent reads,
+  cancellation, undeclared schemas, first-operation truncation and sanitized failure propagation.
+  The same review fixes a P0: completed failed seeding previously returned partial rows. A failed
+  seed now blocks every read. New-candidate hosted behavior and the other flaky causes remain open.
+  Full local pre-push passes in 794.6 seconds: 44 source checks, 122 consumer checks, 11 Portal
+  contracts and 142 smoke cases. The private cold-cache picker control also passes. Final log:
+  `release-validation/studio-hosted-failures/final-pre-push.log`.
 - [ ] **`DesktopStudioJourneyTests` exit timeout:** waited 10 s for `ApplicationStopping` after "Exit
   Without Saving" on CI; passes 3 of 3 locally in 9–11 s.
   **In progress:** aborting the final heartbeat now deterministically reproduces the same shutdown
@@ -645,9 +847,40 @@ here; each one failed a single test per run and passed on rerun.
   test fixtures are fixed. Regression cases cover the retired statements and canonical replacements;
   `BREAKING_CHANGES.md` records their migration paths. Original failures and final TRX evidence are
   retained under `release-validation/`; final-candidate certification remains required below.
-- [ ] **Linux package install and upgrade.** The postinst now leaves shipped files root-owned and
+- [x] **Linux package install and upgrade.** The postinst now leaves shipped files root-owned and
   makes `/usr/lib/etl-sql/bin` `root:etlsql 1775`. Install fresh and upgrade over a previous package;
   confirm the Portal and Orchestrator start and write their databases, logs and data.
+  **Verified 2026-10-27:** [hosted run 40594065837](https://github.com/etl-sql/ETL-SQL/actions/runs/40594065837)
+  passes all 45 fresh-install, upgrade, rollback and purge checks on candidate `755fe3fb3`.
+  Both services run the installed executable and write nonempty databases and open application
+  logs as `etlsql`; the service account creates, reads and removes runtime data. All 481 shipped
+  paths are protected and the install directory is `root:etlsql 1775` after both installation paths.
+  The installed evidence upload/download digest matches. The
+  [acceptance record](certification-results/linux-installed-acceptance-2026-10-27.json) retains
+  candidate, package and evidence hashes. Installed acceptance took 6.2 minutes; the build took
+  41 minutes. The package still reports 0.21.0; final v0.22 delivery-path certification stays open.
+  Assertion coverage explicitly verifies the sticky directory mode,
+  root-owned protected package paths, service-owned nonempty databases, each service's open
+  application log and service-account data writes. The upgrade sentinel is created by the service
+  account and checked for preserved ownership. Linux rejection fixtures cover wrong ownership,
+  writable or missing payload, missing sticky bit, empty inventory, empty/missing/linked state and
+  denied data writes. The complete service-write assertion also passes against a real service-UID
+  process and open log descriptor in a disposable Linux container; wrong/zero PIDs, root-owned or
+  empty logs and deleted open logs reject. Only systemctl's PID lookup is substituted. Container
+  execution needs SYS_PTRACE for cross-UID /proc reads; denied reads fail explicitly, without
+  weakening acceptance. Evidence: `release-validation/installed-linux-runtime-process-fixture-verified.log`.
+  Hosted run `40551540783` passed the rejection fixtures but stopped during fixture account cleanup:
+  Ubuntu's `userdel` had already removed the matching group. Cleanup now checks group existence
+  and runs on failure too. The exact workflow block passes locally with `USERGROUPS_ENAB=yes`
+  and `no`; injected assertion failure preserves exit 17 and removes both fixture accounts.
+  Evidence: `release-validation/installed-linux-cleanup-policy-test.log` and
+  `release-validation/installed-linux-cleanup-failure-test.log`. The original hosted failure is retained.
+
+  Installed-service assertion review reproduced a false pass for inactive services. The assertion
+  now requires an active service, a positive numeric PID and the exact installed executable;
+  failed lookups, missing/unrelated executables and deleted binaries fail. All ten deterministic
+  cases pass in Windows/Git Bash and a Linux Node 22 container. They complement the real installed
+  acceptance above; failed-job-only recovery evidence is tracked in its separate release item.
 - [x] **Windows run of the security tests.** Confirm the OS-neutral `SecurityTests` on Windows.
   **Verified 2026-10-24:** all 23 Windows x64 Release cases pass without skips, including
   `TestHardwareLockedEncryption`'s DPAPI round trip and wrong-entropy rejection. The initial run
@@ -791,7 +1024,30 @@ here; each one failed a single test per run and passed on rerun.
   11 Portal contracts and 142 smoke cases). Hosted certification exposes dependency audit findings,
   missing generated browser inventories in isolated MSI jobs, macOS VS Code test-host startup,
   one retired Studio control assertion and two governance HTTP 500 failures.
-  The dependency updates pass pinned npm 10 clean installs without audit findings, extension/UI
+  Hosted run `40552006993` later exposed the newly updated `qs` advisory in the VSIX toolchain.
+  An explicit 6.16.1 override now fixes its four reproduced comma-array crash inputs; a clean
+  Node 22/npm 10 install and real audit report zero vulnerabilities, and all four target archive
+  regressions pass. The BSD-3-Clause license and notices were checked; the generated inventory
+  remains current. Evidence: `release-validation/qs-audit.json`, `qs-advisory-probe-fixed.log`
+  and `qs-vsix-toolchain.log`. Hosted acceptance on the fixed candidate remains required.
+  The combined candidate also repairs two other failures retained from that run: foreground CSV
+  metadata fixtures no longer leave background refresh reading their temporary file, and the
+  Studio chart probe reads attached marks/data together during redraw. All 459 language-server
+  tests pass, including the separate background-refresh tests. A deterministic browser regression
+  fails the earlier probe and passes with the fix; all ten Studio interaction cases pass.
+  Original and corrected TRX evidence: `release-validation/chart-redraw-before/`,
+  `chart-redraw-after/` and `language-server-complete/`. These fixes still need hosted acceptance.
+  Candidate `755fe3fb3` passes all three hosted browser shards, consumer contracts, extension and
+  Studio performance checks, but its CI fails one Portal smoke assertion: a report job becomes
+  `Completed` before its manifest is built. Three deterministic barrier cases reproduce premature
+  completion, cancellation exclusion and lost preparation failure. Terminal state/payload now
+  publish together after preparation and scope cleanup; all 14 focused real-report, cancellation,
+  failure and authorization cases pass. An unsupported report executor fails explicitly, with its
+  runtime compatibility change recorded. Evidence: `release-validation/report-completion-before/`
+  and `report-completion-real-executor/`. The original hosted failure remains retained.
+  Local pre-push now includes `Smoke.Portal` in its existing Portal test invocation, so the
+  report execution and completion regressions run before paying for another hosted round.
+  The earlier dependency updates pass pinned npm 10 clean installs without audit findings, extension/UI
   compile/build and lint, 403 unit tests, four real target VSIX archive checks and the SDK/SQLite
   packaging coordinator. MSI workers now prepare/verify assets before installation, with failure
   guards exercised. The current list-filter Ctrl+click journey and all three governance roles pass
@@ -825,6 +1081,38 @@ here; each one failed a single test per run and passed on rerun.
   checks, 122 consumer checks, 11 Portal contracts and 142 smoke cases. Source preflight verifies
   the identity regression runs once before expensive builds. Retained result:
   `release-validation/native-40312582254/combined-pre-push-recovery.log`.
+  Further changelog review reproduced compilation of a neighboring checkout when the requested
+  checkout contains brackets, plus coverage false passes for untracked/Unicode sources and an
+  invalid comparison reference after a committed feature change. Literal path operations now keep
+  writes and fragment deletion in the requested checkout. NUL-delimited Git inventories cover
+  committed/staged/unstaged/untracked paths; bounded Git queries reject invalid commits, missing
+  bases and parent-repository discovery before writes. Public-command regressions pass on Windows
+  and native Linux, including a POSIX newline filename, tag fallback, separate bracketed fragment
+  names and byte-identical preservation of a neighboring checkout. The old compiler fails the new
+  untracked-source regression. Original reproductions, controls and recovery logs:
+  `release-validation/changelog-coverage-review/`. The broader review remains open.
+  The same review also reproduces coverage from whitespace-only fragments, missed source removal
+  through rename detection, and duplicate Unreleased headings compiling notes twice before deleting
+  their fragment. Coverage now needs nonempty content or a changed changelog and includes both rename
+  paths. Compilation requires one Unreleased heading in both input and proposed output, preserving
+  documents/fragments on rejection. Staged/committed renames, empty-fragment check/compile calls and
+  duplicate input/fragment headings have executed public-command regressions.
+  Version-tool review also reproduced PowerShell reporting a successful bump while a bracketed
+  checkout retained its old version. Version bumps and consistency checks now use literal paths
+  for metadata and Portal page enumeration/reads. Executed public-command regressions cover
+  bracketed checkouts and page names, reject a stale bracketed page, and verify that a
+  wildcard-matching neighboring checkout stays byte-identical in both PowerShell and Bash.
+  Original-command failures and focused recovery: `release-validation/version-literal-path-review/`.
+  Source preflight also exposed an intermittent wrapper fixture failure restoring its synthetic
+  macOS package. A focused Node 22 run passes all 43 cases; the original cause remains unproven.
+  The fixture now retains process diagnostics before reading observations and includes scenario,
+  exit/output and observed state in assertion failures. Original failed preflight:
+  `release-validation/preflight/1793096626266-19888/`; focused diagnostics are retained beside
+  the version-tool review evidence.
+  Final source preflight passes 41 checks, including both changed fixtures; three checks time out
+  during a long tool pause and pass unchanged under the same deadlines on failed-check-only
+  recovery (21.8 seconds). Full report: `release-validation/preflight/1793096789722-3012/`;
+  recovery: `release-validation/version-literal-path-review/preflight-recovery/`.
 - [x] **Pre-commit hook.** Track `scripts/pre-commit` as executable in fresh Linux clones.
   **Verified 2026-10-24:** the Git index records mode `100755` and the archive retains execute bits, with the hook
   body unchanged. Its repository bytes use LF and `.gitattributes` now pins that checkout form.

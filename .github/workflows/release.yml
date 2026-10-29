@@ -89,12 +89,12 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Require full controlled-host local evidence
+      - name: Require uploaded independent workstation evidence
         id: local-selection
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
-        run: node scripts/collect-hosted-local-evidence.mjs "$env:GITHUB_REPOSITORY" "$env:SOURCE_SHA" release-validation/selected-local-evidence
+        run: node scripts/collect-workstation-release-evidence.mjs "$env:GITHUB_REPOSITORY" "$env:SOURCE_SHA" release-validation/selected-local-evidence
 
       - name: Retain verified local phase bundle
         id: local-evidence
@@ -559,7 +559,7 @@ jobs:
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
           MANIFEST_SHA256: ${{ needs.validate.outputs.local_manifest_sha256 }}
         run: |
-          node scripts/local-release-bundle.mjs verify local-evidence/bundle "$SOURCE_SHA"
+          node scripts/workstation-release-evidence.mjs verify local-evidence/bundle "$SOURCE_SHA"
           test "$(sha256sum local-evidence/bundle/manifest.json | cut -d ' ' -f 1)" = "$MANIFEST_SHA256"
           test ! -e local-release-evidence.zip
           ( cd local-evidence && zip -qr ../local-release-evidence.zip bundle selection.json )
@@ -603,12 +603,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
         run: node scripts/collect-hosted-release-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-hosted-evidence.json
-      - name: Recheck full local evidence before publication
+      - name: Recheck independent workstation evidence before publication
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
           MANIFEST_SHA256: ${{ needs.validate.outputs.local_manifest_sha256 }}
-        run: node scripts/collect-hosted-local-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-local-evidence "$MANIFEST_SHA256"
+        run: node scripts/collect-workstation-release-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-local-evidence "$MANIFEST_SHA256"
       - name: Verify draft local evidence attachment
         shell: pwsh
         env:
@@ -618,7 +618,7 @@ jobs:
           gh release download $env:TAG_NAME --repo $env:GITHUB_REPOSITORY --pattern local-release-evidence.zip --dir current-local-attachment
           if ($LASTEXITCODE -ne 0) { throw 'Cannot download the draft local evidence attachment.' }
           [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $PWD 'current-local-attachment/local-release-evidence.zip'), (Join-Path $PWD 'current-local-attachment/contents'))
-          node scripts/collect-hosted-local-evidence.mjs verify-attachment current-local-attachment/contents current-local-evidence/selection.json
+          node scripts/collect-workstation-release-evidence.mjs verify-attachment current-local-attachment/contents current-local-evidence/selection.json
           if ($LASTEXITCODE -ne 0) { throw 'Draft local evidence does not match the current verified selection.' }
       - name: Download original certified Windows selection
         uses: actions/download-artifact@v8

@@ -141,6 +141,10 @@ These tools run during builds and archive checks; they do not ship inside the ex
 The toolchain overrides its transitive `@azure/msal-node` to 7.1.1 (MIT) for the
 [authorization-code origin validation fix](https://github.com/advisories/GHSA-xcx6-jx8p-x3h5). Its unsigned archive workflow does not use interactive
 authentication. MSAL is maintained at https://github.com/AzureAD/microsoft-authentication-library-for-js.
+The same build-only toolchain pins transitive `qs` to 6.16.1 (BSD-3-Clause), which fixes
+[comma-array serialization crashes](https://github.com/advisories/GHSA-6pq8-jhm2-2vcw).
+Copyright (c) 2014, Nathan LaFreniere and other contributors. Its complete BSD license remains
+in the installed package. The project is maintained at https://github.com/ljharb/qs.
 
 The extension and UI use Vitest 4.1.12 and Vite 8.3.5 (MIT). The extension's security overrides also use patched
 brace-expansion, Undici and js-yaml releases, all under MIT, and serialize-javascript 7.1.4

@@ -8,6 +8,91 @@ namespace ETL_SQL.Portal.BrowserTests;
 public sealed class BrowserNavigationDiagnosticsTests(DetailSurfaceHarnessFixture fixture)
 {
     [Fact]
+    public async Task StudioStartupFailure_RetainsSanitizedHttpErrorsAndProcessResources()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        await using var context = await session.Page.Context.Browser!.NewContextAsync();
+        var directory = EvidenceDirectory();
+        await using (var diagnostics = new BrowserNavigationDiagnostics(context, directory))
+        {
+            var page = await context.NewPageAsync();
+            await page.RouteAsync("https://example.invalid/**", route => route.FulfillAsync(new()
+            { Status = 200, ContentType = "text/html", Body = "<title>Studio startup</title>" }));
+            await page.RouteAsync("**/api/studio/session?**", route => route.FulfillAsync(new()
+            { Status = 503, ContentType = "text/plain", Body = "private-response-body" }));
+            await page.GotoWithDiagnosticsAsync("https://example.invalid/studio?token=private-page-token");
+            Assert.Equal(503, await page.EvaluateAsync<int>("async () => (await fetch('/api/studio/session?token=private-api-token')).status"));
+            // flaky-wait-budget-ok: Studio is deliberately absent after a completed failed session request.
+            await Assert.ThrowsAsync<TimeoutException>(() => StudioPersistenceTests.WaitForStudioAsync(page, 100));
+        }
+        var snapshot = Assert.Single(ReadSnapshots(directory));
+        Assert.Equal("function-wait-failure", snapshot.GetProperty("trigger").GetString());
+        Assert.Equal(nameof(StudioStartupFailure_RetainsSanitizedHttpErrorsAndProcessResources), snapshot.GetProperty("caller").GetString());
+        var failure = Assert.Single(snapshot.GetProperty("requests").GetProperty("HttpErrors").EnumerateArray());
+        Assert.Equal(503, failure.GetProperty("Status").GetInt32());
+        Assert.Equal("https://example.invalid/api/studio/session", failure.GetProperty("Url").GetString());
+        Assert.NotEmpty(snapshot.GetProperty("processes").EnumerateArray());
+        Assert.DoesNotContain("private-", snapshot.GetRawText());
+    }
+
+    [Fact]
+    public async Task StudioReadiness_RequiresRequestedReportAndMatchingEditorBuffer()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.RouteAsync("https://example.invalid/**", route => route.FulfillAsync(new()
+        { Status = 200, ContentType = "text/html", Body = "<title>Studio readiness</title>" }));
+        await page.GotoWithDiagnosticsAsync("https://example.invalid/studio?reportId=7");
+        await page.EvaluateAsync("""
+            () => {
+                window.testEditorBuffer = '';
+                window.__STUDIO__ = { state: { activeDocId: 'report-7', documents: [],
+                    editorInstance: { getValue: () => window.testEditorBuffer } } };
+            }
+            """);
+        // flaky-wait-budget-ok: a mounted workbench without the requested report is deliberately not ready.
+        await Assert.ThrowsAsync<TimeoutException>(() => StudioPersistenceTests.WaitForStudioAsync(page, 100));
+        await page.EvaluateAsync("() => window.__STUDIO__.state.documents.push({ id: 'report-7', reportId: 7, content: 'saved buffer' })");
+        // flaky-wait-budget-ok: document metadata is present but its text has deliberately not reached the editor.
+        await Assert.ThrowsAsync<TimeoutException>(() => StudioPersistenceTests.WaitForStudioAsync(page, 100));
+        await page.EvaluateAsync("() => { window.testEditorBuffer = 'saved buffer'; }");
+        await StudioPersistenceTests.WaitForStudioAsync(page);
+        await page.EvaluateAsync("""
+            () => {
+                window.__STUDIO__.state.documents[0].content = 'first\rsecond\r\nthird';
+                window.testEditorBuffer = 'first\nsecond\nthird';
+            }
+            """);
+        await StudioPersistenceTests.WaitForStudioAsync(page);
+        await page.EvaluateAsync("() => { window.testEditorBuffer = ''; window.__STUDIO__.state.documents[0].content = ''; }");
+        await StudioPersistenceTests.WaitForStudioAsync(page);
+    }
+
+    [Fact]
+    public async Task FailedModule_RetainsScriptTransportFailureAfterSuccessfulDocumentNavigation()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        await using var context = await session.Page.Context.Browser!.NewContextAsync();
+        var directory = EvidenceDirectory();
+        await using (var diagnostics = new BrowserNavigationDiagnostics(context, directory))
+        {
+            var page = await context.NewPageAsync();
+            await page.RouteAsync("https://example.invalid/**", route => route.FulfillAsync(new()
+            { Status = 200, ContentType = "text/html", Body = "<script type='module' src='/studio.js?token=private-module-token'></script>" }));
+            await page.RouteAsync("**/studio.js?**", route => route.AbortAsync("connectionrefused"));
+            var response = await page.GotoWithDiagnosticsAsync("https://example.invalid/studio");
+            Assert.Equal(200, response!.Status);
+        }
+        var snapshot = Assert.Single(ReadSnapshots(directory));
+        Assert.Equal("transport-script", snapshot.GetProperty("trigger").GetString());
+        Assert.False(snapshot.GetProperty("requests").GetProperty("NavigationFailed").GetBoolean());
+        var failure = Assert.Single(snapshot.GetProperty("requests").GetProperty("Requests").EnumerateArray());
+        Assert.Equal("script", failure.GetProperty("ResourceType").GetString());
+        Assert.Equal("net::ERR_CONNECTION_REFUSED", failure.GetProperty("FailureCode").GetString());
+        Assert.DoesNotContain("private-module-token", snapshot.GetRawText());
+    }
+
+    [Fact]
     public async Task DesktopShutdownTimeout_RecordsTransportHistoryAndPreservesException()
     {
         await using var session = await fixture.NewSessionAsync();
@@ -70,7 +155,14 @@ public sealed class BrowserNavigationDiagnosticsTests(DetailSurfaceHarnessFixtur
                 if (process.GetProperty("HandleCount").ValueKind == JsonValueKind.Null)
                     Assert.NotEmpty(process.GetProperty("Unavailable").EnumerateArray());
                 else
-                    Assert.True(process.GetProperty("HandleCount").GetInt32() > 0);
+                {
+                    var handles = process.GetProperty("HandleCount").GetInt32();
+                    Assert.InRange(handles, 0, int.MaxValue);
+                    // A child can exit between CDP discovery and the native snapshot. The fixture
+                    // keeps only the main browser and test host alive throughout this check.
+                    if (process.GetProperty("Role").GetString() is "test-host" or "browser")
+                        Assert.True(handles > 0);
+                }
             }
             var host = Assert.Single(processes, process => process.GetProperty("Role").GetString() == "test-host");
             Assert.Equal(JsonValueKind.Number, host.GetProperty("TcpV4Endpoints").ValueKind);
