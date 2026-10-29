@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Measure Studio startup readiness independently of headless animation-frame delivery. Keep the
+  same editor-ready condition and performance budgets, and retain navigation/resource timing
+  alongside the result to distinguish loading delays from delayed observation.
+
 - Keep all 64 CI-impact routing cases in independent native processes and private directories,
   running at most four concurrently. Preserve the existing deadlines and assertions while reducing
   serial startup cost behind repeated hosted source-preflight timeouts.

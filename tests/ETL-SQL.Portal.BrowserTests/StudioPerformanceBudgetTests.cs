@@ -30,11 +30,39 @@ public sealed class StudioPerformanceBudgetTests(
 
         var startup = Stopwatch.StartNew();
         await page.GotoWithDiagnosticsAsync(StudioStory);
-        await page.WaitForFunctionAsync(
-            "() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)",
-            null,
-            new PageWaitForFunctionOptions { Timeout = 20_000 });
+        var navigationMs = startup.Elapsed.TotalMilliseconds;
+        await WaitForStudioReadyAsync(page);
         startup.Stop();
+
+        // Collect after stopping the existing timer so attribution does not change the budget.
+        // Keep only local pathnames: queries can carry session tokens in other sandbox stories.
+        var startupDetails = await page.EvaluateAsync<JsonElement>(
+            """
+            () => {
+              const navigation = performance.getEntriesByType('navigation')[0];
+              const resources = performance.getEntriesByType('resource');
+              return {
+                navigation: navigation ? {
+                  responseStartMs: navigation.responseStart,
+                  responseEndMs: navigation.responseEnd,
+                  domInteractiveMs: navigation.domInteractive,
+                  domContentLoadedMs: navigation.domContentLoadedEventEnd,
+                  loadMs: navigation.loadEventEnd
+                } : null,
+                resourceCount: resources.length,
+                slowestResources: resources.slice().sort((a, b) => b.duration - a.duration)
+                  .slice(0, 20).map(entry => ({
+                    path: new URL(entry.name).pathname,
+                    type: entry.initiatorType,
+                    startMs: entry.startTime,
+                    durationMs: entry.duration,
+                    responseStartMs: entry.responseStart,
+                    responseEndMs: entry.responseEnd,
+                    transferBytes: entry.transferSize
+                  }))
+              };
+            }
+            """);
 
         var heapMiB = await MeasureHeapMiBAsync(page);
         var keystrokeP95Ms = await MeasureKeystrokeP95Async(page);
@@ -104,10 +132,15 @@ public sealed class StudioPerformanceBudgetTests(
             KeystrokeP95Ms: keystrokeP95Ms,
             AggregationP95Ms: browserMeasures.GetProperty("aggregationP95Ms").GetDouble(),
             CanvasRedrawP95Ms: browserMeasures.GetProperty("canvasRedrawP95Ms").GetDouble(),
-            Budget: budget);
+            Budget: budget,
+            StartupNavigationMs: navigationMs,
+            StartupReadyWaitMs: startup.Elapsed.TotalMilliseconds - navigationMs,
+            StartupDetails: startupDetails);
 
         WriteResult(result);
         Record("startup", result.StartupMs, budget.StartupMs, "ms");
+        output.WriteLine($"studio-performance startup attribution: navigation {navigationMs:0.00} ms; "
+            + $"Studio readiness {result.StartupReadyWaitMs:0.00} ms; {startupDetails.GetRawText()}");
         Record("post-GC JavaScript heap", result.JsHeapMiB, budget.JsHeapMiB, "MiB");
         Record("keystroke input-to-frame p95", result.KeystrokeP95Ms, budget.KeystrokeP95Ms, "ms");
         Record("250-row aggregate/render p95", result.AggregationP95Ms, budget.AggregationP95Ms, "ms");
@@ -119,6 +152,44 @@ public sealed class StudioPerformanceBudgetTests(
         AssertWithin("250-row aggregate/render p95", result.AggregationP95Ms, budget.AggregationP95Ms, "ms");
         AssertWithin("canvas redraw/layout p95", result.CanvasRedrawP95Ms, budget.CanvasRedrawP95Ms, "ms");
         Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task StartupReadiness_WaitsForEditorWithoutDependingOnAnimationFrames()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        await session.Page.SetContentAsync("<!doctype html><title>Readiness control</title>");
+        await session.Page.EvaluateAsync("""
+            () => {
+              window.requestAnimationFrame = () => 1;
+              window.__readinessChecks = 0;
+              window.__editorReady = false;
+              window.__STUDIO_INSTANCE__ = { state: {
+                get editorInstance() {
+                  window.__readinessChecks++;
+                  return window.__editorReady ? {} : null;
+                }
+              } };
+            }
+            """);
+        var waiting = WaitForStudioReadyAsync(session.Page);
+        await using var checkedNotReady = await session.Page.WaitForFunctionAsync(
+            "() => window.__readinessChecks > 0", null,
+            new PageWaitForFunctionOptions { Timeout = 20_000, PollingInterval = 50 });
+        Assert.False(waiting.IsCompleted);
+        await session.Page.EvaluateAsync("() => { window.__editorReady = true; }");
+        await waiting;
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static async Task WaitForStudioReadyAsync(IPage page)
+    {
+        // Readiness is the editor state, not receipt of a headless animation frame. The default
+        // frame polling can observe an already-ready editor seconds late on Windows. Rendering
+        // and input-to-frame latency keep their separate measured budgets below.
+        await using var ready = await page.WaitForFunctionAsync(
+            "() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)", null,
+            new PageWaitForFunctionOptions { Timeout = 20_000, PollingInterval = 50 });
     }
 
     private static async Task<double> MeasureHeapMiBAsync(IPage page)
@@ -220,5 +291,8 @@ public sealed class StudioPerformanceBudgetTests(
         double KeystrokeP95Ms,
         double AggregationP95Ms,
         double CanvasRedrawP95Ms,
-        StudioPerformanceBudget Budget);
+        StudioPerformanceBudget Budget,
+        double StartupNavigationMs,
+        double StartupReadyWaitMs,
+        JsonElement StartupDetails);
 }

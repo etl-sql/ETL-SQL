@@ -759,6 +759,16 @@ bands are unchanged, and the final clean-candidate gate remains required.
 **Record:** [flaky-test stability](docs/releases/flaky-test-stability.md). v0.21.0 deferred these
 here; each one failed a single test per run and passed on rerun.
 
+**Studio startup budget follow-up, 2026-10-29:** release CI `40831673166` reports 10.9 seconds
+against the unchanged five-second Windows budget; its other Studio measurements pass. A local
+CPU/ready-state probe finds the editor ready at 167 ms while default animation-frame polling
+returns at 2.44 seconds. Timer polling observes the same condition at 191 ms. The measurement now
+uses 50 ms polling and retains post-timer navigation/resource attribution. The real fixture passes
+at 211 ms, and a regression with animation frames withheld verifies editor readiness still controls
+completion. Render/input budgets remain separate and unchanged. Hosted acceptance is pending;
+this does not explain or close the separate `ERR_NO_BUFFER_SPACE` transport failure. Original
+failure, profiles and local reports: `release-validation/critical-path/`.
+
 - [ ] **Browser lane on the Windows CI runner:** `net::ERR_NO_BUFFER_SPACE` and 30 s navigation
   timeouts, one test per run. The recorded next step is to capture failed requests and the process's
   handle and socket counts when a navigation fails.
