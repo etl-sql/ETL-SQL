@@ -12,6 +12,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Require the mounted macOS DMG CLI to report the exact release version and candidate commit.
+  Reject detach failures before recording DMG acceptance, while preserving an earlier launch or
+  asset-verification error when cleanup also fails.
+
+- Bound native ZIP/VSIX publishing with the shared process supervisor and retain diagnostics
+  before uploading full package artifacts. Preserve the publish log used by certification.
+  Also retain compiler-restore output, supervise asset preparation and bound native acceptance steps.
+  Bound preparation in reusable macOS release builds and upload their diagnostics before packages.
+  Bound DEB preflight and asset preparation, retain their logs on failure, and reserve upload time.
+
 - Preserve the workstation certification plan's original JSON timestamps. PowerShell date
   reserialization could trim fractional zeros and reject otherwise successful fresh or resumed evidence.
 

@@ -301,6 +301,44 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   before workers start; that separate original failure is retained and does not prove group recovery.
 - [ ] **Watchdogs and log streaming** on every long CI step, with the console streamed to an artifact
   and diagnostics uploaded on failure.
+  Native ZIP/VSIX publishing now uses a 75-minute process supervisor inside an 80-minute step
+  and 160-minute job, retaining the existing `publish.log` plus separate supervisor diagnostics.
+  A five-minute diagnostic upload precedes the full package artifact, which has a ten-minute
+  upload deadline. Executed workflow-command fixtures cover all four RIDs, success, failed exits
+  and timeout exits; actionlint and the shared supervisor regressions pass. Actual hosted timeout,
+  diagnostic retention and native timing acceptance remain open.
+  Native compiler restoration now retains both output channels under a five-minute step limit;
+  asset preparation uses a six-minute supervisor inside an eight-minute step. Candidate inspection,
+  extracted-CLI checks, DMG acceptance and VSIX acceptance have explicit step deadlines too.
+  Executed workflow fixtures cover restore failures and preparation timeout propagation for every
+  RID, including the per-RID diagnostic paths. Hosted execution and timeout/upload evidence remain open.
+  Windows/macOS package promotion fixtures pass with these changes. The Windows producer fixture
+  now extracts only its own workflow step, so inserting the diagnostic upload cannot feed YAML
+  into its PowerShell command. Receipt and unchanged-byte recovery checks remain intact.
+  The reusable macOS release build now bounds compiler restore, asset preparation and UI build,
+  retaining restore/build output and supervisor diagnostics per architecture. Diagnostics upload
+  before package artifacts under separate deadlines; the job budget leaves room after the existing
+  90-minute publish supervisor. Executed command fixtures cover both architectures, restore/build
+  failures and preparation timeouts. Actual hosted macOS timeout/upload evidence remains open.
+  DEB build and installed-upgrade preparation now have bounded preflight, compiler restore,
+  asset sync and sync-check commands with separate logs. Build diagnostics upload before candidate
+  packages; installed evidence includes preparation logs even when installation never starts.
+  Job budgets reserve time for the step deadlines and uploads. Executed command fixtures verify
+  arguments, both output streams, original failure/timeout exits and stopped follow-up commands.
+  Actionlint, DEB candidate and reuse fixtures pass; hosted timeout/upload evidence remains open.
+  Budget review caught the native job's original 110-minute ceiling below its 153 minutes of
+  configured step deadlines. The 160-minute ceiling now covers those steps plus setup; workflow
+  fixtures enforce that reserve for native, macOS release and both DEB jobs. This is a watchdog
+  ceiling, not a timing target. Original failing budget check: `release-validation/workflow-job-budgets/`.
+  Combined source validation passes all 51 checks in 121.3 seconds at
+  `release-validation/preflight/1793375598367-38192/summary.json`; the subsequent budget correction
+  passes the complete workflow fixture, actionlint and diff checks.
+  The accumulated package-watchdog batch passes 51 source checks, formatting, asset ownership,
+  browser types and lint. Consumer validation passes 120/122 initially; the two real SDK packaging
+  fixtures fail only on sandbox-blocked NuGet access and pass on focused network-enabled retries.
+  The remaining asset check, 53 Portal contracts/smoke cases and 142 engine smoke cases pass with
+  no skips. Original consumer summary: `release-validation/consumer-contracts/1793375955704-39792/`;
+  original gate and separate recovery/smoke logs: `release-validation/package-watchdogs-*.log`.
   **In progress:** MSI workstation and Portal jobs use the shared bounded supervisor. Other long
   CI steps still need coverage. Consumer-contract checks now retain per-check logs and summaries,
   stream bounded output chunks with heartbeats, and fail each child after 30 minutes while
@@ -1024,6 +1062,12 @@ failure, profiles and local reports: `release-validation/critical-path/`.
   is removed. Regression cases prove canonical options remain available and both retired forms
   receive no connector-option suggestions. All 459 language-server cases pass without skips.
 - [ ] **Review `scripts/`, the installers and `tests/`.** The v0.22.0 review covered `src/` only.
+  Native DMG acceptance review reproduces a green result when the mounted CLI reports an older
+  release. The workflow now requires the exact candidate version and commit, rejects missing or
+  mismatched candidate identity before mounting, and checks detach success before recording DMG
+  acceptance. Cleanup failures preserve earlier launch/asset failures. Ten executed workflow
+  scenarios cover these outcomes with mocked native tools; actual macOS installation remains
+  separate hosted evidence. Original failure and recovery: `release-validation/dmg-acceptance-review/`.
   **In progress 2026-10-25:** inventory contains 376 tracked script files and 1,856 test files,
   plus installer/deployment inputs. The MSI review reproduced P0 key loss when a replacement
   file could not be created: the old protected file was deleted and errors were ignored.

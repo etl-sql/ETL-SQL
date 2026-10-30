@@ -292,6 +292,234 @@ exit ([int]$env:FIXTURE_EXIT)
   }
   console.log('Browser shard preparation: bounded commands retain original arguments, failure exits and both log channels inside shard artifacts.');
   const nativeSource = readFileSync(new URL('../../.github/workflows/native-packages.yml', import.meta.url), 'utf8');
+  const nativeJob = nativeSource.split(/^  native-package:\r?\n/m)[1].split(/^  [\w-]+:\r?\n/m)[0];
+  const nativeStep = name => nativeJob.split(/^      - /m).find(block => block.split(/\r?\n/)[0] === `name: ${name}`);
+  const publishStep = nativeStep('Build native ZIP and VSIX');
+  const assertJobBudget = (job, name) => {
+    const budget = Number(job.match(/^    timeout-minutes: (\d+)/m)?.[1]);
+    const steps = [...job.matchAll(/^        timeout-minutes: (\d+)/gm)].reduce((total, match) => total + Number(match[1]), 0);
+    assert.ok(budget >= steps + 5, `${name}: ${budget} minutes cannot cover ${steps} minutes of steps plus setup`);
+  };
+  assertJobBudget(nativeJob, 'Native package');
+  assert.match(publishStep, /^        timeout-minutes: 80/m);
+  const nativeCommands = publishStep.split('        run: |')[1].replace(/^          /gm, '');
+  writeFileSync(path.join(directory, 'native-publish.ps1'), nativeCommands);
+  writeFileSync(path.join(directory, 'scripts/Invoke-CertificationProcess.ps1'), `
+param($Command, [string[]]$CommandArguments, $ScriptPath, [string[]]$ScriptArguments, $EvidenceDirectory, [int]$TimeoutSeconds)
+@{ Command = $Command; CommandArguments = $CommandArguments; ScriptPath = $ScriptPath; ScriptArguments = $ScriptArguments; EvidenceDirectory = $EvidenceDirectory; TimeoutSeconds = $TimeoutSeconds } | ConvertTo-Json | Set-Content $env:WORKFLOW_RECEIPT
+Write-Output 'native-publish-stdout'
+[Console]::Error.WriteLine('native-publish-stderr')
+exit ([int]$env:FIXTURE_EXIT)
+`);
+  for (const rid of ['win-x64', 'linux-x64', 'osx-x64', 'osx-arm64']) {
+    mkdirSync(path.join(directory, `artifacts/native-packages/${rid}`), { recursive: true });
+    for (const exit of [0, 7, 124]) {
+      const receipt = path.join(directory, 'native-publish-receipt.json');
+      const result = spawnSync('pwsh', ['-NoProfile', '-File', path.join(directory, 'native-publish.ps1')], {
+        cwd: directory, encoding: 'utf8', windowsHide: true, timeout: 10000,
+        env: { ...process.env, PACKAGE_RID: rid, WORKFLOW_RECEIPT: receipt, FIXTURE_EXIT: String(exit) },
+      });
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, exit === 0 ? 0 : 1, `${rid}/${exit}: ${result.stdout} ${result.stderr}`);
+      const actual = JSON.parse(readFileSync(receipt, 'utf8'));
+      assert.equal(actual.ScriptPath, 'scripts/publish-release.ps1');
+      assert.deepEqual(actual.ScriptArguments, ['-Platforms', rid]);
+      assert.equal(actual.TimeoutSeconds, 4500);
+      assert.equal(actual.EvidenceDirectory, `artifacts/native-packages/${rid}/publish-process`);
+      const output = readFileSync(path.join(directory, `artifacts/native-packages/${rid}/publish.log`), 'utf8');
+      assert.match(output, /native-publish-stdout/);
+      assert.match(result.stderr + result.stdout, /native-publish-stderr/);
+      if (exit !== 0) assert.match(result.stderr, /Native publish failed/);
+    }
+  }
+  const nativeRestore = nativeStep('Install browser compiler');
+  assert.match(nativeRestore, /shell: bash/);
+  assert.match(nativeRestore, /timeout-minutes: 5/);
+  const restoreNativeCommands = nativeRestore.split('        run: |')[1].replace(/^          /gm, '').replaceAll('\r\n', '\n');
+  const preparation = nativeStep('Prepare browser assets');
+  assert.match(preparation, /shell: pwsh/);
+  assert.match(preparation, /timeout-minutes: 8/);
+  const preparationHarness = path.join(directory, 'native-preparation.ps1');
+  writeFileSync(preparationHarness, preparation.match(/^        run: (.+)$/m)[1] + '\nexit $LASTEXITCODE\n');
+  for (const rid of ['win-x64', 'linux-x64', 'osx-x64', 'osx-arm64']) {
+    for (const exit of [0, 7]) {
+      const result = spawnSync(fixtureBash, ['-euo', 'pipefail', '-c',
+        `npm() { printf 'restore-args=%s\\n' "$*"; printf 'restore-stderr\\n' >&2; return "$FIXTURE_EXIT"; }\n${restoreNativeCommands}`], {
+        cwd: directory, encoding: 'utf8', windowsHide: true, timeout: 10000,
+        env: { ...process.env, PACKAGE_RID: rid, FIXTURE_EXIT: String(exit) },
+      });
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, exit, result.stdout + result.stderr);
+      const log = readFileSync(path.join(directory, `artifacts/native-packages/${rid}/restore-compiler.log`), 'utf8');
+      assert.match(log, /restore-args=ci --prefix scripts\/typecheck/);
+      assert.match(log, /restore-stderr/);
+    }
+    for (const exit of [0, 124]) {
+      const receipt = path.join(directory, 'native-preparation-receipt.json');
+      const result = spawnSync('pwsh', ['-NoProfile', '-File', preparationHarness], {
+        cwd: directory, encoding: 'utf8', windowsHide: true, timeout: 10000,
+        env: { ...process.env, PACKAGE_RID: rid, WORKFLOW_RECEIPT: receipt, FIXTURE_EXIT: String(exit) },
+      });
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, exit, result.stdout + result.stderr);
+      const actual = JSON.parse(readFileSync(receipt, 'utf8'));
+      assert.equal(actual.Command, 'node');
+      assert.deepEqual(actual.CommandArguments, ['scripts/sync-assets.js']);
+      assert.equal(actual.TimeoutSeconds, 360);
+      assert.equal(actual.EvidenceDirectory, `artifacts/native-packages/${rid}/preparation`);
+    }
+  }
+  for (const [name, minutes] of [['Record candidate and native host', 5], ['Verify checksums and launch the extracted CLI', 10],
+    ['Build, mount and launch macOS DMG package', 10], ['Verify VSIX webviews inside VS Code', 15]]) {
+    assert.match(nativeStep(name), new RegExp(`^        timeout-minutes: ${minutes}$`, 'm'));
+  }
+  const earlyDiagnostics = nativeStep('Retain native package diagnostics first');
+  assert.match(earlyDiagnostics, /if: always\(\)/);
+  assert.match(earlyDiagnostics, /timeout-minutes: 5/);
+  assert.ok(earlyDiagnostics.includes('native-package-diagnostics-${{ matrix.rid }}-${{ github.run_id }}-${{ github.run_attempt }}'));
+  assert.match(earlyDiagnostics, /path: artifacts\/native-packages\/\$\{\{ matrix.rid \}\}\//);
+  assert.ok(nativeJob.indexOf('Retain native package diagnostics first') < nativeJob.indexOf('Retain native package evidence'));
+  assert.match(nativeStep('Retain native package evidence'), /timeout-minutes: 10/);
+  console.log('Native publishing: all RIDs retain the publish-log contract, bounded supervisor arguments and failure/timeout propagation; diagnostics upload precedes packages.');
+  const macosSource = readFileSync(new URL('../../.github/workflows/macos-release-package.yml', import.meta.url), 'utf8');
+  const macosStep = name => macosSource.split(/^      - /m).find(block => block.split(/\r?\n/)[0] === `name: ${name}`);
+  const macosCommands = name => macosStep(name).split('        run: |')[1].replace(/^          /gm, '').replaceAll('\r\n', '\n');
+  for (const [name, minutes] of [['Install browser compiler', 5], ['Prepare browser assets', 8], ['Build extension UI', 10],
+    ['Require matching candidate and native architecture', 2], ['Record native package identity', 2],
+    ['Retain native packaging diagnostics', 5], ['Retain native packages before publication', 10]]) {
+    assert.match(macosStep(name), new RegExp(`^        timeout-minutes: ${minutes}$`, 'm'));
+  }
+  assert.match(macosSource, /^    timeout-minutes: 160$/m);
+  assertJobBudget(macosSource, 'macOS release');
+  assert.match(macosStep('Retain native packaging diagnostics'), /if: always\(\)/);
+  assert.ok(macosSource.indexOf('name: Retain native packaging diagnostics') < macosSource.indexOf('name: Retain native packages before publication'));
+  for (const rid of ['osx-x64', 'osx-arm64']) {
+    for (const failedCommand of ['', 'ci --prefix scripts/typecheck', 'ci', 'run build']) {
+      const result = spawnSync(fixtureBash, ['-euo', 'pipefail', '-c',
+        `export GITHUB_WORKSPACE="$PWD"\nnpm() { printf 'npm-args=%s\\n' "$*"; printf 'npm-stderr\\n' >&2; if [[ "$*" == "$FAILED_COMMAND" ]]; then return 7; fi; }\n${macosCommands('Install browser compiler')}\n${macosCommands('Build extension UI')}`], {
+        cwd: directory, encoding: 'utf8', windowsHide: true, timeout: 10000,
+        env: { ...process.env, PACKAGE_RID: rid, FAILED_COMMAND: failedCommand },
+      });
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, failedCommand ? 7 : 0, result.stdout + result.stderr);
+      const logName = failedCommand === 'ci' ? 'restore-ui' : failedCommand === 'run build' ? 'build-ui' : 'restore-compiler';
+      const log = readFileSync(path.join(directory, `release-validation/macos/${rid}/${logName}.log`), 'utf8');
+      assert.ok(log.includes(`npm-args=${failedCommand || 'ci --prefix scripts/typecheck'}`));
+      assert.match(log, /npm-stderr/);
+    }
+    for (const exit of [0, 124]) {
+      const receipt = path.join(directory, 'macos-preparation-receipt.json');
+      const harness = path.join(directory, 'macos-preparation.ps1');
+      writeFileSync(harness, macosCommands('Prepare browser assets') + '\nexit $LASTEXITCODE\n');
+      const result = spawnSync('pwsh', ['-NoProfile', '-File', harness], {
+        cwd: directory, encoding: 'utf8', windowsHide: true, timeout: 10000,
+        env: { ...process.env, PACKAGE_RID: rid, WORKFLOW_RECEIPT: receipt, FIXTURE_EXIT: String(exit) },
+      });
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, exit, result.stdout + result.stderr);
+      const actual = JSON.parse(readFileSync(receipt, 'utf8'));
+      assert.equal(actual.Command, 'node');
+      assert.deepEqual(actual.CommandArguments, ['scripts/sync-assets.js']);
+      assert.equal(actual.TimeoutSeconds, 360);
+      assert.equal(actual.EvidenceDirectory, `release-validation/macos/${rid}/preparation`);
+    }
+  }
+  console.log('macOS release preparation: both architectures retain restore/build logs, failure and timeout exits, and upload diagnostics before packages.');
+  const debSource = readFileSync(new URL('../../.github/workflows/deb-upgrade.yml', import.meta.url), 'utf8');
+  const debStep = name => debSource.split(/^      - /m).find(block => block.split(/\r?\n/)[0] === `name: ${name}`);
+  for (const jobName of ['build', 'installed-upgrade']) {
+    const job = debSource.split(new RegExp(`^  ${jobName}:\\r?\\n`, 'm'))[1].split(/^  [\w-]+:\r?\n/m)[0];
+    assertJobBudget(job, `DEB ${jobName}`);
+  }
+  for (const [name, minutes, invocations] of [
+    ['Source preflight', 22, ['2m node scripts/setup-actionlint.mjs', '18m node scripts/release-preflight.mjs']],
+    ['Prepare browser assets', 15, ['4m npm ci --prefix scripts/typecheck', '6m node scripts/sync-assets.js', '2m node scripts/sync-assets.js -Check']],
+    ['Prepare asset comparison sources', 12, ['4m npm ci --prefix scripts/typecheck', '6m node scripts/sync-assets.js']],
+  ]) {
+    const step = debStep(name);
+    assert.match(step, /shell: bash/);
+    assert.match(step, new RegExp(`^        timeout-minutes: ${minutes}$`, 'm'));
+    const commands = step.split('        run: |')[1].replace(/^          /gm, '').replaceAll('\r\n', '\n');
+    const logs = [...commands.matchAll(/\| tee (\S+)/g)].map(match => match[1]);
+    for (const failedIndex of [-1, ...invocations.keys()]) for (const exit of failedIndex === -1 ? [0] : [7, 124]) {
+      const result = spawnSync(fixtureBash, ['-euo', 'pipefail', '-c',
+        `timeout() { printf 'timeout-args=%s\\n' "$*"; printf 'timeout-stderr\\n' >&2; if [[ "$*" == "$FAILED_COMMAND" ]]; then return "$FIXTURE_EXIT"; fi; }\n${commands}`], {
+        cwd: directory, encoding: 'utf8', windowsHide: true, timeout: 10000,
+        env: { ...process.env, FAILED_COMMAND: failedIndex === -1 ? '' : `--signal=TERM --kill-after=30s ${invocations[failedIndex]}`, FIXTURE_EXIT: String(exit) },
+      });
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, exit, `${name}: ${result.stdout} ${result.stderr}`);
+      const executed = failedIndex === -1 ? invocations.length : failedIndex + 1;
+      assert.equal((result.stdout.match(/timeout-args=/g) || []).length, executed);
+      for (let index = 0; index < executed; index++) {
+        const log = readFileSync(path.join(directory, logs[index]), 'utf8');
+        assert.ok(log.includes(`timeout-args=--signal=TERM --kill-after=30s ${invocations[index]}`));
+        assert.match(log, /timeout-stderr/);
+      }
+    }
+  }
+  assert.ok(debSource.indexOf('name: Retain build diagnostics') < debSource.indexOf('name: Retain immutable candidate pair'));
+  for (const name of ['Retain build diagnostics', 'Retain installation evidence']) {
+    assert.match(debStep(name), /if: always\(\)/);
+    assert.match(debStep(name), /timeout-minutes: 5/);
+  }
+  assert.ok(debStep('Retain installation evidence').includes('release-validation/deb/preparation/*.log'));
+  console.log('DEB preparation: bounded preflight/restore/sync/check commands retain both streams, stop on failures/timeouts and include preparation logs in installation evidence.');
+  const dmgDirectory = path.join(directory, 'dmg-acceptance');
+  mkdirSync(path.join(dmgDirectory, 'artifacts/native-packages/osx-x64'), { recursive: true });
+  mkdirSync(path.join(dmgDirectory, 'release'));
+  writeFileSync(path.join(dmgDirectory, 'Directory.Build.props'), '<Project><PropertyGroup><VersionPrefix>0.22.0</VersionPrefix></PropertyGroup></Project>');
+  writeFileSync(path.join(dmgDirectory, 'fixture-cli.ps1'), "Write-Output $env:FIXTURE_CLI_VERSION\nexit ([int]$env:FIXTURE_CLI_EXIT)\n");
+  const dmgStep = nativeStep('Build, mount and launch macOS DMG package');
+  const dmgBody = dmgStep.split('        run: |')[1].replace(/^          /gm, '').replaceAll('\r\n', '\n');
+  const mountedCli = "'/Volumes/ETL-SQL/ETL-SQL.app/Contents/Resources/bin/ETL-SQL'";
+  assert.ok(dmgBody.includes(mountedCli));
+  const dmgHarness = path.join(dmgDirectory, 'accept.ps1');
+  writeFileSync(dmgHarness, `
+function bash { Set-Content -LiteralPath 'ETL-SQL_v0.22.0.dmg' -Value 'fixture-image'; $global:LASTEXITCODE = 0 }
+function hdiutil {
+  $args[0] | Add-Content -LiteralPath 'mount-actions.log'
+  $global:LASTEXITCODE = if ($args[0] -eq 'detach') { [int]$env:FIXTURE_DETACH_EXIT } else { 0 }
+}
+function node { $global:LASTEXITCODE = [int]$env:FIXTURE_ASSETS_EXIT }
+${dmgBody.replace(mountedCli, "(Join-Path $PWD 'fixture-cli.ps1')")}
+`);
+  const dmgSummaryPath = path.join(dmgDirectory, 'artifacts/native-packages/osx-x64/certification.json');
+  const dmgCommit = 'a'.repeat(40), dmgVersion = `0.22.0+${dmgCommit}`;
+  for (const scenario of [
+    { name: 'accepted', passed: true },
+    { name: 'wrong-version', version: `0.21.0+${dmgCommit}`, error: /exact candidate version/ },
+    { name: 'wrong-commit', version: `0.22.0+${'b'.repeat(40)}`, error: /exact candidate version/ },
+    { name: 'empty-version', version: '', error: /exact candidate version/ },
+    { name: 'launch-failure', cli: 7, error: /exit code 7/ },
+    { name: 'asset-failure', assets: 8, error: /do not match inventory/ },
+    { name: 'detach-failure', detach: 9, error: /hdiutil detach failed/ },
+    { name: 'primary-and-detach-failure', cli: 7, detach: 9, error: /exit code 7/ },
+    { name: 'wrong-summary-candidate', summaryCommit: 'b'.repeat(40), beforeMount: true, error: /exact candidate identity/ },
+    { name: 'missing-candidate', candidate: '', beforeMount: true, error: /exact candidate identity/ },
+  ]) {
+    const original = JSON.stringify({ commit: scenario.summaryCommit ?? dmgCommit, status: 'Passed' });
+    writeFileSync(dmgSummaryPath, original);
+    writeFileSync(path.join(dmgDirectory, 'mount-actions.log'), '');
+    const result = spawnSync('pwsh', ['-NoProfile', '-File', dmgHarness], {
+      cwd: dmgDirectory, encoding: 'utf8', windowsHide: true, timeout: 10000,
+      env: { ...process.env, PACKAGE_RID: 'osx-x64', CANDIDATE_SHA: scenario.candidate ?? dmgCommit, FIXTURE_CLI_VERSION: scenario.version ?? dmgVersion,
+        FIXTURE_CLI_EXIT: String(scenario.cli ?? 0), FIXTURE_ASSETS_EXIT: String(scenario.assets ?? 0), FIXTURE_DETACH_EXIT: String(scenario.detach ?? 0) },
+    });
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, scenario.passed ? 0 : 1, `${scenario.name}: ${result.stdout} ${result.stderr}`);
+    const mountActions = readFileSync(path.join(dmgDirectory, 'mount-actions.log'), 'utf8').trim();
+    assert.deepEqual(mountActions ? mountActions.split(/\r?\n/) : [], scenario.beforeMount ? [] : ['attach', 'detach']);
+    if (scenario.passed) {
+      const summary = JSON.parse(readFileSync(dmgSummaryPath, 'utf8'));
+      assert.equal(summary.dmgMountedAndLaunched, true);
+      assert.match(summary.dmgSha256, /^[a-f0-9]{64}$/);
+    } else {
+      assert.match(result.stderr, scenario.error);
+      assert.equal(readFileSync(dmgSummaryPath, 'utf8'), original, 'Failed DMG acceptance must not publish success fields.');
+    }
+  }
+  console.log('DMG workflow: exact candidate launch, failed launch/assets/detach and preservation of the primary failure passed with mocked native tools.');
   assert.match(nativeSource, /native-package:\r?\n    needs: package-impact\r?\n    if: needs\.package-impact\.outputs\.should_run == 'true'/);
   assert.match(nativeSource, /fetch-depth: 0/);
   assert.match(nativeSource, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
