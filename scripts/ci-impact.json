@@ -39,6 +39,12 @@
       "nativePackages": false
     },
     {
+      "name": "MSI certification scripts and focused fixtures",
+      "pattern": "^scripts/(?:Test-Msi(?:Portal)?Upgrade\\.ps1|checks/(?:Test-Msi(?:Checkpoint|BackupEvidence)\\.ps1|test-msi-candidate\\.mjs))$",
+      "lanes": ["msi-upgrade"],
+      "nativePackages": false
+    },
+    {
       "name": "Core, runtime, shared UI, dependencies and unclassified files",
       "pattern": "^",
       "lanes": "*",

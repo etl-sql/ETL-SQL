@@ -23,6 +23,14 @@ try {
     'workstation-resume.mjs', 'hosted-local-resume.mjs']) {
     copyFileSync(fileURLToPath(new URL(`../${file}`, import.meta.url)), path.join(root, 'scripts', file));
   }
+  // Force a valid timestamp ending in zero milliseconds. PowerShell's default
+  // JSON date conversion trims that zero, which must not change the original plan.
+  const resumePath = path.join(root, 'scripts/workstation-resume.mjs');
+  const resumeSource = readFileSync(resumePath, 'utf8');
+  const originalStart = 'let attempt = 1, startedUtc = new Date().toISOString();';
+  assert.ok(resumeSource.includes(originalStart));
+  writeFileSync(resumePath, resumeSource.replace(originalStart,
+    "let attempt = 1, startedUtc = new Date().toISOString().replace(/\\dZ$/, '0Z');"));
   // A tiny gate supplies synthetic phases. The real wrapper, supervisor, source guards and bundle run.
   writeFileSync(path.join(root, 'scripts/Test-PreRelease.ps1'), `
 param([string]$Configuration,[switch]$IncludeSlt,[switch]$IncludeDockerIntegration,[switch]$IncludeStandardScale,[string]$OutDir,[switch]$Resume)
@@ -77,6 +85,8 @@ scope:{quick:false,forceResume:false,skipNode:false,skipScale:false,includeSlt:t
     extractWorkstationArchive(path.join(directory, 'windows-workstation-evidence.zip'), extracted);
     assert.equal(verifyWorkstationEvidence(path.join(extracted, 'bundle'), sha).phaseCount, 44);
     const invocation = readFileSync(path.join(directory, 'invocation.json'), 'utf8');
+    assert.match(JSON.parse(invocation).startedUtc, /\d{2}0Z$/);
+    assert.equal(JSON.parse(readFileSync(path.join(directory, 'process-result.json'))).startedUtc, JSON.parse(invocation).startedUtc);
     assert.notEqual(invoke('success').status, 0);
     assert.equal(readFileSync(path.join(directory, 'invocation.json'), 'utf8'), invocation);
     assert.notEqual(invoke('hosted', { GITHUB_ACTIONS: 'true', GITHUB_RUN_ID: '123' }).status, 0);
@@ -87,6 +97,8 @@ scope:{quick:false,forceResume:false,skipNode:false,skipScale:false,includeSlt:t
     const firstResult = readFileSync(path.join(recovery, 'process-result.json'), 'utf8');
     const recovered = invoke('recoverable', {}, true);
     assert.equal(recovered.status, 0, recovered.stdout + recovered.stderr);
+    assert.equal(JSON.parse(readFileSync(path.join(recovery, 'attempt-2.result.json'))).startedUtc,
+      JSON.parse(readFileSync(path.join(recovery, 'invocation.json'))).startedUtc);
     const final = JSON.parse(readFileSync(path.join(recovery, 'validation/latest/state.json')));
     assert.deepEqual(final.phases.slice(0, -1), JSON.parse(original).phases.slice(0, -1));
     assert.equal(readFileSync(path.join(recovery, 'process-result.json'), 'utf8'), firstResult);

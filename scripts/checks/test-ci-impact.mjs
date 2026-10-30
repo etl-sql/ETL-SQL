@@ -9,6 +9,23 @@ import { manifest, selectLanes, changedPaths, runSelection, validateManifest } f
 import { runPrepushCases } from './fixtures/parallel-prepush-cases.mjs';
 
 const all = manifest.lanes;
+const msiOnlyPaths = ['scripts/Test-MsiUpgrade.ps1', 'scripts/Test-MsiPortalUpgrade.ps1',
+  'scripts/checks/Test-MsiCheckpoint.ps1', 'scripts/checks/Test-MsiBackupEvidence.ps1',
+  'scripts/checks/test-msi-candidate.mjs'];
+for (const file of msiOnlyPaths) {
+  const result = selectLanes([file, 'TODO.md']);
+  assert.deepEqual(result.lanes, ['source-preflight', 'msi-upgrade'], file);
+  assert.equal(result.nativePackages, false, file);
+  assert.equal(result.certification, false, file);
+  assert.deepEqual(selectLanes([file], { full: true }).lanes, all);
+  assert.equal(selectLanes([file], { full: true }).nativePackages, true);
+  assert.deepEqual(selectLanes([file, 'src/ETL-SQL.Portal/Program.cs']).lanes, all);
+}
+for (const file of ['scripts/MsiUpgrade.Helpers.ps1', 'scripts/MsiImpact.Helpers.ps1',
+  'scripts/build-msi.ps1', 'scripts/Test-MsiNewCheck.ps1', 'scripts/checks/Test-MsiBackupEvidence.ps1.extra']) {
+  assert.deepEqual(selectLanes([file]).lanes, all, file);
+  assert.equal(selectLanes([file]).nativePackages, true, file);
+}
 assert.ok(process.argv.length === 2 || (process.argv.length === 4 && ['--legacy-prepush', '--legacy-mixed-prepush'].includes(process.argv[2]) && /^[a-f0-9]{7,40}$/.test(process.argv[3])));
 const legacyPrePush = process.argv[2] === '--legacy-prepush' ? process.argv[3] : null;
 const legacyMixedPrePush = process.argv[2] === '--legacy-mixed-prepush' ? process.argv[3] : null;
@@ -95,7 +112,7 @@ for (const options of [
   { browserShard: '1', lanes: ['portal-browser-journey'], full: true },
   ...['0', '4', '1,2', '01', '', '1; echo bad'].map(browserShard => ({ browserShard, lanes: ['portal-browser-journey'] })),
 ]) assert.throws(() => runSelection(options), /browser shard requires/);
-for (const selection of [selectLanes(['src/etl-sql-vscode/ui/src/App.tsx']), selectLanes(['TODO.md']),
+for (const selection of [selectLanes(msiOnlyPaths), selectLanes(['src/etl-sql-vscode/ui/src/App.tsx']), selectLanes(['TODO.md']),
   selectLanes(['src/etl-sql-vscode/src/extension.ts']), selectLanes([], { full: true })]) {
   for (const event of ['push', 'pull_request', 'workflow_dispatch']) {
     for (const lane of manifest.lanes.filter(lane => !['source-preflight', 'msi-upgrade'].includes(lane))) {
@@ -134,7 +151,7 @@ try {
     'tests/ETL-SQL.Portal.BrowserTests/Journey.cs', 'tests/ETL-SQL.Portal.BrowserTests/Fixtures/Portal.cs',
     'tests/ETL-SQL.Portal.BrowserTests/project.csproj', 'src/etl-sql-vscode/ui/src/App.tsx',
     'src/etl-sql-vscode/src/extension.ts', 'src/ETL-SQL.Orchestrator.Service/Program.cs',
-    'Directory.Build.props', '.github/workflows/msi-upgrade.yml', 'unknown/file', 'TODO.MD'];
+    'Directory.Build.props', '.github/workflows/msi-upgrade.yml', 'unknown/file', 'TODO.MD', ...msiOnlyPaths];
   file('package-paths.json', JSON.stringify(packagePaths));
   file('package-parity.ps1', `
 $ErrorActionPreference = 'Stop'
@@ -150,7 +167,10 @@ ConvertTo-Json -InputObject @($results)
   assert.equal(parity.status, 0, parity.stdout + parity.stderr);
   const packageResults = JSON.parse(parity.stdout);
   assert.equal(packageResults.length, packagePaths.length);
-  for (const result of packageResults) assert.equal(result.shouldRun, selectLanes([result.path]).nativePackages, result.path);
+  for (const result of packageResults) {
+    const selected = selectLanes([result.path]);
+    assert.equal(result.shouldRun, selected.nativePackages || selected.lanes.includes('msi-upgrade'), result.path);
+  }
   rmSync(path.join(fixture, 'package-paths.json'));
   rmSync(path.join(fixture, 'package-parity.ps1'));
   git('init');

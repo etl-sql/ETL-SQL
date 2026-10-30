@@ -60,6 +60,12 @@ unknown inputs require it. Missing comparison history requires certification. Ma
 release workflow calls always run full MSI certification. Invalid or missing impact policy fails
 detection and cannot satisfy the MSI gate.
 
+The explicitly listed MSI certification scripts and fixtures select only source preflight and
+`msi-upgrade` in regular CI. The MSI classifier requires certification for either native-package
+impact or an explicit MSI lane, so these fixes still build and install-test the MSI while skipping
+unrelated ZIP/VSIX builds. Shared helpers, build scripts and unknown files retain broad selection.
+Local pre-push keeps its existing full validation path for MSI-only edits.
+
 ```powershell
 # Changes since the tracked upstream, including staged, unstaged and untracked local files.
 node scripts\select-ci-lanes.mjs --base '@{upstream}' --working-tree

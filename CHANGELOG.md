@@ -12,6 +12,28 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Preserve the workstation certification plan's original JSON timestamps. PowerShell date
+  reserialization could trim fractional zeros and reject otherwise successful fresh or resumed evidence.
+
+- Recheck the complete draft asset inventory immediately before release publication against a
+  retained, hash-pinned manifest from platform verification. Changed, missing or extra packages,
+  evidence, checksums or SBOM now block publication across every platform.
+
+- Include candidate-cut, tag and publication times and attempt reasons from an external,
+  candidate-bound ledger in release timeline reports. Label supplied timestamps explicitly,
+  preserve unknown values and report total release elapsed time separately from parallel job time.
+
+- Verify hosted browser asset-generation checks after the compiler optimization: 635.3 seconds
+  versus the earlier 996.2-second run, with all 122 consumer checks passing. Retain both archive
+  digests and tested source identities; full-release timing remains separate.
+
+- Reject release timeline collection if a selected run changes during collection or its final
+  state cannot be read. Concurrent retries can no longer leave an outdated completed-run report.
+
+- Limit MSI certification-script fixes to source checks and MSI build/install certification in
+  regular CI. Keep shared helpers, package-build scripts, unknown files and full certification
+  on the conservative path; unrelated native package and browser jobs no longer run for these fixes.
+
 - Measure Studio startup readiness independently of headless animation-frame delivery. Keep the
   same editor-ready condition and performance budgets, and retain navigation/resource timing
   alongside the result to distinguish loading delays from delayed observation.
