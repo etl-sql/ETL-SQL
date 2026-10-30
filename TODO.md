@@ -19,6 +19,9 @@ Deferred initiatives stay in `ROADMAP.md` until selected.
 
 ## Now — v0.22.0 work that can be done today
 
+**Current execution focus:** [release recovery acceptance](docs/releases/recovery-acceptance.md).
+Finish its remaining hosted proof and complete-candidate timing before expanding other work.
+
 ### 1. Faster release certification
 
 **Design:** [`ROADMAP.md`](ROADMAP.md#release-engineering--faster-release-certification), which also
@@ -339,6 +342,13 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   The remaining asset check, 53 Portal contracts/smoke cases and 142 engine smoke cases pass with
   no skips. Original consumer summary: `release-validation/consumer-contracts/1793375955704-39792/`;
   original gate and separate recovery/smoke logs: `release-validation/package-watchdogs-*.log`.
+  Release validation now supervises workflow-checker setup, source preflight and hosted,
+  workstation and Windows evidence collection. Each retains stdout/stderr and supervisor results;
+  the always-run preflight artifact includes those diagnostics. Collector and upload deadlines fit
+  a 110-minute job budget. Executed workflow commands use the real supervisor with stand-in
+  collectors to verify exact arguments, inherited GitHub output files, logs and exits 0/7/124.
+  Actionlint and hosted/workstation/Windows evidence fixtures pass. Hosted timeout/upload
+  verification remains open; no certification or publication acceptance is inferred from fixtures.
   **In progress:** MSI workstation and Portal jobs use the shared bounded supervisor. Other long
   CI steps still need coverage. Consumer-contract checks now retain per-check logs and summaries,
   stream bounded output chunks with heartbeats, and fail each child after 30 minutes while

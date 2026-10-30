@@ -26,6 +26,7 @@ jobs:
   # 1. Validation Job - ensures the release is stable
   validate:
     name: Validate & Test
+    timeout-minutes: 110
     outputs:
       source_sha: ${{ steps.candidate.outputs.source_sha }}
       hosted_evidence_artifact_id: ${{ steps.hosted-evidence.outputs.artifact-id }}
@@ -44,6 +45,7 @@ jobs:
           fetch-depth: 0
 
       - name: Verify release tag is on a supported release branch
+        timeout-minutes: 5
         id: candidate
         shell: pwsh
         run: |
@@ -68,19 +70,26 @@ jobs:
           node-version: 22
 
       - name: Prepare pinned workflow checker
-        run: node scripts/setup-actionlint.mjs
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/setup-actionlint.mjs') -EvidenceDirectory release-validation/supervisors/checker -TimeoutSeconds 180
       - name: Collect source preflight findings
+        timeout-minutes: 22
+        shell: pwsh
         env:
           ETLSQL_RELEASE_TAG: ${{ env.TAG_NAME }}
-        run: node scripts/release-preflight.mjs
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/release-preflight.mjs') -EvidenceDirectory release-validation/supervisors/preflight -TimeoutSeconds 1200
 
       - name: Require exact-candidate CI and CodeQL evidence
+        timeout-minutes: 12
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
-        run: node scripts/collect-hosted-release-evidence.mjs "$env:GITHUB_REPOSITORY" "$env:SOURCE_SHA" release-validation/hosted-release-evidence.json
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-hosted-release-evidence.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, 'release-validation/hosted-release-evidence.json') -EvidenceDirectory release-validation/supervisors/hosted -TimeoutSeconds 600
 
       - name: Retain selected hosted evidence
+        timeout-minutes: 5
         id: hosted-evidence
         uses: actions/upload-artifact@v7
         with:
@@ -90,13 +99,16 @@ jobs:
           retention-days: 30
 
       - name: Require uploaded independent workstation evidence
+        timeout-minutes: 12
+        shell: pwsh
         id: local-selection
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
-        run: node scripts/collect-workstation-release-evidence.mjs "$env:GITHUB_REPOSITORY" "$env:SOURCE_SHA" release-validation/selected-local-evidence
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-workstation-release-evidence.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, 'release-validation/selected-local-evidence') -EvidenceDirectory release-validation/supervisors/workstation -TimeoutSeconds 600
 
       - name: Retain verified local phase bundle
+        timeout-minutes: 10
         id: local-evidence
         uses: actions/upload-artifact@v7
         with:
@@ -108,12 +120,14 @@ jobs:
       - name: Require certified pre-tag Windows packages
         id: windows-selection
         timeout-minutes: 15
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
-        run: node scripts/collect-certified-windows.mjs "$env:GITHUB_REPOSITORY" "$env:SOURCE_SHA" $env:TAG_NAME.TrimStart('v') release-validation/selected-windows
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-certified-windows.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, $env:TAG_NAME.TrimStart('v'), 'release-validation/selected-windows') -EvidenceDirectory release-validation/supervisors/windows -TimeoutSeconds 780
 
       - name: Retain certified Windows selection
+        timeout-minutes: 5
         id: windows-evidence
         uses: actions/upload-artifact@v7
         with:
@@ -124,10 +138,13 @@ jobs:
 
       - name: Upload source preflight logs
         if: always()
+        timeout-minutes: 5
         uses: actions/upload-artifact@v7
         with:
           name: release-preflight-${{ github.run_id }}-${{ github.run_attempt }}
-          path: release-validation/preflight/
+          path: |
+            release-validation/preflight/
+            release-validation/supervisors/
           if-no-files-found: warn
           retention-days: 30
 

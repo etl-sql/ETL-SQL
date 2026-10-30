@@ -579,6 +579,55 @@ ${selectionCommands}
     }
   }
   console.log('Native package selection: full manual scope, PR comparison, typed impact, safe skip and failed/cancelled/missing gate outcomes passed.');
+  const validation = jobs.get('validate');
+  assertJobBudget(validation, 'Release validation');
+  const validationStep = name => validation.split(/^      - /m).find(block => block.split(/\r?\n/)[0] === `name: ${name}`);
+  writeFileSync(path.join(directory, 'scripts/Invoke-CertificationProcess.ps1'), readFileSync(new URL('../Invoke-CertificationProcess.ps1', import.meta.url)));
+  const candidate = 'a'.repeat(40);
+  for (const [name, script, args, evidence, seconds, minutes] of [
+    ['Prepare pinned workflow checker', 'setup-actionlint.mjs', [], 'checker', 180, 5],
+    ['Collect source preflight findings', 'release-preflight.mjs', [], 'preflight', 1200, 22],
+    ['Require exact-candidate CI and CodeQL evidence', 'collect-hosted-release-evidence.mjs', ['owner/repository', candidate, 'release-validation/hosted-release-evidence.json'], 'hosted', 600, 12],
+    ['Require uploaded independent workstation evidence', 'collect-workstation-release-evidence.mjs', ['owner/repository', candidate, 'release-validation/selected-local-evidence'], 'workstation', 600, 12],
+    ['Require certified pre-tag Windows packages', 'collect-certified-windows.mjs', ['owner/repository', candidate, '0.22.0', 'release-validation/selected-windows'], 'windows', 780, 15],
+  ]) {
+    const step = validationStep(name);
+    assert.match(step, /shell: pwsh/);
+    assert.match(step, new RegExp(`^        timeout-minutes: ${minutes}$`, 'm'));
+    writeFileSync(path.join(directory, 'scripts', script), `import { writeFileSync } from 'node:fs';
+writeFileSync(process.env.WORKFLOW_RECEIPT, JSON.stringify(process.argv.slice(2)));
+writeFileSync(process.env.GITHUB_OUTPUT, 'fixture_output=retained\\n');
+console.log('collector stdout'); console.error('collector stderr');
+process.exit(Number(process.env.FIXTURE_EXIT));`);
+    const harness = path.join(directory, 'release-validation-step.ps1');
+    writeFileSync(harness, step.match(/^        run: (.+)$/m)[1] + '\nexit $LASTEXITCODE\n');
+    for (const exit of [0, 7, 124]) {
+      const receipt = path.join(directory, 'release-collector-args.json');
+      const output = path.join(directory, 'release-collector-output.txt');
+      writeFileSync(output, '');
+      const result = spawnSync('pwsh', ['-NoProfile', '-File', harness], {
+        cwd: directory, encoding: 'utf8', windowsHide: true, timeout: 15000,
+        env: { ...process.env, GITHUB_REPOSITORY: 'owner/repository', SOURCE_SHA: candidate, TAG_NAME: 'v0.22.0',
+          WORKFLOW_RECEIPT: receipt, GITHUB_OUTPUT: output, FIXTURE_EXIT: String(exit) },
+      });
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, exit, `${name}: ${result.stdout} ${result.stderr}`);
+      assert.deepEqual(JSON.parse(readFileSync(receipt, 'utf8')), args);
+      assert.equal(readFileSync(output, 'utf8'), 'fixture_output=retained\n');
+      const evidencePath = path.join(directory, 'release-validation/supervisors', evidence);
+      const supervision = JSON.parse(readFileSync(path.join(evidencePath, 'result.json'), 'utf8'));
+      assert.equal(supervision.exitCode, exit);
+      assert.equal(supervision.timeoutSeconds, seconds);
+      assert.match(readFileSync(path.join(evidencePath, 'stdout.log'), 'utf8'), /collector stdout/);
+      assert.match(readFileSync(path.join(evidencePath, 'stderr.log'), 'utf8'), /collector stderr/);
+    }
+  }
+  const releaseLogs = validationStep('Upload source preflight logs');
+  assert.match(releaseLogs, /if: always\(\)/);
+  assert.match(releaseLogs, /timeout-minutes: 5/);
+  assert.ok(releaseLogs.includes('release-validation/preflight/'));
+  assert.ok(releaseLogs.includes('release-validation/supervisors/'));
+  console.log('Release validation: real supervisor preserves collector arguments, step outputs, both log streams and exit codes under recorded deadlines.');
   const first = path.join(directory, 'expression.yml');
   const second = path.join(directory, 'syntax.yml');
   const good = path.join(directory, 'good.yml');

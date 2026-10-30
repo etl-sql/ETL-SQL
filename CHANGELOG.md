@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Bound release-validation preflight and evidence collectors with the shared process supervisor.
+  Retain their diagnostics on failure and reserve time for evidence uploads.
+  Track release timing and failed-job recovery in a focused acceptance table.
+
 - Require the mounted macOS DMG CLI to report the exact release version and candidate commit.
   Reject detach failures before recording DMG acceptance, while preserving an earlier launch or
   asset-verification error when cleanup also fails.
