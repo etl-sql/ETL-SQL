@@ -1,0 +1,98 @@
+name: Release upload recovery rehearsal
+on:
+  push:
+    branches: [rehearsal/release-upload-recovery]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+env:
+  SOURCE_SHA: d800288e20cc44da52747cd5ac00925729408c41
+  SOURCE_RUN: '40940345271'
+  SOURCE_ARTIFACT: '12928589167'
+  SOURCE_DIGEST: sha256:728e4b81eb188ec30d0a1c4823b3e782eef20600d6113a8a6af1068fb3cc769e
+  REHEARSAL_TAG: rehearsal-upload-${{ github.run_id }}
+  TAG_NAME: v0.21.0
+jobs:
+  retain-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      artifact_id: ${{ steps.identity.outputs.artifact_id }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Pin existing accepted package artifact
+        id: identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p evidence
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$SOURCE_ARTIFACT" > evidence/source-artifact.json
+          node --input-type=module -e 'import fs from "node:fs"; import assert from "node:assert/strict"; const a=JSON.parse(fs.readFileSync("evidence/source-artifact.json")); assert.equal(String(a.id),process.env.SOURCE_ARTIFACT); assert.equal(a.expired,false); assert.equal(a.digest,process.env.SOURCE_DIGEST); assert.equal(String(a.workflow_run.id),process.env.SOURCE_RUN); assert.equal(a.workflow_run.head_sha,process.env.SOURCE_SHA);'
+          echo "artifact_id=$SOURCE_ARTIFACT" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pinned-source-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
+  prepare-draft:
+    needs: retain-source
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Create isolated draft only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$REHEARSAL_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --prerelease --title "Diagnostic upload recovery $GITHUB_RUN_ID" --notes 'Disposable recovery proof. Uses unchanged historical packages. Not release certification. Must remain draft.'
+  upload-probe:
+    needs: [retain-source, prepare-draft]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Download original packages without rebuilding
+        timeout-minutes: 10
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.retain-source.outputs.artifact_id }}
+          run-id: ${{ env.SOURCE_RUN }}
+          github-token: ${{ github.token }}
+          path: candidate
+          merge-multiple: true
+      - name: Execute production upload with controlled first-attempt failure
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/run-release-upload-rehearsal.mjs
+      - name: Retain each original outcome
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: upload-probe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 30
+  missing-artifact-probe:
+    needs: retain-source
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Reject missing artifact then recover original immutable input
+        timeout-minutes: 10
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ github.run_attempt == 1 && '1' || needs.retain-source.outputs.artifact_id }}
+          run-id: ${{ env.SOURCE_RUN }}
+          github-token: ${{ github.token }}
+          path: candidate
+          merge-multiple: true
+      - name: Ensure original candidate was recovered
+        run: test -f candidate/release/windows-package-inputs.json
