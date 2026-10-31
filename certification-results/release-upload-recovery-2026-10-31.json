@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "scope": "hosted-draft-upload-and-missing-artifact-recovery",
+  "fullReleaseCertification": false,
+  "passed": true,
+  "runId": 41144863470,
+  "runUrl": "https://github.com/etl-sql/ETL-SQL/actions/runs/41144863470",
+  "rehearsalSha": "7e17d15cb1aba1fca10b1129c2ae2223cd8614c9",
+  "sourceSha": "d800288e20cc44da52747cd5ac00925729408c41",
+  "sourceRun": "40940345271",
+  "retries": 1,
+  "draftOnly": true,
+  "initialRunSeconds": 110,
+  "recoveryRequestedAt": "2026-10-31T02:29:43.6899342+00:00",
+  "recoverySeconds": 238.311,
+  "operatorWaitSeconds": 10649.689,
+  "totalElapsedSeconds": 10998,
+  "sourceArtifact": {
+    "id": 12928589167,
+    "digest": "sha256:728e4b81eb188ec30d0a1c4823b3e782eef20600d6113a8a6af1068fb3cc769e",
+    "size": 1918891199
+  },
+  "manifestHash": "a79156e4b5ef4317ded65129b5a72cbdb374bbbc9fa5b192a3ac6ccdc279e82d",
+  "preservedExecutions": [
+    {
+      "name": "retain-source",
+      "originalId": 124367494581,
+      "currentId": 124416041914,
+      "startedAt": "2026-10-30T23:30:32Z",
+      "completedAt": "2026-10-30T23:30:50Z"
+    },
+    {
+      "name": "prepare-draft",
+      "originalId": 124367636461,
+      "currentId": 124416041622,
+      "startedAt": "2026-10-30T23:30:52Z",
+      "completedAt": "2026-10-30T23:30:55Z"
+    }
+  ],
+  "recoveredJobs": [
+    {
+      "name": "missing-artifact-probe",
+      "startedAt": "2026-10-31T02:29:49Z",
+      "completedAt": "2026-10-31T02:30:06Z",
+      "conclusion": "success"
+    },
+    {
+      "name": "upload-probe",
+      "startedAt": "2026-10-31T02:29:49Z",
+      "completedAt": "2026-10-31T02:33:41Z",
+      "conclusion": "success"
+    }
+  ],
+  "draftAssets": [
+    {
+      "name": "ETL-SQL-v0.21.0-win-x64.zip",
+      "digest": "sha256:69fbb716de67d6fd0e7cc358d0279281ca059a988f78b8f0c47ae281dd64f1bf",
+      "size": 1299267425
+    },
+    {
+      "name": "etl-sql-vscode-0.21.0-win32-x64.vsix",
+      "digest": "sha256:a093f348821dca6622e11943c0ecb3ae9a05980e3c79457bd095657a166c6821",
+      "size": 628984042
+    },
+    {
+      "name": "windows-package-inputs.json",
+      "digest": "sha256:a79156e4b5ef4317ded65129b5a72cbdb374bbbc9fa5b192a3ac6ccdc279e82d",
+      "size": 367
+    }
+  ],
+  "limitations": [
+    "Historical Windows packages; no new build or final-candidate certification.",
+    "Draft-only upload proof; no public release was made.",
+    "Operator/review interruption is reported separately from retry execution."
+  ]
+}

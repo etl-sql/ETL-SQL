@@ -773,6 +773,12 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   green through unlimited retries. Record time to first actionable failure and time to recover,
   separately from the full certification time. This rehearsal is the acceptance test for the new
   release process, before v0.22.0 release day.
+  **Hosted upload/missing-artifact recovery verified 2026-10-31:** run `41144863470` fails after
+  one real draft upload and rejects a missing artifact. One failed-job-only retry passes in
+  238.311 seconds, preserving successful executions and source artifact `12928589167` with its
+  original digest. Downloaded draft bytes match the original manifest; no rebuild or publication
+  occurs. The approval/operator pause is recorded separately from execution. Historical receipt:
+  `certification-results/release-upload-recovery-2026-10-31.json`. Full-candidate timing remains open.
   **In progress:** executed the actual Windows and macOS upload commands against a local mock
   that fails after uploading the first package. Failed-only recovery preserves retained inputs;
   missing or changed packages/manifests stop before the upload command runs. Both upload jobs

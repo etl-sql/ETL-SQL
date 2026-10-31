@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Verify hosted failed-upload and missing-artifact recovery in 3m58s using the original Windows
+  packages. Successful jobs and immutable artifact identity survive one failed-job-only retry;
+  downloaded draft bytes match the original manifest. No public release or rebuild was performed.
+
 - Bound release-validation preflight and evidence collectors with the shared process supervisor.
   Retain their diagnostics on failure and reserve time for evidence uploads.
   Track release timing and failed-job recovery in a focused acceptance table.
