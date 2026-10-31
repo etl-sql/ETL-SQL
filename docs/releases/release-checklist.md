@@ -9,6 +9,46 @@ ordinary PR validation within 30 minutes. Record clean and recovery elapsed time
 including queue waits and publication. Larger process/job watchdog limits are recovery safeguards;
 they do not establish that either target has been met.
 
+## Execution order and reuse
+
+Complete versioning, notes, dependency changes, source review and any intended merge **before**
+freezing the candidate. Record its full SHA and candidate-cut time outside Git. Do not merge,
+format, compile changelog fragments or commit evidence into that candidate after certification.
+Tagging the frozen release branch is supported; merging it into `main` can follow publication.
+A merge commit created before tagging is a new candidate and needs its own certification.
+
+| Order | Work | Reuse / completion rule |
+| :--- | :--- | :--- |
+| Before candidate cut | Finish metadata, source preflight and targeted defect checks | Resolve cheap failures together before starting builds. A targeted PR is not release certification. |
+| At candidate cut | Start full hosted CI, CodeQL, native packages, MSI/DEB installed certification and independent workstation certification | Start independent hosts together. Never run two full local gates against the same mutable output directories. |
+| While those run | Complete deployment profiles/transitions, canary contracts and applicable operator evidence | Index each receipt once. Review the required/conditional ledger below; do not launch another copy of a lane already running. |
+| Before tag | Review every required receipt, candidate identity, package hash and uncovered claim | Full hosted CI includes enterprise Windows/Linux, Docker integration, HA harness contracts and browser shards. Reuse those artifacts for their stated scope. The independent Windows gate is a separate required execution. |
+| After tag | Promote accepted artifacts, verify draft bytes, attest, then publish | Windows/macOS ZIPs and VSIXs come from manual native certification. MSI and DEB reuse installed certification. There is no second macOS build. |
+| On failure | Inspect the first failure and retained logs; retry only failed work on unchanged inputs | `gh run rerun <run-id> --failed` preserves successful jobs. Use workstation `-Resume` for its unchanged checkpoint. A source fix needs a new candidate. |
+
+Planning allowance: start the roughly two-hour workstation path and hosted/native paths together,
+allow up to one hour for evidence review and promotion, and reserve the remaining hour for one
+diagnosed recovery. These are scheduling budgets, not measured acceptance or permission to omit
+tests. Claims requiring a long controlled-host soak need their own capacity plan. Record queue,
+execution and operator delays separately; report a missed target instead of widening the target.
+
+Dispatch the missing hosted producers on the frozen release branch; first inspect existing exact-SHA
+runs to avoid duplicates. Full CI dispatch is journaled by the shared helper:
+
+```powershell
+$candidateSha = (git rev-parse HEAD).Trim()
+node scripts/ensure-release-certification.mjs $candidateSha release/vx.y.z
+gh workflow run codeql.yml --ref release/vx.y.z
+gh workflow run native-packages.yml --ref release/vx.y.z
+gh workflow run msi-upgrade.yml --ref release/vx.y.z
+gh workflow run deb-upgrade.yml --ref release/vx.y.z
+```
+
+For a failed producer, resume its existing run. Do not dispatch a fresh workflow to recover an
+unchanged candidate. Keep original failures, successful job execution times and artifact IDs in the
+timeline. The [recovery acceptance record](recovery-acceptance.md) identifies completed rehearsals;
+those rehearsals do not need to be repeated for each release and do not certify the release candidate.
+
 > **Tooling note.** This checklist is the authoritative release policy. The local validation driver is
 > `scripts/Test-PreRelease.ps1`
 > (POSIX: `scripts/test-pre-release.sh`). Version bumping is `scripts/Set-Version.ps1`. Cross-platform
@@ -33,7 +73,7 @@ they do not establish that either target has been met.
 > resume cannot reuse a legacy or forced-resume state; start a fresh run. Release drivers provide
 > no local-gate or CI-wait bypass. Source fingerprints cannot be overridden.
 > CI/CodeQL jobs and the independently uploaded workstation phase bundle are enforced by Release. The
-> complete operator/package evidence manifest is not yet enforced. Complete every applicable checkbox before tagging;
+> operator submission is also enforced, alongside certified package promotion. Complete every applicable checkbox before tagging;
 > a green local gate alone is necessary but not sufficient.
 
 Release now requires the DEB installed-upgrade workflow and promotes its retained package by
@@ -79,20 +119,21 @@ VSIX, manifest and selection. Missing/expired artifacts, input changes and alter
 block promotion. After an upload failure, rerun failed jobs in the same Release run; the successful
 validation retains its selection. Hosted cross-run reuse, retry and timing acceptance remain open.
 
-macOS Intel and Apple Silicon builds also retain packages by independent artifact IDs before a
-separate Linux upload job. Rerun failed jobs in the same Release run after a build or upload failure;
-successful architecture builds keep their original outputs. Both native manifests and package hashes
-must pass before upload, and the downloaded draft must match the original build digests before
-attestation. The optional Intel DMG is recorded only when its build succeeds; a recorded DMG must
-remain present and unchanged. An unrecorded DMG in the draft blocks attestation. This provides
-same-run recovery; pre-tag macOS package certification and hosted retry/timing evidence remain open.
+macOS Intel and Apple Silicon publication also selects the frozen release branch's successful manual
+`native-packages.yml` run. Each architecture retains its original artifact ID, manifest and acceptance
+evidence across failed-job retries. The Intel DMG must have passed mount, exact-candidate CLI launch,
+asset verification and detach checks. Release verifies both selections and package hashes before
+upload, attaches the selections to the draft, and rechecks their origins and actual draft bytes before
+publication. Missing or changed evidence blocks promotion; it cannot trigger a replacement macOS
+build. Hosted cross-run promotion and timing acceptance of this path remain required.
 
 If either package-upload job fails, its console and Actions job summary include the candidate SHA,
 retained artifact IDs and exact `gh run view --log-failed` / `gh run rerun --failed` commands.
 Wait for the run to finish, inspect the failure and fix the upload issue before rerunning failed
 jobs in that same run. Successful builds retain their outputs. Changed source requires a new
 candidate; missing artifacts or changed package bytes must pass verification before uploading.
-Each upload step has a ten-minute deadline inside its fifteen-minute job.
+Each upload step has a ten-minute deadline. Windows has a fifteen-minute job budget; macOS has
+twenty minutes to include staging the accepted files from their native artifact trees.
 
 Replace `x.y.z` with the target version (current target: **0.22.0**) throughout.
 
@@ -249,13 +290,13 @@ API details: [workflow runs](https://docs.github.com/en/rest/actions/workflow-ru
       commit, another topology, or an earlier release is development/history evidence—not release
       evidence.
 - [ ] No `SECRET:` / API keys / connection strings committed (`git diff vLAST..HEAD`).
-- [ ] **Pause Dependabot during the release window.** Temporarily pause or comment out Dependabot update schedules in `.github/dependabot.yml` so automatic PR rebases and CI runs do not compete for runner capacity during release builds.
+- [ ] **Reserve release capacity before freezing metadata.** If Dependabot schedules must be paused,
+      do that before candidate cut. Do not make a schedule-only commit during certification.
 - [ ] **Release path is actually open** (these blocked v0.16.0 mid-release):
       - The `refs/tags/v*` ruleset must permit **creation** (keep *deletion* / *update* / *non-fast-forward*
         restricted so released tags stay immutable — an empty bypass list blocks creation for admins too).
-      - Know the merge route: a solo maintainer **cannot self-approve** their own PR, and org policy may
-        disable PRs entirely. With `enforce_admins` off, fast-forward the release branch into `main`
-        directly (`git push origin release/x.y.z:main`) — a push to `main` still runs CI **and** CodeQL.
+      - Confirm the permitted PR/merge route before candidate cut. Do not depend on self-approval
+        or introduce a merge commit after certification. A release-branch tag is supported.
       - Commits must be signed (`required_signatures`); tag with `git tag -s vx.y.z`.
 
 ## Phase 1 — Version & changelog (hand-authored)
@@ -308,7 +349,7 @@ API details: [workflow runs](https://docs.github.com/en/rest/actions/workflow-ru
       ```
 - [ ] No open **High/Critical** findings (see the per-release review note in `docs/architecture/decisions/`).
 - [ ] Any accepted Medium/Low findings are recorded in the release notes or `docs/architecture/decisions/`.
-- [ ] New third-party dependencies are reflected in `THIRD-PARTY-INVENTORY.md` and `NOTICES.md`.
+- [ ] New third-party dependencies are reflected in `THIRD-PARTY-INVENTORY.md` and `THIRD-PARTY-NOTICES.md`.
 
 ### Feature security watchlist (resolve before the named capability ships)
 
@@ -387,7 +428,7 @@ retries preserve successful work from earlier attempts. It checks pagination and
 identity after collection to reject a concurrent retry. Failures print inspection and retry commands.
 Release retains the JSON as an artifact, attaches it to the draft and includes it in attestation
 and checksums. This is CI/CodeQL execution evidence, not proof of alert triage or completion of
-operator, local and delivery certifications. Full checklist enforcement remains unfinished.
+operator, local and delivery certifications. The [operator evidence gate](operator-evidence.md) enforces the separate submission and review inventory.
 API contract: [workflow run attempts and jobs](https://docs.github.com/en/rest/actions/workflow-jobs).
 
 ### Recovering a failed MSI certification
@@ -460,8 +501,9 @@ attest and publish. A failed or skipped required certification blocks promotion 
 Manual release dispatches resolve the requested tag to one SHA used by all packaging jobs. The tag
 must match `VersionPrefix`, and the dispatch's workflow ref must resolve to that same SHA. Select
 the release tag when dispatching, so build provenance identifies the candidate being packaged.
-Failed-job recovery retains the selected artifact IDs. Full checklist evidence enforcement and hosted
-runner-loss diagnosis/recovery evidence remain open in `TODO.md`.
+Failed-job recovery retains the selected artifact IDs. The operator gate below enforces submitted
+checklist evidence. Hosted publication/recovery acceptance and runner-loss diagnosis remain open
+in `TODO.md`.
 
 Both `Invoke-Release.ps1` and `invoke-release.sh` require the MSI input manifest, certification receipt,
 checksums and SBOM among published assets,
@@ -470,12 +512,18 @@ treats a remaining draft as incomplete, and allows 120 minutes for release compl
 
 GitHub documents the retry controls in [Re-running workflows and jobs](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
 
-The local gate is the authoritative local validation run. It is one required part of the release
-decision, not the whole decision. Green CI is not a substitute because CI does not run the
-Docker-integration or SLT lanes; likewise, a green local gate is not a substitute for the
-cross-platform and operator-run certifications below.
+The local gate is one required part of the release decision. Full hosted CI covers Docker
+integration and cross-platform enterprise/browser checks; SLT and the independent workstation
+execution remain required separately. The workstation driver runs the local gate itself. Its
+passing full run satisfies that local-gate row: do not run the same full gate again just to tick
+another checkbox. A green local gate does not replace the other certifications below.
 
 ### Two-segment local validation on a memory-constrained host
+
+This direct-gate technique is for resource diagnostics. It does not produce the independent
+workstation driver's required invocation/process bundle and cannot replace that execution.
+For release certification, reserve a workstation with sufficient memory and run the independent
+driver once. Do not complete this diagnostic sequence and then treat another full run as routine.
 
 Use this when Docker Desktop's VM would compete with the engine, browser or scale lanes for RAM.
 Keep one clean candidate commit, configuration, platform list and output directory throughout.
@@ -509,45 +557,52 @@ Native Linux/macOS packaging and cross-platform certifications still require the
       ```powershell
       .\scripts\Test-PreRelease.ps1 -Explain -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
-- [ ] Run the full gate:
+- [ ] Run the full local gate **once**, through the independent Windows workstation driver below.
+      The underlying command is shown for inspection and targeted local diagnostics; it is not
+      an additional full run after workstation certification:
       ```powershell
       .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
 - [ ] **Fast Targeted Retesting Protocol (Iterate quickly on isolated failures):**
-      Never re-run the entire 40+ phase matrix from scratch while fixing a single test, packaging, or connector issue. Use targeted commands to verify fixes in seconds:
-      - **Targeted Test/Class**: `dotnet test <project> --filter FullyQualifiedName~<Test>` (1–5s)
-      - **Fast Pre-Push Sanity**: `.\scripts\Test-PrePush.ps1` (~60s, checks format, assets, index, and smoke)
+      Use targeted commands while fixing a test, packaging or connector issue. Freeze the corrected
+      candidate before full certification. A source fix invalidates the previous candidate's evidence.
+      - **Targeted Test/Class**: `dotnet test <project> --filter FullyQualifiedName~<Test>`
+      - **Pre-Push Validation**: `.\scripts\Test-PrePush.ps1` (impact-selected; broad runs have measured about 12 minutes)
       - **Specific Lane**: `.\scripts\test-lane.ps1 -Lane <smoke|fast|ebnf|portal|browser|slt>`
       - **Direct Docker/Parity**: `.\scripts\Invoke-SmokeParity.ps1`
       - **Direct Packaging / MSI**: `.\scripts\build-msi.ps1` or `.\scripts\publish-release.ps1`
-- [ ] On a failure, fix it and resume:
+- [ ] Recover a workstation failure using its original evidence directory:
       ```powershell
-      # Standard resume (reuses passed phases if source fingerprint matches):
-      .\scripts\Test-PreRelease.ps1 -Resume -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
-
-      # Diagnostic-only forced resume; this result cannot satisfy the release gate:
-      .\scripts\Test-PreRelease.ps1 -Resume -ForceResume -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
+      # Unchanged candidate and cached inputs only:
+      .\scripts\Invoke-WorkstationCertification.ps1 -EvidenceDirectory $evidence -Resume
       ```
-      After changing candidate sources, run full validation without `-ForceResume`. Release drivers
-      reject a mismatched source fingerprint and no longer accept a force override for it.
-- [ ] Run the gate detached to avoid terminal interruption during long runs (PowerShell on Windows):
+      Inspect the original failure first. Source changes require a new clean candidate and evidence
+      directory. A forced direct-gate resume is diagnostic-only and cannot satisfy publication.
+
+Choose one launch method for the workstation run below. A detached process or worktree changes
+where it runs; neither is an additional certification requirement.
+
+- **Detached process** to avoid terminal interruption (PowerShell on Windows):
       ```powershell
       New-Item -ItemType Directory -Force -Path release-validation | Out-Null
       $stamp = Get-Date -Format yyyyMMdd-HHmmss
+      $evidence = "release-validation\workstation-$stamp"
       $out = "release-validation\pre-release-$stamp.out.log"
       $err = "release-validation\pre-release-$stamp.err.log"
       Start-Process pwsh `
-        -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale" `
+        -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File .\scripts\Invoke-WorkstationCertification.ps1 -EvidenceDirectory $evidence" `
         -WindowStyle Hidden `
         -RedirectStandardOutput $out `
         -RedirectStandardError $err
       Get-Content $out -Wait
       ```
-- [ ] Run the gate from a detached worktree at the exact release commit to guarantee reproducibility:
+- **Detached worktree** at the exact release commit:
       ```powershell
       git worktree add --detach .worktrees\release-gate-x.y.z <release-commit-hash>
       Set-Location .worktrees\release-gate-x.y.z
-      .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
+      # Prepare this checkout's pinned tools and browser assets before starting.
+      $evidence = "release-validation\workstation-$(Get-Date -Format yyyyMMddHHmmss)"
+      .\scripts\Invoke-WorkstationCertification.ps1 -EvidenceDirectory $evidence
       ```
 - [ ] **A hung phase now fails instead of stalling the run.** Every phase is guarded by a watchdog
       (`scripts/lib/Watch-PhaseTimeout.ps1`) that kills its process subtree and records why when the
@@ -630,6 +685,18 @@ execution window and Windows x64 host, exact clean candidate, all required phase
 completion timestamps, original attempt windows and payload hashes. It rejects stale, skipped, partial, changed or wrong-SHA
 evidence. Raw diagnostic dumps stay local; review logs before sharing.
 
+The release driver can read that run's existing state directly. Do not rerun the full gate merely
+to populate `release-validation/latest/`. Preview with the explicit state path and authored notes:
+
+```powershell
+.\scripts\Invoke-Release.ps1 -Version x.y.z -Branch release/vx.y.z `
+    -ValidationState "$evidence/validation/latest/state.json" -NotesFile docs/releases/vx.y.z.md -DryRun
+```
+
+The Bash option is `--validation-state`. Both entry points apply the same full-scope, freshness,
+candidate and fingerprint checks to the supplied state. This option selects evidence; it cannot
+bypass a failed or incomplete gate. The default state path remains available for direct local runs.
+
 Uploading is a separate operator step after the check finishes. Create a separate **draft** evidence
 release. This does not publish a product release or connect the workstation as a runner:
 
@@ -655,6 +722,15 @@ This covers local phases only. CI/CodeQL, installed-package certification, deplo
 HA, recovery and conditionally applicable suites retain their separate requirements. The first
 successful full workstation run and real upload/publication acceptance remain outstanding.
 
+### Operator report and review gate
+
+Prepare and seal the [operator submission](operator-evidence.md) for the frozen candidate. It is
+required before tagging and rechecked before publication. Deployment/canary/recovery reports are
+validated without retesting; conditional certification decisions retain named operator reviews,
+scope, commands, execution windows and files. Missing or inconsistent rows, changed evidence, an
+outdated previous-release diff or open CodeQL alerts block promotion. This does not replace
+trusted-host or live-topology evidence.
+
 ### Certification schedule and evidence ledger
 
 Use this schedule on every release. “Separate workflow” means the work may run in CI or on a
@@ -671,12 +747,14 @@ in top-level and nested certifications. Rerun older producers whose reports omit
 
 #### Required for every release candidate
 
-- [ ] **Full local pre-release gate:** passed with SLT, Docker integration, and Standard scale—not
+- [ ] **Full local pre-release gate:** the independent workstation execution above passed with
+      SLT, Docker integration, and Standard scale—not
       `-Quick`, and not a default run with those switches omitted:
       ```powershell
       .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
-      Evidence: `release-validation/<run-id>/` and `release-validation/latest/state.json`.
+      Evidence: the workstation run's retained validation state, logs and portable bundle.
+      This row reviews that existing run; it does not request a second full execution.
       Publication requires the independent workstation bundle above. Upload its verified ZIP
       separately after the manual check completes. Incomplete evidence cannot replace it.
 
@@ -739,7 +817,7 @@ in top-level and nested certifications. Rerun older producers whose reports omit
       ```
       If an environment cannot run a required topology, record the release as not certified for that
       topology; do not inherit an older result while continuing to publish a current HA claim.
-- [ ] **CodeQL:** both language analyses for the candidate `main` commit are green, with no unresolved
+- [ ] **CodeQL:** both language analyses for the exact frozen candidate are green, with no unresolved
       High/Critical alert accepted silently. CodeQL remains a CI gate rather than a local phase.
 - [ ] **MSI in-place upgrade:** the `MSI In-Place Upgrade` workflow passes for the candidate/tag and
       its `release-validation/msi-upgrade/` evidence is retained. Tags force the full install test;
@@ -785,9 +863,10 @@ the `Test-BillionRow*` commands and are not additional gates.
       not covered as well as what passed.
 - [ ] Profile, transition, platform, topology, configuration, commit, dirty state, and result match the
       release claim. Managed Dedicated and Shared SaaS are reviewed as separate claims.
-- [ ] `Invoke-Release.ps1` is not used as a substitute for this review. Until it validates a
-      release-mode evidence manifest, its green pre-release-state check does not prove that the
-      optional and external rows above ran.
+- [ ] Verify the [operator submission](operator-evidence.md), including every required report,
+      review and applicability row. Both drivers and Release enforce its candidate and diff identity.
+      Human decisions remain submitted attestations; the local Passed state alone does not prove
+      operator execution or live-topology certification.
 
 The gate covers (in order): asset-drift check, changelog compilation, **secret scan**,
 `dotnet restore`, dependency-audit self-test, NuGet dependency audit (no
@@ -811,7 +890,7 @@ only when large-job and fault-injection measured reports are present.
 
 The PowerShell and Bash gates run the **same phases in the same order**; a few phases in the Bash
 gate bridge to the canonical PowerShell helpers via `pwsh`. Deep static security analysis (CodeQL)
-is intentionally **left to CI** (`codeql.yml` on every `main` push + schedule) rather than the local
+is intentionally **left to CI** (`codeql.yml` on `main`/release pushes, PRs and dispatch/schedule) rather than the local
 gate, as a full local CodeQL run is heavy.
 
 > The **VS Code VSIX package** phase runs the same `vsce package` that the tag-triggered
@@ -821,10 +900,10 @@ gate, as a full local CodeQL run is heavy.
 
 ### Lessons learned (keep the gate ahead of the release build)
 
-The tag-triggered `release.yml` is the only thing that actually builds the cross-platform
-artifacts; a failure there is slow and public. Every step `release.yml` performs that *can* be
-validated locally should have a counterpart in `Test-PreRelease.ps1`/`.sh`. Gaps found in v0.13.0
-and the safeguards added:
+Pre-tag native and installed-package producers build the release artifacts. The tag-triggered
+workflow verifies and promotes their accepted bytes. Packaging failures belong in those producers
+before tagging; keep cheap local counterparts for packaging inputs and toolchain checks. Historical
+gaps found in v0.13.0 and the safeguards added:
 
 | What slipped through | Why the gate missed it | Safeguard now in place |
 | :--- | :--- | :--- |
@@ -851,13 +930,13 @@ progress log that names an arbitrary worker, does not report a weaker signal tha
 reports a confident wrong one, and costs more than having no step at all. When adding a phase, add
 the assertion that it is wired up in the same change.
 
-**The local gate runs on Windows only and does not run the enterprise-hardening cert lane.** Four of
+**The independent Windows gate does not replace cross-platform enterprise certification.** Four of
 v0.16.0's blockers were Windows-vs-Linux divergences (shell globbing, dev-absolute paths, a spawn-path
 that only breaks under `--artifacts-path`) that a green Windows gate cannot see. A green local gate is
-**necessary but not sufficient**: after pushing the release branch, confirm **every** CI job on **both**
-OSes — `Build & Test`, `Browser and Consumer Contracts`, `Enterprise Certification (windows)` + `(linux)`, `Build VS Code Extension`, and
-both CodeQL `Analyze` jobs — is green **before** tagging. Consider running the lint/fast lanes under
-Linux (WSL/Docker) as part of the gate.
+**necessary but not sufficient**: after pushing the release branch, confirm every required job in
+[`hosted-release-policy.json`](../../scripts/hosted-release-policy.json) passed on the exact frozen
+candidate before tagging. Review its retained artifacts; do not rerun those jobs manually merely
+because they also appear in the evidence ledger.
 
 ## Phase 4 — Build & package artifacts
 
@@ -892,24 +971,24 @@ cross-platform and coverage evidence to the draft before publishing it. The cert
 the selected deployment-profile contracts/transitions; it does not certify hosted production. The
 unversioned `certification-results/` and `coverage/report/` trees are never attached automatically.
 
-- [ ] Build installers via the gate (preferred, logged) **or** the master orchestrator:
+- [ ] Review the accepted native and installed-package artifacts from the parallel certification
+      round. Do not rebuild them through the local gate or master orchestrator for publication.
+      These local build commands are diagnostic/reproduction tools when a producer needs fixing:
       ```powershell
       .\scripts\Test-PreRelease.ps1 -Resume -BuildInstallers -Platforms win-x64
       # or, portable bundles plus the current host's native package:
       .\scripts\Master-Release.ps1 -Version x.y.z
       ```
-- [ ] Confirm `release/` contains the platform bundles, `sha256sums.txt`, and `sbom.json`
-      (CycloneDX) generated by `publish-release.ps1`.
+- [ ] Confirm the retained candidate artifacts contain the platform bundles. Release assembles
+      `sha256sums.txt` and the CycloneDX `sbom.json` once over the complete draft asset set.
 - [ ] Inspect `ETL-SQL-vx.y.z-certification-results.zip` against the Phase 3 evidence index. It
       contains no stale, dirty, failed, wrong-commit, or unrelated local certification runs.
 - [ ] Retain or attach `artifacts/release-evidence/x.y.z/` separately. The current
       `publish-release.ps1` certification ZIP includes `certification-results/`, not this release
       evidence directory; neither archive substitutes for the Phase 3 evidence review.
-- [ ] Windows MSI built (WiX 3.14 `candle`/`light` on PATH) — `build-msi.ps1`.
-- [ ] Linux/Mac packages built on their native hosts as applicable. The wrapper does not dispatch
-      WSL implicitly. Its packaging-complete message does not replace installed-package certification
-      or publication gates. It collects a fresh nonempty native artifact into `release/`; run the
-      other native platform lanes separately.
+- [ ] Review the retained MSI and DEB installed-certification receipts and native macOS acceptance.
+      Their certified package bytes satisfy this row. Local packaging commands above are for
+      diagnosis; they do not add another release build or replace installed-package certification.
 - [ ] Retain the four RID artifacts from
       [Native Package Certification](../../.github/workflows/native-packages.yml) for the final
       candidate. It runs on candidate pull requests and supports manual dispatch once available on
@@ -918,19 +997,27 @@ unversioned `certification-results/` and `coverage/report/` trees are never atta
       Its JSON records the scope and gaps; MSI upgrade, deployment certification, DEB/DMG installation
       and live service startup require their own applicable evidence. The macOS matrix uses separate
       Intel and ARM runners from [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
-- [ ] Spot-check a built binary launches: `dotnet ETL-SQL.dll --version` (or run an MSI install in a VM).
-- [ ] **In-place upgrade check** (MSI): install the *previous* released MSI, then install this
-      version's MSI over it. Confirm it **upgrades** (not a side-by-side second install), preserves
-      config/data, and removes the prior version. WiX major-upgrade regressions are otherwise silent —
-      the gate's N→N+1 drill only covers the data/engine layer, not the installer.
+- [ ] Review each native artifact's extracted-CLI version log for the exact version and commit.
+      The native certification launch satisfies this row; investigate a missing log before promotion.
+- [ ] **In-place upgrade check** (MSI): review the installed-certification receipt for both profiles,
+      exact candidate/predecessor and preserved config/data. Its install/upgrade/rollback run satisfies
+      this row; do not repeat it manually when its required evidence is complete. The local N→N+1
+      data/engine drill alone does not cover installer behavior.
 
 ## Phase 5 — Tag & publish
 
-- [ ] Push the release branch and open/merge its PR to `main` only after the gate passed.
-- [ ] **Verify zero open CodeQL security and quality issues:** Confirm both C# and JS/TS CodeQL analysis
-      runs succeed on `main` and verify zero open alerts exist before creating the release tag:
+- [ ] Ensure the frozen release branch is pushed and its exact candidate evidence is accepted.
+      If a merge to `main` is required before release, perform it before candidate cut. Otherwise,
+      tag the certified release branch and merge forward after publication. Do not insert a new
+      merge commit between certification and tag creation.
+- [ ] **Verify zero open CodeQL security and quality issues:** Confirm both language analyses pass
+      for the exact frozen candidate. Review alerts on its release branch before creating the tag:
       ```powershell
-      $openAlerts = @(gh api --paginate "/repos/etl-sql/ETL-SQL/code-scanning/alerts?state=open&ref=refs/heads/main" | ConvertFrom-Json)
+      $candidateRef = 'refs/heads/release/vx.y.z'
+      $encodedRef = [Uri]::EscapeDataString($candidateRef)
+      $pages = gh api --paginate --slurp "/repos/etl-sql/ETL-SQL/code-scanning/alerts?state=open&ref=$encodedRef"
+      if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect candidate CodeQL alerts.' }
+      $openAlerts = @($pages | ConvertFrom-Json | ForEach-Object { $_ })
       if ($openAlerts.Count -gt 0) {
           $openAlerts | Select-Object number, @{N='rule';E={$_.rule.id}}, @{N='path';E={$_.most_recent_instance.location.path}}, @{N='severity';E={$_.rule.security_severity_level}} | Format-Table
           throw "Found $($openAlerts.Count) open CodeQL alert(s). Resolve all open security and quality issues before tagging."
@@ -948,8 +1035,8 @@ unversioned `certification-results/` and `coverage/report/` trees are never atta
       pinned manifest digest. A missing, changed or extra asset blocks publication. Restore the
       certified bytes and retry the failed job; a source change requires a new candidate. This
       comparison does not replace platform certification or the operator evidence requirements.
-- [ ] Create/curate the GitHub Release: paste the CHANGELOG section; attach `sha256sums.txt`
-      and `sbom.json` (per `Release_Workflows.md`, these verification assets must be on the draft).
+- [ ] Curate the draft release notes before publication. The workflow attaches checksums and SBOM;
+      inspect those files without replacing them after attestation.
 - [ ] Verify published asset checksums match `sha256sums.txt`.
 - [ ] Confirm the `Attest build provenance` job (`release.yml`) succeeded and spot-verify one
       published artifact's provenance (keyless SLSA attestation — the authenticity leg alongside

@@ -12,6 +12,7 @@ Queueing, execution and time waiting for an operator must be reported separately
 | Failed MSI profile reuses installer and successful profile | [MSI rehearsal](https://github.com/etl-sql/ETL-SQL/actions/runs/40760871492): original artifact 12850372732, recovery 7m33s | Runner-loss cause remains separate from successful recovery |
 | Corrected DEB diagnostics survive upload | [DEB acceptance](https://github.com/etl-sql/ETL-SQL/actions/runs/40494686777): 39 installed assertions and diagnostic upload pass | Final candidate still needs its own certification |
 | Failed publication upload preserves package bytes | [Hosted rehearsal](https://github.com/etl-sql/ETL-SQL/actions/runs/41144863470): both failed jobs recover in 3m58s; original artifact and successful executions retained | Final-candidate promotion remains separate |
+| Promotion reuses native packages and retained operator reports | [Release checklist](release-checklist.md) and [operator gate](operator-evidence.md): local command fixtures verify original package identity, report contracts, changed-evidence rejection and unchanged-byte recovery | Hosted acceptance on the final candidate; fixtures are not certification evidence |
 | Full release completes within four hours | No complete current-candidate elapsed-time proof | Freeze one candidate, collect all required certification and promotion timings, preserve successful jobs across any retry |
 
 Execution order: land the reviewed recovery changes, then measure the complete candidate path.

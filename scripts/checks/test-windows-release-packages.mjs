@@ -119,5 +119,3 @@ try {
 } finally {
   rmSync(rehearsal, { recursive: true, force: true });
 }
-
-await import('./test-certified-windows.mjs');

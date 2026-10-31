@@ -12,6 +12,23 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Require a candidate-bound operator checklist bundle before release promotion and publication.
+  Validate retained deployment, canary and recovery reports, explicit conditional reviews, the
+  previous-release diff and CodeQL alert inventory without rerunning successful suites.
+
+- Retain sanitized transport and process-resource evidence when the missing-chart browser
+  assertion times out. Preserve its existing timeout and original exception without adding retries.
+
+- Promote the certified macOS Intel and Apple Silicon packages from their original native
+  certification artifacts. Release verifies candidate identity, webview/CLI/DMG acceptance,
+  toolchain and hashes before upload and publication, without rebuilding macOS packages.
+  Clarify parallel certification and receipt reuse in the release checklist, including one full
+  independent workstation execution and no merge commit after candidate certification.
+  Let both release drivers consume the workstation run's original validation state directly,
+  with unchanged scope/freshness/candidate checks, and resolve notes from `docs/releases/`.
+  Give Windows artifact certification its own preflight entry so the consumer gate excludes it
+  after success instead of running it again through discovery.
+
 - Update minimatch and glob to patched releases across lint, extension, UI and VSIX toolchains.
   Read the draft manifest through its validated open handle to prevent path replacement races.
 

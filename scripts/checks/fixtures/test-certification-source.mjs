@@ -67,6 +67,9 @@ try {
       assert.equal(report.result, 'Passed');
       assert.equal(report.dirty, mode === 'dirty-stable');
       if (!legacy) {
+        assert.equal(report.configuration, 'Release');
+        assert.equal(report.noBuild, true);
+        assert.equal(report.releaseEligible, false, 'No-build diagnostics cannot certify an operator submission.');
         assert.match(report.sourceFingerprint, /^[a-f0-9]{64}$/);
         if (mode === 'stable') assert.equal(report.sourceFingerprint, createHash('sha256').update(sha).digest('hex'));
       }

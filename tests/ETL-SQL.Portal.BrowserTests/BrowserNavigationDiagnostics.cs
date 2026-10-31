@@ -162,6 +162,17 @@ internal sealed class BrowserNavigationDiagnostics : IAsyncDisposable
 
 internal static class BrowserNavigationExtensions
 {
+    internal static async Task WaitForWithDiagnosticsAsync(this ILocator locator, LocatorWaitForOptions? options = null,
+        [CallerMemberName] string caller = "")
+    {
+        try { await locator.WaitForAsync(options); }
+        catch (Exception exception) when (exception is PlaywrightException or TimeoutException)
+        {
+            await BrowserNavigationDiagnostics.CaptureAsync(locator.Page, "locator-wait-failure", caller, locator.Page.Url);
+            throw;
+        }
+    }
+
     internal static async Task WaitForFunctionWithDiagnosticsAsync(this IPage page, string expression, object? arg = null,
         PageWaitForFunctionOptions? options = null, [CallerMemberName] string caller = "")
     {

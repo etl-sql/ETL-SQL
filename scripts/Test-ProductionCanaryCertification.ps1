@@ -105,6 +105,9 @@ try {
         sourceFingerprint = $source.fingerprint
         dirty = $dirtyLines.Count -gt 0
         dirtyPaths = @($dirtyLines)
+        configuration = $Configuration
+        noBuild = [bool]$NoBuild
+        releaseEligible = $passed -and $Configuration -ceq 'Release' -and -not $NoBuild -and $dirtyLines.Count -eq 0
         evidenceScope = "DeterministicCanaryContracts"
         uncovered = @("Live regional provisioning, availability and latency are not certified by this lane.", "External notification delivery and hosted fleet recovery require operator evidence.")
         startedUtc = $started.ToString("O")

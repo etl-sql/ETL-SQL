@@ -4,6 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
+| [Operator release evidence](operator-evidence.md) | Candidate-bound reports, applicability reviews and publication checks. |
 | [Release recovery acceptance](recovery-acceptance.md) | Timing targets, verified recovery cases and remaining hosted acceptance. |
 | [v0.21.0 bugs and logic audit](v0.21.0-bug-logic-audit.md) | Defect review and validation evidence. |
 | [v0.21.0 performance results](v0.21.0-performance-results.md) | Scale certification measurements and run-order findings. |

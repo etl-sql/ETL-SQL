@@ -5,14 +5,15 @@
 # Runs the mechanical Phases 3-5 of Docs/Release_Checklist.md AFTER Test-PreRelease.ps1 has
 # passed and the version bump + CHANGELOG entry are committed on the release branch. It does
 # NOT bump versions, author the CHANGELOG, or build artifacts locally (the Release workflow
-# builds them in the cloud on the tag).
+# promotes the accepted pre-tag certification bytes).
 #
 # Usage:
 #   ./scripts/invoke-release.sh --version 0.12.0 [options]
 #
 # Options:
 #   --version X.Y.Z            (required) release version, no leading 'v'
-#   --notes-file PATH          curated release notes (default: Docs/ReleaseNotes/vX.Y.Z.md, release-notes-vX.Y.Z.md, or CHANGELOG)
+#   --notes-file PATH          curated release notes (default: docs/releases/vX.Y.Z.md, release-notes-vX.Y.Z.md, or CHANGELOG)
+#   --validation-state PATH    passed state from the independent workstation gate
 #   --remote NAME              git remote (default: origin)
 #   --branch NAME              release branch (default: main)
 #   --dry-run                  print mutating actions without performing them
@@ -28,6 +29,7 @@ set -euo pipefail
 
 VERSION=""
 NOTES_FILE=""
+VALIDATION_STATE=""
 REMOTE="origin"
 BRANCH="main"
 DRY_RUN=0
@@ -42,6 +44,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --version) VERSION="$2"; shift 2 ;;
     --notes-file) NOTES_FILE="$2"; shift 2 ;;
+    --validation-state) VALIDATION_STATE="$2"; shift 2 ;;
     --remote) REMOTE="$2"; shift 2 ;;
     --branch) BRANCH="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -111,7 +114,7 @@ node scripts/check-release-metadata.mjs "$TAG" || die "Finalize release metadata
 
 # ---- 2. pre-release gate --------------------------------------------------
 step "Pre-release validation gate"
-STATE="release-validation/latest/state.json"
+STATE="${VALIDATION_STATE:-release-validation/latest/state.json}"
 if [ ! -f "$STATE" ]; then
   die "No pre-release state at $STATE. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale first."
 else
@@ -157,14 +160,24 @@ Run Set-Version.ps1 -Version $VERSION."
 fi
 ok "all six version sources read $VERSION"
 
+# ---- 3b. operator evidence before push/tag --------------------------------
+step "Operator release evidence"
+OPERATOR_REPOSITORY="$(gh repo view --json nameWithOwner --jq '.nameWithOwner')" || die "Cannot resolve the operator evidence repository."
+OPERATOR_ROOT="release-validation/operator-preflight"
+mkdir -p "$OPERATOR_ROOT"
+OPERATOR_OUTPUT="$OPERATOR_ROOT/$LOCAL_SHA-$(date +%s)-$$"
+node scripts/collect-operator-release-evidence.mjs "$OPERATOR_REPOSITORY" "$LOCAL_SHA" "$VERSION" "$OPERATOR_OUTPUT" ||
+  die "Operator evidence is missing, incomplete or changed. Complete its candidate draft before tagging; no certification was rerun."
+ok "operator checklist and retained reports verified"
+
 # ---- 4. resolve release notes --------------------------------------------
 step "Release notes"
 TEMP_NOTES=""
 if [ -n "$NOTES_FILE" ]; then
   [ -f "$NOTES_FILE" ] || die "--notes-file '$NOTES_FILE' not found."
   NOTES_PATH="$NOTES_FILE"; ok "using $NOTES_FILE"
-elif [ -f "Docs/ReleaseNotes/$TAG.md" ]; then
-  NOTES_PATH="Docs/ReleaseNotes/$TAG.md"; ok "using Docs/ReleaseNotes/$TAG.md"
+elif [ -f "docs/releases/$TAG.md" ]; then
+  NOTES_PATH="docs/releases/$TAG.md"; ok "using docs/releases/$TAG.md"
 elif [ -f "release-notes-$TAG.md" ]; then
   NOTES_PATH="release-notes-$TAG.md"; ok "using release-notes-$TAG.md"
 else

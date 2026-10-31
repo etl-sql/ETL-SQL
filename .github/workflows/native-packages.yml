@@ -67,7 +67,7 @@ jobs:
     # The Intel macOS runner takes about twice as long per publish as the others: 52 minutes for the
     # eight hosts and several more for the VSIX. Sixty minutes cancelled it mid-package twice.
     # Cover preparation, publish, acceptance and both uploads, plus setup time.
-    timeout-minutes: 160
+    timeout-minutes: 165
     strategy:
       fail-fast: false
       matrix:
@@ -341,6 +341,33 @@ jobs:
           $summary | Add-Member -NotePropertyName releaseCandidateChecksPassedAt -NotePropertyValue ([DateTimeOffset]::UtcNow.ToString('o'))
           $summary | ConvertTo-Json -Depth 8 | Set-Content $summaryPath -Encoding utf8
 
+      - name: Finalize certified macOS package identity
+        if: runner.os == 'macOS'
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . ./scripts/Release.Helpers.ps1
+          $source = Get-ReleaseCertificationSource -RepoRoot $PWD.Path
+          if ($source.commit -cne $env:CANDIDATE_SHA -or $source.dirtyPaths.Count -ne 0) { throw 'Native package acceptance changed candidate source.' }
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.VersionPrefix
+          $nodeVersion = (& node --version).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot record Node toolchain.' }
+          $dotnetVersion = (& dotnet --version).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot record .NET toolchain.' }
+          $arguments = @('create', 'release', $env:CANDIDATE_SHA, $version, $env:PACKAGE_RID)
+          if ($env:PACKAGE_RID -ceq 'osx-x64') { $arguments += '--include-dmg' }
+          node scripts/macos-release-packages.mjs @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot bind accepted macOS package bytes.' }
+          $summaryPath = "artifacts/native-packages/$env:PACKAGE_RID/certification.json"
+          $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+          $manifest = "release/${env:PACKAGE_RID}-package-inputs.json"
+          $summary | Add-Member -NotePropertyName packageManifestSha256 -NotePropertyValue (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash.ToLowerInvariant()
+          $summary | Add-Member -NotePropertyName toolchain -NotePropertyValue @{ nodeVersion = $nodeVersion; dotnetVersion = $dotnetVersion }
+          $summary | Add-Member -NotePropertyName releaseCandidateChecksPassedAt -NotePropertyValue ([DateTimeOffset]::UtcNow.ToString('o'))
+          $summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $summaryPath -Encoding utf8
+
       - name: Retain native package diagnostics first
         if: always()
         timeout-minutes: 5
@@ -365,6 +392,7 @@ jobs:
             release/sha256sums.txt
             release/sbom.json
             release/windows-package-inputs.json
+            release/osx-*-package-inputs.json
           if-no-files-found: error
           retention-days: 30
 

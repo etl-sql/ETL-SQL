@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "maximumAgeDays": 7,
+  "maximumPayloadBytes": 536870912,
+  "maximumFileBytes": 33554432,
+  "maximumFiles": 10000,
+  "maximumArchiveEntries": 20000,
+  "uncovered": [
+    "Operator reviews are submitted attestations, not trusted-host execution provenance.",
+    "Hosted CI, workstation and package gates remain separate.",
+    "Shared SaaS runtime containment is not certified."
+  ],
+  "requiredReports": ["deployment", "canary", "recovery"],
+  "requiredReviews": [
+    "source-and-security", "dependency-and-license", "evidence-redaction",
+    "release-notes-and-upgrade-guidance", "deployment-claims-and-overlays", "codeql-alert-triage"
+  ],
+  "conditionalCertifications": [
+    "ha-fault-recovery", "stress-scale", "provider-scale", "columnar-storage",
+    "columnar-operators", "spill-allocation", "service-capacity", "huge-scale",
+    "billion-row", "sustained-ha-capacity", "full-service-capacity-baseline"
+  ]
+}

@@ -115,15 +115,19 @@ try {
   const env = { ...process.env, TAG_NAME: `v${version}`, SOURCE_SHA: sourceSha, GITHUB_REPOSITORY: 'fixture/local' };
   const retained = new Map();
   for (const [suffix, platform, target] of [['intel', 'osx-x64', 'darwin-x64'], ['arm64', 'osx-arm64', 'darwin-arm64']]) {
-    const directory = path.join(rehearsal, 'candidate', suffix);
+    const directory = path.join(rehearsal, 'candidate', suffix, 'release');
     mkdirSync(directory, { recursive: true });
-    const files = [`ETL-SQL-v${version}-${platform}.zip`, `etl-sql-vscode-${version}-${target}.vsix`];
+    const files = [`ETL-SQL-v${version}-${platform}.zip`, `etl-sql-vscode-${version}-${target}.vsix`,
+      ...(platform === 'osx-x64' ? [`ETL-SQL_v${version}.dmg`] : [])];
     for (const name of files) writeFileSync(path.join(directory, name), `${platform} retained bytes`);
-    await macosPackages('create', directory, sourceSha, version, platform);
+    await macosPackages('create', directory, sourceSha, version, platform, platform === 'osx-x64' ? '--include-dmg' : undefined);
     const manifest = `${platform}-package-inputs.json`;
     env[`${suffix.toUpperCase()}_MANIFEST_SHA256`] = digest(readFileSync(path.join(directory, manifest)));
-    for (const name of [...files, manifest]) retained.set(path.join(directory, name), readFileSync(path.join(directory, name)));
+    for (const name of [...files, manifest]) retained.set(path.join(path.dirname(directory), name), readFileSync(path.join(directory, name)));
+    writeFileSync(path.join(directory, 'sbom.json'), 'per-platform metadata must not overwrite consolidated metadata');
+    mkdirSync(path.join(rehearsal, 'candidate', suffix, 'artifacts'));
   }
+  passed(runUpload(uploadCommands('upload-macos', 'Stage only certified release packages'), rehearsal, env));
   const run = () => runUpload(commands, rehearsal, env);
   writeFileSync(path.join(rehearsal, 'fail-next-upload'), 'fail once');
   assert.equal(run().status, 23);
@@ -134,6 +138,7 @@ try {
     assert.deepEqual(readFileSync(file), bytes);
     assert.deepEqual(readFileSync(path.join(rehearsal, 'uploaded', path.basename(file))), bytes);
   }
+  assert.equal(readFileSync(path.join(rehearsal, 'candidate/intel/release/sbom.json'), 'utf8'), 'per-platform metadata must not overwrite consolidated metadata');
   const calls = readFileSync(path.join(rehearsal, 'uploads.log'), 'utf8');
   for (const [file, bytes] of retained) {
     writeFileSync(file, 'changed after successful build');

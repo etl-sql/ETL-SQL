@@ -73,6 +73,13 @@ class load and shared background-service state from its startup/shutdown observa
 
 ## History and outcomes
 
+- **v0.22.0 — missing-chart timeout evidence:** CI `41205139235` times out waiting for the
+  missing-chart message in shard 3. The plain locator wait did not capture a snapshot. It now
+  retains the existing bounded, sanitized request history and own-process resource counts before
+  teardown, then rethrows the original exception under the same timeout. A controlled missing-element
+  regression covers HTTP failure history, caller identity and token removal. The original test and
+  its 23-case class pass locally, which does not explain the hosted failure. Retained baseline and
+  follow-up evidence: `release-validation/current-ci-review/`. No retries or timeout increases were added.
 - **v0.22.0 — Studio startup and reload evidence:** hosted Portal-shard rehearsal `40609095598`
   on `c9003c12dfb5d8d7914f0bc7b6a32e4e9da58227` includes two startup timeouts in
   `StudioPersistenceTests` and one empty editor read after reload. Existing snapshots cover failed

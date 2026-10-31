@@ -53,6 +53,14 @@ for (const prefix of ['browser-asset-ownership-', 'studio-performance-windows-',
   assert.ok(artifactNames.has(`${prefix}123-2`));
 }
 const windowsUpload = jobs.get('upload-windows');
+assert.match(jobs.get('prepare-release'), /needs: \[validate, operator-evidence\]/);
+for (const kind of ['msi', 'deb']) assert.match(jobs.get(`certify-${kind}`), /needs: \[validate, find-\w+, operator-evidence\]/);
+assert.match(jobs.get('operator-evidence'), /contents: write/);
+assert.match(jobs.get('operator-evidence'), /security-events: read/);
+assert.match(jobs.get('operator-evidence'), /collect-operator-release-evidence\.mjs/);
+assert.match(jobs.get('attest-provenance'), /Verify and attach operator evidence to draft/);
+assert.match(jobs.get('publish-release'), /Recheck operator evidence before publication/);
+assert.match(jobs.get('publish-release'), /Verify draft operator evidence attachment/);
 assert.equal(jobs.has('build-windows'), false, 'Release must promote the accepted Windows bytes without rebuilding.');
 assert.match(jobs.get('validate'), /Require certified pre-tag Windows packages/);
 assert.match(jobs.get('validate'), /collect-certified-windows\.mjs/);
@@ -66,13 +74,15 @@ assert.match(jobs.get('attest-provenance'), /needs: \[validate, upload-windows,/
 assert.match(jobs.get('attest-provenance'), /MANIFEST_SHA256: \$\{\{ needs\.upload-windows\.outputs\.manifest_sha256 \}\}/);
 assert.match(jobs.get('attest-provenance'), /windows-release-packages\.mjs verify dist/);
 for (const [suffix, rid] of [['intel', 'osx-x64'], ['arm64', 'osx-arm64']]) {
-  const build = jobs.get(`build-macos-${suffix}`);
+  const build = jobs.get(`select-macos-${suffix}`);
   assert.match(build, /^    needs: validate\r?$/m);
-  assert.match(build, /uses: \.\/\.github\/workflows\/macos-release-package\.yml/);
-  assert.match(build, new RegExp(`rid: ${rid}`));
+  assert.match(build, /collect-certified-macos\.mjs/);
+  assert.doesNotMatch(build, /uses: \.\/\.github\/workflows\/macos-release-package\.yml|publish-release\.ps1|dotnet build/);
+  assert.ok(build.includes(rid));
+  assert.equal(jobs.has(`build-macos-${suffix}`), false);
   const upload = jobs.get('upload-macos');
-  assert.ok(upload.includes('artifact-ids: ${{ needs.build-macos-' + suffix + '.outputs.artifact_id }}'));
-  assert.ok(upload.includes(suffix + '_manifest_sha256: ${{ needs.build-macos-' + suffix + '.outputs.manifest_sha256 }}'));
+  assert.ok(upload.includes('artifact-ids: ${{ needs.select-macos-' + suffix + '.outputs.artifact_id }}'));
+  assert.ok(upload.includes(suffix + '_manifest_sha256: ${{ needs.select-macos-' + suffix + '.outputs.manifest_sha256 }}'));
   assert.ok(jobs.get('attest-provenance').includes(`needs.upload-macos.outputs.${suffix}_manifest_sha256`));
 }
 const macosBuild = readFileSync(new URL('../../.github/workflows/macos-release-package.yml', import.meta.url), 'utf8');
@@ -96,7 +106,7 @@ for (const [job, platform] of [[windowsUpload, 'Windows'], [macosUpload, 'macOS'
   assert.match(recovery, /run: node scripts\/report-package-upload-recovery\.mjs/);
 }
 assert.doesNotMatch(macosUpload, /publish-release\.ps1|dotnet build|npm ci/);
-assert.match(macosUpload, /^    needs: \[validate, prepare-release, build-macos-intel, build-macos-arm64\]/m);
+assert.match(macosUpload, /^    needs: \[validate, prepare-release, select-macos-intel, select-macos-arm64\]/m);
 for (const rid of ['osx-x64', 'osx-arm64']) {
   const verification = macosUpload.indexOf(`${rid} "$`);
   assert.ok(verification >= 0 && verification < macosUpload.indexOf('gh release upload'));
@@ -301,6 +311,7 @@ exit ([int]$env:FIXTURE_EXIT)
     assert.ok(budget >= steps + 5, `${name}: ${budget} minutes cannot cover ${steps} minutes of steps plus setup`);
   };
   assertJobBudget(nativeJob, 'Native package');
+  for (const id of ['select-macos-intel', 'select-macos-arm64', 'upload-macos', 'operator-evidence']) assertJobBudget(jobs.get(id), id);
   assert.match(publishStep, /^        timeout-minutes: 80/m);
   const nativeCommands = publishStep.split('        run: |')[1].replace(/^          /gm, '');
   writeFileSync(path.join(directory, 'native-publish.ps1'), nativeCommands);

@@ -578,6 +578,21 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   The workflow's actual upload commands also pass a local mock-GitHub failure/retry rehearsal:
   unchanged retained bytes survive the retry, and tampering stops before any upload command runs.
   Hosted architecture-only retry, failed-upload recovery and elapsed-time evidence remain open.
+  **Update 2026-10-31:** Release now selects both macOS architectures from the frozen release
+  branch's manual native-package certification instead of rebuilding them after tagging. Shared
+  verification retains the original successful job/artifact across retries and binds CLI/webview
+  acceptance, toolchain, package hashes and Intel mounted-DMG acceptance. Selections are attached
+  to the draft and origins/draft bytes are rechecked before publication. Local API, producer,
+  package and retry fixtures cover both architectures; hosted promotion/timing remains required.
+  The checklist now schedules independent producers together, counts the workstation's full gate
+  once, reuses installed/CLI receipts, and prevents a new merge commit between certification and tag.
+  Both release drivers accept the workstation run's existing validation state explicitly, preserving
+  full-scope/freshness/candidate guards. This removes the default-directory obstacle that could
+  require a second full local gate. Executed PowerShell/Bash fixtures cover Unicode/bracketed
+  paths and reject failed, partial, missing and wrong-candidate supplied state.
+  Windows artifact-certification fixtures now have their own source-preflight entry. They had
+  also been imported by the Windows package fixture and rediscovered by the consumer gate;
+  manifest-owned exclusion now runs that suite once per validation pass.
 - [x] **Split MSI build and certification into resumable jobs.** Persist the built MSI before any
   install test. Run workstation and Portal certification on separate clean runners against that
   artifact and one pinned previous-release MSI. A Portal failure should allow only that job to
@@ -642,6 +657,18 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
     cost/customer guards, revocations, replacement reasons and lifecycle continuity/timing. Corrupted
     details cannot pass solely by retaining a successful summary. Deterministic evidence still does
     not establish live provisioning, notification delivery or trusted-host provenance.
+    Operator checklist enforcement is now implemented: both drivers, promotion and publication
+    require the original candidate-bound submission. Deployment/canary/recovery report validators,
+    explicit conditional reviews, previous-stable-release diff, candidate branch and zero-open-alert
+    checks reject incomplete or altered evidence without rerunning suites. Public CLI and workflow
+    fixtures cover valid synthetic contracts, corrupt reports, archive limits and changed origins.
+    These are validator tests, not candidate certification. Hosted publication/recovery acceptance
+    and final-candidate operator reports remain required before this item can close.
+    Combined local validation passes in 758.5 seconds: 56 source checks, 121 consumer checks,
+    53 Portal contracts/smoke cases and 142 engine smoke/audit cases. Focused native Linux
+    report, attachment, macOS promotion and driver checks pass too. The final archive-path guard
+    rejects Windows alternate data streams before extraction; its affected Windows checks pass
+    separately after the combined source preflight. Evidence: `release-validation/current-ci-review/`.
 - [x] **Report all cheap failures in one preflight.** Move independent syntax, metadata, workflow,
   path-map and static installer-source checks into a shared local/CI preflight that collects all
   failures before exiting. Run it before expensive packaging and installation. Keep checks requiring
@@ -900,6 +927,16 @@ failure, profiles and local reports: `release-validation/critical-path/`.
 - [ ] **Browser lane on the Windows CI runner:** `net::ERR_NO_BUFFER_SPACE` and 30 s navigation
   timeouts, one test per run. The recorded next step is to capture failed requests and the process's
   handle and socket counts when a navigation fails.
+  **Follow-up 2026-10-31:** current CI `41205139235` fails only shard 3's missing-chart-payload
+  assertion; MSI, native packages and CodeQL pass. Its plain locator wait retained no diagnostic
+  snapshot. That wait now uses the same bounded, sanitized transport/resource capture as navigation
+  failures, preserving the original timeout and exception. A controlled failed-request/missing-element
+  regression checks the retained history, caller, process resources and token removal. The original
+  hosted log, artifact and local reproducer results are retained under
+  `release-validation/current-ci-review/`. The hosted cause remains unproven; a local pass cannot close it.
+  The unchanged local shard passes all 338 cases with verified inventory coverage; the failing
+  hosted case passes in 95 ms there. The rebuilt diagnostic/detail slice then passes all 36 cases,
+  including the new sanitized timeout capture. These are development results, not final-candidate evidence.
   **In progress:** context-level transport history and navigation/URL-wait wrappers now capture
   bounded JSON snapshots before teardown. Chromium identifies its own processes through CDP;
   Windows IP Helper tables supply per-PID IPv4/IPv6 TCP/UDP endpoint counts alongside handle counts.

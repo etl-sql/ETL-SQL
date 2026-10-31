@@ -1,19 +1,19 @@
 <#
 .SYNOPSIS
-    Mechanical release driver for ETL-SQL: lands main, tags, sets curated notes, and
+    Mechanical release driver for ETL-SQL: tags the certified branch, sets curated notes, and
     watches the GitHub Release workflow to a verified, published result.
 
 .DESCRIPTION
     Runs the mechanical Phases 3-5 of Docs/Release_Checklist.md AFTER Test-PreRelease.ps1
-    has passed and the version bump + CHANGELOG entry are committed on main. It does NOT
+    has passed and the version bump + CHANGELOG entry are committed on the release branch. It does NOT
     bump versions (use Set-Version.ps1), author the CHANGELOG, or build artifacts locally
-    (the Release workflow builds them in the cloud on the tag).
+    (pre-tag certification builds them; Release promotes their accepted bytes).
 
     Steps:
       1. Pre-flight guards: tools present, clean tree, on the release branch, in sync with origin.
       2. Pre-release gate: release-validation/latest/state.json is Passed for the current commit.
       3. Version consistency across the six version sources.
-      4. Resolve release notes (-NotesFile, Docs/ReleaseNotes/vX.Y.Z.md, release-notes-vX.Y.Z.md, or the CHANGELOG section).
+      4. Resolve release notes (-NotesFile, docs/releases/vX.Y.Z.md, release-notes-vX.Y.Z.md, or the CHANGELOG section).
       5. Tag identity guard: existing local/remote tags must resolve to the candidate commit.
       6. Push the branch; wait for CI to go green for the pushed commit.
       7. Create + push the release tag (full ref to avoid ambiguity). Signed (-s) when -SignTag is
@@ -47,6 +47,7 @@ param(
     [string]$Version,
 
     [string]$NotesFile,
+    [string]$ValidationState,
     [string]$Remote = "origin",
     [string]$Branch = "main",
 
@@ -145,14 +146,15 @@ if ($LASTEXITCODE -ne 0) { Fail 'Finalize release metadata before tagging.' }
 # ---- 2. pre-release validation gate --------------------------------------
 Write-Step "Pre-release validation gate"
 $statePath = Join-Path $RepoRoot "release-validation/latest/state.json"
-if (-not (Test-Path $statePath)) {
+if ($ValidationState) { $statePath = [IO.Path]::GetFullPath($ValidationState, $RepoRoot) }
+if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
     Fail "No pre-release state at $statePath. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale first."
 }
 else {
     Test-Tool node
     & node (Join-Path $ScriptRoot 'check-release-evidence.mjs') $statePath $localSha
     if ($LASTEXITCODE -ne 0) { Fail 'Local evidence is incomplete. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale without quick/skip/forced-resume options.' }
-    $state = Get-Content $statePath -Raw | ConvertFrom-Json
+    $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
     if ($state.status -ne "Passed") {
         Fail "Latest pre-release run status is '$($state.status)', not 'Passed'. Fix and re-run Test-PreRelease.ps1."
     }
@@ -188,6 +190,17 @@ if ($mismatch.Count -gt 0) {
 }
 Write-Ok "all six version sources read $Version"
 
+# ---- 3b. operator evidence before push/tag --------------------------------
+Write-Step 'Operator release evidence'
+$operatorRepository = (& gh repo view --json nameWithOwner --jq '.nameWithOwner')
+if ($LASTEXITCODE -ne 0 -or -not $operatorRepository) { Fail 'Cannot resolve the operator evidence repository.' }
+$operatorRoot = Join-Path $RepoRoot 'release-validation/operator-preflight'
+New-Item -ItemType Directory -Force -Path $operatorRoot | Out-Null
+$operatorOutput = Join-Path $operatorRoot ("$localSha-" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() + "-$PID")
+& node (Join-Path $ScriptRoot 'collect-operator-release-evidence.mjs') $operatorRepository.Trim() $localSha $Version $operatorOutput
+if ($LASTEXITCODE -ne 0) { Fail 'Operator evidence is missing, incomplete or changed. Complete its candidate draft before tagging; no certification was rerun.' }
+Write-Ok 'operator checklist and retained reports verified'
+
 # ---- 4. resolve release notes --------------------------------------------
 Write-Step "Release notes"
 $notesPath = $null
@@ -197,9 +210,9 @@ if ($NotesFile) {
     $notesPath = (Resolve-Path $NotesFile).Path
     Write-Ok "using $NotesFile"
 }
-elseif (Test-Path (Join-Path $RepoRoot "Docs/ReleaseNotes/$Tag.md")) {
-    $notesPath = Join-Path $RepoRoot "Docs/ReleaseNotes/$Tag.md"
-    Write-Ok "using Docs/ReleaseNotes/$Tag.md"
+elseif (Test-Path (Join-Path $RepoRoot "docs/releases/$Tag.md")) {
+    $notesPath = Join-Path $RepoRoot "docs/releases/$Tag.md"
+    Write-Ok "using docs/releases/$Tag.md"
 }
 elseif (Test-Path (Join-Path $RepoRoot "release-notes-$Tag.md")) {
     $notesPath = Join-Path $RepoRoot "release-notes-$Tag.md"

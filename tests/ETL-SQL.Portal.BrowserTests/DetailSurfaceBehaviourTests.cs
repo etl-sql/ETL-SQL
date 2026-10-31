@@ -500,7 +500,7 @@ public sealed class DetailSurfaceBehaviourTests(DetailSurfaceHarnessFixture fixt
         await page.GotoWithDiagnosticsAsync($"{fixture.BaseUrl}/tools/ui-sandbox/detail-surface.html?payload=missing");
 
         var missing = page.Locator(".missing-chart-payload");
-        await missing.WaitForAsync(new LocatorWaitForOptions { Timeout = 30_000 });
+        await missing.WaitForWithDiagnosticsAsync(new LocatorWaitForOptions { Timeout = 30_000 });
 
         // Explicit, not blank: the message names the visual and its type, and is announced.
         var text = await missing.InnerTextAsync();

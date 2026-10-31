@@ -7,6 +7,15 @@ For workstation or service setup, use the packaged installation paths in the
 [Installation guide](../docs/administration/platform/installation.md). The simulated workstation
 bootstrap scripts and obsolete standalone service helpers were retired in v0.22.0.
 
+## Release evidence
+
+The [operator evidence guide](../docs/releases/operator-evidence.md) describes the required
+candidate-bound checklist bundle. `operator-release-evidence.mjs` creates pending templates and
+validates/seals completed submissions. `collect-operator-release-evidence.mjs` collects the original
+draft attachment and rechecks its hashes, previous-release diff, candidate branch and CodeQL alerts.
+Both release drivers and publication require it. Validation reads retained reports without rerunning
+their suites. Operator attestations remain distinct from trusted-host execution evidence.
+
 ## CI impact selection
 
 `ci-impact.json` owns the initial change-to-lane mapping. `select-ci-lanes.mjs` reports affected
@@ -53,6 +62,19 @@ release branch. `collect-certified-windows.mjs` verifies the original job/artifa
 toolchain and package hashes. It pins the selection before promotion and rechecks it alongside the
 actual draft files before publication. Missing certification blocks Release without a Windows rebuild.
 See the [release checklist](../docs/releases/release-checklist.md) for dispatch and recovery.
+
+`Invoke-Release.ps1 -ValidationState <path>` / `invoke-release.sh --validation-state <path>` reuse
+the independent workstation run's existing `validation/latest/state.json`. They enforce the same
+candidate, fingerprint, freshness and full-phase checks as the default state path. This avoids
+running the local gate again solely to satisfy the release driver's default directory. Both drivers
+resolve authored release notes from `docs/releases/` when `-NotesFile` / `--notes-file` is omitted.
+
+macOS promotion uses the same native acceptance verifier through `collect-certified-macos.mjs`.
+Both architecture artifacts must come from a successful exact-candidate manual native-package run
+on a release branch. Intel additionally requires the mounted DMG acceptance and hash. Release pins
+each selection, uploads the retained ZIP/VSIX/DMG bytes, and verifies origins and actual draft bytes
+again before publication. No macOS build runs in Release. Failed upload recovery reuses the original
+artifact IDs; missing or changed evidence blocks promotion. Hosted acceptance remains required.
 
 `MsiImpact.Helpers.ps1` reads the same manifest rules for regular MSI selection. The same classified
 documentation and browser-test-only paths can skip installer certification; shipped/shared and

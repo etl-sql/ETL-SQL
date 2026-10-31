@@ -40,6 +40,7 @@ $RepoRoot = $env:FIXTURE_ROOT
 $ScriptRoot = $env:SOURCE_SCRIPTS
 $Force = $env:TEST_FORCE -eq '1'
 $localSha = (& git rev-parse HEAD).Trim()
+$ValidationState = $env:FIXTURE_VALIDATION_STATE
 function Write-Step($m) {}
 function Write-Ok($m) {}
 function Write-WarnLine($m) {}
@@ -106,6 +107,42 @@ wait_for_run nightly-release.yml aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1 Nigh
     assert.notEqual(rejected.status, 0);
     assert.match(rejected.stderr, /Unknown argument/);
   }
+  writeFileSync(path.join(root, 'operator-gate.ps1'), `
+$ErrorActionPreference = 'Stop'
+$RepoRoot = $env:FIXTURE_ROOT
+$ScriptRoot = $env:SOURCE_SCRIPTS
+$localSha = '${'a'.repeat(40)}'
+$Version = '1.2.3'
+function Write-Step($m) {}
+function Write-Ok($m) {}
+function Fail($m) { throw $m }
+function gh { 'owner/repo'; $global:LASTEXITCODE = 0 }
+function node { $args | ConvertTo-Json -AsArray | Set-Content operator-args.json; $global:LASTEXITCODE = [int]$env:OPERATOR_EXIT }
+${section(psSource, '# ---- 3b.', '# ---- 4.')}
+'TAG_REACHABLE'
+`);
+  writeFileSync(path.join(root, 'operator-gate.sh'), `set -euo pipefail
+LOCAL_SHA=${'a'.repeat(40)}
+VERSION=1.2.3
+step() { :; }
+ok() { :; }
+die() { echo "$*" >&2; exit 1; }
+gh() { printf owner/repo; }
+node() { printf '%s\\n' "$@" > operator-args.txt; return "$OPERATOR_EXIT"; }
+${section(bashSource, '# ---- 3b.', '# ---- 4.')}
+echo TAG_REACHABLE
+`);
+  for (const [command, args] of [['pwsh', ['-NoProfile', '-File', 'operator-gate.ps1']], [bash, ['operator-gate.sh']]]) {
+    for (const exit of [0, 7]) {
+      const result = execute(command, args, { env: { OPERATOR_EXIT: String(exit) } });
+      assert.equal(result.status === 0, exit === 0, result.stdout + result.stderr);
+      assert.equal(result.stdout.includes('TAG_REACHABLE'), exit === 0);
+      const recorded = command === 'pwsh' ? JSON.parse(readFileSync(path.join(root, 'operator-args.json'))) : readFileSync(path.join(root, 'operator-args.txt'), 'utf8').trim().split(/\r?\n/);
+      assert.ok(recorded[0].replaceAll('\\', '/').endsWith('/collect-operator-release-evidence.mjs'));
+      assert.deepEqual(recorded.slice(1, 4), ['owner/repo', 'a'.repeat(40), '1.2.3']);
+      assert.ok(recorded[4].replaceAll('\\', '/').includes('release-validation/operator-preflight/'));
+    }
+  }
   writeFileSync(path.join(root, 'status-failure.ps1'), `
 function git { $global:LASTEXITCODE = 128 }
 function Fail($message) { throw $message }
@@ -147,6 +184,22 @@ throw 'Status failure was accepted.'
       assert.equal(result.status === 0, accepted, `${command} ${label}: ${result.stdout} ${result.stderr}`);
       assert.equal(result.stdout.includes('GATE_ACCEPTED'), accepted);
     }
+    // Workstation certification owns its validation/latest state beneath a private evidence root.
+    // Its full passed state must be reusable without rerunning the gate at the driver's default path.
+    const customState = path.join(root, 'workstation [候補]', 'validation/latest/state.json');
+    mkdirSync(path.dirname(customState), { recursive: true });
+    writeFileSync(customState, JSON.stringify(full));
+    writeFileSync(path.join(root, 'release-validation/latest/state.json'), JSON.stringify({ ...full, status: 'Failed' }));
+    const environment = { FIXTURE_VALIDATION_STATE: customState, VALIDATION_STATE: customState.replaceAll('\\', '/'), TEST_FORCE: '0' };
+    const custom = execute(command, args, { env: environment });
+    assert.equal(custom.status, 0, custom.stdout + custom.stderr);
+    assert.ok(custom.stdout.includes('GATE_ACCEPTED'));
+    for (const state of [{ ...full, commitHash: 'b'.repeat(40) }, { ...full, status: 'Failed' },
+      { ...full, scope: { ...full.scope, quick: true } }]) {
+      writeFileSync(customState, JSON.stringify(state));
+      assert.notEqual(execute(command, args, { env: environment }).status, 0);
+    }
+    assert.notEqual(execute(command, args, { env: { ...environment, FIXTURE_VALIDATION_STATE: customState + '.missing', VALIDATION_STATE: customState.replaceAll('\\', '/') + '.missing' } }).status, 0);
   }
   const validationSource = readFileSync(path.join(scripts, 'Test-PreRelease.ps1'), 'utf8');
   writeFileSync(path.join(root, 'resume.ps1'), `

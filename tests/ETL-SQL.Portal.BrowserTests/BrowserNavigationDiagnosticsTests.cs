@@ -8,6 +8,36 @@ namespace ETL_SQL.Portal.BrowserTests;
 public sealed class BrowserNavigationDiagnosticsTests(DetailSurfaceHarnessFixture fixture)
 {
     [Fact]
+    public async Task LocatorTimeout_RetainsSanitizedHistoryAndPreservesOriginalTimeout()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        await using var context = await session.Page.Context.Browser!.NewContextAsync();
+        var directory = EvidenceDirectory();
+        await using (var diagnostics = new BrowserNavigationDiagnostics(context, directory))
+        {
+            var page = await context.NewPageAsync();
+            await page.RouteAsync("https://example.invalid/**", route => route.FulfillAsync(new()
+            { Status = 200, ContentType = "text/html", Body = "<title>Missing chart payload</title>" }));
+            await page.RouteAsync("**/chart.js?**", route => route.FulfillAsync(new()
+            { Status = 503, ContentType = "text/plain", Body = "private-response-body" }));
+            await page.GotoWithDiagnosticsAsync("https://example.invalid/report?token=private-page-token");
+            Assert.Equal(503, await page.EvaluateAsync<int>("async () => (await fetch('/chart.js?token=private-module-token')).status"));
+            // flaky-wait-budget-ok: the missing message is intentional after a completed failed request.
+            var exception = await Assert.ThrowsAsync<TimeoutException>(() =>
+                page.Locator(".missing-chart-payload").WaitForWithDiagnosticsAsync(new() { Timeout = 100 }));
+            Assert.Contains("missing-chart-payload", exception.Message);
+        }
+        var snapshot = Assert.Single(ReadSnapshots(directory));
+        Assert.Equal("locator-wait-failure", snapshot.GetProperty("trigger").GetString());
+        Assert.Equal(nameof(LocatorTimeout_RetainsSanitizedHistoryAndPreservesOriginalTimeout), snapshot.GetProperty("caller").GetString());
+        var failure = Assert.Single(snapshot.GetProperty("requests").GetProperty("HttpErrors").EnumerateArray());
+        Assert.Equal(503, failure.GetProperty("Status").GetInt32());
+        Assert.Equal("https://example.invalid/chart.js", failure.GetProperty("Url").GetString());
+        Assert.NotEmpty(snapshot.GetProperty("processes").EnumerateArray());
+        Assert.DoesNotContain("private-", snapshot.GetRawText());
+    }
+
+    [Fact]
     public async Task StudioStartupFailure_RetainsSanitizedHttpErrorsAndProcessResources()
     {
         await using var session = await fixture.NewSessionAsync();

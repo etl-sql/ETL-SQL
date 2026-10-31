@@ -115,7 +115,7 @@ try {
   const extracted = path.join(root, 'valid-extract');
   extractWorkstationArchive(validArchive, extracted);
   assert.equal(verifyWorkstationEvidence(path.join(extracted, 'bundle'), sha, { now }).manifestSha256, valid.selected.manifestSha256);
-  for (const [i, name] of ['bundle/../../escaped.txt', '/bundle/absolute.txt', 'bundle\\backslash.txt', 'bundle/linked.json'].entries()) {
+  for (const [i, name] of ['bundle/../../escaped.txt', '/bundle/absolute.txt', 'bundle\\backslash.txt', 'bundle/linked.json', 'bundle/report.json:hidden'].entries()) {
     const unsafeArchive = path.join(root, `unsafe-${i}.zip`);
     const response = spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-Command', `
 $zip=[IO.Compression.ZipFile]::Open($env:FIXTURE_ARCHIVE,[IO.Compression.ZipArchiveMode]::Create)

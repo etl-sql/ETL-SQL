@@ -558,18 +558,32 @@ ETL-SQL strictly follows [Semantic Versioning 2.0.0](https://semver.org/). Agent
 - **No direct commits to `main` or `dev`.**
 - Active development happens on the **release branch for the version in flight** (e.g. `release/v0.19.0`). Branch features and fixes off that branch, not off `dev` or `main`, and open pull requests back into it.
 - After a stable release is tagged, critical bug fixes and security hotfixes are applied (or cherry-picked) to that version's `release/vX.Y.Z` branch, shipped as a patch, and merged forward.
-- Batch work into a single push. Every push to `main` or a `release/**` branch runs the full ~40-minute CI; back-to-back pushes queue the runners. Cancel superseded runs when the queue backs up.
+- Batch work into a single push. Regular push/PR CI uses the shared impact manifest; shared or
+  unknown changes select broad coverage. Full frozen-candidate certification selects every required
+  lane. Preserve immutable candidate runs and recover unchanged inputs with failed-job-only retries.
 
 ### 16.3 Release Flow
 
 Full procedure: **[release-checklist.md](./docs/releases/release-checklist.md)**. The mechanical sequence:
 
-1. `scripts/Set-Version.ps1 -Version x.y.z` plus a hand-authored `CHANGELOG.md` entry.
-2. `scripts/Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration` — the authoritative gate. Writes `release-validation/latest/state.json`; `-Explain` previews the plan, `-Resume` continues after fixing a failed phase.
-3. `scripts/Master-Release.ps1 -Version x.y.z` — builds the VS Code UI, runs cross-platform packaging via `scripts/publish-release.ps1` (emits `release/`, `sha256sums.txt`, a CycloneDX `sbom.json`, and SLSA provenance), and builds the Windows MSI.
-4. Tag and publish **manually**: push the branch, then `git tag vx.y.z && git push origin vx.y.z`. The tag push triggers `.github/workflows/release.yml`.
+1. Finish versioning, changelog, release notes, dates and source preflight before freezing the SHA.
+2. Run full hosted CI/CodeQL, native packages, MSI/DEB installed certification and the independent
+   Windows workstation gate on that exact candidate. Independent hosts may run in parallel. The
+   workstation driver runs `Test-PreRelease.ps1` with SLT, Docker integration and Standard scale;
+   do not run that full gate again to populate a different state directory. Complete the checklist's
+   deployment/operator evidence too.
+3. Review retained results and hashes. Use failed-job-only retries or workstation `-Resume` for
+   unchanged inputs. Source changes require a new candidate. `Master-Release.ps1` remains a local
+   packaging/diagnostic tool; it is not an additional publication build.
+4. Tag and publish **manually** only after all applicable evidence is accepted. The tag-triggered
+   `.github/workflows/release.yml` verifies and promotes certified packages and generates consolidated
+   checksums, SBOM and provenance. It does not rebuild macOS packages.
 
-`.github/workflows/ci.yml` runs on pushes and PRs to `main` and `release/**` but does **not** cover the Docker integration or SLT lanes — a green CI is not a substitute for `Test-PreRelease`. Confirm CI is green before tagging: a few failures only reproduce there.
+Regular CI is impact-selected. Explicit full certification includes Docker integration and the
+cross-platform enterprise/browser lanes; SLT and the independent workstation run remain separate
+requirements. Green regular CI alone cannot authorize publication. Release drivers accept the
+workstation's original state with `-ValidationState` / `--validation-state` and enforce the same
+full-scope, freshness, candidate and source-fingerprint checks.
 
 ---
 
@@ -635,7 +649,10 @@ To prevent cross-platform CI failures and avoid wasting 1-hour GitHub Actions ru
 4. **C# Text/Doc Assertions Must Normalize Line Endings**:
    - When writing C# tests that read markdown or text files from disk via `File.ReadAllText()`, never assume `\r\n` or `\n`. Always use `.Replace("\r\n", "\n")` or regex `\r?\n` for cross-platform stability.
 5. **Always Run Pre-Push Validation Locally**:
-   - Before pushing to remote, always execute `.\scripts\Test-PrePush.ps1` (or verify via git pre-push hook). It verifies formatting, asset sync, syntax index sync, link coverage, flaky sleep patterns, test lane inventory, and fast contract tests in ~30 seconds.
+   - Before pushing to remote, always execute `.\scripts\Test-PrePush.ps1` (or verify via git pre-push hook).
+     It selects affected checks and verifies formatting, assets, syntax, documentation, test inventory,
+     contracts and smoke tests. Source preflight has measured about two minutes; broad runs about
+     twelve minutes. These are observations, not timeout guarantees.
 
 ---
 
