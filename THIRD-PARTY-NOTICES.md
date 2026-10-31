@@ -97,6 +97,10 @@ NuGet package details can be reviewed at:
 
 ## Direct npm Dependencies
 
+The extension and build/test toolchains use minimatch 11 and glob 14 under BlueOak-1.0.0.
+Copyright Isaac Z. Schlueter and contributors. Preserve their packaged LICENSE files.
+Sources and licenses: https://github.com/isaacs/minimatch and https://github.com/isaacs/node-glob.
+
 The VS Code extension UI uses the following direct npm packages. The generated inventory reads
 their licenses from the committed npm lockfiles before publishing the extension.
 

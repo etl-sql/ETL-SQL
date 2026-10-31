@@ -12,6 +12,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Update minimatch and glob to patched releases across lint, extension, UI and VSIX toolchains.
+  Read the draft manifest through its validated open handle to prevent path replacement races.
+
 - Verify hosted failed-upload and missing-artifact recovery in 3m58s using the original Windows
   packages. Successful jobs and immutable artifact identity survive one failed-job-only retry;
   downloaded draft bytes match the original manifest. No public release or rebuild was performed.

@@ -8,14 +8,15 @@
   },
   "devDependencies": {
     "@vscode/vsce": "4.0.0",
-    "yauzl": "3.4.0",
+    "@vscode/vsce-sign": "file:./unsigned-signing",
     "xml2js": "0.6.2",
-    "@vscode/vsce-sign": "file:./unsigned-signing"
+    "yauzl": "3.4.0"
   },
   "overrides": {
     "@vscode/vsce-sign": "$@vscode/vsce-sign",
     "@azure/msal-node": "7.1.1",
-    "qs": "6.16.1"
+    "qs": "6.16.1",
+    "minimatch": "^11.0.1"
   },
   "description": "Locked unsigned VSIX packager and archive verification tools. Signing is disabled by a repository-owned replacement.",
   "license": "Apache-2.0"

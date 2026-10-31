@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { lstat, readdir, readFile, writeFile } from 'node:fs/promises';
+import { lstat, open, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -36,9 +36,15 @@ export async function draftManifest(mode, directory, manifestPath, sourceSha, ta
     const assets = await inventory(directory);
     await writeFile(manifestPath, `${JSON.stringify({ schemaVersion: 1, sourceSha, tag, assets }, null, 2)}\n`, { flag: 'wx' });
   }
-  const info = await lstat(manifestPath);
-  if (!info.isFile() || info.isSymbolicLink()) throw new Error('Invalid draft manifest file.');
-  const bytes = await readFile(manifestPath), digest = createHash('sha256').update(bytes).digest('hex');
+  const handle = await open(manifestPath, 'r');
+  let bytes;
+  try {
+    const info = await handle.stat(), entry = await lstat(manifestPath);
+    if (!info.isFile() || !entry.isFile() || entry.isSymbolicLink() ||
+        info.dev !== entry.dev || info.ino !== entry.ino) throw new Error('Invalid draft manifest file.');
+    bytes = await handle.readFile();
+  } finally { await handle.close(); }
+  const digest = createHash('sha256').update(bytes).digest('hex');
   if (mode === 'verify') {
     if (!/^[a-f0-9]{64}$/.test(expectedHash ?? '') || digest !== expectedHash) throw new Error('Draft manifest hash mismatch.');
     const manifest = JSON.parse(bytes);
