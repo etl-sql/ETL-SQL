@@ -12,6 +12,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Stage macOS DMG applications under `release/` so packaging preserves the clean candidate.
+  Submit bounded MSI phase/resource annotations directly to the job's check run before and
+  after resource probes. Diagnostic delivery cannot change a certification result.
+
+- Bound MSI candidate builds with streamed diagnostics and a 45-minute process deadline;
+  retain build diagnostics separately before uploading the installer inputs.
+  Require explicit runner-job, shell-command and checkout deadlines across CI/release workflows.
+
 - Require a candidate-bound operator checklist bundle before release promotion and publication.
   Validate retained deployment, canary and recovery reports, explicit conditional reviews, the
   previous-release diff and CodeQL alert inventory without rerunning successful suites.

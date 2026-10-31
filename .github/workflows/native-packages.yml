@@ -16,6 +16,7 @@ concurrency:
 jobs:
   package-impact:
     name: Native package impact
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.impact.outputs.should_run }}
@@ -23,6 +24,7 @@ jobs:
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 13
         with:
           ref: ${{ env.CANDIDATE_SHA }}
           fetch-depth: 0
@@ -30,6 +32,7 @@ jobs:
         with:
           node-version: 22
       - name: Select package consumers
+        timeout-minutes: 13
         id: impact
         shell: pwsh
         env:
@@ -47,8 +50,10 @@ jobs:
           if ($selection.nativePackages -isnot [bool]) { throw 'Native package impact is missing.' }
           "should_run=$($selection.nativePackages.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
       - name: Prepare pinned workflow checker
+        timeout-minutes: 13
         run: node scripts/setup-actionlint.mjs
       - name: Collect source preflight findings
+        timeout-minutes: 12
         run: node scripts/release-preflight.mjs
       - name: Retain package selection and preflight logs
         if: always()
@@ -66,8 +71,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     # The Intel macOS runner takes about twice as long per publish as the others: 52 minutes for the
     # eight hosts and several more for the VSIX. Sixty minutes cancelled it mid-package twice.
-    # Cover preparation, publish, acceptance and both uploads, plus setup time.
-    timeout-minutes: 165
+    # Cover preparation, publish, acceptance, uploads and the observed ten-minute Intel checkout.
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
@@ -85,6 +90,7 @@ jobs:
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout candidate
+        timeout-minutes: 15
         uses: actions/checkout@v6
         with:
           ref: ${{ env.CANDIDATE_SHA }}
@@ -398,11 +404,13 @@ jobs:
 
   native-package-gate:
     name: Native Package Certification
+    timeout-minutes: 5
     needs: [package-impact, native-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Require package coverage or an explicit no-impact selection
+        timeout-minutes: 3
         env:
           IMPACT_RESULT: ${{ needs.package-impact.result }}
           PACKAGES_REQUIRED: ${{ needs.package-impact.outputs.should_run }}

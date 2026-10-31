@@ -33,6 +33,7 @@ jobs:
       artifact_id: ${{ steps.artifact.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 7
         with:
           ref: ${{ env.CANDIDATE_SHA }}
       - uses: actions/setup-node@v7
@@ -140,12 +141,13 @@ jobs:
     name: DEB fresh install, upgrade and rollback
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 70
     outputs:
       artifact_id: ${{ needs.build.outputs.artifact_id }}
       receipt_id: ${{ steps.receipt.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 10
         with:
           ref: ${{ env.CANDIDATE_SHA }}
       - uses: actions/setup-node@v7

@@ -33,8 +33,9 @@ $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $workflow = Get-Content (Join-Path $root '.github/workflows/msi-upgrade.yml') -Raw
 # Each isolated profile starts from a checkout without generated browser assets. Exercise the
 # preparation commands and their failure guards before the installer can mutate the machine.
-$preparation = [regex]::Match($workflow, '(?s)- name: Prepare candidate browser inventory\s+shell: pwsh\s+run: \|\r?\n(.*?)\r?\n      - name: Certify installer profile')
-if (-not $preparation.Success) { throw 'Isolated MSI jobs do not prepare their browser inventory before certification.' }
+$preparationStep = [regex]::Match($workflow, '(?ms)^      - name: Prepare candidate browser inventory\r?\n(.*?)(?=^      - |\z)')
+$preparation = [regex]::Match($preparationStep.Groups[1].Value, '(?ms)^        run: \|\r?\n(.*)$')
+if (-not $preparationStep.Success -or $preparationStep.Value -notmatch '(?m)^        shell: pwsh' -or -not $preparation.Success) { throw 'Isolated MSI jobs do not prepare their browser inventory before certification.' }
 $prepareScript = [scriptblock]::Create(($preparation.Groups[1].Value -replace '(?m)^          ', ''))
 & {
     function npm { $script:prepareCalls.Add('restore'); $global:LASTEXITCODE = if ($script:prepareFailure -eq 'restore') { 1 } else { 0 } }

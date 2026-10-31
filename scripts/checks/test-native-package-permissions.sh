@@ -54,13 +54,13 @@ awk '
 [[ "$(awk '$NF == "./usr/lib/etl-sql/bin/library.dll" { print $1 }' contents.txt)" == '-rw-r--r--' ]]
 [[ "$(awk '$NF == "./usr/lib/etl-sql/bin/read-only.txt" { print $1 }' contents.txt)" == '-r--r--r--' ]]
 
-mkdir -p src/ETL-SQL.Installer/mac
-printf 'keep until tools validate\n' > src/ETL-SQL.Installer/mac/sentinel
+mkdir -p release/mac-dmg
+printf 'keep until tools validate\n' > release/mac-dmg/sentinel
 if PATH="$FIXTURE/no-tools" /bin/bash scripts/build-mac-dmg.sh 0.22.0 "$FIXTURE/payload" > missing-mac-tool.log 2>&1; then
     echo 'Missing hdiutil incorrectly reported success' >&2
     exit 1
 fi
-test -f src/ETL-SQL.Installer/mac/sentinel
+test -f release/mac-dmg/sentinel
 grep -F 'hdiutil is required' missing-mac-tool.log
 hdiutil() { printf fixture-dmg > ETL-SQL_v0.22.0.dmg; }
 export -f hdiutil
@@ -71,14 +71,14 @@ for state in appsettings.secrets.json appsettings.secrets.json.fixture.tmp appse
     printf 'synthetic runtime sentinel\n' > "payload/$state"
     for builder in build-linux-packages.sh build-mac-dmg.sh; do
         printf keep > src/ETL-SQL.Installer/linux/build/sentinel
-        printf keep > src/ETL-SQL.Installer/mac/sentinel
+        printf keep > release/mac-dmg/sentinel
         if bash "scripts/$builder" 0.22.0 "$FIXTURE/payload" > runtime-state.log 2>&1; then
             echo "Runtime state accepted by $builder: $state" >&2
             exit 1
         fi
         grep -qF 'Runtime state in the publish folder' runtime-state.log
         test -f src/ETL-SQL.Installer/linux/build/sentinel
-        test -f src/ETL-SQL.Installer/mac/sentinel
+        test -f release/mac-dmg/sentinel
         sha256sum -c previous-packages.sha256 >/dev/null
     done
     rm "payload/$state"
@@ -101,7 +101,7 @@ for builder in build-linux-packages.sh build-mac-dmg.sh; do
     fi
     grep -qF 'Runtime state in the publish folder' runtime-directory.log
     test -f src/ETL-SQL.Installer/linux/build/sentinel
-    test -f src/ETL-SQL.Installer/mac/sentinel
+    test -f release/mac-dmg/sentinel
     sha256sum -c previous-packages.sha256 >/dev/null
 done
 rmdir payload/.portal-keys
@@ -109,7 +109,7 @@ echo 'Native runtime inputs: 38 rejection cases passed; prior staging and packag
 # Exercise real bundle construction on POSIX; only image creation is mocked.
 (umask 000; cd caller; bash "$FIXTURE/scripts/build-mac-dmg.sh" 0.22.0 "$FIXTURE/payload")
 test -s ETL-SQL_v0.22.0.dmg
-BUNDLE=src/ETL-SQL.Installer/mac/ETL-SQL.app
+BUNDLE=release/mac-dmg/ETL-SQL.app
 test -z "$(find "$BUNDLE" -type f -perm /0022 -print)"
 test -z "$(find "$BUNDLE" -type d -perm /0022 -print)"
 [[ "$(stat -c %a "$BUNDLE/Contents/MacOS/ETL-SQL")" == 755 ]]
@@ -118,6 +118,8 @@ test ! -w "$BUNDLE/Contents/Resources/bin/read-only.txt" || [[ "$(stat -c %a "$B
 # A linked installer ancestor must not redirect recursive staging cleanup into another tree.
 mkdir -p guarded/scripts guarded/src held-installer/linux/build held-installer/mac
 cp scripts/build-linux-packages.sh scripts/build-mac-dmg.sh guarded/scripts/
+mkdir -p guarded/scripts/lib
+cp scripts/lib/native-publish-input.sh scripts/lib/package-runtime-state.patterns guarded/scripts/lib/
 printf keep > held-installer/linux/build/sentinel
 printf keep > held-installer/mac/sentinel
 ln -s "$FIXTURE/held-installer" guarded/src/ETL-SQL.Installer
@@ -140,8 +142,7 @@ test -f held-installer/linux/build/sentinel
 rm guarded/src/ETL-SQL.Installer/linux
 mkdir guarded/src/ETL-SQL.Installer/linux
 ln -s "$FIXTURE/held-installer/linux/build" guarded/src/ETL-SQL.Installer/linux/build
-ln -s "$FIXTURE/held-installer/mac" guarded/src/ETL-SQL.Installer/mac
-for builder in build-linux-packages.sh build-mac-dmg.sh; do
+for builder in build-linux-packages.sh; do
     if bash "$FIXTURE/guarded/scripts/$builder" 0.22.0 "$FIXTURE/payload" > guarded-output.log 2>&1; then
         echo 'Linked staging output was accepted' >&2
         exit 1
@@ -149,4 +150,23 @@ for builder in build-linux-packages.sh build-mac-dmg.sh; do
 done
 test -f held-installer/linux/build/sentinel
 test -f held-installer/mac/sentinel
+
+mkdir -p held-release/mac-dmg
+printf keep > held-release/mac-dmg/sentinel
+ln -s "$FIXTURE/held-release" guarded/release
+if bash guarded/scripts/build-mac-dmg.sh 0.22.0 "$FIXTURE/payload" > guarded-release.log 2>&1; then
+    echo 'Linked release ancestor was accepted' >&2
+    exit 1
+fi
+grep -qF 'release output must not be a symbolic link' guarded-release.log
+test -f held-release/mac-dmg/sentinel
+rm guarded/release
+mkdir guarded/release
+ln -s "$FIXTURE/held-release/mac-dmg" guarded/release/mac-dmg
+if bash guarded/scripts/build-mac-dmg.sh 0.22.0 "$FIXTURE/payload" > guarded-mac-output.log 2>&1; then
+    echo 'Linked macOS staging output was accepted' >&2
+    exit 1
+fi
+grep -qF 'staging output must not be a symbolic link' guarded-mac-output.log
+test -f held-release/mac-dmg/sentinel
 echo 'Native package modes: actual DEB and macOS bundle construction strip non-owner writes; read-only inputs preserved. DMG creation mocked; nothing installed.'

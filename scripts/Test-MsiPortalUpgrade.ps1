@@ -33,6 +33,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'MsiUpgrade.Helpers.ps1')
+. (Join-Path $PSScriptRoot 'MsiCheckpoint.Helpers.ps1')
 
 if (-not $IsWindows) { throw 'MSI certification runs on Windows only.' }
 $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -68,7 +69,11 @@ function Write-Line([string]$Text) {
 # The first CI run lost its runner with no log. Record what was running at each stage, so a
 # starved or crash-looping service shows up in the evidence.
 function Write-ResourceSnapshot([string]$Stage) {
+    $delivered = Write-MsiDurableCheckpoint -Stage $Stage
+    Add-Content -LiteralPath $summary -Value "   durable checkpoint delivered: $delivered"
     $os = Get-CimInstance Win32_OperatingSystem
+    $delivered = Write-MsiDurableCheckpoint -Stage $Stage -FreeMemoryMiB ([math]::Round($os.FreePhysicalMemory / 1KB)) -TotalMemoryMiB ([math]::Round($os.TotalVisibleMemorySize / 1KB))
+    Add-Content -LiteralPath $summary -Value "   durable resource snapshot delivered: $delivered"
     Add-Content -LiteralPath $summary -Value ("   free memory {0:N0} MB of {1:N0} MB" -f ($os.FreePhysicalMemory / 1KB), ($os.TotalVisibleMemorySize / 1KB))
     Get-Process | Sort-Object CPU -Descending | Select-Object -First 6 | ForEach-Object {
         Add-Content -LiteralPath $summary -Value ("   {0,-28} cpu {1,8:N0}s  ws {2,6:N0} MB" -f $_.ProcessName, $_.CPU, ($_.WorkingSet64 / 1MB))

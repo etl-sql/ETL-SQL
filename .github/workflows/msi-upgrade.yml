@@ -37,11 +37,13 @@ env:
 jobs:
   detect-upgrade-impact:
     name: Detect MSI Upgrade Impact
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.changes.outputs.should_run }}
     steps:
       - name: Checkout
+        timeout-minutes: 13
         uses: actions/checkout@v6
         with:
           ref: ${{ env.CERTIFICATION_SHA }}
@@ -53,8 +55,10 @@ jobs:
           node-version: 22
 
       - name: Prepare pinned workflow checker
+        timeout-minutes: 13
         run: node scripts/setup-actionlint.mjs
       - name: Collect source preflight findings
+        timeout-minutes: 12
         run: node scripts/release-preflight.mjs
 
       - name: Upload source preflight logs
@@ -67,6 +71,7 @@ jobs:
           retention-days: 30
 
       - name: Classify changed paths
+        timeout-minutes: 13
         id: changes
         shell: pwsh
         env:
@@ -122,6 +127,7 @@ jobs:
 
   build-msi:
     name: Build MSI certification inputs
+    timeout-minutes: 90
     outputs:
       artifact_id: ${{ steps.inputs.outputs.artifact-id }}
       previous_tag: ${{ steps.versions.outputs.previous_tag }}
@@ -130,12 +136,14 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
+        timeout-minutes: 3
         uses: actions/checkout@v6
         with:
           ref: ${{ env.CERTIFICATION_SHA }}
           fetch-depth: 0
 
       - name: Resolve current version and previous release
+        timeout-minutes: 3
         id: versions
         shell: pwsh
         env:
@@ -162,6 +170,7 @@ jobs:
           key: previous-msi-${{ steps.versions.outputs.previous_tag }}-x64
 
       - name: Download previous MSI
+        timeout-minutes: 5
         if: steps.previous-cache.outputs.cache-hit != 'true'
         shell: pwsh
         env:
@@ -181,23 +190,39 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
+        timeout-minutes: 3
         run: npm ci --prefix scripts/typecheck
 
       - name: Install WiX Toolset
+        timeout-minutes: 8
         shell: pwsh
         run: choco install wixtoolset -y --no-progress --skip-if-installed
 
       - name: Build current MSI
+        timeout-minutes: 47
         shell: pwsh
         env:
           ETL_SQL_VERSION: ${{ steps.versions.outputs.current_version }}
-        run: .\scripts\build-msi.ps1
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/build-msi.ps1 -EvidenceDirectory release-validation/msi-build -TimeoutSeconds 2700
+
+      - name: Retain MSI build diagnostics first
+        if: always()
+        timeout-minutes: 5
+        # Keep candidate retention independent of diagnostic transport.
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: msi-build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/msi-build/
+          if-no-files-found: warn
+          retention-days: 30
 
       # Split from the certification below so the log says which half failed. The static contract
       # needs no elevation and no install, and it is where the gate's first real run went wrong —
       # keeping it as its own step means that class of failure is named rather than buried in the
       # output of an install sequence that never started.
       - name: Check the static upgrade contract
+        timeout-minutes: 3
         shell: pwsh
         env:
           CURRENT_VERSION: ${{ steps.versions.outputs.current_version }}
@@ -208,6 +233,7 @@ jobs:
           .\scripts\Test-MsiUpgrade.ps1 -PreviousMsi $previous[0].FullName -CurrentMsi $current -StaticChecksOnly
 
       - name: Preserve certification inputs
+        timeout-minutes: 3
         shell: pwsh
         env:
           CURRENT_VERSION: ${{ steps.versions.outputs.current_version }}
@@ -219,6 +245,7 @@ jobs:
 
       - name: Upload certification inputs
         id: inputs
+        timeout-minutes: 5
         uses: actions/upload-artifact@v7
         with:
           name: msi-inputs-${{ github.run_id }}-${{ github.run_attempt }}
@@ -229,6 +256,10 @@ jobs:
 
   msi-upgrade:
     name: MSI certification (${{ matrix.profile }})
+    permissions:
+      contents: read
+      actions: read
+      checks: write
     needs: build-msi
     runs-on: windows-latest
     timeout-minutes: 65
@@ -238,6 +269,7 @@ jobs:
         profile: [workstation, portal]
     steps:
       - name: Checkout
+        timeout-minutes: 3
         uses: actions/checkout@v6
         with:
           ref: ${{ env.CERTIFICATION_SHA }}
@@ -250,6 +282,7 @@ jobs:
           merge-multiple: true
 
       - name: Verify certification inputs
+        timeout-minutes: 3
         shell: pwsh
         run: ./scripts/MsiCandidate.ps1 -Mode Verify -Directory candidate -SourceSha $env:CERTIFICATION_SHA
 
@@ -259,6 +292,7 @@ jobs:
           node-version: 22
 
       - name: Prepare candidate browser inventory
+        timeout-minutes: 3
         shell: pwsh
         run: |
           npm ci --prefix scripts/typecheck
@@ -273,8 +307,13 @@ jobs:
         shell: pwsh
         env:
           PROFILE: ${{ matrix.profile }}
+          GH_TOKEN: ${{ github.token }}
+          ETLSQL_MSI_DURABLE_CHECKPOINTS: '1'
+          ETLSQL_MSI_CHECKPOINT_RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           $script = if ($env:PROFILE -eq 'portal') { 'scripts/Test-MsiPortalUpgrade.ps1' } else { 'scripts/Test-MsiUpgrade.ps1' }
+          . ./scripts/MsiCheckpoint.Helpers.ps1
+          $null = Write-MsiDurableCheckpoint -Stage 'supervisor starting'
           Write-Host '::notice title=MSI checkpoint::{"stage":"supervisor starting"}'
           ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath $script -ScriptArguments @('-PreviousMsi', 'candidate/previous.msi', '-CurrentMsi', 'candidate/current.msi') -EvidenceDirectory "release-validation/msi-supervisor/$env:PROFILE" -TimeoutSeconds 1200 -ForwardMsiCheckpoints
 
@@ -309,6 +348,7 @@ jobs:
 
   msi-upgrade-gate:
     name: MSI In-Place Upgrade
+    timeout-minutes: 5
     outputs:
       artifact_id: ${{ steps.gate.outputs.artifact_id }}
       receipt_id: ${{ steps.receipt.outputs.artifact-id }}
@@ -320,6 +360,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Require certification when applicable
+        timeout-minutes: 3
         id: gate
         shell: pwsh
         env:

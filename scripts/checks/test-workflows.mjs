@@ -400,7 +400,7 @@ exit ([int]$env:FIXTURE_EXIT)
     ['Retain native packaging diagnostics', 5], ['Retain native packages before publication', 10]]) {
     assert.match(macosStep(name), new RegExp(`^        timeout-minutes: ${minutes}$`, 'm'));
   }
-  assert.match(macosSource, /^    timeout-minutes: 160$/m);
+  assert.match(macosSource, /^    timeout-minutes: 170$/m);
   assertJobBudget(macosSource, 'macOS release');
   assert.match(macosStep('Retain native packaging diagnostics'), /if: always\(\)/);
   assert.ok(macosSource.indexOf('name: Retain native packaging diagnostics') < macosSource.indexOf('name: Retain native packages before publication'));

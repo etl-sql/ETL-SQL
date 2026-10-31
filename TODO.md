@@ -174,6 +174,17 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   temporary storage outside that tree; overlapping evidence roots reject before backup creation.
   Production-path regression checks verify both destinations and cleanup after success/failure.
   This fixes evidence isolation, not the runner-loss cause; hosted acceptance remains required.
+  **Recurrence 2026-10-31:** PR run `41243213319` retains its successful build and workstation
+  result, then loses the Portal runner again. Its terminal annotation reports runner communication
+  loss; the job-log blob and Portal artifact are absent. The live check run had zero annotations
+  after its step deadline, confirming queued notices did not supply durable progress.
+  Portal checkpoints now append output-only annotations directly to that job's check run before
+  each resource probe and again with bounded memory counts. Requests have a three-second deadline,
+  a two-MiB response limit and no redirects. Identity binds the repository, run, attempt, profile
+  and both PR run/checkout SHAs. Tests reject wrong/stale/foreign jobs and unsafe phases and exercise
+  transport cancellation, including an unresponsive handler, without GitHub writes. Reusable callers
+  delegate only the required read/check permissions. Hosted retention and the runner-loss cause
+  remain open; diagnostic transport cannot make certification pass.
 - [ ] **Nightly release-branch lanes.** Run the installed-upgrade checks (DEB and the MSI Portal
   profile) and the Portal shards nightly from the day the release branch is cut.
   **In progress:** the nightly scheduler discovers version branches newer than the latest stable
@@ -360,6 +371,19 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   continuing independent checks. Their serial ordering is preserved because fixtures can mutate
   prepared assets. A runner that disappears cannot be relied on to upload artifacts;
   heartbeat and certification output also stream directly to the Actions console.
+  The separate MSI build still inherited GitHub's six-hour job limit. It now uses a 45-minute
+  supervisor under a 47-minute step and 90-minute job cap, based on a retained 28-minute successful
+  build. Diagnostics stream and upload before the candidate; failed diagnostic transport cannot
+  prevent retaining a successful installer. Candidate upload has its own five-minute ceiling.
+  Local command fixtures exercise the real supervisor with successful, failed and timed-out builds.
+  Hosted deadline/upload acceptance remains required.
+  A full workflow audit also found 15 other runner jobs inheriting that six-hour default. All
+  runner jobs now declare an explicit cap, including source preflight, CodeQL and final promotion.
+  Shell-command and checkout steps also have explicit limits, including package transfers,
+  source checks and consumer contracts; the gate rejects a step limit above its job ceiling.
+  A separate source gate rejects missing, invalid or over-three-hour runner limits and unsupported
+  layouts; reusable calls inherit their constituent jobs' caps. These are failure ceilings, not
+  evidence that the release meets its four-hour target.
   Portal run `40312449960` failed certification then remained live in its full evidence upload
   for more than 15 minutes, with job logs unavailable through the API. MSI profiles now upload
   candidate identity, Portal summary, supervisor result/heartbeat/stderr first under a five-minute
@@ -593,6 +617,12 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   Windows artifact-certification fixtures now have their own source-preflight entry. They had
   also been imported by the Windows package fixture and rediscovered by the consumer gate;
   manifest-owned exclusion now runs that suite once per validation pass.
+  **Intel follow-up:** native run `41243213302` passes ZIP, mounted-DMG and VSIX acceptance, then
+  rejects a dirty source tree. The DMG builder left its generated app under the unignored installer
+  source directory. A real-Git/public-command fixture reproduces those untracked files; staging now
+  lives under ignored `release/mac-dmg/`. Input/output overlap and linked staging ancestors reject
+  before cleanup. The source-cleanliness guard stays mandatory. New-candidate hosted acceptance
+  remains required; the original failed job and package artifact are retained.
 - [x] **Split MSI build and certification into resumable jobs.** Persist the built MSI before any
   install test. Run workstation and Portal certification on separate clean runners against that
   artifact and one pinned previous-release MSI. A Portal failure should allow only that job to

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const sourceChecks = [
   ['workflows', 'check-workflows.mjs'],
+  ['workflow-timeouts', 'check-workflow-timeouts.mjs'],
   ['syntax-index', 'generate-syntax-index.js', '--check'],
   ['syntax-links', 'audit-syntax-index.js', '--strict'],
   ['documentation', 'audit-docs.js', '--strict'],
@@ -21,7 +22,7 @@ sourceChecks.push({ id: 'installer-sources', command: 'pwsh', args: ['-NoProfile
 // These fixtures require no restore, build, network or installed product. Each runs in its own
 // process so a failing policy test cannot hide the other source or recovery findings.
 export const releaseAutomationChecks = [
-  'nightly-release', 'workflows', 'windows-release-packages', 'certified-windows', 'macos-release-packages', 'certified-macos', 'package-upload-recovery', 'msi-candidate', 'deb-candidate', 'deb-reuse', 'certification-process', 'release-preflight', 'release-versions', 'changelog-compiler', 'vsix-module-identity',
+  'nightly-release', 'workflows', 'workflow-timeouts', 'dmg-staging', 'windows-release-packages', 'certified-windows', 'macos-release-packages', 'certified-macos', 'package-upload-recovery', 'msi-candidate', 'msi-build-watchdog', 'deb-candidate', 'deb-reuse', 'certification-process', 'release-preflight', 'release-versions', 'changelog-compiler', 'vsix-module-identity',
   'installer-sources', 'installer-actions', 'master-release', 'publish-release', 'sbom-output', 'docs-audit', 'release-evidence', 'production-canary-evidence', 'certification-source', 'deployment-claims', 'local-release-bundle', 'release-driver-gates', 'release-run-wait', 'release-tag', 'release-timeline', 'ci-impact', 'browser-shards', 'built-browser-assets', 'hosted-release-evidence', 'hosted-local-evidence', 'workstation-release-evidence', 'collected-workstation-evidence', 'operator-release-evidence', 'collected-operator-evidence', 'operator-report-inputs', 'workstation-certification-driver', 'lane-shard-results', 'engine-coverage', 'scale-comparison-assets', 'release-certification',
 ].map(name => ({ id: `test-${name}`, command: process.execPath, args: [`scripts/checks/test-${name}.mjs`] }));
 releaseAutomationChecks.push({ id: 'test-release-draft-manifest', command: process.execPath, args: ['scripts/checks/test-release-draft-manifest.mjs'] });

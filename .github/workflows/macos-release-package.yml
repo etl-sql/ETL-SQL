@@ -26,7 +26,7 @@ jobs:
     name: Build ${{ inputs.rid }}
     runs-on: ${{ inputs.rid == 'osx-x64' && 'macos-15-intel' || 'macos-15' }}
     # Leave room for preparation, optional DMG and diagnostic uploads after the publish deadline.
-    timeout-minutes: 160
+    timeout-minutes: 170
     outputs:
       artifact_id: ${{ steps.packages.outputs.artifact-id }}
       manifest_sha256: ${{ steps.identity.outputs.manifest_sha256 }}
@@ -36,6 +36,7 @@ jobs:
       TAG_NAME: ${{ inputs.tag }}
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 15
         with:
           ref: ${{ inputs.source_sha }}
       - uses: actions/setup-node@v7

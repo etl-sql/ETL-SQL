@@ -39,6 +39,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
+        timeout-minutes: 9
         uses: actions/checkout@v6
         with:
           ref: ${{ env.TAG_NAME }}
@@ -161,6 +162,7 @@ jobs:
       manifest_sha256: ${{ steps.selection.outputs.manifest_sha256 }}
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
           fetch-depth: 0
@@ -196,10 +198,12 @@ jobs:
 
   prepare-release:
     name: Prepare GitHub Release
+    timeout-minutes: 10
     needs: [validate, operator-evidence]
     runs-on: ubuntu-latest
     steps:
       - name: Create or update draft release
+        timeout-minutes: 8
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -215,6 +219,7 @@ jobs:
 
   find-msi:
     name: Find certified candidate MSI
+    timeout-minutes: 20
     needs: validate
     runs-on: ubuntu-latest
     outputs:
@@ -223,10 +228,12 @@ jobs:
       receipt_id: ${{ steps.find.outputs.receipt_id }}
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
       - name: Find successful certification for this commit
+        timeout-minutes: 15
         id: find
         shell: pwsh
         env:
@@ -247,12 +254,15 @@ jobs:
     if: needs.find-msi.outputs.artifact_id == ''
     permissions:
       contents: read
+      actions: read
+      checks: write
     uses: ./.github/workflows/msi-upgrade.yml
     with:
       source_sha: ${{ needs.validate.outputs.source_sha }}
 
   promote-msi:
     name: Promote certified MSI
+    timeout-minutes: 30
     needs: [validate, prepare-release, find-msi, certify-msi]
     if: >-
       ${{ !cancelled() && needs.validate.result == 'success' && needs.prepare-release.result == 'success' &&
@@ -262,11 +272,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
 
       - name: Require certified artifact ID
+        timeout-minutes: 15
         shell: pwsh
         env:
           ARTIFACT_ID: ${{ needs.find-msi.outputs.artifact_id || needs.certify-msi.outputs.artifact_id }}
@@ -292,6 +304,7 @@ jobs:
           path: certification
 
       - name: Verify and upload certified MSI
+        timeout-minutes: 20
         shell: pwsh
         env:
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
@@ -307,6 +320,7 @@ jobs:
 
   find-deb:
     name: Find certified candidate DEB
+    timeout-minutes: 20
     needs: validate
     runs-on: ubuntu-latest
     outputs:
@@ -315,12 +329,14 @@ jobs:
       receipt_id: ${{ steps.find.outputs.receipt_id }}
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 15
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
       - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Select exact-candidate DEB certification
+        timeout-minutes: 15
         id: find
         shell: pwsh
         env:
@@ -348,6 +364,7 @@ jobs:
 
   promote-deb:
     name: Promote Linux candidate packages
+    timeout-minutes: 30
     needs: [validate, prepare-release, find-deb, certify-deb]
     if: >-
       ${{ !cancelled() && needs.validate.result == 'success' && needs.prepare-release.result == 'success' &&
@@ -359,12 +376,14 @@ jobs:
       artifact_id: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 15
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
       - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Require DEB candidate and receipt IDs
+        timeout-minutes: 15
         env:
           ARTIFACT_ID: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
           RECEIPT_ID: ${{ needs.find-deb.outputs.receipt_id || needs.certify-deb.outputs.receipt_id }}
@@ -385,6 +404,7 @@ jobs:
           path: certification
           merge-multiple: true
       - name: Verify and upload Linux candidate packages
+        timeout-minutes: 20
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -406,17 +426,19 @@ jobs:
     name: Promote certified Windows packages
     needs: [validate, prepare-release]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     outputs:
       manifest_sha256: ${{ needs.validate.outputs.windows_manifest_sha256 }}
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 13
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
       - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Require retained Windows artifact ID
+        timeout-minutes: 1
         env:
           ARTIFACT_ID: ${{ needs.validate.outputs.windows_artifact_id }}
         run: '[[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]'
@@ -442,6 +464,7 @@ jobs:
             "candidate/release/etl-sql-vscode-${version}-win32-x64.vsix" \
             candidate/release/windows-package-inputs.json --clobber
       - name: Report Windows upload recovery
+        timeout-minutes: 1
         if: failure()
         env:
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
@@ -454,7 +477,7 @@ jobs:
     name: Select certified macOS (osx-x64)
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     outputs:
       artifact_id: ${{ steps.selection.outputs.artifact_id }}
       run_id: ${{ steps.selection.outputs.run_id }}
@@ -462,6 +485,7 @@ jobs:
       selection_artifact_id: ${{ steps.receipt.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
       - uses: actions/setup-node@v7
@@ -498,7 +522,7 @@ jobs:
     name: Select certified macOS (osx-arm64)
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     outputs:
       artifact_id: ${{ steps.selection.outputs.artifact_id }}
       run_id: ${{ steps.selection.outputs.run_id }}
@@ -506,6 +530,7 @@ jobs:
       selection_artifact_id: ${{ steps.receipt.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
       - uses: actions/setup-node@v7
@@ -542,7 +567,7 @@ jobs:
     name: Upload retained macOS packages
     needs: [validate, prepare-release, select-macos-intel, select-macos-arm64]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     outputs:
       intel_manifest_sha256: ${{ needs.select-macos-intel.outputs.manifest_sha256 }}
       arm64_manifest_sha256: ${{ needs.select-macos-arm64.outputs.manifest_sha256 }}
@@ -550,12 +575,14 @@ jobs:
       arm64_selection_artifact_id: ${{ needs.select-macos-arm64.outputs.selection_artifact_id }}
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 3
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
       - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Require retained native artifact IDs
+        timeout-minutes: 1
         env:
           INTEL_ARTIFACT_ID: ${{ needs.select-macos-intel.outputs.artifact_id }}
           ARM64_ARTIFACT_ID: ${{ needs.select-macos-arm64.outputs.artifact_id }}
@@ -603,6 +630,7 @@ jobs:
           node scripts/macos-release-packages.mjs verify candidate/arm64 "$SOURCE_SHA" "$version" osx-arm64 "$ARM64_MANIFEST_SHA256"
           gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" candidate/intel/*.zip candidate/intel/*.vsix candidate/intel/*.dmg candidate/intel/osx-*-package-inputs.json candidate/arm64/*.zip candidate/arm64/*.vsix candidate/arm64/osx-*-package-inputs.json --clobber
       - name: Report macOS upload recovery
+        timeout-minutes: 1
         if: failure()
         env:
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
@@ -618,6 +646,7 @@ jobs:
   # (SBOM = contents, sha256sums = integrity, provenance = authenticity.)
   attest-provenance:
     name: Attest build provenance
+    timeout-minutes: 75
     outputs:
       operator_artifact_id: ${{ needs.operator-evidence.outputs.artifact_id }}
       operator_manifest_sha256: ${{ needs.operator-evidence.outputs.manifest_sha256 }}
@@ -639,10 +668,12 @@ jobs:
       actions: read        # read the retained hosted-evidence artifact
     steps:
       - name: Checkout
+        timeout-minutes: 3
         uses: actions/checkout@v6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
       - name: Download draft release assets
+        timeout-minutes: 10
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -656,11 +687,13 @@ jobs:
         with:
           node-version: 22
       - name: Verify draft Windows packages against retained build
+        timeout-minutes: 3
         env:
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
           MANIFEST_SHA256: ${{ needs.upload-windows.outputs.manifest_sha256 }}
         run: node scripts/windows-release-packages.mjs verify dist "$SOURCE_SHA" "${TAG_NAME#v}" "$MANIFEST_SHA256"
       - name: Verify draft macOS packages against retained builds
+        timeout-minutes: 3
         env:
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
           INTEL_MANIFEST_SHA256: ${{ needs.upload-macos.outputs.intel_manifest_sha256 }}
@@ -669,11 +702,13 @@ jobs:
           node scripts/macos-release-packages.mjs verify dist "$SOURCE_SHA" "${TAG_NAME#v}" osx-x64 "$INTEL_MANIFEST_SHA256"
           node scripts/macos-release-packages.mjs verify dist "$SOURCE_SHA" "${TAG_NAME#v}" osx-arm64 "$ARM64_MANIFEST_SHA256"
       - name: Verify draft Linux packages against candidate
+        timeout-minutes: 3
         env:
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
           ARTIFACT_ID: ${{ needs.promote-deb.outputs.artifact_id }}
         run: node scripts/check-deb-candidate.mjs dist/deb-certification-inputs.json dist/deb-certification.json "$SOURCE_SHA" "${TAG_NAME#v}" "$ARTIFACT_ID" "dist/etl-sql_${TAG_NAME#v}_amd64.deb" "dist/ETL-SQL-${TAG_NAME}-linux-x64.zip" "dist/etl-sql-vscode-${TAG_NAME#v}-linux-x64.vsix"
       - name: Verify draft MSI against certification
+        timeout-minutes: 3
         shell: pwsh
         env:
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
@@ -706,6 +741,7 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Verify and attach certified macOS selections
+        timeout-minutes: 3
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -714,10 +750,12 @@ jobs:
           node scripts/collect-certified-macos.mjs verify-draft dist dist/certified-osx-arm64-selection.json osx-arm64
           gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" dist/certified-osx-*-selection.json --clobber
       - name: Attach certified Windows selection to draft
+        timeout-minutes: 3
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" dist/certified-windows-selection.json --clobber
       - name: Attach hosted evidence to draft
+        timeout-minutes: 3
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" dist/hosted-release-evidence.json --clobber
@@ -728,6 +766,7 @@ jobs:
           path: local-evidence
           merge-multiple: true
       - name: Verify and attach local evidence to draft
+        timeout-minutes: 10
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
@@ -768,6 +807,7 @@ jobs:
       # full set of published artifacts — and attach them (SBOM = contents, sha256sums = integrity;
       # the attestation above is authenticity).
       - name: Generate and upload checksums + SBOM
+        timeout-minutes: 12
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -777,6 +817,7 @@ jobs:
           gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" \
             sha256sums.txt release/sbom.json --clobber
       - name: Bind complete verified draft asset set
+        timeout-minutes: 3
         id: draft-manifest
         env:
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
@@ -797,6 +838,7 @@ jobs:
   # never public without provenance.
   publish-release:
     name: Publish GitHub Release
+    timeout-minutes: 110
     needs: [validate, attest-provenance]
     if: ${{ !cancelled() && needs.validate.result == 'success' && needs.attest-provenance.result == 'success' }}
     runs-on: ubuntu-latest
@@ -806,6 +848,7 @@ jobs:
       security-events: read
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
@@ -814,17 +857,20 @@ jobs:
         with:
           node-version: 22
       - name: Recheck hosted evidence before publication
+        timeout-minutes: 15
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
         run: node scripts/collect-hosted-release-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-hosted-evidence.json
       - name: Recheck independent workstation evidence before publication
+        timeout-minutes: 15
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
           MANIFEST_SHA256: ${{ needs.validate.outputs.local_manifest_sha256 }}
         run: node scripts/collect-workstation-release-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-local-evidence "$MANIFEST_SHA256"
       - name: Verify draft local evidence attachment
+        timeout-minutes: 20
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -937,6 +983,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Publish draft release
+        timeout-minutes: 15
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

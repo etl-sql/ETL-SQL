@@ -823,6 +823,19 @@ in top-level and nested certifications. Rerun older producers whose reports omit
       its `release-validation/msi-upgrade/` evidence is retained. Tags force the full install test;
       path-based PR skipping is not tag evidence.
 
+MSI phase/resource annotations are diagnostic progress, not certification. The workflow submits
+them directly to the current job's check run so the last accepted phase can survive runner loss.
+If a log blob or artifact is missing, inspect the job's annotations before retrying:
+
+```powershell
+$portalJob = gh api repos/etl-sql/ETL-SQL/actions/jobs/JOB_ID | ConvertFrom-Json
+gh api --paginate "$($portalJob.check_run_url)/annotations?per_page=100" --jq '.[] | select(.title == "MSI checkpoint") | .message'
+```
+
+Replace `JOB_ID` with the failed Portal job ID. Missing annotations never imply success; transport
+may be unavailable or lack permission. Preserve the original failure and retained installer inputs.
+The new transport's hosted retention acceptance and the runner-loss cause remain tracked in `TODO.md`.
+
 #### Conditional certification—run when the affected surface changed
 
 Mark each row **Run** or **Not applicable**, and record the diff-based reason. “Not applicable” is a

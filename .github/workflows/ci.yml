@@ -37,12 +37,14 @@ concurrency:
 jobs:
   source-preflight:
     name: Source preflight
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     outputs:
       lanes: ${{ steps.impact.outputs.lanes }}
       browser_shards: ${{ steps.impact.outputs.browser_shards }}
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 13
         with:
           fetch-depth: 0
       - uses: actions/setup-node@v7
@@ -50,6 +52,7 @@ jobs:
           node-version: 22
       # Event values are passed as data, never interpolated into shell source.
       - name: Select affected lanes or full certification
+        timeout-minutes: 13
         id: impact
         shell: pwsh
         env:
@@ -79,8 +82,10 @@ jobs:
           "lanes=$($selection.lanes | ConvertTo-Json -Compress -AsArray)" >> $env:GITHUB_OUTPUT
           "browser_shards=$($selection.browserShards | ConvertTo-Json -Compress -AsArray)" >> $env:GITHUB_OUTPUT
       - name: Prepare pinned workflow checker
+        timeout-minutes: 13
         run: node scripts/setup-actionlint.mjs
       - name: Collect source findings
+        timeout-minutes: 12
         run: node scripts/release-preflight.mjs
       - name: Upload preflight logs
         if: always()
@@ -100,6 +105,7 @@ jobs:
 
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
 
       - name: Set up browser compiler runtime
@@ -108,18 +114,23 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
+        timeout-minutes: 15
         run: npm ci --prefix scripts/typecheck
 
       - name: Prepare browser assets
+        timeout-minutes: 15
         run: node scripts/sync-assets.js
 
       - name: Verify .NET
+        timeout-minutes: 15
         run: dotnet --info
 
       - name: Verify Node.js
+        timeout-minutes: 15
         run: node --version
 
       - name: Restore tools
+        timeout-minutes: 15
         run: dotnet tool restore
 
       - name: Restore dependencies
@@ -128,6 +139,7 @@ jobs:
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('restore', 'ETL-SQL.slnx') -EvidenceDirectory release-validation/build/restore -TimeoutSeconds 600
 
       - name: Audit NuGet packages for known vulnerabilities
+        timeout-minutes: 15
         shell: pwsh
         run: .\scripts\Test-VulnerablePackages.ps1
 
@@ -142,6 +154,7 @@ jobs:
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'ETL-SQL.slnx', '--no-restore', '--configuration', 'Release') -EvidenceDirectory release-validation/build/compile -TimeoutSeconds 900
 
       - name: Run engine smoke tests using the existing build
+        timeout-minutes: 15
         shell: pwsh
         env:
           DOTNET_GCHeapHardLimit: '200000000'
@@ -173,6 +186,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 15
       - uses: ./.github/actions/prepare-test-project
         with:
           project: tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj
@@ -209,6 +223,7 @@ jobs:
         group: [1, 2, 3]
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 15
       - uses: ./.github/actions/prepare-test-project
         with:
           project: tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj
@@ -248,6 +263,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Require all selected build and test workers
+        timeout-minutes: 15
         shell: pwsh
         env:
           BUILD_RESULT: ${{ needs.build-verification.result }}
@@ -259,6 +275,7 @@ jobs:
           $expectedEngine = if ($env:CI_EVENT -ceq 'pull_request') { 'skipped' } else { 'success' }
           if ($env:ENGINE_RESULT -cne $expectedEngine) { throw 'Engine coverage workers did not reach the required state.' }
       - uses: actions/checkout@v6
+        timeout-minutes: 15
       - name: Download all retained engine group attempts
         if: github.event_name != 'pull_request'
         uses: actions/download-artifact@v8
@@ -271,6 +288,7 @@ jobs:
         timeout-minutes: 7
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Merge-EngineCoverage.ps1 -ScriptArguments @('-InputDirectory', 'release-validation/engine-groups', '-OutputDirectory', 'coverage', '-Commit', $env:GITHUB_SHA, '-RunId', $env:GITHUB_RUN_ID) -EvidenceDirectory release-validation/coverage-merge -TimeoutSeconds 300
       - name: Restore coverage reporter
+        timeout-minutes: 15
         if: github.event_name != 'pull_request'
         run: dotnet tool restore
       - name: Enforce the unchanged engine coverage threshold
@@ -298,6 +316,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 15
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -305,13 +324,16 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - name: Install browser compiler
+        timeout-minutes: 15
         run: npm ci --prefix scripts/typecheck
       - name: Prepare browser assets
+        timeout-minutes: 15
         run: node scripts/sync-assets.js
 
       # Deletes every inventoried output and both manifests, prepares again, and requires identical
       # bytes. A checkout that still tracks its outputs proves nothing about a tree without them.
       - name: Prove source-only browser asset preparation
+        timeout-minutes: 15
         run: node scripts/verify-source-only-preparation.mjs --evidence artifacts/browser-assets-source-only.json
 
       - name: Upload browser asset ownership and hashes
@@ -325,23 +347,29 @@ jobs:
           retention-days: 30
 
       - name: Check shared report runtime assets
+        timeout-minutes: 15
         shell: pwsh
         run: node .\scripts\sync-assets.js -Check
 
       - name: Check browser asset ownership against the Git index
+        timeout-minutes: 15
         run: node scripts/browser-asset-ownership.mjs --check
 
       - name: Check browser-side types
+        timeout-minutes: 15
         run: node scripts/typecheck-browser.mjs
 
       - name: Install browser lint-gate toolchain
+        timeout-minutes: 15
         run: npm ci --prefix scripts/lint
 
       - name: Install unsigned VSIX verification toolchain
+        timeout-minutes: 15
         working-directory: scripts/vsix
         run: npm ci
 
       - name: Audit browser toolchain packages for known vulnerabilities
+        timeout-minutes: 15
         shell: pwsh
         run: |
           foreach ($root in @('scripts/typecheck', 'scripts/lint', 'scripts/codemirror', 'scripts/vsix')) {
@@ -350,9 +378,11 @@ jobs:
           }
 
       - name: Lint the browser sources
+        timeout-minutes: 15
         run: node scripts/lint-browser.mjs
 
       - name: Run browser and consumer contract checks
+        timeout-minutes: 45
         run: node scripts/check-consumer-contracts.mjs --exclude-preflight
 
       - name: Retain consumer contract diagnostics
@@ -365,6 +395,7 @@ jobs:
           retention-days: 30
 
       - name: Verify prepared assets after consumer checks
+        timeout-minutes: 15
         run: node scripts/sync-assets.js -Check
 
       # The independent engine coverage lane already executes the HA manifest and CLI .NET tests.
@@ -393,6 +424,7 @@ jobs:
 
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
 
       - name: Set up browser compiler runtime
@@ -412,6 +444,7 @@ jobs:
         run: node scripts/sync-assets.js
 
       - name: Verify .NET
+        timeout-minutes: 15
         run: dotnet --info
 
       - name: Build engine for integration tests
@@ -420,6 +453,7 @@ jobs:
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'src/ETL-SQL.App/ETL-SQL.App.csproj', '--configuration', 'Debug') -EvidenceDirectory release-validation/vscode/engine -TimeoutSeconds 900
 
       - name: Verify Node.js
+        timeout-minutes: 15
         run: node --version
 
       - name: Install dependencies
@@ -508,6 +542,7 @@ jobs:
 
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
 
       - name: Set up browser compiler runtime
@@ -516,9 +551,11 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
+        timeout-minutes: 15
         run: npm ci --prefix scripts/typecheck
 
       - name: Prepare browser assets
+        timeout-minutes: 15
         run: node scripts/sync-assets.js
 
       - name: Set up .NET
@@ -574,6 +611,7 @@ jobs:
 
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
 
       - name: Set up browser compiler runtime
@@ -635,6 +673,7 @@ jobs:
             -TimeoutSeconds 1800
 
       - name: Report browser shard recovery
+        timeout-minutes: 15
         if: failure()
         env:
           SOURCE_SHA: ${{ github.sha }}
@@ -652,15 +691,18 @@ jobs:
 
   portal-browser-gate:
     name: Portal Browser Journey
+    timeout-minutes: 5
     needs: [source-preflight, portal-browser-journey]
     if: always() && needs.source-preflight.result == 'success' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'portal-browser-journey') && needs.source-preflight.outputs.browser_shards == '[1,2,3]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        timeout-minutes: 3
       - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Require all browser jobs to pass
+        timeout-minutes: 3
         env:
           SHARD_RESULT: ${{ needs.portal-browser-journey.result }}
         run: test "$SHARD_RESULT" = success
@@ -669,6 +711,7 @@ jobs:
           pattern: browser-shard-*-${{ github.run_id }}-*
           path: browser-evidence
       - name: Verify complete nonoverlapping browser coverage
+        timeout-minutes: 3
         run: node scripts/verify-browser-shards.mjs browser-evidence "$GITHUB_RUN_ID" 3
 
   studio-performance-budgets:
@@ -691,6 +734,7 @@ jobs:
             platform: macos
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
 
       - name: Set up browser compiler runtime
@@ -767,6 +811,7 @@ jobs:
 
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
 
       - name: Set up browser compiler runtime
@@ -775,9 +820,11 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
+        timeout-minutes: 15
         run: npm ci --prefix scripts/typecheck
 
       - name: Prepare browser assets
+        timeout-minutes: 15
         run: node scripts/sync-assets.js
 
       - name: Set up .NET
@@ -821,6 +868,7 @@ jobs:
 
     steps:
       - name: Checkout
+        timeout-minutes: 15
         uses: actions/checkout@v6
 
       - name: Set up browser compiler runtime
@@ -829,9 +877,11 @@ jobs:
           node-version: 22
 
       - name: Install browser compiler
+        timeout-minutes: 15
         run: npm ci --prefix scripts/typecheck
 
       - name: Prepare browser assets
+        timeout-minutes: 15
         run: node scripts/sync-assets.js
 
       - name: Set up .NET
@@ -840,9 +890,11 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Verify .NET
+        timeout-minutes: 15
         run: dotnet --info
 
       - name: Verify Docker
+        timeout-minutes: 15
         run: docker info
 
       - name: Restore dependencies

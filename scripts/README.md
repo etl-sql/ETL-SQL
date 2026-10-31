@@ -16,6 +16,13 @@ draft attachment and rechecks its hashes, previous-release diff, candidate branc
 Both release drivers and publication require it. Validation reads retained reports without rerunning
 their suites. Operator attestations remain distinct from trusted-host execution evidence.
 
+MSI Portal diagnostics submit phase markers and memory counts to their own check-run annotations
+before/after resource probes. This is opt-in CI transport with current-job identity checks, a
+three-second request deadline and bounded responses. Its payload changes output only; it cannot
+change the certification result. Local runs and unavailable transport continue using local logs.
+GitHub documents annotation appends in the
+[check-run API](https://docs.github.com/en/rest/checks/runs#update-a-check-run).
+
 ## CI impact selection
 
 `ci-impact.json` owns the initial change-to-lane mapping. `select-ci-lanes.mjs` reports affected
@@ -29,6 +36,12 @@ targeted paths, including the engine prerequisite and both extension/UI packages
 browser inventory and Studio performance receipt. They avoid unrelated broad checks. Shared,
 unknown and incomplete selections retain broader checks.
 A selection report is never release certification.
+
+`check-workflow-timeouts.mjs` requires an explicit job deadline for every runner job, capped at
+180 minutes, and explicit shell-command and checkout deadlines within that job's limit.
+Reusable calls inherit their constituent jobs' limits. The scanner fails closed on
+unsupported job layouts; actionlint remains the workflow syntax/schema checker. Deadlines bound
+failures and do not establish the release-time target.
 
 VS Code UI files under `src/etl-sql-vscode/ui/src/` select extension checks, browser/consumer
 contracts, browser journeys and Studio performance in regular CI, plus native packaging. The

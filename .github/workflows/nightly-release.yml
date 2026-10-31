@@ -17,9 +17,11 @@ concurrency:
 
 jobs:
   candidate:
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - name: Require exact release branch candidate
+        timeout-minutes: 3
         env:
           REQUESTED_SHA: ${{ inputs.candidate_sha }}
         run: |
@@ -35,6 +37,10 @@ jobs:
       candidate_sha: ${{ inputs.candidate_sha }}
   msi:
     needs: candidate
+    permissions:
+      contents: read
+      actions: read
+      checks: write
     uses: ./.github/workflows/msi-upgrade.yml
     with:
       source_sha: ${{ inputs.candidate_sha }}

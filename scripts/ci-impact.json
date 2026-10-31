@@ -40,7 +40,7 @@
     },
     {
       "name": "MSI certification scripts and focused fixtures",
-      "pattern": "^scripts/(?:Test-Msi(?:Portal)?Upgrade\\.ps1|checks/(?:Test-Msi(?:Checkpoint|BackupEvidence)\\.ps1|test-msi-candidate\\.mjs))$",
+      "pattern": "^scripts/(?:Test-Msi(?:Portal)?Upgrade\\.ps1|checks/(?:Test-Msi(?:Checkpoint|BackupEvidence)\\.ps1|test-msi-(?:candidate|build-watchdog)\\.mjs))$",
       "lanes": ["msi-upgrade"],
       "nativePackages": false
     },

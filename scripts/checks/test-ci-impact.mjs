@@ -11,7 +11,7 @@ import { runPrepushCases } from './fixtures/parallel-prepush-cases.mjs';
 const all = manifest.lanes;
 const msiOnlyPaths = ['scripts/Test-MsiUpgrade.ps1', 'scripts/Test-MsiPortalUpgrade.ps1',
   'scripts/checks/Test-MsiCheckpoint.ps1', 'scripts/checks/Test-MsiBackupEvidence.ps1',
-  'scripts/checks/test-msi-candidate.mjs'];
+  'scripts/checks/test-msi-candidate.mjs', 'scripts/checks/test-msi-build-watchdog.mjs'];
 for (const file of msiOnlyPaths) {
   const result = selectLanes([file, 'TODO.md']);
   assert.deepEqual(result.lanes, ['source-preflight', 'msi-upgrade'], file);

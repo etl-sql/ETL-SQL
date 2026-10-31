@@ -19,7 +19,12 @@ cd "$REPO_ROOT"
 VERSION=${1:-"0.21.0"}
 PUBLISHED_BIN_DIR=${2:-"release/osx-x64/bin"}
 APP_NAME="ETL-SQL"
-BUILD_DIR="$INSTALLER_ROOT/mac"
+RELEASE_ROOT="$REPO_ROOT/release"
+if [[ -L "$RELEASE_ROOT" ]]; then
+    echo '[ERROR] macOS release output must not be a symbolic link.' >&2
+    exit 1
+fi
+BUILD_DIR="$RELEASE_ROOT/mac-dmg"
 if [[ -L "$BUILD_DIR" ]]; then
     echo '[ERROR] macOS staging output must not be a symbolic link.' >&2
     exit 1
@@ -30,9 +35,15 @@ echo "--- ETL-SQL macOS DMG Builder ---"
 
 source "$REPO_ROOT/scripts/lib/native-publish-input.sh"
 assert_clean_native_publish "$PUBLISHED_BIN_DIR"
+PUBLISHED_BIN_DIR="$(cd "$PUBLISHED_BIN_DIR" && pwd -P)"
+if [[ "$PUBLISHED_BIN_DIR" == "$BUILD_DIR" || "$PUBLISHED_BIN_DIR" == "$BUILD_DIR/"* || "$BUILD_DIR" == "$PUBLISHED_BIN_DIR/"* ]]; then
+    echo '[ERROR] Published input and macOS staging must not overlap.' >&2
+    exit 1
+fi
 
 # 1. Create .app Structure
-rm -rf "$BUILD_DIR"
+mkdir -p "$RELEASE_ROOT"
+rm -rf -- "$BUILD_DIR"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
 mkdir -p "$APP_BUNDLE/Contents/Resources/bin"
