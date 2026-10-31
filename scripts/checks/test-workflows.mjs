@@ -311,7 +311,7 @@ exit ([int]$env:FIXTURE_EXIT)
     assert.ok(budget >= steps + 5, `${name}: ${budget} minutes cannot cover ${steps} minutes of steps plus setup`);
   };
   assertJobBudget(nativeJob, 'Native package');
-  for (const id of ['select-macos-intel', 'select-macos-arm64', 'upload-macos', 'operator-evidence']) assertJobBudget(jobs.get(id), id);
+  for (const id of ['select-macos-intel', 'select-macos-arm64', 'upload-windows', 'upload-macos', 'operator-evidence']) assertJobBudget(jobs.get(id), id);
   assert.match(publishStep, /^        timeout-minutes: 80/m);
   const nativeCommands = publishStep.split('        run: |')[1].replace(/^          /gm, '');
   writeFileSync(path.join(directory, 'native-publish.ps1'), nativeCommands);

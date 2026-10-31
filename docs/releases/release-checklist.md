@@ -132,8 +132,8 @@ retained artifact IDs and exact `gh run view --log-failed` / `gh run rerun --fai
 Wait for the run to finish, inspect the failure and fix the upload issue before rerunning failed
 jobs in that same run. Successful builds retain their outputs. Changed source requires a new
 candidate; missing artifacts or changed package bytes must pass verification before uploading.
-Each upload step has a ten-minute deadline. Windows has a fifteen-minute job budget; macOS has
-twenty minutes to include staging the accepted files from their native artifact trees.
+Each upload step has a ten-minute deadline. Windows has a twenty-minute job budget; macOS has
+twenty-five minutes to include staging the accepted files from their native artifact trees.
 
 Replace `x.y.z` with the target version (current target: **0.22.0**) throughout.
 
