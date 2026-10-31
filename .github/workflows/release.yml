@@ -26,6 +26,7 @@ jobs:
   # 1. Validation Job - ensures the release is stable
   validate:
     name: Validate & Test
+    timeout-minutes: 110
     outputs:
       source_sha: ${{ steps.candidate.outputs.source_sha }}
       hosted_evidence_artifact_id: ${{ steps.hosted-evidence.outputs.artifact-id }}
@@ -44,6 +45,7 @@ jobs:
           fetch-depth: 0
 
       - name: Verify release tag is on a supported release branch
+        timeout-minutes: 5
         id: candidate
         shell: pwsh
         run: |
@@ -68,19 +70,26 @@ jobs:
           node-version: 22
 
       - name: Prepare pinned workflow checker
-        run: node scripts/setup-actionlint.mjs
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/setup-actionlint.mjs') -EvidenceDirectory release-validation/supervisors/checker -TimeoutSeconds 180
       - name: Collect source preflight findings
+        timeout-minutes: 22
+        shell: pwsh
         env:
           ETLSQL_RELEASE_TAG: ${{ env.TAG_NAME }}
-        run: node scripts/release-preflight.mjs
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/release-preflight.mjs') -EvidenceDirectory release-validation/supervisors/preflight -TimeoutSeconds 1200
 
       - name: Require exact-candidate CI and CodeQL evidence
+        timeout-minutes: 12
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
-        run: node scripts/collect-hosted-release-evidence.mjs "$env:GITHUB_REPOSITORY" "$env:SOURCE_SHA" release-validation/hosted-release-evidence.json
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-hosted-release-evidence.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, 'release-validation/hosted-release-evidence.json') -EvidenceDirectory release-validation/supervisors/hosted -TimeoutSeconds 600
 
       - name: Retain selected hosted evidence
+        timeout-minutes: 5
         id: hosted-evidence
         uses: actions/upload-artifact@v7
         with:
@@ -90,13 +99,16 @@ jobs:
           retention-days: 30
 
       - name: Require uploaded independent workstation evidence
+        timeout-minutes: 12
+        shell: pwsh
         id: local-selection
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
-        run: node scripts/collect-workstation-release-evidence.mjs "$env:GITHUB_REPOSITORY" "$env:SOURCE_SHA" release-validation/selected-local-evidence
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-workstation-release-evidence.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, 'release-validation/selected-local-evidence') -EvidenceDirectory release-validation/supervisors/workstation -TimeoutSeconds 600
 
       - name: Retain verified local phase bundle
+        timeout-minutes: 10
         id: local-evidence
         uses: actions/upload-artifact@v7
         with:
@@ -108,12 +120,14 @@ jobs:
       - name: Require certified pre-tag Windows packages
         id: windows-selection
         timeout-minutes: 15
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
-        run: node scripts/collect-certified-windows.mjs "$env:GITHUB_REPOSITORY" "$env:SOURCE_SHA" $env:TAG_NAME.TrimStart('v') release-validation/selected-windows
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-certified-windows.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, $env:TAG_NAME.TrimStart('v'), 'release-validation/selected-windows') -EvidenceDirectory release-validation/supervisors/windows -TimeoutSeconds 780
 
       - name: Retain certified Windows selection
+        timeout-minutes: 5
         id: windows-evidence
         uses: actions/upload-artifact@v7
         with:
@@ -124,10 +138,13 @@ jobs:
 
       - name: Upload source preflight logs
         if: always()
+        timeout-minutes: 5
         uses: actions/upload-artifact@v7
         with:
           name: release-preflight-${{ github.run_id }}-${{ github.run_attempt }}
-          path: release-validation/preflight/
+          path: |
+            release-validation/preflight/
+            release-validation/supervisors/
           if-no-files-found: warn
           retention-days: 30
 
@@ -471,6 +488,9 @@ jobs:
   # (SBOM = contents, sha256sums = integrity, provenance = authenticity.)
   attest-provenance:
     name: Attest build provenance
+    outputs:
+      draft_manifest_sha256: ${{ steps.draft-manifest.outputs.sha256 }}
+      draft_manifest_artifact_id: ${{ steps.retain-draft-manifest.outputs.artifact-id }}
     needs: [validate, upload-windows, upload-macos, promote-msi, promote-deb]
     # Reuse intentionally skips certification ancestors. Require every direct gate to pass.
     if: >-
@@ -582,6 +602,22 @@ jobs:
           node scripts/generate-sbom.js   # reads version from Directory.Build.props -> release/sbom.json
           gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" \
             sha256sums.txt release/sbom.json --clobber
+      - name: Bind complete verified draft asset set
+        id: draft-manifest
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: |
+          cp sha256sums.txt release/sbom.json dist/
+          digest=$(node scripts/release-draft-manifest.mjs create dist verified-draft.json "$SOURCE_SHA" "$TAG_NAME")
+          echo "sha256=$digest" >> "$GITHUB_OUTPUT"
+      - name: Retain verified draft manifest
+        id: retain-draft-manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: verified-draft-${{ github.run_id }}-${{ github.run_attempt }}
+          path: verified-draft.json
+          if-no-files-found: error
+          retention-days: 30
 
   # 6. Publish the GitHub Release (un-draft) only after provenance is attached, so the artifacts are
   # never public without provenance.
@@ -642,6 +678,22 @@ jobs:
             --pattern "ETL-SQL-${TAG_NAME}-win-x64.zip" --pattern "etl-sql-vscode-${TAG_NAME#v}-win32-x64.vsix" \
             --pattern windows-package-inputs.json --pattern certified-windows-selection.json
           node scripts/collect-certified-windows.mjs verify-draft current-windows-draft current-windows/certified-windows-selection.json
+      - name: Download pinned verified draft manifest
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.attest-provenance.outputs.draft_manifest_artifact_id }}
+          path: verified-draft
+          merge-multiple: true
+      - name: Recheck every draft asset before publication
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          MANIFEST_SHA256: ${{ needs.attest-provenance.outputs.draft_manifest_sha256 }}
+        run: |
+          mkdir final-draft
+          gh release download "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --dir final-draft
+          node scripts/release-draft-manifest.mjs verify final-draft verified-draft/verified-draft.json "$SOURCE_SHA" "$TAG_NAME" "$MANIFEST_SHA256"
       - name: Publish draft release
         shell: pwsh
         env:

@@ -142,7 +142,8 @@ try {
   writeFileSync(path.join(producer, '.gitignore'), 'release/\nartifacts/\n');
   writeFileSync(path.join(producer, 'Directory.Build.props'), `<Project><PropertyGroup><VersionPrefix>${version}</VersionPrefix></PropertyGroup></Project>`);
   const workflow = readFileSync(new URL('../../.github/workflows/native-packages.yml', import.meta.url), 'utf8');
-  const block = workflow.split('      - name: Finalize certified Windows package identity')[1].split('      - name: Retain native package evidence')[0];
+  const block = workflow.split(/^      - /m).find(step => step.split(/\r?\n/)[0] === 'name: Finalize certified Windows package identity');
+  assert.ok(block, 'Missing Windows package identity finalizer.');
   const finalizeCommands = block.split('        run: |')[1].replace(/^          /gm, '');
   writeFileSync(path.join(producer, 'finalize.ps1'), `function dotnet { '10.0.306'; $global:LASTEXITCODE = 0 }\n${finalizeCommands}`);
   const execute = (command, args, env = {}) => spawnSync(command, args, { cwd: producer, env: { ...process.env, ...env }, encoding: 'utf8', windowsHide: true, timeout: 15000 });

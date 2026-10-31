@@ -1,4 +1,4 @@
-# Native package and MSI selection share the same conservative payload-impact rules.
+# MSI runs for shared package inputs and explicitly selected installer certification scripts.
 function Get-MsiUpgradeImpact {
     param(
         [AllowEmptyCollection()][string[]]$ChangedPaths = @(),
@@ -25,7 +25,7 @@ function Get-MsiUpgradeImpact {
     $relevant = @($ChangedPaths | Where-Object {
         $candidatePath = $_
         $rule = $policy.rules | Where-Object { $candidatePath -cmatch $_.pattern } | Select-Object -First 1
-        $null -eq $rule -or $rule.nativePackages
+        $null -eq $rule -or $rule.nativePackages -or $rule.lanes -ccontains 'msi-upgrade'
     })
     [pscustomobject]@{
         ShouldRun = $relevant.Count -gt 0

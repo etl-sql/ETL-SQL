@@ -148,7 +148,37 @@ job and step, with conclusions and measured durations. Keep these reports with t
 external evidence; do not create an evidence-only candidate commit. Collect different candidate
 SHAs separately. Start delay is not an exact queue measurement, job spans do not include every
 operator pause, and summed job time includes parallel work. Missing timestamps are unknown.
-Still record candidate-cut/tag times and the reason for each rerun in the release ledger.
+Keep candidate-cut, tag and publication timestamps and the reason for each attempt in a JSON
+ledger outside the frozen source commit. Pass it with `--ledger` to include total release elapsed
+time and attempt reasons in both reports. The ledger is bound to the exact repository and candidate;
+it cannot be reused for another SHA. Its timestamps are explicitly operator-supplied, not verified
+GitHub event times. Use recorded UTC timestamps in `YYYY-MM-DDTHH:mm:ssZ` or
+`YYYY-MM-DDTHH:mm:ss.sssZ` form. Leave an event `null` until its time is known; do not substitute
+the collection time. Reversed milestones, invalid dates and unknown/duplicate attempt identities
+reject collection without writing a report. Reasons omitted from the ledger appear as unknown.
+
+For example, create this structure in the candidate's external evidence directory. Replace the
+run ID and reason with the actual values and fill in recorded milestones as they become available:
+
+```powershell
+$ledger = @{
+    schemaVersion = 1
+    repository = 'etl-sql/ETL-SQL'
+    sourceSha = $candidateSha
+    candidateCutAt = $null
+    tagCreatedAt = $null
+    publishedAt = $null
+    attempts = @(@{ runId = '12345'; attempt = 1; reason = 'Initial certification' })
+}
+$ledger | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath .\release-validation\release-ledger.json -Encoding utf8
+node scripts/collect-release-timeline.mjs etl-sql/ETL-SQL $candidateSha "12345,12346" `
+    --ledger .\release-validation\release-ledger.json
+```
+
+Total release elapsed time spans candidate cut through publication, including operator pauses and
+gaps between runs. It stays unknown until both endpoints are recorded. Job timing remains separate
+and preserves successful executions carried through a retry. Keep the ledger and each generated
+report; a later collection creates a new directory.
 API details: [workflow runs](https://docs.github.com/en/rest/actions/workflow-runs) and
 [workflow jobs](https://docs.github.com/en/rest/actions/workflow-jobs).
 
@@ -912,6 +942,12 @@ unversioned `certification-results/` and `coverage/report/` trees are never atta
       git push origin vx.y.z
       ```
 - [ ] Watch the Release workflow to a green, asset-checked publish.
+      The attestation job retains an immutable manifest of the complete verified asset set,
+      including evidence, checksums and SBOM. Immediately before publication, the workflow downloads
+      every draft asset and requires matching names, sizes and hashes against that artifact and its
+      pinned manifest digest. A missing, changed or extra asset blocks publication. Restore the
+      certified bytes and retry the failed job; a source change requires a new candidate. This
+      comparison does not replace platform certification or the operator evidence requirements.
 - [ ] Create/curate the GitHub Release: paste the CHANGELOG section; attach `sha256sums.txt`
       and `sbom.json` (per `Release_Workflows.md`, these verification assets must be on the draft).
 - [ ] Verify published asset checksums match `sha256sums.txt`.

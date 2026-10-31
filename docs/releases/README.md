@@ -4,6 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
+| [Release recovery acceptance](recovery-acceptance.md) | Timing targets, verified recovery cases and remaining hosted acceptance. |
 | [v0.21.0 bugs and logic audit](v0.21.0-bug-logic-audit.md) | Defect review and validation evidence. |
 | [v0.21.0 performance results](v0.21.0-performance-results.md) | Scale certification measurements and run-order findings. |
 | [v0.21.0 closed TODO audit](v0.21.0-closed-todo-audit.md) | Completed-item review and validation evidence. |

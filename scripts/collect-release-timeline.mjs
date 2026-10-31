@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,6 +7,45 @@ function timestamp(value) { const n = value ? Date.parse(value) : NaN; return Nu
 function seconds(start, end) {
   const a = timestamp(start), b = timestamp(end);
   return a === null || b === null || b < a ? null : (b - a) / 1000;
+}
+function runSnapshot(run) {
+  return JSON.stringify([run.id, run.head_sha, run.repository?.full_name?.toLowerCase(),
+    run.run_attempt, run.status, run.conclusion, run.created_at, run.run_started_at, run.updated_at]);
+}
+export function releaseLedger(ledger, repository, sha, runs) {
+  if (!ledger || ledger.schemaVersion !== 1 || ledger.repository !== repository || ledger.sourceSha !== sha ||
+      !Array.isArray(ledger.attempts)) throw new Error('Release ledger must match the repository and exact candidate SHA.');
+  const times = {};
+  for (const key of ['candidateCutAt', 'tagCreatedAt', 'publishedAt']) {
+    const value = ledger[key];
+    if (value === null || value === undefined) { times[key] = null; continue; }
+    // Require canonical UTC rather than allowing Date.parse to normalize invalid dates.
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value) ||
+        timestamp(value) === null || new Date(value).toISOString() !== (value.includes('.') ? value : value.replace('Z', '.000Z'))) {
+      throw new Error(`Invalid UTC release ledger timestamp: ${key}`);
+    }
+    times[key] = new Date(value).toISOString();
+  }
+  const known = Object.values(times).filter(value => value !== null);
+  if (known.some((value, i) => i > 0 && timestamp(value) < timestamp(known[i - 1]))) throw new Error('Release ledger milestones are out of order.');
+  const attempts = [], seen = new Set();
+  for (const entry of ledger.attempts) {
+    const runId = String(entry?.runId), attempt = entry?.attempt;
+    const key = `${runId}/${attempt}`;
+    if (!/^[1-9][0-9]*$/.test(runId) || !Number.isSafeInteger(attempt) || attempt < 1 || seen.has(key) ||
+        typeof entry.reason !== 'string' || !entry.reason.trim() || entry.reason.length > 2000) {
+      throw new Error('Release ledger needs distinct run/attempt identities and nonempty reasons.');
+    }
+    if (!runs.some(run => run.id === runId && run.attempts.some(a => a.number === attempt))) {
+      throw new Error(`Release ledger refers to an uncollected attempt: ${key}`);
+    }
+    seen.add(key);
+    attempts.push({ runId, attempt, reason: entry.reason.trim() });
+  }
+  return { provenance: 'operator-supplied', ...times, attempts,
+    candidateToTagSeconds: seconds(times.candidateCutAt, times.tagCreatedAt),
+    tagToPublicationSeconds: seconds(times.tagCreatedAt, times.publishedAt),
+    totalReleaseSeconds: seconds(times.candidateCutAt, times.publishedAt) };
 }
 export function stepCategory(name) {
   const matches = [
@@ -36,15 +75,17 @@ function api(endpoint, paginate = false) {
   if (result.error || result.status !== 0) throw new Error(`Cannot read GitHub timeline endpoint: ${endpoint}`);
   return JSON.parse(result.stdout);
 }
-export async function collectTimeline(repository, sha, runIds, query = api) {
+export async function collectTimeline(repository, sha, runIds, query = api, ledger = null) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !/^[a-f0-9]{40}$/i.test(sha) ||
       !runIds.length || runIds.some(id => !/^[1-9][0-9]*$/.test(String(id))) || new Set(runIds.map(String)).size !== runIds.length) throw new Error('Supply repository, exact candidate SHA and distinct positive run IDs.');
   const runs = [];
+  const snapshots = [];
   for (const id of runIds) {
     const base = `repos/${repository}/actions/runs/${id}`;
     const run = await query(base);
     if (String(run.id) !== String(id) || run.head_sha !== sha || run.repository?.full_name?.toLowerCase() !== repository.toLowerCase() ||
         !Number.isSafeInteger(run.run_attempt) || run.run_attempt < 1) throw new Error(`Run ${id} does not match the candidate/repository or has invalid attempts.`);
+    snapshots.push({ base, snapshot: runSnapshot(run) });
     const attempts = [];
     for (let number = 1; number <= run.run_attempt; number++) {
       const attempt = await query(`${base}/attempts/${number}`);
@@ -90,15 +131,41 @@ export async function collectTimeline(repository, sha, runIds, query = api) {
     }
     runs.push({ id: String(id), workflow: run.path, createdAt: run.created_at, attempts });
   }
-  return { schemaVersion: 1, repository, sourceSha: sha, collectedAt: new Date().toISOString(), runs };
+  // Recheck every run after collecting all pages and runs: an earlier run may have
+  // been retried while later runs were being read. Never retain that mixed snapshot.
+  for (const { base, snapshot } of snapshots) {
+    if (runSnapshot(await query(base)) !== snapshot) {
+      throw new Error('Run changed during timeline collection. Retry collection after the run settles.');
+    }
+  }
+  return { schemaVersion: 1, repository, sourceSha: sha, collectedAt: new Date().toISOString(), runs,
+    ...(ledger === null ? {} : { releaseLedger: releaseLedger(ledger, repository, sha, runs) }) };
 }
 export function timelineMarkdown(timeline) {
   const cell = value => String(value ?? 'unknown').replaceAll('|', '\\|').replace(/[\r\n]/g, ' ');
   const minutes = value => value === null ? 'unknown' : (value / 60).toFixed(2);
-  const lines = ['# Release run timeline', '', `Candidate: ${timeline.sourceSha}`, '',
+  const lines = ['# Release run timeline', '', `Candidate: ${timeline.sourceSha}`, ''];
+  if (timeline.releaseLedger) {
+    const ledger = timeline.releaseLedger;
+    lines.push('## Release milestones', '',
+      'These timestamps and attempt reasons are operator-supplied records bound to this candidate, not independently verified GitHub events. Missing milestones remain unknown. Total release time includes gaps between selected workflows; it is not a sum of job durations.', '',
+      `- Candidate cut: ${cell(ledger.candidateCutAt)}`,
+      `- Tag created: ${cell(ledger.tagCreatedAt)}`,
+      `- Published: ${cell(ledger.publishedAt)}`,
+      `- Candidate to tag (min): ${minutes(ledger.candidateToTagSeconds)}`,
+      `- Tag to publication (min): ${minutes(ledger.tagToPublicationSeconds)}`,
+      `- Total release elapsed (min): ${minutes(ledger.totalReleaseSeconds)}`, '',
+      '| Run / attempt | Reason |', '| :--- | :--- |');
+    for (const run of timeline.runs) for (const attempt of run.attempts) {
+      const entry = ledger.attempts.find(item => item.runId === run.id && item.attempt === attempt.number);
+      lines.push(`| ${run.id} / ${attempt.number} | ${cell(entry?.reason)} |`);
+    }
+    lines.push('');
+  }
+  lines.push(
     'Job spans are observed elapsed time; summed job durations include parallel work. Both exclude executions carried forward from previous attempts, identified by matching job name and execution timestamps even when GitHub changes their IDs. Start delay is from attempt start to first new job start, not an exact runner-queue measurement. Missing timestamps remain unknown. This report is timing evidence, not certification.', '',
     '| Run / attempt | Result | Complete | Start delay (min) | Job span (min) | Summed jobs (min) | Unmeasured jobs |',
-    '| :--- | :--- | :--- | ---: | ---: | ---: | ---: |'];
+    '| :--- | :--- | :--- | ---: | ---: | ---: | ---: |');
   for (const run of timeline.runs) for (const a of run.attempts) {
     lines.push(`| ${run.id} / ${a.number} | ${cell(a.conclusion ?? a.status)} | ${a.complete} | ${minutes(a.startDelaySeconds)} | ${minutes(a.observedJobSpanSeconds)} | ${minutes(a.measuredJobSeconds)} | ${a.unmeasuredJobs} |`);
   }
@@ -119,9 +186,13 @@ export function timelineMarkdown(timeline) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    if (process.argv.length !== 5) throw new Error('Usage: node scripts/collect-release-timeline.mjs owner/repo <candidate-SHA> <run-id,run-id>');
+    if (process.argv.length !== 5 && !(process.argv.length === 7 && process.argv[5] === '--ledger')) {
+      throw new Error('Usage: node scripts/collect-release-timeline.mjs owner/repo <candidate-SHA> <run-id,run-id> [--ledger <path>]');
+    }
     const [, , repository, sha, ids] = process.argv;
-    const timeline = await collectTimeline(repository, sha, ids.split(','));
+    const ledger = process.argv.length === 7 ? JSON.parse(readFileSync(process.argv[6], 'utf8')) : null;
+    if (process.argv.length === 7 && ledger === null) throw new Error('Release ledger must be an object.');
+    const timeline = await collectTimeline(repository, sha, ids.split(','), api, ledger);
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
     const directory = path.join(root, 'release-validation', 'timelines', `${Date.now()}-${process.pid}`);
     mkdirSync(directory, { recursive: true });

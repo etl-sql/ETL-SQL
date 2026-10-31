@@ -24,6 +24,7 @@ export const releaseAutomationChecks = [
   'nightly-release', 'workflows', 'windows-release-packages', 'macos-release-packages', 'package-upload-recovery', 'msi-candidate', 'deb-candidate', 'deb-reuse', 'certification-process', 'release-preflight', 'release-versions', 'changelog-compiler', 'vsix-module-identity',
   'installer-sources', 'installer-actions', 'master-release', 'publish-release', 'sbom-output', 'docs-audit', 'release-evidence', 'production-canary-evidence', 'certification-source', 'deployment-claims', 'local-release-bundle', 'release-driver-gates', 'release-run-wait', 'release-tag', 'release-timeline', 'ci-impact', 'browser-shards', 'built-browser-assets', 'hosted-release-evidence', 'hosted-local-evidence', 'workstation-release-evidence', 'collected-workstation-evidence', 'workstation-certification-driver', 'lane-shard-results', 'engine-coverage', 'scale-comparison-assets', 'release-certification',
 ].map(name => ({ id: `test-${name}`, command: process.execPath, args: [`scripts/checks/test-${name}.mjs`] }));
+releaseAutomationChecks.push({ id: 'test-release-draft-manifest', command: process.execPath, args: ['scripts/checks/test-release-draft-manifest.mjs'] });
 sourceChecks.push(...releaseAutomationChecks);
 // Ordinary branch work may keep draft notes. Tag publication must use finalized metadata.
 if (process.env.ETLSQL_RELEASE_TAG) sourceChecks.push({ id: 'final-release-metadata', command: process.execPath,

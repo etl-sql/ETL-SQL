@@ -11,6 +11,8 @@ foreach ($path in @(
     'docs/reference/statements/new.md', 'LICENSE.md', 'unknown/new-file',
     'docs/releases/payload.js', 'src/etl-sql-vscode/ui/src/App.tsx',
     'src/etl-sql-vscode/src/extension.ts', 'scripts/Test-MsiUpgrade.ps1',
+    'scripts/Test-MsiPortalUpgrade.ps1', 'scripts/checks/Test-MsiCheckpoint.ps1',
+    'scripts/checks/Test-MsiBackupEvidence.ps1', 'scripts/checks/test-msi-candidate.mjs',
     'tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj',
     '../docs/releases/file.md', 'docs\releases\file.md'
 )) {

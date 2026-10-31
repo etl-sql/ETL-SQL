@@ -140,7 +140,7 @@ Downloaded for workflow validation only; not redistributed with the application.
 | eslint-plugin-react-hooks | ^7.0.1 | development | MIT | https://www.npmjs.com/package/eslint-plugin-react-hooks | src/etl-sql-vscode/ui/package.json |
 | eslint-plugin-react-refresh | ^0.5.3 | development | MIT | https://www.npmjs.com/package/eslint-plugin-react-refresh | src/etl-sql-vscode/ui/package.json |
 | framer-motion | ^12.42.0 | runtime | MIT | https://www.npmjs.com/package/framer-motion | src/etl-sql-vscode/ui/package.json |
-| glob | ^13.0.6 | development | BlueOak-1.0.0 | https://www.npmjs.com/package/glob | src/etl-sql-vscode/package.json |
+| glob | ^14.0.3 | development | BlueOak-1.0.0 | https://www.npmjs.com/package/glob | src/etl-sql-vscode/package.json |
 | globals | ^17.7.0; 17.12.0 | development | MIT | https://www.npmjs.com/package/globals | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json; scripts/lint/package.json |
 | jsdom | ^29.0.2 | development | MIT | https://www.npmjs.com/package/jsdom | src/etl-sql-vscode/package.json |
 | lucide-react | ^1.21.0 | runtime | ISC | https://www.npmjs.com/package/lucide-react | src/etl-sql-vscode/ui/package.json |

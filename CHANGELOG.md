@@ -12,6 +12,52 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Update minimatch and glob to patched releases across lint, extension, UI and VSIX toolchains.
+  Read the draft manifest through its validated open handle to prevent path replacement races.
+
+- Verify hosted failed-upload and missing-artifact recovery in 3m58s using the original Windows
+  packages. Successful jobs and immutable artifact identity survive one failed-job-only retry;
+  downloaded draft bytes match the original manifest. No public release or rebuild was performed.
+
+- Bound release-validation preflight and evidence collectors with the shared process supervisor.
+  Retain their diagnostics on failure and reserve time for evidence uploads.
+  Track release timing and failed-job recovery in a focused acceptance table.
+
+- Require the mounted macOS DMG CLI to report the exact release version and candidate commit.
+  Reject detach failures before recording DMG acceptance, while preserving an earlier launch or
+  asset-verification error when cleanup also fails.
+
+- Bound native ZIP/VSIX publishing with the shared process supervisor and retain diagnostics
+  before uploading full package artifacts. Preserve the publish log used by certification.
+  Also retain compiler-restore output, supervise asset preparation and bound native acceptance steps.
+  Bound preparation in reusable macOS release builds and upload their diagnostics before packages.
+  Bound DEB preflight and asset preparation, retain their logs on failure, and reserve upload time.
+
+- Preserve the workstation certification plan's original JSON timestamps. PowerShell date
+  reserialization could trim fractional zeros and reject otherwise successful fresh or resumed evidence.
+
+- Recheck the complete draft asset inventory immediately before release publication against a
+  retained, hash-pinned manifest from platform verification. Changed, missing or extra packages,
+  evidence, checksums or SBOM now block publication across every platform.
+
+- Include candidate-cut, tag and publication times and attempt reasons from an external,
+  candidate-bound ledger in release timeline reports. Label supplied timestamps explicitly,
+  preserve unknown values and report total release elapsed time separately from parallel job time.
+
+- Verify hosted browser asset-generation checks after the compiler optimization: 635.3 seconds
+  versus the earlier 996.2-second run, with all 122 consumer checks passing. Retain both archive
+  digests and tested source identities; full-release timing remains separate.
+
+- Reject release timeline collection if a selected run changes during collection or its final
+  state cannot be read. Concurrent retries can no longer leave an outdated completed-run report.
+
+- Limit MSI certification-script fixes to source checks and MSI build/install certification in
+  regular CI. Keep shared helpers, package-build scripts, unknown files and full certification
+  on the conservative path; unrelated native package and browser jobs no longer run for these fixes.
+
+- Keep MSI certification backup archives outside uploaded evidence. The backups include generated
+  service secrets; retain certification logs and assertions without publishing those archives.
+
 - Measure Studio startup readiness independently of headless animation-frame delivery. Keep the
   same editor-ready condition and performance budgets, and retain navigation/resource timing
   alongside the result to distinguish loading delays from delayed observation.

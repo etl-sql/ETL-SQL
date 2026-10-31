@@ -19,6 +19,9 @@ Deferred initiatives stay in `ROADMAP.md` until selected.
 
 ## Now — v0.22.0 work that can be done today
 
+**Current execution focus:** [release recovery acceptance](docs/releases/recovery-acceptance.md).
+Finish its remaining hosted proof and complete-candidate timing before expanding other work.
+
 ### 1. Faster release certification
 
 **Design:** [`ROADMAP.md`](ROADMAP.md#release-engineering--faster-release-certification), which also
@@ -130,6 +133,21 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   records per-job time outside steps only when all intervals are complete, ordered and bounded.
   Tests cover carried retries, gaps, overlaps and missing timestamps. Exact runner queue time
   and cold/warm hosted measurements remain outstanding.
+  Timeline collection now rechecks every selected run after reading all attempts and pages.
+  A concurrent retry, state/identity change or failed recheck rejects the report instead of
+  retaining an outdated completed snapshot. Node 22 regressions reproduce acceptance by the
+  original collector and verify rejection, including an earlier run changing while a later run
+  is collected. Evidence: `release-validation/timeline-snapshot-review/`. This guards collection
+  consistency; hosted timing and final-candidate timeline evidence remain open.
+  The collector also accepts a candidate-bound external JSON ledger for candidate-cut, tag and
+  publication timestamps plus per-attempt reasons. Reports distinguish operator records from
+  GitHub observations and calculate total elapsed time across workflow gaps without summing
+  parallel work. Missing milestones/reasons remain unknown. Node 22 public-CLI regressions cover
+  retained JSON/Markdown, Unicode/bracketed paths and rejection without output for wrong candidates,
+  invalid dates, reversed milestones and invalid arguments; API fixtures reject unknown/duplicate
+  attempt identities. Actual final-candidate milestone collection remains required.
+  Combined source preflight passes all 50 checks in 113.4 seconds on Node 22, including the
+  MSI impact selection and timeline changes. Report: `release-validation/preflight/1793322993068-20652/`.
 - [ ] **Find why the MSI runner is lost.** Both of the tag's MSI attempts lost their hosted runner
   about 10 minutes after the Portal-profile step's 35-minute watchdog was due. The step passes in
   about 5 minutes. Determine whether the script hangs or the watchdog's `taskkill /T` takes the runner
@@ -151,6 +169,11 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   failure annotation. Thus notices from a running step do not provide the required durable
   diagnostic evidence. Original metadata and annotation are retained under
   `release-validation/critical-path/release-5b6c6abd-msi-*`; the cause remains unresolved.
+  The review also finds fresh-install backup archives, including the generated keys archive,
+  inside the uploaded evidence directory. Both fresh and pre-upgrade backups now use unique
+  temporary storage outside that tree; overlapping evidence roots reject before backup creation.
+  Production-path regression checks verify both destinations and cleanup after success/failure.
+  This fixes evidence isolation, not the runner-loss cause; hosted acceptance remains required.
 - [ ] **Nightly release-branch lanes.** Run the installed-upgrade checks (DEB and the MSI Portal
   profile) and the Portal shards nightly from the day the release branch is cut.
   **In progress:** the nightly scheduler discovers version branches newer than the latest stable
@@ -162,6 +185,13 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   retry and schedule evidence remain outstanding.
 - [ ] **Path-filtered fix rounds.** A fix commit runs only the lanes its paths touch, using a manifest
   of which lanes cover which paths. The final round still runs everything.
+  MSI-only certification scripts and their explicitly listed fixtures now select source preflight
+  plus MSI build/install certification, without native ZIP/VSIX or unrelated CI consumers.
+  The MSI classifier honors both shared package impact and its explicit lane; this preserves
+  installed checks when native-package impact is false. JavaScript/PowerShell parity and actual
+  CI-condition fixtures pass, including mixed product changes, exact-path matching and full override.
+  Shared helpers and unknown scripts remain broad. Local pre-push retains its existing full path;
+  hosted selection/timing acceptance remains open.
   **In progress:** regular CI consumes the shared impact selection. Unknown/shared changes expand
   to all lanes. Full certification ignores the diff. Browser-only hosted selection is verified;
   other path families and full-candidate certification remain open.
@@ -254,7 +284,17 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   original. The guarded production implementation passes the complete local pre-push gate in
   742.0 seconds: 50 source checks, 122 consumer checks, 53 Portal contracts/smoke cases and 142
   engine smoke cases. Its complete asset-generation check passes in 305.6 seconds; the added
-  classic/global-augmentation regressions pass. Hosted compiler timing remains unverified.
+  classic/global-augmentation regressions pass.
+  **Hosted asset-generation timing verified 2026-10-29:** PR 50 CI `40940345240` passes all
+  122 consumer checks on attempt 1. Asset-generation checks take 635.272 seconds versus
+  996.185 seconds in control `40312449895`, a measured reduction of 360.913 seconds (36.2%).
+  The consumer job takes 16.97 minutes including setup. Both original archive digests and
+  matching check inventories are verified; the checkout log identifies merge `45e178d82`, whose
+  tree equals head `d800288e2`. Compiler/consumer sources are unchanged from base `434b72f3f`.
+  These are different hosted runs, not an isolated compiler A/B measurement. Engine coverage,
+  Docker and enterprise jobs skip in this PR, so full-CI and final-release timing remain open.
+  Receipt: `certification-results/hosted-compiler-timing-2026-10-29.json`; original archives,
+  API responses, timeline and executable audit: `release-validation/hosted-compiler-timing-20261029/`.
   **Engine recovery verified 2026-10-28:** disposable workflow-only candidate
   `cd600510d3b933151e6b86d59a93758f4425e7f8`, run `40754693409`, deliberately fails group 1 after all
   its tests pass. One failed-job-only retry reaches green in 875 seconds (14.6 minutes), with 13,101
@@ -269,6 +309,51 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   before workers start; that separate original failure is retained and does not prove group recovery.
 - [ ] **Watchdogs and log streaming** on every long CI step, with the console streamed to an artifact
   and diagnostics uploaded on failure.
+  Native ZIP/VSIX publishing now uses a 75-minute process supervisor inside an 80-minute step
+  and 160-minute job, retaining the existing `publish.log` plus separate supervisor diagnostics.
+  A five-minute diagnostic upload precedes the full package artifact, which has a ten-minute
+  upload deadline. Executed workflow-command fixtures cover all four RIDs, success, failed exits
+  and timeout exits; actionlint and the shared supervisor regressions pass. Actual hosted timeout,
+  diagnostic retention and native timing acceptance remain open.
+  Native compiler restoration now retains both output channels under a five-minute step limit;
+  asset preparation uses a six-minute supervisor inside an eight-minute step. Candidate inspection,
+  extracted-CLI checks, DMG acceptance and VSIX acceptance have explicit step deadlines too.
+  Executed workflow fixtures cover restore failures and preparation timeout propagation for every
+  RID, including the per-RID diagnostic paths. Hosted execution and timeout/upload evidence remain open.
+  Windows/macOS package promotion fixtures pass with these changes. The Windows producer fixture
+  now extracts only its own workflow step, so inserting the diagnostic upload cannot feed YAML
+  into its PowerShell command. Receipt and unchanged-byte recovery checks remain intact.
+  The reusable macOS release build now bounds compiler restore, asset preparation and UI build,
+  retaining restore/build output and supervisor diagnostics per architecture. Diagnostics upload
+  before package artifacts under separate deadlines; the job budget leaves room after the existing
+  90-minute publish supervisor. Executed command fixtures cover both architectures, restore/build
+  failures and preparation timeouts. Actual hosted macOS timeout/upload evidence remains open.
+  DEB build and installed-upgrade preparation now have bounded preflight, compiler restore,
+  asset sync and sync-check commands with separate logs. Build diagnostics upload before candidate
+  packages; installed evidence includes preparation logs even when installation never starts.
+  Job budgets reserve time for the step deadlines and uploads. Executed command fixtures verify
+  arguments, both output streams, original failure/timeout exits and stopped follow-up commands.
+  Actionlint, DEB candidate and reuse fixtures pass; hosted timeout/upload evidence remains open.
+  Budget review caught the native job's original 110-minute ceiling below its 153 minutes of
+  configured step deadlines. The 160-minute ceiling now covers those steps plus setup; workflow
+  fixtures enforce that reserve for native, macOS release and both DEB jobs. This is a watchdog
+  ceiling, not a timing target. Original failing budget check: `release-validation/workflow-job-budgets/`.
+  Combined source validation passes all 51 checks in 121.3 seconds at
+  `release-validation/preflight/1793375598367-38192/summary.json`; the subsequent budget correction
+  passes the complete workflow fixture, actionlint and diff checks.
+  The accumulated package-watchdog batch passes 51 source checks, formatting, asset ownership,
+  browser types and lint. Consumer validation passes 120/122 initially; the two real SDK packaging
+  fixtures fail only on sandbox-blocked NuGet access and pass on focused network-enabled retries.
+  The remaining asset check, 53 Portal contracts/smoke cases and 142 engine smoke cases pass with
+  no skips. Original consumer summary: `release-validation/consumer-contracts/1793375955704-39792/`;
+  original gate and separate recovery/smoke logs: `release-validation/package-watchdogs-*.log`.
+  Release validation now supervises workflow-checker setup, source preflight and hosted,
+  workstation and Windows evidence collection. Each retains stdout/stderr and supervisor results;
+  the always-run preflight artifact includes those diagnostics. Collector and upload deadlines fit
+  a 110-minute job budget. Executed workflow commands use the real supervisor with stand-in
+  collectors to verify exact arguments, inherited GitHub output files, logs and exits 0/7/124.
+  Actionlint and hosted/workstation/Windows evidence fixtures pass. Hosted timeout/upload
+  verification remains open; no certification or publication acceptance is inferred from fixtures.
   **In progress:** MSI workstation and Portal jobs use the shared bounded supervisor. Other long
   CI steps still need coverage. Consumer-contract checks now retain per-check logs and summaries,
   stream bounded output chunks with heartbeats, and fail each child after 30 minutes while
@@ -410,6 +495,11 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   43 successful synthetic phases; 19 changed/missing/stale/linked inputs reject reuse before work. Evidence
   validation rejects inconsistent attempt windows. These are regression fixtures, not a full
   passing workstation run; missing or unfinished checkpoints never trigger an automatic full rerun.
+  Source preflight subsequently exposes an intermittent workstation evidence rejection: PowerShell
+  parses plan timestamps as dates and trims fractional zeros when serializing them, breaking exact
+  invocation identity. A controlled zero-ending timestamp reproduces the failure in the real driver.
+  The plan now retains the original JSON; fresh and resumed synthetic runs preserve exact timestamps
+  and all prior failure/reuse checks pass. Evidence: `release-validation/workstation-plan-timestamps/`.
   Local validation covers 50 source checks, 122 consumer checks, 53 Portal cases and 142 engine
   smoke cases. Two sandbox-blocked NuGet restores pass on failed-check-only recovery with network
   access; the other 120 successes and both original failures remain retained. Evidence:
@@ -535,6 +625,19 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
     exactly once, matching isolation and fault attribution to the declared plan. Executed fixtures
     reject duplicate/missing combinations and invalid alert delivery. The checklist distinguishes
     deterministic contract evidence from live hosted evidence; complete manifest enforcement remains open.
+    Publication now downloads every draft asset and compares the complete filename/size/hash inventory
+    with an artifact-pinned manifest from the successful platform verification/attestation job.
+    The final check covers Linux, macOS, MSI, Windows, evidence, checksums and SBOM; missing, changed
+    or extra assets block publication. Executed producer/publication workflow commands verify
+    rejection and recovery using the unchanged manifest. This closes the local final-byte-check gap;
+    hosted publication/recovery acceptance and the operator checklist manifest remain open.
+    Shared preflight passes 50 of 51 checks, including this gate; its workstation timestamp failure
+    is reproduced and corrected separately, then the failed check passes in 14.9 seconds under the
+    original deadline. Original results: `release-validation/preflight/1793323361560-9516/`;
+    recovery: `release-validation/workstation-plan-timestamps/recovery/`.
+    The combined batch subsequently passes full pre-push in 718.6 seconds: all 51 source checks,
+    122 consumer checks, 53 Portal contracts/smoke cases and 142 engine smoke cases, with no skips.
+    Log: `release-validation/release-validation-gates-pre-push.log`. Hosted acceptance remains open.
     Canary provisioning and credential receipts now validate their underlying plan-bound identities,
     cost/customer guards, revocations, replacement reasons and lifecycle continuity/timing. Corrupted
     details cannot pass solely by retaining a successful summary. Deterministic evidence still does
@@ -670,6 +773,12 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   green through unlimited retries. Record time to first actionable failure and time to recover,
   separately from the full certification time. This rehearsal is the acceptance test for the new
   release process, before v0.22.0 release day.
+  **Hosted upload/missing-artifact recovery verified 2026-10-31:** run `41144863470` fails after
+  one real draft upload and rejects a missing artifact. One failed-job-only retry passes in
+  238.311 seconds, preserving successful executions and source artifact `12928589167` with its
+  original digest. Downloaded draft bytes match the original manifest; no rebuild or publication
+  occurs. The approval/operator pause is recorded separately from execution. Historical receipt:
+  `certification-results/release-upload-recovery-2026-10-31.json`. Full-candidate timing remains open.
   **In progress:** executed the actual Windows and macOS upload commands against a local mock
   that fails after uploading the first package. Failed-only recovery preserves retained inputs;
   missing or changed packages/manifests stop before the upload command runs. Both upload jobs
@@ -974,6 +1083,12 @@ failure, profiles and local reports: `release-validation/critical-path/`.
   is removed. Regression cases prove canonical options remain available and both retired forms
   receive no connector-option suggestions. All 459 language-server cases pass without skips.
 - [ ] **Review `scripts/`, the installers and `tests/`.** The v0.22.0 review covered `src/` only.
+  Native DMG acceptance review reproduces a green result when the mounted CLI reports an older
+  release. The workflow now requires the exact candidate version and commit, rejects missing or
+  mismatched candidate identity before mounting, and checks detach success before recording DMG
+  acceptance. Cleanup failures preserve earlier launch/asset failures. Ten executed workflow
+  scenarios cover these outcomes with mocked native tools; actual macOS installation remains
+  separate hosted evidence. Original failure and recovery: `release-validation/dmg-acceptance-review/`.
   **In progress 2026-10-25:** inventory contains 376 tracked script files and 1,856 test files,
   plus installer/deployment inputs. The MSI review reproduced P0 key loss when a replacement
   file could not be created: the old protected file was deleted and errors were ignored.

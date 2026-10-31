@@ -25,7 +25,8 @@ jobs:
   build:
     name: Build ${{ inputs.rid }}
     runs-on: ${{ inputs.rid == 'osx-x64' && 'macos-15-intel' || 'macos-15' }}
-    timeout-minutes: 110
+    # Leave room for preparation, optional DMG and diagnostic uploads after the publish deadline.
+    timeout-minutes: 160
     outputs:
       artifact_id: ${{ steps.packages.outputs.artifact-id }}
       manifest_sha256: ${{ steps.identity.outputs.manifest_sha256 }}
@@ -44,6 +45,7 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - name: Require matching candidate and native architecture
+        timeout-minutes: 2
         shell: pwsh
         run: |
           $sha = (git rev-parse HEAD).Trim()
@@ -53,14 +55,23 @@ jobs:
           $actual = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
           if ($env:PACKAGE_RID -cne "osx-$actual") { throw 'macOS package must build on its native architecture.' }
       - name: Install browser compiler
-        run: npm ci --prefix scripts/typecheck
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          mkdir -p "release-validation/macos/$PACKAGE_RID"
+          npm ci --prefix scripts/typecheck 2>&1 | tee "release-validation/macos/$PACKAGE_RID/restore-compiler.log"
       - name: Prepare browser assets
-        run: node scripts/sync-assets.js
+        timeout-minutes: 8
+        shell: pwsh
+        run: |
+          ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/sync-assets.js') -EvidenceDirectory "release-validation/macos/$env:PACKAGE_RID/preparation" -TimeoutSeconds 360
       - name: Build extension UI
+        timeout-minutes: 10
+        shell: bash
         working-directory: src/etl-sql-vscode/ui
         run: |
-          npm ci
-          npm run build
+          npm ci 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/macos/$PACKAGE_RID/restore-ui.log"
+          npm run build 2>&1 | tee "$GITHUB_WORKSPACE/release-validation/macos/$PACKAGE_RID/build-ui.log"
       - name: Publish native VSIX and ZIP
         shell: pwsh
         timeout-minutes: 95
@@ -79,6 +90,7 @@ jobs:
           bash -euo pipefail scripts/build-mac-dmg.sh "$version" release/osx-x64/bin
           mv "ETL-SQL_v${version}.dmg" release/
       - name: Record native package identity
+        timeout-minutes: 2
         id: identity
         shell: pwsh
         env:
@@ -90,7 +102,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Cannot record macOS package identity.' }
           $hash = (Get-FileHash "release/$env:PACKAGE_RID-package-inputs.json" -Algorithm SHA256).Hash.ToLowerInvariant()
           "manifest_sha256=$hash" >> $env:GITHUB_OUTPUT
+      - name: Retain native packaging diagnostics
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-package-logs-${{ inputs.rid }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/macos/
+          if-no-files-found: warn
+          retention-days: 30
       - name: Retain native packages before publication
+        timeout-minutes: 10
         id: packages
         uses: actions/upload-artifact@v7
         with:
@@ -101,12 +123,4 @@ jobs:
             release/${{ inputs.rid }}-package-inputs.json
             release/*.dmg
           if-no-files-found: error
-          retention-days: 30
-      - name: Retain native packaging diagnostics
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: macos-package-logs-${{ inputs.rid }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: release-validation/macos/
-          if-no-files-found: warn
           retention-days: 30

@@ -30,7 +30,8 @@ try {
         $planText = & node (Join-Path $PSScriptRoot 'workstation-resume.mjs') $mode $repoRoot $evidence $identityFile
         if ($LASTEXITCODE -ne 0) { throw 'Workstation checkpoint verification failed. No certification work was started.' }
         $plan = ($planText -join "`n") | ConvertFrom-Json
-        $plan | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $planFile -Encoding utf8
+        # Preserve timestamp strings exactly; JSON date conversion can trim fractional zeros.
+        ($planText -join "`n") | Set-Content -LiteralPath $planFile -Encoding utf8
         $arguments = @('-Configuration', 'Release', '-IncludeSlt', '-IncludeDockerIntegration', '-IncludeStandardScale',
             '-OutDir', (Join-Path $evidence 'validation'))
         if ($plan.resume) { $arguments += '-Resume' }

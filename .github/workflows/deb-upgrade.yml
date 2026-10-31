@@ -27,7 +27,8 @@ jobs:
   build:
     name: Build DEB candidate
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    # Preserve upload time after preparation, publish and package deadlines.
+    timeout-minutes: 130
     outputs:
       artifact_id: ${{ steps.artifact.outputs.artifact-id }}
     steps:
@@ -41,14 +42,20 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - name: Source preflight
+        timeout-minutes: 22
+        shell: bash
         run: |
-          node scripts/setup-actionlint.mjs
-          node scripts/release-preflight.mjs
+          mkdir -p release-validation/deb/preflight
+          timeout --signal=TERM --kill-after=30s 2m node scripts/setup-actionlint.mjs 2>&1 | tee release-validation/deb/preflight/setup.log
+          timeout --signal=TERM --kill-after=30s 18m node scripts/release-preflight.mjs 2>&1 | tee release-validation/deb/preflight/console.log
       - name: Prepare browser assets
+        timeout-minutes: 15
+        shell: bash
         run: |
-          npm ci --prefix scripts/typecheck
-          node scripts/sync-assets.js
-          node scripts/sync-assets.js -Check
+          mkdir -p release-validation/deb/preparation
+          timeout --signal=TERM --kill-after=30s 4m npm ci --prefix scripts/typecheck 2>&1 | tee release-validation/deb/preparation/restore.log
+          timeout --signal=TERM --kill-after=30s 6m node scripts/sync-assets.js 2>&1 | tee release-validation/deb/preparation/sync.log
+          timeout --signal=TERM --kill-after=30s 2m node scripts/sync-assets.js -Check 2>&1 | tee release-validation/deb/preparation/check.log
       - name: Check native package file permissions
         shell: bash
         timeout-minutes: 2
@@ -111,7 +118,16 @@ jobs:
             linuxZipSha256 = (Get-FileHash candidate/current.zip -Algorithm SHA256).Hash
             linuxVsixSha256 = (Get-FileHash candidate/current.vsix -Algorithm SHA256).Hash
           } | ConvertTo-Json | Set-Content candidate/candidate.json
+      - name: Retain build diagnostics
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: deb-build-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/
+          retention-days: 30
       - name: Retain immutable candidate pair
+        timeout-minutes: 10
         id: artifact
         uses: actions/upload-artifact@v7
         with:
@@ -119,19 +135,12 @@ jobs:
           path: candidate/
           if-no-files-found: error
           retention-days: 14
-      - name: Retain build diagnostics
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: deb-build-logs-${{ github.run_id }}-${{ github.run_attempt }}
-          path: release-validation/
-          retention-days: 30
 
   installed-upgrade:
     name: DEB fresh install, upgrade and rollback
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     outputs:
       artifact_id: ${{ needs.build.outputs.artifact_id }}
       receipt_id: ${{ steps.receipt.outputs.artifact-id }}
@@ -143,11 +152,13 @@ jobs:
         with:
           node-version: 22
       - uses: actions/download-artifact@v8
+        timeout-minutes: 10
         with:
           artifact-ids: ${{ needs.build.outputs.artifact_id }}
           path: candidate
           merge-multiple: true
       - name: Verify candidate identity and bytes
+        timeout-minutes: 2
         shell: pwsh
         run: |
           $receipt = Get-Content candidate/candidate.json -Raw | ConvertFrom-Json
@@ -160,9 +171,12 @@ jobs:
             if ((Get-FileHash "candidate/current.$extension" -Algorithm SHA256).Hash -cne $receipt.$key) { throw "Candidate hash mismatch: $extension" }
           }
       - name: Prepare asset comparison sources
+        timeout-minutes: 12
+        shell: bash
         run: |
-          npm ci --prefix scripts/typecheck
-          node scripts/sync-assets.js
+          mkdir -p release-validation/deb/preparation
+          timeout --signal=TERM --kill-after=30s 4m npm ci --prefix scripts/typecheck 2>&1 | tee release-validation/deb/preparation/restore.log
+          timeout --signal=TERM --kill-after=30s 6m node scripts/sync-assets.js 2>&1 | tee release-validation/deb/preparation/sync.log
       - name: Certify installed packages on disposable runner
         timeout-minutes: 23
         shell: bash
@@ -176,6 +190,7 @@ jobs:
             bash scripts/test-deb-upgrade.sh candidate/previous.deb candidate/current.deb "$PWD" \
             "$PWD/release-validation/deb/installed" 2>&1 | tee release-validation/deb/console.log
       - name: Record successful certification
+        timeout-minutes: 2
         shell: pwsh
         env:
           CANDIDATE_ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
@@ -201,6 +216,7 @@ jobs:
             sudo chown -- "$(id -u):$(id -g)" "$report"
           fi
       - name: Retain installation evidence
+        timeout-minutes: 5
         id: receipt
         if: always()
         uses: actions/upload-artifact@v7
@@ -210,6 +226,7 @@ jobs:
           path: |
             release-validation/deb/console.log
             release-validation/deb/certification.json
+            release-validation/deb/preparation/*.log
             release-validation/deb/installed/*.log
             release-validation/deb/installed/*.txt
             release-validation/deb/installed/*.json
