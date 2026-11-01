@@ -24,6 +24,11 @@ on:
         type: choice
         options: ['All', 'UpgradeRollback']
         default: 'All'
+      diagnostic_restart_manager:
+        description: Retained-input experiment only; never changes ordinary certification
+        type: choice
+        options: ['Default', 'DisableShutdown']
+        default: 'Default'
   workflow_call:
     inputs:
       source_sha:
@@ -492,6 +497,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       PROFILE: portal
       ETLSQL_MSI_DIAGNOSTIC_ONLY: '1'
+      ETLSQL_MSI_DIAGNOSTIC_RESTART_MANAGER: ${{ inputs.diagnostic_restart_manager || 'Default' }}
       ETLSQL_MSI_DURABLE_CHECKPOINTS: '1'
       ETLSQL_MSI_CHECKPOINT_RUN_SHA: ${{ github.sha }}
     steps:

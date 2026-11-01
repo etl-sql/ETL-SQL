@@ -259,6 +259,14 @@ function Invoke-MsiExec {
         $null -ne (Get-Command Write-MsiDurableCheckpoint -CommandType Function -ErrorAction SilentlyContinue)
     $logging = if ($diagnostic) { '/l*v!' } else { '/l*v' }
     $allArguments = @($Arguments) + @('/qn', '/norestart', $logging, $LogPath)
+    $restartManager = $env:ETLSQL_MSI_DIAGNOSTIC_RESTART_MANAGER
+    if ([string]::IsNullOrWhiteSpace($restartManager)) { $restartManager = 'Default' }
+    if ($restartManager -cnotin @('Default', 'DisableShutdown')) { throw 'Unknown diagnostic Restart Manager mode.' }
+    if ($restartManager -cne 'Default') {
+        if (-not $diagnostic) { throw 'Restart Manager overrides are diagnostic-only.' }
+        $allArguments += 'MSIRESTARTMANAGERCONTROL=DisableShutdown'
+        $null = Write-MsiDurableCheckpoint -Stage 'diagnostic restart_manager DisableShutdown'
+    }
     $process = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" `
         -ArgumentList $allArguments -PassThru -WindowStyle Hidden
     # An unbounded wait let a stuck install outlast the CI step timeout, and killing the step then
