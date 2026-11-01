@@ -2,6 +2,8 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../MsiImpact.Helpers.ps1')
 
 foreach ($path in @(
+    'src/ETL-SQL.Installer/Installer.wxs', 'scripts/Test-InstallerSources.ps1',
+    'scripts/checks/test-installer-sources.mjs',
     'src/ETL-SQL.Orchestrator.Service/Program.cs',
     'src/ETL-SQL.Portal/Program.cs', 'src/ETL-SQL.Engine/Evaluator.cs',
     'src/ETL-SQL.Connectors/NewConnector.cs', 'src/appsettings.json',

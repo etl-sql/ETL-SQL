@@ -9,7 +9,8 @@ import { manifest, selectLanes, changedPaths, runSelection, validateManifest } f
 import { runPrepushCases } from './fixtures/parallel-prepush-cases.mjs';
 
 const all = manifest.lanes;
-const msiOnlyPaths = ['scripts/Test-MsiUpgrade.ps1', 'scripts/Test-MsiPortalUpgrade.ps1',
+const msiOnlyPaths = ['src/ETL-SQL.Installer/Installer.wxs', 'scripts/Test-InstallerSources.ps1',
+  'scripts/checks/test-installer-sources.mjs', 'scripts/Test-MsiUpgrade.ps1', 'scripts/Test-MsiPortalUpgrade.ps1',
   'scripts/checks/Test-MsiCheckpoint.ps1', 'scripts/checks/Test-MsiBackupEvidence.ps1',
   'scripts/checks/test-msi-candidate.mjs', 'scripts/checks/test-msi-build-watchdog.mjs'];
 for (const file of msiOnlyPaths) {
@@ -19,10 +20,17 @@ for (const file of msiOnlyPaths) {
   assert.equal(result.certification, false, file);
   assert.deepEqual(selectLanes([file], { full: true }).lanes, all);
   assert.equal(selectLanes([file], { full: true }).nativePackages, true);
+  assert.deepEqual(selectLanes([file], { fallbackReason: 'Missing comparison base' }).lanes, all);
+  assert.equal(selectLanes([file], { fallbackReason: 'Missing comparison base' }).nativePackages, true);
   assert.deepEqual(selectLanes([file, 'src/ETL-SQL.Portal/Program.cs']).lanes, all);
 }
 for (const file of ['scripts/MsiUpgrade.Helpers.ps1', 'scripts/MsiImpact.Helpers.ps1',
   'scripts/build-msi.ps1', 'scripts/Test-MsiNewCheck.ps1', 'scripts/checks/Test-MsiBackupEvidence.ps1.extra']) {
+  assert.deepEqual(selectLanes([file]).lanes, all, file);
+  assert.equal(selectLanes([file]).nativePackages, true, file);
+}
+for (const file of ['src/ETL-SQL.Installer/Installer.wxs.extra', 'src/ETL-SQL.Installer/Other.wxs',
+  'src/ETL-SQL.Installer/installer-actions.js', 'src/ETL-SQL.Installer/configure-portal-jwt.ps1']) {
   assert.deepEqual(selectLanes([file]).lanes, all, file);
   assert.equal(selectLanes([file]).nativePackages, true, file);
 }
@@ -280,8 +288,16 @@ function node {
     if ($args[0].EndsWith('select-ci-lanes.mjs')) {
         $output = Join-Path $env:IMPACT_FIXTURE_ROOT 'release-validation/preflight/local-ci-impact.json'
         New-Item -ItemType Directory -Force (Split-Path -Parent $output) | Out-Null
-        @{ lanes = @($env:IMPACT_FIXTURE_LANES -split ',') } | ConvertTo-Json | Set-Content $output
-    } elseif (-not $args[0].EndsWith('release-preflight.mjs') -and -not $args[0].EndsWith('setup-actionlint.mjs')) {
+        $selection = @{ lanes = @($env:IMPACT_FIXTURE_LANES -split ',') }
+        if ($env:IMPACT_FIXTURE_PACKAGES -eq 'false') { $selection.nativePackages = $false }
+        elseif ($env:IMPACT_FIXTURE_PACKAGES -eq 'true') { $selection.nativePackages = $true }
+        elseif ($env:IMPACT_FIXTURE_PACKAGES -eq 'text') { $selection.nativePackages = 'false' }
+        $selection | ConvertTo-Json | Set-Content $output
+    } elseif ($args[0].EndsWith('release-preflight.mjs') -or $args[0].EndsWith('setup-actionlint.mjs')) {
+        $key = if ($args[0].EndsWith('release-preflight.mjs')) { 'preflight' } else { 'checker' }
+        $global:LASTEXITCODE = if ($env:IMPACT_FAIL_TASK -eq $key) { 1 } else { 0 }
+        return
+    } else {
         throw 'EXPENSIVE_VALIDATION_REACHED'
     }
     $global:LASTEXITCODE = 0
@@ -453,9 +469,45 @@ finally { $env:ETLSQL_STUDIO_PERF_OUTPUT | Set-Content (Join-Path $env:IMPACT_FI
       assert.ok(!local.stdout.includes('UI pre-push passed'));
     });
   }
-  assert.equal(routingCases.length, legacyPrePush ? 20 : legacyMixedPrePush ? 47 : 64, 'Every original routing case must remain selected.');
+  if (!legacyPrePush && !legacyMixedPrePush) {
+    for (const lanes of ['msi-upgrade,source-preflight', 'source-preflight,msi-upgrade']) {
+      queueRouting({ IMPACT_FIXTURE_LANES: lanes, IMPACT_FIXTURE_PACKAGES: 'false' }, local => {
+        assert.ifError(local.error);
+        assert.equal(local.status, 0, local.stdout + local.stderr);
+        assert.match(local.stdout, /MSI source pre-push passed/);
+        assert.ok(!local.stdout.includes('Preparing browser assets'));
+      });
+    }
+    for (const packages of ['', 'true', 'text']) {
+      queueRouting({ IMPACT_FIXTURE_LANES: 'source-preflight,msi-upgrade', IMPACT_FIXTURE_PACKAGES: packages }, local => {
+        assert.ifError(local.error);
+        assert.equal(local.status, 1, local.stdout + local.stderr);
+        assert.match(local.stderr, /EXPENSIVE_VALIDATION_REACHED/);
+        assert.ok(!local.stdout.includes('MSI source pre-push passed'));
+      });
+    }
+    for (const lanes of ['source-preflight,msi-upgrade,portal-browser-journey,studio-performance-budgets',
+      'source-preflight,msi-upgrade,unknown-lane']) {
+      queueRouting({ IMPACT_FIXTURE_LANES: lanes, IMPACT_FIXTURE_PACKAGES: 'false' }, local => {
+        assert.ifError(local.error);
+        assert.equal(local.status, 1, local.stdout + local.stderr);
+        assert.match(local.stderr, /EXPENSIVE_VALIDATION_REACHED/);
+        assert.ok(!local.stdout.includes('MSI source pre-push passed'));
+      });
+    }
+    for (const failure of ['checker', 'preflight']) {
+      queueRouting({ IMPACT_FIXTURE_LANES: 'source-preflight,msi-upgrade', IMPACT_FIXTURE_PACKAGES: 'false', IMPACT_FAIL_TASK: failure }, local => {
+        assert.ifError(local.error);
+        assert.equal(local.status, 1, local.stdout + local.stderr);
+        assert.match(local.stderr, failure === 'checker' ? /Workflow checker setup failed/ : /Source preflight failed/);
+        assert.ok(!local.stdout.includes('MSI source pre-push passed'));
+      });
+    }
+  }
+  assert.equal(routingCases.length, legacyPrePush ? 20 : legacyMixedPrePush ? 47 : 73, 'Every original routing case must remain selected.');
   const routingResults = await runPrepushCases(fixture, routingCases.map(test => test.env));
   for (const [index, result] of routingResults.entries()) routingCases[index].verify(result);
+  if (!legacyPrePush && !legacyMixedPrePush) console.log('MSI-only pre-push: source checks run first; typed selection, both lane orders, mixed/unknown fallback and checker/preflight failures verified.');
   console.log(`UI pre-push: ${legacyPrePush ? 'legacy gap reproduced' : 'all selected consumers, retained broad checks and 26 failure paths verified'}.`);
   if (!legacyPrePush) console.log(`Mixed extension/browser pre-push: ${legacyMixedPrePush ? 'legacy gap reproduced' : 'both selected suites, no broad detour and 17 failure paths verified'}.`);
   console.log('CI impact: narrow changes, shared consumers, unknown paths, full override, real Git comparisons, renames, local changes and missing bases passed.');

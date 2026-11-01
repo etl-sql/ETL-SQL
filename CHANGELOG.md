@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Route MSI XML authoring and its source-validation changes to source preflight and installed
+  MSI certification. Unrelated native package builds and engine suites skip in ordinary PR checks.
+  Local MSI-only pre-push stops after source checks; full release certification still selects
+  every lane and all four native platforms.
+
 - Prevent MSI maintenance from automatically shutting down unrelated applications through
   Windows Restart Manager. ETL-SQL applications and services still close explicitly, and
   files-in-use detection remains enabled.

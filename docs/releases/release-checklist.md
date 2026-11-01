@@ -415,6 +415,15 @@ failed/cancelled required builds and unexpected skips. Superseded PR revisions c
 package work; manual candidate runs are preserved. A no-impact PR result does not replace the
 final-candidate package certification required below.
 
+Changes confined to `src/ETL-SQL.Installer/Installer.wxs`, `scripts/Test-InstallerSources.ps1`,
+`scripts/checks/test-installer-sources.mjs`, the existing classified MSI test paths and planning
+documents select source preflight plus installed MSI certification in ordinary PR checks.
+They do not author runtime source or native archive layout, so those package jobs skip. Local pre-push runs
+the complete source preflight, including MSI contract and recovery fixtures, then stops for
+this exact selection. Mixed, unknown, shared build/policy and runtime changes retain broader
+validation. Manual full certification still runs every lane and all four native platforms.
+This routing does not establish a new hosted elapsed time until measured after rollout.
+
 Hosted Windows packaging shares the **Publish Windows payload** job in the full MSI workflow.
 It publishes the eight Windows hosts once and retains the file inventory, source SHA, version,
 build options and hashes. MSI packaging consumes that artifact directly. Windows native packaging

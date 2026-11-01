@@ -39,6 +39,12 @@
       "nativePackages": false
     },
     {
+      "name": "MSI authoring and source validation",
+      "pattern": "^(?:src/ETL-SQL\\.Installer/Installer\\.wxs|scripts/(?:Test-InstallerSources\\.ps1|checks/test-installer-sources\\.mjs))$",
+      "lanes": ["msi-upgrade"],
+      "nativePackages": false
+    },
+    {
       "name": "MSI certification scripts and focused fixtures",
       "pattern": "^scripts/(?:Test-Msi(?:Portal)?Upgrade\\.ps1|checks/(?:Test-Msi(?:Checkpoint|BackupEvidence)\\.ps1|test-msi-(?:candidate|build-watchdog)\\.mjs))$",
       "lanes": ["msi-upgrade"],

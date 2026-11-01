@@ -37,6 +37,13 @@ if (@($impact.lanes).Count -eq 1 -and $impact.lanes[0] -eq 'source-preflight') {
     Write-Host "Documentation-only pre-push passed. Full release certification remains required before tagging." -ForegroundColor Green
     exit 0
 }
+$selectedSourceLanes = @($impact.lanes | Sort-Object) -join ','
+if ($selectedSourceLanes -ceq 'msi-upgrade,source-preflight' -and
+    $impact.nativePackages -is [bool] -and -not $impact.nativePackages) {
+    # Source preflight includes the installer authoring, upgrade/reuse and supervisor fixtures.
+    Write-Host 'MSI source pre-push passed. Hosted installed certification remains required; full release certification is unchanged.' -ForegroundColor Green
+    exit 0
+}
 
 Write-Host "Preparing browser assets..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "sync-assets.js")
