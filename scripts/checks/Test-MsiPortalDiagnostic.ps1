@@ -55,6 +55,7 @@ try {
     $good = Join-Path $root 'good'
     & $producer -ArtifactId 123 -OutputDirectory $good
     $origin = Get-Content (Join-Path $good 'origin.json') -Raw | ConvertFrom-Json
+    if ((Get-Content $env:GITHUB_OUTPUT) -cnotcontains 'origin_run_id=456') { throw 'Cross-run download lost its original run ID.' }
     if ($origin.scope -cne 'DiagnosticOnly' -or $origin.inputRunId -cne '456' -or $origin.inputAttempt -ne 2 -or
         $origin.inputRunHead -cne ('b' * 40) -or $origin.scriptSha -cne ('c' * 40) -or
         (Test-Path (Join-Path $good 'certification.json'))) { throw 'Diagnostic origin lost its separate scope.' }

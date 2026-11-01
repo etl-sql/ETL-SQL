@@ -10,6 +10,7 @@ const diagnostic = workflow.split(/^  diagnostic-portal:\r?\n/m)[1];
 assert.ok(diagnostic, 'Retained-input diagnostic job must exist.');
 assert.match(diagnostic, /Prepare-MsiPortalDiagnostic.ps1/);
 assert.match(diagnostic, /MsiCandidate.ps1 -Mode Verify/);
+assert.ok(diagnostic.includes('run-id: ${{ steps.inputs.outputs.origin_run_id }}'));
 assert.match(diagnostic, /inputRunHead|INPUT_RUN_HEAD/);
 assert.doesNotMatch(diagnostic, /build-msi.ps1|msi-certified-|path: certification.json/);
 assert.match(diagnostic, /ETLSQL_MSI_DIAGNOSTIC_ONLY: '1'/);

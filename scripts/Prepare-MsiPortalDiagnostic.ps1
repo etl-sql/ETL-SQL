@@ -49,5 +49,6 @@ New-Item -ItemType Directory -Path $output | Out-Null
     uncovered = 'No release certification: diagnostic scripts and retained installer sources may differ.'
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'origin.json')
 "artifact_id=$ArtifactId" >> $env:GITHUB_OUTPUT
+"origin_run_id=$originRun" >> $env:GITHUB_OUTPUT
 "origin_head=$($run.head_sha)" >> $env:GITHUB_OUTPUT
 Write-Host 'Retained MSI inputs selected for diagnosis only; no build requested.'
