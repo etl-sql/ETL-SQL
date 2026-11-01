@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { readVsixTestHost } from './lib/vsix-test-host.mjs';
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -19,6 +20,7 @@ function parseArgs(args) {
         else if (args[i] === '--out' && args[i + 1]) options.out = path.resolve(args[++i]);
         else if (args[i] === '--inventory' && args[i + 1]) options.inventory = path.resolve(args[++i]);
         else if (args[i] === '--fixture' && args[i + 1]) options.fixture = path.resolve(args[++i]);
+        else if (args[i] === '--host-receipt' && args[i + 1]) options.hostReceipt = path.resolve(args[++i]);
     }
     return options;
 }
@@ -47,6 +49,7 @@ if (!fs.existsSync(testElectronModule)) {
     throw new Error('Missing @vscode/test-electron dependency. Run npm ci --prefix src/etl-sql-vscode first.');
 }
 const { runTests } = require(testElectronModule);
+const vscodeExecutablePath = options.hostReceipt ? await readVsixTestHost(repository, options.hostReceipt) : undefined;
 
 function extractVsix(vsixFile, destDir) {
     return new Promise((resolve, reject) => {
@@ -123,6 +126,7 @@ try {
     console.log('Launching VS Code webview acceptance suite...');
     const exitCode = await runTests({
         cachePath,
+        vscodeExecutablePath,
         extensionDevelopmentPath: unpackedExtension,
         extensionTestsPath: path.resolve(repository, 'scripts/fixtures/vsix-webview-acceptance.cjs'),
         extensionTestsEnv: {

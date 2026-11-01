@@ -12,6 +12,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Prepare the VS Code acceptance host before native publishing. Later webview checks verify
+  its local receipt and executable hash and use that executable without resolving another
+  download. A network failure now stops before the long native build. Webview assertions and
+  the combined download/test time budget are preserved.
+
+- Capture effective protected secrets when preparing the previous Portal installation for MSI
+  upgrade certification. Consume its existing bootstrap file before checking that the upgrade
+  creates none. Legacy shared-settings predecessors remain covered, and inconsistent service
+  settings fail before upgrade. This corrects test setup for the 0.21.0 predecessor.
+
 - Prepare v0.22.0 version sources and draft release notes before testing its installed upgrade
   path. Source preflight checks release-branch version families before expensive builds, including
   the PR's target branch. Final release dates and certification remain separate gates.

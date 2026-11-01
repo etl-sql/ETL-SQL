@@ -386,7 +386,8 @@ exit ([int]$env:FIXTURE_EXIT)
     }
   }
   for (const [name, minutes] of [['Record candidate and native host', 5], ['Verify checksums and launch the extracted CLI', 10],
-    ['Build, mount and launch macOS DMG package', 10], ['Verify VSIX webviews inside VS Code', 15]]) {
+    ['Build, mount and launch macOS DMG package', 10], ['Prepare VS Code acceptance host before publishing', 8],
+    ['Verify VSIX webviews inside VS Code', 7]]) {
     assert.match(nativeStep(name), new RegExp(`^        timeout-minutes: ${minutes}$`, 'm'));
   }
   const earlyDiagnostics = nativeStep('Retain native package diagnostics first');

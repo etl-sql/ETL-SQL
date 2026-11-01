@@ -18,7 +18,7 @@ for (const source of [catalog.replaceAll('\r\n', '\n'), catalog.replaceAll('\r\n
 assert.throws(() => syntaxIndex.extractStewardshipTags(catalog.replace('TableColumnScriptScopes, []),', 'TableColumnScriptScopes, [], []),')),
   /Unable to extract/, 'A changed record shape must fail instead of silently dropping an entry.');
 
-assert.equal(releaseAutomationChecks.length, 49);
+assert.equal(releaseAutomationChecks.length, 50);
 assert.equal(checksForArguments([]), sourceChecks);
 const branchChecks = checksForArguments(['--release-branch', 'release/v0.22.0']);
 assert.equal(branchChecks.length, sourceChecks.length);

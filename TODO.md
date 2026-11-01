@@ -117,6 +117,10 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   the 30-minute target. On Intel, the eight sequential host publishes occupy about 29 minutes;
   VSIX packaging adds about five minutes. These are measured bottlenecks, not a reason to skip
   required package checks. Full frozen-candidate release timing remains unmeasured.
+  Native run `41306970075` builds Linux packages successfully, then its late VS Code download
+  fails with `ETIMEDOUT`. Host preparation now precedes publishing, and acceptance validates
+  the prepared executable's hash/platform/cache path without another download. Local fixtures
+  cover unavailable downloads and altered/foreign receipts; hosted acceptance remains pending.
 
 - [ ] **Release timeline.** Record the v0.22.0 candidate cut, each CI/MSI round, its cause and the
   tag time as the release runs, so the goal is measured rather than remembered.
@@ -208,6 +212,13 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   survive as direct annotations through `supervisor complete`. The older diagnostic stalls and
   original runner-loss cause remain unresolved. This retained 0.21.0 payload is not evidence for
   the 0.21.0-to-0.22.0 path.
+  The first 0.21.0-to-0.22.0 run `41306970073` completes Portal certification with two failed
+  assertions rather than runner loss. Its predecessor already uses protected settings, so the
+  shared-file signing-key seed is overridden; its existing first-sign-in file is also still
+  present. The harness now records effective predecessor secrets and consumes that bootstrap
+  file before checking preservation/no regeneration. A no-install regression covers legacy and
+  protected precedence, matching service settings and repeated baseline capture. Retained-input
+  hosted acceptance of this correction remains pending; production configuration is unchanged.
 - [ ] **Nightly release-branch lanes.** Run the installed-upgrade checks (DEB and the MSI Portal
   profile) and the Portal shards nightly from the day the release branch is cut.
   **In progress:** the nightly scheduler discovers version branches newer than the latest stable

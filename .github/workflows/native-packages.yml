@@ -120,6 +120,15 @@ jobs:
         timeout-minutes: 8
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/sync-assets.js') -EvidenceDirectory "artifacts/native-packages/$env:PACKAGE_RID/preparation" -TimeoutSeconds 360
 
+      - name: Prepare VS Code acceptance host before publishing
+        shell: pwsh
+        timeout-minutes: 8
+        run: |
+          npm ci --prefix src/etl-sql-vscode
+          if ($LASTEXITCODE -ne 0) { throw 'VS Code test tool restore failed.' }
+          node scripts/prepare-vsix-acceptance.mjs --out "artifacts/native-packages/$env:PACKAGE_RID/vscode-host.json"
+          if ($LASTEXITCODE -ne 0) { throw 'VS Code acceptance host preparation failed.' }
+
       - name: Record candidate and native host
         shell: pwsh
         timeout-minutes: 5
@@ -288,7 +297,8 @@ jobs:
 
       - name: Verify VSIX webviews inside VS Code
         shell: pwsh
-        timeout-minutes: 15
+        # The download's eight-minute budget now runs before publishing; seven remain for tests.
+        timeout-minutes: 7
         run: |
           $ErrorActionPreference = 'Stop'
           [xml]$props = Get-Content -LiteralPath 'Directory.Build.props'
@@ -306,10 +316,10 @@ jobs:
           $vsixLog = Join-Path $outDir 'vsix-acceptance.log'
 
           if ($IsLinux) {
-            & xvfb-run -a node scripts/test-vsix-acceptance.mjs --vsix $vsix --out $outDir *>&1 |
+            & xvfb-run -a node scripts/test-vsix-acceptance.mjs --vsix $vsix --out $outDir --host-receipt (Join-Path $outDir 'vscode-host.json') *>&1 |
               Tee-Object -FilePath $vsixLog
           } else {
-            & node scripts/test-vsix-acceptance.mjs --vsix $vsix --out $outDir *>&1 |
+            & node scripts/test-vsix-acceptance.mjs --vsix $vsix --out $outDir --host-receipt (Join-Path $outDir 'vscode-host.json') *>&1 |
               Tee-Object -FilePath $vsixLog
           }
           if ($LASTEXITCODE -ne 0) { throw 'VSIX webview acceptance failed.' }

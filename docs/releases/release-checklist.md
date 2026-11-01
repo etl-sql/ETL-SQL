@@ -117,6 +117,11 @@ acceptance reports/logs, Node/.NET versions and a candidate hash manifest. PR re
 skips cannot authorize publication. Release rejects a missing or newer unsuccessful candidate run;
 it does not rebuild Windows packages as a fallback.
 
+VS Code host preparation runs before native publishing, so an unavailable download fails before
+the long build. Later webview acceptance verifies the prepared host's local receipt and executable
+hash and uses that executable without another download. Preparation alone does not satisfy webview
+acceptance; both designer and preview checks still have to pass.
+
 Release selects the original successful job and artifact across failed-job retries, verifies the
 acceptance details and package hashes, then uploads those retained bytes. Its selection receipt is
 attached and attested with the draft. Before publication, the collector rechecks the selected run,

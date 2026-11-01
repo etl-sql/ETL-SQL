@@ -163,14 +163,35 @@ function Get-Setting([string]$Path) {
         $full = Join-Path $installDir $file
         if (-not (Test-Path -LiteralPath $full)) { continue }
         $node = Get-Content -LiteralPath $full -Raw | ConvertFrom-Json
+        $found = $true
         # Strict mode: a key missing from one of the two files is absent, not an error.
         foreach ($part in $Path.Split(':')) {
-            if ($null -eq $node -or $null -eq $node.PSObject.Properties[$part]) { $node = $null; break }
+            if ($null -eq $node -or $null -eq $node.PSObject.Properties[$part]) { $found = $false; break }
             $node = $node.$part
         }
-        if ($node -is [string] -and $node) { $value = $node }
+        if ($found) { $value = if ($node -is [string]) { $node } else { '' } }
     }
     return $value
+}
+
+function Initialize-PreviousPortalUpgradeBaseline {
+    # The previous release may already use protected settings. Capture what its services read,
+    # not a shared-file override hidden by that protected file.
+    $baseline = [ordered]@{}
+    foreach ($path in @('Portal:Jwt:Secret', 'Orchestrator:ApiKey', 'Portal:Dataset:AtRestKey', 'Orchestrator:IdentitySigningSecret')) {
+        $value = Get-Setting $path
+        if ([string]::IsNullOrWhiteSpace($value)) { throw 'Previous Portal has an empty required setting.' }
+        $baseline[$path] = $value
+    }
+    foreach ($pair in @(@('Orchestrator:ApiKey', 'Portal:Orchestrator:ApiKey'),
+        @('Orchestrator:IdentitySigningSecret', 'Portal:Orchestrator:IdentitySigningSecret'))) {
+        if ((Get-Setting $pair[1]) -cne $baseline[$pair[0]]) { throw 'Previous Portal and Orchestrator settings disagree.' }
+    }
+    # Model the administrator consuming the previous install's bootstrap file. Its continued
+    # presence would not prove that the upgrade generated another one.
+    $signIn = Join-Path $installDir 'first-run-password.txt'
+    if (Test-Path -LiteralPath $signIn -PathType Leaf) { Remove-Item -LiteralPath $signIn -Force }
+    return $baseline
 }
 
 $generatedSecrets = 'Portal:Jwt:Secret', 'Portal:Dataset:AtRestKey', 'Orchestrator:ApiKey', 'Orchestrator:IdentitySigningSecret', 'Portal:Orchestrator:ApiKey', 'Portal:Orchestrator:IdentitySigningSecret'
@@ -293,8 +314,9 @@ try {
     Set-ServicesState Stopped
     Set-ServicesState Running
     Test-Step 'previous: Portal healthy' { Wait-Portal 'previous' }
-    $secret = Get-Setting 'Portal:Jwt:Secret'; $apiKey = Get-Setting 'Orchestrator:ApiKey'
-    $atRest = Get-Setting 'Portal:Dataset:AtRestKey'
+    $baseline = Initialize-PreviousPortalUpgradeBaseline
+    $secret = $baseline['Portal:Jwt:Secret']; $apiKey = $baseline['Orchestrator:ApiKey']
+    $atRest = $baseline['Portal:Dataset:AtRestKey']; $signing = $baseline['Orchestrator:IdentitySigningSecret']
     $cachePrevious = Join-Path $out 'cache-previous.json'
     Test-Step 'previous: served assets recorded as a browser cache' { Invoke-Assets @('--record', $cachePrevious, '--out', (Join-Path $out 'previous-assets.json')) }
     $backup = Join-Path $privateBackupRoot 'pre-upgrade-backup'
