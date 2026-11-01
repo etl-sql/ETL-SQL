@@ -19,7 +19,8 @@ function run() {
 }
 const installer = 'src/ETL-SQL.Installer/';
 try {
-  const xml = '<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"><Fragment><File Source="$(var.PublishDir)\\app.exe"/><File Source="..\\..\\LICENSE.md"/><Binary SourceFile="installer-actions.js"/></Fragment></Wix>';
+  const property = '<Property Id="MSIRESTARTMANAGERCONTROL" Value="DisableShutdown"/>';
+  const xml = `<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"><Product>${property}<File Source="$(var.PublishDir)\\app.exe"/><File Source="..\\..\\LICENSE.md"/><Binary SourceFile="installer-actions.js"/></Product></Wix>`;
   write(installer + 'Installer.wxs', xml);
   write('LICENSE.md', 'fixture');
   write('scripts/build-msi.ps1', 'throw "Must never execute"');
@@ -27,6 +28,13 @@ try {
   write(installer + 'installer-actions.js', 'throw new Error("Must never execute");');
   const passed = run();
   assert.equal(passed.status, 0, passed.stdout + passed.stderr);
+  for (const changed of [xml.replace(property, ''), xml.replace('DisableShutdown', '0'),
+    xml.replace('DisableShutdown', 'Disable'), xml.replace(property, property + property)]) {
+    write(installer + 'Installer.wxs', changed);
+    const rejected = run();
+    assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+    assert.match(rejected.stdout, /MSIRESTARTMANAGERCONTROL=DisableShutdown/);
+  }
   write(installer + 'Installer.wxs', xml.replace('LICENSE.md', 'missing.md'));
   write(installer + 'configure-portal-jwt.ps1', 'function Broken {');
   write(installer + 'installer-actions.js', 'function broken( {');

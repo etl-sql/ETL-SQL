@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Prevent MSI maintenance from automatically shutting down unrelated applications through
+  Windows Restart Manager. ETL-SQL applications and services still close explicitly, and
+  files-in-use detection remains enabled.
+
 - Publish Windows host binaries once for hosted MSI and ZIP/VSIX packaging. Consumers verify
   the retained payload inventory and hashes and reuse its original successful build attempt.
   MSI and native packaging keep separate acceptance checks; release publication requires their

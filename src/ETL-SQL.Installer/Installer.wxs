@@ -3,6 +3,10 @@
     <Product Id="*" Name="ETL-SQL" Language="1033" Version="$(var.ProductVersion)" Manufacturer="Charles Clemens" UpgradeCode="7e3da743-19a2-463e-a794-b9fb9a1757e1">
         <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Platform="x64" />
 
+        <!-- ETL-SQL applications and services are closed explicitly. Keep files-in-use detection
+             without Restart Manager automatically shutting down other applications or services. -->
+        <Property Id="MSIRESTARTMANAGERCONTROL" Value="DisableShutdown" Secure="yes" />
+
         <!-- Close running applications to avoid locked files during upgrade/install -->
         <util:CloseApplication Id="CloseLSP" Target="ETL-SQL-LSP.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
         <util:CloseApplication Id="CloseCLI" Target="ETL-SQL.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />

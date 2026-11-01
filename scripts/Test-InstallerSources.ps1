@@ -19,6 +19,12 @@ try {
         $manifest.DocumentElement.NamespaceURI -cne 'http://schemas.microsoft.com/wix/2006/wi') {
         throw 'Expected a WiX 3 manifest.'
     }
+    $namespaces = [Xml.XmlNamespaceManager]::new($manifest.NameTable)
+    $namespaces.AddNamespace('w', 'http://schemas.microsoft.com/wix/2006/wi')
+    $restartManager = $manifest.SelectNodes('/w:Wix/w:Product/w:Property[@Id="MSIRESTARTMANAGERCONTROL"]', $namespaces)
+    if ($restartManager.Count -ne 1 -or $restartManager[0].Value -cne 'DisableShutdown') {
+        $findings.Add('MSI must disable Restart Manager automatic shutdown while retaining files-in-use detection: MSIRESTARTMANAGERCONTROL=DisableShutdown.')
+    }
     foreach ($attribute in $manifest.SelectNodes('//@Source | //@SourceFile')) {
         $source = $attribute.Value
         # Published binaries are checked after publish; heat generates wwwroot.wxs then too.
