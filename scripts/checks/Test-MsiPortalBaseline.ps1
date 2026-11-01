@@ -1,6 +1,25 @@
 $ErrorActionPreference = 'Stop'
 $source = Join-Path $PSScriptRoot '../Test-MsiPortalUpgrade.ps1'
 $ast = [Management.Automation.Language.Parser]::ParseFile($source, [ref]$null, [ref]$null)
+$guard = $ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.IfStatementAst] -and
+    $_.Extent.Text.Contains('Partial Portal scenarios are diagnostic-only') }
+if (@($guard).Count -ne 1) { throw 'Missing partial-scenario certification guard.' }
+$priorDiagnostic = $env:ETLSQL_MSI_DIAGNOSTIC_ONLY
+try {
+    $DiagnosticScenario = 'UpgradeRollback'
+    $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = ''
+    $rejected = $false
+    try { Invoke-Expression $guard.Extent.Text } catch { $rejected = $true }
+    if (-not $rejected) { throw 'Partial certification accepted outside diagnostic mode.' }
+    $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = '1'
+    Invoke-Expression $guard.Extent.Text
+    $fresh = $ast.Find({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and
+        $node.Clauses[0].Item1.Extent.Text -eq "$" + "DiagnosticScenario -ceq 'All'" }, $true)
+    if ($null -eq $fresh) { throw 'Fresh lifecycle is not explicitly selected.' }
+    if (Invoke-Expression $fresh.Clauses[0].Item1.Extent.Text) { throw 'Upgrade-only diagnostic selected fresh install.' }
+    $DiagnosticScenario = 'All'
+    if (-not (Invoke-Expression $fresh.Clauses[0].Item1.Extent.Text)) { throw 'Full certification omitted fresh install.' }
+} finally { $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = $priorDiagnostic }
 foreach ($name in @('Get-Setting', 'Initialize-PreviousPortalUpgradeBaseline')) {
     $function = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     if ($null -eq $function) { throw "Missing baseline function $name" }

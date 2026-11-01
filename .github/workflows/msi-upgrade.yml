@@ -19,6 +19,11 @@ on:
         description: Optional retained msi-inputs artifact for Portal diagnosis only, on a development branch
         type: string
         default: ''
+      diagnostic_scenario:
+        description: Retained-input diagnostic scope only; ordinary certification always runs All
+        type: choice
+        options: ['All', 'UpgradeRollback']
+        default: 'All'
   workflow_call:
     inputs:
       source_sha:
@@ -477,10 +482,12 @@ jobs:
       - name: Diagnose the Portal profile without rebuilding
         timeout-minutes: 22
         shell: pwsh
+        env:
+          DIAGNOSTIC_SCENARIO: ${{ inputs.diagnostic_scenario || 'All' }}
         run: |
           . ./scripts/MsiCheckpoint.Helpers.ps1
           $null = Write-MsiDurableCheckpoint -Stage 'supervisor starting'
-          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-MsiPortalUpgrade.ps1 -ScriptArguments @('-PreviousMsi', 'candidate/previous.msi', '-CurrentMsi', 'candidate/current.msi', '-OutDir', 'release-validation/msi-portal-diagnostic/report') -EvidenceDirectory release-validation/msi-portal-diagnostic/supervisor -TimeoutSeconds 1200 -ForwardMsiCheckpoints
+          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-MsiPortalUpgrade.ps1 -ScriptArguments @('-PreviousMsi', 'candidate/previous.msi', '-CurrentMsi', 'candidate/current.msi', '-OutDir', 'release-validation/msi-portal-diagnostic/report', '-DiagnosticScenario', $env:DIAGNOSTIC_SCENARIO) -EvidenceDirectory release-validation/msi-portal-diagnostic/supervisor -TimeoutSeconds 1200 -ForwardMsiCheckpoints
       - name: Retain diagnostic reports without certification receipt
         if: always()
         timeout-minutes: 5

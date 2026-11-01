@@ -21,6 +21,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   upgrade certification. Consume its existing bootstrap file before checking that the upgrade
   creates none. Legacy shared-settings predecessors remain covered, and inconsistent service
   settings fail before upgrade. This corrects test setup for the 0.21.0 predecessor.
+  A guarded diagnostic selection can exercise upgrade/rollback against retained installers
+  separately from fresh-install failures; ordinary certification always includes both scenarios.
 
 - Prepare v0.22.0 version sources and draft release notes before testing its installed upgrade
   path. Source preflight checks release-branch version families before expensive builds, including

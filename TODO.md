@@ -219,6 +219,11 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   file before checking preservation/no regeneration. A no-install regression covers legacy and
   protected precedence, matching service settings and repeated baseline capture. Retained-input
   hosted acceptance of this correction remains pending; production configuration is unchanged.
+  Retained-input diagnostic `41312716403` stalls earlier, at fresh uninstall `InstallFinalize`;
+  the last durable parent heartbeat also precedes that interval. It does not reach the corrected
+  predecessor setup. A guarded diagnostic-only `UpgradeRollback` selection now isolates that
+  setup without another fresh-install/uninstall cycle. Ordinary certification retains `All`,
+  and partial diagnostics cannot create its receipt. Historical runner loss remains unresolved.
 - [ ] **Nightly release-branch lanes.** Run the installed-upgrade checks (DEB and the MSI Portal
   profile) and the Portal shards nightly from the day the release branch is cut.
   **In progress:** the nightly scheduler discovers version branches newer than the latest stable

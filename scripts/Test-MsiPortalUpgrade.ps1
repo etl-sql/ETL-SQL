@@ -28,10 +28,14 @@
 param(
     [Parameter(Mandatory)] [string]$PreviousMsi,
     [Parameter(Mandatory)] [string]$CurrentMsi,
-    [string]$OutDir = './release-validation/msi-portal-upgrade'
+    [string]$OutDir = './release-validation/msi-portal-upgrade',
+    [ValidateSet('All', 'UpgradeRollback')] [string]$DiagnosticScenario = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
+if ($DiagnosticScenario -cne 'All' -and $env:ETLSQL_MSI_DIAGNOSTIC_ONLY -cne '1') {
+    throw 'Partial Portal scenarios are diagnostic-only; certification requires All.'
+}
 . (Join-Path $PSScriptRoot 'MsiUpgrade.Helpers.ps1')
 . (Join-Path $PSScriptRoot 'MsiCheckpoint.Helpers.ps1')
 
@@ -50,6 +54,7 @@ $out = [IO.Path]::GetFullPath($OutDir)
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $summary = Join-Path $out 'summary.txt'
 Set-Content -LiteralPath $summary -Value "previous $($contract.PreviousVersion) current $($contract.CurrentVersion)"
+if ($DiagnosticScenario -cne 'All') { Add-Content -LiteralPath $summary -Value "DIAGNOSTIC ONLY: $DiagnosticScenario; not full certification." }
 $privateBackupRoot = Join-Path ([IO.Path]::GetTempPath()) ('etlsql-msi-backup-' + [guid]::NewGuid().ToString('N'))
 if ($privateBackupRoot.StartsWith($out.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Backup scratch must be outside uploaded evidence.' }
 New-Item -ItemType Directory -Path $privateBackupRoot | Out-Null
@@ -242,61 +247,63 @@ function Get-DatabaseFiles {
 
 $services = 'ETL-SQL-Orchestrator', 'ETL-SQL-Portal'
 try {
-    # 0. Fresh install of the candidate, with no operator configuration at all.
-    Write-Line "== fresh install of $($contract.CurrentVersion)"
-    Test-Step 'fresh: msiexec install' { Install-Msi $currentPath '00-fresh.log' }
-    Test-Step 'fresh: Portal healthy' { Wait-Portal 'fresh' }
-    foreach ($service in $services) {
-        Test-Step "fresh: $service runs the installed executable" { Assert-ServiceRunsVersion $service $contract.CurrentVersion }
-    }
-    Test-Step 'fresh: one-time sign-in for Administrators and SYSTEM only' {
-        $signIn = Join-Path $installDir 'first-run-password.txt'
-        $grantees = (Get-Acl -LiteralPath $signIn).Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } | Sort-Object -Unique
-        if (($grantees -join ',') -ne 'S-1-5-18,S-1-5-32-544') { throw "Grantees: $($grantees -join ', ')" }
-    }
-    Test-Step 'fresh: dataset at-rest key generated' { -not [string]::IsNullOrWhiteSpace((Get-Setting 'Portal:Dataset:AtRestKey')) }
-    Test-Step 'fresh: secrets only in the Administrators and SYSTEM file' { Assert-SecretsProtected }
-    Test-Step 'fresh: served assets match the candidate' { Invoke-Assets @('--inventory-root', $repoRoot, '--out', (Join-Path $out 'fresh-assets.json')) }
-    # `admin backup` runs as the operator, not LocalSystem, so it must be told where the service's
-    # job history is. Before v0.21.0 it silently backed up no Orchestrator database.
-    Test-Step 'fresh: admin backup includes the job history the service writes' {
-        Write-ResourceSnapshot 'fresh backup start'
-        $jobHistory = Join-Path $systemData 'etlsql.db'
-        if ((Get-Setting 'Portal:Orchestrator:DatabasePath') -ne $jobHistory) { throw "Portal:Orchestrator:DatabasePath is '$(Get-Setting 'Portal:Orchestrator:DatabasePath')', expected $jobHistory." }
-        if (-not (Test-Path -LiteralPath $jobHistory)) { throw "The Orchestrator wrote no $jobHistory." }
-        Set-ServicesState 'Stopped'
-        $backupDir = Join-Path $privateBackupRoot 'fresh-backup'
-        New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
-        # Bounded like msiexec: run 39131831623 lost its runner at the step timeout once this call was
-        # reached. No console input exists here, so stdin is empty rather than inherited.
-        $backupLog = Join-Path $out 'fresh-backup.log'
-        $noInput = Join-Path $out 'empty-stdin.txt'
-        Set-Content -LiteralPath $noInput -Value $null
-        $backup = Start-Process -FilePath (Join-Path $installDir 'ETL-SQL.exe') -ArgumentList @('admin', 'backup', '--output-dir', "`"$backupDir`"") `
-            -WorkingDirectory $out -PassThru -NoNewWindow -RedirectStandardInput $noInput `
-            -RedirectStandardOutput $backupLog -RedirectStandardError (Join-Path $out 'fresh-backup.err.log')
-        if (-not $backup.WaitForExit(300000)) {
-            Write-HungInstallDiagnostics -LogPath $backupLog -OutPath (Join-Path $out 'fresh-backup.hung.txt')
-            Stop-Process -Id $backup.Id -Force -ErrorAction SilentlyContinue
-            throw [TimeoutException]::new('admin backup did not finish within 5 minutes; see fresh-backup.hung.txt.')
+    if ($DiagnosticScenario -ceq 'All') {
+        # 0. Fresh install of the candidate, with no operator configuration at all.
+        Write-Line "== fresh install of $($contract.CurrentVersion)"
+        Test-Step 'fresh: msiexec install' { Install-Msi $currentPath '00-fresh.log' }
+        Test-Step 'fresh: Portal healthy' { Wait-Portal 'fresh' }
+        foreach ($service in $services) {
+            Test-Step "fresh: $service runs the installed executable" { Assert-ServiceRunsVersion $service $contract.CurrentVersion }
         }
-        if ($backup.ExitCode -ne 0) { throw "admin backup exited $($backup.ExitCode)." }
-        $archive = Get-ChildItem -LiteralPath $backupDir -Filter 'etl-sql-backup-*.zip' | Select-Object -First 1
-        if ($null -eq $archive) { throw 'admin backup wrote no data archive.' }
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        $zip = [IO.Compression.ZipFile]::OpenRead($archive.FullName)
-        try { $entries = @($zip.Entries | ForEach-Object { $_.FullName -replace '\\', '/' }) } finally { $zip.Dispose() }
-        foreach ($name in 'db/portal.db', 'db/etlsql.db') {
-            if ($entries -notcontains $name) { throw "The backup has no $name ($($entries -join ', '))." }
+        Test-Step 'fresh: one-time sign-in for Administrators and SYSTEM only' {
+            $signIn = Join-Path $installDir 'first-run-password.txt'
+            $grantees = (Get-Acl -LiteralPath $signIn).Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } | Sort-Object -Unique
+            if (($grantees -join ',') -ne 'S-1-5-18,S-1-5-32-544') { throw "Grantees: $($grantees -join ', ')" }
         }
-        Write-ResourceSnapshot 'fresh backup complete'
+        Test-Step 'fresh: dataset at-rest key generated' { -not [string]::IsNullOrWhiteSpace((Get-Setting 'Portal:Dataset:AtRestKey')) }
+        Test-Step 'fresh: secrets only in the Administrators and SYSTEM file' { Assert-SecretsProtected }
+        Test-Step 'fresh: served assets match the candidate' { Invoke-Assets @('--inventory-root', $repoRoot, '--out', (Join-Path $out 'fresh-assets.json')) }
+        # `admin backup` runs as the operator, not LocalSystem, so it must be told where the service's
+        # job history is. Before v0.21.0 it silently backed up no Orchestrator database.
+        Test-Step 'fresh: admin backup includes the job history the service writes' {
+            Write-ResourceSnapshot 'fresh backup start'
+            $jobHistory = Join-Path $systemData 'etlsql.db'
+            if ((Get-Setting 'Portal:Orchestrator:DatabasePath') -ne $jobHistory) { throw "Portal:Orchestrator:DatabasePath is '$(Get-Setting 'Portal:Orchestrator:DatabasePath')', expected $jobHistory." }
+            if (-not (Test-Path -LiteralPath $jobHistory)) { throw "The Orchestrator wrote no $jobHistory." }
+            Set-ServicesState 'Stopped'
+            $backupDir = Join-Path $privateBackupRoot 'fresh-backup'
+            New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+            # Bounded like msiexec: run 39131831623 lost its runner at the step timeout once this call was
+            # reached. No console input exists here, so stdin is empty rather than inherited.
+            $backupLog = Join-Path $out 'fresh-backup.log'
+            $noInput = Join-Path $out 'empty-stdin.txt'
+            Set-Content -LiteralPath $noInput -Value $null
+            $backup = Start-Process -FilePath (Join-Path $installDir 'ETL-SQL.exe') -ArgumentList @('admin', 'backup', '--output-dir', "`"$backupDir`"") `
+                -WorkingDirectory $out -PassThru -NoNewWindow -RedirectStandardInput $noInput `
+                -RedirectStandardOutput $backupLog -RedirectStandardError (Join-Path $out 'fresh-backup.err.log')
+            if (-not $backup.WaitForExit(300000)) {
+                Write-HungInstallDiagnostics -LogPath $backupLog -OutPath (Join-Path $out 'fresh-backup.hung.txt')
+                Stop-Process -Id $backup.Id -Force -ErrorAction SilentlyContinue
+                throw [TimeoutException]::new('admin backup did not finish within 5 minutes; see fresh-backup.hung.txt.')
+            }
+            if ($backup.ExitCode -ne 0) { throw "admin backup exited $($backup.ExitCode)." }
+            $archive = Get-ChildItem -LiteralPath $backupDir -Filter 'etl-sql-backup-*.zip' | Select-Object -First 1
+            if ($null -eq $archive) { throw 'admin backup wrote no data archive.' }
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $zip = [IO.Compression.ZipFile]::OpenRead($archive.FullName)
+            try { $entries = @($zip.Entries | ForEach-Object { $_.FullName -replace '\\', '/' }) } finally { $zip.Dispose() }
+            foreach ($name in 'db/portal.db', 'db/etlsql.db') {
+                if ($entries -notcontains $name) { throw "The backup has no $name ($($entries -join ', '))." }
+            }
+            Write-ResourceSnapshot 'fresh backup complete'
+        }
+        $null = Write-MsiDurableCheckpoint -Stage 'fresh uninstall start'
+        Uninstall-All '00-fresh-uninstall.log'
+        $null = Write-MsiDurableCheckpoint -Stage 'fresh uninstall complete'
+        $null = Write-MsiDurableCheckpoint -Stage 'fresh cleanup start'
+        Remove-Item -LiteralPath $installDir, $systemData -Recurse -Force -ErrorAction SilentlyContinue
+        $null = Write-MsiDurableCheckpoint -Stage 'fresh cleanup complete'
     }
-    $null = Write-MsiDurableCheckpoint -Stage 'fresh uninstall start'
-    Uninstall-All '00-fresh-uninstall.log'
-    $null = Write-MsiDurableCheckpoint -Stage 'fresh uninstall complete'
-    $null = Write-MsiDurableCheckpoint -Stage 'fresh cleanup start'
-    Remove-Item -LiteralPath $installDir, $systemData -Recurse -Force -ErrorAction SilentlyContinue
-    $null = Write-MsiDurableCheckpoint -Stage 'fresh cleanup complete'
 
     # 1. The previous release, configured as its documentation says.
     Write-Line "== install previous $($contract.PreviousVersion)"
