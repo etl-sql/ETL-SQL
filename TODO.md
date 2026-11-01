@@ -112,6 +112,12 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   certification or every path family. Historical receipt:
   `release-validation/critical-path/scoped-pr-acceptance-2026-10-29.json`.
 
+  **Broad proposal timing 2026-11-01:** proposal `fbcbccf85` passes regular CI in 26m31s,
+  MSI in 34m31s and native packages last in 49m18s. Thus the full package-affecting PR misses
+  the 30-minute target. On Intel, the eight sequential host publishes occupy about 29 minutes;
+  VSIX packaging adds about five minutes. These are measured bottlenecks, not a reason to skip
+  required package checks. Full frozen-candidate release timing remains unmeasured.
+
 - [ ] **Release timeline.** Record the v0.22.0 candidate cut, each CI/MSI round, its cause and the
   tag time as the release runs, so the goal is measured rather than remembered.
   **In progress:** `collect-release-timeline.mjs` reads selected exact-candidate runs and all retry
