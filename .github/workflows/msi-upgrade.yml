@@ -550,6 +550,9 @@ jobs:
         shell: pwsh
         env:
           DIAGNOSTIC_SCENARIO: ${{ inputs.diagnostic_scenario || 'All' }}
+          # Keep the request diagnostic-only, but exercise ordinary buffered/quiet runtime behavior.
+          ETLSQL_MSI_DIAGNOSTIC_ONLY: '0'
+          ETLSQL_MSI_DURABLE_CHECKPOINTS: '0'
         run: |
           . ./scripts/MsiCheckpoint.Helpers.ps1
           $null = Write-MsiDurableCheckpoint -Stage 'supervisor starting'

@@ -9,7 +9,7 @@ $global:MsiActionFixtureTrace = [Collections.Generic.List[string]]::new()
 function Write-MsiDurableCheckpoint { param($Stage) $global:MsiActionFixtureTrace.Add($Stage); return $true }
 function Start-Process {
     param($FilePath, $ArgumentList, [switch]$PassThru, $WindowStyle)
-    $expectedLog = if ($env:ETLSQL_MSI_DIAGNOSTIC_ONLY -ceq '1') { '/l*v!' } else { '/l*v' }
+    $expectedLog = if ($global:MsiActionFixtureObserved) { '/l*v!' } else { '/l*v' }
     if ($ArgumentList -notcontains $expectedLog -or $ArgumentList -notcontains '/norestart') { throw 'Diagnostic flush or normal restart policy changed.' }
     $override = $ArgumentList -contains 'MSIRESTARTMANAGERCONTROL=DisableShutdown'
     if ($override -ne ($env:ETLSQL_MSI_DIAGNOSTIC_RESTART_MANAGER -ceq 'DisableShutdown')) { throw 'Diagnostic Restart Manager argument changed.' }
@@ -25,10 +25,11 @@ try {
         if ($null -ne (Get-MsiDiagnosticAction $file)) { throw 'Log values escaped action filtering.' }
     }
     if ($null -ne (Get-MsiDiagnosticAction (Join-Path $root 'missing.log'))) { throw 'Missing log returned an action.' }
-    foreach ($mode in @('normal', 'diagnostic', 'restart-manager', 'failure', 'timeout')) {
+    foreach ($mode in @('normal', 'quiet-diagnostic', 'diagnostic', 'restart-manager', 'failure', 'timeout')) {
         $global:MsiActionFixtureTrace.Clear()
         $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = if ($mode -eq 'normal') { '0' } else { '1' }
         $env:ETLSQL_MSI_DIAGNOSTIC_RESTART_MANAGER = if ($mode -eq 'restart-manager') { 'DisableShutdown' } else { 'Default' }
+        $global:MsiActionFixtureObserved = $mode -notin @('normal', 'quiet-diagnostic')
         $file = Join-Path $root '02-upgrade.log'
         [IO.File]::WriteAllText($file, '', [Text.Encoding]::Unicode)
         $global:MsiActionFixtureProcess = [pscustomobject]@{
@@ -44,11 +45,12 @@ try {
         }
         $global:MsiActionFixtureProcess | Add-Member ScriptMethod Kill { $this.Killed = $true }
         $rejected = $false
-        try { Invoke-MsiExec -Arguments @('/i', 'fixture.msi') -LogPath $file -Stage 'fixture' -TimeoutMinutes $(if ($mode -eq 'timeout') { 0 } else { 10 }) }
+        try { Invoke-MsiExec -Arguments @('/i', 'fixture.msi') -LogPath $file -Stage 'fixture' -TimeoutMinutes $(if ($mode -eq 'timeout') { 0 } else { 10 }) -ObserveActions:$global:MsiActionFixtureObserved }
         catch { $rejected = $true }
         if ($rejected -ne ($mode -in @('failure', 'timeout'))) { throw "MSI exit changed: $mode" }
-        if ($mode -eq 'normal') {
-            if ($global:MsiActionFixtureTrace.Count -ne 0 -or $global:MsiActionFixtureProcess.Waits[0] -ne 600000) { throw 'Normal certification wait changed.' }
+        if ($mode -in @('normal', 'quiet-diagnostic')) {
+            if ($global:MsiActionFixtureTrace.Count -ne 0 -or $global:MsiActionFixtureProcess.Waits.Count -ne 3 -or
+                @($global:MsiActionFixtureProcess.Waits | Where-Object { $_ -lt 0 -or $_ -gt 1000 }).Count) { throw 'Quiet polling emitted diagnostics or exceeded a bounded wait.' }
         } elseif ($mode -eq 'timeout') {
             if (-not $global:MsiActionFixtureProcess.Killed) { throw 'Diagnostic timeout did not stop its own process.' }
         } else {
@@ -65,11 +67,11 @@ try {
         try { Invoke-MsiExec -Arguments @('/x', 'fixture.msi') -LogPath $file -Stage 'guard' } catch { $rejected = $true }
         if (-not $rejected) { throw 'Restart Manager diagnostic guard accepted a certification override or unsupported mode.' }
     }
-    Write-Host 'MSI action diagnostics: bounded UTF-8/UTF-16 tails expose only action names; original normal wait and failure/timeout behavior preserved. No installer executed.'
+    Write-Host 'MSI waits: quiet buffered polling and optional action observation preserve arguments, exits and timeout cleanup. No installer executed.'
 } finally {
     $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = $priorDiagnostic
     $env:ETLSQL_MSI_DIAGNOSTIC_RESTART_MANAGER = $priorRestartManager
-    Remove-Variable MsiActionFixtureTrace,MsiActionFixtureProcess -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable MsiActionFixtureTrace,MsiActionFixtureProcess,MsiActionFixtureObserved -Scope Global -ErrorAction SilentlyContinue
     $resolved = [IO.Path]::GetFullPath($root)
     if (-not $resolved.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetFileName($resolved) -notmatch '^msi-action-[a-f0-9]{32}$') { throw 'Refusing cleanup outside fixture.' }
     Remove-Item -LiteralPath $resolved -Recurse -Force

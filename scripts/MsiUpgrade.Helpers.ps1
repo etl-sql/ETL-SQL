@@ -253,17 +253,18 @@ function Get-MsiDiagnosticAction {
 }
 
 function Invoke-MsiExec {
-    param([string[]]$Arguments, [string]$LogPath, [string]$Stage, [int]$TimeoutMinutes = 10)
+    param([string[]]$Arguments, [string]$LogPath, [string]$Stage, [int]$TimeoutMinutes = 10, [switch]$ObserveActions)
 
-    $diagnostic = $env:ETLSQL_MSI_DIAGNOSTIC_ONLY -ceq '1' -and
+    $diagnosticScope = $env:ETLSQL_MSI_DIAGNOSTIC_ONLY -ceq '1' -and
         $null -ne (Get-Command Write-MsiDurableCheckpoint -CommandType Function -ErrorAction SilentlyContinue)
+    $diagnostic = $diagnosticScope -and $ObserveActions
     $logging = if ($diagnostic) { '/l*v!' } else { '/l*v' }
     $allArguments = @($Arguments) + @('/qn', '/norestart', $logging, $LogPath)
     $restartManager = $env:ETLSQL_MSI_DIAGNOSTIC_RESTART_MANAGER
     if ([string]::IsNullOrWhiteSpace($restartManager)) { $restartManager = 'Default' }
     if ($restartManager -cnotin @('Default', 'DisableShutdown')) { throw 'Unknown diagnostic Restart Manager mode.' }
     if ($restartManager -cne 'Default') {
-        if (-not $diagnostic) { throw 'Restart Manager overrides are diagnostic-only.' }
+        if (-not $diagnosticScope) { throw 'Restart Manager overrides are diagnostic-only.' }
         $allArguments += 'MSIRESTARTMANAGERCONTROL=DisableShutdown'
         $null = Write-MsiDurableCheckpoint -Stage 'diagnostic restart_manager DisableShutdown'
     }
@@ -271,28 +272,30 @@ function Invoke-MsiExec {
         -ArgumentList $allArguments -PassThru -WindowStyle Hidden
     # An unbounded wait let a stuck install outlast the CI step timeout, and killing the step then
     # lost the runner and every piece of evidence. Record what was running, then stop the install.
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    $finished = $false
     if ($diagnostic) {
         $name = [IO.Path]::GetFileNameWithoutExtension($LogPath)
         $lastAction = $null
-        $watch = [Diagnostics.Stopwatch]::StartNew()
         $null = Write-MsiDurableCheckpoint -Stage "msi $name process_started"
-        $finished = $false
-        while ($watch.ElapsedMilliseconds -lt $TimeoutMinutes * 60000) {
-            $finished = $process.WaitForExit([int][math]::Max(0, [math]::Min(1000, $TimeoutMinutes * 60000 - $watch.ElapsedMilliseconds)))
+    }
+    while ($watch.ElapsedMilliseconds -lt $TimeoutMinutes * 60000) {
+        $finished = $process.WaitForExit([int][math]::Max(0, [math]::Min(1000, $TimeoutMinutes * 60000 - $watch.ElapsedMilliseconds)))
+        if ($diagnostic) {
             $action = Get-MsiDiagnosticAction $LogPath
             if ($action -and $action -cne $lastAction) {
                 $null = Write-MsiDurableCheckpoint -Stage "msi $name $action"
                 $lastAction = $action
             }
-            if ($finished) { break }
         }
+        if ($finished) { break }
+    }
+    if ($diagnostic) {
         if ($finished) {
             $diagnosticExit = $process.ExitCode
             $exitLabel = if ($null -eq $diagnosticExit) { 'unknown' } elseif ($diagnosticExit -lt 0) { 'minus_' + (-[long]$diagnosticExit) } else { [string]$diagnosticExit }
             $null = Write-MsiDurableCheckpoint -Stage "msi $name process_exited_$exitLabel"
         }
-    } else {
-        $finished = $process.WaitForExit($TimeoutMinutes * 60000)
     }
     if (-not $finished) {
         $diagnostics = [IO.Path]::ChangeExtension($LogPath, '.hung.txt')

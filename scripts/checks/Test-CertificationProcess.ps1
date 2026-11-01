@@ -132,7 +132,7 @@ exit 0
     function Write-HungInstallDiagnostics { throw 'fixture diagnostic failure' }
     function Get-Process { throw 'Unscoped process enumeration during installer cleanup.' }
     $timeoutReported = $false
-    try { Invoke-MsiExec -Arguments @('/i', 'fixture.msi') -LogPath (Join-Path $fixture 'fixture.log') -Stage 'fixture' }
+    try { Invoke-MsiExec -Arguments @('/i', 'fixture.msi') -LogPath (Join-Path $fixture 'fixture.log') -Stage 'fixture' -TimeoutMinutes 0 }
     catch [TimeoutException] { $timeoutReported = $true }
     if (-not $timeoutReported -or -not $global:CertificationFakeInstaller.Killed) { throw 'Installer timeout did not stop its owned process after diagnostic failure.' }
     Write-Host 'Certification supervision passed: streams, exit status, timeout, unrelated process survival, inherited pipes and owned installer cleanup.'
