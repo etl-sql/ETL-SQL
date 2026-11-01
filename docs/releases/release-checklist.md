@@ -467,14 +467,13 @@ API contract: [workflow run attempts and jobs](https://docs.github.com/en/rest/a
 
 ### Recovering a failed MSI certification
 
-MSI maintenance disables Restart Manager's automatic shutdown behavior while keeping its
-files-in-use detection. ETL-SQL's named application close actions and service controls handle
-its own processes. The source preflight rejects missing, duplicate or weakened authoring before
-publishing binaries. A retained 0.22.0 diagnostic passed fresh install/uninstall, upgrade, rollback
-and cleanup with this setting after default behavior repeatedly lost the runner at uninstall.
-See [recovery acceptance](recovery-acceptance.md); the new MSI still requires normal installed
-certification. The [Windows Installer property reference](https://learn.microsoft.com/en-us/windows/win32/msi/msirestartmanagercontrol)
-defines the retained files-in-use behavior.
+Quiet MSI certification polls the owned installer process in bounded one-second intervals under
+the existing ten-minute call deadline. Installer arguments, buffered verbose logging, exit-code
+checks and cleanup remain unchanged. Observed diagnostics retain their separate action notices.
+A retained quiet-runtime control passed fresh install/uninstall, upgrade, rollback and cleanup
+without a Restart Manager override or diagnostic callbacks. Normal candidate certification still
+must pass; see [recovery acceptance](recovery-acceptance.md). Do not infer the cause of a historical
+runner loss from one successful diagnostic run.
 
 The MSI workflow saves the current and previous installers together after the static upgrade
 contract passes. Workstation and Portal certification consume that same artifact on separate clean

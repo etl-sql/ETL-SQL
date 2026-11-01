@@ -17,9 +17,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   Local MSI-only pre-push stops after source checks; full release certification still selects
   every lane and all four native platforms.
 
-- Prevent MSI maintenance from automatically shutting down unrelated applications through
-  Windows Restart Manager. ETL-SQL applications and services still close explicitly, and
-  files-in-use detection remains enabled.
+- Poll the installer process in bounded intervals during quiet MSI certification, using the
+  existing deadline, ordinary logging and installer arguments. Retained quiet-runtime checks
+  pass fresh install/uninstall, upgrade, rollback and cleanup. The Restart Manager authoring
+  experiment is removed after a control passed without its override.
 
 - Publish Windows host binaries once for hosted MSI and ZIP/VSIX packaging. Consumers verify
   the retained payload inventory and hashes and reuse its original successful build attempt.

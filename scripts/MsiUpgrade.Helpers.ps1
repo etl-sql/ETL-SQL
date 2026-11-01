@@ -263,28 +263,31 @@ function Invoke-MsiExec {
         -ArgumentList $allArguments -PassThru -WindowStyle Hidden
     # An unbounded wait let a stuck install outlast the CI step timeout, and killing the step then
     # lost the runner and every piece of evidence. Record what was running, then stop the install.
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    $finished = $false
     if ($diagnostic) {
         $name = [IO.Path]::GetFileNameWithoutExtension($LogPath)
         $lastAction = $null
-        $watch = [Diagnostics.Stopwatch]::StartNew()
         $null = Write-MsiDurableCheckpoint -Stage "msi $name process_started"
-        $finished = $false
-        while ($watch.ElapsedMilliseconds -lt $TimeoutMinutes * 60000) {
-            $finished = $process.WaitForExit([int][math]::Max(0, [math]::Min(1000, $TimeoutMinutes * 60000 - $watch.ElapsedMilliseconds)))
+    }
+    # Use the same bounded polling for quiet certification and observed diagnostics.
+    while ($watch.ElapsedMilliseconds -lt $TimeoutMinutes * 60000) {
+        $finished = $process.WaitForExit([int][math]::Max(0, [math]::Min(1000, $TimeoutMinutes * 60000 - $watch.ElapsedMilliseconds)))
+        if ($diagnostic) {
             $action = Get-MsiDiagnosticAction $LogPath
             if ($action -and $action -cne $lastAction) {
                 $null = Write-MsiDurableCheckpoint -Stage "msi $name $action"
                 $lastAction = $action
             }
-            if ($finished) { break }
         }
+        if ($finished) { break }
+    }
+    if ($diagnostic) {
         if ($finished) {
             $diagnosticExit = $process.ExitCode
             $exitLabel = if ($null -eq $diagnosticExit) { 'unknown' } elseif ($diagnosticExit -lt 0) { 'minus_' + (-[long]$diagnosticExit) } else { [string]$diagnosticExit }
             $null = Write-MsiDurableCheckpoint -Stage "msi $name process_exited_$exitLabel"
         }
-    } else {
-        $finished = $process.WaitForExit($TimeoutMinutes * 60000)
     }
     if (-not $finished) {
         $diagnostics = [IO.Path]::ChangeExtension($LogPath, '.hung.txt')

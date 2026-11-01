@@ -44,7 +44,8 @@ try {
         catch { $rejected = $true }
         if ($rejected -ne ($mode -in @('failure', 'timeout'))) { throw "MSI exit changed: $mode" }
         if ($mode -eq 'normal') {
-            if ($global:MsiActionFixtureTrace.Count -ne 0 -or $global:MsiActionFixtureProcess.Waits[0] -ne 600000) { throw 'Normal certification wait changed.' }
+            if ($global:MsiActionFixtureTrace.Count -ne 0 -or $global:MsiActionFixtureProcess.Waits.Count -ne 3 -or
+                @($global:MsiActionFixtureProcess.Waits | Where-Object { $_ -lt 0 -or $_ -gt 1000 }).Count) { throw 'Quiet certification emitted diagnostics or exceeded a bounded wait.' }
         } elseif ($mode -eq 'timeout') {
             if (-not $global:MsiActionFixtureProcess.Killed) { throw 'Diagnostic timeout did not stop its own process.' }
         } else {
@@ -54,7 +55,7 @@ try {
             }
         }
     }
-    Write-Host 'MSI action diagnostics: bounded UTF-8/UTF-16 tails expose only action names; original normal wait and failure/timeout behavior preserved. No installer executed.'
+    Write-Host 'MSI action diagnostics: bounded tails expose only action names; quiet and diagnostic waits poll under the same deadline and preserve failure/timeout cleanup. No installer executed.'
 } finally {
     $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = $priorDiagnostic
     Remove-Variable MsiActionFixtureTrace,MsiActionFixtureProcess -Scope Global -ErrorAction SilentlyContinue

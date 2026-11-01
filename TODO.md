@@ -168,13 +168,14 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   the supervisor's output pipe open after exit; clearing supervisor standard-handle inheritance
   before launch fixes that fixture. This is a possible cause, not proof of the historical runner
   loss. Hosted timeout/recovery evidence is still required.
-  **2026-11-01 uninstall diagnosis:** [retained-input run 41332302124](https://github.com/etl-sql/ETL-SQL/actions/runs/41332302124)
-  reuses installer artifact `13088976661` and passes all 32 Portal assertions in 4m03s with
-  `MSIRESTARTMANAGERCONTROL=DisableShutdown`. Fresh uninstall completes in about two seconds;
-  upgrade, rollback and final cleanup pass. All seven MSI logs confirm the property. The MSI now
-  authors that default, and source preflight rejects missing, duplicate or weakened authoring.
-  Normal certification of the changed MSI remains required. This isolates the 0.22.0 uninstall
-  case; it does not establish the cause of every historical 0.21.0 runner loss.
+  **2026-11-01 uninstall diagnosis:** retained artifact `13088976661` passes all 32 assertions
+  both with and without a Restart Manager override under observed diagnostics. The authored
+  default in `88d65e72c` did not prevent normal uninstall from stopping; read-only inspection
+  confirms the property was compiled. The override did not establish the cause and is removed.
+  [Quiet control 41341896065](https://github.com/etl-sql/ETL-SQL/actions/runs/41341896065) passes all 32 assertions
+  in 4m08s with ordinary buffered logging, no override and no diagnostic runtime callbacks.
+  Normal MSI calls now use bounded one-second polling under the unchanged ten-minute deadline.
+  New normal-candidate acceptance remains required; historical runner-loss causes remain unproven.
   Hosted MSI now emits bounded phase and free-memory notices, including backup start/end,
   with explicit supervisor forwarding for that diagnostic prefix only. Local runs emit no
   workflow commands; unrelated/stderr/oversized commands remain prefixed and original evidence
