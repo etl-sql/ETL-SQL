@@ -4,7 +4,9 @@ param(
     [Parameter(Mandatory)] [ValidateSet('Create', 'Verify', 'VerifyPublished')] [string]$Mode,
     [Parameter(Mandatory)] [string]$Directory,
     [Parameter(Mandatory)] [string]$SourceSha,
-    [string]$PublishedMsi
+    [string]$PublishedMsi,
+    [string]$WindowsPayloadHash,
+    [string]$Version
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,7 +16,12 @@ if ($Mode -eq 'Create') {
     $files = @($names | ForEach-Object {
         @{ name = $_; sha256 = (Get-FileHash -LiteralPath (Join-Path $Directory $_) -Algorithm SHA256).Hash }
     })
-    @{ schemaVersion = 1; sourceSha = $SourceSha; files = $files } |
+    $candidate = @{ schemaVersion = 1; sourceSha = $SourceSha; files = $files }
+    if ($WindowsPayloadHash -or $Version) {
+        if ($WindowsPayloadHash -cnotmatch '^[a-f0-9]{64}$' -or $Version -cnotmatch '^\d+\.\d+\.\d+$') { throw 'Invalid Windows payload identity.' }
+        $candidate.windowsPayload = @{ sourceSha = $SourceSha; version = $Version; manifestSha256 = $WindowsPayloadHash }
+    }
+    $candidate |
         ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding utf8
 } else {
     if ($Mode -eq 'VerifyPublished' -and [string]::IsNullOrWhiteSpace($PublishedMsi)) {
@@ -23,6 +30,10 @@ if ($Mode -eq 'Create') {
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     if ($manifest.schemaVersion -ne 1 -or $manifest.sourceSha -cne $SourceSha) {
         throw 'MSI candidate schema or source SHA mismatch.'
+    }
+    if ($manifest.PSObject.Properties.Name -contains 'windowsPayload') {
+        if ($manifest.windowsPayload.sourceSha -cne $SourceSha -or $manifest.windowsPayload.version -cnotmatch '^\d+\.\d+\.\d+$' -or
+            $manifest.windowsPayload.manifestSha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'Invalid Windows payload identity.' }
     }
     if (@($manifest.files).Count -ne 2) { throw 'MSI candidate must contain exactly two installer records.' }
     foreach ($name in $names) {

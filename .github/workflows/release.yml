@@ -740,6 +740,11 @@ jobs:
           artifact-ids: ${{ needs.upload-macos.outputs.arm64_selection_artifact_id }}
           path: dist
           merge-multiple: true
+      - name: Require the same certified Windows payload
+        timeout-minutes: 3
+        env:
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: node scripts/check-windows-package-origin.mjs dist/msi-certification-inputs.json dist/certified-windows-selection.json "$SOURCE_SHA" "${TAG_NAME#v}"
       - name: Verify and attach certified macOS selections
         timeout-minutes: 3
         env:
@@ -918,12 +923,14 @@ jobs:
         timeout-minutes: 10
         env:
           GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
         run: |
           mkdir current-windows-draft
           gh release download "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --dir current-windows-draft \
             --pattern "ETL-SQL-${TAG_NAME}-win-x64.zip" --pattern "etl-sql-vscode-${TAG_NAME#v}-win32-x64.vsix" \
-            --pattern windows-package-inputs.json --pattern certified-windows-selection.json
+            --pattern windows-package-inputs.json --pattern certified-windows-selection.json --pattern msi-certification-inputs.json
           node scripts/collect-certified-windows.mjs verify-draft current-windows-draft current-windows/certified-windows-selection.json
+          node scripts/check-windows-package-origin.mjs current-windows-draft/msi-certification-inputs.json current-windows/certified-windows-selection.json "$SOURCE_SHA" "${TAG_NAME#v}"
       - name: Download original certified osx-x64 selection
         uses: actions/download-artifact@v8
         with:

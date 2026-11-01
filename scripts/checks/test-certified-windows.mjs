@@ -29,6 +29,7 @@ async function payload(directory, candidate = sha) {
   await windowsPackages('create', path.join(directory, 'release'), candidate, version);
   const manifest = JSON.parse(readFileSync(path.join(directory, 'release/windows-package-inputs.json')));
   const summary = { schemaVersion: 1, commit: candidate, version, dirty: false, rid: 'win-x64', architecture: 'x64', status: 'Passed',
+    windowsPayload: { sourceSha: candidate, version, manifestSha256: 'd'.repeat(64) },
     zipSha256: manifest.packages[`ETL-SQL-v${version}-win-x64.zip`], vsixWebviewsVerified: true, vsixInstalledAssets: 59,
     packageManifestSha256: hash(readFileSync(path.join(directory, 'release/windows-package-inputs.json'))),
     toolchain: { nodeVersion: 'v22.23.3', dotnetVersion: '10.0.306' }, startedAt: time(-8500), finishedAt: time(-6000),
@@ -78,6 +79,8 @@ try {
     ['wrong architecture', value => { value.architecture = 'arm64'; }], ['failed', value => { value.status = 'Failed'; }],
     ['missing webviews', value => { value.vsixWebviewsVerified = false; }], ['manifest replaced', value => { value.packageManifestSha256 = '0'.repeat(64); }],
     ['bad Node', value => { value.toolchain.nodeVersion = 'v24.0.0'; }], ['bad SDK', value => { value.toolchain.dotnetVersion = '9.0.1'; }],
+    ['missing payload', value => { delete value.windowsPayload; }], ['wrong payload source', value => { value.windowsPayload.sourceSha = 'b'.repeat(40); }],
+    ['wrong payload version', value => { value.windowsPayload.version = '1.2.4'; }], ['invalid payload hash', value => { value.windowsPayload.manifestSha256 = 'invalid'; }],
     ['late acceptance', value => { value.releaseCandidateChecksPassedAt = time(-1500); }], ['wrong URL', value => { value.runUrl += '0'; }],
   ]) { await assert.rejects(collect({ change: alter(summaryPath, action) }), undefined, name); }
   for (const action of [value => { value.passed = false; }, value => { value.errors.push('underlying failure'); },
@@ -109,18 +112,20 @@ try {
   writeFileSync(draftSelection, JSON.stringify({ ...selected, runAttempt: 999 })); await assert.rejects(verifyWindowsDraft(draft, selected));
   writeFileSync(draftSelection, JSON.stringify(selected)); writeFileSync(path.join(draft, 'ETL-SQL-v1.2.3-win-x64.zip'), 'Replaced draft bytes');
   await assert.rejects(verifyWindowsDraft(draft, selected));
-  console.log('Certified Windows: 16 API rejection cases, 27 evidence/file rejection cases, concurrent changes, pinned selection, carried original jobs and actual draft bytes verified.');
+  console.log('Certified Windows: 16 API rejection cases, 31 evidence/file rejection cases, concurrent changes, pinned selection, carried original jobs and actual draft bytes verified.');
 
   const commands = uploadCommands('publish-release', 'Verify draft Windows packages and selection');
   const bash = process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
-  for (const mode of ['valid', 'changed-package', 'changed-selection', 'missing-manifest', 'download-failure']) {
+  for (const mode of ['valid', 'changed-package', 'changed-selection', 'changed-payload', 'missing-manifest', 'download-failure']) {
     const executionRoot = path.join(root, `draft-command-${mode}`);
     mkdirSync(path.join(executionRoot, 'scripts'), { recursive: true });
-    for (const name of ['collect-certified-windows.mjs', 'collect-hosted-release-evidence.mjs', 'hosted-release-policy.json', 'windows-release-packages.mjs', 'release-package-manifest.mjs']) {
+    for (const name of ['collect-certified-windows.mjs', 'collect-hosted-release-evidence.mjs', 'hosted-release-policy.json', 'windows-release-packages.mjs', 'release-package-manifest.mjs', 'check-windows-package-origin.mjs']) {
       copyFileSync(new URL(`../${name}`, import.meta.url), path.join(executionRoot, 'scripts', name));
     }
     const retained = path.join(executionRoot, 'retained'); cpSync(path.join(root, 'input-0/release'), retained, { recursive: true });
     writeFileSync(path.join(retained, 'certified-windows-selection.json'), JSON.stringify(mode === 'changed-selection' ? { ...selected, artifactId: 999 } : selected));
+    writeFileSync(path.join(retained, 'msi-certification-inputs.json'), JSON.stringify({ sourceSha: sha,
+      windowsPayload: { sourceSha: sha, version, manifestSha256: (mode === 'changed-payload' ? 'e' : 'd').repeat(64) } }));
     if (mode === 'changed-package') writeFileSync(path.join(retained, 'ETL-SQL-v1.2.3-win-x64.zip'), 'Changed draft package');
     if (mode === 'missing-manifest') unlinkSync(path.join(retained, 'windows-package-inputs.json'));
     mkdirSync(path.join(executionRoot, 'current-windows'));
@@ -131,7 +136,7 @@ try {
     }
 `;
     const result = spawnSync(bash, ['-euo', 'pipefail', '-c', mock + commands], { cwd: executionRoot,
-      env: { ...process.env, TAG_NAME: 'v1.2.3', GITHUB_REPOSITORY: 'owner/repo', FIXTURE_MODE: mode }, encoding: 'utf8', windowsHide: true, timeout: 15000 });
+      env: { ...process.env, TAG_NAME: 'v1.2.3', SOURCE_SHA: sha, GITHUB_REPOSITORY: 'owner/repo', FIXTURE_MODE: mode }, encoding: 'utf8', windowsHide: true, timeout: 15000 });
     assert.equal(result.error, undefined);
     assert.equal(result.status === 0, mode === 'valid', `${mode}: ${result.stdout} ${result.stderr}`);
   }

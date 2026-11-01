@@ -21,6 +21,10 @@ try {
     Set-Content -LiteralPath $current -Value 'candidate bytes'
     Set-Content -LiteralPath $previous -Value 'previous release bytes'
     & $helper -Mode Create -Directory $fixture -SourceSha $sourceSha
+    & $helper -Mode Create -Directory $fixture -SourceSha $sourceSha -Version '1.2.3' -WindowsPayloadHash ('d' * 64)
+    $origin = (Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json).windowsPayload
+    if ($origin.sourceSha -cne $sourceSha -or $origin.version -cne '1.2.3' -or $origin.manifestSha256 -cne ('d' * 64)) { throw 'MSI lost shared payload identity.' }
+    Assert-Rejected { & $helper -Mode Create -Directory $fixture -SourceSha $sourceSha -Version '1.2.3' -WindowsPayloadHash 'invalid' } 'Invalid Windows payload'
     & $helper -Mode Verify -Directory $fixture -SourceSha $sourceSha
     Copy-Item -LiteralPath $current -Destination $published
     & $helper -Mode VerifyPublished -Directory $fixture -SourceSha $sourceSha -PublishedMsi $published
@@ -34,6 +38,11 @@ try {
     Assert-Rejected { & $helper -Mode Verify -Directory $fixture -SourceSha $sourceSha } 'hash mismatch'
     Set-Content -LiteralPath $current -Value 'candidate bytes'
     $original = Get-Content -LiteralPath $manifestPath -Raw
+    $badOrigin = $original | ConvertFrom-Json
+    $badOrigin.windowsPayload.manifestSha256 = 'invalid'
+    $badOrigin | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath
+    Assert-Rejected { & $helper -Mode Verify -Directory $fixture -SourceSha $sourceSha } 'Invalid Windows payload'
+    Set-Content -LiteralPath $manifestPath -Value $original
     $manifest = $original | ConvertFrom-Json
     $manifest.files[1].name = $manifest.files[0].name
     $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath

@@ -42,7 +42,7 @@ permissions:
   contents: read
 
 env:
-  CERTIFICATION_SHA: ${{ inputs.source_sha || github.sha }}
+  CERTIFICATION_SHA: ${{ inputs.source_sha || github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   detect-upgrade-impact:
@@ -138,13 +138,65 @@ jobs:
             Write-Host 'Shared package-impact rules found no payload changes; MSI certification will be skipped.'
           }
 
+  publish-windows-payload:
+    name: Publish Windows payload
+    timeout-minutes: 100
+    needs: detect-upgrade-impact
+    if: needs.detect-upgrade-impact.outputs.should_run == 'true'
+    runs-on: windows-latest
+    outputs:
+      artifact_id: ${{ steps.payload.outputs.artifact-id }}
+      manifest_sha256: ${{ steps.identity.outputs.manifest_sha256 }}
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 3
+        with:
+          ref: ${{ env.CERTIFICATION_SHA }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install payload browser compiler
+        timeout-minutes: 3
+        run: npm ci --prefix scripts/typecheck
+      - name: Publish shared Windows binaries once
+        id: identity
+        shell: pwsh
+        timeout-minutes: 62
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Publish-WindowsPayload.ps1 -ScriptArguments @('-OutputDirectory', 'artifacts/windows-payload/bundle') -EvidenceDirectory release-validation/windows-payload-build -TimeoutSeconds 3600
+      - name: Retain Windows payload diagnostics
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-payload-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/windows-payload-build/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Retain immutable Windows payload
+        id: payload
+        timeout-minutes: 8
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-payload-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/windows-payload/
+          include-hidden-files: true
+          # Self-contained hosts are compressible; reduce both consumers' download volume.
+          compression-level: 1
+          if-no-files-found: error
+          retention-days: 30
+
   build-msi:
     name: Build MSI certification inputs
     timeout-minutes: 90
     outputs:
       artifact_id: ${{ steps.inputs.outputs.artifact-id }}
       previous_tag: ${{ steps.versions.outputs.previous_tag }}
-    needs: detect-upgrade-impact
+    needs: [detect-upgrade-impact, publish-windows-payload]
     if: needs.detect-upgrade-impact.outputs.should_run == 'true'
     runs-on: windows-latest
     steps:
@@ -211,12 +263,19 @@ jobs:
         shell: pwsh
         run: choco install wixtoolset -y --no-progress --skip-if-installed
 
+      - name: Download original Windows payload
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.publish-windows-payload.outputs.artifact_id }}
+          path: artifacts/windows-payload-input
+
       - name: Build current MSI
-        timeout-minutes: 47
+        timeout-minutes: 15
         shell: pwsh
         env:
           ETL_SQL_VERSION: ${{ steps.versions.outputs.current_version }}
-        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/build-msi.ps1 -EvidenceDirectory release-validation/msi-build -TimeoutSeconds 2700
+          WINDOWS_PAYLOAD_HASH: ${{ needs.publish-windows-payload.outputs.manifest_sha256 }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/build-msi.ps1 -ScriptArguments @('-WindowsPayloadDirectory', 'artifacts/windows-payload-input/bundle', '-WindowsPayloadHash', $env:WINDOWS_PAYLOAD_HASH) -EvidenceDirectory release-validation/msi-build -TimeoutSeconds 780
 
       - name: Retain MSI build diagnostics first
         if: always()
@@ -250,11 +309,12 @@ jobs:
         shell: pwsh
         env:
           CURRENT_VERSION: ${{ steps.versions.outputs.current_version }}
+          WINDOWS_PAYLOAD_HASH: ${{ needs.publish-windows-payload.outputs.manifest_sha256 }}
         run: |
           New-Item -ItemType Directory -Force candidate | Out-Null
           Copy-Item .upgrade-cache/*-x64-Setup.msi candidate/previous.msi
           Copy-Item "src/ETL-SQL.Installer/ETL-SQL-v$env:CURRENT_VERSION.msi" candidate/current.msi
-          ./scripts/MsiCandidate.ps1 -Mode Create -Directory candidate -SourceSha $env:CERTIFICATION_SHA
+          ./scripts/MsiCandidate.ps1 -Mode Create -Directory candidate -SourceSha $env:CERTIFICATION_SHA -WindowsPayloadHash $env:WINDOWS_PAYLOAD_HASH -Version $env:CURRENT_VERSION
 
       - name: Upload certification inputs
         id: inputs

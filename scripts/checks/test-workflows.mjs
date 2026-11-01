@@ -338,8 +338,8 @@ exit ([int]$env:FIXTURE_EXIT)
       assert.equal(result.error, undefined);
       assert.equal(result.status, exit === 0 ? 0 : 1, `${rid}/${exit}: ${result.stdout} ${result.stderr}`);
       const actual = JSON.parse(readFileSync(receipt, 'utf8'));
-      assert.equal(actual.ScriptPath, 'scripts/publish-release.ps1');
-      assert.deepEqual(actual.ScriptArguments, ['-Platforms', rid]);
+      assert.equal(actual.ScriptPath, rid === 'win-x64' ? 'scripts/Build-WindowsNativePackages.ps1' : 'scripts/publish-release.ps1');
+      assert.deepEqual(actual.ScriptArguments ?? [], rid === 'win-x64' ? [] : ['-Platforms', rid]);
       assert.equal(actual.TimeoutSeconds, 4500);
       assert.equal(actual.EvidenceDirectory, `artifacts/native-packages/${rid}/publish-process`);
       const output = readFileSync(path.join(directory, `artifacts/native-packages/${rid}/publish.log`), 'utf8');

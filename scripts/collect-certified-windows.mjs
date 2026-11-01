@@ -15,7 +15,7 @@ const hash = value => createHash('sha256').update(value).digest('hex');
 const json = file => JSON.parse(readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 const upper = value => Date.parse(value) + (/:\d{2}(?:Z|[+-]\d{2}:\d{2})$/.test(value ?? '') ? 999 : 0);
 const pinned = ['schemaVersion', 'scope', 'repository', 'sourceSha', 'version', 'runId', 'jobId',
-  'executionAttempt', 'artifactId', 'artifactName', 'artifactDigest', 'manifestSha256', 'evidenceSha256', 'platform'];
+  'executionAttempt', 'artifactId', 'artifactName', 'artifactDigest', 'manifestSha256', 'evidenceSha256', 'platform', 'windowsPayloadSha256'];
 function sameSelection(actual, expected) {
   if (pinned.some(field => !isDeepStrictEqual(actual[field], expected[field]))) throw new Error('Certified native selection changed after validation.');
 }
@@ -56,6 +56,8 @@ export async function verifyCertifiedNative(directory, sha, version, platform) {
   if (!/^[a-f0-9]{40}$/.test(sha) || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) throw new Error('Invalid native acceptance identity.');
   const evidence = `artifacts/native-packages/${platform}`;
   const summaryFile = file(directory, `${evidence}/certification.json`), summary = json(summaryFile);
+  if (platform === 'win-x64' && (summary.windowsPayload?.sourceSha !== sha || summary.windowsPayload?.version !== version ||
+      !/^[a-f0-9]{64}$/.test(summary.windowsPayload?.manifestSha256 ?? ''))) throw new Error('Shared Windows payload acceptance is missing or mismatched.');
   const manifestFile = file(directory, `release/${descriptor.manifest}`), manifestSha256 = hash(readFileSync(manifestFile));
   const manifest = json(manifestFile);
   for (const name of [`ETL-SQL-v${version}-${platform}.zip`, `etl-sql-vscode-${version}-${descriptor.target}.vsix`]) file(directory, `release/${name}`);
@@ -121,6 +123,7 @@ export async function collectCertifiedNative(repository, sha, version, platform,
     artifactId: artifact.id, artifactName: artifact.name, artifactDigest: artifact.digest,
     manifestSha256: verified.manifestSha256, evidenceSha256: verified.evidenceSha256, collectedAt: new Date(now).toISOString() };
   if (platform !== 'win-x64') selection.platform = platform;
+  else selection.windowsPayloadSha256 = verified.summary.windowsPayload.manifestSha256;
   if (expectedSelection) {
     sameSelection(selection, expectedSelection);
     if (!Number.isSafeInteger(expectedSelection.runAttempt) || expectedSelection.runAttempt < job.attempt || expectedSelection.runAttempt > run.attempt ||

@@ -1,7 +1,12 @@
 # ETL-SQL Windows Installer Build Script
 # Requires WiX Toolset v3.x installed and in PATH or under Program Files.
+[CmdletBinding()]
+param([string]$WindowsPayloadDirectory, [string]$WindowsPayloadHash)
 
 $ErrorActionPreference = "Stop"
+if ([string]::IsNullOrWhiteSpace($WindowsPayloadDirectory) -ne [string]::IsNullOrWhiteSpace($WindowsPayloadHash)) {
+    throw 'Windows payload directory and manifest hash must be supplied together.'
+}
 & (Join-Path $PSScriptRoot 'Test-InstallerSources.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Installer source validation failed.' }
 & node (Join-Path $PSScriptRoot 'sync-assets.js')
@@ -9,6 +14,17 @@ if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed. Run npm ci -
 $Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.22.0" }
 $BuildDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer\publish\win-x64\bin"
 $InstallerDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Installer"
+$PayloadSourceSha = $null
+if ($WindowsPayloadDirectory) {
+    $repo = Split-Path $PSScriptRoot -Parent
+    $PayloadSourceSha = (& git -C $repo rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve MSI payload source.' }
+    $dirty = @(& git -C $repo status --porcelain)
+    if ($LASTEXITCODE -ne 0 -or $dirty.Count) { throw 'Shared MSI packaging requires clean source.' }
+    & node (Join-Path $PSScriptRoot 'windows-payload.mjs') verify $WindowsPayloadDirectory $PayloadSourceSha $Version $WindowsPayloadHash
+    if ($LASTEXITCODE -ne 0) { throw 'MSI Windows payload verification failed.' }
+    $BuildDir = Join-Path ([IO.Path]::GetFullPath($WindowsPayloadDirectory)) 'bin'
+}
 
 function Get-WixProductVersion {
     param([Parameter(Mandatory = $true)][string]$InputVersion)
@@ -104,7 +120,7 @@ if (-not $WixToolset) {
 }
 
 # 1. Publish all components
-Write-Host "Publishing components to $BuildDir..." -ForegroundColor Gray
+Write-Host "Preparing installer inputs from $BuildDir..." -ForegroundColor Gray
 $Projects = @(
     "..\src\ETL-SQL.App\ETL-SQL.App.csproj",
     "..\src\ETL-SQL.LanguageServer\ETL-SQL.LanguageServer.csproj",
@@ -114,20 +130,22 @@ $Projects = @(
     "..\src\ETL-SQL.Portal\ETL-SQL.Portal.csproj"
 )
 
-foreach ($Proj in $Projects) {
-    $ProjPath = Join-Path $PSScriptRoot $Proj
-    Write-Host "  Publishing $([System.IO.Path]::GetFileNameWithoutExtension($ProjPath))..." -ForegroundColor Gray
-    dotnet publish $ProjPath -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o $BuildDir --nologo
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "dotnet publish failed for $Proj (exit code $LASTEXITCODE)"
-        exit $LASTEXITCODE
+if (-not $WindowsPayloadDirectory) {
+    foreach ($Proj in $Projects) {
+        $ProjPath = Join-Path $PSScriptRoot $Proj
+        Write-Host "  Publishing $([System.IO.Path]::GetFileNameWithoutExtension($ProjPath))..." -ForegroundColor Gray
+        dotnet publish $ProjPath -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o $BuildDir --nologo
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "dotnet publish failed for $Proj (exit code $LASTEXITCODE)"
+            exit $LASTEXITCODE
+        }
     }
 }
 
 # Ensure appsettings.json is copied to the build directory
 $appsettingsSrc = Join-Path $PSScriptRoot "..\src\appsettings.json"
 $appsettingsDest = Join-Path $BuildDir "appsettings.json"
-if (Test-Path $appsettingsSrc) {
+if (-not $WindowsPayloadDirectory -and (Test-Path $appsettingsSrc)) {
     Write-Host "Copying appsettings.json to $BuildDir" -ForegroundColor Gray
     Copy-Item $appsettingsSrc $appsettingsDest -Force
 }
@@ -164,10 +182,18 @@ try {
         exit $LASTEXITCODE
     }
 
-    Write-Host "[SUCCESS] Installer created: ETL-SQL-v$Version.msi" -ForegroundColor Green
 } finally {
     Pop-Location
 }
 
+if ($WindowsPayloadDirectory) {
+    & node (Join-Path $PSScriptRoot 'windows-payload.mjs') verify $WindowsPayloadDirectory $PayloadSourceSha $Version $WindowsPayloadHash
+    if ($LASTEXITCODE -ne 0) { throw 'MSI payload changed during packaging.' }
+    $after = (& git -C $repo rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or $after -cne $PayloadSourceSha) { throw 'MSI source changed during packaging.' }
+    $dirty = @(& git -C $repo status --porcelain)
+    if ($LASTEXITCODE -ne 0 -or $dirty.Count) { throw 'MSI source changed during packaging.' }
+}
+Write-Host "[SUCCESS] Installer created: ETL-SQL-v$Version.msi" -ForegroundColor Green
 Write-Host "`nBuild process complete." -ForegroundColor Cyan
 exit 0

@@ -71,6 +71,9 @@ jobs:
     if: needs.package-impact.outputs.should_run == 'true'
     name: Native package (${{ matrix.rid }})
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      actions: read
     # The Intel macOS runner takes about twice as long per publish as the others: 52 minutes for the
     # eight hosts and several more for the VSIX. Sixty minutes cancelled it mid-package twice.
     # Cover preparation, publish, acceptance, uploads and the observed ten-minute Intel checkout.
@@ -166,11 +169,15 @@ jobs:
       - name: Build native ZIP and VSIX
         shell: pwsh
         timeout-minutes: 80
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
           $log = "artifacts/native-packages/$env:PACKAGE_RID/publish.log"
-          & ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/publish-release.ps1 `
-            -ScriptArguments @('-Platforms', $env:PACKAGE_RID) `
+          $script = if ($env:PACKAGE_RID -eq 'win-x64') { 'scripts/Build-WindowsNativePackages.ps1' } else { 'scripts/publish-release.ps1' }
+          $arguments = if ($env:PACKAGE_RID -eq 'win-x64') { @() } else { @('-Platforms', $env:PACKAGE_RID) }
+          & ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath $script `
+            -ScriptArguments $arguments `
             -EvidenceDirectory "artifacts/native-packages/$env:PACKAGE_RID/publish-process" -TimeoutSeconds 4500 *>&1 |
             Tee-Object -FilePath $log
           if ($LASTEXITCODE -ne 0) { throw 'Native publish failed.' }

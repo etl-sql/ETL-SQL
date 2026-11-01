@@ -107,8 +107,9 @@ function command(executable, args, options = {}) {
   return result.stdout;
 }
 
-export function extractWorkstationArchive(archive, directory, { maximumBytes = Number.MAX_SAFE_INTEGER, maximumEntries = Number.MAX_SAFE_INTEGER, allowSelection = false } = {}) {
-  if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1 || !Number.isSafeInteger(maximumEntries) || maximumEntries < 1) throw new Error('Invalid evidence archive limits.');
+export function extractWorkstationArchive(archive, directory, { maximumBytes = Number.MAX_SAFE_INTEGER, maximumEntries = Number.MAX_SAFE_INTEGER, allowSelection = false, timeoutMs = 60000 } = {}) {
+  if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1 || !Number.isSafeInteger(maximumEntries) || maximumEntries < 1 ||
+      !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300000) throw new Error('Invalid evidence archive limits.');
   command('pwsh', ['-NoProfile', '-NonInteractive', '-Command', `
 $ErrorActionPreference='Stop'
 $zip=[IO.Compression.ZipFile]::OpenRead($env:ETLSQL_WORKSTATION_ZIP)
@@ -159,7 +160,7 @@ try {
     } finally {$source.Dispose()}
   }
 } finally {$zip.Dispose()}
-`], { env: { ...process.env, ETLSQL_WORKSTATION_ZIP: path.resolve(archive), ETLSQL_WORKSTATION_OUTPUT: path.resolve(directory),
+`], { timeout: timeoutMs, env: { ...process.env, ETLSQL_WORKSTATION_ZIP: path.resolve(archive), ETLSQL_WORKSTATION_OUTPUT: path.resolve(directory),
     ETLSQL_EVIDENCE_MAX_BYTES: String(maximumBytes), ETLSQL_EVIDENCE_MAX_ENTRIES: String(maximumEntries), ETLSQL_EVIDENCE_ALLOW_SELECTION: String(allowSelection) } });
 }
 export const extractSubmittedArchive = extractWorkstationArchive;

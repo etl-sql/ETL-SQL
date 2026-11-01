@@ -6,10 +6,15 @@ param(
     [string[]]$Platforms = @("win-x64", "linux-x64", "osx-x64", "osx-arm64"),
     [switch]$SkipVsix,
     [string]$CertificationEvidenceRoot,
-    [psobject]$OutputTransaction
+    [psobject]$OutputTransaction,
+    [string]$WindowsPayloadDirectory,
+    [string]$WindowsPayloadHash
 )
 
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($WindowsPayloadDirectory) -ne [string]::IsNullOrWhiteSpace($WindowsPayloadHash)) {
+    throw 'Windows payload directory and manifest hash must be supplied together.'
+}
 # COMPAT_BREAK: 0.22 — reject unsafe packaging inputs before release output cleanup.
 $Platforms = @($Platforms | ForEach-Object { $_.ToLowerInvariant() })
 if ($Platforms.Count -eq 0 -or @($Platforms | Select-Object -Unique).Count -ne $Platforms.Count) {
@@ -24,6 +29,16 @@ if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.
     throw 'Release version must be a file-safe three-part version.'
 }
 $ReleaseRoot = Join-Path $RepoRoot "release"
+$PayloadSourceSha = $null
+if ($WindowsPayloadDirectory) {
+    if ($Platforms.Count -ne 1 -or $Platforms[0] -cne 'win-x64') { throw 'A Windows payload packages only win-x64.' }
+    $PayloadSourceSha = (& git -C $RepoRoot rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot identify Windows package source.' }
+    $dirty = @(& git -C $RepoRoot status --porcelain)
+    if ($LASTEXITCODE -ne 0 -or $dirty.Count) { throw 'Shared Windows packaging requires clean source.' }
+    & node (Join-Path $PSScriptRoot 'windows-payload.mjs') verify $WindowsPayloadDirectory $PayloadSourceSha $Version $WindowsPayloadHash
+    if ($LASTEXITCODE -ne 0) { throw 'Windows package payload verification failed.' }
+}
 $SampleSource = Join-Path $RepoRoot "samples"
 $RuntimeStatePatterns = @(Get-Content -LiteralPath (Join-Path $PSScriptRoot 'lib/package-runtime-state.patterns'))
 . (Join-Path $PSScriptRoot 'ReleaseEvidence.Helpers.ps1')
@@ -178,13 +193,18 @@ try {
         New-Item -ItemType Directory -Path $SampleFolder | Out-Null
 
         # 2. Publish Binaries
-        foreach ($Proj in $Projects) {
-            $ProjPath = Join-Path $PSScriptRoot (Join-PathSegments $Proj)
-            $ProjName = [System.IO.Path]::GetFileNameWithoutExtension($ProjPath)
+        if ($WindowsPayloadDirectory) {
+            & node (Join-Path $PSScriptRoot 'windows-payload.mjs') copy $WindowsPayloadDirectory $PayloadSourceSha $Version $WindowsPayloadHash $BinFolder
+            Assert-NativeCommandSucceeded 'Copy verified Windows payload'
+        } else {
+            foreach ($Proj in $Projects) {
+                $ProjPath = Join-Path $PSScriptRoot (Join-PathSegments $Proj)
+                $ProjName = [System.IO.Path]::GetFileNameWithoutExtension($ProjPath)
 
-            Write-Host "  Publishing $ProjName..." -ForegroundColor Gray
-            dotnet publish $ProjPath -c Release -r $Platform --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -o $BinFolder --nologo | Out-Null
-            Assert-NativeCommandSucceeded "dotnet publish $ProjName for $Platform"
+                Write-Host "  Publishing $ProjName..." -ForegroundColor Gray
+                dotnet publish $ProjPath -c Release -r $Platform --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -o $BinFolder --nologo | Out-Null
+                Assert-NativeCommandSucceeded "dotnet publish $ProjName for $Platform"
+            }
         }
 
         Assert-ReleaseBinaries -Platform $Platform -BinFolder $BinFolder
@@ -280,6 +300,10 @@ try {
         New-VerifiedArchive -SourceDirectory $PlatformFolder -DestinationPath $ZipDest
 
         Write-Host "  Platform $Platform complete. Archive: $ZipFileName" -ForegroundColor Green
+        if ($WindowsPayloadDirectory) {
+            & node (Join-Path $PSScriptRoot 'windows-payload.mjs') verify $WindowsPayloadDirectory $PayloadSourceSha $Version $WindowsPayloadHash
+            Assert-NativeCommandSucceeded 'Recheck original Windows payload'
+        }
     }
 
     # 7.5 Retain test and certification reports in release assets
@@ -305,6 +329,12 @@ try {
     Write-ReleaseChecksums -OutputDirectory $ReleaseRoot
     Write-Host "  Checksums file generated: sha256sums.txt" -ForegroundColor Green
 
+    if ($WindowsPayloadDirectory) {
+        $after = (& git -C $RepoRoot rev-parse HEAD).Trim()
+        if ($LASTEXITCODE -ne 0 -or $after -cne $PayloadSourceSha) { throw 'Windows package source commit changed.' }
+        $dirty = @(& git -C $RepoRoot status --porcelain)
+        if ($LASTEXITCODE -ne 0 -or $dirty.Count) { throw 'Windows package source changed during packaging.' }
+    }
     if ($ownsTransaction) {
         Complete-ReleaseOutputTransaction $transaction
         Write-Host "`nRelease v$Version ready in $($transaction.Accepted)" -ForegroundColor Cyan

@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Publish Windows host binaries once for hosted MSI and ZIP/VSIX packaging. Consumers verify
+  the retained payload inventory and hashes and reuse its original successful build attempt.
+  MSI and native packaging keep separate acceptance checks; release publication requires their
+  certified packages to identify the same payload. Failed consumers have no rebuild fallback.
+
 - Prepare the VS Code acceptance host before native publishing. Later webview checks verify
   its local receipt and executable hash and use that executable without resolving another
   download. A network failure now stops before the long native build. Webview assertions and

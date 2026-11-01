@@ -415,6 +415,20 @@ failed/cancelled required builds and unexpected skips. Superseded PR revisions c
 package work; manual candidate runs are preserved. A no-impact PR result does not replace the
 final-candidate package certification required below.
 
+Hosted Windows packaging shares the **Publish Windows payload** job in the full MSI workflow.
+It publishes the eight Windows hosts once and retains the file inventory, source SHA, version,
+build options and hashes. MSI packaging consumes that artifact directly. Windows native packaging
+waits for the completed producer, then packages the same binaries into ZIP and VSIX; it does not
+wait for installed Portal tests. Start full MSI certification on the same candidate ref when
+dispatching native certification manually. A missing or failed producer stops the consumer with
+an inspection message; it never falls back to publishing the applications again.
+
+Retry failed packaging or installed-test jobs only. A successful producer carried into a retry
+retains its original artifact and attempt identity. MSI and native acceptance remain independent,
+and the release gate compares their shared payload hashes before attestation and publication.
+Treat the four-hour release and thirty-minute PR budgets as targets until the complete hosted
+candidate establishes elapsed time; sharing Windows binaries alone does not establish those targets.
+
 CI evidence uploads use distinct names for each run attempt and matrix execution. A failed-job
 retry retains earlier artifacts and adds its own evidence. Inspect the artifact for the intended
 job execution; do not substitute an older successful artifact for a failed retry. The evidence
