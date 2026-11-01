@@ -73,8 +73,9 @@ function write(name, value) {
   mkdirSync(path.dirname(target), { recursive: true });
   writeFileSync(target, value);
 }
-function run() {
-  const result = spawnSync('pwsh', ['-NoProfile', '-File', script, '-Root', checkerRoot], { encoding: 'utf8' });
+function run(branch = '') {
+  const result = spawnSync('pwsh', ['-NoProfile', '-File', script, '-Root', checkerRoot,
+    ...(branch ? ['-BranchName', branch] : [])], { encoding: 'utf8' });
   if (result.error) throw result.error;
   return result;
 }
@@ -86,6 +87,12 @@ try {
   writeChecker('src/etl-sql-vscode/package-lock.json', JSON.stringify(lock));
   writeChecker('src/ETL-SQL.Portal/wwwroot/index.html', '<script src="/js/app.js?v=1.2.3"></script>');
   assert.equal(run().status, 0);
+  for (const branch of ['release/v1.2.3', 'refs/heads/release/v1.2.3', 'release/v1.2.0', 'main', 'fix/example']) assert.equal(run(branch).status, 0, branch);
+  for (const branch of ['release/v1.2.4', 'release/v1.3.0', 'release/v2.2.3']) {
+    const mismatch = run(branch);
+    assert.equal(mismatch.status, 1, branch);
+    assert.match(mismatch.stdout, /Set the target version before testing its upgrade path/);
+  }
   writeChecker('src/ETL-SQL.Portal/wwwroot/dashboard[2].html', '<script src="/js/app.js?v=1.2.2"></script>');
   const staleBracketedPage = run();
   assert.equal(staleBracketedPage.status, 1);

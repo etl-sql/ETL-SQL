@@ -54,7 +54,7 @@ function Write-MsiDurableCheckpoint {
         $env:GITHUB_RUN_ID -cnotmatch '^[1-9]\d*$' -or $env:GITHUB_RUN_ATTEMPT -cnotmatch '^[1-9]\d*$' -or
         $env:CERTIFICATION_SHA -cnotmatch '^[a-f0-9]{40}$' -or $env:ETLSQL_MSI_CHECKPOINT_RUN_SHA -cnotmatch '^[a-f0-9]{40}$' -or
         $null -eq $Stage -or $Stage.Length -gt 128 -or
-        $Stage -cnotmatch '^(?:supervisor starting|fresh (?:backup|uninstall|cleanup) (?:start|complete)|== (?:fresh install of|install previous|upgrade to|roll back to) (?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?)$') {
+        $Stage -cnotmatch '^(?:supervisor (?:starting|heartbeat|timeout|complete)|fresh (?:backup|uninstall|cleanup) (?:start|complete)|msi (?:00-fresh(?:-uninstall)?|01-previous|02-upgrade|03-rollback-(?:uninstall|install)|04-cleanup-uninstall) [A-Za-z][A-Za-z0-9_]{0,63}|== (?:fresh install of|install previous|upgrade to|roll back to) (?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?)$') {
         return $false
     }
     if ($null -ne $FreeMemoryMiB -or $null -ne $TotalMemoryMiB) {

@@ -136,6 +136,37 @@ exit 0
     catch [TimeoutException] { $timeoutReported = $true }
     if (-not $timeoutReported -or -not $global:CertificationFakeInstaller.Killed) { throw 'Installer timeout did not stop its owned process after diagnostic failure.' }
     Write-Host 'Certification supervision passed: streams, exit status, timeout, unrelated process survival, inherited pipes and owned installer cleanup.'
+    $wrapper = Join-Path $fixture 'durable parent wrapper.ps1'
+    $durableChild = Join-Path $fixture 'durable child.ps1'
+    Set-Content -LiteralPath $durableChild -Value 'if($env:CERT_DIAG_CHILD_TIMEOUT -eq "1"){Start-Sleep -Seconds 20}; exit 0'
+    Set-Content -LiteralPath $wrapper -Value @'
+param($Supervisor, $Child, $Evidence, $Sink, [int]$Timeout, $Hang, $FailSink)
+$env:GITHUB_ACTIONS='true'; $env:ETLSQL_MSI_DIAGNOSTIC_ONLY='1'
+$env:CERT_DIAG_CHILD_TIMEOUT=$Hang; $env:CERT_DIAG_SINK=$Sink; $env:CERT_DIAG_FAIL=$FailSink
+function Write-MsiDurableCheckpoint {
+    param($Stage)
+    Add-Content -LiteralPath $env:CERT_DIAG_SINK -Value $Stage
+    if($env:CERT_DIAG_FAIL -eq '1'){throw 'fixture sink unavailable'}
+    return $true
+}
+& $Supervisor -ScriptPath $Child -EvidenceDirectory $Evidence -TimeoutSeconds $Timeout
+exit $LASTEXITCODE
+'@
+    foreach ($case in @(@{ Name = 'success'; Timeout = 10; Hang = '0'; FailSink = '1'; Exit = 0 },
+        @{ Name = 'timeout'; Timeout = 1; Hang = '1'; FailSink = '0'; Exit = 124 })) {
+        $sink = Join-Path $fixture "durable-$($case.Name).txt"
+        $process = Start-TestProcess @('-NoProfile', '-File', $wrapper, $supervisor, $durableChild,
+            (Join-Path $fixture "durable-$($case.Name)"), $sink, [string]$case.Timeout, $case.Hang, $case.FailSink)
+        $output = $process.StandardOutput.ReadToEndAsync(); $errorOutput = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(15000)) { $process.Kill(); throw 'Durable parent fixture exceeded its deadline.' }
+        if (-not $output.Wait(2000) -or -not $errorOutput.Wait(2000) -or $process.ExitCode -ne $case.Exit) {
+            throw "Diagnostic sink changed the child result: $($case.Name). $($errorOutput.Result)"
+        }
+        $stages = Get-Content -LiteralPath $sink
+        if ($stages -notcontains 'supervisor heartbeat' -or $stages -notcontains 'supervisor complete' -or
+            ($case.Hang -eq '1' -and $stages -notcontains 'supervisor timeout')) { throw 'Parent heartbeat/completion evidence missing.' }
+    }
+    Write-Host 'Diagnostic parent markers preserve successful and timed-out child results even when the sink fails; no GitHub writes.'
 } finally {
     # Only handles created by these fixtures are stopped; no process-name or process-tree kills.
     foreach ($process in $processes) {

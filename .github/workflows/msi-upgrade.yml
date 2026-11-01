@@ -65,7 +65,9 @@ jobs:
         run: node scripts/setup-actionlint.mjs
       - name: Collect source preflight findings
         timeout-minutes: 12
-        run: node scripts/release-preflight.mjs
+        env:
+          ETLSQL_RELEASE_BRANCH: ${{ github.base_ref || github.ref_name }}
+        run: node scripts/release-preflight.mjs --release-branch "$ETLSQL_RELEASE_BRANCH"
 
       - name: Upload source preflight logs
         if: always()

@@ -16,7 +16,7 @@ if [[ "$INSTALLER_ROOT" != "$REPO_ROOT/src/ETL-SQL.Installer" ]]; then
 fi
 cd "$REPO_ROOT"
 
-VERSION=${1:-"0.21.0"}
+VERSION=${1:-"0.22.0"}
 PUBLISHED_BIN_DIR=${2:-"release/linux-x64/bin"}
 ARCH="amd64"
 PKG_NAME="etl-sql"

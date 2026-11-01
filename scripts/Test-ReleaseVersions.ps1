@@ -1,6 +1,9 @@
 <# Source-only version consistency; no restore or build required. #>
 [CmdletBinding()]
-param([string]$Root = (Split-Path $PSScriptRoot -Parent))
+param(
+    [string]$Root = (Split-Path $PSScriptRoot -Parent),
+    [string]$BranchName = ''
+)
 
 $ErrorActionPreference = 'Stop'
 $findings = [System.Collections.Generic.List[string]]::new()
@@ -19,6 +22,15 @@ try {
 function Test-VersionValue([string]$Location, $Value) {
     if ($Value -cne $expected) {
         $findings.Add("${Location}: expected $expected; found '$Value'. Run scripts/Set-Version.ps1 for a complete version bump.")
+    }
+}
+
+$target = [regex]::Match($BranchName, '^(?:refs/heads/)?release/v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$')
+if ($target.Success) {
+    $requested = $target.Groups[1].Value.Split('.')
+    $actual = $expected.Split('.')
+    if ($actual[0] -cne $requested[0] -or $actual[1] -cne $requested[1] -or [bigint]$actual[2] -lt [bigint]$requested[2]) {
+        $findings.Add("Release branch $BranchName cannot validate version $expected. Set the target version before testing its upgrade path.")
     }
 }
 

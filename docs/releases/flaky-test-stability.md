@@ -80,8 +80,15 @@ class load and shared background-service state from its startup/shutdown observa
   in a single switch. Other platforms keep their defaults. No request retry or assertion timeout
   changes. A real-browser regression checks every original disabled feature and other fixed switch.
   Local stress completes 1,600 default page loads without reproducing the error; its occupancy
-  safeguard truncates later comparison arms. This does not establish the historical hosted cause
-  or close stability acceptance. Retained probes: `release-validation/current-ci-review/`.
+  safeguard truncates later comparison arms. This does not establish the historical hosted
+  cause. At proposal `fbcbccf85`, [CI](https://github.com/etl-sql/ETL-SQL/actions/runs/41267322023),
+  [second inventory](https://github.com/etl-sql/ETL-SQL/actions/runs/41268947571) and
+  [third inventory](https://github.com/etl-sql/ETL-SQL/actions/runs/41270889034) each pass all
+  557 methods / 1,016 cases without retries, skips or overlapping shards. This establishes
+  consecutive hosted stability for the mitigation, without establishing every historical
+  timeout's cause. The [development evidence summary](../../certification-results/release-process-development-2026-11-01.json)
+  retains original run identities and receipt hashes. Raw probes and shard audits:
+  `release-validation/current-ci-review/`.
 - **v0.22.0 — missing-chart timeout evidence:** CI `41205139235` times out waiting for the
   missing-chart message in shard 3. The plain locator wait did not capture a snapshot. It now
   retains the existing bounded, sanitized request history and own-process resource counts before

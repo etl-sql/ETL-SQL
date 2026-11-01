@@ -16,7 +16,7 @@ if [[ "$INSTALLER_ROOT" != "$REPO_ROOT/src/ETL-SQL.Installer" ]]; then
 fi
 cd "$REPO_ROOT"
 
-VERSION=${1:-"0.21.0"}
+VERSION=${1:-"0.22.0"}
 PUBLISHED_BIN_DIR=${2:-"release/osx-x64/bin"}
 APP_NAME="ETL-SQL"
 RELEASE_ROOT="$REPO_ROOT/release"

@@ -3,8 +3,8 @@
     Non-elevated helpers for MSI upgrade certification.
 
 .DESCRIPTION
-    Everything here reads MSI metadata or compares it. Nothing installs, uninstalls, or touches the
-    registry, so all of it runs on any machine without elevation and is unit-testable.
+    Metadata and comparison helpers run without elevation. Invoke-MsiExec installs or uninstalls
+    only when called explicitly and requires the disposable elevated host used by certification.
 
     That split is the point. The install sequence genuinely needs an elevated, disposable machine
     and therefore CI; these checks do not, and keeping them here means a mistake in them is found in
@@ -224,15 +224,69 @@ function Assert-EntryCount {
     return $entries
 }
 
+function Get-MsiDiagnosticAction {
+    param([string]$LogPath)
+    $stream = $null
+    try {
+        $stream = [IO.FileStream]::new($LogPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
+        $signature = [byte[]]::new(2)
+        $count = $stream.Read($signature, 0, 2)
+        $unicode = $count -eq 2 -and $signature[0] -eq 255 -and $signature[1] -eq 254
+        $offset = [math]::Max(0, $stream.Length - 65536)
+        if ($unicode) { $offset -= $offset % 2 }
+        $null = $stream.Seek($offset, [IO.SeekOrigin]::Begin)
+        $buffer = [byte[]]::new(65536)
+        $count = $stream.Read($buffer, 0, $buffer.Length)
+        $encoding = if ($unicode) { [Text.Encoding]::Unicode } else { [Text.Encoding]::UTF8 }
+        $text = $encoding.GetString($buffer, 0, $count)
+        if ($offset -eq 0) { $text = $text.TrimStart([char]0xFEFF) }
+        else {
+            $newline = $text.IndexOf("`n", [StringComparison]::Ordinal)
+            if ($newline -lt 0) { return $null }
+            $text = $text.Substring($newline + 1)
+        }
+        $actions = [regex]::Matches($text, '(?m)^Action start [0-9]{1,2}:[0-9]{2}:[0-9]{2}: ([A-Za-z][A-Za-z0-9_]{0,63})\.\r?$')
+        if ($actions.Count) { return $actions[$actions.Count - 1].Groups[1].Value }
+    } catch [IO.IOException] { } catch [UnauthorizedAccessException] { }
+    finally { if ($stream) { $stream.Dispose() } }
+    return $null
+}
+
 function Invoke-MsiExec {
     param([string[]]$Arguments, [string]$LogPath, [string]$Stage, [int]$TimeoutMinutes = 10)
 
-    $allArguments = @($Arguments) + @('/qn', '/norestart', '/l*v', $LogPath)
+    $diagnostic = $env:ETLSQL_MSI_DIAGNOSTIC_ONLY -ceq '1' -and
+        $null -ne (Get-Command Write-MsiDurableCheckpoint -CommandType Function -ErrorAction SilentlyContinue)
+    $logging = if ($diagnostic) { '/l*v!' } else { '/l*v' }
+    $allArguments = @($Arguments) + @('/qn', '/norestart', $logging, $LogPath)
     $process = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" `
         -ArgumentList $allArguments -PassThru -WindowStyle Hidden
     # An unbounded wait let a stuck install outlast the CI step timeout, and killing the step then
     # lost the runner and every piece of evidence. Record what was running, then stop the install.
-    if (-not $process.WaitForExit($TimeoutMinutes * 60000)) {
+    if ($diagnostic) {
+        $name = [IO.Path]::GetFileNameWithoutExtension($LogPath)
+        $lastAction = $null
+        $watch = [Diagnostics.Stopwatch]::StartNew()
+        $null = Write-MsiDurableCheckpoint -Stage "msi $name process_started"
+        $finished = $false
+        while ($watch.ElapsedMilliseconds -lt $TimeoutMinutes * 60000) {
+            $finished = $process.WaitForExit([int][math]::Max(0, [math]::Min(1000, $TimeoutMinutes * 60000 - $watch.ElapsedMilliseconds)))
+            $action = Get-MsiDiagnosticAction $LogPath
+            if ($action -and $action -cne $lastAction) {
+                $null = Write-MsiDurableCheckpoint -Stage "msi $name $action"
+                $lastAction = $action
+            }
+            if ($finished) { break }
+        }
+        if ($finished) {
+            $diagnosticExit = $process.ExitCode
+            $exitLabel = if ($null -eq $diagnosticExit) { 'unknown' } elseif ($diagnosticExit -lt 0) { 'minus_' + (-[long]$diagnosticExit) } else { [string]$diagnosticExit }
+            $null = Write-MsiDurableCheckpoint -Stage "msi $name process_exited_$exitLabel"
+        }
+    } else {
+        $finished = $process.WaitForExit($TimeoutMinutes * 60000)
+    }
+    if (-not $finished) {
         $diagnostics = [IO.Path]::ChangeExtension($LogPath, '.hung.txt')
         try { Write-HungInstallDiagnostics $LogPath $diagnostics }
         catch { Write-Warning "Could not finish installer diagnostics: $($_.Exception.Message)" }
@@ -242,8 +296,9 @@ function Invoke-MsiExec {
         }
         throw [TimeoutException]::new("$Stage did not finish within $TimeoutMinutes minutes. See $diagnostics")
     }
-    if ($process.ExitCode -notin @(0, 1641, 3010)) {
-        throw "$Stage failed with msiexec exit code $($process.ExitCode). See $LogPath"
+    $resultCode = if ($diagnostic) { $diagnosticExit } else { $process.ExitCode }
+    if ($resultCode -notin @(0, 1641, 3010)) {
+        throw "$Stage failed with msiexec exit code $resultCode. See $LogPath"
     }
 }
 

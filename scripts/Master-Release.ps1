@@ -6,11 +6,11 @@
     then publishes bundles and builds the native package supported by this host.
     Publication and installed-package certification use the separate release workflows.
 .EXAMPLE
-    .\Master-Release.ps1 -Version "0.21.0"
+    .\Master-Release.ps1 -Version "0.22.0"
 #>
 param(
     [ValidatePattern('^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')]
-    [string]$Version = "0.21.0",
+    [string]$Version = "0.22.0",
     [switch]$SkipTests,
     [switch]$SkipUI,
     [switch]$IncludeSampleValidation

@@ -196,7 +196,12 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   diagnostic job. It verifies the original successful build and payload hashes, runs only Portal
   without rebuilding, and records distinct script/installer identities. Normal certification is
   skipped and no certification receipt is created. Fork/failed/truncated origins and protected
-  branches reject. Hosted diagnostic dispatch and the runner-loss cause remain open.
+  branches reject. Hosted diagnostic `41271704106` passes Portal fresh install, upgrade, rollback
+  and cleanup against original artifact `13061996390`, without rebuilding or creating a
+  certification receipt. Bounded action names, numeric MSI exits and independent parent heartbeats
+  survive as direct annotations through `supervisor complete`. The older diagnostic stalls and
+  original runner-loss cause remain unresolved. This retained 0.21.0 payload is not evidence for
+  the 0.21.0-to-0.22.0 path.
 - [ ] **Nightly release-branch lanes.** Run the installed-upgrade checks (DEB and the MSI Portal
   profile) and the Portal shards nightly from the day the release branch is cut.
   **In progress:** the nightly scheduler discovers version branches newer than the latest stable
@@ -838,6 +843,11 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   across resumes. Reuse and the release gate both reject phases older than seven days or with
   missing/future times; an executed resume fixture verifies success is reused without refreshing
   its timestamp or replacing its log.
+  Version sources and draft notes now prepare 0.22.0 before its installed-upgrade checks.
+  Previously the proposal still built 0.21.0 against 0.20.1. Source preflight now rejects a
+  release-branch major/minor mismatch or a version below its patch baseline, using the PR target
+  branch before expensive builds. Draft notes carry no publication date; final metadata and
+  exact-candidate certification remain required before tagging.
 - [ ] **Rehearse failure recovery before the next release.** On a disposable candidate, exercise a
   failed test shard, interrupted MSI certification, missing artifact and failed publication upload.
   Require useful diagnostics, rejection of incomplete evidence, and recovery without repeating
@@ -981,7 +991,12 @@ failure, profiles and local reports: `release-validation/critical-path/`.
   verifies exactly one effective disabled-feature switch, every original feature and all other
   fixed arguments. All 51 focused diagnostic/detail cases pass. The local stress probe does not
   reproduce the error in 1,600 default loads; occupancy limits truncate its later arms. Historical
-  causality and consecutive hosted acceptance remain open; no assertion is retried or widened.
+  causality remains open; no assertion is retried or widened. At proposal `fbcbccf85`, CI
+  `41267322023` and independent inventories `41268947571` / `41270889034` all pass on their
+  first attempts: 557 methods and 1,016 cases each, with complete nonoverlapping shard coverage.
+  The latter runs select only browser/performance lanes and cannot count as full release
+  certification. This establishes consecutive hosted stability for the mitigation; the separate
+  historical navigation, missing-chart and desktop-exit causes remain open.
   **Follow-up 2026-10-31:** current CI `41205139235` fails only shard 3's missing-chart-payload
   assertion; MSI, native packages and CodeQL pass. Its plain locator wait retained no diagnostic
   snapshot. That wait now uses the same bounded, sanitized transport/resource capture as navigation

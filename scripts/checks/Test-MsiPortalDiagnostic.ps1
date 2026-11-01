@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $producer = Join-Path $PSScriptRoot '../Prepare-MsiPortalDiagnostic.ps1'
-$root = Join-Path ([IO.Path]::GetTempPath()) ('msi-diagnostic-' + [guid]::NewGuid().ToString('N'))
+$tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+$root = Join-Path $tempRoot ('msi-diagnostic-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $root | Out-Null
 $names = @('GITHUB_EVENT_NAME', 'GITHUB_REF', 'GITHUB_REPOSITORY', 'GITHUB_SHA', 'GITHUB_OUTPUT')
 $saved = @{}
@@ -74,5 +75,7 @@ try {
 } finally {
     foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
     Remove-Variable MsiDiagnosticFixtureMode -Scope Global
-    Remove-Item -LiteralPath $root -Recurse -Force
+    $resolved = [IO.Path]::GetFullPath($root)
+    if (-not $resolved.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetFileName($resolved) -notmatch '^msi-diagnostic-[a-f0-9]{32}$') { throw 'Refusing cleanup outside fixture.' }
+    Remove-Item -LiteralPath $resolved -Recurse -Force
 }

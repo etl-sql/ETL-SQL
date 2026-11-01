@@ -11,6 +11,12 @@ they do not establish that either target has been met.
 
 ## Execution order and reuse
 
+Set the new version when cutting its release branch, before running installed-upgrade checks.
+For example, `Set-Version.ps1 -Version 0.22.0` makes MSI selection test the published v0.21.0
+predecessor instead of repeating the older v0.20.1-to-v0.21.0 path. Keep notes draft until their
+final review. CI, MSI and native source preflights reject a version outside the target release
+branch's major/minor version or behind its patch; patch maintenance may advance within that branch.
+
 Complete versioning, notes, dependency changes, source review and any intended merge **before**
 freezing the candidate. Record its full SHA and candidate-cut time outside Git. Do not merge,
 format, compile changelog fragments or commit evidence into that candidate after certification.

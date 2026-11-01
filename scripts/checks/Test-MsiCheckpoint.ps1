@@ -97,12 +97,12 @@ try {
     $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = '0'
     if (Write-MsiDurableCheckpoint -Stage 'supervisor starting' -Request $request) { throw 'Diagnostic job reused a certification identity.' }
     $script:checkpointMode = 'reusable-name'; $script:MsiDurableCheckpointTarget = $null
-    foreach ($stage in @('fresh uninstall start', 'fresh uninstall complete', 'fresh cleanup start', 'fresh cleanup complete', '== fresh install of 0.21.0.0')) {
+    foreach ($stage in @('fresh uninstall start', 'fresh uninstall complete', 'fresh cleanup start', 'fresh cleanup complete', '== fresh install of 0.21.0.0', 'msi 02-upgrade StopServices', 'msi 02-upgrade process_exited_0', 'supervisor heartbeat', 'supervisor timeout', 'supervisor complete')) {
         if (-not (Write-MsiDurableCheckpoint -Stage $stage -Request $request)) { throw "Fresh-reset checkpoint was rejected: $stage" }
         $payload = $script:checkpointRequests[$script:checkpointRequests.Count - 1].body.output.annotations[0].message | ConvertFrom-Json
         if ($payload.stage -cne $stage) { throw 'Fresh-reset checkpoint changed.' }
     }
-    foreach ($stage in @('unknown phase', "fresh backup start`n::error::injected", 'fresh backup start SECRET:fixture', '== fresh install of 0.21.0.0.0')) {
+    foreach ($stage in @('unknown phase', "fresh backup start`n::error::injected", 'fresh backup start SECRET:fixture', '== fresh install of 0.21.0.0.0', 'msi arbitrary-log StopServices', 'msi 02-upgrade SECRET:fixture')) {
         $before = $script:checkpointRequests.Count
         if ((Write-MsiDurableCheckpoint -Stage $stage -Request $request) -or $script:checkpointRequests.Count -ne $before) { throw 'Unsafe stage reached transport.' }
     }

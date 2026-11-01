@@ -7,6 +7,9 @@ Queueing, execution and time waiting for an operator must be reported separately
 | Requirement | Evidence | Remaining work |
 | :--- | :--- | :--- |
 | Scoped PR within 30 minutes | [PR 48 CI](https://github.com/etl-sql/ETL-SQL/actions/runs/40872610604): 19m21s, browser-test scope | Measure other path families; this is not a full-CI timing claim |
+| Broad proposal PR within 30 minutes | [PR 51 CI](https://github.com/etl-sql/ETL-SQL/actions/runs/41267322023): 26m31s, first attempt | Regular PR lanes only; release-only lanes and later version changes need their own evidence |
+| Windows browser mitigation stability | [Proposal CI](https://github.com/etl-sql/ETL-SQL/actions/runs/41267322023), [second inventory](https://github.com/etl-sql/ETL-SQL/actions/runs/41268947571), [third inventory](https://github.com/etl-sql/ETL-SQL/actions/runs/41270889034): three complete first-attempt inventories at `fbcbccf85` | Does not establish the cause of every historical timeout |
+| MSI diagnosis without rebuilding | [Retained-input Portal diagnostic](https://github.com/etl-sql/ETL-SQL/actions/runs/41271704106): original installer artifact `13061996390`, no build or certification receipt | Earlier stalls remain unexplained; this tests retained 0.21.0 bytes, not the 0.22.0 upgrade path |
 | Failed browser shards preserve successful jobs | [Portal rehearsal](https://github.com/etl-sql/ETL-SQL/actions/runs/40609095598): original successful timestamps retained, recovery 19m43s | No repeat of this historical rehearsal needed |
 | Failed engine group preserves other groups | [Engine rehearsal](https://github.com/etl-sql/ETL-SQL/actions/runs/40754693409): recovery 14m35s | No repeat of this historical rehearsal needed |
 | Failed MSI profile reuses installer and successful profile | [MSI rehearsal](https://github.com/etl-sql/ETL-SQL/actions/runs/40760871492): original artifact 12850372732, recovery 7m33s | Runner-loss cause remains separate from successful recovery |
@@ -16,6 +19,8 @@ Queueing, execution and time waiting for an operator must be reported separately
 | Full release completes within four hours | No complete current-candidate elapsed-time proof | Freeze one candidate, collect all required certification and promotion timings, preserve successful jobs across any retry |
 
 Execution order: land the reviewed recovery changes, then measure the complete candidate path.
+The [development evidence summary](../../certification-results/release-process-development-2026-11-01.json)
+retains the three browser inventories, receipt hashes and retained-input MSI diagnostic scope.
 Do not repeat successful historical rehearsals or expand
 unrelated hardening to close these requirements. A source change creates a new candidate;
 results from different candidates cannot be combined into release certification.

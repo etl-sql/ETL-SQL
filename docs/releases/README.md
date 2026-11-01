@@ -4,6 +4,7 @@
 
 | Page | Description |
 | :--- | :--- |
+| [ETL-SQL v0.22.0 — Draft](v0.22.0.md) | Candidate changes and migration notes; final certification and publication are pending. |
 | [Operator release evidence](operator-evidence.md) | Candidate-bound reports, applicability reviews and publication checks. |
 | [Release recovery acceptance](recovery-acceptance.md) | Timing targets, verified recovery cases and remaining hosted acceptance. |
 | [v0.21.0 bugs and logic audit](v0.21.0-bug-logic-audit.md) | Defect review and validation evidence. |

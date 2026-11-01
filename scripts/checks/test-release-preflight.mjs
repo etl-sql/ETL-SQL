@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { runChecks, sourceChecks, releaseAutomationChecks } from '../release-preflight.mjs';
+import { runChecks, sourceChecks, releaseAutomationChecks, checksForArguments } from '../release-preflight.mjs';
 import syntaxIndex from '../generate-syntax-index.js';
 
 const catalog = readFileSync(new URL('../../src/ETL-SQL.Core/Common/StewardshipTagCatalog.cs', import.meta.url), 'utf8');
@@ -19,6 +19,18 @@ assert.throws(() => syntaxIndex.extractStewardshipTags(catalog.replace('TableCol
   /Unable to extract/, 'A changed record shape must fail instead of silently dropping an entry.');
 
 assert.equal(releaseAutomationChecks.length, 49);
+assert.equal(checksForArguments([]), sourceChecks);
+const branchChecks = checksForArguments(['--release-branch', 'release/v0.22.0']);
+assert.equal(branchChecks.length, sourceChecks.length);
+for (const [index, check] of sourceChecks.entries()) {
+  if (check.id === 'release-versions') {
+    assert.deepEqual(branchChecks[index].args, [...check.args, '-BranchName', 'release/v0.22.0']);
+    assert.ok(!check.args.includes('-BranchName'), 'The shared catalog must remain unchanged.');
+  } else assert.equal(branchChecks[index], check);
+}
+for (const args of [['--release-branch'], ['--release-branch', ''], ['--release-branch', '--skip'], ['--skip'], ['--release-branch', 'main', 'extra']]) {
+  assert.throws(() => checksForArguments(args), /always runs the full source preflight/);
+}
 for (const name of ['dmg-staging', 'workflow-timeouts', 'msi-build-watchdog', 'operator-release-evidence', 'collected-operator-evidence', 'operator-report-inputs', 'certified-windows', 'certified-macos', 'release-draft-manifest', 'release-evidence', 'production-canary-evidence', 'certification-source', 'deployment-claims',
   'workstation-release-evidence', 'collected-workstation-evidence', 'workstation-certification-driver', 'engine-coverage', 'installer-sources', 'installer-actions', 'master-release', 'publish-release', 'sbom-output', 'changelog-compiler', 'vsix-module-identity']) {
   assert.equal(releaseAutomationChecks.filter(check => check.id === `test-${name}`).length, 1);

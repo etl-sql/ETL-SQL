@@ -12,6 +12,11 @@ const sections = workflow.split(/^  ([\w-]+):\r?$/m);
 const jobs = new Map();
 for (let i = 1; i < sections.length; i += 2) jobs.set(sections[i], sections[i + 1]);
 const ciSource = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
+for (const source of [ciSource, ...['msi-upgrade', 'native-packages'].map(name =>
+  readFileSync(new URL(`../../.github/workflows/${name}.yml`, import.meta.url), 'utf8'))]) {
+  assert.match(source, /ETLSQL_RELEASE_BRANCH: \$\{\{ github\.base_ref \|\| github\.ref_name \}\}/);
+  assert.match(source, /run: node scripts\/release-preflight\.mjs --release-branch "\$ETLSQL_RELEASE_BRANCH"/);
+}
 const consumerJob = ciSource.split(/^  browser-consumer-contracts:\r?\n/m)[1].split(/^  [\w-]+:\r?\n/m)[0];
 assert.match(consumerJob, /if: contains\(fromJSON\(needs\.source-preflight\.outputs\.lanes \|\| '\[\]'\), 'browser-consumer-contracts'\)/);
 assert.doesNotMatch(consumerJob, /'build-and-test'/);

@@ -100,9 +100,18 @@ export async function runChecks(checks, { cwd = root, outputDirectory, concurren
   return summary;
 }
 
+export function checksForArguments(args) {
+  if (args.length === 0) return sourceChecks;
+  if (args.length !== 2 || args[0] !== '--release-branch' || !args[1].trim() || args[1].startsWith('-')) {
+    throw new Error('Expected no arguments or --release-branch <branch>. This command always runs the full source preflight.');
+  }
+  return sourceChecks.map(check => check.id === 'release-versions'
+    ? { ...check, args: [...check.args, '-BranchName', args[1]] } : check);
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (process.argv.length > 2) throw new Error('No check-selection switches: this command always runs the full source preflight.');
+  const checks = checksForArguments(process.argv.slice(2));
   const outputDirectory = path.join(root, 'release-validation', 'preflight', `${Date.now()}-${process.pid}`);
-  const summary = await runChecks(sourceChecks, { outputDirectory });
+  const summary = await runChecks(checks, { outputDirectory });
   process.exitCode = summary.passed ? 0 : 1;
 }

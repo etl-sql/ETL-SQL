@@ -38,6 +38,16 @@ $exitCode = 1
 $timedOut = $false
 $streams = @()
 $lastOutputSeconds = 0.0
+$durableDiagnostic = $null
+if ($env:GITHUB_ACTIONS -ceq 'true' -and $env:ETLSQL_MSI_DIAGNOSTIC_ONLY -ceq '1') {
+    $durableDiagnostic = Get-Command Write-MsiDurableCheckpoint -CommandType Function -ErrorAction SilentlyContinue
+}
+function Write-SupervisorDiagnostic([string]$Stage) {
+    if ($durableDiagnostic) {
+        # Diagnostic delivery never changes the child result.
+        try { $null = & $durableDiagnostic -Stage $Stage } catch { }
+    }
+}
 try {
     # Windows may inherit other inheritable handles in addition to the redirected standard pipes.
     # A service/grandchild retaining the runner's pipe can keep the step alive after we exit.
@@ -90,6 +100,7 @@ public static class CertificationHandleFlags {
     }
     Write-Host "Certification started: child PID $($child.Id), timeout ${TimeoutSeconds}s, evidence $evidence"
     $nextHeartbeat = 0.0
+    $nextDurableHeartbeat = 0.0
     $exitObservedAt = $null
     while ($true) {
         foreach ($stream in $streams) {
@@ -127,6 +138,7 @@ public static class CertificationHandleFlags {
             Write-Host "Certification timeout: stopping only child PID $($child.Id); see watchdog.json."
             $child.Kill()
             if (-not $child.WaitForExit(2000)) { Write-Warning 'Tracked child did not exit within the cleanup budget.' }
+            Write-SupervisorDiagnostic 'supervisor timeout'
             break
         }
         if ($timer.Elapsed.TotalSeconds -ge $nextHeartbeat) {
@@ -134,6 +146,10 @@ public static class CertificationHandleFlags {
             Write-Host $heartbeat
             Add-Content -LiteralPath (Join-Path $evidence 'heartbeat.log') -Value $heartbeat
             $nextHeartbeat = $timer.Elapsed.TotalSeconds + $HeartbeatSeconds
+        }
+        if ($durableDiagnostic -and $timer.Elapsed.TotalSeconds -ge $nextDurableHeartbeat) {
+            Write-SupervisorDiagnostic 'supervisor heartbeat'
+            $nextDurableHeartbeat = $timer.Elapsed.TotalSeconds + 60
         }
         Start-Sleep -Milliseconds 100
     }
@@ -147,4 +163,5 @@ public static class CertificationHandleFlags {
     } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence 'result.json')
     $child.Dispose()
 }
+Write-SupervisorDiagnostic 'supervisor complete'
 exit $exitCode

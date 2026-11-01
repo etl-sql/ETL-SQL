@@ -12,6 +12,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Prepare v0.22.0 version sources and draft release notes before testing its installed upgrade
+  path. Source preflight checks release-branch version families before expensive builds, including
+  the PR's target branch. Final release dates and certification remain separate gates.
+
+- Retain bounded Windows Installer action names, numeric exit codes and independent supervisor
+  heartbeats in development-only MSI diagnostics. Flush diagnostic installer logs and preserve
+  the existing certification deadlines, result codes and ordinary installer behavior.
+  A retained-input Portal diagnostic passes without rebuilding; earlier runner stalls remain
+  unexplained. Three independent browser inventories on the same proposal pass without retries.
+
 - Preserve Playwright's browser defaults while applying its upstream Windows TCP port-allocation
   mitigation to test-owned Chromium launches. Keep browser assertions, timeouts and request failures.
 
