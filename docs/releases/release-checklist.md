@@ -122,6 +122,12 @@ the long build. Later webview acceptance verifies the prepared host's local rece
 hash and uses that executable without another download. Preparation alone does not satisfy webview
 acceptance; both designer and preview checks still have to pass.
 
+Before compiling a platform's hosts, native publishing restores all eight hosts with the same
+Release, runtime and self-contained/ReadyToRun settings used by publishing. A failed restore stops
+that platform before any host publish. Publishing uses `--no-restore`; retained Windows payload
+consumers perform neither restore nor publish. This catches dependency failures earlier without
+changing the required package acceptance checks or establishing a new timing result.
+
 Release selects the original successful job and artifact across failed-job retries, verifies the
 acceptance details and package hashes, then uploads those retained bytes. Its selection receipt is
 attached and attested with the draft. Before publication, the collector rechecks the selected run,
@@ -471,9 +477,11 @@ Quiet MSI certification polls the owned installer process in bounded one-second 
 the existing ten-minute call deadline. Installer arguments, buffered verbose logging, exit-code
 checks and cleanup remain unchanged. Observed diagnostics retain their separate action notices.
 A retained quiet-runtime control passed fresh install/uninstall, upgrade, rollback and cleanup
-without a Restart Manager override or diagnostic callbacks. Normal candidate certification still
-must pass; see [recovery acceptance](recovery-acceptance.md). Do not infer the cause of a historical
-runner loss from one successful diagnostic run.
+without a Restart Manager override or diagnostic callbacks. Normal PR certification subsequently
+passed on failed-job-only recovery, preserving its installer build and workstation execution;
+see [recovery acceptance](recovery-acceptance.md). The first-attempt runner loss remains unexplained.
+Do not infer its cause from a successful diagnostic or retry. The frozen release candidate still
+needs eligible release-branch certification.
 
 The MSI workflow saves the current and previous installers together after the static upgrade
 contract passes. Workstation and Portal certification consume that same artifact on separate clean
@@ -499,8 +507,10 @@ not replace release provenance or the full release evidence checklist.
   Windows standard handles from being inherited by the child and bounds draining after child exit,
   so a descendant retaining output handles cannot hold the supervisor open indefinitely. The local
   regression covers this mechanism; it does not establish the cause of earlier hosted runner loss.
-- Before closing the resumable-MSI TODO, rehearse a failed Portal job and verify the retry keeps
-  the original artifact ID and hashes without repeating the successful build/workstation check.
+- The completed [failed-profile recovery rehearsal](recovery-acceptance.md) verifies reuse of the
+  original installer artifact and successful workstation execution. Keep that evidence; do not
+  repeat the rehearsal for every candidate. A new runner-loss failure still needs diagnosis and
+  successful candidate certification before the runner-loss TODO can close.
 
 `release.yml` first looks for a completed, successful MSI run on the exact candidate SHA in this
 repository, from a `release/**` push or manual dispatch within the past seven days. PR runs and

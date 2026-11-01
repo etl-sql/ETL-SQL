@@ -3,6 +3,7 @@ param([Parameter(Mandatory)] [string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'ReleaseOutput.Helpers.ps1')
+. (Join-Path $PSScriptRoot 'ReleasePublish.Helpers.ps1')
 $output = [IO.Path]::GetFullPath($OutputDirectory)
 Assert-ReleaseOutputPath -RepoRoot $repo -Path $output
 if (Test-Path -LiteralPath $output) { throw 'Windows payload publication requires a new output directory.' }
@@ -18,12 +19,14 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect .NET SDK.' }
 if ($LASTEXITCODE -ne 0) { throw 'Windows payload asset preparation failed.' }
 $projects = & node (Join-Path $PSScriptRoot 'windows-payload.mjs') projects
 if ($LASTEXITCODE -ne 0) { throw 'Cannot read Windows host inventory.' }
+$hosts = @($projects | ConvertFrom-Json)
+Restore-ReleasePublishInputs -Projects @($hosts | ForEach-Object { Join-Path $repo $_.project }) -RuntimeIdentifier win-x64
 $bin = Join-Path $output 'bin'
 $null = New-Item -ItemType Directory -Path $bin
-foreach ($hostProject in ($projects | ConvertFrom-Json)) {
+foreach ($hostProject in $hosts) {
     Write-Host "Publishing shared Windows host $($hostProject.executable)..."
     & dotnet publish (Join-Path $repo $hostProject.project) -c Release -r win-x64 --self-contained true `
-        -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -o $bin --nologo
+        -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -o $bin --no-restore --nologo
     if ($LASTEXITCODE -ne 0) { throw 'Windows host publish failed; no payload is accepted.' }
 }
 Copy-Item -LiteralPath (Join-Path $repo 'src/appsettings.json') -Destination (Join-Path $bin 'appsettings.json')

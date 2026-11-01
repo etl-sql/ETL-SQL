@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Restore every native host's dependencies for the selected platform before publishing any
+  host. Publishing then uses those restored inputs without another restore. A dependency
+  failure in a later host now stops before compiling earlier hosts; verified Windows payload
+  consumers continue to package the retained bytes without restoring or publishing again.
+
 - Route MSI XML authoring and its source-validation changes to source preflight and installed
   MSI certification. Unrelated native package builds and engine suites skip in ordinary PR checks.
   Local MSI-only pre-push stops after source checks; full release certification still selects

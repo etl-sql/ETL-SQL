@@ -121,6 +121,12 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   fails with `ETIMEDOUT`. Host preparation now precedes publishing, and acceptance validates
   the prepared executable's hash/platform/cache path without another download. Local fixtures
   cover unavailable downloads and altered/foreign receipts; hosted acceptance remains pending.
+  Native publishing now restores all eight hosts for each platform before its first host publish,
+  using matching Release, RID, self-contained and ReadyToRun settings. Publishing uses
+  `--no-restore`; verified Windows payload consumers never restore or publish again. Public-script
+  fixtures inject first/last-host restore failures and verify no compilation or replacement of
+  accepted packages. A real .NET 10 self-contained ReadyToRun executable restores, publishes
+  without restore and launches locally. Hosted acceptance and elapsed-time improvement remain open.
 
 - [ ] **Release timeline.** Record the v0.22.0 candidate cut, each CI/MSI round, its cause and the
   tag time as the release runs, so the goal is measured rather than remembered.
@@ -175,7 +181,11 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   [Quiet control 41341896065](https://github.com/etl-sql/ETL-SQL/actions/runs/41341896065) passes all 32 assertions
   in 4m08s with ordinary buffered logging, no override and no diagnostic runtime callbacks.
   Normal MSI calls now use bounded one-second polling under the unchanged ten-minute deadline.
-  New normal-candidate acceptance remains required; historical runner-loss causes remain unproven.
+  Normal `2ff552ae9` certification passes on failed-job-only recovery in run `41343571100`,
+  attempt two: all 32 Portal assertions pass in 5m15s, reusing installer artifact `13099299211`
+  and the original successful producer, MSI build and workstation execution times. Attempt one
+  still lost its runner; historical causes remain unproven. Frozen release-branch certification
+  and complete release timing remain required.
   Hosted MSI now emits bounded phase and free-memory notices, including backup start/end,
   with explicit supervisor forwarding for that diagnostic prefix only. Local runs emit no
   workflow commands; unrelated/stderr/oversized commands remain prefixed and original evidence

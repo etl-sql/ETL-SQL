@@ -167,6 +167,7 @@ $Projects = @(
 
 # COMPAT_BREAK: 0.22 — retain accepted releases throughout a failed complete rebuild.
 . (Join-Path $PSScriptRoot 'ReleaseOutput.Helpers.ps1')
+. (Join-Path $PSScriptRoot 'ReleasePublish.Helpers.ps1')
 $ownsTransaction = $null -eq $OutputTransaction
 if ($ownsTransaction) { $transaction = New-ReleaseOutputTransaction -RepoRoot $RepoRoot }
 else {
@@ -197,12 +198,14 @@ try {
             & node (Join-Path $PSScriptRoot 'windows-payload.mjs') copy $WindowsPayloadDirectory $PayloadSourceSha $Version $WindowsPayloadHash $BinFolder
             Assert-NativeCommandSucceeded 'Copy verified Windows payload'
         } else {
+            $projectPaths = @($Projects | ForEach-Object { Join-Path $PSScriptRoot (Join-PathSegments $_) })
+            Restore-ReleasePublishInputs -Projects $projectPaths -RuntimeIdentifier $Platform
             foreach ($Proj in $Projects) {
                 $ProjPath = Join-Path $PSScriptRoot (Join-PathSegments $Proj)
                 $ProjName = [System.IO.Path]::GetFileNameWithoutExtension($ProjPath)
 
                 Write-Host "  Publishing $ProjName..." -ForegroundColor Gray
-                dotnet publish $ProjPath -c Release -r $Platform --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -o $BinFolder --nologo | Out-Null
+                dotnet publish $ProjPath -c Release -r $Platform --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -o $BinFolder --no-restore --nologo | Out-Null
                 Assert-NativeCommandSucceeded "dotnet publish $ProjName for $Platform"
             }
         }

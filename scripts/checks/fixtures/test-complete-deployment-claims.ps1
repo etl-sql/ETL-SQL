@@ -201,7 +201,7 @@ $null = New-Item -ItemType Directory -Path (Join-Path $publisher 'scripts')
 $null = New-Item -ItemType Directory -Path (Join-Path $publisher 'release')
 $sentinel = Join-Path $publisher 'release/keep.txt'
 'keep previous bytes' | Set-Content -LiteralPath $sentinel -NoNewline
-foreach ($name in @('publish-release.ps1', 'ReleaseOutput.Helpers.ps1', 'ReleaseEvidence.Helpers.ps1', 'DeploymentCertification.Contracts.ps1', 'DeploymentCertification.Plan.ps1', 'DeploymentCertification.Evidence.ps1', 'DeploymentTestEvidence.Helpers.ps1')) {
+foreach ($name in @('publish-release.ps1', 'ReleaseOutput.Helpers.ps1', 'ReleasePublish.Helpers.ps1', 'ReleaseEvidence.Helpers.ps1', 'DeploymentCertification.Contracts.ps1', 'DeploymentCertification.Plan.ps1', 'DeploymentCertification.Evidence.ps1', 'DeploymentTestEvidence.Helpers.ps1')) {
     Copy-Item -LiteralPath (Join-Path $scripts $name) -Destination (Join-Path $publisher 'scripts')
 }
 $null = New-Item -ItemType Directory -Path (Join-Path $publisher 'scripts/lib')

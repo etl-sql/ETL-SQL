@@ -15,6 +15,7 @@ $global:Calls=[Collections.Generic.List[string]]::new()
 $env:ETL_SQL_VERSION=if($Case -eq 'invalid-version'){'../invalid'}else{'0.22.0'}
 $zip=Join-Path $Root 'release/ETL-SQL-v0.22.0-linux-x64.zip'
 $global:PublishCount=0
+$global:RestoreCount=0
 function node {
     $global:Calls.Add('node')
     if($args[0] -like '*generate-sbom.js') {
@@ -28,6 +29,19 @@ function node {
     $global:LASTEXITCODE=if($Case -eq 'asset-failure'){17}else{0}
 }
 function dotnet {
+    if($args[0] -eq 'restore') {
+        $global:Calls.Add('restore')
+        $global:RestoreCount++
+        $normalized=($args -join ' ').Replace('-p: ', '-p:').Split(' ')
+        foreach($option in @('-p:Configuration=Release','-p:SelfContained=true','-p:PublishSingleFile=true','-p:PublishReadyToRun=true','-p:IncludeNativeLibrariesForSelfExtract=true')) {
+            if($normalized -notcontains $option){throw "Restore did not request publish inputs: $option"}
+        }
+        $global:LASTEXITCODE=if(($Case -eq 'restore-first-failure' -and $global:RestoreCount -eq 1) -or
+            ($Case -eq 'restore-last-failure' -and $global:RestoreCount -eq 8)){19}else{0}
+        return
+    }
+    if($args[0] -ne 'publish' -or $args -notcontains '--no-restore'){throw 'Publish must consume restored inputs.'}
+    if($global:RestoreCount -lt 8 * (1 + [math]::Floor($global:PublishCount / 8))){throw 'Publishing started before every host was restored.'}
     $global:Calls.Add('dotnet')
     $global:PublishCount++
     if(($Case -eq 'publish-first-failure' -and $global:PublishCount -eq 1) -or
@@ -145,7 +159,7 @@ try {
   for (const name of ['invalid-platform', 'unsupported-platform', 'duplicate-platform', 'empty-platforms', 'invalid-version',
     'archive-throw', 'archive-empty', 'archive-corrupt', 'archive-incomplete', 'archive-mismatch', 'archive-duplicate',
     'runtime-secret', 'runtime-sidecar', 'runtime-keyring', 'missing-binary', 'empty-binary', 'directory-binary',
-    'asset-failure', 'publish-first-failure', 'publish-last-failure', 'sbom-failure', 'sbom-missing',
+    'asset-failure', 'restore-first-failure', 'restore-last-failure', 'publish-first-failure', 'publish-last-failure', 'sbom-failure', 'sbom-missing',
     'sbom-invalid', 'sbom-wrong-version', 'second-platform-failure', 'checksum-failure', 'certification-failure',
     'vsix-failure', 'vsix-nonzero', 'vsix-missing', 'vsix-empty', 'promotion-failure', 'rollback-failure', 'live-lock', 'linked-artifacts', 'linked-release',
     'caller-owned-failure', 'closed-transaction', 'forged-transaction',
@@ -165,6 +179,7 @@ try {
       if (name === 'rollback-failure') helper = helper.replace('[IO.Directory]::Move($Transaction.Previous, $Transaction.Accepted)', 'throw "Synthetic rollback failure"');
     }
     write(root, 'scripts/ReleaseOutput.Helpers.ps1', helper);
+    write(root, 'scripts/ReleasePublish.Helpers.ps1', readFileSync(new URL('../ReleasePublish.Helpers.ps1', import.meta.url), 'utf8'));
     write(root, 'scripts/publish-vsix.ps1', String.raw`param($Platform,$BinSourceDir,$OutputDir)
 if($Case -eq 'vsix-failure'){throw 'Synthetic VSIX failure'}
 if($Case -eq 'vsix-missing'){$global:LASTEXITCODE=0;return}
@@ -210,6 +225,12 @@ $file
       if (name === 'live-lock') { assert.equal(outcome.liveLockRetained, true); assert.deepEqual(outcome.calls, []); }
       else assert.equal(outcome.liveLockRetained, false, 'Owned lock was abandoned');
       if (name === 'second-platform-failure') assert.equal(outcome.stagedZipCount, 1, 'First platform output not retained');
+      if (name.startsWith('restore-')) {
+        assert.equal(outcome.calls.filter(call => call === 'restore').length, name === 'restore-first-failure' ? 1 : 8);
+        assert.equal(outcome.calls.includes('dotnet'), false, 'A host was compiled before restore failure');
+        assert.equal(outcome.stagedZipCount, 0, 'Restore failure created a replacement archive');
+        assert.match(outcome.problem, /Publish input restore failed/);
+      }
       if (['invalid-platform', 'unsupported-platform', 'duplicate-platform', 'empty-platforms', 'invalid-version'].includes(name)) {
         assert.equal(outcome.failed, true, `${name}: invalid input accepted`);
         assert.equal(outcome.sentinel, true, `${name}: prior release output deleted`);

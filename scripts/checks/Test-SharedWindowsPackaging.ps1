@@ -5,6 +5,8 @@ $fixture = Join-Path $tempRoot ('windows-payload-public-' + [guid]::NewGuid().To
 $global:SharedWindowsFixtureNodeExecutable = (Get-Command node -CommandType Application | Select-Object -First 1).Source
 $global:SharedWindowsFixtureHosts = & $global:SharedWindowsFixtureNodeExecutable (Join-Path $repo 'scripts/windows-payload.mjs') projects | ConvertFrom-Json
 $global:SharedWindowsFixturePublishes = 0
+$global:SharedWindowsFixtureRestores = 0
+$global:SharedWindowsFixtureFailRestore = 0
 $global:SharedWindowsFixtureFailPublish = 0
 $global:SharedWindowsFixtureDrift = $false
 $global:SharedWindowsFixtureWixCalls = [Collections.Generic.List[object]]::new()
@@ -25,7 +27,19 @@ function git {
 function dotnet {
     $global:LASTEXITCODE = 0
     if ($args[0] -eq '--version') { return '10.0.100' }
+    if ($args[0] -eq 'restore') {
+        $global:SharedWindowsFixtureRestores++
+        if ($global:SharedWindowsFixturePublishes -ne 0) { throw 'Restore occurred after publishing started.' }
+        $normalized = ($args -join ' ').Replace('-p: ', '-p:').Split(' ')
+        foreach ($option in @('-p:Configuration=Release', '-p:SelfContained=true', '-p:PublishSingleFile=true', '-p:PublishReadyToRun=true', '-p:IncludeNativeLibrariesForSelfExtract=true')) {
+            if ($normalized -notcontains $option) { throw "Restore omitted publish input $option" }
+        }
+        if ($args[[Array]::IndexOf($args, '-r') + 1] -cne 'win-x64') { throw 'Restore used the wrong RID.' }
+        if ($global:SharedWindowsFixtureRestores -eq $global:SharedWindowsFixtureFailRestore) { $global:LASTEXITCODE = 19 }
+        return
+    }
     if ($args[0] -ne 'publish') { throw 'Unexpected .NET fixture call.' }
+    if ($global:SharedWindowsFixtureRestores -ne 8 -or $args -notcontains '--no-restore') { throw 'Publish did not use all restored inputs.' }
     $global:SharedWindowsFixturePublishes++
     foreach ($argument in @('-p:PublishSingleFile=true', '-p:PublishReadyToRun=true', '-p:IncludeNativeLibrariesForSelfExtract=true')) {
         if (($args -join ' ').Replace('-p: ', '-p:').Split(' ') -notcontains $argument) { throw ('Windows producer options changed: ' + ($args | ConvertTo-Json -Compress)) }
@@ -72,7 +86,7 @@ function Invoke-FakeWix {
 }
 try {
     $null = [IO.Directory]::CreateDirectory($fixture)
-    foreach ($relative in @('Publish-WindowsPayload.ps1', 'Build-WindowsNativePackages.ps1', 'windows-payload.mjs', 'ReleaseOutput.Helpers.ps1', 'ReleaseEvidence.Helpers.ps1', 'DeploymentCertification.Contracts.ps1', 'DeploymentTestEvidence.Helpers.ps1', 'publish-release.ps1', 'lib/package-runtime-state.patterns')) {
+    foreach ($relative in @('Publish-WindowsPayload.ps1', 'Build-WindowsNativePackages.ps1', 'windows-payload.mjs', 'ReleaseOutput.Helpers.ps1', 'ReleasePublish.Helpers.ps1', 'ReleaseEvidence.Helpers.ps1', 'DeploymentCertification.Contracts.ps1', 'DeploymentTestEvidence.Helpers.ps1', 'publish-release.ps1', 'lib/package-runtime-state.patterns')) {
         Write-Fixture "scripts/$relative" (Get-Content -LiteralPath (Join-Path $repo "scripts/$relative") -Raw)
     }
     # Only the three external WiX tools are simulated. The authored argument/validation flow runs.
@@ -153,6 +167,16 @@ if ($ScriptArguments.Count -ne 6 -or $ScriptArguments[0] -cne '-Platforms' -or
     $rejected = $false
     try { & (Join-Path $fixture 'scripts/build-msi.ps1') -WindowsPayloadDirectory $payload -WindowsPayloadHash $hash } catch { $rejected = $true }
     if (-not $rejected -or $global:SharedWindowsFixtureWixCalls.Count -ne 3 -or $global:SharedWindowsFixturePublishes -ne 8) { throw 'MSI accepted a changed payload.' }
+    if ($global:SharedWindowsFixtureRestores -ne 8) { throw 'A verified payload consumer restored dependencies again.' }
+    foreach ($failedRestore in @(1, 8)) {
+        $global:SharedWindowsFixturePublishes = 0; $global:SharedWindowsFixtureRestores = 0
+        $global:SharedWindowsFixtureFailRestore = $failedRestore
+        $rejected = $false
+        $restoreFailurePayload = Join-Path $fixture "artifacts/restore-failed-$failedRestore/bundle"
+        try { & (Join-Path $fixture 'scripts/Publish-WindowsPayload.ps1') -OutputDirectory $restoreFailurePayload } catch { $rejected = $_.Exception.Message -like '*Publish input restore failed*' }
+        if (-not $rejected -or $global:SharedWindowsFixturePublishes -ne 0 -or $global:SharedWindowsFixtureRestores -ne $failedRestore -or (Test-Path -LiteralPath $restoreFailurePayload)) { throw 'Restore failure started publishing or created accepted input.' }
+    }
+    $global:SharedWindowsFixtureRestores = 0; $global:SharedWindowsFixtureFailRestore = 0
     $global:SharedWindowsFixturePublishes = 0; $global:SharedWindowsFixtureFailPublish = 3
     $rejected = $false
     $failedPayload = Join-Path $fixture 'artifacts/failed/bundle'
