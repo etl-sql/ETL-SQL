@@ -3,8 +3,26 @@ import { spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { runInNewContext } from 'node:vm';
 
 const workflow = readFileSync(new URL('../../.github/workflows/msi-upgrade.yml', import.meta.url), 'utf8');
+const diagnostic = workflow.split(/^  diagnostic-portal:\r?\n/m)[1];
+assert.ok(diagnostic, 'Retained-input diagnostic job must exist.');
+assert.match(diagnostic, /Prepare-MsiPortalDiagnostic.ps1/);
+assert.match(diagnostic, /MsiCandidate.ps1 -Mode Verify/);
+assert.match(diagnostic, /inputRunHead|INPUT_RUN_HEAD/);
+assert.doesNotMatch(diagnostic, /build-msi.ps1|msi-certified-|path: certification.json/);
+assert.match(diagnostic, /ETLSQL_MSI_DIAGNOSTIC_ONLY: '1'/);
+for (const id of ['detect-upgrade-impact', 'msi-upgrade-gate', 'diagnostic-portal']) {
+  const block = workflow.split(new RegExp(`^  ${id}:\\r?\\n`, 'm'))[1].split(/^  [\w-]+:\r?\n/m)[0];
+  const expression = block.match(/^    if: (.+)$/m)[1].replace(/^\$\{\{\s*|\s*\}\}$/g, '');
+  for (const artifact of ['', '123']) {
+    const selected = runInNewContext(expression, {
+      inputs: { diagnostic_artifact_id: artifact }, github: { event_name: 'workflow_dispatch' }, always: () => true,
+    }, { timeout: 1000 });
+    assert.equal(selected, id === 'diagnostic-portal' ? !!artifact : !artifact, `${id}/${artifact}`);
+  }
+}
 const job = workflow.split(/^  build-msi:\r?\n/m)[1]?.split(/^  [\w-]+:\r?\n/m)[0];
 assert.ok(job, 'MSI build job must exist.');
 assert.match(job, /^    timeout-minutes: 90$/m);

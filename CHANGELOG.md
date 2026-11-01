@@ -12,9 +12,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Preserve Playwright's browser defaults while applying its upstream Windows TCP port-allocation
+  mitigation to test-owned Chromium launches. Keep browser assertions, timeouts and request failures.
+
 - Stage macOS DMG applications under `release/` so packaging preserves the clean candidate.
   Submit bounded MSI phase/resource annotations directly to the job's check run before and
-  after resource probes. Diagnostic delivery cannot change a certification result.
+  after resource probes, including separate fresh-uninstall/cleanup markers and Windows Installer
+  product versions. Diagnostic delivery cannot change a certification result.
+  Investigate the Portal profile against retained installer inputs through a separate development-
+  branch dispatch, without rebuilding or generating release certification.
 
 - Bound MSI candidate builds with streamed diagnostics and a 45-minute process deadline;
   retain build diagnostics separately before uploading the installer inputs.

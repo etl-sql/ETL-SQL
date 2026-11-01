@@ -32,6 +32,7 @@ $checkpointEnvironment = @{
     GITHUB_ACTIONS = 'true'; ETLSQL_MSI_DURABLE_CHECKPOINTS = '1'; GH_TOKEN = 'fixture-only-not-a-token'
     PROFILE = 'portal'; GITHUB_REPOSITORY = 'owner/repo'; GITHUB_RUN_ID = '123'; GITHUB_RUN_ATTEMPT = '2'
     CERTIFICATION_SHA = ('a' * 40); ETLSQL_MSI_CHECKPOINT_RUN_SHA = ('b' * 40)
+    ETLSQL_MSI_DIAGNOSTIC_ONLY = '0'
 }
 $priorCheckpointEnvironment = @{}
 foreach ($name in $checkpointEnvironment.Keys) {
@@ -61,6 +62,7 @@ $request = {
         'foreign-check' { $row.check_run_url = 'https://api.github.com/repos/other/repo/check-runs/456' }
         'foreign-host' { $row.check_run_url = 'https://example.invalid/repos/owner/repo/check-runs/456' }
         'reusable-name' { $row.name = 'certify-msi / MSI certification (portal)' }
+        'diagnostic-name' { $row.name = 'MSI Portal diagnostic only' }
     }
     $rows = @(if ($script:checkpointMode -eq 'duplicate') { $row; $row } else { $row })
     return @{ total_count = $(if ($script:checkpointMode -eq 'truncated') { 2 } else { $rows.Count }); jobs = $rows }
@@ -90,7 +92,17 @@ try {
     }
     $script:checkpointMode = 'reusable-name'; $script:MsiDurableCheckpointTarget = $null
     if (-not (Write-MsiDurableCheckpoint -Stage '== upgrade to 1.2.3' -Request $request)) { throw 'Reusable job identity was rejected.' }
-    foreach ($stage in @('unknown phase', "fresh backup start`n::error::injected", 'fresh backup start SECRET:fixture')) {
+    $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = '1'; $script:checkpointMode = 'diagnostic-name'
+    if (-not (Write-MsiDurableCheckpoint -Stage 'supervisor starting' -Request $request)) { throw 'Diagnostic job identity was rejected.' }
+    $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = '0'
+    if (Write-MsiDurableCheckpoint -Stage 'supervisor starting' -Request $request) { throw 'Diagnostic job reused a certification identity.' }
+    $script:checkpointMode = 'reusable-name'; $script:MsiDurableCheckpointTarget = $null
+    foreach ($stage in @('fresh uninstall start', 'fresh uninstall complete', 'fresh cleanup start', 'fresh cleanup complete', '== fresh install of 0.21.0.0')) {
+        if (-not (Write-MsiDurableCheckpoint -Stage $stage -Request $request)) { throw "Fresh-reset checkpoint was rejected: $stage" }
+        $payload = $script:checkpointRequests[$script:checkpointRequests.Count - 1].body.output.annotations[0].message | ConvertFrom-Json
+        if ($payload.stage -cne $stage) { throw 'Fresh-reset checkpoint changed.' }
+    }
+    foreach ($stage in @('unknown phase', "fresh backup start`n::error::injected", 'fresh backup start SECRET:fixture', '== fresh install of 0.21.0.0.0')) {
         $before = $script:checkpointRequests.Count
         if ((Write-MsiDurableCheckpoint -Stage $stage -Request $request) -or $script:checkpointRequests.Count -ne $before) { throw 'Unsafe stage reached transport.' }
     }

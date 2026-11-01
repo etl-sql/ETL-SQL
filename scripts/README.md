@@ -91,7 +91,7 @@ artifact IDs; missing or changed evidence blocks promotion. Hosted acceptance re
 
 `MsiImpact.Helpers.ps1` reads the same manifest rules for regular MSI selection. The same classified
 documentation and browser-test-only paths can skip installer certification; shipped/shared and
-unknown inputs require it. Missing comparison history requires certification. Manual dispatch and
+unknown inputs require it. Missing comparison history requires certification. Ordinary manual dispatch and
 release workflow calls always run full MSI certification. Invalid or missing impact policy fails
 detection and cannot satisfy the MSI gate.
 
@@ -178,6 +178,19 @@ request record and trying again. A failed existing run requires diagnosis and an
 retry, not a new dispatch. The new dispatch workflow must be available on the repository's default
 branch before hosted rollout; see [GitHub's dispatch requirements](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch).
 MSI diagnostics use `msi-upgrade.yml` directly, not the regular CI lane selector.
+For an installation investigation on a development branch, reuse a retained `msi-inputs-*` artifact:
+
+```powershell
+gh workflow run msi-upgrade.yml --ref fix/my-investigation -f diagnostic_artifact_id=ARTIFACT_ID
+```
+
+Use the numeric artifact ID from the failed run's successful build. This separate diagnostic job
+checks the original repository/run/build and artifact hashes, records both script and installer
+source identities, then runs only the Portal profile. It never rebuilds an installer, emits a
+certification receipt or satisfies the release gate. `main`, `dev`, release branches and tags reject
+diagnostic mode. Omitting the input runs normal certification. Diagnostic and certification runs
+must not be combined into passing release evidence.
+
 Each profile uploads candidate identity, the Portal summary and supervisor result/heartbeat/stderr
 before its full evidence bundle. The focused upload has a five-minute deadline, the full upload
 20 minutes, and the profile job 65 minutes. Both artifacts retain their original run attempt.
@@ -376,6 +389,7 @@ Candidate artifacts are not product claims until the public certification matrix
 | **[`publish-release.ps1`](./publish-release.ps1)** | PowerShell | Windows | Publishes the CLI applications for different platforms (Windows, Linux, macOS) targeting x64 and arm64 architectures. |
 | **[`build-msi.ps1`](./build-msi.ps1)** | PowerShell | Windows | Bundles Windows published binaries into an MSI setup package using the WiX candle/light compilation toolset. |
 | **[`Test-MsiUpgrade.ps1`](./Test-MsiUpgrade.ps1)** | PowerShell | Windows (Administrator) | Installs release N then N+1, proves a single upgraded uninstall entry, sentinel preservation, installed CLI version, and complete uninstall, with verbose MSI logs and JSON evidence. |
+| **[`Prepare-MsiPortalDiagnostic.ps1`](./Prepare-MsiPortalDiagnostic.ps1)** | PowerShell 7 | Cross-platform | Checks the retained MSI artifact's original successful build and records diagnostic-only provenance. Does not install or build; the development-branch workflow runs Portal diagnosis separately. |
 | **[`build-linux-packages.sh`](./build-linux-packages.sh)** | Bash | Linux | Packages published binaries into a Debian `.deb` with `dpkg-deb`. Requires repository-bound staging and removes non-owner write access from the program payload. |
 | **[`build-mac-dmg.sh`](./build-mac-dmg.sh)** | Bash | macOS | Creates an Intel app bundle and DMG with `hdiutil`. Removes non-owner write access from the bundle; signing and notarization are separate release steps. |
 | **[`test-native-package-permissions.sh`](./checks/test-native-package-permissions.sh)** | Bash + dpkg-deb | Linux | Builds a synthetic DEB and macOS bundle, checks non-owner write permissions and protected staging paths, and verifies missing-tool failures. DMG image creation is mocked; nothing is installed. |

@@ -270,8 +270,12 @@ try {
         }
         Write-ResourceSnapshot 'fresh backup complete'
     }
+    $null = Write-MsiDurableCheckpoint -Stage 'fresh uninstall start'
     Uninstall-All '00-fresh-uninstall.log'
+    $null = Write-MsiDurableCheckpoint -Stage 'fresh uninstall complete'
+    $null = Write-MsiDurableCheckpoint -Stage 'fresh cleanup start'
     Remove-Item -LiteralPath $installDir, $systemData -Recurse -Force -ErrorAction SilentlyContinue
+    $null = Write-MsiDurableCheckpoint -Stage 'fresh cleanup complete'
 
     # 1. The previous release, configured as its documentation says.
     Write-Line "== install previous $($contract.PreviousVersion)"

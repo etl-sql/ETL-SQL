@@ -73,6 +73,15 @@ class load and shared background-service state from its startup/shutdown observa
 
 ## History and outcomes
 
+- **v0.22.0 — Windows Chromium loopback mitigation:** the test browser backports
+  [Playwright's accepted mitigation](https://github.com/microsoft/playwright/pull/43605) for
+  intermittent TCP port-allocation failures. Windows launches disable `TcpPortRandomizationWin`.
+  One probe reads the pinned driver's effective feature list; the final launch preserves that list
+  in a single switch. Other platforms keep their defaults. No request retry or assertion timeout
+  changes. A real-browser regression checks every original disabled feature and other fixed switch.
+  Local stress completes 1,600 default page loads without reproducing the error; its occupancy
+  safeguard truncates later comparison arms. This does not establish the historical hosted cause
+  or close stability acceptance. Retained probes: `release-validation/current-ci-review/`.
 - **v0.22.0 — missing-chart timeout evidence:** CI `41205139235` times out waiting for the
   missing-chart message in shard 3. The plain locator wait did not capture a snapshot. It now
   retains the existing bounded, sanitized request history and own-process resource counts before

@@ -55,7 +55,7 @@ public sealed class DetailSurfaceHarnessFixture : IAsyncLifetime
         }
 
         playwright = await Playwright.CreateAsync();
-        browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
+        browser = await BrowserTestLaunch.LaunchAsync(playwright);
     }
 
     /// <summary>Opens an isolated context at desktop width, recording JavaScript failures.</summary>

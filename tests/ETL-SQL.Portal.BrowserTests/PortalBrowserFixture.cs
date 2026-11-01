@@ -59,7 +59,7 @@ public class PortalBrowserFixture : IAsyncLifetime
         }
 
         playwright = await Playwright.CreateAsync();
-        browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
+        browser = await BrowserTestLaunch.LaunchAsync(playwright);
     }
 
     /// <summary>

@@ -185,6 +185,18 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   transport cancellation, including an unresponsive handler, without GitHub writes. Reusable callers
   delegate only the required read/check permissions. Hosted retention and the runner-loss cause
   remain open; diagnostic transport cannot make certification pass.
+  Hosted `41250826912` verifies retention during runner loss: five direct annotations survive,
+  ending at `fresh backup complete` with 13,440 MiB free of 16,379 MiB. Backup completed; the
+  following uninstall/cleanup interval has no retained completion. Additional start/completion
+  markers now distinguish those operations without exposing paths, commands or secret values.
+  Versioned stage markers also accept Windows Installer's observed four-part product versions;
+  the three-part-only diagnostic filter had suppressed `== fresh install of 0.21.0.0`.
+  This narrows the investigation; it does not establish the cause or certify the failed Portal job.
+  The MSI workflow also accepts a retained input-artifact ID for a separate development-branch
+  diagnostic job. It verifies the original successful build and payload hashes, runs only Portal
+  without rebuilding, and records distinct script/installer identities. Normal certification is
+  skipped and no certification receipt is created. Fork/failed/truncated origins and protected
+  branches reject. Hosted diagnostic dispatch and the runner-loss cause remain open.
 - [ ] **Nightly release-branch lanes.** Run the installed-upgrade checks (DEB and the MSI Portal
   profile) and the Portal shards nightly from the day the release branch is cut.
   **In progress:** the nightly scheduler discovers version branches newer than the latest stable
@@ -621,8 +633,11 @@ of the GitHub runs. Implement the first three together, alongside the MSI runner
   rejects a dirty source tree. The DMG builder left its generated app under the unignored installer
   source directory. A real-Git/public-command fixture reproduces those untracked files; staging now
   lives under ignored `release/mac-dmg/`. Input/output overlap and linked staging ancestors reject
-  before cleanup. The source-cleanliness guard stays mandatory. New-candidate hosted acceptance
-  remains required; the original failed job and package artifact are retained.
+  before cleanup. The source-cleanliness guard stays mandatory. Hosted `41250826811` on
+  `98e7ba351` now passes all four native platforms, including Intel DMG mount/launch/detach,
+  both VSIX webviews, the final clean-source guard and retained package hashes/toolchains.
+  This verifies the staging fix; frozen-release-candidate certification remains required.
+  The original failed job and package artifact are retained.
 - [x] **Split MSI build and certification into resumable jobs.** Persist the built MSI before any
   install test. Run workstation and Portal certification on separate clean runners against that
   artifact and one pinned previous-release MSI. A Portal failure should allow only that job to
@@ -957,6 +972,16 @@ failure, profiles and local reports: `release-validation/critical-path/`.
 - [ ] **Browser lane on the Windows CI runner:** `net::ERR_NO_BUFFER_SPACE` and 30 s navigation
   timeouts, one test per run. The recorded next step is to capture failed requests and the process's
   handle and socket counts when a navigation fails.
+  CI `41243213227` captures `rt-util.js` failing with `ERR_NO_BUFFER_SPACE` before the tooltip
+  fixture renders. Test-host/browser-network endpoint counts are only 8/6 at failure; system-wide
+  allocation pressure remains unknown. One failed-shard recovery passes all 1,015 cases while
+  preserving 13 successful execution records. This is recovery proof, not stability closure.
+  Test-owned Windows browsers now backport the upstream mitigation documented in the
+  [stability record](docs/releases/flaky-test-stability.md). A real-browser red/green regression
+  verifies exactly one effective disabled-feature switch, every original feature and all other
+  fixed arguments. All 51 focused diagnostic/detail cases pass. The local stress probe does not
+  reproduce the error in 1,600 default loads; occupancy limits truncate its later arms. Historical
+  causality and consecutive hosted acceptance remain open; no assertion is retried or widened.
   **Follow-up 2026-10-31:** current CI `41205139235` fails only shard 3's missing-chart-payload
   assertion; MSI, native packages and CodeQL pass. Its plain locator wait retained no diagnostic
   snapshot. That wait now uses the same bounded, sanitized transport/resource capture as navigation

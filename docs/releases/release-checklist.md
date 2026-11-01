@@ -834,7 +834,10 @@ gh api --paginate "$($portalJob.check_run_url)/annotations?per_page=100" --jq '.
 
 Replace `JOB_ID` with the failed Portal job ID. Missing annotations never imply success; transport
 may be unavailable or lack permission. Preserve the original failure and retained installer inputs.
-The new transport's hosted retention acceptance and the runner-loss cause remain tracked in `TODO.md`.
+Hosted runner-loss retention is verified; the cause remains tracked in `TODO.md`. To investigate
+with revised scripts, use the [retained-input MSI diagnostic dispatch](../../scripts/README.md)
+on a development branch. It reuses the installer pair without rebuilding and cannot certify a
+release. After a source fix, certify the new frozen candidate normally.
 
 #### Conditional certification—run when the affected surface changed
 

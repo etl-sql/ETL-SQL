@@ -54,7 +54,7 @@ function Write-MsiDurableCheckpoint {
         $env:GITHUB_RUN_ID -cnotmatch '^[1-9]\d*$' -or $env:GITHUB_RUN_ATTEMPT -cnotmatch '^[1-9]\d*$' -or
         $env:CERTIFICATION_SHA -cnotmatch '^[a-f0-9]{40}$' -or $env:ETLSQL_MSI_CHECKPOINT_RUN_SHA -cnotmatch '^[a-f0-9]{40}$' -or
         $null -eq $Stage -or $Stage.Length -gt 128 -or
-        $Stage -cnotmatch '^(?:supervisor starting|fresh backup (?:start|complete)|== (?:fresh install of|install previous|upgrade to|roll back to) (?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))$') {
+        $Stage -cnotmatch '^(?:supervisor starting|fresh (?:backup|uninstall|cleanup) (?:start|complete)|== (?:fresh install of|install previous|upgrade to|roll back to) (?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))?)$') {
         return $false
     }
     if ($null -ne $FreeMemoryMiB -or $null -ne $TotalMemoryMiB) {
@@ -62,11 +62,11 @@ function Write-MsiDurableCheckpoint {
             $TotalMemoryMiB -lt 1 -or $FreeMemoryMiB -gt $TotalMemoryMiB) { return $false }
     }
     try {
-        $key = "$env:GITHUB_REPOSITORY/$env:GITHUB_RUN_ID/$env:GITHUB_RUN_ATTEMPT/$env:PROFILE/$env:CERTIFICATION_SHA/$env:ETLSQL_MSI_CHECKPOINT_RUN_SHA"
+        $key = "$env:GITHUB_REPOSITORY/$env:GITHUB_RUN_ID/$env:GITHUB_RUN_ATTEMPT/$env:PROFILE/$env:CERTIFICATION_SHA/$env:ETLSQL_MSI_CHECKPOINT_RUN_SHA/$env:ETLSQL_MSI_DIAGNOSTIC_ONLY"
         if (-not $script:MsiDurableCheckpointTarget -or $script:MsiDurableCheckpointTarget.key -cne $key) {
             $listing = & $Request 'GET' "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID/jobs?filter=latest&per_page=100" $null
             if ($listing.jobs -isnot [array] -or $listing.total_count -ne $listing.jobs.Count) { return $false }
-            $name = "MSI certification ($env:PROFILE)"
+            $name = if ($env:ETLSQL_MSI_DIAGNOSTIC_ONLY -ceq '1') { 'MSI Portal diagnostic only' } else { "MSI certification ($env:PROFILE)" }
             $matches = @($listing.jobs | Where-Object {
                     ($_.name -ceq $name -or $_.name.EndsWith(" / $name", [StringComparison]::Ordinal)) -and
                     $_.status -ceq 'in_progress' -and [string]$_.run_id -ceq $env:GITHUB_RUN_ID -and

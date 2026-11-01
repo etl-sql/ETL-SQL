@@ -14,6 +14,11 @@ on:
       - main
       - 'release/**'
   workflow_dispatch:
+    inputs:
+      diagnostic_artifact_id:
+        description: Optional retained msi-inputs artifact for Portal diagnosis only, on a development branch
+        type: string
+        default: ''
   workflow_call:
     inputs:
       source_sha:
@@ -37,6 +42,7 @@ env:
 jobs:
   detect-upgrade-impact:
     name: Detect MSI Upgrade Impact
+    if: ${{ !inputs.diagnostic_artifact_id }}
     timeout-minutes: 15
     runs-on: ubuntu-latest
     outputs:
@@ -356,7 +362,7 @@ jobs:
       - detect-upgrade-impact
       - build-msi
       - msi-upgrade
-    if: always()
+    if: always() && !inputs.diagnostic_artifact_id
     runs-on: ubuntu-latest
     steps:
       - name: Require certification when applicable
@@ -404,4 +410,80 @@ jobs:
           name: msi-certified-${{ github.run_id }}-${{ github.run_attempt }}
           path: certification.json
           if-no-files-found: error
+          retention-days: 30
+
+  diagnostic-portal:
+    name: MSI Portal diagnostic only
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnostic_artifact_id != ''
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+      checks: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PROFILE: portal
+      ETLSQL_MSI_DIAGNOSTIC_ONLY: '1'
+      ETLSQL_MSI_DURABLE_CHECKPOINTS: '1'
+      ETLSQL_MSI_CHECKPOINT_RUN_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 3
+      - name: Select original successful MSI build inputs
+        id: inputs
+        timeout-minutes: 3
+        shell: pwsh
+        env:
+          INPUT_ARTIFACT_ID: ${{ inputs.diagnostic_artifact_id }}
+        run: ./scripts/Prepare-MsiPortalDiagnostic.ps1 -ArtifactId $env:INPUT_ARTIFACT_ID
+      - uses: actions/download-artifact@v8
+        timeout-minutes: 5
+        with:
+          artifact-ids: ${{ steps.inputs.outputs.artifact_id }}
+          github-token: ${{ github.token }}
+          path: candidate
+          merge-multiple: true
+      - name: Verify retained payload and record diagnostic scope
+        timeout-minutes: 2
+        shell: pwsh
+        env:
+          INPUT_RUN_HEAD: ${{ steps.inputs.outputs.origin_head }}
+        run: |
+          $manifest = Get-Content candidate/candidate.json -Raw | ConvertFrom-Json
+          if ($manifest.sourceSha -cnotmatch '^[a-f0-9]{40}$') { throw 'Invalid original installer source.' }
+          $commit = gh api "repos/$env:GITHUB_REPOSITORY/commits/$($manifest.sourceSha)" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or ($manifest.sourceSha -cne $env:INPUT_RUN_HEAD -and $env:INPUT_RUN_HEAD -cnotin @($commit.parents.sha))) { throw 'Installer source is not the original run head or its PR merge.' }
+          ./scripts/MsiCandidate.ps1 -Mode Verify -Directory candidate -SourceSha $manifest.sourceSha
+          if ($LASTEXITCODE -ne 0) { throw 'Retained MSI hash verification failed.' }
+          "CERTIFICATION_SHA=$($manifest.sourceSha)" >> $env:GITHUB_ENV
+          Copy-Item candidate/candidate.json release-validation/msi-portal-diagnostic/candidate.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Prepare diagnostic browser inventory
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          npm ci --prefix scripts/typecheck
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic compiler restore failed.' }
+          node scripts/sync-assets.js
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic browser preparation failed.' }
+          node scripts/sync-assets.js -Check
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic browser inventory is stale.' }
+      - name: Diagnose the Portal profile without rebuilding
+        timeout-minutes: 22
+        shell: pwsh
+        run: |
+          . ./scripts/MsiCheckpoint.Helpers.ps1
+          $null = Write-MsiDurableCheckpoint -Stage 'supervisor starting'
+          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-MsiPortalUpgrade.ps1 -ScriptArguments @('-PreviousMsi', 'candidate/previous.msi', '-CurrentMsi', 'candidate/current.msi', '-OutDir', 'release-validation/msi-portal-diagnostic/report') -EvidenceDirectory release-validation/msi-portal-diagnostic/supervisor -TimeoutSeconds 1200 -ForwardMsiCheckpoints
+      - name: Retain diagnostic reports without certification receipt
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: msi-portal-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/msi-portal-diagnostic/
+          if-no-files-found: warn
           retention-days: 30
