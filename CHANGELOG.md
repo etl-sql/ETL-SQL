@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Wait for consumer-check discovery output to finish before exiting. A busy output pipe could
+  otherwise truncate the test list and falsely fail source preflight. Regression checks delay
+  output for both full and preflight-excluded discovery without changing test membership.
+
 - Restore every native host's dependencies for the selected platform before publishing any
   host. Publishing then uses those restored inputs without another restore. A dependency
   failure in a later host now stops before compiling earlier hosts; verified Windows payload

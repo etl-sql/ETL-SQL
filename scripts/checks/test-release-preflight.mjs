@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runChecks, sourceChecks, releaseAutomationChecks, checksForArguments } from '../release-preflight.mjs';
 import syntaxIndex from '../generate-syntax-index.js';
 
@@ -39,8 +39,8 @@ for (const check of releaseAutomationChecks) {
   assert.equal(sourceChecks.filter(candidate => candidate.id === check.id).length, 1);
 }
 const consumer = fileURLToPath(new URL('../check-consumer-contracts.mjs', import.meta.url));
-const listed = options => {
-  const result = spawnSync(process.execPath, [consumer, '--list', ...options],
+const listed = (options, nodeOptions = []) => {
+  const result = spawnSync(process.execPath, [...nodeOptions, consumer, '--list', ...options],
     { encoding: 'utf8', windowsHide: true, timeout: 10000 });
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr);
@@ -57,6 +57,15 @@ for (const check of releaseAutomationChecks) {
 const fixture = mkdtempSync(path.join(os.tmpdir(), 'release-preflight-'));
 const check = (id, code) => ({ id, command: process.execPath, args: ['-e', code] });
 try {
+  // Force delayed stdout independently of OS pipe capacity or runner load.
+  const delayedStdout = path.join(fixture, 'delayed-stdout.mjs');
+  writeFileSync(delayedStdout, `const write = process.stdout.write.bind(process.stdout);
+process.stdout.write = (...args) => { setTimeout(() => write(...args), 50); return false; };
+`);
+  for (const [options, expected] of [[[], completeConsumers], [['--exclude-preflight'], remainingConsumers]]) {
+    assert.deepEqual(listed(options, ['--import', pathToFileURL(delayedStdout).href]), expected,
+      'Discovery must flush the complete list before exiting, including when stdout is delayed.');
+  }
   const summary = await runChecks([
     check('first-failure', 'console.error("first defect");process.exit(2)'),
     check('second-failure', 'console.error("second defect");process.exit(3)'),

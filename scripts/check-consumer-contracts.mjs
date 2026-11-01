@@ -63,7 +63,10 @@ if (checks.length === 0) {
 }
 
 if (listOnly) {
-  for (const check of checks) console.log(check.name);
+  // Explicit exit can discard pending pipe writes on a busy runner.
+  await new Promise((resolve, reject) => {
+    process.stdout.write(checks.map(check => check.name).join('\n') + '\n', error => error ? reject(error) : resolve());
+  });
   process.exit(0);
 }
 

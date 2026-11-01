@@ -127,6 +127,10 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   fixtures inject first/last-host restore failures and verify no compilation or replacement of
   accepted packages. A real .NET 10 self-contained ReadyToRun executable restores, publishes
   without restore and launches locally. Hosted acceptance and elapsed-time improvement remain open.
+  Hosted native source preflight `41361695088` stops before any package build when consumer
+  discovery omits its last test. Delayed-stdout regression reproduces success with empty output;
+  discovery now awaits the complete write before exit. Windows/Linux regressions preserve full
+  and preflight-excluded membership. Original failure is retained; hosted acceptance remains open.
 
 - [ ] **Release timeline.** Record the v0.22.0 candidate cut, each CI/MSI round, its cause and the
   tag time as the release runs, so the goal is measured rather than remembered.
