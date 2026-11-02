@@ -38,7 +38,7 @@ public class SetVariableStatementHandler : IStatementHandler
             if (!context.VarContext.ContainsVariable(varName))
                 throw new ExecutionException($"Variable {varName} must be declared before it can be assigned.");
 
-            context.VarContext.VariableMetadata.TryGetValue(varName, out var targetMeta);
+            context.VarContext.TryGetVariableMetadata(varName, out var targetMeta);
             bool decrypt = !(targetMeta?.IsSensitive ?? false);
             var val = await context.EvaluationContext.EvaluateValue(stmt.Value, new Row(), decrypt);
             context.VarContext.SetVariable(varName, val);

@@ -46,6 +46,11 @@ public class ExportDatasetStatementHandler(ILogger logger) : IStatementHandler
                 $"EXPORT DATASET '{stmt.DatasetName}' requires a transport credential: ENCRYPT = PASSWORD or KEYFILE.",
                 null, stmt.Line, stmt.Column);
 
+        // KEYFILE is a script-selected path: authorize it like any other read before use.
+        var keyFile = stmt.EncryptionMode == DatasetEncryptionMode.KeyFile
+            ? DatasetTransport.AuthorizeKeyFile(context, stmt.KeyFile!)
+            : null;
+
         var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
         var existing = await registry.Lookup(stmt.DatasetName, callerCtx);
         if (existing == null)
@@ -59,7 +64,7 @@ public class ExportDatasetStatementHandler(ILogger logger) : IStatementHandler
 
         using var datasetKey = await DatasetKeyResolution.ResolveAsync(context, existing.AtRestKeyVersion);
         var atRest = new EncryptionOptions(BuildAtRestOptions(datasetKey.Password));
-        var transport = new EncryptionOptions(BuildTransportOptions(stmt));
+        var transport = new EncryptionOptions(BuildTransportOptions(stmt, keyFile));
         var targetPath = context.ResolvePath(stmt.TargetPath);
         if (!targetPath.EndsWith(".etlds", StringComparison.OrdinalIgnoreCase))
         {
@@ -77,7 +82,7 @@ public class ExportDatasetStatementHandler(ILogger logger) : IStatementHandler
             .Authorize(context, targetPath, FileSystemAccessKind.Write, validateFileType: false)
             .CanonicalPath;
 
-        var tempPlain = Path.Combine(Path.GetTempPath(), $"__ds_export_{Guid.NewGuid():N}.parquet");
+        var tempPlain = DatasetTransport.CreatePlaintextStagingPath("__ds_export");
         using var fileTransaction = DatasetFileTransaction.Create(targetPath);
         try
         {
@@ -89,7 +94,7 @@ public class ExportDatasetStatementHandler(ILogger logger) : IStatementHandler
         }
         finally
         {
-            DatasetFileTransaction.Cleanup(tempPlain);
+            DatasetTransport.CleanupPlaintextStaging(tempPlain);
         }
 
         _logger.Debug("EXPORT DATASET '{Name}': wrote portable file to {Path}.", stmt.DatasetName, targetPath);
@@ -104,8 +109,8 @@ public class ExportDatasetStatementHandler(ILogger logger) : IStatementHandler
             ? new Dictionary<string, string> { ["ENCRYPT"] = "MACHINE" }
             : new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = atRestKey };
 
-    private static Dictionary<string, string> BuildTransportOptions(ExportDatasetStatement stmt) =>
+    private static Dictionary<string, string> BuildTransportOptions(ExportDatasetStatement stmt, string? keyFile) =>
         stmt.EncryptionMode == DatasetEncryptionMode.KeyFile
-            ? new Dictionary<string, string> { ["ENCRYPT"] = "KEYFILE", ["KEYFILE"] = stmt.KeyFile ?? "" }
+            ? new Dictionary<string, string> { ["ENCRYPT"] = "KEYFILE", ["KEYFILE"] = keyFile ?? "" }
             : new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = stmt.EncryptionPassword ?? "" };
 }

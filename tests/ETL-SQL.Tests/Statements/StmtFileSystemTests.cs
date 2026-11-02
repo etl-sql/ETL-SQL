@@ -493,6 +493,69 @@ namespace ETL_SQL.Tests.Statements.Statements
         }
 
         [Fact]
+        public async Task SyncDirectory_LinkInSourcePointingOutside_StaysInsideDestination()
+        {
+            // A junction (Windows) or symlink in the source canonicalizes outside the source. The
+            // relative path must come from the enumerated path, or Path.Combine(dest, "..\\x")
+            // escapes the destination - here it would delete and rewrite the sibling's own file.
+            string root = Path.GetFullPath("sync_link_" + Guid.NewGuid().ToString("N")[..8]);
+            string srcDir = Path.Combine(root, "src");
+            string siblingDir = Path.Combine(root, "sibling");
+            string destDir = Path.Combine(root, "dest");
+            Directory.CreateDirectory(srcDir);
+            Directory.CreateDirectory(siblingDir);
+            Directory.CreateDirectory(destDir);
+            try
+            {
+                await File.WriteAllTextAsync(Path.Combine(siblingDir, "linked.txt"), "sibling content");
+                string linkDir = Path.Combine(srcDir, "link");
+                if (!TryCreateDirectoryLink(linkDir, siblingDir))
+                    return; // No way to create a directory link on this host.
+
+                var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+                await ExecuteAsync(
+                    $"SYNC DIRECTORY '{srcDir}' TO '{destDir}' WITH (DELETE_EXTRA = OFF, OVERWRITE = ON, RECURSIVE = ON);",
+                    evaluator);
+
+                Assert.Equal("sibling content", await File.ReadAllTextAsync(Path.Combine(destDir, "link", "linked.txt")));
+                Assert.Equal("sibling content", await File.ReadAllTextAsync(Path.Combine(siblingDir, "linked.txt")));
+                Assert.Equal(new[] { "dest", "sibling", "src" },
+                    Directory.GetDirectories(root).Select(Path.GetFileName).Order().ToArray());
+            }
+            finally
+            {
+                string linkDir = Path.Combine(srcDir, "link");
+                if (Directory.Exists(linkDir)) Directory.Delete(linkDir); // removes the link only
+                if (Directory.Exists(root)) Directory.Delete(root, true);
+            }
+        }
+
+        private static bool TryCreateDirectoryLink(string linkPath, string targetPath)
+        {
+            try
+            {
+                Directory.CreateSymbolicLink(linkPath, targetPath);
+                return true;
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            {
+            }
+            if (!OperatingSystem.IsWindows()) return false;
+            // Junctions need no privilege on Windows.
+            var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe")
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            foreach (var arg in new[] { "/c", "mklink", "/J", linkPath, targetPath }) psi.ArgumentList.Add(arg);
+            using var process = System.Diagnostics.Process.Start(psi)!;
+            process.WaitForExit(10_000);
+            return process.ExitCode == 0 && Directory.Exists(linkPath);
+        }
+
+        [Fact]
         public async Task TestVerifyFileIntegrity()
         {
             var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();

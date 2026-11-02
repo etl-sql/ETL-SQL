@@ -606,6 +606,37 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("PASSWORD", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
+        [Theory]
+        [InlineData("EXPORT DATASET &sales TO 'out.etlds' ENCRYPT = KEYFILE KEYFILE = '{0}';")]
+        [InlineData("PUBLISH DATASET &sales2 FROM 'in.etlds' INTO '/f' ENCRYPT = KEYFILE KEYFILE = '{0}';")]
+        public async Task TransportKeyFile_InSystemDirectory_IsDenied(string template)
+        {
+            // KEYFILE is a script-selected path and must pass the same path policy as any read.
+            var systemFile = OperatingSystem.IsWindows()
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "win.ini")
+                : "/etc/hostname";
+            var registry = new SingleDatasetRegistry(ownerUserId: 1);
+            await registry.RegisterOrUpdate(new DatasetMetadata
+            {
+                Name = "&sales",
+                FolderPath = "/f",
+                ParquetFilePath = "sales_1.parquet",
+                SourceQuery = "SELECT 1 AS v",
+                AccessLevel = DatasetAccessLevel.Public,
+                LastRefresh = DateTime.UtcNow
+            });
+
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            eval.DatasetRegistry = registry;
+            eval.DatasetCallerContext = "IsAdmin=true";
+
+            var ex = await Assert.ThrowsAnyAsync<Exception>(
+                () => eval.Evaluate(Parse(string.Format(template, systemFile))));
+            var denial = ex;
+            while (denial is not null and not ETL_SQL.Services.SecurityException) denial = denial.InnerException;
+            Assert.True(denial is not null, $"Expected a path-policy denial, got {ex.GetType().Name}: {ex.Message}");
+        }
+
         // ── 2b: EXPORT → PUBLISH round-trip (move between portals) ─────────────────
 
         [Fact]

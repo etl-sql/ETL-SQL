@@ -277,12 +277,20 @@ public class ExpressionEvaluator
 
         if (expr is SubqueryExpression subq)
         {
+            // try/finally: a consumer that stops early (FOREACH ... BREAK) or throws disposes the
+            // iterator, and the outer-row frame must still come off the stack.
             _context.OuterRowStack.Push(context);
-            await foreach (var batch in _context.ExecuteQuery(subq.Query))
+            try
             {
-                foreach (var row in batch.Rows) yield return row;
+                await foreach (var batch in _context.ExecuteQuery(subq.Query))
+                {
+                    foreach (var row in batch.Rows) yield return row;
+                }
             }
-            _context.OuterRowStack.Pop();
+            finally
+            {
+                _context.OuterRowStack.Pop();
+            }
             yield break;
         }
 
@@ -366,7 +374,7 @@ public class ExpressionEvaluator
                 var val = (decryptSensitive && s.StartsWith("ENC:")) ? _context.DecryptValue(s) : s;
                 if (val is string strVal && strVal.Contains("${"))
                 {
-                    val = InterpolateStringVariables(strVal);
+                    val = InterpolateStringVariables(strVal, decryptSensitive);
                 }
                 return new ValueTask<object?>(val);
             }
@@ -1026,7 +1034,7 @@ public class ExpressionEvaluator
         var val = _context.VarContext.GetVariable(v.Name);
 
         if (val is string reldateExpr &&
-            _context.VarContext.VariableMetadata.TryGetValue(v.Name, out var relMeta) &&
+            _context.VarContext.TryGetVariableMetadata(v.Name, out var relMeta) &&
             "RELDATE".Equals(relMeta.DataType, StringComparison.OrdinalIgnoreCase))
         {
             return RelDateResolver.ResolveValue(reldateExpr, _context.WeekStartDay);
@@ -1034,7 +1042,7 @@ public class ExpressionEvaluator
 
         if (decryptSensitive && val is string s && s.StartsWith("ENC:"))
         {
-            if (_context.VarContext.VariableMetadata.TryGetValue(v.Name, out var meta) && meta.IsSensitive)
+            if (_context.VarContext.TryGetVariableMetadata(v.Name, out var meta) && meta.IsSensitive)
             {
                 return _context.DecryptValue(s);
             }
@@ -1043,8 +1051,13 @@ public class ExpressionEvaluator
         return val;
     }
 
-    /// <summary>Performs inline variable interpolation for string literals containing ${@var} or ${var}.</summary>
-    private string InterpolateStringVariables(string input)
+    /// <summary>
+    /// Performs inline variable interpolation for string literals containing ${@var} or ${var}.
+    /// An <c>ENC:</c> value of a sensitive variable is decrypted only when the caller is a
+    /// credential consumer (<paramref name="decryptSensitive"/>), the same rule a bare
+    /// <c>@var</c> reference follows; otherwise <c>PRINT '${@pw}'</c> would print plaintext.
+    /// </summary>
+    private string InterpolateStringVariables(string input, bool decryptSensitive)
     {
         if (string.IsNullOrEmpty(input) || !input.Contains("${")) return input;
 
@@ -1061,7 +1074,7 @@ public class ExpressionEvaluator
                 var val = _context.VarContext.GetVariable(varName);
                 if (val != null)
                 {
-                    if (_context.VarContext.VariableMetadata.TryGetValue(varName, out var meta) && meta.IsSensitive)
+                    if (decryptSensitive && _context.VarContext.TryGetVariableMetadata(varName, out var meta) && meta.IsSensitive)
                     {
                         if (val is string enc && enc.StartsWith("ENC:", StringComparison.Ordinal))
                         {

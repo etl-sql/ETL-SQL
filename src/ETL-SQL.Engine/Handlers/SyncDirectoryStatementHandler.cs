@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
@@ -90,20 +91,20 @@ public class SyncDirectoryStatementHandler : IStatementHandler
 
         var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
         var destFileMap = EnumerateFiles(context, pathAuthorizer, dest, recursive, searchOption).ToDictionary(
-            f => Path.GetRelativePath(dest, f),
-            f => f,
+            f => f.RelativePath,
+            f => f.CanonicalPath,
             StringComparer.OrdinalIgnoreCase
         );
         var sourceSeen = deleteExtra ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) : null;
 
         // 1. Copy new or modified files
-        foreach (var sourceFile in EnumerateFiles(context, pathAuthorizer, source, recursive, searchOption))
+        foreach (var (relativePath, sourceFile) in EnumerateFiles(context, pathAuthorizer, source, recursive, searchOption))
         {
             context.CancellationToken.ThrowIfCancellationRequested();
-            string relativePath = Path.GetRelativePath(source, sourceFile);
             sourceSeen?.Add(relativePath);
             string targetFile = pathAuthorizer.Authorize(context, Path.Combine(dest, relativePath),
                 FileSystemAccessKind.Write).CanonicalPath;
+            RequireWithinDestination(dest, targetFile);
 
             bool needsCopy = false;
             if (!destFileMap.TryGetValue(relativePath, out var existingDestFile))
@@ -168,6 +169,7 @@ public class SyncDirectoryStatementHandler : IStatementHandler
                 {
                     destFile = pathAuthorizer.Authorize(context, destFile,
                         FileSystemAccessKind.Delete).CanonicalPath;
+                    RequireWithinDestination(dest, destFile);
                     context.SecurityService.ValidateWriteAccess(destFile);
                     context.SecurityService.ValidateFileType(destFile);
                     context.IncrementOperationCount(OperationType.FileSystem, destFile, 1);
@@ -186,15 +188,31 @@ public class SyncDirectoryStatementHandler : IStatementHandler
         }
     }
 
-    private static IEnumerable<string> EnumerateFiles(IExecutionContext context,
-        FileSystemPolicyAuthorizer authorizer, string root, bool recursive, SearchOption searchOption)
+    /// <summary>
+    /// Enumerates files under <paramref name="root"/>. The relative path is taken from the
+    /// enumerated (lexical) path, never from the canonical one: a symlink or junction inside the
+    /// tree canonicalizes outside it, and a relative path computed from that target would start
+    /// with <c>..</c> and escape the other side of the sync.
+    /// </summary>
+    private static IEnumerable<(string RelativePath, string CanonicalPath)> EnumerateFiles(
+        IExecutionContext context, FileSystemPolicyAuthorizer authorizer, string root, bool recursive,
+        SearchOption searchOption)
     {
         foreach (var file in Directory.EnumerateFiles(root, "*", searchOption))
         {
             context.CancellationToken.ThrowIfCancellationRequested();
             if (recursive) ValidateRecursiveDepth(context, root, file);
-            yield return authorizer.Authorize(context, file, FileSystemAccessKind.Read).CanonicalPath;
+            var canonical = authorizer.Authorize(context, file, FileSystemAccessKind.Read).CanonicalPath;
+            yield return (Path.GetRelativePath(root, file), canonical);
         }
+    }
+
+    /// <summary>Refuses a write or delete whose canonical target is outside the destination.</summary>
+    private static void RequireWithinDestination(string dest, string canonicalTarget)
+    {
+        if (!SafePath.IsWithinRoot(dest, canonicalTarget))
+            throw new SecurityException(
+                $"SYNC DIRECTORY refused '{canonicalTarget}': it resolves outside the destination directory '{dest}'.");
     }
 
     private static void ValidateRecursiveDepth(IExecutionContext context, string root, string file)

@@ -29,6 +29,14 @@ public interface IVariableContext
     IDictionary<string, object?> CurrentVariables { get; }
     IDictionary<string, VariableMetadata> VariableMetadata { get; }
     IDictionary<string, VariableMetadata> CurrentMetadata { get; }
+    /// <summary>
+    /// Finds a variable's metadata in the scope that <see cref="GetVariable"/> would read it from:
+    /// local scopes innermost first, then the session scope. <see cref="VariableMetadata"/> is
+    /// the session scope only, so a <c>SECRET</c> declared inside a procedure is not in it.
+    /// </summary>
+    bool TryGetVariableMetadata(string name,
+        [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out VariableMetadata metadata)
+        => CurrentMetadata.TryGetValue(name, out metadata) || VariableMetadata.TryGetValue(name, out metadata);
     void SetVariable(string name, object? value);
     object? GetVariable(string name);
     void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null);
