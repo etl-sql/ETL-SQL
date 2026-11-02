@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 
@@ -70,10 +71,22 @@ namespace ETL_SQL.Reporting
             if (value is null)
                 return string.Empty;
 
+            value = NeutralizeFormula(value);
+
             if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
                 return $"\"{value.Replace("\"", "\"\"")}\"";
 
             return value;
         }
+
+        // Excel/Sheets read a cell beginning with =, +, -, @ (or a leading tab/CR) as a formula, so
+        // text such as =HYPERLINK(...) gets a leading quote and renders as literal text. Manifest
+        // cells carry numbers in invariant form, and a number ("-5", "+1.5E3") is left untouched so
+        // a negative value never turns into text.
+        private static string NeutralizeFormula(string value) =>
+            value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r'
+                && !double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out _)
+                ? "'" + value
+                : value;
     }
 }
