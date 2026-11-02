@@ -5,17 +5,15 @@ import { clsx } from 'clsx';
 
 type ContextMenuArgs = { x: number; y: number; visual: VisualManifest; rowData?: unknown[] };
 
-interface VsCodeWindow {
-    vscode?: { postMessage: (message: unknown) => void };
-}
-
 interface ReportTabProps {
     manifest: ReportManifest;
     onRefresh: (parameters?: Record<string, string | null>) => void;
     onExport?: (format: 'markdown' | 'pdf' | 'text') => void;
+    /** Opens the interactive report in the browser. The host posts `serve`. */
+    onServe?: () => void;
 }
 
-export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh, onExport }) => {
+export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh, onExport, onServe }) => {
     const [activePageName, setActivePageName] = useState<string | null>(
         manifest.pages?.[0]?.name || null
     );
@@ -86,7 +84,7 @@ export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh, onExp
                     
                     <div className="flex items-center border border-[var(--border)] bg-[var(--vscode-toolbar-hoverBackground,transparent)]/20">
                         <button
-                            onClick={() => (window as Window & VsCodeWindow).vscode?.postMessage({ type: 'serve' })}
+                            onClick={() => onServe?.()}
                             className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-[var(--text)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))]"
                             title="Open interactive report"
                         >
