@@ -13,6 +13,10 @@ export const windowsHosts = Object.freeze([
 ].map(([project, executable]) => ({ project: `src/${project}/${project}.csproj`, executable: `${executable}.exe` })));
 export const windowsPublishOptions = Object.freeze({ configuration: 'Release', rid: 'win-x64',
     selfContained: true, singleFile: true, readyToRun: true, includeNativeLibrariesForSelfExtract: true });
+function publishOptions(readyToRun) {
+    if (typeof readyToRun !== 'boolean') throw new Error('Windows publish optimization must be a boolean.');
+    return { ...windowsPublishOptions, readyToRun };
+}
 const manifestName = 'windows-payload.json';
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const identity = (sha, version) => {
@@ -55,18 +59,18 @@ async function inventory(root) {
     return files;
 }
 
-export async function createWindowsPayload(root, sha, version, dotnetVersion) {
+export async function createWindowsPayload(root, sha, version, dotnetVersion, readyToRun = true) {
     identity(sha, version);
     if (!/^v22\.\d+\.\d+$/.test(process.version) || !/^10\.\d+\.\d+$/.test(dotnetVersion)) throw new Error('Windows payload requires Node 22 and .NET 10.');
     const value = { schemaVersion: 1, scope: 'WindowsBuildInputsOnly', sourceSha: sha, version,
-        options: windowsPublishOptions, hosts: windowsHosts,
+        options: publishOptions(readyToRun), hosts: windowsHosts,
         toolchain: { nodeVersion: process.version, dotnetVersion }, files: await inventory(root) };
     const contents = JSON.stringify(value, null, 2) + '\n';
     await writeFile(path.join(root, manifestName), contents);
     return digest(contents);
 }
 
-export async function verifyWindowsPayload(root, sha, version, expectedHash) {
+export async function verifyWindowsPayload(root, sha, version, expectedHash, readyToRun = true) {
     identity(sha, version);
     const file = path.join(root, manifestName), info = await lstat(file);
     if (!info.isFile() || info.isSymbolicLink() || info.size > 8 * 1024 ** 2) throw new Error('Invalid Windows payload manifest.');
@@ -74,15 +78,15 @@ export async function verifyWindowsPayload(root, sha, version, expectedHash) {
     if (!/^[a-f0-9]{64}$/.test(expectedHash ?? '') || digest(contents) !== expectedHash) throw new Error('Windows payload manifest hash mismatch.');
     const value = JSON.parse(contents);
     if (value.schemaVersion !== 1 || value.scope !== 'WindowsBuildInputsOnly' || value.sourceSha !== sha || value.version !== version ||
-        !isDeepStrictEqual(value.options, windowsPublishOptions) || !isDeepStrictEqual(value.hosts, windowsHosts) ||
+        !isDeepStrictEqual(value.options, publishOptions(readyToRun)) || !isDeepStrictEqual(value.hosts, windowsHosts) ||
         !/^v22\.\d+\.\d+$/.test(value.toolchain?.nodeVersion ?? '') || !/^10\.\d+\.\d+$/.test(value.toolchain?.dotnetVersion ?? '') ||
         !isDeepStrictEqual(value.files, await inventory(root))) throw new Error('Windows payload identity, options or files changed.');
     return value;
 }
 
-export async function copyWindowsPayload(root, sha, version, expectedHash, destination) {
+export async function copyWindowsPayload(root, sha, version, expectedHash, destination, readyToRun = true) {
     if (path.basename(destination) !== 'bin') throw new Error('Windows payload destination must be an empty bin directory.');
-    const manifest = await verifyWindowsPayload(root, sha, version, expectedHash);
+    const manifest = await verifyWindowsPayload(root, sha, version, expectedHash, readyToRun);
     await directory(destination);
     if ((await readdir(destination)).length) throw new Error('Windows payload copy requires an empty destination.');
     for (const file of manifest.files) {
@@ -92,15 +96,16 @@ export async function copyWindowsPayload(root, sha, version, expectedHash, desti
     }
     // Verify the copy and source before packaging; neither partial nor changed input is accepted.
     if (!isDeepStrictEqual(await inventory(path.dirname(destination)), manifest.files)) throw new Error('Copied Windows payload differs.');
-    await verifyWindowsPayload(root, sha, version, expectedHash);
+    await verifyWindowsPayload(root, sha, version, expectedHash, readyToRun);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
     try {
         const [mode, root, sha, version, hashOrSdk, destination] = process.argv.slice(2);
-        if (mode === 'create' && process.argv.length === 7) console.log(await createWindowsPayload(root, sha, version, hashOrSdk));
-        else if (mode === 'verify' && process.argv.length === 7) { await verifyWindowsPayload(root, sha, version, hashOrSdk); console.log(hashOrSdk); }
-        else if (mode === 'copy' && process.argv.length === 8) { await copyWindowsPayload(root, sha, version, hashOrSdk, destination); console.log(hashOrSdk); }
+        const readyToRun = !(process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_EVENT_NAME === 'pull_request');
+        if (mode === 'create' && process.argv.length === 7) console.log(await createWindowsPayload(root, sha, version, hashOrSdk, readyToRun));
+        else if (mode === 'verify' && process.argv.length === 7) { await verifyWindowsPayload(root, sha, version, hashOrSdk, readyToRun); console.log(hashOrSdk); }
+        else if (mode === 'copy' && process.argv.length === 8) { await copyWindowsPayload(root, sha, version, hashOrSdk, destination, readyToRun); console.log(hashOrSdk); }
         else if (mode === 'projects' && process.argv.length === 3) console.log(JSON.stringify(windowsHosts));
         else throw new Error('Usage: windows-payload.mjs projects | create <root> <sha> <version> <sdk> | verify <root> <sha> <version> <hash> | copy <root> <sha> <version> <hash> <empty-bin>');
     } catch (error) { console.error(error.message); process.exitCode = 1; }

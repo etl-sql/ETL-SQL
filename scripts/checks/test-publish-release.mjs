@@ -16,6 +16,9 @@ $env:ETL_SQL_VERSION=if($Case -eq 'invalid-version'){'../invalid'}else{'0.22.0'}
 $zip=Join-Path $Root 'release/ETL-SQL-v0.22.0-linux-x64.zip'
 $global:PublishCount=0
 $global:RestoreCount=0
+$env:GITHUB_ACTIONS=if($Case -eq 'success-local'){'false'}else{'true'}
+$env:GITHUB_EVENT_NAME=if($Case -in @('success-pr','success-local')){'pull_request'}else{'workflow_dispatch'}
+$global:ExpectedReadyToRun=if($Case -eq 'success-pr'){'false'}else{'true'}
 function node {
     $global:Calls.Add('node')
     if($args[0] -like '*generate-sbom.js') {
@@ -33,7 +36,7 @@ function dotnet {
         $global:Calls.Add('restore')
         $global:RestoreCount++
         $normalized=($args -join ' ').Replace('-p: ', '-p:').Split(' ')
-        foreach($option in @('-p:Configuration=Release','-p:SelfContained=true','-p:PublishSingleFile=true','-p:PublishReadyToRun=true','-p:IncludeNativeLibrariesForSelfExtract=true')) {
+        foreach($option in @('-p:Configuration=Release','-p:SelfContained=true','-p:PublishSingleFile=true',"-p:PublishReadyToRun=$global:ExpectedReadyToRun",'-p:IncludeNativeLibrariesForSelfExtract=true')) {
             if($normalized -notcontains $option){throw "Restore did not request publish inputs: $option"}
         }
         $global:LASTEXITCODE=if(($Case -eq 'restore-first-failure' -and $global:RestoreCount -eq 1) -or
@@ -41,6 +44,7 @@ function dotnet {
         return
     }
     if($args[0] -ne 'publish' -or $args -notcontains '--no-restore'){throw 'Publish must consume restored inputs.'}
+    if(($args -join ' ').Replace('-p: ', '-p:').Split(' ') -notcontains "-p:PublishReadyToRun=$global:ExpectedReadyToRun"){throw 'Wrong publish optimization profile.'}
     if($global:RestoreCount -lt 8 * (1 + [math]::Floor($global:PublishCount / 8))){throw 'Publishing started before every host was restored.'}
     $global:Calls.Add('dotnet')
     $global:PublishCount++
@@ -163,7 +167,7 @@ try {
     'sbom-invalid', 'sbom-wrong-version', 'second-platform-failure', 'checksum-failure', 'certification-failure',
     'vsix-failure', 'vsix-nonzero', 'vsix-missing', 'vsix-empty', 'promotion-failure', 'rollback-failure', 'live-lock', 'linked-artifacts', 'linked-release',
     'caller-owned-failure', 'closed-transaction', 'forged-transaction',
-    'success', 'success-uppercase', 'success Unicode é [literal]', 'success-repeat', 'success-fresh', 'vsix-success', 'success-caller-owned']) {
+    'success', 'success-pr', 'success-local', 'success-uppercase', 'success Unicode é [literal]', 'success-repeat', 'success-fresh', 'vsix-success', 'success-caller-owned']) {
     const root = path.join(fixture, name);
     // Replace only the native compression boundary for injected failures. Inventory, hashing,
     // validation, promotion and cleanup execute unchanged; success uses the real .NET ZIP writer.

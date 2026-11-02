@@ -585,6 +585,11 @@ requirements. Green regular CI alone cannot authorize publication. Release drive
 workstation's original state with `-ValidationState` / `--validation-state` and enforce the same
 full-scope, freshness, candidate and source-fingerprint checks.
 
+Hosted PR native packages skip ReadyToRun precompilation while retaining self-contained bundles
+and the selected installed/CLI/webview checks. Local, nightly, release-branch push and full manual
+certification keep ReadyToRun enabled. Publication requires typed optimized-package evidence and
+cannot promote the faster PR artifacts. Their complete hosted timing still needs measurement.
+
 ---
 
 ## 17. Syntax Consistency Rules

@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Skip ReadyToRun precompilation for hosted PR native packages while retaining self-contained
+  bundles, installed-package checks, CLI launches and VSIX webview acceptance. Local, nightly
+  and full release publishing keep ReadyToRun enabled. Payload manifests bind the selected
+  setting, and publication rejects PR, missing or untyped optimization evidence.
+
 - Retry a failed native-package evidence upload on the same runner using its completed files.
   A successful upload is never replaced. The complete artifact retains diagnostics if their
   separate upload fails; exhausted or missing uploads still fail certification. Store the

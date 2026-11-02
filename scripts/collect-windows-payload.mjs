@@ -71,6 +71,7 @@ export async function selectWindowsPayload(context, { query, now = Date.now() } 
             artifact.size_in_bytes < 1 || artifact.size_in_bytes > 8 * 1024 ** 3 ||
             timestamp(artifact.created_at) < start || timestamp(artifact.created_at) > end + 999) throw new Error('Invalid Windows payload artifact origin.');
         return { schemaVersion: 1, scope: 'WindowsBuildInputsOnly', status: 'Ready', repository, sourceSha: sha,
+            publishReadyToRun: event !== 'pull_request',
             runId: run.id, jobId: original.job.id, executionAttempt: original.attempt, artifactId: artifact.id,
             artifactName: artifact.name, artifactDigest: artifact.digest, artifactBytes: artifact.size_in_bytes };
     }
@@ -96,6 +97,7 @@ export async function waitForWindowsPayload(context, { query, timeoutMs = 300000
 }
 
 export async function downloadWindowsPayload(selection, version, output, { query, download } = {}) {
+    if (typeof selection.publishReadyToRun !== 'boolean') throw new Error('Windows payload optimization profile is missing.');
     const attempt = path.join(output, `${selection.runId}-${selection.artifactId}`);
     mkdirSync(attempt, { recursive: false });
     const archive = path.join(attempt, 'payload.zip');
@@ -108,7 +110,7 @@ export async function downloadWindowsPayload(selection, version, output, { query
     extractSubmittedArchive(archive, expanded, { maximumBytes: 8 * 1024 ** 3, maximumEntries: 10000, timeoutMs: 300000 });
     const payloadDirectory = path.join(expanded, 'bundle');
     const manifestSha256 = createHash('sha256').update(readFileSync(path.join(payloadDirectory, 'windows-payload.json'))).digest('hex');
-    await verifyWindowsPayload(payloadDirectory, selection.sourceSha, version, manifestSha256);
+    await verifyWindowsPayload(payloadDirectory, selection.sourceSha, version, manifestSha256, selection.publishReadyToRun);
     // Recheck the same artifact after download; an altered/deleted origin cannot become accepted input.
     const pages = await query(`${apiRoot(selection.repository)}/artifacts/${selection.artifactId}`);
     const artifact = pages[0];

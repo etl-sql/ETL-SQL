@@ -138,6 +138,14 @@ that platform before any host publish. Publishing uses `--no-restore`; retained 
 consumers perform neither restore nor publish. This catches dependency failures earlier without
 changing the required package acceptance checks or establishing a new timing result.
 
+Hosted PR packages omit ReadyToRun precompilation. They still publish every selected host as a
+self-contained bundle and run the installed, CLI and webview checks. Local, release-branch push,
+nightly and manually dispatched full certification keep ReadyToRun enabled. Native evidence records
+`publishReadyToRun` as a boolean; publication requires `true`, including the Windows payload origin.
+The shared payload manifest also binds its actual publish options. PR artifacts and missing or
+untyped optimization evidence cannot authorize publication. Measure the complete PR path before
+claiming the 30-minute target; a one-host optimization benchmark does not establish that result.
+
 Release selects the original successful job and artifact across failed-job retries, verifies the
 acceptance details and package hashes, then uploads those retained bytes. Its selection receipt is
 attached and attested with the draft. Before publication, the collector rechecks the selected run,

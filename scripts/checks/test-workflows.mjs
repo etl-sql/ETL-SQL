@@ -309,6 +309,8 @@ exit ([int]$env:FIXTURE_EXIT)
   const nativeSource = readFileSync(new URL('../../.github/workflows/native-packages.yml', import.meta.url), 'utf8');
   const nativeJob = nativeSource.split(/^  native-package:\r?\n/m)[1].split(/^  [\w-]+:\r?\n/m)[0];
   const nativeStep = name => nativeJob.split(/^      - /m).find(block => block.split(/\r?\n/)[0] === `name: ${name}`);
+  assert.match(nativeStep('Record candidate and native host'), /\. \.\/scripts\/ReleasePublish\.Helpers\.ps1/);
+  assert.match(nativeStep('Record candidate and native host'), /publishReadyToRun = Get-ReleasePublishReadyToRun/);
   const publishStep = nativeStep('Build native ZIP and VSIX');
   const assertJobBudget = (job, name, inactiveSteps = []) => {
     const budget = Number(job.match(/^    timeout-minutes: (\d+)/m)?.[1]);

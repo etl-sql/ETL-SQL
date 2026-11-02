@@ -29,7 +29,8 @@ async function payload(directory, candidate = sha) {
   await windowsPackages('create', path.join(directory, 'release'), candidate, version);
   const manifest = JSON.parse(readFileSync(path.join(directory, 'release/windows-package-inputs.json')));
   const summary = { schemaVersion: 1, commit: candidate, version, dirty: false, rid: 'win-x64', architecture: 'x64', status: 'Passed',
-    windowsPayload: { sourceSha: candidate, version, manifestSha256: 'd'.repeat(64) },
+    publishReadyToRun: true,
+    windowsPayload: { sourceSha: candidate, version, manifestSha256: 'd'.repeat(64), publishReadyToRun: true },
     zipSha256: manifest.packages[`ETL-SQL-v${version}-win-x64.zip`], vsixWebviewsVerified: true, vsixInstalledAssets: 59,
     packageManifestSha256: hash(readFileSync(path.join(directory, 'release/windows-package-inputs.json'))),
     toolchain: { nodeVersion: 'v22.23.3', dotnetVersion: '10.0.306' }, startedAt: time(-8500), finishedAt: time(-6000),
@@ -75,6 +76,11 @@ try {
   ]) { await assert.rejects(collect({ mutate }), undefined, name); }
   const summaryPath = 'artifacts/native-packages/win-x64/certification.json', webviewPath = 'artifacts/native-packages/win-x64/packaged-webview.json';
   for (const [name, action] of [
+    ['PR optimization profile', value => { value.publishReadyToRun = false; }],
+    ['missing optimization profile', value => { delete value.publishReadyToRun; }],
+    ['untyped optimization profile', value => { value.publishReadyToRun = 'true'; }],
+    ['PR payload optimization', value => { value.windowsPayload.publishReadyToRun = false; }],
+    ['missing payload optimization', value => { delete value.windowsPayload.publishReadyToRun; }],
     ['dirty', value => { value.dirty = true; }], ['wrong version', value => { value.version = '1.2.4'; }],
     ['wrong architecture', value => { value.architecture = 'arm64'; }], ['failed', value => { value.status = 'Failed'; }],
     ['missing webviews', value => { value.vsixWebviewsVerified = false; }], ['manifest replaced', value => { value.packageManifestSha256 = '0'.repeat(64); }],

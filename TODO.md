@@ -138,7 +138,14 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   retains diagnostics if their separate upload fails. Successful uploads are never overwritten.
   Hosted recovery acceptance remains required; no retained artifact exists for the failed ARM job.
   Isolated experiment `41367135973` compares one Intel CLI publish with ReadyToRun enabled/disabled.
-  It creates timing reports only; production options and full release requirements remain unchanged.
+  Publishing takes 11m07s enabled versus 3m27s disabled with the same source/SDK/OS/image. Both CLI
+  versions match; the harness rejects preceding startup messages. Original failed statuses remain
+  retained, and binary hashes/post-publish clean checks were not reached. The harness is corrected
+  for future use; these one-host timings do not certify packages or establish complete PR elapsed time.
+  Hosted PR packages now omit ReadyToRun while preserving all selected hosts and acceptance checks.
+  Local/nightly/full release publishing remains optimized. Payload options and typed native evidence
+  distinguish profiles; publication rejects PR/missing/untyped optimization evidence. Full hosted
+  PR acceptance and timing remain required before closing the target.
 
 - [ ] **Release timeline.** Record the v0.22.0 candidate cut, each CI/MSI round, its cause and the
   tag time as the release runs, so the goal is measured rather than remembered.

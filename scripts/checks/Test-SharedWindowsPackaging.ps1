@@ -7,12 +7,17 @@ $global:SharedWindowsFixtureHosts = & $global:SharedWindowsFixtureNodeExecutable
 $global:SharedWindowsFixturePublishes = 0
 $global:SharedWindowsFixtureRestores = 0
 $global:SharedWindowsFixtureFailRestore = 0
+$global:SharedWindowsFixtureExpectedReadyToRun = 'true'
 $global:SharedWindowsFixtureFailPublish = 0
 $global:SharedWindowsFixtureDrift = $false
 $global:SharedWindowsFixtureWixCalls = [Collections.Generic.List[object]]::new()
 $priorVersion = $env:ETL_SQL_VERSION
 $priorCandidate = $env:CANDIDATE_SHA
 $priorOutput = $env:GITHUB_OUTPUT
+$priorActions = $env:GITHUB_ACTIONS
+$priorEvent = $env:GITHUB_EVENT_NAME
+$env:GITHUB_ACTIONS = 'true'
+$env:GITHUB_EVENT_NAME = 'workflow_dispatch'
 $env:GITHUB_OUTPUT = $null
 function Write-Fixture([string]$Relative, [string]$Value) {
     $file = Join-Path $fixture $Relative
@@ -31,7 +36,7 @@ function dotnet {
         $global:SharedWindowsFixtureRestores++
         if ($global:SharedWindowsFixturePublishes -ne 0) { throw 'Restore occurred after publishing started.' }
         $normalized = ($args -join ' ').Replace('-p: ', '-p:').Split(' ')
-        foreach ($option in @('-p:Configuration=Release', '-p:SelfContained=true', '-p:PublishSingleFile=true', '-p:PublishReadyToRun=true', '-p:IncludeNativeLibrariesForSelfExtract=true')) {
+        foreach ($option in @('-p:Configuration=Release', '-p:SelfContained=true', '-p:PublishSingleFile=true', "-p:PublishReadyToRun=$global:SharedWindowsFixtureExpectedReadyToRun", '-p:IncludeNativeLibrariesForSelfExtract=true')) {
             if ($normalized -notcontains $option) { throw "Restore omitted publish input $option" }
         }
         if ($args[[Array]::IndexOf($args, '-r') + 1] -cne 'win-x64') { throw 'Restore used the wrong RID.' }
@@ -41,7 +46,7 @@ function dotnet {
     if ($args[0] -ne 'publish') { throw 'Unexpected .NET fixture call.' }
     if ($global:SharedWindowsFixtureRestores -ne 8 -or $args -notcontains '--no-restore') { throw 'Publish did not use all restored inputs.' }
     $global:SharedWindowsFixturePublishes++
-    foreach ($argument in @('-p:PublishSingleFile=true', '-p:PublishReadyToRun=true', '-p:IncludeNativeLibrariesForSelfExtract=true')) {
+    foreach ($argument in @('-p:PublishSingleFile=true', "-p:PublishReadyToRun=$global:SharedWindowsFixtureExpectedReadyToRun", '-p:IncludeNativeLibrariesForSelfExtract=true')) {
         if (($args -join ' ').Replace('-p: ', '-p:').Split(' ') -notcontains $argument) { throw ('Windows producer options changed: ' + ($args | ConvertTo-Json -Compress)) }
     }
     if ($global:SharedWindowsFixturePublishes -eq $global:SharedWindowsFixtureFailPublish) { $global:LASTEXITCODE = 7; return }
@@ -62,6 +67,7 @@ function node {
         $copy = Join-Path $args[3] 'bundle'
         Copy-Item -LiteralPath $global:SharedWindowsFixturePayload -Destination $copy -Recurse
         @{ sourceSha = 'a' * 40; version = '0.22.0'; manifestSha256 = $global:SharedWindowsFixtureHash;
+           publishReadyToRun = $global:SharedWindowsFixtureExpectedReadyToRun -ceq 'true';
            artifactId = 123; executionAttempt = 1; payloadDirectory = $copy } |
             ConvertTo-Json | Set-Content -LiteralPath (Join-Path $args[3] 'selection.json')
         $global:LASTEXITCODE = 0
@@ -85,6 +91,7 @@ function Invoke-FakeWix {
     $global:LASTEXITCODE = 0
 }
 try {
+    . (Join-Path $repo 'scripts/ReleasePublish.Helpers.ps1')
     $null = [IO.Directory]::CreateDirectory($fixture)
     foreach ($relative in @('Publish-WindowsPayload.ps1', 'Build-WindowsNativePackages.ps1', 'windows-payload.mjs', 'ReleaseOutput.Helpers.ps1', 'ReleasePublish.Helpers.ps1', 'ReleaseEvidence.Helpers.ps1', 'DeploymentCertification.Contracts.ps1', 'DeploymentTestEvidence.Helpers.ps1', 'publish-release.ps1', 'lib/package-runtime-state.patterns')) {
         Write-Fixture "scripts/$relative" (Get-Content -LiteralPath (Join-Path $repo "scripts/$relative") -Raw)
@@ -168,6 +175,28 @@ if ($ScriptArguments.Count -ne 6 -or $ScriptArguments[0] -cne '-Platforms' -or
     try { & (Join-Path $fixture 'scripts/build-msi.ps1') -WindowsPayloadDirectory $payload -WindowsPayloadHash $hash } catch { $rejected = $true }
     if (-not $rejected -or $global:SharedWindowsFixtureWixCalls.Count -ne 3 -or $global:SharedWindowsFixturePublishes -ne 8) { throw 'MSI accepted a changed payload.' }
     if ($global:SharedWindowsFixtureRestores -ne 8) { throw 'A verified payload consumer restored dependencies again.' }
+    foreach ($event in @('workflow_dispatch', 'push', 'schedule')) {
+        $env:GITHUB_EVENT_NAME = $event
+        if ((Get-ReleasePublishReadyToRun) -ne $true) { throw 'Full release publishing lost ReadyToRun.' }
+    }
+    $env:GITHUB_EVENT_NAME = 'pull_request'
+    if ((Get-ReleasePublishReadyToRun) -ne $false) { throw 'Hosted PR publishing did not select the faster profile.' }
+    $env:GITHUB_ACTIONS = 'false'
+    if ((Get-ReleasePublishReadyToRun) -ne $true) { throw 'Local publication must keep release optimization.' }
+    $env:GITHUB_ACTIONS = 'true'
+    $global:SharedWindowsFixturePublishes = 0; $global:SharedWindowsFixtureRestores = 0
+    $global:SharedWindowsFixtureExpectedReadyToRun = 'false'
+    $prPayload = Join-Path $fixture 'artifacts/pr-payload/bundle'
+    & (Join-Path $fixture 'scripts/Publish-WindowsPayload.ps1') -OutputDirectory $prPayload
+    if ($global:SharedWindowsFixturePublishes -ne 8 -or $global:SharedWindowsFixtureRestores -ne 8) { throw 'PR profile skipped a host.' }
+    $prManifest = Get-Content (Join-Path $prPayload 'windows-payload.json') -Raw | ConvertFrom-Json
+    if ($prManifest.options.readyToRun -ne $false) { throw 'PR payload did not bind its optimization profile.' }
+    $prHash = (Get-FileHash (Join-Path $prPayload 'windows-payload.json')).Hash.ToLowerInvariant()
+    $env:GITHUB_EVENT_NAME = 'workflow_dispatch'
+    $rejected = $false
+    try { & (Join-Path $fixture 'scripts/build-msi.ps1') -WindowsPayloadDirectory $prPayload -WindowsPayloadHash $prHash } catch { $rejected = $true }
+    if (-not $rejected -or $global:SharedWindowsFixtureWixCalls.Count -ne 3) { throw 'Release MSI packaging accepted unoptimized PR inputs.' }
+    $global:SharedWindowsFixtureExpectedReadyToRun = 'true'
     foreach ($failedRestore in @(1, 8)) {
         $global:SharedWindowsFixturePublishes = 0; $global:SharedWindowsFixtureRestores = 0
         $global:SharedWindowsFixtureFailRestore = $failedRestore
@@ -187,6 +216,8 @@ if ($ScriptArguments.Count -ne 6 -or $ScriptArguments[0] -cne '-Platforms' -or
     $env:ETL_SQL_VERSION = $priorVersion
     $env:CANDIDATE_SHA = $priorCandidate
     $env:GITHUB_OUTPUT = $priorOutput
+    $env:GITHUB_ACTIONS = $priorActions
+    $env:GITHUB_EVENT_NAME = $priorEvent
     $resolved = [IO.Path]::GetFullPath($fixture)
     if ([IO.Path]::GetDirectoryName($resolved) -cne $tempRoot.TrimEnd('\', '/') -or [IO.Path]::GetFileName($resolved) -cnotmatch '^windows-payload-public-[a-f0-9]{32}$') { throw 'Unsafe fixture cleanup.' }
     if (Test-Path -LiteralPath $resolved) { Remove-Item -LiteralPath $resolved -Recurse -Force }

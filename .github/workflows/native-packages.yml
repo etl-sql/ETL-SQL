@@ -137,6 +137,7 @@ jobs:
         timeout-minutes: 5
         run: |
           $ErrorActionPreference = 'Stop'
+          . ./scripts/ReleasePublish.Helpers.ps1
           $commit = (git rev-parse HEAD).Trim()
           if ($LASTEXITCODE -ne 0 -or $commit -ne $env:CANDIDATE_SHA) {
             throw 'Checkout does not match the requested candidate.'
@@ -151,6 +152,7 @@ jobs:
           [ordered]@{
             schemaVersion = 1
             commit = $commit
+            publishReadyToRun = Get-ReleasePublishReadyToRun
             dirty = $false
             rid = $env:PACKAGE_RID
             operatingSystem = [Runtime.InteropServices.RuntimeInformation]::OSDescription

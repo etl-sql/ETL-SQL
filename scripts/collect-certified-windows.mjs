@@ -56,7 +56,9 @@ export async function verifyCertifiedNative(directory, sha, version, platform) {
   if (!/^[a-f0-9]{40}$/.test(sha) || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) throw new Error('Invalid native acceptance identity.');
   const evidence = `artifacts/native-packages/${platform}`;
   const summaryFile = file(directory, `${evidence}/certification.json`), summary = json(summaryFile);
+  if (summary.publishReadyToRun !== true) throw new Error('Native publication requires ReadyToRun release certification.');
   if (platform === 'win-x64' && (summary.windowsPayload?.sourceSha !== sha || summary.windowsPayload?.version !== version ||
+      summary.windowsPayload?.publishReadyToRun !== true ||
       !/^[a-f0-9]{64}$/.test(summary.windowsPayload?.manifestSha256 ?? ''))) throw new Error('Shared Windows payload acceptance is missing or mismatched.');
   const manifestFile = file(directory, `release/${descriptor.manifest}`), manifestSha256 = hash(readFileSync(manifestFile));
   const manifest = json(manifestFile);

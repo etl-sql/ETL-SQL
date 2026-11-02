@@ -38,6 +38,7 @@ try {
       await macosPackages('create', path.join(directory, 'release'), candidate, version, platform, platform === 'osx-x64' ? '--include-dmg' : undefined);
       const manifestBytes = readFileSync(path.join(directory, 'release', manifestName)), manifest = JSON.parse(manifestBytes);
       const summary = { schemaVersion: 1, commit: candidate, version, dirty: false, rid: platform, architecture: platform === 'osx-arm64' ? 'arm64' : 'x64', status: 'Passed',
+        publishReadyToRun: true,
         zipSha256: manifest.packages[names[0]], vsixWebviewsVerified: true, vsixInstalledAssets: 59, packageManifestSha256: hash(manifestBytes),
         toolchain: { nodeVersion: 'v22.23.3', dotnetVersion: '10.0.306' }, startedAt: time(-8500), finishedAt: time(-6000),
         releaseCandidateChecksPassedAt: time(-3000), runUrl: 'https://github.com/owner/repo/actions/runs/123' };
@@ -77,7 +78,8 @@ try {
       data => { data[artifactsUrl][0].total_count++; }, data => { data[artifactsUrl][0].artifacts[0].expired = true; },
       data => { data[artifactsUrl][0].artifacts[0].workflow_run.head_sha = 'b'.repeat(40); },
       data => { data[artifactsUrl][0].artifacts[0].created_at = time(-9500); }]) await assert.rejects(collect({ mutate }));
-    for (const action of [value => { value.dirty = true; }, value => { value.architecture = 'other'; },
+    for (const action of [value => { value.publishReadyToRun = false; }, value => { delete value.publishReadyToRun; },
+      value => { value.publishReadyToRun = 'true'; }, value => { value.dirty = true; }, value => { value.architecture = 'other'; },
       value => { value.rid = 'win-x64'; }, value => { value.version = '1.2.4'; }, value => { value.status = 'Failed'; },
       value => { value.toolchain.nodeVersion = 'v24.0.0'; }, value => { value.packageManifestSha256 = '0'.repeat(64); },
       value => { value.releaseCandidateChecksPassedAt = time(-1500); }]) await assert.rejects(collect({ change: alter(summaryPath, action) }));

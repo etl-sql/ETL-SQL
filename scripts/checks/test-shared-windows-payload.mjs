@@ -76,9 +76,12 @@ try {
         } });
     };
     assert.equal((await exercise()).artifactId, 120, 'Portal may still be running; only the completed payload producer is required.');
-    assert.equal((await exercise(copy => {
+    assert.equal((await exercise()).publishReadyToRun, false);
+    const manualSelection = await exercise(copy => {
         copy[`${root}/workflows/msi-upgrade.yml/runs?head_sha=${sha}&per_page=100`][0].workflow_runs[0].event = 'push';
-    }, { event: 'workflow_dispatch' })).artifactId, 120, 'Manual native certification may consume the full MSI branch producer.');
+    }, { event: 'workflow_dispatch' });
+    assert.equal(manualSelection.artifactId, 120, 'Manual native certification may consume the full MSI branch producer.');
+    assert.equal(manualSelection.publishReadyToRun, true);
     assert.equal((await exercise(copy => {
         copy[`${root}/workflows/msi-upgrade.yml/runs?head_sha=${sha}&per_page=100`][0].workflow_runs[0].head_repository.full_name = 'fork/repo';
     })).status, 'Waiting', 'A different source repository must not satisfy the request.');
@@ -105,6 +108,13 @@ try {
     await assert.rejects(waitForWindowsPayload(context, { query: async () => page('workflow_runs', []), registrationMs: 2,
         clock: () => clock, sleep: async () => { clock++; }, intervalMs: 1, report: () => {} }), /No matching/);
 
+    const prManifestHash = await createWindowsPayload(bundle, sha, version, '10.0.100', false);
+    await verifyWindowsPayload(bundle, sha, version, prManifestHash, false);
+    await assert.rejects(verifyWindowsPayload(bundle, sha, version, prManifestHash), /options/);
+    await assert.rejects(verifyWindowsPayload(bundle, sha, version, prManifestHash, 'false'), /boolean/);
+    const prCopy = path.join(temporary, 'copy-pr/bin');
+    await fs.mkdir(prCopy, { recursive: true });
+    await copyWindowsPayload(bundle, sha, version, prManifestHash, prCopy, false);
     const archive = path.join(temporary, 'source.zip');
     const zip = spawnSync('pwsh', ['-NoProfile', '-Command', '[IO.Compression.ZipFile]::CreateFromDirectory($env:PAYLOAD_SOURCE,$env:PAYLOAD_ZIP,[IO.Compression.CompressionLevel]::NoCompression,$true)'],
         { env: { ...process.env, PAYLOAD_SOURCE: bundle, PAYLOAD_ZIP: archive }, encoding: 'utf8', windowsHide: true, timeout: 10000 });
@@ -116,8 +126,9 @@ try {
         download: async (_selection, target) => fs.copyFile(archive, target),
         query: async () => [{ ...artifact, digest: selection.artifactDigest }],
     });
-    assert.equal(accepted.manifestSha256, manifestHash);
-    await verifyWindowsPayload(accepted.payloadDirectory, sha, version, manifestHash);
+    assert.equal(accepted.publishReadyToRun, false);
+    assert.equal(accepted.manifestSha256, prManifestHash);
+    await verifyWindowsPayload(accepted.payloadDirectory, sha, version, prManifestHash, false);
     const badOutput = path.join(temporary, 'bad-download'); await fs.mkdir(badOutput);
     await assert.rejects(downloadWindowsPayload({ ...selection, artifactDigest: `sha256:${'0'.repeat(64)}` }, version, badOutput,
         { download: async (_selection, target) => fs.copyFile(archive, target), query: async () => [] }), /digest mismatch/);
