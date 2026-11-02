@@ -581,7 +581,7 @@ builder.Services.AddScoped<ETL_SQL.Core.Governance.PolicyAuthorityService>(sp =>
         sp.GetRequiredService<ETL_SQL.Core.Governance.IPolicyEnvelopeSigner>(),
         authorityTenant: tenant);
 });
-builder.Services.AddSingleton<ETL_SQL.Portal.Services.DedicatedPolicyAuthorityGuard>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.DedicatedPolicyAuthorityGuard>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ReportPublishingPolicyService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SubscriptionDeliveryStatusService>();
 // Scoped: it reads the current principal's live group membership, so it must not outlive a request.

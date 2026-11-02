@@ -212,7 +212,7 @@ public class PolicyAuthorityController(
     public async Task<IActionResult> ListMachines(
         [FromQuery] string? tenant, [FromQuery] string? environment, CancellationToken cancellationToken)
     {
-        if (tenantGuard.IsDedicated)
+        if (tenantGuard.IsTenantBound)
         {
             if (AuthorizeTenant(tenant, mutation: false, out var scopedTenant) is { } denied) return denied;
             tenant = scopedTenant;
@@ -248,7 +248,7 @@ public class PolicyAuthorityController(
 
         var existing = await db.PolicyMachines
             .FirstOrDefaultAsync(m => m.MachineId == request.MachineId, cancellationToken);
-        if (existing is not null && tenantGuard.IsDedicated
+        if (existing is not null && tenantGuard.IsTenantBound
             && !existing.Tenant.Equals(tenant, StringComparison.Ordinal))
         {
             return StatusCode(StatusCodes.Status403Forbidden, new
@@ -295,7 +295,7 @@ public class PolicyAuthorityController(
         string machineId, [FromBody] PolicyMachineRevokeRequest request, CancellationToken cancellationToken)
     {
         string? hostTenant = null;
-        if (tenantGuard.IsDedicated)
+        if (tenantGuard.IsTenantBound)
         {
             if (AuthorizeTenant(null, mutation: true, out hostTenant) is { } denied) return denied;
         }
