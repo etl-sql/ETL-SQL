@@ -59,7 +59,9 @@ WITH (
 | `HOSTED` | Reserved for Portal / `report serve` browser-backed export. Explicit mode fails if unavailable. |
 | `BROWSER` | Uses an optional installed Chrome, Edge, or Chromium executable. No browser is bundled or required. |
 
-`HOST` and `BROWSER_PATH` are accepted only with `FORMAT PDF`. `HOSTED` and `BROWSER` are opt-in
+`HOST` and `BROWSER_PATH` are accepted only with `FORMAT PDF`. `HOST` must be an absolute `http` or
+`https` URL on an allowed host. `BROWSER_PATH` selects one of the installed browsers found on `PATH` or
+in a standard install location; any other file is refused. `HOSTED` and `BROWSER` are opt-in
 high-fidelity modes; `STATIC` remains the portable default.
 
 ## `etl-sql-report refresh`

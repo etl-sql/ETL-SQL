@@ -67,8 +67,8 @@ SELECT * FROM #orders;
 | Option | Values | Default | Description |
 |---|---|---|---|
 | `PDF_MODE` | `STATIC` \| `AUTO` \| `HOSTED` \| `BROWSER` | `STATIC` | Method of PDF rendering. |
-| `HOST` | report serve / Portal URL | none | Portal URL for hosted export. |
-| `BROWSER_PATH` | path to Chromium executable | none | Chrome, Edge, or Chromium executable path. |
+| `HOST` | report serve / Portal URL | none | Portal URL for hosted export. Must be an absolute `http` or `https` URL whose host passes the network host policy. |
+| `BROWSER_PATH` | path to Chromium executable | none | Chrome, Edge, or Chromium executable path. Must be a browser found on `PATH` or in a standard install location; any other file is refused. |
 
 `STATIC` uses the built-in PDFsharp/MigraDoc exporter and requires no browser. `HOSTED` and `BROWSER` use an installed Chrome, Edge, or Chromium browser with the shared report runtime. `AUTO` tries the configured browser-backed path when `HOST` is available and falls back to `STATIC` with a warning.
 

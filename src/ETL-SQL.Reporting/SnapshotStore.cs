@@ -138,10 +138,12 @@ namespace ETL_SQL.Reporting
                     return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
                 }
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException or InvalidDataException
+                or System.Security.Cryptography.CryptographicException)
             {
-                // If the JSON is corrupt (e.g. partial write during unexpected crash),
-                // treat as missing so it can be rebuilt.
+                // A corrupt or truncated snapshot (partial write during a crash, a damaged or
+                // tampered package that fails authentication) is treated as missing so it is
+                // rebuilt from the script rather than trusted or crashing the caller.
                 return null;
             }
             finally

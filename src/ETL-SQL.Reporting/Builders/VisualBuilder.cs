@@ -761,9 +761,9 @@ namespace ETL_SQL.Reporting.Builders
                         var sum = g.Sum(r =>
                         {
                             var v = r[mi];
-                            return decimal.TryParse(v, out var d) ? d : 0m;
+                            return TryParseNumber(v, out var d) ? d : 0m;
                         });
-                        row[mi] = sum.ToString();
+                        row[mi] = sum.ToString(CultureInfo.InvariantCulture);
                     }
                     return row;
                 })
@@ -917,7 +917,7 @@ namespace ETL_SQL.Reporting.Builders
                 }
                 foreach (var row in batch.Rows)
                 {
-                    targetRows.Add(vm.Columns.Select(c => row[c]?.ToString()).ToList());
+                    targetRows.Add(vm.Columns.Select(c => ToCellText(row[c])).ToList());
                     if (targetRows == vm.Rows)
                     {
                         vm.RawRows.Add(vm.Columns.ToDictionary(
@@ -1070,7 +1070,7 @@ namespace ETL_SQL.Reporting.Builders
                 double cmin = double.MaxValue, cmax = double.MinValue;
                 foreach (var row in vm.Rows)
                 {
-                    if (si < row.Count && row[si] != null && double.TryParse(row[si], out var d))
+                    if (si < row.Count && row[si] != null && double.TryParse(row[si], NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
                     {
                         if (d < cmin) cmin = d;
                         if (d > cmax) cmax = d;
@@ -1222,7 +1222,7 @@ namespace ETL_SQL.Reporting.Builders
             // 1. Specific Aggregates
             foreach (var item in vStmt.Summaries)
             {
-                var colIndex = vm.Columns.FindIndex(c => c.Equals(item.Column, StringComparison.OrdinalIgnoreCase));
+                var colIndex = FindSummaryColumn(vStmt, vm, item.Column);
                 if (colIndex < 0) continue;
 
                 var value = ComputeAggregate(vm.Rows, colIndex, item.Aggregate);
@@ -1248,7 +1248,7 @@ namespace ETL_SQL.Reporting.Builders
 
                 foreach (var colName in colsToSummarize)
                 {
-                    var colIndex = vm.Columns.FindIndex(c => c.Equals(colName, StringComparison.OrdinalIgnoreCase));
+                    var colIndex = FindSummaryColumn(vStmt, vm, colName);
                     if (colIndex < 0) continue;
 
                     var sum = ComputeAggregate(vm.Rows, colIndex, agg);
@@ -1258,6 +1258,19 @@ namespace ETL_SQL.Reporting.Builders
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Summaries run before MAPPINGS renames the columns, so a summary may name either the source
+        /// column or the display name the author gave it with <c>COLUMN x AS 'Display'</c>.
+        /// </summary>
+        private static int FindSummaryColumn(CreateVisualStatement vStmt, VisualManifest vm, string name)
+        {
+            var index = vm.Columns.FindIndex(c => c.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0) return index;
+            var mapping = vStmt.Mappings.FirstOrDefault(m =>
+                m.DisplayName != null && m.DisplayName.Equals(name, StringComparison.OrdinalIgnoreCase));
+            return mapping == null ? -1 : vm.Columns.FindIndex(c => c.Equals(mapping.Column, StringComparison.OrdinalIgnoreCase));
         }
 
         private void ApplyTableSort(CreateVisualStatement vStmt, VisualManifest vm)
@@ -1328,6 +1341,16 @@ namespace ETL_SQL.Reporting.Builders
                 vm.RawRows.Clear();
                 vm.RawRows.AddRange(newRaw);
             }
+            // Row-indexed arrays travel with their rows.
+            vm.RowStyles = Reorder(vm.RowStyles);
+            vm.RowFontStyles = Reorder(vm.RowFontStyles);
+            vm.SegmentRowStyles = Reorder(vm.SegmentRowStyles);
+            vm.RowDetailKeys = Reorder(vm.RowDetailKeys);
+
+            List<T>? Reorder<T>(List<T>? perRow) =>
+                perRow is { Count: > 0 } && perRow.Count == indexedRows.Count
+                    ? indexedRows.Select(x => perRow[x.originalIndex]).ToList()
+                    : perRow;
         }
 
         private string ComputeAggregate(List<List<string?>> rows, int colIndex, string aggregate)
@@ -1338,20 +1361,20 @@ namespace ETL_SQL.Reporting.Builders
             switch (aggregate.ToUpperInvariant())
             {
                 case "COUNT":
-                    return values.Count.ToString();
+                    return values.Count.ToString(CultureInfo.InvariantCulture);
                 case "SUM":
                 case "AVG":
                 case "MIN":
                 case "MAX":
-                    var decimals = values.Select(v => decimal.TryParse(v, out var d) ? d : (decimal?)null).Where(d => d != null).Select(d => d!.Value).ToList();
+                    var decimals = values.Select(v => TryParseNumber(v, out var d) ? d : (decimal?)null).Where(d => d != null).Select(d => d!.Value).ToList();
                     if (decimals.Count == 0) return values.Count > 0 && (aggregate == "MIN" || aggregate == "MAX") ? values.OrderBy(v => v).First()! : "0";
 
                     return aggregate.ToUpperInvariant() switch
                     {
-                        "SUM" => decimals.Sum().ToString("G29"),
-                        "AVG" => decimals.Average().ToString("G29"),
-                        "MIN" => decimals.Min().ToString("G29"),
-                        "MAX" => decimals.Max().ToString("G29"),
+                        "SUM" => decimals.Sum().ToString("G29", CultureInfo.InvariantCulture),
+                        "AVG" => decimals.Average().ToString("G29", CultureInfo.InvariantCulture),
+                        "MIN" => decimals.Min().ToString("G29", CultureInfo.InvariantCulture),
+                        "MAX" => decimals.Max().ToString("G29", CultureInfo.InvariantCulture),
                         _ => "0"
                     };
                 default:
@@ -1362,8 +1385,23 @@ namespace ETL_SQL.Reporting.Builders
         private bool IsNumericColumn(List<List<string?>> rows, int colIndex)
         {
             var sample = rows.Take(10).Select(r => r[colIndex]).FirstOrDefault(v => !string.IsNullOrEmpty(v));
-            return decimal.TryParse(sample, out _);
+            return TryParseNumber(sample, out _);
         }
+
+        /// <summary>
+        /// Manifest cells carry numbers in invariant form ("1.5", never "1,5") so every server-side
+        /// parse below, the client runtime, and exports read the same value on any host culture.
+        /// </summary>
+        private static string? ToCellText(object? value) => value switch
+        {
+            null => null,
+            decimal or double or float or int or long or short or byte or sbyte or uint or ulong or ushort
+                => Convert.ToString(value, CultureInfo.InvariantCulture),
+            _ => value.ToString()
+        };
+
+        private static bool TryParseNumber(string? text, out decimal value) =>
+            decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out value);
 
         private static void ResolveDynamicMinMax(VisualManifest vm)
         {
