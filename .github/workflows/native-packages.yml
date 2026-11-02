@@ -4,6 +4,11 @@ on:
   pull_request:
     branches: [main, 'release/**']
   workflow_dispatch:
+    inputs:
+      diagnostic_publish_cost:
+        description: Development branch only; compare one Intel CLI publish, never certification
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -14,7 +19,57 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  diagnostic-publish-cost:
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnostic_publish_cost
+    name: Publish cost (ReadyToRun=${{ matrix.ready_to_run }})
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        ready_to_run: ['true', 'false']
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 5
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require isolated diagnostic scope
+        shell: pwsh
+        timeout-minutes: 1
+        run: |
+          if ($env:GITHUB_REF -cne 'refs/heads/diagnostic/native-publish-cost') { throw 'Development timing experiment only.' }
+      - name: Prepare browser sources
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          npm ci --prefix scripts/typecheck
+          if ($LASTEXITCODE -ne 0) { throw 'Experiment compiler restore failed.' }
+          node scripts/sync-assets.js
+          if ($LASTEXITCODE -ne 0) { throw 'Experiment browser preparation failed.' }
+          node scripts/sync-assets.js -Check
+          if ($LASTEXITCODE -ne 0) { throw 'Experiment browser inventory mismatch.' }
+      - name: Measure restore and publish independently
+        shell: pwsh
+        timeout-minutes: 43
+        env:
+          READY_TO_RUN: ${{ matrix.ready_to_run }}
+        run: ./scripts/Measure-NativePublishCost.ps1 -ReadyToRun $env:READY_TO_RUN
+      - name: Retain timing and diagnostics only
+        if: always()
+        timeout-minutes: 3
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-publish-cost-${{ matrix.ready_to_run }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/native-publish-cost/
+          if-no-files-found: warn
+          retention-days: 30
+
   package-impact:
+    if: ${{ !inputs.diagnostic_publish_cost }}
     name: Native package impact
     timeout-minutes: 15
     runs-on: ubuntu-latest
@@ -425,7 +480,7 @@ jobs:
     name: Native Package Certification
     timeout-minutes: 5
     needs: [package-impact, native-package]
-    if: always()
+    if: always() && !inputs.diagnostic_publish_cost
     runs-on: ubuntu-latest
     steps:
       - name: Require package coverage or an explicit no-impact selection
