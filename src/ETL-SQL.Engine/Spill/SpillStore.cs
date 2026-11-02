@@ -509,7 +509,9 @@ public partial class SpillStore : ISpillStore
                 }
             }
             var json = JsonSerializer.Serialize(dict);
-            if (_context.Telemetry?.TelemetryEnabled ?? false)
+            // Spill accounting runs whatever SET TELEMETRY says: it backs the enterprise
+            // Security:MaxSpillBytesPerScript ceiling, which a script must not be able to switch off.
+            if (_context.Telemetry != null)
             {
                 // Fast approximation (+2 for newline)
                 long inc = json.Length + 2;
@@ -714,7 +716,7 @@ public partial class SpillStore : ISpillStore
             _buffer.Add(snapshot);
             _acceptedRowCount++;
 
-            if (_context.Telemetry?.TelemetryEnabled ?? false)
+            if (_context.Telemetry != null)
             {
                 // Row.ColumnCount, not Row.Columns.Count — the Columns property materializes a
                 // fresh dictionary per access, which on this per-row path was measurable churn.
@@ -835,7 +837,7 @@ public partial class SpillStore : ISpillStore
                     await FlushBatchAsync();
             }
 
-            if ((_context.Telemetry?.TelemetryEnabled ?? false) && telemetryBytes > 0)
+            if (_context.Telemetry != null && telemetryBytes > 0)
             {
                 _context.Telemetry.TotalSpilledBytes += telemetryBytes;
                 BytesWritten += telemetryBytes;
@@ -861,7 +863,7 @@ public partial class SpillStore : ISpillStore
 
             using var recordBatch = BuildBatch(batch);
             await _arrowWriter!.WriteRecordBatchAsync(recordBatch);
-            if (_context.Telemetry?.TelemetryEnabled ?? false)
+            if (_context.Telemetry != null)
             {
                 var increment = batch.AllocatedBytes;
                 _context.Telemetry.TotalSpilledBytes += increment;
