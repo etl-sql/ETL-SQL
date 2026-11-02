@@ -171,8 +171,8 @@ exit 0
     $durableChild = Join-Path $fixture 'durable child.ps1'
     Set-Content -LiteralPath $durableChild -Value 'if($env:CERT_DIAG_CHILD_TIMEOUT -eq "1"){Start-Sleep -Seconds 20}; exit 0'
     Set-Content -LiteralPath $wrapper -Value @'
-param($Supervisor, $Child, $Evidence, $Sink, [int]$Timeout, $Hang, $FailSink)
-$env:GITHUB_ACTIONS='true'; $env:ETLSQL_MSI_DIAGNOSTIC_ONLY='1'
+param($Supervisor, $Child, $Evidence, $Sink, [int]$Timeout, $Hang, $FailSink, $Diagnostic)
+$env:GITHUB_ACTIONS='true'; $env:ETLSQL_MSI_DIAGNOSTIC_ONLY=$Diagnostic; $env:ETLSQL_MSI_DURABLE_CHECKPOINTS='1'
 $env:CERT_DIAG_CHILD_TIMEOUT=$Hang; $env:CERT_DIAG_SINK=$Sink; $env:CERT_DIAG_FAIL=$FailSink
 function Write-MsiDurableCheckpoint {
     param($Stage)
@@ -183,11 +183,12 @@ function Write-MsiDurableCheckpoint {
 & $Supervisor -ScriptPath $Child -EvidenceDirectory $Evidence -TimeoutSeconds $Timeout
 exit $LASTEXITCODE
 '@
-    foreach ($case in @(@{ Name = 'success'; Timeout = 10; Hang = '0'; FailSink = '1'; Exit = 0 },
-        @{ Name = 'timeout'; Timeout = 1; Hang = '1'; FailSink = '0'; Exit = 124 })) {
+    foreach ($case in @(@{ Name = 'success'; Timeout = 10; Hang = '0'; FailSink = '1'; Exit = 0; Diagnostic = '1' },
+        @{ Name = 'normal'; Timeout = 10; Hang = '0'; FailSink = '0'; Exit = 0; Diagnostic = '0' },
+        @{ Name = 'timeout'; Timeout = 1; Hang = '1'; FailSink = '0'; Exit = 124; Diagnostic = '1' })) {
         $sink = Join-Path $fixture "durable-$($case.Name).txt"
         $process = Start-TestProcess @('-NoProfile', '-File', $wrapper, $supervisor, $durableChild,
-            (Join-Path $fixture "durable-$($case.Name)"), $sink, [string]$case.Timeout, $case.Hang, $case.FailSink)
+            (Join-Path $fixture "durable-$($case.Name)"), $sink, [string]$case.Timeout, $case.Hang, $case.FailSink, $case.Diagnostic)
         $output = $process.StandardOutput.ReadToEndAsync(); $errorOutput = $process.StandardError.ReadToEndAsync()
         if (-not $process.WaitForExit(15000)) { $process.Kill(); throw 'Durable parent fixture exceeded its deadline.' }
         if (-not $output.Wait(2000) -or -not $errorOutput.Wait(2000) -or $process.ExitCode -ne $case.Exit) {

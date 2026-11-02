@@ -424,6 +424,55 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  msi-progress:
+    name: MSI runner progress monitor
+    needs: build-msi
+    if: always() && (needs.build-msi.result == 'success' || inputs.diagnostic_artifact_id != '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      actions: write
+      checks: read
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 3
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Observe MSI progress from an independent runner
+        id: progress
+        timeout-minutes: 66
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MSI_MONITOR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          MSI_MONITOR_DIAGNOSTIC: ${{ inputs.diagnostic_artifact_id != '' }}
+        run: node scripts/watch-msi-progress.mjs
+      - name: Retain independent progress evidence before cancellation
+        if: always()
+        timeout-minutes: 2
+        uses: actions/upload-artifact@v7
+        with:
+          name: msi-progress-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/msi-progress/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: End an unresponsive MSI run without rebuilding successful jobs
+        if: always() && steps.progress.outputs.stalled == 'true'
+        timeout-minutes: 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current_attempt="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .run_attempt)"
+          if [[ "$current_attempt" != "$GITHUB_RUN_ATTEMPT" ]]; then
+            echo 'MSI run attempt changed; refusing cancellation.'
+            exit 1
+          fi
+          gh run cancel "$GITHUB_RUN_ID" --force
+
   msi-upgrade-gate:
     name: MSI In-Place Upgrade
     timeout-minutes: 5
@@ -434,6 +483,7 @@ jobs:
       - detect-upgrade-impact
       - build-msi
       - msi-upgrade
+      - msi-progress
     if: always() && !inputs.diagnostic_artifact_id
     runs-on: ubuntu-latest
     steps:
@@ -446,6 +496,7 @@ jobs:
           SHOULD_RUN: ${{ needs.detect-upgrade-impact.outputs.should_run }}
           BUILD_RESULT: ${{ needs.build-msi.result }}
           CERTIFICATION_RESULT: ${{ needs.msi-upgrade.result }}
+          PROGRESS_RESULT: ${{ needs.msi-progress.result }}
           ARTIFACT_ID: ${{ needs.build-msi.outputs.artifact_id }}
           PREVIOUS_TAG: ${{ needs.build-msi.outputs.previous_tag }}
         run: |
@@ -456,6 +507,7 @@ jobs:
           if ($env:SHOULD_RUN -eq 'true' -and ($env:BUILD_RESULT -ne 'success' -or $env:CERTIFICATION_RESULT -ne 'success')) {
             throw "MSI upgrade certification was required but ended as '$env:CERTIFICATION_RESULT'."
           }
+          if ($env:SHOULD_RUN -eq 'true' -and $env:PROGRESS_RESULT -ne 'success') { throw 'Independent MSI progress monitoring did not pass.' }
           if ($env:SHOULD_RUN -eq 'false' -and ($env:BUILD_RESULT -ne 'skipped' -or $env:CERTIFICATION_RESULT -ne 'skipped')) {
             throw "MSI upgrade certification was not required but ended as '$env:CERTIFICATION_RESULT'."
           }

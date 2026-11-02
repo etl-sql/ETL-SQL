@@ -53,7 +53,7 @@ for (const callerName of ['release.yml', 'nightly-release.yml']) {
   const caller = readFileSync(new URL(`../../.github/workflows/${callerName}`, import.meta.url), 'utf8');
   const call = caller.split(/^  [\w-]+:\r?\n/m).find(block => block.includes('uses: ./.github/workflows/msi-upgrade.yml'));
   assert.ok(call, callerName);
-  for (const permission of ['contents: read', 'actions: read', 'checks: write']) assert.ok(call.includes(permission), `${callerName}: ${permission}`);
+  for (const permission of ['contents: read', 'actions: write', 'checks: write']) assert.ok(call.includes(permission), `${callerName}: ${permission}`);
 }
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'msi-build-watchdog-'));

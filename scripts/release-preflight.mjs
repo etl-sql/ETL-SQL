@@ -26,6 +26,7 @@ export const releaseAutomationChecks = [
   'installer-sources', 'installer-actions', 'master-release', 'publish-release', 'sbom-output', 'docs-audit', 'release-evidence', 'production-canary-evidence', 'certification-source', 'deployment-claims', 'local-release-bundle', 'release-driver-gates', 'release-run-wait', 'release-tag', 'release-timeline', 'ci-impact', 'browser-shards', 'built-browser-assets', 'hosted-release-evidence', 'hosted-local-evidence', 'workstation-release-evidence', 'collected-workstation-evidence', 'operator-release-evidence', 'collected-operator-evidence', 'operator-report-inputs', 'workstation-certification-driver', 'lane-shard-results', 'engine-coverage', 'scale-comparison-assets', 'release-certification',
 ].map(name => ({ id: `test-${name}`, command: process.execPath, args: [`scripts/checks/test-${name}.mjs`] }));
 releaseAutomationChecks.push({ id: 'test-release-draft-manifest', command: process.execPath, args: ['scripts/checks/test-release-draft-manifest.mjs'] });
+releaseAutomationChecks.push({ id: 'test-msi-progress', command: process.execPath, args: ['scripts/checks/test-msi-progress.mjs'] });
 sourceChecks.push(...releaseAutomationChecks);
 // Ordinary branch work may keep draft notes. Tag publication must use finalized metadata.
 if (process.env.ETLSQL_RELEASE_TAG) sourceChecks.push({ id: 'final-release-metadata', command: process.execPath,
