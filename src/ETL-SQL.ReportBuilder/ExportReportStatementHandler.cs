@@ -35,6 +35,10 @@ namespace ETL_SQL.ReportBuilder
             var reportPath = context.ResolvePath(reportPathRaw);
             var outputPath = context.ResolvePath(outputPathRaw);
 
+            // Validate script-supplied PDF options before the report runs or a browser starts.
+            var isPdf = string.Equals(stmt.Format, "PDF", StringComparison.OrdinalIgnoreCase);
+            var pdfOptions = isPdf ? await BuildPdfExportOptionsAsync(stmt, context) : null;
+
             bool exists = await Task.Run(() => File.Exists(reportPath));
             if (!exists)
                 throw new ExecutionException($"EXPORT REPORT: report file not found: '{reportPath}'");
@@ -69,7 +73,7 @@ namespace ETL_SQL.ReportBuilder
             switch (stmt.Format.ToUpperInvariant())
             {
                 case "PDF":
-                    var pdfBytes = await new ReportPdfExporter(logger: logger).ExportAsync(manifest, await BuildPdfExportOptionsAsync(stmt, context), context.CancellationToken);
+                    var pdfBytes = await new ReportPdfExporter(logger: logger).ExportAsync(manifest, pdfOptions, context.CancellationToken);
                     await File.WriteAllBytesAsync(outputPath, pdfBytes);
                     break;
 
@@ -92,6 +96,26 @@ namespace ETL_SQL.ReportBuilder
         {
             var host = stmt.Host == null ? null : (await context.EvaluateValue(stmt.Host, new Row()))?.ToString();
             var browserPath = stmt.BrowserPath == null ? null : (await context.EvaluateValue(stmt.BrowserPath, new Row()))?.ToString();
+
+            if (!string.IsNullOrWhiteSpace(host))
+            {
+                if (!BrowserReportPdfExporter.IsNavigableHost(host))
+                    throw new ExecutionException("EXPORT REPORT: HOST must be an absolute http or https URL.");
+                try
+                {
+                    context.SecurityService.ValidateHost(new Uri(host).Host);
+                }
+                catch (ETL_SQL.Services.SecurityException ex)
+                {
+                    throw new ExecutionException($"EXPORT REPORT: HOST is not an allowed host. {ex.Message}");
+                }
+            }
+
+            // A script may choose among the browsers the engine itself would discover; it may not
+            // name an arbitrary executable, because the exporter starts that file as a process.
+            if (!string.IsNullOrWhiteSpace(browserPath) && !BrowserReportPdfExporter.IsInstalledBrowser(browserPath))
+                throw new ExecutionException(
+                    "EXPORT REPORT: BROWSER_PATH must name an installed Chrome, Edge, or Chromium found on PATH or in a standard install location.");
 
             return new PdfExportOptions
             {
