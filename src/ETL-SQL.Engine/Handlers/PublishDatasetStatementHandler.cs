@@ -46,6 +46,11 @@ public class PublishDatasetStatementHandler(ILogger logger) : IStatementHandler
                 $"PUBLISH DATASET '{stmt.DatasetName}' requires the transport credential the file was exported with: ENCRYPT = PASSWORD or KEYFILE.",
                 null, stmt.Line, stmt.Column);
 
+        // KEYFILE is a script-selected path: authorize it like any other read before use.
+        var keyFile = stmt.EncryptionMode == DatasetEncryptionMode.KeyFile
+            ? DatasetTransport.AuthorizeKeyFile(context, stmt.KeyFile!)
+            : null;
+
         TagGovernanceRuntimePolicy.EnforceDatasetPublish(
             stmt.DatasetName,
             stmt.AccessLevel,
@@ -118,11 +123,11 @@ public class PublishDatasetStatementHandler(ILogger logger) : IStatementHandler
             var atRestPath = registry.BuildDatasetFilePath(id, stmt.DatasetName);
             using var fileTransaction = DatasetFileTransaction.Create(atRestPath);
 
-            var transport = new EncryptionOptions(BuildTransportOptions(stmt));
+            var transport = new EncryptionOptions(BuildTransportOptions(stmt, keyFile));
             using var datasetKey = await DatasetKeyResolution.ResolveAsync(context);
             var atRest = new EncryptionOptions(BuildAtRestOptions(datasetKey.Password));
 
-            var tempPlain = Path.Combine(Path.GetTempPath(), $"__ds_publish_{Guid.NewGuid():N}.parquet");
+            var tempPlain = DatasetTransport.CreatePlaintextStagingPath("__ds_publish");
             try
             {
                 // Decrypt the portable file once with the transport credential, then re-encrypt at rest.
@@ -132,7 +137,7 @@ public class PublishDatasetStatementHandler(ILogger logger) : IStatementHandler
             }
             finally
             {
-                DatasetFileTransaction.Cleanup(tempPlain);
+                DatasetTransport.CleanupPlaintextStaging(tempPlain);
             }
 
             metadata.Id = id;
@@ -194,8 +199,8 @@ public class PublishDatasetStatementHandler(ILogger logger) : IStatementHandler
             ? new Dictionary<string, string> { ["ENCRYPT"] = "MACHINE" }
             : new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = atRestKey };
 
-    private static Dictionary<string, string> BuildTransportOptions(PublishDatasetStatement stmt) =>
+    private static Dictionary<string, string> BuildTransportOptions(PublishDatasetStatement stmt, string? keyFile) =>
         stmt.EncryptionMode == DatasetEncryptionMode.KeyFile
-            ? new Dictionary<string, string> { ["ENCRYPT"] = "KEYFILE", ["KEYFILE"] = stmt.KeyFile ?? "" }
+            ? new Dictionary<string, string> { ["ENCRYPT"] = "KEYFILE", ["KEYFILE"] = keyFile ?? "" }
             : new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = stmt.EncryptionPassword ?? "" };
 }
