@@ -515,6 +515,18 @@ not replace release provenance or the full release evidence checklist.
 - Inputs and per-profile evidence are retained for 30 days. If inputs expire or hash verification
   fails, rebuild and recertify; never substitute another run's installer under the old evidence.
 - Require the final **MSI In-Place Upgrade** gate to pass. A successful build alone is insufficient.
+- The independent **MSI runner progress monitor** runs on Linux beside the Windows profiles. It
+  polls every 30 seconds and detects at least five minutes without durable progress during an
+  active certification step. Parent supervisors publish checkpoints every minute. Queueing and
+  setup do not use this silence limit. Transient API reads get bounded retries; API errors,
+  invalid identities and changed attempts cannot request cancellation.
+- Inspect `msi-progress-<run-id>-<attempt>` when the monitor ends an unresponsive run. Its receipt
+  is retained before force cancellation, and the attempt is checked again immediately before the
+  request. Cancellation affects the entire Actions run, including a reusable workflow's caller:
+  completed jobs/artifacts remain retained, while other running jobs may be interrupted. Inspect
+  the first failure, then use failed-job-only recovery on unchanged inputs. The monitor never
+  dispatches a rebuild or retry. A cancelled run is not certification; runner-loss diagnosis stays
+  separate from this shorter recovery path.
 - Each profile runs under `Invoke-CertificationProcess.ps1`: a 20-minute child deadline within a
   25-minute step limit, leaving time for evidence upload. `release-validation/msi-supervisor/<profile>`
   contains stdout/stderr, heartbeats, `result.json` and (on timeout) `watchdog.json`. A timeout exits

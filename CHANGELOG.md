@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Monitor MSI certification from an independent Linux runner. Retain its progress report before
+  cancelling a run whose active test stops delivering checkpoints for five minutes. Successful
+  jobs and installer artifacts remain available for failed-job-only recovery. Recheck the attempt
+  before cancellation; monitoring failures cannot certify packages or trigger a rebuild.
+
 - Skip ReadyToRun precompilation for hosted PR native packages while retaining self-contained
   bundles, installed-package checks, CLI launches and VSIX webview acceptance. Local, nightly
   and full release publishing keep ReadyToRun enabled. Payload manifests bind the selected

@@ -39,7 +39,7 @@ $timedOut = $false
 $streams = @()
 $lastOutputSeconds = 0.0
 $durableDiagnostic = $null
-if ($env:GITHUB_ACTIONS -ceq 'true' -and $env:ETLSQL_MSI_DIAGNOSTIC_ONLY -ceq '1') {
+if ($env:GITHUB_ACTIONS -ceq 'true' -and $env:ETLSQL_MSI_DURABLE_CHECKPOINTS -ceq '1') {
     $durableDiagnostic = Get-Command Write-MsiDurableCheckpoint -CommandType Function -ErrorAction SilentlyContinue
 }
 function Write-SupervisorDiagnostic([string]$Stage) {

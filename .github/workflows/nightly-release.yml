@@ -39,7 +39,7 @@ jobs:
     needs: candidate
     permissions:
       contents: read
-      actions: read
+      actions: write
       checks: write
     uses: ./.github/workflows/msi-upgrade.yml
     with:

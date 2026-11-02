@@ -147,6 +147,16 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   distinguish profiles; publication rejects PR/missing/untyped optimization evidence. Full hosted
   PR acceptance and timing remain required before closing the target.
 
+  **Independent MSI progress:** a Linux observer now watches the active Windows test steps,
+  retaining its receipt before cancelling a run after five minutes without checkpoints. It checks
+  the attempt again before cancellation and never rebuilds or retries. Diagnostic `41452876817`
+  detects 308.25 seconds of silence and ends in 8m06s using original installer pair `13109304447`;
+  observer artifact `13145387437` is uploaded first. Its unchanged-input retry also stalls: silence
+  is detected after 313.786 seconds, artifact `13146582152` is uploaded first, and the whole attempt
+  ends in 8m48s. Both attempts remain cancelled; normal hosted monitoring still needs verification.
+  Cancellation affects the entire Actions run; completed jobs/artifacts remain retained, while
+  other running jobs may be interrupted. The MSI cause and complete release timing remain open.
+
 - [ ] **Release timeline.** Record the v0.22.0 candidate cut, each CI/MSI round, its cause and the
   tag time as the release runs, so the goal is measured rather than remembered.
   **In progress:** `collect-release-timeline.mjs` reads selected exact-candidate runs and all retry
