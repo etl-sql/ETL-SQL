@@ -6,11 +6,6 @@ namespace ETL_SQL.WorkstationEditor;
 public sealed class WorkstationGitService(WorkstationWorkspace workspace)
 {
     private static readonly Regex RevisionPattern = new("^[0-9a-fA-F]{7,40}$", RegexOptions.CultureInvariant);
-    private static readonly HashSet<string> CommitExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".etlsql",
-        ".rptsql"
-    };
 
     public GitStatusResponse GetStatus()
     {
@@ -191,7 +186,7 @@ public sealed class WorkstationGitService(WorkstationWorkspace workspace)
         {
             var file = ParseStatusPath(line);
             if (string.IsNullOrWhiteSpace(file)) continue;
-            if (!CommitExtensions.Contains(Path.GetExtension(file))) continue;
+            if (!WorkstationWorkspace.IsEditableScript(file)) continue;
 
             string fullPath;
             try
