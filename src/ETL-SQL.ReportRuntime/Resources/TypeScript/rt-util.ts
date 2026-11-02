@@ -173,17 +173,28 @@ export function abbreviateNumber(num: number, formatHint?: string | null) {
  * @returns {string} HTML. The input is escaped first, so only the markup produced here is live.
  */
 export function renderInlineMarkdown(text: string) {
-    return escHtml(text)
+    // Links are cut out first and their opening tags held as placeholders, so the emphasis rules
+    // below never reach inside an href. NUL is the placeholder delimiter, so it is dropped from
+    // the input first.
+    const links: string[] = [];
+    // eslint-disable-next-line no-control-regex -- NUL is the placeholder delimiter being removed
+    const withLinks = escHtml(String(text ?? '').replace(/\u0000/g, ''))
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label: string, url: string) => {
+            // label and url are already escaped (the whole text was escaped above); escaping them
+            // again showed "&amp;" in link text and broke query strings in the href.
+            const trimmed = url.trim();
+            // A site path is fine; "//host" and "/\host" are protocol-relative and leave the site.
+            const safe = /^(https?:|mailto:)/i.test(trimmed) || /^\/(?![/\\])/.test(trimmed);
+            if (!safe) return label;
+            links.push(`<a href="${url}" target="_blank" rel="noopener noreferrer">`);
+            return `\u0000${links.length - 1}\u0000${label}</a>`;
+        });
+    return withLinks
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.+?)\*/g,     '<em>$1</em>')
         .replace(/`(.+?)`/g,       '<code>$1</code>')
-        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
-            // label and url are already escaped (the whole text was escaped above); escaping them
-            // again showed "&amp;" in link text and broke query strings in the href.
-            const safe = /^(https?:|mailto:|\/)/i.test(url.trim());
-            if (!safe) return label;
-            return `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
-        });
+        // eslint-disable-next-line no-control-regex -- NUL delimits the link placeholders
+        .replace(/\u0000(\d+)\u0000/g, (_, index: string) => links[Number(index)] ?? '');
 }
 
 export function simpleMarkdown(src: unknown) {

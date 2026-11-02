@@ -79,4 +79,33 @@ const select = descendants(slicerRoot).find(e => e.attributes['aria-label'] === 
 assert.equal(select.value, 'West');
 change(select, 'East');
 assert.deepEqual(posts, [{ Value: 'East' }]);
+
+// Option images come from report data: unsafe schemes are dropped, ordinary and data:image icons are kept.
+const imageRoot = new Element();
+controls.renderSlicer(imageRoot, {
+    name: 'Region', visualType: 'SLICER', columns: ['Region', 'Label', 'Icon'],
+    rows: [['East', 'East', 'javascript:alert(1)'], ['West', 'West', 'https://cdn.example/w.png'], ['North', 'North', 'data:image/png;base64,iVBORw0KGgo=']],
+    options: { LAYOUT: 'TILE', IMAGE: 'Icon' },
+    actions: [{ type: 'SET_PARAMETER', trigger: 'ON_CHANGE', parameterName: 'Value' }]
+}, { parameters: { Value: 'West' } });
+const optionImages = descendants(imageRoot).filter(e => String(e.className || '').startsWith('slicer-option-image'));
+assert.deepEqual(optionImages.map(img => img.src), ['https://cdn.example/w.png', 'data:image/png;base64,iVBORw0KGgo=']);
+
+// A multiselect dropdown re-rendered many times adds at most one document click listener.
+const documentListeners = [];
+const listeningDocument = {
+    createElement: () => new Element(),
+    createElementNS: () => new Element(),
+    addEventListener: type => documentListeners.push(type),
+    querySelectorAll: () => [],
+};
+const listeningControls = new Function(...Object.keys(dependencies), `${source}\nreturn { renderSlicer };`)(
+    ...Object.values({ ...dependencies, document: listeningDocument }));
+for (let i = 0; i < 3; i++) {
+    listeningControls.renderSlicer(new Element(), {
+        name: 'Tags', visualType: 'MULTISELECT', columns: ['Tag'], rows: [['a'], ['b']],
+        options: { LAYOUT: 'DROPDOWN' }, actions: []
+    }, { parameters: {} });
+}
+assert.equal(documentListeners.filter(type => type === 'click').length, 1, 'one outside-click listener for all renders');
 console.log('input controls: accessible state, checkbox values, numeric bounds, slider snapping, textbox validation and slicer selection passed');

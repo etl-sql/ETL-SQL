@@ -130,147 +130,8 @@ export function renderNativeSvg(container: HTMLElement, visual: ChartVisual, man
 
     
     const vopts = visual.options || {};
-    const crosshairOpt = (vopts['CROSSHAIR'] || '').toUpperCase();
-    const crosshairAxis = (vopts['CROSSHAIR_AXIS'] || 'BOTH').toUpperCase();
-    const crosshairColor = vopts['CROSSHAIR_COLOR'] || '#94a3b8';
-    const crosshairDash = vopts['CROSSHAIR_DASH'] || '4 4';
-    const linkTooltipGroup = vopts['LINK_TOOLTIP'] ? vopts['LINK_TOOLTIP'].trim() : null;
-
-    if (linkTooltipGroup) {
-        wrapper.dataset.linkTooltip = linkTooltipGroup;
-    }
-
     const svgEl = wrapper.querySelector<SVGSVGElement>('svg');
-    if (svgEl && (crosshairOpt === 'ON' || crosshairOpt === 'TRUE' || vopts['CROSSHAIR_AXIS'] || linkTooltipGroup)) {
-        const chartSvg = svgEl;
-        let crosshairG = svgEl.querySelector('.plot-crosshair-group');
-        if (!crosshairG) {
-            crosshairG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            crosshairG.setAttribute('class', 'plot-crosshair-group');
-            crosshairG.setAttribute('pointer-events', 'none');
-            /** @type {HTMLElement} */ ((crosshairG) as unknown as HTMLElement).style.display = 'none';
-            svgEl.appendChild(crosshairG);
-        }
-
-        const lineX = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        lineX.setAttribute('class', 'plot-crosshair-x');
-        lineX.setAttribute('stroke', crosshairColor);
-        lineX.setAttribute('stroke-dasharray', crosshairDash);
-        lineX.setAttribute('stroke-width', '1');
-        if (crosshairAxis === 'X' || crosshairAxis === 'BOTH') crosshairG.appendChild(lineX);
-
-        const lineY = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        lineY.setAttribute('class', 'plot-crosshair-y');
-        lineY.setAttribute('stroke', crosshairColor);
-        lineY.setAttribute('stroke-dasharray', crosshairDash);
-        lineY.setAttribute('stroke-width', '1');
-        if (crosshairAxis === 'Y' || crosshairAxis === 'BOTH') crosshairG.appendChild(lineY);
-
-        function updateCrosshair(svgPoint: { x: number; y: number }): void {
-            const bbox = chartSvg.viewBox?.baseVal || { x: 0, y: 0, width: chartSvg.clientWidth || 600, height: chartSvg.clientHeight || 400 };
-            /** @type {HTMLElement} */ ((crosshairG) as unknown as HTMLElement).style.display = '';
-            if (lineX) {
-                lineX.setAttribute('x1', String(svgPoint.x));
-                lineX.setAttribute('x2', String(svgPoint.x));
-                lineX.setAttribute('y1', String(bbox.y || 0));
-                lineX.setAttribute('y2', String((bbox.y || 0) + (bbox.height || 400)));
-            }
-            if (lineY) {
-                lineY.setAttribute('y1', String(svgPoint.y));
-                lineY.setAttribute('y2', String(svgPoint.y));
-                lineY.setAttribute('x1', String(bbox.x || 0));
-                lineY.setAttribute('x2', String((bbox.x || 0) + (bbox.width || 600)));
-            }
-        }
-
-        function hideCrosshair(): void {
-            /** @type {HTMLElement} */ ((crosshairG) as unknown as HTMLElement).style.display = 'none';
-        }
-
-        /** @type {EtlSqlVisualHost} */ ((wrapper) as EtlSqlVisualHost)._updateCrosshair = updateCrosshair;
-        /** @type {EtlSqlVisualHost} */ ((wrapper) as EtlSqlVisualHost)._hideCrosshair = hideCrosshair;
-
-        chartSvg.addEventListener('pointermove', event => {
-            const pt = chartSvg.createSVGPoint();
-            pt.x = event.clientX;
-            pt.y = event.clientY;
-            const ctm = chartSvg.getScreenCTM();
-            if (ctm) {
-                const svgPt = pt.matrixTransform(ctm.inverse());
-                updateCrosshair(svgPt);
-
-                if (linkTooltipGroup) {
-                    const linkedWrappers = document.querySelectorAll(`[data-link-tooltip="${CSS.escape(linkTooltipGroup)}"]`);
-                    linkedWrappers.forEach(w => {
-                        if (w !== wrapper && typeof /** @type {EtlSqlVisualHost} */ ((w) as EtlSqlVisualHost)._updateCrosshair === 'function') {
-                            /** @type {EtlSqlVisualHost} */ ((w) as EtlSqlVisualHost)._updateCrosshair!(svgPt);
-                        }
-                    });
-                }
-            }
-        });
-
-        chartSvg.addEventListener('pointerleave', () => {
-            hideCrosshair();
-            if (linkTooltipGroup) {
-                const linkedWrappers = document.querySelectorAll(`[data-link-tooltip="${CSS.escape(linkTooltipGroup)}"]`);
-                linkedWrappers.forEach(w => {
-                    if (w !== wrapper && typeof /** @type {EtlSqlVisualHost} */ ((w) as EtlSqlVisualHost)._hideCrosshair === 'function') {
-                        /** @type {EtlSqlVisualHost} */ ((w) as EtlSqlVisualHost)._hideCrosshair!();
-                    }
-                });
-            }
-        });
-    }
-
-    // Setup Hover Focus & Series Emphasis
-    const hoverFocusMode = (svgEl?.dataset?.hoverFocus || vopts['HOVER_FOCUS'] || 'NONE').toUpperCase();
-    if (svgEl && hoverFocusMode !== 'NONE') {
-        svgEl.addEventListener('pointerover', event => {
-            if (hoverFocusMode === 'SERIES') {
-                const target = /** @type {Element} */ ((event.target) as Element).closest('[data-series]');
-                if (target) {
-                    const seriesKey = /** @type {HTMLElement} */ ((target) as HTMLElement).dataset.series;
-                    const allSeriesMarks = svgEl.querySelectorAll('[data-series]');
-                    allSeriesMarks.forEach(m => {
-                        if (/** @type {HTMLElement} */ ((m) as HTMLElement).dataset.series === seriesKey) {
-                            m.classList.add('plot-series-focused');
-                            m.classList.remove('plot-series-dimmed');
-                        } else {
-                            m.classList.add('plot-series-dimmed');
-                            m.classList.remove('plot-series-focused');
-                        }
-                    });
-                }
-            } else if (hoverFocusMode === 'SELF') {
-                const mark = /** @type {Element} */ ((event.target) as Element).closest('[data-row-index]');
-                if (mark) {
-                    const allMarks = svgEl.querySelectorAll('[data-row-index]');
-                    allMarks.forEach(m => {
-                        if (m === mark) {
-                            m.classList.add('plot-mark-focused');
-                            m.classList.remove('plot-mark-dimmed');
-                        } else {
-                            m.classList.add('plot-mark-dimmed');
-                            m.classList.remove('plot-mark-focused');
-                        }
-                    });
-                }
-            }
-        });
-
-        svgEl.addEventListener('pointerleave', () => {
-            if (hoverFocusMode === 'SERIES') {
-                svgEl.querySelectorAll('.plot-series-focused, .plot-series-dimmed').forEach(m => {
-                    m.classList.remove('plot-series-focused', 'plot-series-dimmed');
-                });
-            } else if (hoverFocusMode === 'SELF') {
-                svgEl.querySelectorAll('.plot-mark-focused, .plot-mark-dimmed').forEach(m => {
-                    m.classList.remove('plot-mark-focused', 'plot-mark-dimmed');
-                });
-            }
-        });
-    }
+    wireNativeSvgInteractions(wrapper, svgEl, visual);
 
     // Setup Animation
     const animOpt = (svgEl?.dataset?.animation || vopts['ANIMATION'] || 'ON').toUpperCase();
@@ -607,6 +468,155 @@ function findVisualInManifest(m?: ChartManifest | null, name?: string | null): C
     return null;
 }
 
+/**
+ * Wires the pointer interactions that live on the chart's <svg>: crosshair lines and hover focus.
+ * Called again after a responsive redraw replaces the <svg>, because listeners and the crosshair
+ * lines belong to the element that was replaced.
+ */
+function wireNativeSvgInteractions(wrapper: HTMLElement, svgEl: SVGSVGElement | null, visual: ChartVisual): void {
+    const vopts = visual.options || {};
+    const crosshairOpt = (vopts['CROSSHAIR'] || '').toUpperCase();
+    const crosshairAxis = (vopts['CROSSHAIR_AXIS'] || 'BOTH').toUpperCase();
+    const crosshairColor = vopts['CROSSHAIR_COLOR'] || '#94a3b8';
+    const crosshairDash = vopts['CROSSHAIR_DASH'] || '4 4';
+    const linkTooltipGroup = vopts['LINK_TOOLTIP'] ? vopts['LINK_TOOLTIP'].trim() : null;
+
+    if (linkTooltipGroup) {
+        wrapper.dataset.linkTooltip = linkTooltipGroup;
+    }
+
+    if (svgEl && (crosshairOpt === 'ON' || crosshairOpt === 'TRUE' || vopts['CROSSHAIR_AXIS'] || linkTooltipGroup)) {
+        const chartSvg = svgEl;
+        let crosshairG = svgEl.querySelector('.plot-crosshair-group');
+        if (!crosshairG) {
+            crosshairG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            crosshairG.setAttribute('class', 'plot-crosshair-group');
+            crosshairG.setAttribute('pointer-events', 'none');
+            /** @type {HTMLElement} */ ((crosshairG) as unknown as HTMLElement).style.display = 'none';
+            svgEl.appendChild(crosshairG);
+        }
+
+        const lineX = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        lineX.setAttribute('class', 'plot-crosshair-x');
+        lineX.setAttribute('stroke', crosshairColor);
+        lineX.setAttribute('stroke-dasharray', crosshairDash);
+        lineX.setAttribute('stroke-width', '1');
+        if (crosshairAxis === 'X' || crosshairAxis === 'BOTH') crosshairG.appendChild(lineX);
+
+        const lineY = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        lineY.setAttribute('class', 'plot-crosshair-y');
+        lineY.setAttribute('stroke', crosshairColor);
+        lineY.setAttribute('stroke-dasharray', crosshairDash);
+        lineY.setAttribute('stroke-width', '1');
+        if (crosshairAxis === 'Y' || crosshairAxis === 'BOTH') crosshairG.appendChild(lineY);
+
+        function updateCrosshair(svgPoint: { x: number; y: number }): void {
+            const bbox = chartSvg.viewBox?.baseVal || { x: 0, y: 0, width: chartSvg.clientWidth || 600, height: chartSvg.clientHeight || 400 };
+            /** @type {HTMLElement} */ ((crosshairG) as unknown as HTMLElement).style.display = '';
+            if (lineX) {
+                lineX.setAttribute('x1', String(svgPoint.x));
+                lineX.setAttribute('x2', String(svgPoint.x));
+                lineX.setAttribute('y1', String(bbox.y || 0));
+                lineX.setAttribute('y2', String((bbox.y || 0) + (bbox.height || 400)));
+            }
+            if (lineY) {
+                lineY.setAttribute('y1', String(svgPoint.y));
+                lineY.setAttribute('y2', String(svgPoint.y));
+                lineY.setAttribute('x1', String(bbox.x || 0));
+                lineY.setAttribute('x2', String((bbox.x || 0) + (bbox.width || 600)));
+            }
+        }
+
+        function hideCrosshair(): void {
+            /** @type {HTMLElement} */ ((crosshairG) as unknown as HTMLElement).style.display = 'none';
+        }
+
+        /** @type {EtlSqlVisualHost} */ ((wrapper) as EtlSqlVisualHost)._updateCrosshair = updateCrosshair;
+        /** @type {EtlSqlVisualHost} */ ((wrapper) as EtlSqlVisualHost)._hideCrosshair = hideCrosshair;
+
+        chartSvg.addEventListener('pointermove', event => {
+            const pt = chartSvg.createSVGPoint();
+            pt.x = event.clientX;
+            pt.y = event.clientY;
+            const ctm = chartSvg.getScreenCTM();
+            if (ctm) {
+                const svgPt = pt.matrixTransform(ctm.inverse());
+                updateCrosshair(svgPt);
+
+                if (linkTooltipGroup) {
+                    const linkedWrappers = document.querySelectorAll(`[data-link-tooltip="${CSS.escape(linkTooltipGroup)}"]`);
+                    linkedWrappers.forEach(w => {
+                        if (w !== wrapper && typeof /** @type {EtlSqlVisualHost} */ ((w) as EtlSqlVisualHost)._updateCrosshair === 'function') {
+                            /** @type {EtlSqlVisualHost} */ ((w) as EtlSqlVisualHost)._updateCrosshair!(svgPt);
+                        }
+                    });
+                }
+            }
+        });
+
+        chartSvg.addEventListener('pointerleave', () => {
+            hideCrosshair();
+            if (linkTooltipGroup) {
+                const linkedWrappers = document.querySelectorAll(`[data-link-tooltip="${CSS.escape(linkTooltipGroup)}"]`);
+                linkedWrappers.forEach(w => {
+                    if (w !== wrapper && typeof /** @type {EtlSqlVisualHost} */ ((w) as EtlSqlVisualHost)._hideCrosshair === 'function') {
+                        /** @type {EtlSqlVisualHost} */ ((w) as EtlSqlVisualHost)._hideCrosshair!();
+                    }
+                });
+            }
+        });
+    }
+
+    // Setup Hover Focus & Series Emphasis
+    const hoverFocusMode = (svgEl?.dataset?.hoverFocus || vopts['HOVER_FOCUS'] || 'NONE').toUpperCase();
+    if (svgEl && hoverFocusMode !== 'NONE') {
+        svgEl.addEventListener('pointerover', event => {
+            if (hoverFocusMode === 'SERIES') {
+                const target = /** @type {Element} */ ((event.target) as Element).closest('[data-series]');
+                if (target) {
+                    const seriesKey = /** @type {HTMLElement} */ ((target) as HTMLElement).dataset.series;
+                    const allSeriesMarks = svgEl.querySelectorAll('[data-series]');
+                    allSeriesMarks.forEach(m => {
+                        if (/** @type {HTMLElement} */ ((m) as HTMLElement).dataset.series === seriesKey) {
+                            m.classList.add('plot-series-focused');
+                            m.classList.remove('plot-series-dimmed');
+                        } else {
+                            m.classList.add('plot-series-dimmed');
+                            m.classList.remove('plot-series-focused');
+                        }
+                    });
+                }
+            } else if (hoverFocusMode === 'SELF') {
+                const mark = /** @type {Element} */ ((event.target) as Element).closest('[data-row-index]');
+                if (mark) {
+                    const allMarks = svgEl.querySelectorAll('[data-row-index]');
+                    allMarks.forEach(m => {
+                        if (m === mark) {
+                            m.classList.add('plot-mark-focused');
+                            m.classList.remove('plot-mark-dimmed');
+                        } else {
+                            m.classList.add('plot-mark-dimmed');
+                            m.classList.remove('plot-mark-focused');
+                        }
+                    });
+                }
+            }
+        });
+
+        svgEl.addEventListener('pointerleave', () => {
+            if (hoverFocusMode === 'SERIES') {
+                svgEl.querySelectorAll('.plot-series-focused, .plot-series-dimmed').forEach(m => {
+                    m.classList.remove('plot-series-focused', 'plot-series-dimmed');
+                });
+            } else if (hoverFocusMode === 'SELF') {
+                svgEl.querySelectorAll('.plot-mark-focused, .plot-mark-dimmed').forEach(m => {
+                    m.classList.remove('plot-mark-focused', 'plot-mark-dimmed');
+                });
+            }
+        });
+    }
+}
+
 function updateNativeVisualInPlace(card: HTMLElement, visual: ChartVisual): boolean {
     const wrapper = card.querySelector('.native-chart-wrapper');
     if (!wrapper) return false;
@@ -627,20 +637,11 @@ function updateNativeVisualInPlace(card: HTMLElement, visual: ChartVisual): bool
     const interaction = resolveInteraction(visual);
     applyNativeHighlight(/** @type {HTMLElement} */ ((wrapper) as HTMLElement), visual, interaction);
 
-    const vopts = visual.options || {};
-    const crosshairOpt = (vopts['CROSSHAIR'] || '').toUpperCase();
-    const linkTooltipGroup = vopts['LINK_TOOLTIP'] ? vopts['LINK_TOOLTIP'].trim() : null;
-    const svgEl = wrapper.querySelector('svg');
-    if (svgEl && (crosshairOpt === 'ON' || crosshairOpt === 'TRUE' || vopts['CROSSHAIR_AXIS'] || linkTooltipGroup)) {
-        let crosshairG = svgEl.querySelector('.plot-crosshair-group');
-        if (!crosshairG) {
-            crosshairG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            crosshairG.setAttribute('class', 'plot-crosshair-group');
-            crosshairG.setAttribute('pointer-events', 'none');
-            /** @type {HTMLElement} */ ((crosshairG) as unknown as HTMLElement).style.display = 'none';
-            svgEl.appendChild(crosshairG);
-        }
-    }
+    // The new <svg> has none of the old one's listeners, crosshair lines or focusable marks, so
+    // wire it the way the first render did. Wrapper-level listeners (detail surface) survive.
+    wireNativeSvgInteractions(wrapper as HTMLElement, wrapper.querySelector<SVGSVGElement>('svg'), visual);
+    const detailSurface = ((wrapper as EtlSqlVisualHost)._detailSurface) as { refresh?: () => void } | null | undefined;
+    detailSurface?.refresh?.();
 
     return true;
 }

@@ -230,6 +230,16 @@ assert.equal(util.renderInlineMarkdown('[A & B](https://x.test/?a=1&b=2)'),
     '<a href="https://x.test/?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">A &amp; B</a>');
 assert.ok(!util.renderInlineMarkdown('[x](javascript:alert(1))').includes('<a'));
 assert.ok(!util.renderInlineMarkdown('[x]("onmouseover="alert(1))').includes('<a'));
+// Protocol-relative (and the backslash form browsers treat the same) leaves the site; a site path does not.
+assert.ok(!util.renderInlineMarkdown('[x](//evil.example)').includes('<a'));
+assert.ok(!util.renderInlineMarkdown('[x](/\\evil.example)').includes('<a'));
+assert.equal(util.renderInlineMarkdown('[x](/reports/a)'), '<a href="/reports/a" target="_blank" rel="noopener noreferrer">x</a>');
+// Emphasis markers inside a URL stay in the URL instead of becoming <em> inside href.
+assert.equal(util.renderInlineMarkdown('[x](https://x.test/a*b*c)'),
+    '<a href="https://x.test/a*b*c" target="_blank" rel="noopener noreferrer">x</a>');
+assert.equal(util.renderInlineMarkdown('[**bold** link](https://x.test/`q`) and *em*'),
+    '<a href="https://x.test/`q`" target="_blank" rel="noopener noreferrer"><strong>bold</strong> link</a> and <em>em</em>');
+assert.equal(util.renderInlineMarkdown('\u00000\u0000 text'), '0 text', 'a stray placeholder marker cannot pull in a link');
 console.log('runtime utility pilot: coercion, URL, escaping, formatting and markdown checks passed');
 
 const designerPath = path.join(repo, 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer-util.js');

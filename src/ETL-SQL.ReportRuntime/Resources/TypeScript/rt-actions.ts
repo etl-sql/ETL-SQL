@@ -748,9 +748,9 @@ export function executeAction(action: ReportAction, rowData: ActionRow, columns:
         targets.forEach(t => {
             if (t.startsWith('TAG:')) {
                 const tagName = t.substring(4);
-                /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll<HTMLElement>(`[data-tag="${tagName}"]`)).forEach(el => elements.push(el));
+                /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll<HTMLElement>(`[data-tag="${CSS.escape(tagName)}"]`)).forEach(el => elements.push(el));
             } else {
-                const el = document.getElementById(t) || document.querySelector(`[data-name="${t}"]`);
+                const el = document.getElementById(t) || document.querySelector(`[data-name="${CSS.escape(t)}"]`);
                 if (el) elements.push/** @type {HTMLElement} */ ((el) as HTMLElement);
             }
         });
