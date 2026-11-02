@@ -834,17 +834,57 @@ namespace ETL_SQL.Tests.Orchestration
                     new JobHistoryEntry(2, "FlakyJob", DateTime.Now, DateTime.Now, "FAILURE", "Parse error"),
                     new JobHistoryEntry(1, "FlakyJob", DateTime.Now.AddMinutes(-1), DateTime.Now, "FAILURE", "Parse error")
                 ]);
+            // The job was edited while it ran. Quarantine disables the stored job and keeps the edit,
+            // rather than writing back the snapshot the run started with.
+            var stored = job with { Script = "EDITED SQL;", Version = 7 };
+            store.Setup(s => s.GetJobByIdAsync(job.Id)).ReturnsAsync(stored);
+            store.Setup(s => s.TrySaveJobAsync(It.IsAny<JobDefinition>(), 7)).ReturnsAsync(true);
 
             service.Start();
-            await WaitUntilAsync(() => Invoked(store, nameof(IJobHistoryStore.SaveJobAsync)));
+            await WaitUntilAsync(() => Invoked(store, nameof(IJobHistoryStore.TrySaveJobAsync)));
             service.Stop();
 
-            store.Verify(s => s.SaveJobAsync(
-                It.Is<JobDefinition>(j => j.Name == "FlakyJob" && !j.IsEnabled)), Times.AtLeastOnce());
+            store.Verify(s => s.TrySaveJobAsync(
+                It.Is<JobDefinition>(j => j.Name == "FlakyJob" && !j.IsEnabled && j.Script == "EDITED SQL;"), 7),
+                Times.AtLeastOnce());
+            store.Verify(s => s.SaveJobAsync(It.Is<JobDefinition>(j => !j.IsEnabled)), Times.Never());
             store.Verify(s => s.LogJobEndAsync(
                 It.IsAny<long>(), "QUARANTINED", It.Is<string>(m => m!.Contains("consecutive failures")),
                 It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()),
                 Times.AtLeastOnce());
+        }
+
+        [Fact]
+        public async Task RepeatedFailures_OnANodeThatLostTheLease_DoNotQuarantineTheJob()
+        {
+            // Another node reclaimed the lease while this one ran; the job's state is now the new
+            // owner's to decide, and a write from here would overwrite it.
+            var job = new JobDefinition("FencedJob", "BAD SQL;", 1, "HOUR", null, null, null);
+            var (service, store, _) = Build(
+                [job],
+                new ScriptExecutionResult(false, 0, "Parse error"),
+                config: new Dictionary<string, string?>
+                {
+                    ["Scheduler:SleepIntervalSeconds"] = "1",
+                    ["Scheduler:QuarantineFailureThreshold"] = "2"
+                });
+            store.Setup(s => s.GetHistoryAsync(It.IsAny<JobId>(), 2))
+                .ReturnsAsync([
+                    new JobHistoryEntry(2, "FencedJob", DateTime.Now, DateTime.Now, "FAILURE", "Parse error"),
+                    new JobHistoryEntry(1, "FencedJob", DateTime.Now.AddMinutes(-1), DateTime.Now, "FAILURE", "Parse error")
+                ]);
+            store.Setup(s => s.GetJobByIdAsync(job.Id)).ReturnsAsync(job);
+            store.Setup(s => s.TrySaveJobAsync(It.IsAny<JobDefinition>(), It.IsAny<long>())).ReturnsAsync(true);
+            store.Setup(s => s.TryUpdateJobLastRunFencedAsync(
+                It.IsAny<JobId>(), It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<long>())).ReturnsAsync(false);
+
+            service.Start();
+            await WaitUntilAsync(() => Invoked(store, nameof(IJobHistoryStore.TryUpdateJobLastRunFencedAsync)));
+            await Task.Delay(500); // flaky-delay-ok: gives a wrongly-issued quarantine write time to land
+            service.Stop();
+
+            store.Verify(s => s.SaveJobAsync(It.Is<JobDefinition>(j => !j.IsEnabled)), Times.Never());
+            store.Verify(s => s.TrySaveJobAsync(It.Is<JobDefinition>(j => !j.IsEnabled), It.IsAny<long>()), Times.Never());
         }
 
         [Theory]
