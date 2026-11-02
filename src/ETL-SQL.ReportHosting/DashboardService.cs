@@ -253,14 +253,14 @@ namespace ETL_SQL.ReportHosting
             {
                 if (!string.IsNullOrWhiteSpace(pageName) && IsPaginatedPage(pageName))
                 {
-                    foreach (var (name, value) in updateList) _parameters[name] = value;
+                    foreach (var (name, value) in updateList) _parameters[ParameterKey(name)] = value;
                     _runPages.Add(pageName);
                     return await RebuildAsync(ct);
                 }
 
                 if (string.IsNullOrWhiteSpace(pageName) && HasPaginatedPages())
                 {
-                    foreach (var (name, value) in updateList) _parameters[name] = value;
+                    foreach (var (name, value) in updateList) _parameters[ParameterKey(name)] = value;
                     MarkAllPaginatedPagesRun();
                     return await RebuildAsync(ct);
                 }
@@ -301,7 +301,7 @@ namespace ETL_SQL.ReportHosting
                         {
                             var normalized = name.StartsWith('@') ? name : '@' + name;
                             if (_manifest.Parameters.TryGetValue(normalized, out var committedValue))
-                                _parameters[name] = committedValue;
+                                _parameters[ParameterKey(name)] = committedValue;
                         }
                         foreach (var name in committedNames.Where(committed =>
                                      !updateList.Any(update => string.Equals(
@@ -310,7 +310,7 @@ namespace ETL_SQL.ReportHosting
                         {
                             var normalized = name.StartsWith('@') ? name : '@' + name;
                             if (_manifest.Parameters.TryGetValue(normalized, out var committedValue))
-                                _parameters[name.TrimStart('@')] = committedValue;
+                                _parameters[ParameterKey(name)] = committedValue;
                         }
                         foreach (var name in committedNames)
                         {
@@ -335,7 +335,7 @@ namespace ETL_SQL.ReportHosting
             // No live evaluator (its last rebuild failed): the rebuild is the only way the value
             // takes effect, so it must carry it.
             if (!isInteraction)
-                foreach (var (name, value) in updateList) _parameters[name] = value;
+                foreach (var (name, value) in updateList) _parameters[ParameterKey(name)] = value;
             var result = await RebuildAsync(ct);
             result.IsInteraction = isInteraction;
             return result;
@@ -446,7 +446,7 @@ namespace ETL_SQL.ReportHosting
                     var normalized = name.StartsWith('@') ? name : '@' + name;
                     if (_manifest.Parameters.TryGetValue(normalized, out var committed))
                     {
-                        _parameters[name.TrimStart('@')] = committed;
+                        _parameters[ParameterKey(name)] = committed;
                         _evaluator.ReportContext.BaselineParameters[normalized] = committed;
                     }
                 }
@@ -456,12 +456,20 @@ namespace ETL_SQL.ReportHosting
             finally { _lock.Release(); }
         }
 
+        // One cache key per parameter: "@Region" and "Region" name the same variable.
+        private static string ParameterKey(string name) => name.TrimStart('@');
+
         private static ReportManifest CloneManifest(ReportManifest manifest) =>
             JsonSerializer.Deserialize<ReportManifest>(JsonSerializer.Serialize(manifest))
             ?? throw new InvalidOperationException("Unable to stage the report manifest.");
 
         public async Task<(string Message, bool Refresh)> RunScriptAsync(string scriptPath, Dictionary<string, string> parameters)
         {
+            // Action scripts run in the report's session: warm it first so they get the configured
+            // evaluator (tenant storage, path policy, datasets, temp tables), never a bare one.
+            if (_evaluator == null)
+                await GetManifestAsync();
+
             await _lock.WaitAsync();
             try
             {
@@ -473,19 +481,13 @@ namespace ETL_SQL.ReportHosting
 
                 var source = await File.ReadAllTextAsync(fullPath);
 
-                // We use the existing evaluator if it exists to share context (temp tables, etc.)
-                bool ownsEvaluator = false;
                 var evaluator = _evaluator;
-                IServiceScope? tempScope = null;
-
                 if (evaluator == null)
-                {
-                    ownsEvaluator = true;
-                    tempScope = _scopeFactory.CreateScope();
-                    evaluator = tempScope.ServiceProvider.GetRequiredService<Evaluator>();
-                    evaluator.ExecutionIdentity = _executionIdentity;
-                }
+                    return ("The report session is not available.", false);
 
+                // Relative paths inside the action script resolve from the action script's folder.
+                var previousScriptPath = evaluator.CurrentScriptPath;
+                evaluator.CurrentScriptPath = fullPath;
                 try
                 {
                     // Set action-specific parameters
@@ -520,11 +522,7 @@ namespace ETL_SQL.ReportHosting
                 }
                 finally
                 {
-                    if (ownsEvaluator)
-                    {
-                        await evaluator.DisposeAsync();
-                        tempScope?.Dispose();
-                    }
+                    evaluator.CurrentScriptPath = previousScriptPath;
                 }
             }
             finally
@@ -696,23 +694,24 @@ namespace ETL_SQL.ReportHosting
                 await GetManifestAsync();
             if (_manifest == null || _evaluator == null) return null;
 
-            var vm = _manifest.Visuals.FirstOrDefault(v => v.Name.Equals(visualName, StringComparison.OrdinalIgnoreCase));
-            var action = vm?.Actions?.FirstOrDefault(a => a.Type == "DRILL_IN");
-            if (vm == null || action?.Hierarchy == null) return null;
-
-            var hierarchy = action.Hierarchy;
-            _drillStates.TryGetValue(visualName, out var existing);
-            var path = existing?.Path.ToList() ?? new List<(string, string)>();
-            var curLevel = hierarchy[path.Count];
-            path.Add((curLevel, clickedValue));
-
-            if (path.Count >= hierarchy.Length) return _manifest; // already at leaf
-
-            _drillStates[visualName] = new VisualDrillState(hierarchy, path);
-
+            // Drill state and the manifest are read and written only under the lock: concurrent
+            // requests on one session must not race on the drill-state dictionary.
             await _lock.WaitAsync();
             try
             {
+                if (_manifest == null || _evaluator == null) return null;
+                var vm = _manifest.Visuals.FirstOrDefault(v => v.Name.Equals(visualName, StringComparison.OrdinalIgnoreCase));
+                var action = vm?.Actions?.FirstOrDefault(a => a.Type == "DRILL_IN");
+                if (vm == null || action?.Hierarchy == null) return null;
+
+                var hierarchy = action.Hierarchy;
+                _drillStates.TryGetValue(visualName, out var existing);
+                var path = existing?.Path.ToList() ?? new List<(string, string)>();
+                if (path.Count + 1 >= hierarchy.Length) return _manifest; // already at leaf
+
+                path.Add((hierarchy[path.Count], clickedValue));
+                _drillStates[visualName] = new VisualDrillState(hierarchy, path);
+
                 if (!_evaluator.ReportContext.VisualDefinitions.TryGetValue(visualName, out var vStmt))
                     return _manifest;
                 var builder = new ManifestBuilder(_evaluator);
@@ -733,17 +732,18 @@ namespace ETL_SQL.ReportHosting
                 await GetManifestAsync();
             if (_manifest == null || _evaluator == null) return null;
 
-            var vm = _manifest.Visuals.FirstOrDefault(v => v.Name.Equals(visualName, StringComparison.OrdinalIgnoreCase));
-            if (vm == null) return null;
-
-            if (targetDepth <= 0)
-                _drillStates.Remove(visualName);
-            else if (_drillStates.TryGetValue(visualName, out var existing))
-                _drillStates[visualName] = existing with { Path = existing.Path.Take(targetDepth).ToList() };
-
             await _lock.WaitAsync();
             try
             {
+                if (_manifest == null || _evaluator == null) return null;
+                var vm = _manifest.Visuals.FirstOrDefault(v => v.Name.Equals(visualName, StringComparison.OrdinalIgnoreCase));
+                if (vm == null) return null;
+
+                if (targetDepth <= 0)
+                    _drillStates.Remove(visualName);
+                else if (_drillStates.TryGetValue(visualName, out var existing))
+                    _drillStates[visualName] = existing with { Path = existing.Path.Take(targetDepth).ToList() };
+
                 if (!_evaluator.ReportContext.VisualDefinitions.TryGetValue(visualName, out var vStmt))
                     return _manifest;
                 _drillStates.TryGetValue(visualName, out var newState);
