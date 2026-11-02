@@ -4,14 +4,15 @@
  * Opens a WebviewPanel hosting the shared designer.js component.
  * Parse and generate calls are bridged to the Language Server via
  * custom JSON-RPC requests (etlsql/designerParse, etlsql/designerGenerate)
- * rather than an HTTP server.  Save writes directly to disk.
+ * rather than an HTTP server.  Save goes through the editor buffer, so the
+ * credential save policy runs on it like any other save.
  */
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
 import * as nodeCrypto from 'crypto';
 import { LanguageClient } from 'vscode-languageclient/node';
 import * as logger from './logger';
+import { readScriptText, writeScriptThroughEditor } from './documentWriter';
 
 export class ReportDesignerPanel {
     public static readonly viewType = 'etlsql.reportDesigner';
@@ -122,7 +123,7 @@ export class ReportDesignerPanel {
 
     private async _handleSave(id: string, script: string): Promise<void> {
         try {
-            fs.writeFileSync(this._scriptPath, script, 'utf8');
+            await writeScriptThroughEditor(this._scriptPath, script);
             this._panel.title = `Design: ${path.basename(this._scriptPath)}`;
             this._reply(id, { ok: true });
             vscode.window.showInformationMessage(`Saved: ${path.basename(this._scriptPath)}`);
@@ -142,8 +143,7 @@ export class ReportDesignerPanel {
         const reportName = path.basename(this._scriptPath, path.extname(this._scriptPath));
 
         // Load initial script text for parse
-        let scriptText = '';
-        try { scriptText = fs.readFileSync(this._scriptPath, 'utf8'); } catch { /* new file */ }
+        const scriptText = readScriptText(this._scriptPath);
 
         const designerJsUri  = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'designer', 'designer.js'));
         const designerCssUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'designer', 'designer.css'));
