@@ -192,6 +192,119 @@ public class ProcessJobExecutorChaosTests
         }
     }
 
+    [Fact]
+    public async Task IdentityBoundRun_IsRefusedRatherThanRunWithoutTheIdentity()
+    {
+        // The child process cannot carry the identity, which is also the run's tenant binding and
+        // per-object authority. Running the text anyway ran it unbound and unchecked.
+        var tempDir = NewTempDir();
+        var tracker = new ChildProcessTracker(
+            new Mock<ILogger<ChildProcessTracker>>().Object, Path.Combine(tempDir, "child-pids.json"));
+        var (exePath, argumentsTemplate) = SleepCommand(seconds: 0);
+        var executor = new ProcessJobExecutor(
+            Options.Create(new ProcessJobExecutorOptions
+            {
+                ExecutablePath = exePath,
+                ArgumentsTemplate = argumentsTemplate,
+                TimeoutSeconds = 30
+            }),
+            tracker,
+            new Mock<ILogger<ProcessJobExecutor>>().Object);
+        var identity = new ETL_SQL.Core.Governance.ExecutionIdentity
+        {
+            EffectiveUser = "viewer@tenant-a",
+            RealUser = "viewer@tenant-a",
+            TenantId = "tenant-a",
+            IsAdmin = false
+        };
+
+        try
+        {
+            var refused = await executor.ExecuteTextAsync(
+                "SELECT 1 AS Val;", sessionId: "identity-run", executionIdentity: identity);
+            var scheduled = await executor.ExecuteTextAsync("SELECT 1 AS Val;", sessionId: "scheduled-run");
+
+            Assert.False(refused.Success);
+            Assert.False(refused.RetryAllowed);
+            Assert.Contains("cannot carry the caller's execution identity", refused.ErrorMessage);
+            Assert.True(scheduled.Success, scheduled.ErrorMessage);
+        }
+        finally
+        {
+            TryDelete(tempDir);
+        }
+    }
+
+    [Fact]
+    public async Task WarmRunnerStartup_KillsTheProcessWhenTheHandshakeFails()
+    {
+        // A runner that never sends the ready line: the startup read fails (not JSON) or times out.
+        // Before the handshake no client owns the process, so a failed start left it running.
+        var tempDir = NewTempDir();
+        var (exePath, findRunner) = HandshakeLessRunner(tempDir);
+        try
+        {
+            await Assert.ThrowsAnyAsync<Exception>(() => WarmRunnerClient.StartAsync(
+                exePath, TimeSpan.FromSeconds(3), new Mock<ILogger>().Object, default));
+
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            Process? survivor;
+            while ((survivor = findRunner()) is not null && DateTime.UtcNow < deadline)
+            {
+                survivor.Dispose();
+                await Task.Delay(100); // flaky-delay-ok: polls for the killed process to disappear
+            }
+            Assert.Null(survivor);
+        }
+        finally
+        {
+            if (findRunner() is { } leftover)
+            {
+                try { leftover.Kill(entireProcessTree: true); } catch { }
+                leftover.Dispose();
+            }
+            TryDelete(tempDir);
+        }
+    }
+
+    /// <summary>
+    /// An executable that ignores its <c>runner</c> argument and stays alive without ever writing the
+    /// ready handshake, plus a way to find its live process afterwards.
+    /// </summary>
+    private static (string ExePath, Func<Process?> FindRunner) HandshakeLessRunner(string tempDir)
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            // A uniquely named copy of cmd.exe: interactive on a redirected stdin, prints a banner
+            // that is not JSON, and can be found by its name.
+            var name = $"eo{Guid.NewGuid():N}"[..10];
+            var exe = Path.Combine(tempDir, name + ".exe");
+            File.Copy(Environment.GetEnvironmentVariable("ComSpec") ?? @"C:\Windows\System32\cmd.exe", exe);
+            return (exe, () => Process.GetProcessesByName(name).FirstOrDefault());
+        }
+
+        var pidFile = Path.Combine(tempDir, "runner.pid");
+        var script = Path.Combine(tempDir, "runner.sh");
+        File.WriteAllText(script, $"#!/bin/sh\necho $$ > '{pidFile}'\nexec sleep 60\n");
+        File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        return (script, () =>
+        {
+            if (!File.Exists(pidFile) || !int.TryParse(File.ReadAllText(pidFile).Trim(), out var pid)) return null;
+            try
+            {
+                var process = Process.GetProcessById(pid);
+                if (!process.HasExited) return process;
+                process.Dispose();
+                return null;
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+        }
+        );
+    }
+
     private static string NewTempDir()
     {
         var path = Path.Combine(Path.GetTempPath(), $"etlsql-process-chaos-{Guid.NewGuid():N}");
