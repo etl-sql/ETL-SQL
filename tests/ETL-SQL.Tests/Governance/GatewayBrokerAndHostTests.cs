@@ -426,10 +426,183 @@ public sealed class GatewayBrokerAndHostTests
             time.Delays.Select(delay => (int)delay.TotalMilliseconds).ToArray());
     }
 
+    [Fact]
+    public async Task GatewayHost_NeverReportsConnectedForASessionThatFailedToConnect()
+    {
+        var options = new GatewayHostOptions(
+            new GatewaySessionOptions(new Uri("ws://127.0.0.1:1/"), TenantA, GatewayId, Thumbprint),
+            InitialBackoff: TimeSpan.FromMilliseconds(10),
+            MaxBackoff: TimeSpan.FromSeconds(30),
+            MaxRetries: 2);
+        var dispatcher = new GatewayOperationDispatcher(new GatewayResourceRegistry(), new MockResourceExecutor(), new GatewayOutcomeLedger());
+        var host = new GatewayHost(options, dispatcher, new RecordingDelayTimeProvider());
+        var seen = new List<GatewayHostStatus>();
+        host.StatusChanged += status => { lock (seen) seen.Add(status); };
+
+        await host.RunAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
+
+        Assert.DoesNotContain(GatewayHostStatus.Connected, seen);
+    }
+
+    [Fact]
+    public async Task GatewayHost_ASlowFailedConnectDoesNotResetTheBackoff()
+    {
+        // Every clock read jumps a minute, so each failed attempt "lasts" longer than MaxBackoff.
+        // A failed attempt is not a healthy session, however long it took to fail.
+        var time = new RecordingDelayTimeProvider { StepPerRead = TimeSpan.FromMinutes(1) };
+        var options = new GatewayHostOptions(
+            new GatewaySessionOptions(new Uri("ws://127.0.0.1:1/"), TenantA, GatewayId, Thumbprint),
+            InitialBackoff: TimeSpan.FromMilliseconds(10),
+            MaxBackoff: TimeSpan.FromSeconds(30),
+            MaxRetries: 4);
+        var dispatcher = new GatewayOperationDispatcher(new GatewayResourceRegistry(), new MockResourceExecutor(), new GatewayOutcomeLedger());
+
+        await new GatewayHost(options, dispatcher, time).RunAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
+
+        Assert.Equal(
+            new[] { 10, 20, 40, 80 },
+            time.Delays.Select(delay => (int)delay.TotalMilliseconds).ToArray());
+    }
+
+    [Fact]
+    public async Task Broker_HoldsAnOperationRoutedBeforeTheAcknowledgementUntilAfterIt()
+    {
+        var enrollmentStore = new InMemoryGatewayEnrollmentStore();
+        await enrollmentStore.IssueAsync(TenantA, GatewayId, "token-32-chars-long-minimum-length-req", DateTimeOffset.UtcNow.AddHours(1));
+        await enrollmentStore.ConsumeAsync(TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
+        var registry = new GatewaySessionRegistry();
+        var broker = new GatewayBroker(enrollmentStore, registry, allowUnprovenTestIdentities: true);
+        // The broker's first send is HelloAck; hold it so a caller routing to the freshly registered
+        // session gets the chance to write first.
+        await using var server = await LoopbackWebSocketServer.StartAsync(
+            (socket, ct) => broker.HandleInboundConnectionAsync(new FirstSendDelayingWebSocket(socket, TimeSpan.FromMilliseconds(500)), ct));
+
+        using var gateway = new ClientWebSocket();
+        await gateway.ConnectAsync(server.Uri, CancellationToken.None);
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.Hello,
+            TenantId = TenantA,
+            GatewayId = GatewayId,
+            WorkloadPublicKeyThumbprint = Thumbprint
+        });
+
+        IGatewaySession? session = null;
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!registry.TryGet(TenantA, GatewayId, out session) && DateTime.UtcNow < deadline)
+            await Task.Yield();
+        Assert.NotNull(session);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var running = session!.ExecuteAsync(
+            new GatewayOperation("op-early", TenantA, GatewayId, "orders", GatewayOperationClass.Read,
+                GatewayOperationEffect.ReadOnly, GatewayOperationBounds.Default, "op-early"),
+            "SELECT 1", null, cts.Token);
+
+        Assert.Equal(GatewayFrameKind.HelloAck, (await ReceiveFrameAsync(gateway))!.Kind);
+        Assert.Equal("op-early", (await ReceiveFrameAsync(gateway))!.OperationId);
+
+        await SendFrameAsync(gateway, new GatewayFrame { Kind = GatewayFrameKind.Complete, OperationId = "op-early", RowsProduced = 0 });
+        await running;
+        await gateway.CloseAsync(WebSocketCloseStatus.NormalClosure, "Test done", CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Session_EndsInsteadOfDecodingAnOversizedInboundFrame()
+    {
+        var enrollmentStore = new InMemoryGatewayEnrollmentStore();
+        await enrollmentStore.IssueAsync(TenantA, GatewayId, "token-32-chars-long-minimum-length-req", DateTimeOffset.UtcNow.AddHours(1));
+        await enrollmentStore.ConsumeAsync(TenantA, "token-32-chars-long-minimum-length-req", Thumbprint);
+        var registry = new GatewaySessionRegistry();
+        var broker = new GatewayBroker(enrollmentStore, registry, maxFrameBytes: 4096, allowUnprovenTestIdentities: true);
+        await using var server = await LoopbackWebSocketServer.StartAsync(broker.HandleInboundConnectionAsync);
+
+        using var gateway = new ClientWebSocket();
+        await gateway.ConnectAsync(server.Uri, CancellationToken.None);
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.Hello,
+            TenantId = TenantA,
+            GatewayId = GatewayId,
+            WorkloadPublicKeyThumbprint = Thumbprint
+        });
+        Assert.Equal(GatewayFrameKind.HelloAck, (await ReceiveFrameAsync(gateway))!.Kind);
+        Assert.True(registry.TryGet(TenantA, GatewayId, out var session));
+
+        var running = session!.ExecuteAsync(
+            new GatewayOperation("op-big", TenantA, GatewayId, "orders", GatewayOperationClass.Read,
+                GatewayOperationEffect.ReadOnly, GatewayOperationBounds.Default, "op-big"),
+            "SELECT *", null, CancellationToken.None);
+        Assert.Equal("op-big", (await ReceiveFrameAsync(gateway))!.OperationId);
+
+        // A well-formed frame, over the broker's 4 KB limit but read whole by its second 4 KB
+        // receive, so the oversized bytes are exactly one complete frame.
+        await SendFrameAsync(gateway, new GatewayFrame
+        {
+            Kind = GatewayFrameKind.RowBatch,
+            OperationId = "op-big",
+            Columns = ["v"],
+            Rows = [[new string('x', 6_000)]]
+        });
+
+        await Assert.ThrowsAsync<GatewayProtocolException>(() => running);
+        // The broker ends the session rather than keep reading a stream it can no longer frame.
+        using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var closing = await gateway.ReceiveAsync(new byte[1024], wait.Token);
+        Assert.Equal(WebSocketMessageType.Close, closing.MessageType);
+        Assert.False(session!.IsActive);
+    }
+
+    /// <summary>Delays the first send on a socket, then passes everything through.</summary>
+    private sealed class FirstSendDelayingWebSocket(WebSocket inner, TimeSpan delay) : WebSocket
+    {
+        private int _sends;
+
+        public override WebSocketCloseStatus? CloseStatus => inner.CloseStatus;
+        public override string? CloseStatusDescription => inner.CloseStatusDescription;
+        public override WebSocketState State => inner.State;
+        public override string? SubProtocol => inner.SubProtocol;
+        public override void Abort() => inner.Abort();
+        public override Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken) =>
+            inner.CloseAsync(closeStatus, statusDescription, cancellationToken);
+        public override Task CloseOutputAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken) =>
+            inner.CloseOutputAsync(closeStatus, statusDescription, cancellationToken);
+        public override void Dispose() => inner.Dispose();
+        public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken cancellationToken) =>
+            inner.ReceiveAsync(buffer, cancellationToken);
+        public override ValueTask<ValueWebSocketReceiveResult> ReceiveAsync(Memory<byte> buffer, CancellationToken cancellationToken) =>
+            inner.ReceiveAsync(buffer, cancellationToken);
+
+        public override async Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken)
+        {
+            await DelayFirstSendAsync(cancellationToken);
+            await inner.SendAsync(buffer, messageType, endOfMessage, cancellationToken);
+        }
+
+        public override async ValueTask SendAsync(ReadOnlyMemory<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken)
+        {
+            await DelayFirstSendAsync(cancellationToken);
+            await inner.SendAsync(buffer, messageType, endOfMessage, cancellationToken);
+        }
+
+        private Task DelayFirstSendAsync(CancellationToken cancellationToken) =>
+            Interlocked.Increment(ref _sends) == 1
+                ? Task.Delay(delay, cancellationToken) // flaky-delay-ok: widens the pre-acknowledgement window
+                : Task.CompletedTask;
+    }
+
     /// <summary>Records each requested delay and lets it elapse at once.</summary>
     private sealed class RecordingDelayTimeProvider : TimeProvider
     {
+        private long _reads;
+
         public List<TimeSpan> Delays { get; } = [];
+
+        /// <summary>How far the clock moves on each read; zero leaves it on the system clock.</summary>
+        public TimeSpan StepPerRead { get; init; }
+
+        public override DateTimeOffset GetUtcNow() => StepPerRead == TimeSpan.Zero
+            ? System.GetUtcNow()
+            : DateTimeOffset.UnixEpoch + StepPerRead * Interlocked.Increment(ref _reads);
 
         public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
         {
