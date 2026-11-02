@@ -1090,7 +1090,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             LastResultSets.Clear();
             ClearResults();
             _nodeReuseMap.Clear();
-            _operationCount = 0;
+            System.Threading.Interlocked.Exchange(ref _operationCounter.Value, 0);
             _smtpEmailsSentThisScript = 0;
             // Lineage and Telemetry are session-persistent; clearing handled by ResetSessionAsync
             _expressionEvaluator.ClearCaches();
@@ -1794,7 +1794,20 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             MemoryArbiter = MemoryArbiter,
             _adaptiveController = _adaptiveController,
             _adaptiveAdvisor = _adaptiveAdvisor,
-            _ownsAdaptiveAdvisor = false
+            _ownsAdaptiveAdvisor = false,
+            // Runaway protection spans the whole script: a branch shares the parent's file
+            // operation budget and starts at its recursion depth, or N branches get N budgets.
+            _operationCounter = _operationCounter,
+            CurrentRecursiveDepth = CurrentRecursiveDepth,
+            AllowLargeFileOperationCount = AllowLargeFileOperationCount,
+            AllowDeepRecursion = AllowDeepRecursion,
+            MaxFileOperations = MaxFileOperations,
+            // The fork's constructor reset the shared SecurityService depth to the configured
+            // default; put back the value this script is running with.
+            MaxRecursiveDepth = MaxRecursiveDepth,
+            CurrentScriptPath = CurrentScriptPath,
+            WorkingDirectory = WorkingDirectory,
+            _sessionRoot = _sessionRoot
         };
         fork._options.AdaptiveExecutionEnabled = AdaptiveExecutionEnabled;
         fork._options.AdaptiveExecutionOptions = _options.AdaptiveExecutionOptions;
@@ -1821,10 +1834,11 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         Telemetry.TotalSpilledBytes += spawned.Telemetry.TotalSpilledBytes;
     }
 
-    private int _operationCount = 0;
+    /// <summary>File-operation count for the running script; shared by reference with PARALLEL forks.</summary>
+    private System.Runtime.CompilerServices.StrongBox<int> _operationCounter = new(0);
     public void IncrementOperationCount(OperationType type = OperationType.FileSystem, string? path = null, int count = 1)
     {
-        var total = System.Threading.Interlocked.Add(ref _operationCount, count);
+        var total = System.Threading.Interlocked.Add(ref _operationCounter.Value, count);
         _securityService.CheckRunawayProtection(type, total, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, path);
         // Enterprise ceiling binds regardless of the local Allow*/safe-zone overrides above.
         if (type == OperationType.FileSystem && IsEnterpriseGoverned)
@@ -1838,7 +1852,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public IDisposable EnterRecursiveScope()
     {
         CurrentRecursiveDepth++;
-        _securityService.CheckRunawayProtection(OperationType.FileSystem, _operationCount, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, null);
+        _securityService.CheckRunawayProtection(OperationType.FileSystem, System.Threading.Volatile.Read(ref _operationCounter.Value), CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, null);
         // Enterprise ceiling binds regardless of the local Allow*/safe-zone overrides above.
         if (IsEnterpriseGoverned)
             OperationPolicyBoundary.EnforceCeiling(this, "Security:MaxRecursiveNestingDepth",
