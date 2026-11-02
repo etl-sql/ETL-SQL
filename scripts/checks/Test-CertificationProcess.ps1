@@ -135,6 +135,37 @@ exit 0
     try { Invoke-MsiExec -Arguments @('/i', 'fixture.msi') -LogPath (Join-Path $fixture 'fixture.log') -Stage 'fixture' -TimeoutMinutes 0 }
     catch [TimeoutException] { $timeoutReported = $true }
     if (-not $timeoutReported -or -not $global:CertificationFakeInstaller.Killed) { throw 'Installer timeout did not stop its owned process after diagnostic failure.' }
+    $savedDiagnostic = $env:ETLSQL_MSI_DIAGNOSTIC_ONLY
+    $savedLogging = $env:ETLSQL_MSI_DIAGNOSTIC_LOGGING
+    try {
+        $global:CertificationFakeInstaller = [pscustomobject]@{ HasExited = $true; ExitCode = 0 }
+        $global:CertificationFakeInstaller | Add-Member ScriptMethod WaitForExit { param($milliseconds) return $true }
+        function Start-Process { param($FilePath, $ArgumentList, [switch]$PassThru, $WindowStyle) $global:CertificationMsiArguments = $ArgumentList; return $global:CertificationFakeInstaller }
+        function Write-MsiDurableCheckpoint { param($Stage) $global:CertificationLastCheckpoint = $Stage; return $true }
+        foreach ($case in @(
+            @{ Diagnostic = ''; Logging = ''; Expected = '/l*v' },
+            @{ Diagnostic = ''; Logging = 'Flush'; Expected = '/l*v' },
+            @{ Diagnostic = '1'; Logging = ''; Expected = '/l*v!' },
+            @{ Diagnostic = '1'; Logging = 'Flush'; Expected = '/l*v!' },
+            @{ Diagnostic = '1'; Logging = 'Buffered'; Expected = '/l*v' }
+        )) {
+            $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = $case.Diagnostic
+            $env:ETLSQL_MSI_DIAGNOSTIC_LOGGING = $case.Logging
+            $global:CertificationLastCheckpoint = $null
+            Invoke-MsiExec -Arguments @('/i', 'fixture.msi') -LogPath (Join-Path $fixture 'profile.log') -Stage 'profile'
+            if (@($global:CertificationMsiArguments | Where-Object { $_ -like '/l*' }) -cne $case.Expected) { throw 'Incorrect MSI logging profile.' }
+            if ($case.Diagnostic -ceq '1' -and $global:CertificationLastCheckpoint -cne 'msi profile process_exited_0') { throw 'Logging choice disabled action observation.' }
+        }
+        $env:ETLSQL_MSI_DIAGNOSTIC_LOGGING = 'Invalid'
+        $global:CertificationMsiArguments = $null
+        $rejected = $false
+        try { Invoke-MsiExec -Arguments @('/i', 'fixture.msi') -LogPath (Join-Path $fixture 'invalid.log') -Stage 'invalid' }
+        catch { if ($_.Exception.Message -cne 'Diagnostic MSI logging must be Buffered or Flush.') { throw }; $rejected = $true }
+        if (-not $rejected -or $null -ne $global:CertificationMsiArguments) { throw 'Invalid logging started MSI.' }
+    } finally {
+        $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = $savedDiagnostic
+        $env:ETLSQL_MSI_DIAGNOSTIC_LOGGING = $savedLogging
+    }
     Write-Host 'Certification supervision passed: streams, exit status, timeout, unrelated process survival, inherited pipes and owned installer cleanup.'
     $wrapper = Join-Path $fixture 'durable parent wrapper.ps1'
     $durableChild = Join-Path $fixture 'durable child.ps1'

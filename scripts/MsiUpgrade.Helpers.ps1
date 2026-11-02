@@ -257,7 +257,13 @@ function Invoke-MsiExec {
 
     $diagnostic = $env:ETLSQL_MSI_DIAGNOSTIC_ONLY -ceq '1' -and
         $null -ne (Get-Command Write-MsiDurableCheckpoint -CommandType Function -ErrorAction SilentlyContinue)
-    $logging = if ($diagnostic) { '/l*v!' } else { '/l*v' }
+    # Keep action observation independent of flushing when comparing retained installers.
+    # This override is diagnostic-only; ordinary installed certification stays buffered.
+    if ($diagnostic -and $env:ETLSQL_MSI_DIAGNOSTIC_LOGGING -and
+        $env:ETLSQL_MSI_DIAGNOSTIC_LOGGING -cnotin @('Buffered', 'Flush')) {
+        throw 'Diagnostic MSI logging must be Buffered or Flush.'
+    }
+    $logging = if ($diagnostic -and $env:ETLSQL_MSI_DIAGNOSTIC_LOGGING -cne 'Buffered') { '/l*v!' } else { '/l*v' }
     $allArguments = @($Arguments) + @('/qn', '/norestart', $logging, $LogPath)
     $process = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" `
         -ArgumentList $allArguments -PassThru -WindowStyle Hidden

@@ -24,6 +24,11 @@ on:
         type: choice
         options: ['All', 'UpgradeRollback']
         default: 'All'
+      diagnostic_logging:
+        description: Retained-input diagnosis only; observe actions with buffered or flushed MSI logging
+        type: choice
+        options: ['Buffered', 'Flush']
+        default: 'Flush'
   workflow_call:
     inputs:
       source_sha:
@@ -492,6 +497,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       PROFILE: portal
       ETLSQL_MSI_DIAGNOSTIC_ONLY: '1'
+      ETLSQL_MSI_DIAGNOSTIC_LOGGING: ${{ inputs.diagnostic_logging || 'Flush' }}
       ETLSQL_MSI_DURABLE_CHECKPOINTS: '1'
       ETLSQL_MSI_CHECKPOINT_RUN_SHA: ${{ github.sha }}
     steps:
