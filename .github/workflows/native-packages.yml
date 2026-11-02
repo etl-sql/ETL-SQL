@@ -9,6 +9,10 @@ on:
         description: Development branch only; compare one Intel CLI publish, never certification
         type: boolean
         default: false
+      diagnostic_upload_recovery:
+        description: Development-only tiny-artifact upload failure/recovery, without builds
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -68,8 +72,121 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  diagnostic-upload-recovery:
+    if: github.event_name == 'workflow_dispatch' && inputs.diagnostic_upload_recovery && !inputs.diagnostic_publish_cost
+    name: Native upload recovery diagnostic
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        rid: ['upload-rehearsal']
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 3
+      - name: Prepare isolated fixture without compiling
+        shell: pwsh
+        timeout-minutes: 1
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:GITHUB_REF -cne 'refs/heads/diagnostic/native-publish-cost') { throw 'Development upload rehearsal only.' }
+          $null = New-Item -ItemType Directory -Force release, artifacts/native-packages/upload-rehearsal, release-validation/native-upload-recovery
+          $zipPath = Join-Path $PWD 'release/native-upload-rehearsal.zip'
+          $zip = [IO.Compression.ZipFile]::Open($zipPath, [IO.Compression.ZipArchiveMode]::Create)
+          try {
+            $writer = [IO.StreamWriter]::new($zip.CreateEntry('fixture.txt').Open())
+            try { $writer.Write('Diagnostic upload fixture; not an ETL-SQL package.') } finally { $writer.Dispose() }
+          } finally { $zip.Dispose() }
+          @{ scope = 'DiagnosticFixtureNotCertification'; releaseEligible = $false; sourceSha = $env:GITHUB_SHA } |
+            ConvertTo-Json | Set-Content artifacts/native-packages/upload-rehearsal/certification.json
+          (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash | Set-Content release-validation/native-upload-recovery/expected-sha256.txt
+      - name: Retain native package evidence
+        id: package_upload
+        continue-on-error: true
+        timeout-minutes: 3
+        uses: ./.github/actions/native-upload-fault
+        with:
+          name: native-package-${{ matrix.rid }}-${{ github.run_attempt }}
+          path: |
+            artifacts/native-packages/${{ matrix.rid }}/
+            release/*.zip
+            release/*.vsix
+            release/*.dmg
+            release/sha256sums.txt
+            release/sbom.json
+            release/windows-package-inputs.json
+            release/osx-*-package-inputs.json
+      - name: Retry failed native package upload without rebuilding
+        id: package_upload_retry
+        if: always() && steps.package_upload.outcome == 'failure'
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-package-${{ matrix.rid }}-${{ github.run_attempt }}
+          path: |
+            artifacts/native-packages/${{ matrix.rid }}/
+            release/*.zip
+            release/*.vsix
+            release/*.dmg
+            release/sha256sums.txt
+            release/sbom.json
+            release/windows-package-inputs.json
+            release/osx-*-package-inputs.json
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+          retention-days: 30
+      - name: Require retained native package evidence
+        if: always()
+        timeout-minutes: 1
+        shell: bash
+        env:
+          PRIMARY_UPLOAD: ${{ steps.package_upload.outcome }}
+          RETRY_UPLOAD: ${{ steps.package_upload_retry.outcome }}
+        run: |
+          case "$PRIMARY_UPLOAD:$RETRY_UPLOAD" in
+            success:skipped|failure:success) ;;
+            *)
+              echo 'Native package evidence was not retained. Inspect the upload errors before retrying this failed platform.' >&2
+              exit 1
+              ;;
+          esac
+      - name: Verify intentional failure and unchanged fixture
+        if: always()
+        shell: pwsh
+        timeout-minutes: 1
+        env:
+          PRIMARY_UPLOAD: ${{ steps.package_upload.outcome }}
+          RETRY_UPLOAD: ${{ steps.package_upload_retry.outcome }}
+          RETAINED_ARTIFACT: ${{ steps.package_upload_retry.outputs.artifact-id }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $expected = (Get-Content release-validation/native-upload-recovery/expected-sha256.txt -Raw).Trim()
+          $actual = (Get-FileHash release/native-upload-rehearsal.zip -Algorithm SHA256).Hash
+          $first = (Get-Content release-validation/native-upload-recovery/first-artifact-id.txt -Raw).Trim()
+          $passed = $env:PRIMARY_UPLOAD -ceq 'failure' -and $env:RETRY_UPLOAD -ceq 'success' -and
+            $first -cmatch '^[1-9][0-9]*$' -and $env:RETAINED_ARTIFACT -cmatch '^[1-9][0-9]*$' -and
+            $first -cne $env:RETAINED_ARTIFACT -and $expected -ceq $actual
+          $receipt = @{ schemaVersion = 1; scope = 'DevelopmentUploadRecoveryOnly'; releaseEligible = $false
+            sourceSha = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID; passed = $passed
+            primaryOutcome = $env:PRIMARY_UPLOAD; retryOutcome = $env:RETRY_UPLOAD
+            firstArtifactId = $first; retainedArtifactId = $env:RETAINED_ARTIFACT; sha256 = $actual
+            builds = 0; limitation = 'Injected failure after server upload, not a reproduction of ETIMEDOUT.' }
+          $receipt | ConvertTo-Json | Set-Content release-validation/native-upload-recovery/receipt.json
+          $receipt | ConvertTo-Json | Write-Host
+          if (-not $passed) { throw 'Native upload recovery rehearsal did not preserve its completed bytes.' }
+      - name: Retain rehearsal proof
+        if: always()
+        timeout-minutes: 3
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-upload-recovery-proof-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/native-upload-recovery/
+          if-no-files-found: error
+          retention-days: 30
+
   package-impact:
-    if: ${{ !inputs.diagnostic_publish_cost }}
+    if: ${{ !inputs.diagnostic_publish_cost && !inputs.diagnostic_upload_recovery }}
     name: Native package impact
     timeout-minutes: 15
     runs-on: ubuntu-latest
@@ -480,7 +597,7 @@ jobs:
     name: Native Package Certification
     timeout-minutes: 5
     needs: [package-impact, native-package]
-    if: always() && !inputs.diagnostic_publish_cost
+    if: always() && !inputs.diagnostic_publish_cost && !inputs.diagnostic_upload_recovery
     runs-on: ubuntu-latest
     steps:
       - name: Require package coverage or an explicit no-impact selection

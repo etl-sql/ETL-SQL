@@ -1,0 +1,30 @@
+name: Upload then report failure for recovery rehearsal
+description: Development-only injection after a real artifact upload; never used by certification
+inputs:
+  name:
+    description: Fixture artifact name
+    required: true
+  path:
+    description: Fixture files to retain
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Upload fixture bytes
+      id: server_upload
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: error
+        compression-level: 0
+        overwrite: false
+        retention-days: 30
+    - name: Simulate a failed acknowledgement after upload
+      shell: bash
+      env:
+        FIRST_ARTIFACT_ID: ${{ steps.server_upload.outputs.artifact-id }}
+      run: |
+        printf '%s\n' "$FIRST_ARTIFACT_ID" > release-validation/native-upload-recovery/first-artifact-id.txt
+        echo 'Intentional diagnostic failure after uploading the fixture; package bytes remain unchanged.' >&2
+        exit 23
