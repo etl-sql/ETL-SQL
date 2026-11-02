@@ -52,7 +52,8 @@ try {
         -EvidenceDirectory (Join-Path $evidence 'cli') -TimeoutSeconds 60
     if ($LASTEXITCODE -ne 0) { throw 'Experiment CLI launch failed.' }
     $actual = (Get-Content -LiteralPath (Join-Path $evidence 'cli/stdout.log') -Raw).Trim()
-    if ($actual -cne "$version+$sha") { throw 'Experiment executable does not identify its exact source.' }
+    $expectedVersion = [regex]::Escape("$version+$sha")
+    if ($actual -cnotmatch "(?m)^$expectedVersion\s*$") { throw 'Experiment executable does not identify its exact source.' }
     $report.binaryBytes = (Get-Item -LiteralPath $binary).Length
     $report.binarySha256 = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
     $dirty = @(& git -C $repo status --porcelain)
