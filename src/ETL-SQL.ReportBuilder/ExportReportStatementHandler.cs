@@ -48,23 +48,31 @@ namespace ETL_SQL.ReportBuilder
             var tokens = new Lexer(source).Tokenize();
             var script = new Parser(tokens, source).Parse();
 
+            // The report builds from its own definitions only: the caller's report state (and any
+            // earlier EXPORT REPORT's) is set aside and restored once the manifest is built.
             string? oldPath = context.CurrentScriptPath;
+            var callerReportState = ReportContextSnapshot.Capture(context.ReportContext);
+            context.ReportContext.Clear();
+            context.ReportContext.ReportTitleIsMarkdown = false;
+            context.ReportContext.BaselineParameters.Clear();
+            ReportManifest manifest;
             context.CurrentScriptPath = Path.GetFullPath(reportPath);
             var reportVars = new System.Collections.Generic.Dictionary<string, object?>(context.VarContext.CurrentVariables, StringComparer.OrdinalIgnoreCase);
             context.VarContext.PushScope(reportVars, new System.Collections.Generic.Dictionary<string, VariableMetadata>(StringComparer.OrdinalIgnoreCase));
             try
             {
                 await context.Evaluate(script);
+
+                // ── Build manifest from the report's own state ─────────────────
+                var builder = new ManifestBuilder(context);
+                manifest = await builder.BuildAsync(reportPath);
             }
             finally
             {
                 context.VarContext.PopScope();
                 context.CurrentScriptPath = oldPath;
+                callerReportState.RestoreInto(context.ReportContext);
             }
-
-            // ── Build manifest from current context state ──────────────────────
-            var builder = new ManifestBuilder(context);
-            var manifest = await builder.BuildAsync(reportPath);
 
             // ── Write the export file ──────────────────────────────────────────
             var dir = Path.GetDirectoryName(outputPath);
@@ -124,6 +132,78 @@ namespace ETL_SQL.ReportBuilder
                 BrowserPath = browserPath,
                 Warn = message => context.Log($"EXPORT REPORT: {message}", ConsoleColor.Yellow)
             };
+        }
+
+        /// <summary>A copy of every script-owned value on an <see cref="IReportContext"/>.</summary>
+        private sealed class ReportContextSnapshot
+        {
+            private readonly Action<IReportContext> _restore;
+
+            private ReportContextSnapshot(Action<IReportContext> restore) => _restore = restore;
+
+            public static ReportContextSnapshot Capture(IReportContext c)
+            {
+                var visuals = Copy(c.VisualDefinitions);
+                var pages = Copy(c.PageDefinitions);
+                var datasets = Copy(c.DatasetDefinitions);
+                var containers = Copy(c.ContainerDefinitions);
+                var navigation = Copy(c.NavigationDefinitions);
+                var styles = Copy(c.StyleDefinitions);
+                var buttons = Copy(c.ButtonDefinitions);
+                var bookmarks = Copy(c.BookmarkDefinitions);
+                var templates = Copy(c.TemplateDefinitions);
+                var themes = Copy(c.ThemeDefinitions);
+                var baseline = Copy(c.BaselineParameters);
+                var (templatePath, title, titleIsMarkdown, description) = (c.TemplatePath, c.ReportTitle, c.ReportTitleIsMarkdown, c.ReportDescription);
+                var (css, js, head, body, footer) = (c.ReportCss, c.ReportJs, c.ReportHtmlHead, c.ReportHtmlBody, c.ReportHtmlFooter);
+                var (favicon, logo, background, theme, nav) = (c.ReportFavicon, c.ReportLogo, c.ReportBackground, c.ReportTheme, c.ReportNavigation);
+                var (timeZone, locale, nullLabel) = (c.ReportTimeZone, c.ReportLocale, c.ReportNullLabel);
+
+                return new ReportContextSnapshot(target =>
+                {
+                    target.Clear();
+                    Fill(target.VisualDefinitions, visuals);
+                    Fill(target.PageDefinitions, pages);
+                    Fill(target.DatasetDefinitions, datasets);
+                    Fill(target.ContainerDefinitions, containers);
+                    Fill(target.NavigationDefinitions, navigation);
+                    Fill(target.StyleDefinitions, styles);
+                    Fill(target.ButtonDefinitions, buttons);
+                    Fill(target.BookmarkDefinitions, bookmarks);
+                    Fill(target.TemplateDefinitions, templates);
+                    Fill(target.ThemeDefinitions, themes);
+                    target.BaselineParameters.Clear();
+                    Fill(target.BaselineParameters, baseline);
+                    target.TemplatePath = templatePath;
+                    target.ReportTitle = title;
+                    target.ReportTitleIsMarkdown = titleIsMarkdown;
+                    target.ReportDescription = description;
+                    target.ReportCss = css;
+                    target.ReportJs = js;
+                    target.ReportHtmlHead = head;
+                    target.ReportHtmlBody = body;
+                    target.ReportHtmlFooter = footer;
+                    target.ReportFavicon = favicon;
+                    target.ReportLogo = logo;
+                    target.ReportBackground = background;
+                    target.ReportTheme = theme;
+                    target.ReportNavigation = nav;
+                    target.ReportTimeZone = timeZone;
+                    target.ReportLocale = locale;
+                    target.ReportNullLabel = nullLabel;
+                });
+            }
+
+            public void RestoreInto(IReportContext target) => _restore(target);
+
+            private static System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, T>> Copy<T>(
+                System.Collections.Generic.IDictionary<string, T> source) => new(source);
+
+            private static void Fill<T>(System.Collections.Generic.IDictionary<string, T> target,
+                System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, T>> entries)
+            {
+                foreach (var entry in entries) target[entry.Key] = entry.Value;
+            }
         }
 
         private static PdfExportMode ParsePdfMode(string? mode) =>
