@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Retry a failed native-package evidence upload on the same runner using its completed files.
+  A successful upload is never replaced. The complete artifact retains diagnostics if their
+  separate upload fails; exhausted or missing uploads still fail certification. Store the
+  already-compressed packages without another compression pass during artifact upload.
+
 - Wait for consumer-check discovery output to finish before exiting. A busy output pipe could
   otherwise truncate the test list and falsely fail source preflight. Regression checks delay
   output for both full and preflight-excluded discovery without changing test membership.

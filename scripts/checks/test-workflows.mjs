@@ -310,12 +310,23 @@ exit ([int]$env:FIXTURE_EXIT)
   const nativeJob = nativeSource.split(/^  native-package:\r?\n/m)[1].split(/^  [\w-]+:\r?\n/m)[0];
   const nativeStep = name => nativeJob.split(/^      - /m).find(block => block.split(/\r?\n/)[0] === `name: ${name}`);
   const publishStep = nativeStep('Build native ZIP and VSIX');
-  const assertJobBudget = (job, name) => {
+  const assertJobBudget = (job, name, inactiveSteps = []) => {
     const budget = Number(job.match(/^    timeout-minutes: (\d+)/m)?.[1]);
-    const steps = [...job.matchAll(/^        timeout-minutes: (\d+)/gm)].reduce((total, match) => total + Number(match[1]), 0);
+    const inactiveMinutes = inactiveSteps.reduce((total, step) => total + Number(step.match(/^        timeout-minutes: (\d+)/m)[1]), 0);
+    const steps = [...job.matchAll(/^        timeout-minutes: (\d+)/gm)].reduce((total, match) => total + Number(match[1]), 0) - inactiveMinutes;
     assert.ok(budget >= steps + 5, `${name}: ${budget} minutes cannot cover ${steps} minutes of steps plus setup`);
   };
-  assertJobBudget(nativeJob, 'Native package');
+  for (const [rid, os] of [['win-x64', 'Windows'], ['linux-x64', 'Linux'], ['osx-x64', 'macOS'], ['osx-arm64', 'macOS']]) {
+    const inactiveSteps = [];
+    for (const [name, expected] of [['Finalize certified Windows package identity', rid === 'win-x64'],
+      ['Finalize certified macOS package identity', os === 'macOS']]) {
+      const step = nativeStep(name);
+      const active = runInNewContext(step.match(/^        if: (.+)$/m)[1], { matrix: { rid }, runner: { os } });
+      assert.equal(active, expected, `${name} must retain its native platform guard.`);
+      if (!active) inactiveSteps.push(step);
+    }
+    assertJobBudget(nativeJob, `Native package (${rid})`, inactiveSteps);
+  }
   for (const id of ['select-macos-intel', 'select-macos-arm64', 'upload-windows', 'upload-macos', 'operator-evidence']) assertJobBudget(jobs.get(id), id);
   assert.match(publishStep, /^        timeout-minutes: 80/m);
   const nativeCommands = publishStep.split('        run: |')[1].replace(/^          /gm, '');
@@ -397,6 +408,42 @@ exit ([int]$env:FIXTURE_EXIT)
   assert.match(earlyDiagnostics, /path: artifacts\/native-packages\/\$\{\{ matrix.rid \}\}\//);
   assert.ok(nativeJob.indexOf('Retain native package diagnostics first') < nativeJob.indexOf('Retain native package evidence'));
   assert.match(nativeStep('Retain native package evidence'), /timeout-minutes: 10/);
+  const primaryUpload = nativeStep('Retain native package evidence');
+  const retryUpload = nativeStep('Retry failed native package upload without rebuilding');
+  const uploadGuard = nativeStep('Require retained native package evidence');
+  assert.match(primaryUpload, /^        id: package_upload$/m);
+  assert.match(retryUpload, /^        id: package_upload_retry$/m);
+  assert.match(earlyDiagnostics, /^        continue-on-error: true$/m);
+  for (const step of [primaryUpload, retryUpload]) {
+    assert.match(step, /^        uses: actions\/upload-artifact@v7$/m);
+    assert.match(step, /^        continue-on-error: true$/m);
+    assert.match(step, /^          compression-level: 0$/m);
+    assert.match(step, /^          if-no-files-found: error$/m);
+  }
+  assert.match(primaryUpload, /^        timeout-minutes: 10$/m);
+  assert.match(retryUpload, /^        timeout-minutes: 5$/m);
+  assert.match(primaryUpload, /^          overwrite: false$/m);
+  assert.match(retryUpload, /^          overwrite: true$/m);
+  const uploadInputs = step => step.split(/^        with:\r?\n/m)[1].replace(/^          (?:overwrite|compression-level):[^\r\n]*\r?\n/gm, '').trim();
+  assert.equal(uploadInputs(primaryUpload), uploadInputs(retryUpload), 'Retry must upload the original paths under the same artifact name.');
+  assert.match(uploadGuard, /^        if: always\(\)$/m);
+  assert.match(uploadGuard, /PRIMARY_UPLOAD: \$\{\{ steps\.package_upload\.outcome \}\}/);
+  assert.match(uploadGuard, /RETRY_UPLOAD: \$\{\{ steps\.package_upload_retry\.outcome \}\}/);
+  const retryCondition = retryUpload.match(/^        if: (.+)$/m)[1];
+  const uploadCommands = uploadGuard.split('        run: |')[1].replace(/^          /gm, '');
+  for (const primary of ['success', 'failure', 'cancelled', 'skipped', '']) {
+    assert.equal(runInNewContext(retryCondition, { always: () => true, steps: { package_upload: { outcome: primary } } }), primary === 'failure');
+    for (const retry of ['success', 'failure', 'cancelled', 'skipped', '']) {
+      const result = spawnSync(fixtureBash, ['-euo', 'pipefail', '-c', uploadCommands], {
+        encoding: 'utf8', windowsHide: true, timeout: 10000,
+        env: { ...process.env, PRIMARY_UPLOAD: primary, RETRY_UPLOAD: retry },
+      });
+      assert.ifError(result.error);
+      assert.equal(result.status === 0, (primary === 'success' && retry === 'skipped') || (primary === 'failure' && retry === 'success'),
+        `Upload evidence gate accepted an invalid outcome: ${primary}/${retry}`);
+    }
+  }
+  console.log('Native upload recovery: retry only failed uploads, preserve paths/name, never overwrite success, and reject missing/cancelled/exhausted outcomes.');
   console.log('Native publishing: all RIDs retain the publish-log contract, bounded supervisor arguments and failure/timeout propagation; diagnostics upload precedes packages.');
   const macosSource = readFileSync(new URL('../../.github/workflows/macos-release-package.yml', import.meta.url), 'utf8');
   const macosStep = name => macosSource.split(/^      - /m).find(block => block.split(/\r?\n/)[0] === `name: ${name}`);

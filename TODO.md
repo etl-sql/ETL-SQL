@@ -130,7 +130,15 @@ Measure clean and recovery runs separately; workflow watchdog ceilings are not t
   Hosted native source preflight `41361695088` stops before any package build when consumer
   discovery omits its last test. Delayed-stdout regression reproduces success with empty output;
   discovery now awaits the complete write before exit. Windows/Linux regressions preserve full
-  and preflight-excluded membership. Original failure is retained; hosted acceptance remains open.
+  and preflight-excluded membership. Corrected hosted native preflight `41363308061` passes all
+  62 source checks in 157.2 seconds; its original failed run remains retained.
+  That run's ARM publishing, CLI/webviews and package identity pass, but both artifact uploads
+  fail `CreateArtifact` with `ETIMEDOUT`. A bounded in-job retry now reuses the same completed
+  files; an explicit guard rejects missing, cancelled or exhausted uploads. The complete artifact
+  retains diagnostics if their separate upload fails. Successful uploads are never overwritten.
+  Hosted recovery acceptance remains required; no retained artifact exists for the failed ARM job.
+  Isolated experiment `41367135973` compares one Intel CLI publish with ReadyToRun enabled/disabled.
+  It creates timing reports only; production options and full release requirements remain unchanged.
 
 - [ ] **Release timeline.** Record the v0.22.0 candidate cut, each CI/MSI round, its cause and the
   tag time as the release runs, so the goal is measured rather than remembered.

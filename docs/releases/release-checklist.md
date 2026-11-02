@@ -122,6 +122,16 @@ the long build. Later webview acceptance verifies the prepared host's local rece
 hash and uses that executable without another download. Preparation alone does not satisfy webview
 acceptance; both designer and preview checks still have to pass.
 
+Native package producers upload diagnostics first and include the same reports in their complete
+package artifact. A failed separate diagnostic upload can therefore recover through that complete
+artifact. Its initial upload keeps a ten-minute deadline; a failure gets one five-minute retry on
+the same runner with the same paths and artifact name. Only the failed upload may be replaced;
+a successful upload is never retried or overwritten. An explicit final guard requires a retained
+artifact, and earlier build/acceptance failures still fail the job. Artifact compression is disabled
+for these already-compressed packages; the package bytes and their acceptance hashes stay unchanged.
+If both uploads fail, the discarded runner's files are unavailable. Inspect the failure and rerun
+only failed jobs in the completed run, preserving successful platforms and their artifacts.
+
 Before compiling a platform's hosts, native publishing restores all eight hosts with the same
 Release, runtime and self-contained/ReadyToRun settings used by publishing. A failed restore stops
 that platform before any host publish. Publishing uses `--no-restore`; retained Windows payload

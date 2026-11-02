@@ -395,6 +395,7 @@ jobs:
 
       - name: Retain native package diagnostics first
         if: always()
+        continue-on-error: true
         timeout-minutes: 5
         uses: actions/upload-artifact@v7
         with:
@@ -404,7 +405,9 @@ jobs:
           retention-days: 30
 
       - name: Retain native package evidence
+        id: package_upload
         if: always()
+        continue-on-error: true
         timeout-minutes: 10
         uses: actions/upload-artifact@v7
         with:
@@ -419,7 +422,47 @@ jobs:
             release/windows-package-inputs.json
             release/osx-*-package-inputs.json
           if-no-files-found: error
+          compression-level: 0
+          overwrite: false
           retention-days: 30
+
+      - name: Retry failed native package upload without rebuilding
+        id: package_upload_retry
+        if: always() && steps.package_upload.outcome == 'failure'
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-package-${{ matrix.rid }}-${{ github.run_attempt }}
+          path: |
+            artifacts/native-packages/${{ matrix.rid }}/
+            release/*.zip
+            release/*.vsix
+            release/*.dmg
+            release/sha256sums.txt
+            release/sbom.json
+            release/windows-package-inputs.json
+            release/osx-*-package-inputs.json
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+          retention-days: 30
+
+      - name: Require retained native package evidence
+        if: always()
+        timeout-minutes: 1
+        shell: bash
+        env:
+          PRIMARY_UPLOAD: ${{ steps.package_upload.outcome }}
+          RETRY_UPLOAD: ${{ steps.package_upload_retry.outcome }}
+        run: |
+          case "$PRIMARY_UPLOAD:$RETRY_UPLOAD" in
+            success:skipped|failure:success) ;;
+            *)
+              echo 'Native package evidence was not retained. Inspect the upload errors before retrying this failed platform.' >&2
+              exit 1
+              ;;
+          esac
 
   native-package-gate:
     name: Native Package Certification
