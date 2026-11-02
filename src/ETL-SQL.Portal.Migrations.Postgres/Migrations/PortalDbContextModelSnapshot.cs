@@ -1863,6 +1863,12 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                         .HasColumnType("text")
                         .HasColumnName("smtp_alias");
 
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("tenant_id");
+
                     b.Property<decimal>("Threshold")
                         .HasColumnType("numeric")
                         .HasColumnName("threshold");
@@ -1879,15 +1885,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.HasKey("Id")
                         .HasName("pk_report_alerts");
 
-                    b.HasIndex("Name")
-                        .IsUnique()
-                        .HasDatabaseName("ix_report_alerts_name");
-
                     b.HasIndex("OwnerId")
                         .HasDatabaseName("ix_report_alerts_owner_id");
 
                     b.HasIndex("ReportId")
                         .HasDatabaseName("ix_report_alerts_report_id");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_report_alerts_tenant_id_name");
 
                     b.ToTable("report_alerts");
                 });

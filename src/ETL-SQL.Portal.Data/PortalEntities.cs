@@ -446,6 +446,13 @@ public class SavedReportView
 public class ReportAlert
 {
     public int Id { get; set; }
+
+    /// <summary>
+    /// The owning report's tenant, carried on the row so alert names can be unique per tenant at the
+    /// database: a name is the alert's address (ALTER ALERT, GET alerts/by-name), and equal names in
+    /// two tenants are two different alerts.
+    /// </summary>
+    public string TenantId { get; set; } = "portal-host";
     public int ReportId { get; set; }
     public Report Report { get; set; } = null!;
     public int OwnerId { get; set; }
