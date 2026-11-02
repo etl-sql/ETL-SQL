@@ -129,6 +129,21 @@ app.Use(async (ctx, next) =>
     await next();
 });
 
+// The player listens on loopback with no authentication, so any web page the user has open could
+// otherwise drive it: GET /api/manifest?@p=... and GET /api/refresh change the shared session, and
+// the POST endpoints parse JSON whatever the Content-Type, so a cross-site form post works too.
+// Refuse a request that a browser marks cross-site, one whose Origin is not this host, and one
+// whose Host is not loopback (DNS rebinding). Non-browser local clients send none of these headers.
+app.Use(async (ctx, next) =>
+{
+    if (!IsTrustedLocalRequest(ctx.Request))
+    {
+        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+    await next();
+});
+
 // Track last request time so the idle-timeout timer knows when to shut down.
 long lastActivityTicks = DateTime.UtcNow.Ticks;
 app.Use(async (ctx, next) =>
@@ -204,7 +219,7 @@ if (multiMode)
         var body = await JsonSerializer.DeserializeAsync<ParameterUpdateRequest>(ctx.Request.Body, webOptions);
         if (body == null || string.IsNullOrWhiteSpace(body.Name))
             return Results.BadRequest("name is required");
-        return BrowserManifest(await svc.SetParameterAsync(body.Name, body.Value ?? ""));
+        return BrowserManifest(await svc.SetParameterAsync(body.Name, body.Value ?? "", body.IsInteraction));
     });
 
     app.MapPost("/reports/{name}/api/parameters",
@@ -329,7 +344,7 @@ else
         var body = await JsonSerializer.DeserializeAsync<ParameterUpdateRequest>(ctx.Request.Body, webOptions);
         if (body == null || string.IsNullOrWhiteSpace(body.Name))
             return Results.BadRequest("name is required");
-        return BrowserManifest(await svc.SetParameterAsync(body.Name, body.Value ?? ""));
+        return BrowserManifest(await svc.SetParameterAsync(body.Name, body.Value ?? "", body.IsInteraction));
     });
 
     app.MapPost("/api/parameters", async (HttpContext ctx, DashboardService svc) =>
@@ -358,6 +373,14 @@ else
         if (body == null || string.IsNullOrWhiteSpace(body.BookmarkName))
             return Results.BadRequest("bookmarkName is required");
         return BrowserManifest(await svc.ApplyBookmarkAsync(body.BookmarkName));
+    });
+
+    app.MapPost("/api/run-script", async (HttpContext ctx, DashboardService svc) =>
+    {
+        var body = await JsonSerializer.DeserializeAsync<RunScriptRequest>(ctx.Request.Body, webOptions);
+        if (body == null || string.IsNullOrEmpty(body.ScriptPath)) return Results.BadRequest("ScriptPath is required");
+        var result = await svc.RunScriptAsync(body.ScriptPath, body.Parameters ?? new());
+        return Results.Json(new { message = result.Message, refresh = result.Refresh }, noCache);
     });
 
     app.MapPost("/api/drill", async (HttpContext ctx, DashboardService svc) =>
@@ -630,8 +653,7 @@ static string GetDashboardHtml(ReportManifest manifest, string staleBanner)
         "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n" +
         "<meta charset=\"UTF-8\">\n" +
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
-        "<title>" + title + "</title>\n" +
-        "<title>" + title + "</title>\n" +
+        "<title>" + WebUtility.HtmlEncode(title) + "</title>\n" +
         "<link rel=\"stylesheet\" href=\"/report-runtime.css\">\n</head>\n<body>\n" +
         staleBanner + "\n" +
         "<div id=\"root\"></div>\n" +
@@ -641,6 +663,36 @@ static string GetDashboardHtml(ReportManifest manifest, string staleBanner)
         "<script src=\"/feedback.js\"></script>\n" +
         "<script type=\"module\" src=\"/report-runtime.js\"></script>\n" +
         "</body>\n</html>";
+}
+
+static bool IsTrustedLocalRequest(HttpRequest request)
+{
+    // DNS rebinding: a page on evil.example resolved to 127.0.0.1 still sends Host: evil.example.
+    var host = request.Host.Host;
+    if (!(host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+          || (IPAddress.TryParse(host.Trim('[', ']'), out var address) && IPAddress.IsLoopback(address))))
+        return false;
+
+    // Pages and assets may be opened from anywhere; only the API changes or returns session state.
+    var path = request.Path.Value ?? "";
+    var isApi = path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)
+        || (path.StartsWith("/reports/", StringComparison.OrdinalIgnoreCase)
+            && path.Contains("/api/", StringComparison.OrdinalIgnoreCase));
+    if (!isApi) return true;
+
+    var fetchSite = request.Headers["Sec-Fetch-Site"].ToString();
+    if (fetchSite.Length > 0
+        && !fetchSite.Equals("same-origin", StringComparison.OrdinalIgnoreCase)
+        && !fetchSite.Equals("none", StringComparison.OrdinalIgnoreCase))
+        return false;
+
+    var origin = request.Headers.Origin.ToString();
+    if (origin.Length > 0
+        && !(Uri.TryCreate(origin, UriKind.Absolute, out var originUri)
+             && string.Equals(originUri.Authority, request.Host.Value, StringComparison.OrdinalIgnoreCase)))
+        return false;
+
+    return true;
 }
 
 static string BuildAbsoluteUrl(HttpContext ctx, string path)
@@ -665,8 +717,7 @@ static string GetDashboardShellHtml(string reportName, string? description, stri
         "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n" +
         "<meta charset=\"UTF-8\">\n" +
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
-        "<title>" + reportName + " — ETL-SQL</title>\n" +
-        "<title>" + reportName + " — ETL-SQL</title>\n" +
+        "<title>" + WebUtility.HtmlEncode(reportName) + " — ETL-SQL</title>\n" +
         "<link rel=\"stylesheet\" href=\"/report-runtime.css\">\n</head>\n<body>\n" +
         staleBanner + "\n" +
         "<div id=\"root\"></div>\n" +
@@ -702,8 +753,8 @@ static string GetCatalogHtml(IReadOnlyList<ReportEntry> reports)
         foreach (var r in reports)
         {
             var href = "/reports/" + WebUtility.UrlEncode(r.Name);
-            var desc = r.Description != null ? "<p>" + r.Description + "</p>" : "";
-            cards.Append($"<a href=\"{href}\" class=\"catalog-card\"><h2>{r.Name}</h2>{desc}</a>");
+            var desc = r.Description != null ? "<p>" + WebUtility.HtmlEncode(r.Description) + "</p>" : "";
+            cards.Append($"<a href=\"{href}\" class=\"catalog-card\"><h2>{WebUtility.HtmlEncode(r.Name)}</h2>{desc}</a>");
         }
         cards.Append("</div>");
     }
