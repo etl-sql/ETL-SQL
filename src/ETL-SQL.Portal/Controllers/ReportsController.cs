@@ -42,9 +42,11 @@ public class ReportsController : ControllerBase
     private readonly ReportPublishingPolicyService publishingPolicy;
     private readonly DatasetTenantScope datasetScope;
     private readonly PortalTenantCatalogScope catalogScope;
+    private readonly RequestTenantContextAccessor? tenantAccessor;
 
-    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, PortalTenantLineageCatalog lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies, LineageImpactService lineageImpact, ReportPublishingPolicyService publishingPolicy, DatasetTenantScope? datasetScope = null, PortalTenantCatalogScope? catalogScope = null)
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, PortalTenantLineageCatalog lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts, ReportStructureService reportStructure, ReportDependencyService reportDependencies, LineageImpactService lineageImpact, ReportPublishingPolicyService publishingPolicy, DatasetTenantScope? datasetScope = null, PortalTenantCatalogScope? catalogScope = null, RequestTenantContextAccessor? tenantAccessor = null)
     {
+        this.tenantAccessor = tenantAccessor;
         this.db = db;
         this.audit = audit;
         this.portalConfig = portalConfig;
@@ -93,6 +95,27 @@ public class ReportsController : ControllerBase
         if (IsAdmin) return true;
         var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, User);
         return permission.AtLeast(FolderPermission.Manage);
+    }
+
+    /// <summary>
+    /// On a Shared host an anonymous share link or embed token is the request's only credential, so
+    /// the tenant comes from the row it located, exactly as a refresh secret locates its session. A
+    /// request that already carries a different verified tenant is refused rather than rescoped.
+    /// </summary>
+    private bool TryEstablishAnonymousTenant(Report report)
+    {
+        if (!portalConfig.SharedTenancy.Enabled) return true;
+        if (tenantAccessor is null) return false;
+        try
+        {
+            tenantAccessor.SetVerifiedCredential(
+                ETL_SQL.Core.Multitenancy.TenantContext.FromVerifiedCredential(report.TenantId));
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private async Task<bool> CreatorCanResolveAsync(
@@ -1068,6 +1091,7 @@ public class ReportsController : ControllerBase
         if (link is null || link.Report.IsDeleted) return NotFound();
         if (link.RevokedAt is not null) return NotFound();
         if (link.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow) return NotFound();
+        if (!TryEstablishAnonymousTenant(link.Report)) return NotFound();
 
         if (!await CreatorCanResolveAsync(link.CreatedBy, link.Report))
             return NotFound();
@@ -1155,6 +1179,7 @@ public class ReportsController : ControllerBase
         if (embed is null || embed.Report.IsDeleted) return NotFound();
         if (embed.RevokedAt is not null) return NotFound();
         if (embed.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow) return NotFound();
+        if (!TryEstablishAnonymousTenant(embed.Report)) return NotFound();
         if (!await CreatorCanResolveAsync(embed.CreatedBy, embed.Report))
             return NotFound();
         await audit.LogAsync(null, "ANONYMOUS_EMBED_TOKEN_VIEW", "Report",
@@ -1395,6 +1420,7 @@ public class ReportsController : ControllerBase
 
         var alert = new ReportAlert
         {
+            TenantId = report.TenantId,
             ReportId = id,
             OwnerId = CurrentUserId,
             Name = req.Name,
