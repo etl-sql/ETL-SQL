@@ -285,11 +285,14 @@ namespace ETL_SQL.Orchestrator.Service
                 int limit = 100, int offset = 0) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var jobs = await store.GetJobsPageAsync(RequestTenant(ctx, cfg), limit, offset);
+                var tenant = RequestTenant(ctx, cfg);
                 var caller = RequestCaller(ctx);
-                var visible = await authorization.FilterAsync(caller, OrchestratorObjectKind.Job, jobs,
-                    job => job.Id.ToString(), job => job.TenantId, job => job.CreatedBy,
-                    OrchestratorObjectPermission.Read, ctx.RequestAborted);
+                var visible = await ReadVisiblePageAsync(
+                    async (take, skip) => (IReadOnlyList<JobDefinition>)(await store.GetJobsPageAsync(tenant, take, skip)).ToList(),
+                    async jobs => await authorization.FilterAsync(caller, OrchestratorObjectKind.Job, jobs,
+                        job => job.Id.ToString(), job => job.TenantId, job => job.CreatedBy,
+                        OrchestratorObjectPermission.Read, ctx.RequestAborted),
+                    Math.Clamp(limit, 1, 1000), Math.Max(0, offset));
                 return Results.Ok(visible);
             }).WithName("listScheduledJobs");
 
@@ -453,6 +456,15 @@ namespace ETL_SQL.Orchestrator.Service
                         OrchestratorObjectPermission.Manage, existing.CreatedBy, ctx.RequestAborted))
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
 
+                // The same schedule rules as creation. Without them an update could store a zero or
+                // negative interval, an unknown unit, or an unparseable time of day on the job.
+                if (req.Interval is <= 0)
+                    return Results.BadRequest(new { Error = "Interval must be positive." });
+                if (req.Unit?.ToUpperInvariant() is not (null or "SECOND" or "MINUTE" or "HOUR" or "DAY" or "WEEK" or "MONTH"))
+                    return Results.BadRequest(new { Error = "Unit must be one of: SECOND, MINUTE, HOUR, DAY, WEEK, MONTH" });
+                if (!string.IsNullOrEmpty(req.AtTime) && !TimeSpan.TryParse(req.AtTime, CultureInfo.InvariantCulture, out _))
+                    return Results.BadRequest(new { Error = "AtTime must be a time of day, such as 02:00." });
+
                 var pinnedScript = req.ScriptText != null ? await PinBundlePathsAsync(req.ScriptText, bundleStore) : null;
                 var targetPath = req.TargetPath;
                 if (targetPath is not null && existing.JobType == JobTargetKind.Script)
@@ -612,13 +624,15 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg, string? jobName = null, int limit = 100) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var history = (string.IsNullOrWhiteSpace(jobName)
-                    ? await store.GetHistoryAsync(limit: Math.Clamp(limit, 1, 1000))
-                    : await store.GetHistoryForNameAsync(
-                        RequestTenant(ctx, cfg), jobName, Math.Clamp(limit, 1, 1000))).ToList();
-                return Results.Ok(await FilterReadableJobRowsAsync(
-                    history, row => row.JobName, RequestCaller(ctx), RequestTenant(ctx, cfg),
-                    store, authorization, ctx.RequestAborted));
+                var tenant = RequestTenant(ctx, cfg);
+                var caller = RequestCaller(ctx);
+                return Results.Ok(await ReadVisiblePrefixAsync(
+                    async take => (IReadOnlyList<JobHistoryEntry>)(string.IsNullOrWhiteSpace(jobName)
+                        ? await store.GetHistoryAsync(limit: take)
+                        : await store.GetHistoryForNameAsync(tenant, jobName, take)).ToList(),
+                    rows => FilterReadableJobRowsAsync(
+                        rows, row => row.JobName, caller, tenant, store, authorization, ctx.RequestAborted),
+                    Math.Clamp(limit, 1, 1000)));
             }).WithName("getAllJobHistory");
 
             app.MapGet("/api/data-quality/status", async (HttpContext ctx, IJobHistoryStore store,
@@ -626,11 +640,14 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg, int limit = 1000) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var rows = await store.GetDataQualityStatusesAsync(Math.Clamp(limit, 1, 10000));
-                return Results.Ok(await FilterReadableJobRowsAsync(
-                    rows.Where(row => !string.IsNullOrWhiteSpace(row.JobName)).ToList(),
-                    row => row.JobName!, RequestCaller(ctx), RequestTenant(ctx, cfg),
-                    store, authorization, ctx.RequestAborted));
+                var tenant = RequestTenant(ctx, cfg);
+                var caller = RequestCaller(ctx);
+                return Results.Ok(await ReadVisiblePrefixAsync(
+                    store.GetDataQualityStatusesAsync,
+                    rows => FilterReadableJobRowsAsync(
+                        rows.Where(row => !string.IsNullOrWhiteSpace(row.JobName)).ToList(),
+                        row => row.JobName!, caller, tenant, store, authorization, ctx.RequestAborted),
+                    Math.Clamp(limit, 1, 10000)));
             }).WithName("getDataQualityStatus");
 
             app.MapGet("/api/data-quality/failures", async (HttpContext ctx, IJobHistoryStore store,
@@ -638,10 +655,13 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg, int limit = 1000) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var rows = await store.GetDataQualityFailuresAsync(Math.Clamp(limit, 1, 10000));
-                return Results.Ok(await FilterReadableJobRowsAsync(
-                    rows, row => row.JobName, RequestCaller(ctx), RequestTenant(ctx, cfg),
-                    store, authorization, ctx.RequestAborted));
+                var tenant = RequestTenant(ctx, cfg);
+                var caller = RequestCaller(ctx);
+                return Results.Ok(await ReadVisiblePrefixAsync(
+                    store.GetDataQualityFailuresAsync,
+                    rows => FilterReadableJobRowsAsync(
+                        rows, row => row.JobName, caller, tenant, store, authorization, ctx.RequestAborted),
+                    Math.Clamp(limit, 1, 10000)));
             }).WithName("getDataQualityFailures");
 
             app.MapGet("/api/stewardship/score", async (HttpContext ctx, ITenantLineageCatalogStore store,
@@ -766,10 +786,12 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 var caller = RequestCaller(ctx);
-                var schedules = await catalog.GetSchedulesAsync(Math.Clamp(limit, 1, 1000), Math.Max(0, offset));
-                var visible = await authorization.FilterAsync(caller, OrchestratorObjectKind.Schedule, schedules,
-                    schedule => schedule.Id.ToString(), schedule => schedule.TenantId, schedule => schedule.CreatedBy,
-                    OrchestratorObjectPermission.Read, ctx.RequestAborted);
+                var visible = await ReadVisiblePageAsync(
+                    catalog.GetSchedulesAsync,
+                    async schedules => await authorization.FilterAsync(caller, OrchestratorObjectKind.Schedule, schedules,
+                        schedule => schedule.Id.ToString(), schedule => schedule.TenantId, schedule => schedule.CreatedBy,
+                        OrchestratorObjectPermission.Read, ctx.RequestAborted),
+                    Math.Clamp(limit, 1, 1000), Math.Max(0, offset));
                 return Results.Ok(visible);
             }).WithName("listSchedules");
 
@@ -999,10 +1021,12 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
                 var caller = RequestCaller(ctx);
-                var notifications = await catalog.GetNotificationsAsync(Math.Clamp(limit, 1, 1000), Math.Max(0, offset));
-                var visible = await authorization.FilterAsync(caller, OrchestratorObjectKind.Notification, notifications,
-                    notification => notification.Id.ToString(), notification => notification.TenantId, notification => notification.CreatedBy,
-                    OrchestratorObjectPermission.Read, ctx.RequestAborted);
+                var visible = await ReadVisiblePageAsync(
+                    catalog.GetNotificationsAsync,
+                    async notifications => await authorization.FilterAsync(caller, OrchestratorObjectKind.Notification, notifications,
+                        notification => notification.Id.ToString(), notification => notification.TenantId, notification => notification.CreatedBy,
+                        OrchestratorObjectPermission.Read, ctx.RequestAborted),
+                    Math.Clamp(limit, 1, 1000), Math.Max(0, offset));
                 return Results.Ok(visible);
             }).WithName("listNotifications");
 
@@ -1285,7 +1309,7 @@ namespace ETL_SQL.Orchestrator.Service
             app.MapPost("/api/notifications/{name}/dispatch", async (HttpContext ctx, string name,
                 DispatchNotificationApiRequest req, NotificationDispatchService dispatch,
                 IJobCatalogStore catalog, OrchestratorObjectAuthorizationService authorization,
-                IConfiguration cfg,
+                SecurityService security, IConfiguration cfg,
                 CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
@@ -1309,11 +1333,32 @@ namespace ETL_SQL.Orchestrator.Service
                 if (string.IsNullOrWhiteSpace(req.Text))
                     return Results.BadRequest(new { Error = "Text is required." });
 
+                // The host's path policy comes before any existence check. The payload checks that each
+                // attachment exists, and answered "does not exist" for paths the policy forbids, so a
+                // caller could probe for files anywhere on the host, system directories included.
+                foreach (var attachment in req.AttachmentPaths ?? [])
+                {
+                    if (string.IsNullOrWhiteSpace(attachment) || !Path.IsPathFullyQualified(attachment)) continue;
+                    try
+                    {
+                        security.ValidatePath(attachment);
+                    }
+                    catch (SecurityException)
+                    {
+                        return Results.BadRequest(new { Error = "A notification attachment path is outside the host's permitted paths." });
+                    }
+                }
+
                 NotificationDispatchPayload payload;
                 try
                 {
+                    // Dispatch the notification that was just authorized, by its id. By name alone the
+                    // service resolved it again in the unbound scope, so a tenant's caller was checked
+                    // against its own notification and then sent a different one, or none.
                     payload = new NotificationDispatchPayload(
                         NotificationName: notificationName,
+                        NotificationId: notification.Id,
+                        TenantId: notification.TenantId,
                         SourceKind: sourceKind,
                         Title: req.Title.Trim(),
                         Text: req.Text.Trim(),
@@ -1357,6 +1402,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg, CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (ConnectionAdministrationDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
 
@@ -1382,6 +1428,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg, CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (ConnectionAdministrationDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
 
@@ -1409,6 +1456,7 @@ namespace ETL_SQL.Orchestrator.Service
                 CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (ConnectionAdministrationDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
                 if (entries is null || entries.Count == 0)
@@ -1460,6 +1508,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IServiceProvider services, IConfiguration cfg, CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (ConnectionAdministrationDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (!TryValidateCatalogAlias(alias, out var decodedAlias, out var error)) return error!;
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
@@ -1478,6 +1527,7 @@ namespace ETL_SQL.Orchestrator.Service
                 CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (ConnectionAdministrationDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (!TryValidateCatalogAlias(alias, out var decodedAlias, out var error)) return error!;
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
@@ -1520,6 +1570,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IServiceProvider services, IConfiguration cfg, CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (ConnectionAdministrationDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (!TryValidateCatalogAlias(alias, out var decodedAlias, out var error)) return error!;
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
@@ -1540,6 +1591,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IServiceProvider services, IConfiguration cfg, CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (ConnectionAdministrationDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (!TryValidateCatalogAlias(alias, out var decodedAlias, out var error)) return error!;
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
@@ -1561,6 +1613,7 @@ namespace ETL_SQL.Orchestrator.Service
                 ISecretProvider secrets, ETL_SQL.Services.SecurityService security, CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (ConnectionAdministrationDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (!TryValidateCatalogAlias(alias, out var decodedAlias, out var error)) return error!;
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
@@ -1626,6 +1679,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IServiceProvider services, IConfiguration cfg, IJobHistoryStore store, CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (ConnectionAdministrationDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (!TryValidateCatalogAlias(alias, out var decodedAlias, out var error)) return error!;
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
@@ -1659,6 +1713,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IServiceProvider services, IConfiguration cfg, CancellationToken ct) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (ConnectionAdministrationDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (services.GetService<IConnectionCatalogProvider>() is not IWritableConnectionCatalogProvider writable)
                     return Results.NotFound(new { Error = "No writable connection catalog is configured." });
 
@@ -2302,6 +2357,60 @@ namespace ETL_SQL.Orchestrator.Service
             caller.IsInRole("Admin")
             || string.Equals(caller.PrincipalKey, entry.OwnerPrincipal, StringComparison.OrdinalIgnoreCase);
 
+        // Bounds the rows a list endpoint reads from the store on one request while it fills a page.
+        private const int MaxScannedListRows = 50_000;
+
+        /// <summary>
+        /// One page of the rows a caller may see, from a store that pages by (limit, offset).
+        ///
+        /// <para>Authorization filters rows after they are read, so applying the caller's limit and
+        /// offset to the store's rows returned short or empty pages whenever earlier rows belonged to
+        /// other tenants or principals. The limit and offset here count visible rows; the store is
+        /// read in batches until the page is full or the store has no more.</para>
+        /// </summary>
+        internal static async Task<IReadOnlyList<T>> ReadVisiblePageAsync<T>(
+            Func<int, int, Task<IReadOnlyList<T>>> readRaw,
+            Func<IReadOnlyList<T>, Task<List<T>>> visibleOf,
+            int limit,
+            int offset)
+        {
+            var page = new List<T>(Math.Min(limit, 1000));
+            var batch = Math.Max(limit + offset, 100);
+            var skipped = 0;
+            for (var rawOffset = 0; rawOffset < MaxScannedListRows;)
+            {
+                var raw = await readRaw(batch, rawOffset);
+                foreach (var row in await visibleOf(raw))
+                {
+                    if (skipped < offset) { skipped++; continue; }
+                    page.Add(row);
+                    if (page.Count == limit) return page;
+                }
+                if (raw.Count < batch) break;
+                rawOffset += raw.Count;
+            }
+            return page;
+        }
+
+        /// <summary>
+        /// The first <paramref name="limit"/> visible rows from a store that can only be asked for its
+        /// newest N. Asks for a larger N until enough rows are visible or the store runs out, for the
+        /// same reason as <see cref="ReadVisiblePageAsync"/>.
+        /// </summary>
+        internal static async Task<IReadOnlyList<T>> ReadVisiblePrefixAsync<T>(
+            Func<int, Task<IReadOnlyList<T>>> readNewest,
+            Func<IReadOnlyList<T>, Task<IReadOnlyList<T>>> visibleOf,
+            int limit)
+        {
+            for (var take = limit; ; take = Math.Min(take * 4, MaxScannedListRows))
+            {
+                var raw = await readNewest(take);
+                var visible = await visibleOf(raw);
+                if (visible.Count >= limit) return visible.Take(limit).ToList();
+                if (raw.Count < take || take >= MaxScannedListRows) return visible;
+            }
+        }
+
         private static async Task<IReadOnlyList<T>> FilterReadableJobRowsAsync<T>(
             IReadOnlyList<T> rows,
             Func<T, string> jobName,
@@ -2453,6 +2562,15 @@ namespace ETL_SQL.Orchestrator.Service
         /// role never bypasses the scope: a narrow token held by an administrator is narrow, which is
         /// the entire reason for issuing one.</para>
         /// </summary>
+        /// <summary>
+        /// The shared connection catalog holds every tenant's connection definitions and their secret
+        /// references, so reading or changing it through the admin routes takes an administrator
+        /// wherever callers carry an identity. In legacy mode the API key is the only identity there
+        /// is, and holding it is the authorization — as for <c>/management/stop</c>.
+        /// </summary>
+        private static bool ConnectionAdministrationDenied(HttpContext ctx, IConfiguration cfg) =>
+            !OrchestratorAuthorizationMode.IsLegacy(cfg) && !IsObjectAdministrator(RequestCaller(ctx));
+
         private static bool IsObjectAdministrator(OrchestratorCaller caller)
         {
             if (!caller.IsInRole("Admin")) return false;
