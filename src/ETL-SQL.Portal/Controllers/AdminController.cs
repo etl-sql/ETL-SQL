@@ -512,7 +512,7 @@ public class AdminController(
         // Durable shared resources (folders, reports, datasets) must be explicitly reassigned
         // before their owner disappears — otherwise ownership dangles and PRIVATE datasets
         // become reachable only by administrators.
-        var ownedFolders = await db.Folders.CountAsync(f => f.OwnerId == id);
+        var ownedFolders = await catalogScope.Folders.CountAsync(f => f.OwnerId == id);
         var ownedReports = await catalogScope.Reports.CountAsync(r => r.CreatedBy == id);
         var ownedDatasets = await db.Datasets.CountAsync(
             d => d.TenantId == TenantId && d.CreatedBy == id);
@@ -532,7 +532,7 @@ public class AdminController(
                 return BadRequest(new { error = "reassignTo must identify a different, active user." });
 
             // Bump versions so any concurrent edit holding the old version conflicts cleanly.
-            await db.Folders.Where(f => f.OwnerId == id).ExecuteUpdateAsync(s => s
+            await catalogScope.Folders.Where(f => f.OwnerId == id).ExecuteUpdateAsync(s => s
                 .SetProperty(f => f.OwnerId, target.Id)
                 .SetProperty(f => f.Version, f => f.Version + 1));
             await catalogScope.Reports.Where(r => r.CreatedBy == id).ExecuteUpdateAsync(s => s
@@ -1644,7 +1644,7 @@ public class AdminController(
         var groupIds = user.UserGroups.Select(ug => ug.GroupId).ToHashSet();
         var groupNames = user.UserGroups.Select(ug => ug.Group.Name).OrderBy(n => n).ToList();
 
-        var folders = await db.Folders
+        var folders = await catalogScope.Folders
             .Include(f => f.Acls).ThenInclude(a => a.Group)
             .OrderBy(f => f.Path)
             .ToListAsync();
@@ -1700,7 +1700,7 @@ public class AdminController(
     [HttpGet("permissions/effective/folder/{folderId:int}")]
     public async Task<IActionResult> GetEffectivePermissionsForFolder(int folderId)
     {
-        var folder = await db.Folders
+        var folder = await catalogScope.Folders
             .Include(f => f.Acls).ThenInclude(a => a.Group)
             .FirstOrDefaultAsync(f => f.Id == folderId);
         if (folder is null) return NotFound();
@@ -2101,7 +2101,8 @@ public class AdminController(
     {
         var matching = folder.Acls
             .Where(a => groupIds.Contains(a.GroupId))
-            .OrderByDescending(a => a.Permission)
+            // Ranked, never the stored integer: Author is stored as 3 and Manage as 2.
+            .OrderByDescending(a => a.Permission.Rank())
             .ThenBy(a => a.Group.Name)
             .ToList();
         if (matching.Count == 0) return null;
@@ -2129,7 +2130,8 @@ public class AdminController(
         var groupIds = user.UserGroups.Select(ug => ug.GroupId).ToHashSet();
         var matching = acls
             .Where(a => groupIds.Contains(a.GroupId))
-            .OrderByDescending(a => a.Permission)
+            // Ranked, never the stored integer: Author is stored as 3 and Manage as 2.
+            .OrderByDescending(a => a.Permission.Rank())
             .ThenBy(a => a.Group.Name)
             .ToList();
         if (matching.Count == 0) return null;

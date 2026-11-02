@@ -400,10 +400,12 @@ public class FoldersController(
             return catalogScope.Folders;
 
         var userId = CurrentUserId;
-        return catalogScope.Folders.Where(f => catalogScope.FolderAcls.Any(a =>
-            a.FolderId == f.Id
-            && a.Permission >= FolderPermission.Read
-            && db.UserGroups.Any(ug => ug.UserId == userId && ug.GroupId == a.GroupId)));
+        // Ownership implies Manage (FolderPermissionService), so an owner sees the folder even
+        // without a group grant. Every stored permission is at least Read, so no rank test is needed.
+        return catalogScope.Folders.Where(f => f.OwnerId == userId
+            || catalogScope.FolderAcls.Any(a =>
+                a.FolderId == f.Id
+                && db.UserGroups.Any(ug => ug.UserId == userId && ug.GroupId == a.GroupId)));
     }
 
     private sealed record FolderTreeRow(int Id, int? ParentId, string Name, string Path, long Version);
