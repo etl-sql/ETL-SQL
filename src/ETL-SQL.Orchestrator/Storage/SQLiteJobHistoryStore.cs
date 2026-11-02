@@ -1458,9 +1458,10 @@ namespace ETL_SQL.Orchestrator.Storage
             {
                 existing.CommandText = @"
                     SELECT id FROM job_history
-                    WHERE job_name = @name COLLATE NOCASE AND start_time = @start
+                    WHERE tenant_id = @tenant AND job_name = @name COLLATE NOCASE AND start_time = @start
                       AND ((end_time IS NULL AND @end IS NULL) OR end_time = @end)
                     ORDER BY id LIMIT 1;";
+                existing.AddParam("@tenant", TenantKey(entry.TenantId));
                 existing.AddParam("@name", entry.JobName);
                 existing.AddParam("@start", entry.StartTime.ToString("O"));
                 existing.AddParam("@end", entry.EndTime.HasValue ? entry.EndTime.Value.ToString("O") : DBNull.Value);
@@ -1471,14 +1472,18 @@ namespace ETL_SQL.Orchestrator.Storage
 
             var sql = _dialect.InsertReturningId(@"
                 INSERT INTO job_history
-                    (job_name, start_time, end_time, status, error_message, rows_processed,
+                    (job_id, tenant_id, job_name, start_time, end_time, status, error_message, rows_processed,
                      peak_memory_bytes, cpu_time_seconds, script_hash_at_run_time, hash_matched,
                      rows_quarantined, rows_warned, data_quality_failures, session_id, checkpoint_label)
                 VALUES
-                    (@name, @start, @end, @status, @error, @rows,
+                    (@jobId, @tenant, @name, @start, @end, @status, @error, @rows,
                      @memory, @cpu, @hash, @matched, @quarantined, @warned, @failures, @session, @checkpoint)", "id");
             using var insert = connection.CreateCommand();
             insert.CommandText = sql;
+            // The run keeps its tenant and job. Without them an imported run is invisible to every
+            // tenant-scoped history read and to the rollups that key on job_id.
+            insert.AddParam("@jobId", entry.JobId.Value ?? string.Empty);
+            insert.AddParam("@tenant", TenantKey(entry.TenantId));
             insert.AddParam("@name", entry.JobName);
             insert.AddParam("@start", entry.StartTime.ToString("O"));
             insert.AddParam("@end", entry.EndTime.HasValue ? entry.EndTime.Value.ToString("O") : DBNull.Value);
