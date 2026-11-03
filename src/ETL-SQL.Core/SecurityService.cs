@@ -337,10 +337,13 @@ public partial class SecurityService
 
         foreach (var allowed in AllowedHosts)
         {
-            if (allowed.StartsWith("*."))
+            if (allowed.StartsWith("*.", StringComparison.Ordinal))
             {
-                var domain = allowed.Substring(2);
-                if (host.EndsWith(domain, StringComparison.OrdinalIgnoreCase)) return;
+                // "*.example.com" matches example.com and its subdomains, but not "evil-example.com":
+                // the suffix must start at a label boundary.
+                var suffix = allowed.Substring(1);
+                if (host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(host, allowed.Substring(2), StringComparison.OrdinalIgnoreCase)) return;
             }
 
             if (string.Equals(host, allowed, StringComparison.OrdinalIgnoreCase)) return;
@@ -444,8 +447,7 @@ public partial class SecurityService
         }
         foreach (var blocked in SensitiveDirectories)
         {
-            var blockedClean = blocked.Trim('/');
-            if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase)))
+            if (ContainsSegmentSequence(segments, blocked))
             {
                 throw new SecurityException($"Unauthorized access to protected system/environment directory: {blocked} in path {fullPath}");
             }
@@ -473,6 +475,32 @@ public partial class SecurityService
         }
     }
 
+    /// <summary>
+    /// True when a path (after symlink resolution) is a drive root, lies in a critical system or
+    /// credential directory, or is one of the application's own files — places no configuration
+    /// makes safe to read on a script author's behalf. For callers with no execution context, such
+    /// as static analysis, that must not read such files while inspecting a script. Fails closed.
+    /// </summary>
+    public static bool IsProtectedLocation(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return true;
+        try
+        {
+            var fullPath = ResolvePathSymlinks(Path.GetFullPath(path));
+            if (string.Equals(fullPath, Path.GetPathRoot(fullPath), StringComparison.OrdinalIgnoreCase)) return true;
+            var normalizedPath = fullPath.Replace('\\', '/');
+            var segments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (CriticalSystemDirectories.Any(blocked => IsBlockedDirectoryMatch(normalizedPath, segments, blocked))) return true;
+            if (SensitiveDirectories.Any(blocked => ContainsSegmentSequence(segments, blocked))) return true;
+            EnforceApplicationFileProtection(fullPath);
+            return false;
+        }
+        catch (Exception ex) when (ex is SecurityException or ArgumentException or IOException or NotSupportedException or UnauthorizedAccessException)
+        {
+            return true;
+        }
+    }
+
     private bool IsSensitivePath(string fullPath)
     {
         var normalizedPath = fullPath.Replace('\\', '/');
@@ -484,8 +512,7 @@ public partial class SecurityService
         }
         foreach (var blocked in SensitiveDirectories)
         {
-            var blockedClean = blocked.Trim('/');
-            if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase))) return true;
+            if (ContainsSegmentSequence(segments, blocked)) return true;
         }
         return false;
     }
@@ -579,6 +606,24 @@ public partial class SecurityService
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// True when <paramref name="blocked"/> — one segment (".ssh") or several ("Users/Public") —
+    /// appears as consecutive whole segments of the path.
+    /// </summary>
+    private static bool ContainsSegmentSequence(string[] segments, string blocked)
+    {
+        var parts = blocked.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return false;
+        for (var start = 0; start + parts.Length <= segments.Length; start++)
+        {
+            var match = true;
+            for (var i = 0; i < parts.Length && match; i++)
+                match = string.Equals(segments[start + i], parts[i], StringComparison.OrdinalIgnoreCase);
+            if (match) return true;
+        }
+        return false;
     }
 
     private static bool IsBlockedDirectoryMatch(string normalizedPath, string[] segments, string blocked)
@@ -726,7 +771,9 @@ public partial class SecurityService
         int maxOps = (type == OperationType.FileSystem) ? MaxFileOperations : MaxInternalOperations;
         int maxDepth = MaxRecursiveDepth;
 
-        bool isSafeZone = IsWithinSafeZone(path) || IsTestMode;
+        if (count <= maxOps && depth <= maxDepth) return;
+
+        bool isSafeZone = IsTestMode || IsWithinSafeZone(path);
 
         if (count > maxOps && !allowLargeCount)
         {
@@ -1205,6 +1252,8 @@ public partial class SecurityService
             foreach (var part in parts)
             {
                 current = Path.Combine(current, part);
+                // .NET's File.Exists/Directory.Exists report the link itself, so a dangling symlink
+                // (target not created yet) still counts as existing here and is resolved below.
                 if (File.Exists(current) || Directory.Exists(current))
                 {
                     try
@@ -1235,15 +1284,31 @@ public partial class SecurityService
     private bool IsWithinSafeZone(string? path)
     {
         if (string.IsNullOrEmpty(path)) return false;
-        var fullPath = Path.GetFullPath(path);
+        // Canonicalize like ValidatePath does, so a symlink inside a zone that points outside it does
+        // not count as inside. Zones are matched as written and canonicalized, so a zone configured
+        // through a symlinked directory still matches its real location.
+        var fullPath = ResolvePathSymlinks(Path.GetFullPath(path));
         var current = fullPath;
+        var zones = new HashSet<string>(ApprovedSafeZones, (IEqualityComparer<string>?)ApprovedSafeZones.Comparer);
+        foreach (var zone in ApprovedSafeZones)
+        {
+            try
+            {
+                zones.Add(ResolvePathSymlinks(Path.GetFullPath(zone))
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            }
+            catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
+            {
+                // An unusable zone entry stays matched only as written.
+            }
+        }
 
         _logger.Debug("[SECURITY] Checking if path is within safe zone: {Path}", fullPath);
 
         while (!string.IsNullOrEmpty(current))
         {
             var normalized = current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            if (ApprovedSafeZones.Contains(normalized))
+            if (zones.Contains(normalized))
             {
                 _logger.Debug("[SECURITY] Path AUTHORIZED via safe zone: {Zone}", normalized);
                 return true;
