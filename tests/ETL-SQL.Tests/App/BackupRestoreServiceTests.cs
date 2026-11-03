@@ -309,6 +309,36 @@ namespace ETL_SQL.Tests.CliCommands
             Assert.False(mode.HasFlag(UnixFileMode.OtherRead));
         }
 
+        [Theory]
+        [InlineData(false, "content/reports/planted.rptsql")]
+        [InlineData(true, ".portal-keys/planted-key.xml")]
+        [InlineData(true, "planted.txt")]
+        public async Task Restore_FailsClosed_OnFileNotAttestedByManifest(bool inKeysArchive, string plantedPath)
+        {
+            var outDir = Path.Combine(_root, "out");
+            Assert.Equal(0, await BackupRestoreService.BackupCoreAsync(Config(), _source, outDir, NullLogger.Instance));
+            var (dataZip, keysZip) = FindArchives(outDir);
+
+            var archive = inKeysArchive ? keysZip : dataZip;
+            var unpacked = Path.Combine(_root, "unpacked");
+            ZipFile.ExtractToDirectory(archive, unpacked);
+            var planted = Path.Combine(unpacked, plantedPath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(planted)!);
+            File.WriteAllText(planted, "NOT IN THE MANIFEST");
+            var repacked = Path.Combine(_root, "repacked.zip");
+            ZipFile.CreateFromDirectory(unpacked, repacked);
+
+            var ctx = new CliContext
+            {
+                Command = "admin-restore",
+                RestoreFrom = inKeysArchive ? dataZip : repacked,
+                RestoreKeys = inKeysArchive ? repacked : keysZip,
+                RestoreValidateOnly = true
+            };
+
+            Assert.Equal(1, await BackupRestoreService.RestoreAsync(ctx, NullLogger.Instance));
+        }
+
         [Fact]
         public async Task Restore_FailsClosed_OnTamperedManifestPathTraversal()
         {

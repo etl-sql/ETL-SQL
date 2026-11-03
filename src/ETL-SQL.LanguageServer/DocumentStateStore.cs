@@ -46,9 +46,14 @@ namespace ETL_SQL.LSP
         public bool TryGetState(DocumentUri uri, out DocumentState state)
             => _states.TryGetValue(uri, out state!);
 
-        /// <summary>Removes the stored state for a document.</summary>
+        /// <summary>Removes everything stored for a document: state, parser diagnostics, and notebook context.</summary>
         public void RemoveState(DocumentUri uri)
-            => _states.TryRemove(uri, out _);
+        {
+            _states.TryRemove(uri, out _);
+            _parserDiagnostics.TryRemove(uri, out _);
+            // Notebook contexts are keyed by the URI string the completion provider looks up.
+            _notebookContexts.TryRemove(uri.ToString(), out _);
+        }
 
         /// <summary>Returns the raw text of a document, or null if the URI is not tracked.</summary>
         public string? GetDocumentText(DocumentUri uri)

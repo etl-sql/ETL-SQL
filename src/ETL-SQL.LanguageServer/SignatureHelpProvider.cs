@@ -23,6 +23,7 @@ namespace ETL_SQL.LSP
     {
         private readonly ILogger<SignatureHelpProvider> _logger;
         private readonly IMetadataManager _metadata;
+        private readonly DocumentStateStore _store;
 
         // Canonical signatures for every built-in function.
         private static readonly Dictionary<string, (string Label, string Doc, string[] Params)> _builtIns =
@@ -182,25 +183,26 @@ namespace ETL_SQL.LSP
             { "PERCENTILE_DISC",  ("PERCENTILE_DISC(n)",            "Discrete percentile calculation.",                           new[] { "n" }) },
         };
 
-        public SignatureHelpProvider(ILogger<SignatureHelpProvider> logger, IMetadataManager metadata)
+        public SignatureHelpProvider(ILogger<SignatureHelpProvider> logger, IMetadataManager metadata, DocumentStateStore store)
         {
             _logger = logger;
             _metadata = metadata;
+            _store = store;
         }
 
         public Task<SignatureHelp?> Handle(SignatureHelpParams request, CancellationToken cancellationToken)
         {
-            var line = (int)request.Position.Line;
-            var col = (int)request.Position.Character;
+            // Signature help only needs the cursor line of the synced document text.
+            var text = _store.GetDocumentText(request.TextDocument.Uri);
+            if (text == null) return Task.FromResult<SignatureHelp?>(null);
 
-            // Need document text — use metadata or return null gracefully if unavailable
-            // (SignatureHelp operates purely on the prefix line, no parsed state needed)
+            var lines = text.Split('\n');
+            var line = request.Position.Line;
+            if (line < 0 || line >= lines.Length) return Task.FromResult<SignatureHelp?>(null);
 
-            // The document state store is not injected here because signature help only needs the current line.
-            // The caller (VS Code extension) sends the full line context in the request.
-            // We rely on the active parameter count from the prefix text provided by the client.
-            // If we need the text, CompletionProvider or the underlying state is not our concern.
-            return Task.FromResult<SignatureHelp?>(null); // handled below per actual line
+            var lineText = lines[line].TrimEnd('\r');
+            var col = Math.Clamp(request.Position.Character, 0, lineText.Length);
+            return Task.FromResult(Resolve(lineText, col));
         }
 
         /// <summary>
@@ -208,7 +210,7 @@ namespace ETL_SQL.LSP
         /// </summary>
         public SignatureHelp? Resolve(string lineText, int cursorCol)
         {
-            var prefix = cursorCol > 0 && lineText.Length >= cursorCol ? lineText.Substring(0, cursorCol) : lineText;
+            var prefix = cursorCol >= 0 && lineText.Length >= cursorCol ? lineText.Substring(0, cursorCol) : lineText;
 
             int openParen = prefix.LastIndexOf('(');
             if (openParen == -1) return null;
@@ -249,7 +251,7 @@ namespace ETL_SQL.LSP
                 {
                     Signatures = new List<SignatureInformation> { sig },
                     ActiveSignature = 0,
-                    ActiveParameter = Math.Min(activeParam, info.Params.Length - 1)
+                    ActiveParameter = Math.Max(0, Math.Min(activeParam, info.Params.Length - 1))
                 };
             }
 

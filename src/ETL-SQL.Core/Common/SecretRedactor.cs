@@ -153,6 +153,17 @@ public static partial class SecretRedactor
         return Redact(value) ?? string.Empty;
     }
 
+    /// <summary>
+    /// Display text for a script variable leaving the engine (IDE variable explorers, JSON run
+    /// events): SECRET and SENSITIVE variables are masked, every other value is redacted.
+    /// </summary>
+    public static string VariableDisplayValue(object? value, ETL_SQL.Data.VariableMetadata? metadata, string nullText)
+    {
+        if (value is null) return nullText;
+        if (metadata is { IsSecret: true } or { IsSensitive: true }) return Mask;
+        return Redact(value.ToString()) ?? nullText;
+    }
+
     public static Exception? RedactException(Exception? exception)
     {
         if (exception is null) return null;

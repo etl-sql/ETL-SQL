@@ -56,14 +56,14 @@ namespace ETL_SQL.LSP
             // Word detection for function help
             var lines = state.Text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
             string? word = null;
-            if (line <= lines.Length)
+            if (line >= 1 && line <= lines.Length)
             {
                 var currentLine = lines[line - 1];
-                int start = (int)request.Position.Character;
+                int start = Math.Max(0, (int)request.Position.Character);
                 if (start < currentLine.Length)
                 {
+                    int end = start;
                     while (start > 0 && (char.IsLetterOrDigit(currentLine[start - 1]) || currentLine[start - 1] == '_' || currentLine[start - 1] == '@' || currentLine[start - 1] == '#' || currentLine[start - 1] == '&')) start--;
-                    int end = (int)request.Position.Character;
                     while (end < currentLine.Length && (char.IsLetterOrDigit(currentLine[end]) || currentLine[end] == '_' || currentLine[end] == '@' || currentLine[end] == '#' || currentLine[end] == '&')) end++;
                     if (start < end) word = currentLine.Substring(start, end - start);
                 }
@@ -209,6 +209,7 @@ namespace ETL_SQL.LSP
         private static int Offset(string text, int line, int character)
         {
             var offset = 0;
+            character = Math.Max(0, character);
             for (var currentLine = 0; currentLine < line && offset < text.Length; currentLine++)
             {
                 var newline = text.IndexOf('\n', offset);

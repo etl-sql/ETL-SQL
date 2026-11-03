@@ -669,6 +669,33 @@ namespace ETL_SQL.App
                 }
             }
 
+            // Restore copies whole extracted trees, so every file it would copy must be attested:
+            // the data archive may hold only manifest-listed files, and the keys archive only its
+            // manifest, the secrets file, and the counted Data Protection key files.
+            var listed = new HashSet<string>(StringComparer.Ordinal) { DataManifestName };
+            if (manifest["files"] is JsonArray listedFiles)
+                foreach (var node in listedFiles.OfType<JsonObject>())
+                    if ((string?)node["path"] is { Length: > 0 } path) listed.Add(path);
+            foreach (var file in Directory.EnumerateFiles(dataExtract, "*", SearchOption.AllDirectories))
+            {
+                var rel = RelativeForArchive(file, dataExtract);
+                if (!listed.Contains(rel)) problems.Add($"unlisted file in data archive: {rel}");
+            }
+
+            var keyRingPrefix = DpKeyRingDirName + "/";
+            var keyRingFiles = 0;
+            foreach (var file in Directory.EnumerateFiles(keysExtract, "*", SearchOption.AllDirectories))
+            {
+                var rel = RelativeForArchive(file, keysExtract);
+                if (rel.StartsWith(keyRingPrefix, StringComparison.Ordinal)) keyRingFiles++;
+                else if (rel != KeysManifestName && rel != SecretsName)
+                    problems.Add($"unlisted file in keys archive: {rel}");
+            }
+            var expectedKeyFiles = (int?)keysManifest["dataProtectionKeyFiles"] ?? 0;
+            if (keyRingFiles != expectedKeyFiles)
+                problems.Add(
+                    $"keys archive holds {keyRingFiles} Data Protection key file(s); its manifest lists {expectedKeyFiles}.");
+
             logger.WriteLine(
                 $"Backup id {dataId}; created {(string?)manifest["createdUtc"]}; app version {backupVersion}; " +
                 $"catalog migration {(string?)manifest["catalogMigration"] ?? "(unknown)"}.", ConsoleColor.Gray);
@@ -1075,7 +1102,7 @@ namespace ETL_SQL.App
         /// A per-user staging root (under LocalApplicationData), restricted to the owner, preferred over
         /// the shared system temp directory for staging credential-bearing backup artifacts.
         /// </summary>
-        private static async Task<string> SecureTempRootAsync()
+        internal static async Task<string> SecureTempRootAsync()
         {
             var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var root = string.IsNullOrWhiteSpace(local)
@@ -1090,7 +1117,7 @@ namespace ETL_SQL.App
         /// Restricts a file/directory to owner-only access (0600/0700) on Unix. No-op on Windows, where
         /// LocalApplicationData and the chosen output paths already inherit user-scoped ACLs.
         /// </summary>
-        private static void RestrictToOwner(string path, bool isDirectory)
+        internal static void RestrictToOwner(string path, bool isDirectory)
         {
             if (OperatingSystem.IsWindows()) return;
             try
