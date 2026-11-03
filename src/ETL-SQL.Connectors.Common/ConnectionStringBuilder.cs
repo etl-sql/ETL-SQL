@@ -17,7 +17,7 @@ namespace ETL_SQL.Connectors
             "MSSQL", "SQLSERVER", "POSTGRES", "NPSQL", "ORACLE", "ODBC", "MYSQL", "MARIADB",
             "API", "REST", "HTTP",
             "WEBHOOK", "SLACK", "TEAMS",
-            "FTP", "SFTP", "SMTP", "AZURE_BLOB", "BLOB", "EMAIL", "SSH",
+            "FTP", "FTP_CONN", "SFTP", "SMTP", "AZURE_BLOB", "BLOB", "EMAIL", "SSH",
             "FLATFILE", "CSV", "EXCEL", "JSON", "XML", "PARQUET", "AVRO", "DIRECTORY", "MOCKDB"
         };
 
@@ -56,7 +56,7 @@ namespace ETL_SQL.Connectors
             {
                 "ODBC" => BuildOdbc(props),
                 "API" or "REST" or "HTTP" or "WEBHOOK" or "SLACK" or "TEAMS" => BuildRest(props),
-                "FTP" or "SFTP" or "SMTP" or "AZURE_BLOB" or "BLOB" or "EMAIL" or "SSH" => BuildRemote(props),
+                "FTP" or "FTP_CONN" or "SFTP" or "SMTP" or "AZURE_BLOB" or "BLOB" or "EMAIL" or "SSH" => BuildRemote(props),
                 "FLATFILE" or "CSV" or "EXCEL" or "JSON" or "XML" or "PARQUET" or "AVRO" or "DIRECTORY" or "MOCKDB" => BuildFile(props),
                 _ => throw new ArgumentException($"Structured property building is not yet supported for provider: {provider}")
             };

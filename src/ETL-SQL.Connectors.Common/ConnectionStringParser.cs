@@ -295,7 +295,16 @@ public static class ConnectionStringParser
             {
                 if (c == quoteChar)
                 {
-                    inQuotes = false;
+                    // A doubled closing character ('' "" }}) is a literal one.
+                    if (i + 1 < connectionString.Length && connectionString[i + 1] == quoteChar)
+                    {
+                        currentValue.Append(c);
+                        i++;
+                    }
+                    else
+                    {
+                        inQuotes = false;
+                    }
                 }
                 else
                 {
@@ -304,8 +313,11 @@ public static class ConnectionStringParser
             }
             else
             {
-                if (c is '\'' or '"' or '{')
+                // A value is quoted only when its first non-space character opens the quote. A quote
+                // or brace inside an unquoted value (a password such as p'ss) is literal text.
+                if (!inKey && c is '\'' or '"' or '{' && IsBlank(currentValue))
                 {
+                    currentValue.Clear();
                     inQuotes = true;
                     quoteChar = c == '{' ? '}' : c;
                 }
@@ -337,5 +349,14 @@ public static class ConnectionStringParser
         }
 
         return result;
+    }
+
+    private static bool IsBlank(System.Text.StringBuilder value)
+    {
+        for (int i = 0; i < value.Length; i++)
+        {
+            if (!char.IsWhiteSpace(value[i])) return false;
+        }
+        return true;
     }
 }
