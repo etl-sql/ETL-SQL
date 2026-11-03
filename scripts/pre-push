@@ -4,6 +4,25 @@
 
 set -eu
 
+# Git passes one "<local ref> <local sha> <remote ref> <remote sha>" line per updated ref. A
+# deletion has an all-zero local SHA and pushes no content, so there is nothing to validate.
+zero=0000000000000000000000000000000000000000
+content=no
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+    [ "$local_sha" = "$zero" ] || content=yes
+done
+[ "$content" = yes ] || exit 0
+
+# The browser asset toolchain and several fixtures require Node.js 22; other majors fail them
+# with unrelated-looking errors.
+case "$(node --version 2>/dev/null)" in
+    v22.*) ;;
+    *)
+        echo "pre-push: Node.js 22 is required on PATH (found: $(node --version 2>/dev/null || echo none))." >&2
+        exit 1
+        ;;
+esac
+
 if command -v pwsh >/dev/null 2>&1; then
     pwsh -NoProfile -File ./scripts/Test-PrePush.ps1
 else
