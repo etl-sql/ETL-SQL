@@ -1,78 +1,146 @@
 using System;
 using System.IO;
+using System.IO.Pipelines;
+using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Interfaces;
-using ETL_SQL.Core.Services;
 using ETL_SQL.LSP;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using OmniSharp.Extensions.LanguageServer.Server;
 using Xunit;
 
 namespace ETL_SQL.LanguageServer.Tests
 {
     public class LanguageServerSmokeTests
     {
+        // Drives a real LSP initialize handshake against the shipped composition (the same
+        // services and handlers Program.Main registers). An empty input stream never sends
+        // `initialize`, so LanguageServer.From would wait forever and prove nothing.
         [Fact]
         public async Task Server_Should_Initialize_Without_DI_Errors()
         {
-            // We use memory streams to avoid actual IO
-            var input = new MemoryStream();
-            var output = new MemoryStream();
+            var clientToServer = new Pipe();
+            var serverToClient = new Pipe();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
 
-            var cts = new CancellationTokenSource();
-
-            // We only want to test the INITIALIZATION/RESOLUTION phase
-            // LanguageServer.From will try to resolve all handlers
-            try
-            {
-                var serverTask = OmniSharp.Extensions.LanguageServer.Server.LanguageServer.From(options =>
+            var serverTask = OmniSharp.Extensions.LanguageServer.Server.LanguageServer.From(
+                options => LanguageServerComposition.Configure(
                     options
-                        .WithInput(input)
-                        .WithOutput(output)
-                        .ConfigureLogging(lb => lb.AddDebug().SetMinimumLevel(LogLevel.Trace))
-                        .WithServices(services =>
-                        {
-                            services.AddSingleton<ETL_SQL.Data.IConnectorRegistry>(new ETL_SQL.Data.ConnectorRegistry());
-                            services.AddSingleton<IMetadataManager, MetadataManager>();
-                            services.AddSingleton<ILanguageService, LanguageService>();
-                            services.AddSingleton<DocumentStateStore>();
-                            services.AddSingleton<ETL_SQL.LSP.TextDocumentHandler>();
-                            services.AddSingleton<ETL_SQL.Common.ILogger>(ETL_SQL.Common.NullLogger.Instance);
-                        })
-                        .WithHandler<TextDocumentHandler>()
-                );
+                        .WithInput(clientToServer.Reader)
+                        .WithOutput(serverToClient.Writer)),
+                cts.Token);
 
-                // If it fails with DI error, it will throw here
-                // We'll give it a short timeout in case it hangs waiting for input
-                var completedTask = await Task.WhenAny(serverTask, Task.Delay(2000));
+            await WriteMessageAsync(clientToServer.Writer,
+                """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":null,"capabilities":{"textDocument":{"synchronization":{},"hover":{},"definition":{},"rename":{},"completion":{},"signatureHelp":{},"formatting":{},"documentSymbol":{}}}}}""",
+                cts.Token);
 
-                if (completedTask == serverTask)
-                {
-                    var server = await serverTask;
-                    Assert.NotNull(server);
+            using var response = await ReadResponseAsync(serverToClient.Reader, expectedId: 1, cts.Token);
+            Assert.False(response.RootElement.TryGetProperty("error", out var error), $"initialize failed: {error}");
+            var capabilities = response.RootElement.GetProperty("result").GetProperty("capabilities");
 
-                    // Verify MetadataManager is resolved and assigned
-                    var metadata = server.Services.GetService<IMetadataManager>();
-                    Assert.NotNull(metadata);
-                }
-                else
-                {
-                    // If it timed out, it means it didn't crash during resolution
-                    // which is good enough for a smoke test of DI
-                }
-            }
-            catch (Exception ex)
+            // Every standard-protocol handler must surface its capability; a handler that
+            // failed to resolve or register is missing here.
+            foreach (var capability in new[]
             {
-                // This is where we expect the DryIoc.ContainerException to show up
-                throw new Exception($"DI Resolution Failed: {ex.Message}", ex);
-            }
-            finally
+                "textDocumentSync", "hoverProvider", "definitionProvider", "renameProvider",
+                "completionProvider", "signatureHelpProvider", "documentFormattingProvider",
+                "documentSymbolProvider",
+            })
             {
-                await cts.CancelAsync();
+                Assert.True(capabilities.TryGetProperty(capability, out var value), $"missing capability {capability} in {capabilities}");
+                Assert.NotEqual(JsonValueKind.False, value.ValueKind);
+                Assert.NotEqual(JsonValueKind.Null, value.ValueKind);
             }
+
+            await WriteMessageAsync(clientToServer.Writer,
+                """{"jsonrpc":"2.0","method":"initialized","params":{}}""", cts.Token);
+
+            var server = await serverTask.WaitAsync(cts.Token);
+            Assert.NotNull(server);
+            Assert.NotNull(server.Services.GetService<ETL_SQL.Core.IMetadataManager>());
+
+            // The custom-method handlers have no standard capability, so resolve every
+            // registered handler type from the server's container directly.
+            Assert.Equal(12, LanguageServerComposition.HandlerTypes.Count);
+            foreach (var handlerType in LanguageServerComposition.HandlerTypes)
+            {
+                Assert.NotNull(ActivatorUtilities.GetServiceOrCreateInstance(server.Services, handlerType));
+            }
+
+            server.Dispose();
+        }
+
+        private static async Task WriteMessageAsync(PipeWriter writer, string json, CancellationToken ct)
+        {
+            var body = Encoding.UTF8.GetBytes(json);
+            var header = Encoding.ASCII.GetBytes($"Content-Length: {body.Length}\r\n\r\n");
+            await writer.WriteAsync(header, ct);
+            await writer.WriteAsync(body, ct);
+            await writer.FlushAsync(ct);
+        }
+
+        // Reads framed messages until the response with the given id arrives; server-sent
+        // notifications (logs, telemetry) are skipped.
+        private static async Task<JsonDocument> ReadResponseAsync(PipeReader reader, int expectedId, CancellationToken ct)
+        {
+            var buffer = new MemoryStream();
+            while (true)
+            {
+                var message = TryTakeMessage(buffer);
+                if (message is not null)
+                {
+                    var doc = JsonDocument.Parse(message);
+                    if (doc.RootElement.TryGetProperty("id", out var id)
+                        && id.ValueKind == JsonValueKind.Number
+                        && id.GetInt32() == expectedId
+                        && !doc.RootElement.TryGetProperty("method", out _))
+                    {
+                        return doc;
+                    }
+
+                    doc.Dispose();
+                    continue;
+                }
+
+                var result = await reader.ReadAsync(ct);
+                foreach (var segment in result.Buffer)
+                {
+                    buffer.Write(segment.Span);
+                }
+
+                reader.AdvanceTo(result.Buffer.End);
+                if (result.IsCompleted)
+                {
+                    throw new InvalidOperationException("Server closed its output before responding.");
+                }
+            }
+        }
+
+        private static string TryTakeMessage(MemoryStream buffer)
+        {
+            var text = Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+            var headerEnd = text.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+            if (headerEnd < 0)
+            {
+                return null;
+            }
+
+            const string prefix = "Content-Length:";
+            var lengthLine = text[..headerEnd].Split("\r\n")[0];
+            Assert.StartsWith(prefix, lengthLine, StringComparison.OrdinalIgnoreCase);
+            var length = int.Parse(lengthLine[prefix.Length..].Trim());
+            var bytes = buffer.GetBuffer();
+            var bodyStart = Encoding.UTF8.GetByteCount(text[..(headerEnd + 4)]);
+            if (buffer.Length - bodyStart < length)
+            {
+                return null;
+            }
+
+            var body = Encoding.UTF8.GetString(bytes, bodyStart, length);
+            var remainder = bytes.AsSpan(bodyStart + length, (int)buffer.Length - bodyStart - length).ToArray();
+            buffer.SetLength(0);
+            buffer.Write(remainder);
+            return body;
         }
     }
 }
