@@ -143,6 +143,10 @@ data["Portal"]["Dataset"]["AtRestKey"] = base64.b64encode(os.urandom(32)).decode
 data["UpgradeSentinel"] = {"Value": "kept"}
 json.dump(data, open(path, "w", encoding="utf-8"), indent=2)
 CONFIG
+    # Model the administrator consuming the previous install's bootstrap file (v0.21.0+ writes
+    # one), as the MSI check does. Its continued presence would not prove that the upgrade
+    # generated another one.
+    rm -f "$FIRST_RUN"
     systemctl restart etl-sql-portal.service
 }
 # `admin backup` runs as root, not the service user, so it must be told where the service's job
