@@ -98,7 +98,10 @@ export function readSnapshot(repository, sha, { query = gh, logCache = new Map()
     for (const job of jobs.filter(failed)) {
       const key = `${job.id}:${job.completed_at}`;
       if (!logCache.has(key)) {
-        const log = query(['api', `repos/${repository}/actions/jobs/${job.id}/logs`], { allowFailure: true }) ?? '';
+        // gh refuses to print a log containing terminal escape codes (most test output is coloured)
+        // without --allow-escape-sequences; the codes are then stripped before classification.
+        const log = (query(['api', '--allow-escape-sequences', `repos/${repository}/actions/jobs/${job.id}/logs`], { allowFailure: true }) ?? '')
+          .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
         const annotations = JSON.parse(query(['api', `repos/${repository}/check-runs/${job.id}/annotations`], { allowFailure: true }) ?? '[]')
           .map(a => String(a.message ?? ''));
         logCache.set(key, { log, annotations });

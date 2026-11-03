@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { decide, supervise, reportBody } from '../candidate-supervisor.mjs';
+import { decide, supervise, reportBody, readSnapshot } from '../candidate-supervisor.mjs';
 import { classifyFailure, candidateFailureSignatures } from '../lib/candidate-failure-signatures.mjs';
 
 const t = minute => new Date(Date.UTC(2026, 10, 3, 20, minute)).toISOString();
@@ -127,6 +127,27 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
   assert.ok(!calls.some(c => c.includes('/runs/13/')), 'the supervisor ignores its own run');
   assert.equal(calls.filter(c => c.startsWith('issue create')).length, 1);
   assert.ok(!calls.some(c => c.includes('/jobs/121/logs')), 'no log fetch for jobs still running');
+}
+
+// 7. Real job logs carry terminal colour codes, which gh prints only with --allow-escape-sequences.
+// Without the flag the log is empty and a known flaky failure would be treated as a real defect.
+{
+  const sha = 'c'.repeat(40);
+  const runs = [{ id: 21, name: 'Release Certification', head_sha: sha, status: 'completed', conclusion: 'failure', run_attempt: 1, html_url: 'u21' }];
+  const coloured = '2026-11-03T20:46:59Z [stdout] \x1b[31m[xUnit.net 00:00:49.23]       Studio startup measured 5757.64 ms; budget is 5000.00 ms.\x1b[0m';
+  const query = (args, options = {}) => {
+    const route = args.find(a => a.startsWith('repos/')) ?? '';
+    if (route.includes('/actions/runs?head_sha=')) return JSON.stringify({ workflow_runs: runs });
+    if (/\/runs\/21\/attempts\/1\/jobs/.test(route)) return JSON.stringify({ jobs: [{ id: 211, name: 'Full CI / Portal Browser Journey (1/3)', status: 'completed', conclusion: 'failure', completed_at: t(30) }] });
+    if (route.endsWith('/jobs/211/logs')) return args.includes('--allow-escape-sequences') ? coloured : (options.allowFailure ? null : '');
+    if (route.includes('/annotations')) return '[]';
+    throw new Error(`unexpected gh ${args.join(' ')}`);
+  };
+  const snapshot = readSnapshot('owner/repo', sha, { query });
+  assert.ok(!snapshot.runs[0].jobs[0].log.includes('\x1b'), 'colour codes are stripped before classification');
+  const { actions, outcome } = decide(snapshot, {});
+  assert.equal(outcome, 'running');
+  assert.deepEqual(actions.map(a => a.type), ['rerun'], 'a coloured Studio budget failure is a known flake, not a defect');
 }
 
 console.log('Candidate supervisor: known infrastructure/flaky/dependent failures rerun within their budgets, real defects cancel only the long package runs and open one issue, gate jobs behind a known failure are not defects.');

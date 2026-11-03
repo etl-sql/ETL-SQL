@@ -31,6 +31,21 @@ tests, installation, evidence handling and publication. Preserve the same eviden
 aim for one full certification on the frozen candidate, with no more than two full rounds.
 Measure clean and recovery runs separately; workflow watchdog ceilings are not timing targets.
 
+- [ ] **Measured rounds and fail-fast (2026-11-03, Claude).** Certification workflows were not on
+  main, so nothing could be measured; PR #41 registered them. Round 2: CI 30m, CodeQL 14.5m,
+  MSI 51.8m, native 65.9m, DEB 53m. Round 3 went green after reruns in 2h10m (about 66 min
+  clean); first push to all-green hosted took 5h51m over three rounds. Most lost time was waiting
+  for the slowest run before acting on a failure seen 5-20 minutes in, and almost every failure
+  was infrastructure or a known flake.
+  **Done (fix/release-fail-fast):** Release Candidate Supervisor reruns known
+  infrastructure/flaky/dependent failures within a bounded budget and, on a real defect, cancels
+  MSI/native/DEB (CI keeps running) and opens one issue per candidate; checkout limits 3→8 min;
+  DMG `hdiutil` "Resource busy" retry; the missing `scripts/pre-push` hook now runs
+  Test-PrePush.ps1. Flakes recorded in `docs/releases/flaky-test-stability.md`.
+  **Open:** first hosted run of the supervisor (round 5); first nightly scheduler run; owner
+  decision on carrying forward prior-SHA results for lanes the impact manifest marks unaffected
+  (current policy above: a new SHA re-runs everything).
+
 - [ ] **First priority: separate regular CI from release certification.** Use one tested impact
   manifest for local pre-push and regular push/PR CI. Run cheap source checks plus affected builds,
   tests and dependent consumers; target 30 minutes or less for ordinary scoped changes. Unknown paths,
