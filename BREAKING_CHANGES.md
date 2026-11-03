@@ -45,6 +45,27 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 - **Diagnostic**: HTTP 401 with `Use single sign-on`.
 - **Earliest removal**: N/A
 
+### v0.22.0 — Connector: loopback is governed by `Security:AllowedHosts`
+- **What changed**: `localhost`, `127.0.0.1` and `::1` were always allowed, even when an administrator narrowed `Security:AllowedHosts`. They now need to be listed like any other host. The default list (`*`) is unchanged.
+- **Who is affected**: Deployments with a narrowed `AllowedHosts` whose scripts connect to a local database, API, Portal or Orchestrator.
+- **Migration**: Add the exact loopback names the scripts use to `Security:AllowedHosts`.
+- **Diagnostic**: `Connection to host 'localhost' is denied.`
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: the five-level nesting guardrail is enforced
+- **What changed**: Every engine instance copied `Engine:MaxRecursiveDepth` (10000, the CTE iteration limit) into `Security:MaxRecursiveNestingDepth`, so the nesting guardrail was 10000. It is 5 again. `EXEC '<sql>'` and `EXECUTE '<file>'` now count as nesting levels, as `RUN SCRIPT` does, and `SYNC DIRECTORY ... RECURSIVE` refuses files more than 5 directories deep. `SET MAX_RECURSIVE_DEPTH` still sets only the CTE limit.
+- **Who is affected**: Scripts nesting `RUN SCRIPT`/`EXEC`/`EXECUTE` or procedures more than 5 deep, and recursive `SYNC DIRECTORY` over deep trees.
+- **Migration**: Raise `Security:MaxRecursiveNestingDepth`, or run from an approved safe zone with `SET ALLOW_RECURSIVE_LAYERS = n;`.
+- **Diagnostic**: `Runaway protection: Recursive operation depth (n) exceeds the safety limit of 5.`
+- **Earliest removal**: N/A
+
+### v0.22.0 — Security: federated Orchestrator checks roles on ad-hoc jobs and bundles
+- **What changed**: In federated mode, `POST /jobs` and `/api/bundles/*` accepted any signed caller. `POST /jobs` now needs the execute scope ceiling and a role other than the read-only Orchestrator roles. Publishing a bundle needs Admin or OrchestratorManager, and reading bundles needs a role and the read ceiling. Legacy API-key mode is unchanged.
+- **Who is affected**: Automations holding only `orchestrator.read`, and users with no role or only `OrchestratorViewer`, `FleetReader` or `StewardshipViewer`, that ran ad-hoc jobs or published bundles.
+- **Migration**: Issue the automation `orchestrator.execute` (jobs) or `orchestrator.publish` with the OrchestratorManager role (bundles), or give the user an executing role.
+- **Diagnostic**: HTTP 403.
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: `admin restore` refuses archives with files the manifest does not list
 - **What changed**: Restore copied every file in the data and keys archives, including files `backup-manifest.json` did not attest. Validation (and `--validate`) now fails on an unlisted data file, any keys-archive file other than the manifest, `secrets.json` and `.portal-keys/*`, or a key-ring count that differs from the manifest.
 - **Who is affected**: Operators restoring hand-edited backup archives.

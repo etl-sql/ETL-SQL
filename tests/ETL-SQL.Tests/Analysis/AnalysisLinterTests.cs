@@ -456,6 +456,35 @@ CREATE PAGE Overview AS DASHBOARD (
         }
 
         [Fact]
+        public async Task SchemaValidationRule_StillChecksStatementsAfterARecoveredSyntaxError()
+        {
+            // Ported from the retired tests/ETL-SQL.LintTests console program.
+            var sql = @"
+SELECT * FROM
+-- Missing table (Syntax Error recovery test)
+;
+
+SELECT InvalidCol FROM NonExistentTable;
+";
+            var script = new ETL_SQL.Core.Parser.Parser(new Lexer(sql).Tokenize()).Parse();
+            Assert.Contains(script.Diagnostics, d => d.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error);
+
+            var linter = new Linter();
+            linter.AddRule(new SchemaValidationRule());
+            var context = new DefaultLintContext
+            {
+                Metadata = new MockMetadataProvider
+                {
+                    Connections = new() { "DEFAULT" },
+                    Columns = new(StringComparer.OrdinalIgnoreCase) { ["ExistingTable"] = new() { "ExistingCol" } }
+                }
+            };
+
+            var results = (await linter.AnalyzeAsync(script, context)).ToList();
+            Assert.Contains(results, r => r.Message.Contains("NonExistentTable", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
         public async Task PageVisualReferenced_MapKeyMissingFromStructure_Warns()
         {
             var linter = new Linter();

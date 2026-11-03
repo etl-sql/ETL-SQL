@@ -68,7 +68,6 @@ public class CteManager(ILogger logger)
             while (currentStep.Rows.Count > 0 && depth < context.MaxRecursiveDepth)
             {
                 depth++;
-                context.CurrentRecursiveDepth = previousRecursiveDepth + depth;
 
                 // Register currentStep as the CTE source for this iteration
                 var mem = new InMemoryDataSource();

@@ -587,6 +587,14 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var userPage2Body = await userPage2.Content.ReadFromJsonAsync<PagedResult<UserDto>>(_json);
         Assert.Single(userPage2Body!.Items);
 
+        // Email is PII-encrypted at rest. Searching by a part of it that is not in the username
+        // (the domain) used to run LIKE against ciphertext and match nothing.
+        var byEmail = await AuthGet(token, $"/api/admin/users/catalog?q={usernames[1]}%40TEST.local");
+        var byEmailBody = await byEmail.Content.ReadFromJsonAsync<PagedResult<UserDto>>(_json);
+        Assert.Equal(HttpStatusCode.OK, byEmail.StatusCode);
+        Assert.Equal(1, byEmailBody!.Total);
+        Assert.Equal(usernames[1], byEmailBody.Items.Single().Username);
+
         // Bulk operations carry per-item {id, version} so stale items conflict individually.
         var disableRes = await AuthPost(token, "/api/admin/users/bulk-status", new
         {

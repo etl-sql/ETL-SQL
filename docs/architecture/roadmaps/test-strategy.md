@@ -37,7 +37,6 @@ ETL-SQL's test suite protects a broad product surface: parser and AST behavior, 
 | `tests\ETL-SQL.Benchmarks` | BenchmarkDotNet executable. | Run with the Benchmarks lane, not `dotnet test`. |
 | `tests\ETL-SQL.SqlLogicTests` | SQL Logic Test corpus runner (`SltTests`). | Excluded from all standard lanes; run explicitly with `Category=SLT`. |
 | `tests\etl_scenarios` | Data-driven ETL orchestration scenarios with `script.etlsql` and `expected.json`. | Executed by `ETL-SQL.Tests`; included in Engine and Full. |
-| `tests\ETL-SQL.LintTests` | Command-line lint verification program. | Treat as a tool/program until it is converted to xUnit or moved out of `tests`. |
 
 ## Trait Conventions
 
@@ -108,7 +107,6 @@ Use [Release_Capability_Matrix.md](release-capability-matrix.md) as the checklis
 
 ## Continuing Audit Rules
 
-- Decide whether `tests\ETL-SQL.LintTests` should become an xUnit test project or move under `tools`.
 - Keep benchmark projects out of `dotnet test`; benchmarks run via `dotnet run`.
 - Keep every external-infrastructure test explicitly tagged `Integration`; filenames are not a routing fallback.
 - Keep performance and certification workloads in their targeted categories and focused runners.

@@ -15,6 +15,42 @@ namespace ETL_SQL.Portal.Tests;
 [Trait("Category", "Smoke.Security")]
 public sealed class SharedTenantHttpBoundaryTests
 {
+    /// <summary>
+    /// A machine polling a Shared host carries no verified tenant credential. The guard refuses it
+    /// with an audited 403; the controller used to fail to construct first and answer 500.
+    /// </summary>
+    [Fact]
+    public async Task AnonymousPolicyEnvelopePollIsRefusedCleanlyOnASharedHost()
+    {
+        using var factory = new SharedPortalFactory();
+        using var client = factory.CreateClient();
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.PolicyMachines.Add(new PolicyMachineEntity
+            {
+                MachineId = "shared-machine-1",
+                EnrollmentId = "enr-1",
+                Tenant = "tenant-a",
+                Environment = "prod",
+                RegisteredAtUtc = DateTimeOffset.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        foreach (var machine in new[] { "shared-machine-1", "unknown-machine" })
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/api/policy-authority/envelope");
+            request.Headers.Add(ETL_SQL.Core.Governance.EnterprisePolicyTransport.TenantHeader, "tenant-a");
+            request.Headers.Add(ETL_SQL.Core.Governance.EnterprisePolicyTransport.EnrollmentHeader, "enr-1");
+            request.Headers.Add(ETL_SQL.Core.Governance.EnterprisePolicyTransport.MachineHeader, machine);
+
+            var response = await client.SendAsync(request);
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+    }
+
     [Fact]
     public async Task SignedTenantClaimScopesStoreDespiteCallerTenantSelectors()
     {

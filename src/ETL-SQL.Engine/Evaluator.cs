@@ -153,7 +153,9 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public int MaxRecursiveDepth
     {
         get => _options.MaxRecursiveDepth;
-        set { _options.MaxRecursiveDepth = value; _securityService.MaxRecursiveDepth = value; }
+        // The CTE iteration limit only. It used to overwrite the shared five-level nesting
+        // guardrail (SecurityService.MaxRecursiveDepth), which made that guardrail 10000.
+        set => _options.MaxRecursiveDepth = value;
     }
     public int CurrentRecursiveDepth { get; set; } = 0;
     public string? LastIndexUsedName { get; set; }
@@ -704,6 +706,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         ExternalHashPartitions = DefaultThresholds.ExternalHashPartitions(config);
         BatchSize = DefaultThresholds.BatchSize(config);
         MaxRecursiveDepth = DefaultThresholds.MaxRecursiveDepth(config);
+        _securityService.MaxCteRecursionDepth = MaxRecursiveDepth;
         ExternalSortChunkSize = DefaultThresholds.ExternalSortChunkSize(config);
         WindowSpillThreshold = DefaultThresholds.WindowSpillThreshold(config);
         OperatorMemoryGrantMB = DefaultThresholds.OperatorMemoryGrantMB(config);

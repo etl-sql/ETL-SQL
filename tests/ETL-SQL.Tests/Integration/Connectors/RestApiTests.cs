@@ -189,12 +189,13 @@ namespace ETL_SQL.Tests.Integration.Connectors
             return ctx.Object;
         }
 
-        // Context with strict egress control: test-mode bypass off and the '*' wildcard removed, so
-        // ValidateHost enforces the allowlist (loopback is still always permitted).
+        // Context with strict egress control: test-mode bypass off and the '*' wildcard replaced by
+        // the loopback names the local test server answers on (loopback has no implicit exemption).
         private static IExecutionContext MakeEgressRestrictedContext()
         {
             var security = new SecurityService(NullLogger.Instance) { IsTestMode = false };
             security.AllowedHosts.Clear();
+            security.AllowedHosts.UnionWith(["localhost", "127.0.0.1", "::1", "[::1]"]);
             var ctx = new Mock<IExecutionContext>();
             ctx.Setup(c => c.SecurityService).Returns(security);
             ctx.Setup(c => c.Logger).Returns(NullLogger.Instance);

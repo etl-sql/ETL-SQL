@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Analysis.Services;
+using ETL_SQL.Core;
 
 namespace ETL_SQL.Analysis.Linting.Rules;
 /// <summary>
@@ -18,7 +20,7 @@ public class ConnectionForwardReferenceRule : ILintRule
 
         // Build map: connection name → line number of CREATE / ALTER CONNECTION
         var definitions = new Dictionary<string, int>(System.StringComparer.OrdinalIgnoreCase);
-        foreach (var stmt in script.Statements)
+        foreach (var stmt in ScriptTextEditing.Flatten(script.Statements))
         {
             if (stmt is CreateConnectionStatement cc)
                 definitions[cc.ConnectionName] = stmt.Line;
@@ -27,11 +29,12 @@ public class ConnectionForwardReferenceRule : ILintRule
         }
 
         // Walk all statements in order; flag any use of a connection whose CREATE comes later
-        foreach (var stmt in script.Statements)
+        foreach (var stmt in ScriptTextEditing.Flatten(script.Statements))
         {
-            if (stmt is CreateConnectionStatement or AlterConnectionStatement) continue;
+            // DROP CONNECTION IF EXISTS before CREATE is the idempotent setup pattern, not a use.
+            if (stmt is CreateConnectionStatement or AlterConnectionStatement or DropConnectionStatement) continue;
 
-            foreach (var refName in CollectConnectionRefs(stmt))
+            foreach (var refName in UnusedConnectionRule.CollectConnectionRefs(stmt))
             {
                 if (definitions.TryGetValue(refName, out var defLine) && defLine > stmt.Line)
                 {
@@ -48,48 +51,5 @@ public class ConnectionForwardReferenceRule : ILintRule
         }
 
         return Task.FromResult<IEnumerable<LintResult>>(results);
-    }
-
-    private static IEnumerable<string> CollectConnectionRefs(Statement stmt)
-    {
-        var names = new List<string>();
-
-        // FROM <connection>.<table> — TableReference carries an optional ConnectionName
-        if (stmt is SelectStatement sel)
-        {
-            if (sel.FromTable?.ConnectionName != null)
-                names.Add(sel.FromTable.ConnectionName);
-            foreach (var join in sel.Joins)
-                if (join.Table.ConnectionName != null)
-                    names.Add(join.Table.ConnectionName);
-        }
-        else if (stmt is InsertStatement ins && ins.TargetTable?.ConnectionName != null)
-        {
-            names.Add(ins.TargetTable.ConnectionName);
-        }
-        else if (stmt is AlterConnectionStatement alter)
-        {
-            names.Add(alter.ConnectionName);
-        }
-        else if (stmt is FileOperationStatement fileOp)
-        {
-            if (fileOp.Source is IdentifierExpression sid) names.Add(sid.Name);
-            if (fileOp.Destination is IdentifierExpression did) names.Add(did.Name);
-            if (!string.IsNullOrEmpty(fileOp.ConnectionName)) names.Add(fileOp.ConnectionName);
-        }
-        else if (stmt is DirectoryOperationStatement dirOp)
-        {
-            if (dirOp.Path is IdentifierExpression pid) names.Add(pid.Name);
-            if (dirOp.Destination is IdentifierExpression did) names.Add(did.Name);
-            if (!string.IsNullOrEmpty(dirOp.ConnectionName)) names.Add(dirOp.ConnectionName);
-        }
-        else if (stmt is FileTransferStatement trans)
-        {
-            if (trans.LocalPath is IdentifierExpression lid) names.Add(lid.Name);
-            if (trans.RemotePath is IdentifierExpression rid) names.Add(rid.Name);
-            if (!string.IsNullOrEmpty(trans.ConnectionName)) names.Add(trans.ConnectionName);
-        }
-
-        return names;
     }
 }

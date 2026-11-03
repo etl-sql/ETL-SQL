@@ -114,6 +114,7 @@ internal static class ScriptTextEditing
                 CreateFunctionStatement function => [function.Body],
                 ParallelStatement parallel => [parallel.Body],
                 ParallelForStatement parallel => [parallel.Body],
+                ExecuteRemoteBlockStatement remote => [remote.Body],
                 _ => [],
             };
 

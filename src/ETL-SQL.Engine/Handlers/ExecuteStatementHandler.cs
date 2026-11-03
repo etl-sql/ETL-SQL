@@ -92,6 +92,11 @@ public class ExecuteStatementHandler : IStatementHandler
             }
         }
 
+        // A nested level, as RUN SCRIPT is: at depth 0 Evaluate starts a new run and resets the
+        // file-operation budget. Reading the sub-script counts as a file operation.
+        using var nested = context.EnterRecursiveScope();
+        context.IncrementOperationCount(path: scriptPath);
+
         context.VarContext.PushScope(localVars, localMetadata);
         context.CurrentScriptPath = scriptPath;
         try

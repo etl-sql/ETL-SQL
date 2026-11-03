@@ -466,6 +466,17 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
   minutes.
 - Kafka `Partition`/`Offset` and S3/Azure Blob `Size` are decimal; SharePoint list fields keep their
   number, boolean and NULL types. A scheme-less S3 `ENDPOINT` is refused.
+- Loopback has no exemption from `Security:AllowedHosts`: a narrowed list must name `localhost`,
+  `127.0.0.1` or `::1` to reach them.
+- A federated Orchestrator answers 403 to `POST /jobs` from a caller with no role, only read-only
+  roles, or a service token without the execute scope. Publishing a bundle takes Admin or
+  OrchestratorManager, and reading bundles takes a role.
+- `Security:MaxRecursiveNestingDepth` (default 5) is enforced again; every engine instance had
+  overwritten it with the CTE limit (10000). `EXEC '<sql>'` and `EXECUTE '<file>'` count toward it,
+  and `SYNC DIRECTORY` refuses trees deeper than it unless `ALLOW_RECURSIVE_LAYERS` is set in a safe
+  zone.
+- `CREATE TOOL` and `DROP TOOL` fail with an error naming `etl-sql admin machine tool`; they never
+  registered anything.
 
 ### Added
 
@@ -935,7 +946,17 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
   connector errors are redacted.
 - Test lanes: the fuzzer's NoREC oracle runs on generated queries, SLT honours stacked
   `skipif`/`onlyif` and fails with no corpus, unconfigured scale certifications skip, and several
-  tests now assert what their names claim.
+  tests now assert what their names claim. The `ETL-SQL.LintTests` console program is removed; its
+  one scenario is an xUnit test.
+- The Portal designer and the Orchestrator lint without reading `RUN SCRIPT` dependency files from
+  the server's disk.
+- `EXEC` and `EXECUTE '<file>'` no longer reset the file-operation budget and results mid-script.
+- Portal admin user search matches email, first and last name; it compared against ciphertext.
+- A machine polling `/api/policy-authority/envelope` on a Shared Tenancy host gets 403, not 500.
+- The unused-connection and forward-reference lint rules look inside `TRY`/`CATCH`, `IF`, loops and
+  `EXECUTE ... BEGIN ... END` blocks, CTEs, set operations and subqueries, so a connection used
+  only there is no longer reported unused. `DROP CONNECTION IF EXISTS` before `CREATE` is not a
+  forward reference.
 - Gateway reconnect backoff doubles across failed connections instead of staying at twice the
   initial delay, and waits before reconnecting after a session ends.
 - A Gateway result larger than one frame is sent as several row batches; it used to end the

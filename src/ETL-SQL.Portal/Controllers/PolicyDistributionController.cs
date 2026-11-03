@@ -21,7 +21,7 @@ namespace ETL_SQL.Portal.Controllers;
 [Route("api/policy-authority")]
 public class PolicyDistributionController(
     PortalDbContext db,
-    PolicyAuthorityService authority,
+    IServiceProvider services,
     AuditService audit,
     IConfiguration configuration,
     DedicatedPolicyAuthorityGuard tenantGuard) : ControllerBase
@@ -74,6 +74,9 @@ public class PolicyDistributionController(
         // A machine in the current canary cohort receives the canary version; everyone else stays on the
         // fleet-wide active version. Cohort membership is decided from the machine's own registered
         // identity and group label, never from caller-supplied values.
+        // Resolved only after the tenant guard: on a Shared host the authority cannot be built without
+        // a verified tenant, and constructor injection turned that refusal into a 500.
+        var authority = services.GetRequiredService<PolicyAuthorityService>();
         var canary = await authority.GetCanaryVersionAsync(machine.Tenant, machine.Environment, cancellationToken);
         var served = canary?.Canary is not null
             && canary.Canary.Includes(machine.MachineId, machine.CanaryGroup)

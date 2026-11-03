@@ -247,7 +247,17 @@ public partial class SecurityService
 
     public int MaxFileOperations { get; set; } = DefaultMaxFileOperations;
     public int MaxInternalOperations { get; set; } = 100000;
+    /// <summary>
+    /// Nesting depth for <c>RUN SCRIPT</c>, procedures, <c>EXEC</c> and directory recursion
+    /// (<c>Security:MaxRecursiveNestingDepth</c>). Not the CTE iteration limit.
+    /// </summary>
     public int MaxRecursiveDepth { get; set; } = DefaultMaxRecursiveDepth;
+
+    /// <summary>
+    /// The configured CTE iteration ceiling (<c>Engine:MaxRecursiveDepth</c>). A script's
+    /// <c>SET MAX_RECURSIVE_DEPTH</c> above it needs an approved safe zone.
+    /// </summary>
+    public int MaxCteRecursionDepth { get; set; } = 10000;
     public int MaxParallelDegree { get; set; } = DefaultMaxParallelDegree;
     public long MaxStringResultSize { get; set; } = DefaultMaxStringResultSize;
     public int MaxSmtpEmailsPerScript { get; set; } = DefaultMaxSmtpEmailsPerScript;
@@ -325,14 +335,8 @@ public partial class SecurityService
 
         if (IsTestMode) return;
 
-        // Always allow local loopback
-        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
-            host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
-            host.Equals("::1", StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
+        // Loopback gets no exemption: on a shared host it reaches the host's own services,
+        // so an administrator who narrows AllowedHosts must list "localhost" to allow it.
         if (AllowedHosts.Contains("*")) return;
 
         foreach (var allowed in AllowedHosts)
@@ -858,8 +862,8 @@ public partial class SecurityService
                 globalLimit = MaxFileOperations;
                 break;
             case ThresholdType.MaxRecursiveDepth:
-                isExceeding = Convert.ToInt32(newValue) > MaxRecursiveDepth;
-                globalLimit = MaxRecursiveDepth;
+                isExceeding = Convert.ToInt32(newValue) > MaxCteRecursionDepth;
+                globalLimit = MaxCteRecursionDepth;
                 break;
             case ThresholdType.MaxGenerateRows:
                 isExceeding = Convert.ToInt32(newValue) > 1000000;

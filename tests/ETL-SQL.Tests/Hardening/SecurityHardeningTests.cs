@@ -218,11 +218,16 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
-        public void ValidateHost_ShouldAllowLocalhostExplicity()
+        public void ValidateHost_LoopbackIsGovernedByTheAllowlist()
         {
             _security.AllowedHosts.Clear(); // Strict mode
-            _security.ValidateHost("localhost"); // Should pass (hardcoded loopback exception)
-            _security.ValidateHost("127.0.0.1"); // Should pass
+            Assert.Throws<SecurityException>(() => _security.ValidateHost("localhost"));
+            Assert.Throws<SecurityException>(() => _security.ValidateHost("127.0.0.1"));
+            Assert.Throws<SecurityException>(() => _security.ValidateHost("::1"));
+
+            _security.AllowedHosts.Add("localhost");
+            _security.ValidateHost("localhost");
+            Assert.Throws<SecurityException>(() => _security.ValidateHost("127.0.0.1"));
         }
 
         [Theory]

@@ -577,6 +577,41 @@ must complete before the unified beginner experience can be accepted.
 
 ## Platform, SaaS, and Governance
 
+### SaaS Isolation — Tenant-Scoped Orchestrator Bundle Store
+
+**Status:** Accepted
+**Horizon:** Next (v0.23.0)
+**Authoritative design:** [SaaS Tenant Isolation Architecture](docs/architecture/saas-tenant-isolation.md)
+
+**Problem and Intended Outcome:** The `bundles` and `bundle_files` tables key on
+`(tenant_id, bundle_name, version)`, but no bundle store method binds or filters by tenant. Every
+publish writes to `'default'` with `INSERT OR REPLACE`, and every read matches on bundle name
+across tenants. On a shared Orchestrator one tenant can overwrite or read another tenant's bundle.
+The outcome is that each tenant publishes, lists, reads and deletes only its own bundles, and two
+tenants can use the same bundle name.
+
+**Why next:** Found in the v0.22.0 security review (TODO.md §6). The fix spans Core, the Engine
+bundle handlers, Orchestrator.Service and the LanguageServer, too wide for v0.22.0. Until it ships,
+publishing takes Admin or OrchestratorManager and reading takes a role, but any tenant's caller
+still sees every tenant's bundles, so Shared hosts must not claim bundle isolation.
+
+**Boundaries:** Bundle contents and versioning stay as they are. Promotion packages keep their
+own tenant binding.
+
+**Dependencies:** `TenantContext` on every Orchestrator request path.
+
+**Slices:**
+
+1. A tenant-taking store contract (for example `ITenantBundleStore(TenantContext)`), with the
+   SQLite and Postgres stores filtering every query by tenant.
+2. Engine `PUBLISH`/`RUN SCRIPT 'orch://…'` handlers, the Service endpoints and the LanguageServer
+   resolve bundles through the caller's tenant.
+3. A migration that moves existing `'default'` rows to their owning tenant, or leaves them for an
+   operator to reassign.
+
+**Acceptance evidence:** A two-tenant test where tenant B can neither read nor overwrite tenant A's
+bundle of the same name, on SQLite and Postgres.
+
 ### SaaS Operations — Shared Lifecycle, Metering, and Hosted Launch Evidence
 
 **Status:** Incremental

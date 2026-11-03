@@ -47,13 +47,13 @@ public sealed class AuthorshipPermissionBoundaryTests
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             // ── Not permission decisions ──────────────────────────────────────────────
-            ["AdminController.cs|var ownedFolders = await db.Folders.CountAsync(f => f.OwnerId == id);"] =
+            ["AdminController.cs|var ownedFolders = await catalogScope.Folders.CountAsync(f => f.OwnerId == id);"] =
                 "Counts what a user being deleted owns, so the admin sees the impact. No access is granted.",
             ["AdminController.cs|var ownedReports = await catalogScope.Reports.CountAsync(r => r.CreatedBy == id);"] =
                 "Counts what a user being deleted owns. No access is granted.",
             ["AdminController.cs|d => d.TenantId == TenantId && d.CreatedBy == id);"] =
                 "Counts what a user being deleted owns. No access is granted.",
-            ["AdminController.cs|await db.Folders.Where(f => f.OwnerId == id).ExecuteUpdateAsync(s => s"] =
+            ["AdminController.cs|await catalogScope.Folders.Where(f => f.OwnerId == id).ExecuteUpdateAsync(s => s"] =
                 "Reassigns ownership away from a deleted user. Removes authority rather than granting it.",
             ["AdminController.cs|await catalogScope.Reports.Where(r => r.CreatedBy == id).ExecuteUpdateAsync(s => s"] =
                 "Reassigns ownership away from a deleted user.",
@@ -73,6 +73,11 @@ public sealed class AuthorshipPermissionBoundaryTests
                 "Batch form of the folder-ownership rule above.",
             ["CatalogController.cs|catalogScope.Folders.Any(f => f.Id == r.FolderId && f.OwnerId == userId)"] =
                 "Catalog visibility follows the same folder-ownership rule.",
+            ["CatalogController.cs|return catalogScope.Folders.Where(f => f.OwnerId == userId"] =
+                "Folder listing visibility: the owner sees the folder under the folder-ownership rule, "
+                + "within the tenant-scoped catalog.",
+            ["FoldersController.cs|return catalogScope.Folders.Where(f => f.OwnerId == userId"] =
+                "Same folder-listing visibility rule as CatalogController.VisibleFoldersQuery.",
 
             // ── Guarded: authorship upgrades an existing grant ────────────────────────
             ["FolderPermissionService.cs|return CombineReportPermission(report.CreatedBy == userId, folderPerm, directPerm);"] =

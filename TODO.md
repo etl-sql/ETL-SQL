@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 31 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 19 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -1445,10 +1445,10 @@ Recorded for verification only (no source fixes applied during the audit).
 
 #### `src/ETL-SQL.Core`
 
-- [ ] **[P1 Security] Wildcard host allowlist suffix bypass and unconditional loopback exemption** (`src/ETL-SQL.Core/SecurityService.cs:322-355`).
+- [x] **[P1 Security] Wildcard host allowlist suffix bypass and unconditional loopback exemption** (`src/ETL-SQL.Core/SecurityService.cs:322-355`).
   `ValidateHost` strips `"*."` via `allowed.Substring(2)` and checks `host.EndsWith(domain, StringComparison.OrdinalIgnoreCase)` without requiring a leading `.` boundary, so `*.example.com` allows `evil-example.com`. Lines 329–334 also allow `localhost`, `127.0.0.1`, and `::1` before consulting `AllowedHosts`, and do not normalize alternate loopback encodings via `NetworkDestinationRules.Normalize`.
   **Verify:** Configure `AllowedHosts = ["*.example.com"]` (`IsTestMode = false`) and call `ValidateHost("evil-example.com")`; no `SecurityException` is thrown.
-  **Outcome (2026-11-02):** Partly real. Wildcard bypass fixed (label-boundary match). Loopback exemption is deliberate and pinned by a test, but `security-configuration.md` says `AllowedHosts` governs loopback: **decide** keep-and-fix-doc or strict allowlist.
+  **Outcome (2026-11-02):** Real. Wildcard bypass fixed (label-boundary match). Loopback exemption removed (owner, 2026-11-03: no valid reason to skip): a narrowed `AllowedHosts` must list `localhost` to reach it. SECURITY.md updated; breaking change recorded.
 - [x] **[P1 Security] Dangling symlink bypass in `ResolvePathSymlinks` and missing symlink resolution in `IsWithinSafeZone`** (`src/ETL-SQL.Core/SecurityService.cs:1205-1225, 1235-1258`).
   `ResolvePathSymlinks` checks `if (File.Exists(current) || Directory.Exists(current))`, which returns `false` for a dangling symlink whose target does not exist yet. File writes (`CryptoUtils.EncryptFile`, `SafeZipExtractor.Extract`, CSV/Parquet writers) can create or overwrite forbidden targets through a dangling symlink. `IsWithinSafeZone` also calls `Path.GetFullPath` without `ResolvePathSymlinks`.
   **Verify:** Create a symlink `out.csv` in an allowed directory targeting a non-existent `target.etlsql` and pass it to `ResolvePathSymlinks` and `ValidatePath`.
@@ -1508,21 +1508,21 @@ Recorded for verification only (no source fixes applied during the audit).
   `_context.OuterRowStack.Push(context)` is not guarded by `try ... finally` around the `await foreach` generator in `EvaluateStream`, leaving stale outer rows on `OuterRowStack` when a caller stops enumeration early (`EXISTS`, `FIRST`, `LIMIT`) or throws.
   **Verify:** Break early from `EvaluateStream` on a `SubqueryExpression` and inspect `_context.OuterRowStack.Count`.
   **Outcome (2026-11-02):** Real. Pop moved into `finally`.
-- [ ] **[P1 Bug / Security] `ExecuteToolStatementHandler` drops `CAPABILITY_SECRETS` for `EXECUTABLE` tools and skips `ResolvePath` on `CAPABILITY_MOUNTS` for `CONTAINER` tools** (`src/ETL-SQL.Engine/Handlers/ExecuteToolStatementHandler.cs:79-84, 135-160, 180-197`).
+- [x] **[P1 Bug / Security] `ExecuteToolStatementHandler` drops `CAPABILITY_SECRETS` for `EXECUTABLE` tools and skips `ResolvePath` on `CAPABILITY_MOUNTS` for `CONTAINER` tools** (`src/ETL-SQL.Engine/Handlers/ExecuteToolStatementHandler.cs:79-84, 135-160, 180-197`).
   `CAPABILITY_SECRETS` are only populated into the `CONTAINER` branch (`docker run -e`) and never added to `startInfo.EnvironmentVariables` for `EXECUTABLE` tools. In the `CONTAINER` branch, `CAPABILITY_MOUNTS` host paths are passed to `-v` without `context.ResolvePath` / `FileSystemPolicyAuthorizer`.
   **Verify:** Run `EXECUTE TOOL` on an `EXECUTABLE` tool with `CAPABILITY_SECRETS` and inspect the child environment.
-  **Outcome (2026-11-02):** Secrets for EXECUTABLE: false positive (documented container-only). Mounts: **decide** whether catalog mounts are trusted admin config (fix the doc) or must be authorized.
-- [ ] **[P2 Security] Scalar file functions in `FileFunctions` bypass operation budgets and recursive depth limits** (`src/ETL-SQL.Engine/Functions/FileFunctions.cs:49-107, 161-200`).
+  **Outcome (2026-11-02):** Secrets for EXECUTABLE: false positive (documented container-only). Mounts: trusted admin config (owner, 2026-11-03). Only `etl-sql admin machine tool set` writes the machine-protected tool catalog; `create-tool.md` now says so instead of promising tenant policy grants.
+- [x] **[P2 Security] Scalar file functions in `FileFunctions` bypass operation budgets and recursive depth limits** (`src/ETL-SQL.Engine/Functions/FileFunctions.cs:49-107, 161-200`).
   `FILE_EXISTS`, `DIRECTORY_EXISTS`, `FILE_SIZE`, `FILE_MODIFIED`, `FILE_HASH`, and `FILE_LIST` never call `context.IncrementOperationCount`, and `FILE_LIST(path, true)` uses `SearchOption.AllDirectories` without enforcing `MaxRecursiveDepth`.
   **Verify:** Call `FILE_HASH` >100 times in a `SELECT` without `SET ALLOW_FILE_OPERATIONS`.
-  **Outcome (2026-11-02):** Partly real. Each call is already path-authorized. **Decide** whether scalar file functions count against the 100-operation budget (would break `SELECT FILE_EXISTS(path) FROM #t` beyond 100 rows).
+  **Outcome (2026-11-02):** Partly real. Each call is already path-authorized. Not counted against the operation budget (owner, 2026-11-03): a per-row budget would fail or cut off correct queries over more than 100 rows.
 
 #### `src/ETL-SQL.Analysis`
 
-- [ ] **[P1 Security] Arbitrary file read and content disclosure during static linting in `RunScriptDependencyPreflightRule`** (`src/ETL-SQL.Analysis/Linting/Rules/RunScriptDependencyPreflightRule.cs:29-88, 91-109`).
+- [x] **[P1 Security] Arbitrary file read and content disclosure during static linting in `RunScriptDependencyPreflightRule`** (`src/ETL-SQL.Analysis/Linting/Rules/RunScriptDependencyPreflightRule.cs:29-88, 91-109`).
   Static linting resolves any literal `RUN SCRIPT '...'` path via `Path.GetFullPath` without `SecurityService.ValidatePath`, safe-zone checks, or extension validation, reads the file via `File.ReadAllTextAsync`, and surfaces token values and `@variable` names in `LINT025` diagnostics.
   **Verify:** Lint `RUN SCRIPT 'C:/Windows/win.ini';` via `Linter.AnalyzeAsync`.
-  **Outcome (2026-11-02):** Real, fixed for local lint (only `.etlsql`/`.sql` outside protected locations). **Decide** for server-side lint: Portal and Orchestrator should disable dependency preflight or pass an authorizer.
+  **Outcome (2026-11-02):** Real, fixed for local lint (only `.etlsql`/`.sql` outside protected locations). The Portal designer and the Orchestrator now lint without dependency preflight (`LinterFactory.CreateWithAllRules(readDependencyFiles: false)`), so a Portal author cannot read another tenant's script off the server's disk.
 - [x] **[P2 Security] `CredentialLeakRule` misses `SECRET`-typed variables and `${@var}` string interpolation** (`src/ETL-SQL.Analysis/Linting/Rules/CredentialLeakRule.cs:43-48, 185-229`).
   `Analyze` checks `declare.IsSensitive || IsSensitiveName(declare.VariableName)` but ignores `declare.IsSecret`, and `FindSensitiveVariablesRecursive` does not inspect string literals for `${@var}` interpolations.
   **Verify:** Lint `DECLARE @v SECRET = 'SECRET:k'; PRINT @v;` and `DECLARE @pw STRING SENSITIVE = 'ENC:x'; PRINT '${@pw}';`.
@@ -1618,10 +1618,10 @@ Recorded for verification only (no source fixes applied during the audit).
   Destructive `TruncateAsync` and `WriteBatches` execute against the live database even when `SET WHAT_IF ON` is active.
   **Verify:** Enable `context.IsWhatIf = true` and inspect `TruncateAsync` / `WriteBatches` in those four data sources.
   **Outcome (2026-11-02):** Partly real. Statement handlers already honoured WHAT_IF; the data sources now do too.
-- [ ] **[P1 Bug] Database connectors return native CLR integer types (`int`, `long`, `short`, `byte`) instead of `decimal` in `DataTable` rows** (`SqlServerDataSource.cs:163, 324`, `PostgresDataSource.cs:141, 297`, `MySqlDataSource.cs:137, 283`, `SqliteDataSource.cs:167, 497`, `OdbcDataSource.cs:125, 269`, `SnowflakeDataSource.cs:171, 291`, `BigQueryDataSource.cs:133, 239`, `MongodbDataSource.cs:111, 252`, `Neo4jDataSource.cs:395, 445`).
+- [x] **[P1 Bug] Database connectors return native CLR integer types (`int`, `long`, `short`, `byte`) instead of `decimal` in `DataTable` rows** (`SqlServerDataSource.cs:163, 324`, `PostgresDataSource.cs:141, 297`, `MySqlDataSource.cs:137, 283`, `SqliteDataSource.cs:167, 497`, `OdbcDataSource.cs:125, 269`, `SnowflakeDataSource.cs:171, 291`, `BigQueryDataSource.cs:133, 239`, `MongodbDataSource.cs:111, 252`, `Neo4jDataSource.cs:395, 445`).
   `reader.GetValue(i)` and NoSQL row mappers store CLR integer types directly into `Row` instead of converting `INT`/`BIGINT`/`TINYINT` to `decimal` (`AGENTS.md` §8.1).
   **Verify:** Read an integer column from `SqliteDataSource.ReadBatches` and check `row[0].GetType()`.
-  **Outcome (2026-11-02):** Partly real, no wrong result found (the engine tolerates CLR integers; `ConnectorIntegerRuntimeTypeTests`). **Decide**: normalize once at ingest, convert per connector, or relax the rule to "integers compare and compute as decimal".
+  **Outcome (2026-11-02):** Partly real, no wrong result found (the engine tolerates CLR integers; `ConnectorIntegerRuntimeTypeTests`). Left as is until it causes a wrong result (owner, 2026-11-03).
 - [x] **[P1 Security / Bug] `SnowflakeDataSource` leaks connections on failed open/transaction calls, leaves `ReadBatches` unwrapped, emits unsanitized `ex.Message`, and drops `PRIVATE_KEY_FILE` when absent from `connectionString`** (`src/ETL-SQL.Connectors.Databases/Snowflake/SnowflakeDataSource.cs:70-83, 132-135, 147-187, 231-234, 329-332, 360-363, 390-393, 411-414, 421-448, 459-466`).
   `GetConnectionAsync`, `ReadBatches`, `BeginTransactionAsync`, `CommitAsync`, and `RollbackAsync` let raw `SnowflakeDbException` escape and leak `SnowflakeDbConnection` on failure; other catch blocks interpolate raw `ex.Message` without `SecretRedactor.Redact`; `ReplaceConnectionStringValue` silently drops `PRIVATE_KEY_FILE` when `private_key_file=` is not already in `connectionString`.
   **Verify:** Call `ReadBatches` or `BeginTransactionAsync` on `SnowflakeDataSource` with an invalid connection string.
@@ -1706,10 +1706,10 @@ Recorded for verification only (no source fixes applied during the audit).
 
 #### `src/ETL-SQL.Connectors`
 
-- [ ] **[P1 Bug] `MockDataSeeder`, `PortalDataSource`, `OrchestratorDataSource`, and `RestDataSource` store integer columns as `int`/`long` instead of `decimal`** (`MockDataSeeder.cs:205-675`, `PortalDataSource.cs:2120, 2209`, `OrchestratorDataSource.cs:534, 572, 698, 743, 901, 1214`, `RestDataSource.cs:1217-1219, 1234, 1287`).
+- [x] **[P1 Bug] `MockDataSeeder`, `PortalDataSource`, `OrchestratorDataSource`, and `RestDataSource` store integer columns as `int`/`long` instead of `decimal`** (`MockDataSeeder.cs:205-675`, `PortalDataSource.cs:2120, 2209`, `OrchestratorDataSource.cs:534, 572, 698, 743, 901, 1214`, `RestDataSource.cs:1217-1219, 1234, 1287`).
   Integer fields are populated as `int` or `long` instead of `decimal`.
   **Verify:** Query `SELECT UserID FROM mock.Users` and check `row["UserID"].GetType()`.
-  **Outcome (2026-11-02):** Same finding and **decision** as the Connectors.Databases integer item.
+  **Outcome (2026-11-02):** Same finding as the Connectors.Databases integer item; left as is until it causes a wrong result (owner, 2026-11-03).
 - [x] **[P1 Resource Leak] `RestDataSource` leaks `HttpResponseMessage` and `HttpRequestMessage` across pagination, retries, redirects, and `GetColumnsAsync`** (`src/ETL-SQL.Connectors/Rest/RestDataSource.cs:530-680, 1110-1180, 1389-1438, 1807-1821`).
   `GetColumnsAsync` never disposes `request` or `response`; retry loops in `ReadBatchesCore` and `SendHttpRequestAsync` overwrite `response` without disposing the previous response; `SendWithRedirectsAsync` leaks `response` when `EnforceEnterpriseUrl` throws on a redirect.
   **Verify:** Inspect `RestDataSource.cs:1807-1821` and `550-555`.
@@ -1756,10 +1756,10 @@ Recorded for verification only (no source fixes applied during the audit).
   `ReportAlert.Name` and `PolicyMachineRegistration.MachineId` have single-column unique indexes instead of composite `(TenantId, Name)` and `(TenantId, MachineId)` indexes, causing cross-tenant `DbUpdateException` collisions.
   **Verify:** Create an alert with the same `Name` in two different tenants.
   **Outcome (2026-11-02):** `report_alerts.name` real: new `TenantQualifyReportAlertNames` migration pair. `policy_machines.machine_id` false positive (global GUID identity on purpose).
-- [ ] **[P1 Bug] Non-deterministic `IDataProtector.Protect` encryption on `PortalUser.NormalizedEmail` breaks SQL equality lookups (`FindByEmailAsync`)** (`src/ETL-SQL.Portal.Data/PortalDbContext.cs:627-628`, `src/ETL-SQL.Portal.Data/PortalPiiEncryption.cs:30-36`).
+- [x] **[P1 Bug] Non-deterministic `IDataProtector.Protect` encryption on `PortalUser.NormalizedEmail` breaks SQL equality lookups (`FindByEmailAsync`)** (`src/ETL-SQL.Portal.Data/PortalDbContext.cs:627-628`, `src/ETL-SQL.Portal.Data/PortalPiiEncryption.cs:30-36`).
   `IDataProtector.Protect` generates a fresh random IV on every call, so `WHERE normalized_email = @p0` never matches stored ciphertexts.
   **Verify:** Enable `PiiEncryptionProtector`, save a user with an email, and call `userManager.FindByEmailAsync(email)`.
-  **Outcome (2026-11-02):** Partly real, latent (nothing calls `FindByEmailAsync`). **Decide**: deterministic HMAC blind index, or document email lookup as unsupported.
+  **Outcome (2026-11-02):** Partly real, latent (nothing calls `FindByEmailAsync`). Subscription delivery matches recipients by decrypting every active user's email in memory (`SubscriptionDeliveryService.BuildRecipientIdentityAsync`), which is correct but O(users). Closed (owner, 2026-11-03): subscriptions are the only email lookup and already resolve correctly, so no blind index is added. Revisit if delivery time grows with user count.
 - [x] **[P2 Bug] `DbGatewayEnrollmentStore.ConsumeAsync` loads all historical enrollment rows for a tenant into memory** (`src/ETL-SQL.Portal.Data/DbGatewayEnrollmentStore.cs:65-74`).
   `ConsumeAsync` fetches every enrollment record for `tenant.Value` with `ToListAsync` and hashes `oneTimeToken` against each row's salt in memory.
   **Verify:** Inspect `DbGatewayEnrollmentStore.cs:65-74`.
@@ -1805,10 +1805,10 @@ Recorded for verification only (no source fixes applied during the audit).
   `ExecuteTextCoreAsync` accepts `ExecutionIdentity? executionIdentity` at line 120 and never validates, serializes, or passes it (`--execution-identity-file` / `--tenant`) to the child `ETL-SQL.App` process.
   **Verify:** Inspect `ProcessJobExecutor.cs:114-155`.
   **Outcome (2026-11-02):** Real. Identity-bound runs under `Jobs:UseProcessSpawning` are refused (fail closed). Passing the identity to the child process is a follow-up.
-- [ ] **[P0 Security] Bundle storage (`PublishBundleAsync`, `GetLatestVersionAsync`, `GetFileAsync`, etc.) omits `tenant_id` in SQL queries, enabling cross-tenant bundle overwrite and read** (`src/ETL-SQL.Orchestrator/Storage/SQLiteJobHistoryStore.cs:328-367, 2504-2793`).
+- [x] **[P0 Security] Bundle storage (`PublishBundleAsync`, `GetLatestVersionAsync`, `GetFileAsync`, etc.) omits `tenant_id` in SQL queries, enabling cross-tenant bundle overwrite and read** (`src/ETL-SQL.Orchestrator/Storage/SQLiteJobHistoryStore.cs:328-367, 2504-2793`).
   Although `bundles` and `bundle_files` have `(tenant_id, bundle_name, version)` primary keys, none of the bundle store methods bind or filter by `tenant_id`; all writes go to `'default'` with `INSERT OR REPLACE` and all reads match `WHERE bundle_name = $name` across tenants.
   **Verify:** Inspect `SQLiteJobHistoryStore.cs:2504-2793`.
-  **Outcome (2026-11-02):** Real. **Decide** the shape: `IBundleStore` takes no tenant, so a fix spans Core, Engine handlers, Service and LanguageServer (suggested: `ITenantBundleStore` taking `TenantContext`).
+  **Outcome (2026-11-02):** Real. Moved to ROADMAP.md "SaaS Isolation — Tenant-Scoped Orchestrator Bundle Store" for v0.23.0 (owner, 2026-11-03): `IBundleStore` takes no tenant, so the fix spans Core, Engine handlers, Service and LanguageServer. Bundles stay visible across tenants until then.
 - [x] **[P1 Bug] Fenced-out scheduler nodes in `SchedulerService.ExecuteLeasedJobAsync` still dispatch notifications, trigger linked schedules, and overwrite `Jobs` via unfenced `QuarantineIfRepeatedlyFailingAsync`** (`src/ETL-SQL.Orchestrator/SchedulerService.cs:1100-1130, 1210-1243, 1337-1414`).
   When `!leaseContext.HasValidLease`, both the normal completion path (lines 1127–1129) and the `catch` block (lines 1227–1229) still invoke `QuarantineIfRepeatedlyFailingAsync` (which calls unfenced `SaveJobAsync`), `DispatchJobNotificationsAsync`, and `TriggerLinkedSchedulesAsync`.
   **Verify:** Inspect `SchedulerService.cs:1108-1129` and `1213-1229`.
@@ -1828,10 +1828,10 @@ Recorded for verification only (no source fixes applied during the audit).
 
 #### `src/ETL-SQL.Orchestrator.Service`
 
-- [ ] **[P0 Security] Missing RBAC and scope-ceiling checks on `POST /jobs`, `/api/admin/connections/*`, and `/api/bundles/*`** (`src/ETL-SQL.Orchestrator.Service/Api/JobApiEndpoints.cs:209-236, 1356-1676, 2073-2128`).
+- [x] **[P0 Security] Missing RBAC and scope-ceiling checks on `POST /jobs`, `/api/admin/connections/*`, and `/api/bundles/*`** (`src/ETL-SQL.Orchestrator.Service/Api/JobApiEndpoints.cs:209-236, 1356-1676, 2073-2128`).
   `POST /jobs` and `/api/admin/connections/*` accept any federated principal (including `Viewer` role or `orchestrator.read` service-account tokens) without checking `IsFederatedOperator` or admin scopes, and `/api/bundles/*` does not call `TryAuthorizeFederatedRequest` at all.
   **Verify:** Call `POST /jobs` or `DELETE /api/admin/connections/{alias}` with a `Viewer` / `orchestrator.read` federated token.
-  **Outcome (2026-11-02):** Partly real. `/api/admin/connections/*` fixed. **Decide** `POST /jobs` (engine refuses each statement by scope today, by design) and `/api/bundles` (tied to the bundle-tenant item).
+  **Outcome (2026-11-02):** Real. `/api/admin/connections/*` fixed. In federated mode (2026-11-03), `POST /jobs` takes the execute scope ceiling and a role that runs scripts. Report viewers keep it because the Portal submits their report runs as them; no-role and read-only-role callers get 403. `POST /api/bundles` takes Admin or OrchestratorManager (as object creation does); bundle reads take a role and the read ceiling.
 - [x] **[P0 Security] Arbitrary host file exfiltration and file-existence oracle via `AttachmentPaths` and `RecipientOverride` in `POST /api/notifications/{name}/dispatch`** (`src/ETL-SQL.Orchestrator.Service/Api/JobApiEndpoints.cs:1285-1337`, `src/ETL-SQL.Orchestrator/Notifications/NotificationDispatchService.cs:228-249, 320-343`).
   Caller-supplied `AttachmentPaths` are checked with raw `File.Exists` (returning `"Attachment file not found: {path}"` when missing) and attached via `new Attachment(attachmentPath)` to an email sent to caller-supplied `RecipientOverride` without path policy validation.
   **Verify:** Call `POST /api/notifications/{name}/dispatch` with `attachmentPaths` pointing to a host file and `recipientOverride`.
@@ -2092,10 +2092,10 @@ Recorded for verification only (no source fixes applied during the audit).
   When two `skipif`/`onlyif` lines precede a query, `SltParser` consumes both directives and parses the query as unconditional.
   **Verify:** Parse two consecutive `skipif` lines followed by `statement ok` in `SltParser.ParseFile`.
   **Outcome (2026-11-02):** Real. Fixed.
-- [ ] **[P1 Bug] `ETL-SQL.LintTests`: console entrypoint has zero xUnit tests and catches all exceptions with exit code `0`** (`tests/ETL-SQL.LintTests/Program.cs:14-59`).
+- [x] **[P1 Bug] `ETL-SQL.LintTests`: console entrypoint has zero xUnit tests and catches all exceptions with exit code `0`** (`tests/ETL-SQL.LintTests/Program.cs:14-59`).
   `dotnet test` discovers 0 tests in `ETL-SQL.LintTests`, and `Program.Main` swallows exceptions in `catch (Exception ex)` without setting a non-zero exit code.
   **Verify:** Inspect `tests/ETL-SQL.LintTests/Program.cs:14-59`.
-  **Outcome (2026-11-02):** Partly real. `Main` returns 1 on error. **Decide**: delete the project, convert to xUnit, or move under `tools/`.
+  **Outcome (2026-11-02):** Partly real. Project deleted (owner, 2026-11-03: delete if xUnit coverage exists). `ETL-SQL.Tests` already covers schema validation and parser recovery; the one combined case was ported as `SchemaValidationRule_StillChecksStatementsAfterARecoveredSyntaxError`.
 - [x] **[P2 Bug] `ETL-SQL.Scale.Tests`: unconfigured `Cert_Stress_*` and `Cert_Huge_*` `[Fact]` methods return `Task.CompletedTask` (recording Passed instead of Skipped), and `MemoryBoundMB` shadows the `Huge` tier when `rowScale <= 10`** (`tests/ETL-SQL.Scale.Tests/ScaleCertificationTests.cs:343-371, 516-542`).
   Returning early from a `[Fact]` when `CERT_STRESS_ROW_SCALE` / `CERT_HUGE_ROW_SCALE` is unset marks the test as passed.
   **Verify:** Run `dotnet test --filter "FullyQualifiedName~Cert_Stress_SmokeScenarioSet_RowScale100"` without environment variables set.
@@ -2115,12 +2115,20 @@ Recorded for verification only (no source fixes applied during the audit).
 
 #### Found while verifying (2026-11-02)
 
-- [ ] **[P1 Security] `Security:MaxRecursiveNestingDepth` (5) is overwritten with the CTE limit (10000)** (`src/ETL-SQL.Engine/Evaluator.cs:156, 706`, `src/appsettings.json:58`).
+- [x] **[P1 Security] `Security:MaxRecursiveNestingDepth` (5) is overwritten with the CTE limit (10000)** (`src/ETL-SQL.Engine/Evaluator.cs:156, 706`, `src/appsettings.json:58`).
   `Evaluator.MaxRecursiveDepth` writes the shared `SecurityService.MaxRecursiveDepth`, and every Evaluator constructor sets it from `Engine:MaxRecursiveDepth`. The five-level file-nesting guardrail is in practice 10000. Fix needs the CTE recursion limit and the file-nesting depth split into two settings. Related: `EXEC 'script'` at depth 0 resets the file-operation counter through `Evaluate()`.
-- [ ] **[P2 Bug] Anonymous `GET /api/policy-authority/envelope` returns 500 on a Shared Tenancy host** (`src/ETL-SQL.Portal/Program.cs`, `PolicyAuthorityService` factory).
+  **Outcome (2026-11-03):** Fixed. The CTE limit no longer writes the nesting guardrail; `SET MAX_RECURSIVE_DEPTH` is checked against the configured CTE ceiling (`SecurityService.MaxCteRecursionDepth`), not the nesting one. CTE iterations no longer count as nesting depth. `SYNC DIRECTORY` depth uses the nesting guardrail (default 5, lifted by `ALLOW_RECURSIVE_LAYERS` in a safe zone), as its docs say. `EXEC 'sql'` and `EXECUTE 'file'` enter a nested scope, so they count toward nesting and no longer reset the file-operation budget.
+- [x] **[P2 Bug] Anonymous `GET /api/policy-authority/envelope` returns 500 on a Shared Tenancy host** (`src/ETL-SQL.Portal/Program.cs`, `PolicyAuthorityService` factory).
   The factory throws when no tenant context is bound, so a machine polling a Shared host gets a server error instead of a tenant-scoped answer or a clean refusal.
+  **Outcome (2026-11-03):** Fixed. The controller resolves `PolicyAuthorityService` after the tenant guard, so an unverified Shared caller gets the guard's audited 403.
 - [ ] **[P2 Security] Pass the caller's `ExecutionIdentity` to process-spawned Orchestrator runs** (`src/ETL-SQL.Orchestrator/Execution/ProcessJobExecutor.cs`).
   Identity-bound runs under `Jobs:UseProcessSpawning` are now refused (fail closed). Supporting them needs the identity and tenant carried to the child App, which has no `IOrchestratorObjectAuthorizer`.
+- [x] **[P2 Bug] Portal admin user search never matches email, first or last name** (`src/ETL-SQL.Portal/Controllers/AdminController.cs:222-226`).
+  The search runs `LOWER(col) LIKE '%term%'` in SQL, but those columns hold non-deterministic PII ciphertext, so only the username can match. Substring search on encrypted columns has to run in memory or over a separate search key.
+  **Outcome (2026-11-03):** Fixed. The other filters still run in SQL; the text match runs on the decrypted rows before paging, as the group-member search already did.
+- [x] **[P2 Bug] `CREATE TOOL` parses but has no statement handler** (`src/ETL-SQL.Core/Parser/Components/PortalParser.cs:400`, `docs/reference/statements/ddl/create-tool.md`).
+  `CreatePortalToolStatement` and `DropPortalToolStatement` have no handler, so the statement the reference page documents does nothing. Tools are registered only through `etl-sql admin machine tool set`. Either add a handler that writes the catalog (with an admin check) or remove the statement and point the doc at the CLI.
+  **Outcome (2026-11-03):** `CREATE TOOL` and `DROP TOOL` now fail with an error naming `etl-sql admin machine tool set`/`delete`; `create-tool.md` documents the CLI. A script-side catalog writer would make mounts script-controlled, which contradicts the trusted-admin-config decision above.
 
 ---
 

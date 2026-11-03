@@ -219,8 +219,10 @@ public class SyncDirectoryStatementHandler : IStatementHandler
     {
         var relative = Path.GetRelativePath(root, file);
         var depth = relative.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries).Length - 1;
-        if (depth > context.MaxRecursiveDepth && !context.AllowDeepRecursion)
-            throw new SecurityException($"Runaway protection: Recursive operation depth ({depth}) exceeds the safety limit of {context.MaxRecursiveDepth}. Use 'SET ALLOW_RECURSIVE_LAYERS = n;' override if allowed.");
+        // Directory depth is nesting, governed by Security:MaxRecursiveNestingDepth and lifted only
+        // by ALLOW_RECURSIVE_LAYERS inside an approved safe zone; not the CTE iteration limit.
+        context.SecurityService.CheckRunawayProtection(
+            OperationType.FileSystem, 0, depth, allowDeepRecursion: context.AllowDeepRecursion, path: file);
     }
 
     private static void DeleteEmptySubdirectories(IExecutionContext context,

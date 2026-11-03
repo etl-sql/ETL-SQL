@@ -209,6 +209,7 @@ namespace ETL_SQL.Orchestrator.Service
             app.MapPost("/jobs", (HttpContext ctx, IConfiguration cfg, JobSubmitRequest request, IServiceScopeFactory scopeFactory, ILogger<Program> logger) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (AdHocExecutionDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 EvictStaleAdHocJobs();
 
                 var caller = RequestCaller(ctx);
@@ -2128,6 +2129,7 @@ namespace ETL_SQL.Orchestrator.Service
             app.MapGet("/api/bundles", async (HttpContext ctx, IBundleStore store, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 return Results.Ok(await store.GetBundlesAsync());
             }).WithName("listBundles");
 
@@ -2135,6 +2137,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IBundleStore store, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (BundlePublishDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (req.Bundle == null)
                     return Results.BadRequest(new { Error = "Bundle is required." });
                 if (string.IsNullOrWhiteSpace(req.Bundle.BundleName))
@@ -2153,6 +2156,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IBundleStore store, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 return Results.Ok(await store.GetVersionsAsync(Uri.UnescapeDataString(name)));
             }).WithName("listBundleVersions");
 
@@ -2160,6 +2164,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IBundleStore store, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 var result = await store.GetVersionAsync(Uri.UnescapeDataString(name), version);
                 return result == null ? Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." }) : Results.Ok(result);
             }).WithName("getBundleVersion");
@@ -2168,6 +2173,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IBundleStore store, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (await store.GetVersionAsync(Uri.UnescapeDataString(name), version) == null)
                     return Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." });
                 return Results.Ok(await store.GetFilesAsync(Uri.UnescapeDataString(name), version));
@@ -2177,6 +2183,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IBundleStore store, IConfiguration cfg) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                if (BundleReadDenied(ctx, cfg)) return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (await store.GetVersionAsync(Uri.UnescapeDataString(name), version) == null)
                     return Results.NotFound(new { Error = $"Bundle '{name}' version {version} not found." });
                 return Results.Ok(await store.GetDependenciesAsync(Uri.UnescapeDataString(name), version));
@@ -2570,6 +2577,46 @@ namespace ETL_SQL.Orchestrator.Service
         /// </summary>
         private static bool ConnectionAdministrationDenied(HttpContext ctx, IConfiguration cfg) =>
             !OrchestratorAuthorizationMode.IsLegacy(cfg) && !IsObjectAdministrator(RequestCaller(ctx));
+
+        // Roles that see Orchestrator state but never run anything through it.
+        private static readonly string[] ReadOnlyRoles = ["OrchestratorViewer", "FleetReader", "StewardshipViewer"];
+
+        /// <summary>
+        /// An ad-hoc job runs a script the caller supplies, so it takes the execute scope ceiling and
+        /// a role that runs scripts. Report viewers keep that right: the Portal submits their report
+        /// executions here as themselves. A caller with no role, or only read-only roles, cannot.
+        /// The engine still refuses each statement the caller's policy does not allow.
+        /// </summary>
+        private static bool AdHocExecutionDenied(HttpContext ctx, IConfiguration cfg)
+        {
+            if (OrchestratorAuthorizationMode.IsLegacy(cfg)) return false;
+            var caller = RequestCaller(ctx);
+            if (!OrchestratorObjectAuthorizationService.WithinScopeCeiling(caller, OrchestratorObjectPermission.Execute))
+                return true;
+            // A service token was issued for a stated purpose; its execute scope is that purpose.
+            if (IsServiceCaller(caller)) return false;
+            return !caller.Roles.Any(role => !ReadOnlyRoles.Contains(role, StringComparer.OrdinalIgnoreCase));
+        }
+
+        private static bool IsServiceCaller(OrchestratorCaller caller) =>
+            caller.SubjectType.Equals("service", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Publishing a bundle authors a catalog object, so it follows <see cref="OrchestratorObjectAuthorizationService.CanCreate"/>:
+        /// Admin or OrchestratorManager, within a manage scope ceiling. Reading takes any role and the
+        /// read ceiling. Bundles are not yet tenant-scoped (ROADMAP: Tenant-Scoped Orchestrator Bundle Store).
+        /// </summary>
+        private static bool BundlePublishDenied(HttpContext ctx, IConfiguration cfg) =>
+            !OrchestratorAuthorizationMode.IsLegacy(cfg)
+            && !OrchestratorObjectAuthorizationService.CanCreate(RequestCaller(ctx));
+
+        private static bool BundleReadDenied(HttpContext ctx, IConfiguration cfg)
+        {
+            if (OrchestratorAuthorizationMode.IsLegacy(cfg)) return false;
+            var caller = RequestCaller(ctx);
+            return (!IsServiceCaller(caller) && caller.Roles.Count == 0)
+                || !OrchestratorObjectAuthorizationService.WithinScopeCeiling(caller, OrchestratorObjectPermission.Read);
+        }
 
         private static bool IsObjectAdministrator(OrchestratorCaller caller)
         {

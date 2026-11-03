@@ -80,7 +80,10 @@ public class ExecStatementHandler : IStatementHandler
         {
             var parser = new Parser(new Lexer(sql).Tokenize());
             var script = parser.Parse();
-            await context.Evaluate(script);
+            // A nested level: at depth 0 Evaluate starts a new run, re-capturing the execution
+            // policy and resetting the file-operation budget and results mid-script.
+            using (context.EnterRecursiveScope())
+                await context.Evaluate(script);
         }
     }
 

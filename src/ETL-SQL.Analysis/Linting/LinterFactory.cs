@@ -23,7 +23,12 @@ public static class LinterFactory
     /// implementation found in the ETL-SQL.Analysis assembly.
     /// If a service provider is provided, it will check for registered rules first.
     /// </summary>
-    public static Linter CreateWithAllRules(IServiceProvider? serviceProvider = null)
+    /// <param name="readDependencyFiles">
+    /// False on a server that lints scripts its users submit (the Portal designer, the
+    /// Orchestrator): the dependency preflight reads the files a literal <c>RUN SCRIPT</c> names
+    /// from the server's disk and echoes their contents back in diagnostics.
+    /// </param>
+    public static Linter CreateWithAllRules(IServiceProvider? serviceProvider = null, bool readDependencyFiles = true)
     {
         var linter = new Linter();
         var includeAvoidSelectStar = IsAvoidSelectStarEnabled(serviceProvider);
@@ -34,6 +39,7 @@ public static class LinterFactory
             foreach (var rule in registeredRules)
             {
                 if (!includeAvoidSelectStar && rule is Rules.AvoidSelectStarRule) continue;
+                if (!readDependencyFiles && rule is Rules.RunScriptDependencyPreflightRule) continue;
                 linter.AddRule(rule);
             }
         }
@@ -42,6 +48,7 @@ public static class LinterFactory
         foreach (var type in RuleTypes)
         {
             if (!includeAvoidSelectStar && type == typeof(Rules.AvoidSelectStarRule)) continue;
+            if (!readDependencyFiles && type == typeof(Rules.RunScriptDependencyPreflightRule)) continue;
 
             // Skip if already added via DI
             if (linter.HasRuleOfType(type)) continue;

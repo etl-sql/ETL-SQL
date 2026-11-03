@@ -85,7 +85,8 @@ namespace ETL_SQL.Orchestrator.Execution
                 }
 
                 // 3. Lint
-                var lintResults = await LinterFactory.CreateWithAllRules(_serviceProvider)
+                // Dependency preflight would read server files outside the job's execution policy.
+                var lintResults = await LinterFactory.CreateWithAllRules(_serviceProvider, readDependencyFiles: false)
                     .AnalyzeAsync(script, new DefaultLintContext());
                 result.LintResults.AddRange(lintResults);
 
