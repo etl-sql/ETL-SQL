@@ -88,8 +88,32 @@ namespace ETL_SQL.Connectors.Email
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             _context?.RecordSmtpEmailSend();
 
+            // Everything that can fail (address parsing, attachment I/O, the SMTP session) runs inside
+            // one try so attachment streams are always released and provider errors leave sanitized.
             var message = new MimeMessage();
+            var attachmentStreams = new List<IDisposable>();
+            try
+            {
+                await ComposeAndSendAsync(row, message, attachmentStreams, effectiveCancellationToken);
+            }
+            catch (Exception ex) when (ex is not ETL_SQL.Core.Common.Exceptions.ExecutionException
+                                       && ex is not ETL_SQL.Services.SecurityException
+                                       && ex is not OperationCanceledException)
+            {
+                // COMPAT_BREAK: 0.22.0 — the raw MailKit/MimeKit exception is no longer chained as
+                // InnerException and its message is sanitized.
+                throw ConnectorExceptionWrapper.Wrap("SMTP", ex);
+            }
+            finally
+            {
+                foreach (var stream in attachmentStreams) stream.Dispose();
+                message.Dispose();
+            }
+        }
 
+        private async Task ComposeAndSendAsync(Row row, MimeMessage message, List<IDisposable> attachmentStreams,
+            CancellationToken effectiveCancellationToken)
+        {
             string from = (row.Columns.TryGetValue("From", out var f) ? f?.ToString() : (_options.TryGetValue("DEFAULT_FROM", out var df) ? df : "etl-sql@localhost")) ?? "etl-sql@localhost";
             message.From.Add(MailboxAddress.Parse(from));
 
@@ -121,7 +145,6 @@ namespace ETL_SQL.Connectors.Email
                 Text = (row.Columns.TryGetValue("Body", out var b) ? b?.ToString() : "") ?? ""
             };
 
-            var attachmentStreams = new List<IDisposable>();
             // Handle Attachments
             if (row.Columns.TryGetValue("Attachments", out var att) && att != null)
             {
@@ -146,11 +169,12 @@ namespace ETL_SQL.Connectors.Email
 
                         if (System.IO.File.Exists(resolvedPath))
                         {
-                            var fs = System.IO.File.OpenRead(resolvedPath);
-                            attachmentStreams.Add(fs);
                             var ms = new System.IO.MemoryStream();
                             attachmentStreams.Add(ms);
-                            await fs.CopyToAsync(ms, effectiveCancellationToken);
+                            await using (var fs = System.IO.File.OpenRead(resolvedPath))
+                            {
+                                await fs.CopyToAsync(ms, effectiveCancellationToken);
+                            }
                             ms.Position = 0;
 
                             // COMPAT_BREAK: 0.10
@@ -180,32 +204,19 @@ namespace ETL_SQL.Connectors.Email
             int port = _options.TryGetValue("PORT", out var p) && int.TryParse(p, out var pt) ? pt : 587; // Security: Default to 587 (STARTTLS) instead of 25 (plaintext)
             bool useSsl = ConnectorOptionValues.IsTrue(_options, "USE_SSL");
 
-            try
-            {
-                await client.ConnectAsync(host, port, TlsMode(useSsl, port), effectiveCancellationToken);
+            await client.ConnectAsync(host, port, TlsMode(useSsl, port), effectiveCancellationToken);
 
-                if (_options.TryGetValue("USERNAME", out var user) && _options.TryGetValue("PASSWORD", out var pass))
+            if (_options.TryGetValue("USERNAME", out var user) && _options.TryGetValue("PASSWORD", out var pass))
+            {
+                if (pass.StartsWith("ENC:") && _context != null)
                 {
-                    if (pass.StartsWith("ENC:") && _context != null)
-                    {
-                        pass = _context.DecryptValue(pass) ?? "";
-                    }
-                    await client.AuthenticateAsync(user, pass, effectiveCancellationToken);
+                    pass = _context.DecryptValue(pass) ?? "";
                 }
+                await client.AuthenticateAsync(user, pass, effectiveCancellationToken);
+            }
 
-                await client.SendAsync(message, effectiveCancellationToken);
-                await client.DisconnectAsync(true, effectiveCancellationToken);
-            }
-            catch (Exception ex) when (ex is not ETL_SQL.Core.Common.Exceptions.ExecutionException
-                                       && ex is not ETL_SQL.Services.SecurityException)
-            {
-                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"SMTP connector error: {ex.Message}", ex);
-            }
-            finally
-            {
-                foreach (var stream in attachmentStreams) stream.Dispose();
-                message.Dispose();
-            }
+            await client.SendAsync(message, effectiveCancellationToken);
+            await client.DisconnectAsync(true, effectiveCancellationToken);
         }
 
         public Task TruncateAsync() => Task.CompletedTask;

@@ -23,6 +23,13 @@ namespace ETL_SQL.Connectors.Kafka
         private IConsumer<string, string>? _consumer;
         private IProducer<string, string>? _producer;
 
+        // A WithTable clone borrows its parent's clients and must not close them on dispose; it owns
+        // only a client it creates itself.
+        private bool _ownsConsumer = true;
+        private bool _ownsProducer = true;
+
+        internal string BootstrapServers => _bootstrapServers;
+
         public KafkaDataSource(IExecutionContext context, string bootstrapServers, string topic, Dictionary<string, string>? options = null, IConsumer<string, string>? consumer = null, IProducer<string, string>? producer = null)
         {
             _context = context;
@@ -49,6 +56,7 @@ namespace ETL_SQL.Connectors.Kafka
         {
             if (_consumer != null) return _consumer;
             _consumer = new ConsumerBuilder<string, string>(config).Build();
+            _ownsConsumer = true;
             return _consumer;
         }
 
@@ -56,6 +64,7 @@ namespace ETL_SQL.Connectors.Kafka
         {
             if (_producer != null) return _producer;
             _producer = new ProducerBuilder<string, string>(config).Build();
+            _ownsProducer = true;
             return _producer;
         }
 
@@ -128,8 +137,9 @@ namespace ETL_SQL.Connectors.Kafka
                 }
 
                 var row = table.NewRow();
-                row["Partition"] = result.Partition.Value;
-                row["Offset"] = result.Offset.Value;
+                // COMPAT_BREAK: 0.22.0 — Partition/Offset were int/long; runtime integers are decimal.
+                row["Partition"] = (decimal)result.Partition.Value;
+                row["Offset"] = (decimal)result.Offset.Value;
                 row["Key"] = result.Message.Key;
                 row["Value"] = result.Message.Value;
                 row["Timestamp"] = result.Message.Timestamp.UtcDateTime;
@@ -287,23 +297,39 @@ namespace ETL_SQL.Connectors.Kafka
 
         public IDataSource WithTable(string tableName)
         {
-            return new KafkaDataSource(_context!, _bootstrapServers, tableName, _options, _consumer, _producer);
+            return new KafkaDataSource(_context!, _bootstrapServers, tableName, _options, _consumer, _producer)
+            {
+                _ownsConsumer = false,
+                _ownsProducer = false
+            };
         }
 
         public ValueTask DisposeAsync()
         {
             try
             {
-                _consumer?.Close();
-                _consumer?.Dispose();
+                if (_ownsConsumer)
+                {
+                    _consumer?.Close();
+                    _consumer?.Dispose();
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.Debug("Kafka consumer close failed during dispose: {Error}", ex.GetType().Name);
+            }
             try
             {
-                _producer?.Flush();
-                _producer?.Dispose();
+                if (_ownsProducer)
+                {
+                    _producer?.Flush();
+                    _producer?.Dispose();
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.Debug("Kafka producer flush failed during dispose: {Error}", ex.GetType().Name);
+            }
 
             _consumer = null;
             _producer = null;
