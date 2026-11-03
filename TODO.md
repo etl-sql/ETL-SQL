@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 163 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 31 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -1606,54 +1606,69 @@ Recorded for verification only (no source fixes applied during the audit).
 
 #### `src/ETL-SQL.Connectors.Databases`
 
-- [ ] **[P0 Security / Bug] `DiagnoseAuthenticationAsync` in `SqlServerConnector`, `PostgresConnector`, and `MySqlConnector` bypasses `EnforceEnterpriseHost` and lets `ArgumentException` escape** (`src/ETL-SQL.Connectors.Databases/SqlServer/SqlServerConnector.cs:118-145`, `src/ETL-SQL.Connectors.Databases/Postgres/PostgresConnector.cs:109-136`, `src/ETL-SQL.Connectors.Databases/MySql/MySqlConnector.cs:130-157`).
+- [x] **[P0 Security / Bug] `DiagnoseAuthenticationAsync` in `SqlServerConnector`, `PostgresConnector`, and `MySqlConnector` bypasses `EnforceEnterpriseHost` and lets `ArgumentException` escape** (`src/ETL-SQL.Connectors.Databases/SqlServer/SqlServerConnector.cs:118-145`, `src/ETL-SQL.Connectors.Databases/Postgres/PostgresConnector.cs:109-136`, `src/ETL-SQL.Connectors.Databases/MySql/MySqlConnector.cs:130-157`).
   All three open network connections without calling `ConnectorPolicyAuthorizer.EnforceEnterpriseHost`, and `new SqlConnection`/`NpgsqlConnection`/`MySqlConnection` throws unwrapped `ArgumentException` when `BuildDiagnosticConnectionString` receives a bare host in `context.Target`.
   **Verify:** Call `DiagnoseAuthenticationAsync` with a blocked host in `context.Target`.
-- [ ] **[P1 Security / Bug] `SqliteDataSource` skips `SecurityService.ValidatePath`/`ValidateWriteAccess` and ignores `options["DATABASE"]` when `connectionString` is empty** (`src/ETL-SQL.Connectors.Databases/Sqlite/SqliteDataSource.cs:47-68`).
+  **Outcome (2026-11-02):** Partly real. The engine already authorizes the host and catches probe errors (`ConnectionDiagnosticEngine`); options without a host key dropped the authorized host and `ArgumentException` escaped. Fixed.
+- [x] **[P1 Security / Bug] `SqliteDataSource` skips `SecurityService.ValidatePath`/`ValidateWriteAccess` and ignores `options["DATABASE"]` when `connectionString` is empty** (`src/ETL-SQL.Connectors.Databases/Sqlite/SqliteDataSource.cs:47-68`).
   `SqliteDataSource` calls `context.ResolvePath(dbPath)` without `context.SecurityService.ValidatePath(dbPath)` or `ValidateWriteAccess(dbPath)`, and never reads `options["DATABASE"]` if `connectionString` is empty.
   **Verify:** Construct `new SqliteDataSource(context, "", "t", new Dictionary<string, string> { ["DATABASE"] = "test.db" })` and inspect `ConnectionString`.
-- [ ] **[P1 Bug] `SqlServerDataSource`, `PostgresDataSource`, `OracleDataSource`, and `OdbcDataSource` ignore `_context.IsWhatIf` in `WriteBatches` and `TruncateAsync`** (`src/ETL-SQL.Connectors.Databases/SqlServer/SqlServerDataSource.cs:189-196, 688-699`, `src/ETL-SQL.Connectors.Databases/Postgres/PostgresDataSource.cs:167-174, 622-633`, `src/ETL-SQL.Connectors.Databases/Oracle/OracleDataSource.cs:147-154, 378-389`, `src/ETL-SQL.Connectors.Databases/Odbc/OdbcDataSource.cs:151-158, 492-503`).
+  **Outcome (2026-11-02):** Partly real. ValidatePath and the DATABASE option were false positives; a writable database with a script extension is now refused.
+- [x] **[P1 Bug] `SqlServerDataSource`, `PostgresDataSource`, `OracleDataSource`, and `OdbcDataSource` ignore `_context.IsWhatIf` in `WriteBatches` and `TruncateAsync`** (`src/ETL-SQL.Connectors.Databases/SqlServer/SqlServerDataSource.cs:189-196, 688-699`, `src/ETL-SQL.Connectors.Databases/Postgres/PostgresDataSource.cs:167-174, 622-633`, `src/ETL-SQL.Connectors.Databases/Oracle/OracleDataSource.cs:147-154, 378-389`, `src/ETL-SQL.Connectors.Databases/Odbc/OdbcDataSource.cs:151-158, 492-503`).
   Destructive `TruncateAsync` and `WriteBatches` execute against the live database even when `SET WHAT_IF ON` is active.
   **Verify:** Enable `context.IsWhatIf = true` and inspect `TruncateAsync` / `WriteBatches` in those four data sources.
+  **Outcome (2026-11-02):** Partly real. Statement handlers already honoured WHAT_IF; the data sources now do too.
 - [ ] **[P1 Bug] Database connectors return native CLR integer types (`int`, `long`, `short`, `byte`) instead of `decimal` in `DataTable` rows** (`SqlServerDataSource.cs:163, 324`, `PostgresDataSource.cs:141, 297`, `MySqlDataSource.cs:137, 283`, `SqliteDataSource.cs:167, 497`, `OdbcDataSource.cs:125, 269`, `SnowflakeDataSource.cs:171, 291`, `BigQueryDataSource.cs:133, 239`, `MongodbDataSource.cs:111, 252`, `Neo4jDataSource.cs:395, 445`).
   `reader.GetValue(i)` and NoSQL row mappers store CLR integer types directly into `Row` instead of converting `INT`/`BIGINT`/`TINYINT` to `decimal` (`AGENTS.md` §8.1).
   **Verify:** Read an integer column from `SqliteDataSource.ReadBatches` and check `row[0].GetType()`.
-- [ ] **[P1 Security / Bug] `SnowflakeDataSource` leaks connections on failed open/transaction calls, leaves `ReadBatches` unwrapped, emits unsanitized `ex.Message`, and drops `PRIVATE_KEY_FILE` when absent from `connectionString`** (`src/ETL-SQL.Connectors.Databases/Snowflake/SnowflakeDataSource.cs:70-83, 132-135, 147-187, 231-234, 329-332, 360-363, 390-393, 411-414, 421-448, 459-466`).
+  **Outcome (2026-11-02):** Partly real, no wrong result found (the engine tolerates CLR integers; `ConnectorIntegerRuntimeTypeTests`). **Decide**: normalize once at ingest, convert per connector, or relax the rule to "integers compare and compute as decimal".
+- [x] **[P1 Security / Bug] `SnowflakeDataSource` leaks connections on failed open/transaction calls, leaves `ReadBatches` unwrapped, emits unsanitized `ex.Message`, and drops `PRIVATE_KEY_FILE` when absent from `connectionString`** (`src/ETL-SQL.Connectors.Databases/Snowflake/SnowflakeDataSource.cs:70-83, 132-135, 147-187, 231-234, 329-332, 360-363, 390-393, 411-414, 421-448, 459-466`).
   `GetConnectionAsync`, `ReadBatches`, `BeginTransactionAsync`, `CommitAsync`, and `RollbackAsync` let raw `SnowflakeDbException` escape and leak `SnowflakeDbConnection` on failure; other catch blocks interpolate raw `ex.Message` without `SecretRedactor.Redact`; `ReplaceConnectionStringValue` silently drops `PRIVATE_KEY_FILE` when `private_key_file=` is not already in `connectionString`.
   **Verify:** Call `ReadBatches` or `BeginTransactionAsync` on `SnowflakeDataSource` with an invalid connection string.
-- [ ] **[P1 Security / Bug] `OracleConnector`, `PostgresConnector`, and `SqlServerConnector` let raw provider exceptions escape in `GetVersionAsync`/`GetProceduresAsync`, and `OracleDataSource` corrupts quoted identifiers** (`OracleConnector.cs:19-30, 76-89`, `OracleDataSource.cs:159-193, 391-396`, `PostgresConnector.cs:74-87`, `SqlServerConnector.cs:83-96`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Security / Bug] `OracleConnector`, `PostgresConnector`, and `SqlServerConnector` let raw provider exceptions escape in `GetVersionAsync`/`GetProceduresAsync`, and `OracleDataSource` corrupts quoted identifiers** (`OracleConnector.cs:19-30, 76-89`, `OracleDataSource.cs:159-193, 391-396`, `PostgresConnector.cs:74-87`, `SqlServerConnector.cs:83-96`).
   `OracleConnector.GetVersionAsync` and `GetProceduresAsync` across all three connectors omit `ConnectorExceptionWrapper`. `OracleDataSource.QuoteIdentifier` does not strip outer quotes before escaping `"` as `""`, turning `"MyTable"` into `"""MYTABLE"""`.
   **Verify:** Call `OracleDataSource.QuoteIdentifier("\"MyTable\"")` or `new OracleConnector().GetVersionAsync(context, "invalid")`.
-- [ ] **[P1 Bug / Security] `BigQueryDataSource` enumerates pages synchronously outside `try/catch`, skips `ValidatePath` on `CREDENTIAL_FILE`, emits unsanitized `GoogleApiException`, and misbinds `decimal` parameters** (`src/ETL-SQL.Connectors.Databases/BigQuery/BigQueryDataSource.cs:58-60, 88-91, 119-143, 225-248, 274, 299, 380-383, 419-439`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Bug / Security] `BigQueryDataSource` enumerates pages synchronously outside `try/catch`, skips `ValidatePath` on `CREDENTIAL_FILE`, emits unsanitized `GoogleApiException`, and misbinds `decimal` parameters** (`src/ETL-SQL.Connectors.Databases/BigQuery/BigQueryDataSource.cs:58-60, 88-91, 119-143, 225-248, 274, 299, 380-383, 419-439`).
   `foreach (BigQueryRow row in results)` runs outside `try/catch (GoogleApiException)`, `_credentialFile` is not checked with `SecurityService.ValidatePath`, error messages are not passed through `SecretRedactor.Redact`, and `InferParameter` binds engine `decimal` integers as `BigQueryDbType.Numeric` (throwing unwrapped `ArgumentException` when scale > 9).
   **Verify:** Pass a `decimal` parameter with 10 decimal places to `BigQueryDataSource.ExecuteRawSql`.
-- [ ] **[P1 Security / Bug] `MongodbConnector.GetHost` only checks the first server in multi-host URLs, and `MongodbDataSource` ignores `TIMEOUT_SECONDS`, leaks `IAsyncCursor`, and calls `GetClient()` outside `try/catch`** (`MongodbConnector.cs:59, 70, 153-175`, `MongodbDataSource.cs:54-59, 147-151, 195-196`).
+  **Outcome (2026-11-02):** Partly real. CREDENTIAL_FILE already goes through `ResolvePath`; enumeration wrapping, sanitized messages and decimal binding fixed.
+- [x] **[P1 Security / Bug] `MongodbConnector.GetHost` only checks the first server in multi-host URLs, and `MongodbDataSource` ignores `TIMEOUT_SECONDS`, leaks `IAsyncCursor`, and calls `GetClient()` outside `try/catch`** (`MongodbConnector.cs:59, 70, 153-175`, `MongodbDataSource.cs:54-59, 147-151, 195-196`).
   `mongoUrl.Servers.FirstOrDefault()?.Host` ignores subsequent hosts in `mongodb://host1,host2/db`; `TIMEOUT_SECONDS` is never applied; `ListCollectionNamesAsync` cursor is not disposed; `WriteBatches` calls `GetClient()` before `try`.
   **Verify:** Call `new MongodbConnector().GetHost("mongodb://allowed:27017,blocked:27017/db")`.
-- [ ] **[P1 Bug] `Neo4jDataSource` converts engine `decimal` integers to `double` (`Float64`) and corrupts Cypher queries containing `?` inside string literals** (`src/ETL-SQL.Connectors.Databases/Neo4j/Neo4jDataSource.cs:33-61, 752-787, 907`).
+  **Outcome (2026-11-02):** Real. Every seed host enforced, TIMEOUT_SECONDS applied, cursor disposed (`mongodb+srv` DNS hosts not covered).
+- [x] **[P1 Bug] `Neo4jDataSource` converts engine `decimal` integers to `double` (`Float64`) and corrupts Cypher queries containing `?` inside string literals** (`src/ETL-SQL.Connectors.Databases/Neo4j/Neo4jDataSource.cs:33-61, 752-787, 907`).
   `NormalizePropertyValue` converts all `decimal` values (including engine `INT`/`BIGINT`) to `double`, and `ExecuteRawSqlCore` replaces `?` and `?1`..`?N` via naive string replacement.
   **Verify:** Call `NormalizePropertyValue(42m, "id")` in `Neo4jDataSource`.
-- [ ] **[P1 Bug] `OdbcDataSource` does not rewrite `@p0` parameters to `?` in `ExecuteRawSqlCore`, uses sync-over-async `Task.Run(() => conn.Open())`, and returns views/system tables in `GetTablesAsync`** (`src/ETL-SQL.Connectors.Databases/Odbc/OdbcDataSource.cs:161, 197, 201, 206, 241-249, 322-329, 411, 426, 447, 478`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Bug] `OdbcDataSource` does not rewrite `@p0` parameters to `?` in `ExecuteRawSqlCore`, uses sync-over-async `Task.Run(() => conn.Open())`, and returns views/system tables in `GetTablesAsync`** (`src/ETL-SQL.Connectors.Databases/Odbc/OdbcDataSource.cs:161, 197, 201, 206, 241-249, 322-329, 411, 426, 447, 478`).
   `ExecuteRawSqlCore` adds `OdbcParameter`s without calling `ParameterUtility.ProcessParameters(cmd.CommandText, "?")`, and `GetTablesAsync` does not filter `TABLE_TYPE == "TABLE"`.
   **Verify:** Inspect `OdbcDataSource.cs:241-249` and `322-329`.
+  **Outcome (2026-11-02):** Partly real. `@pN` rewrite and base-table filter fixed; `Task.Run(conn.Open)` is correct (no real async open).
 
 #### `src/ETL-SQL.Connectors.Files`
 
-- [ ] **[P1 Bug / Security] `ParquetDataSource` crashes on non-nullable `int`/`float` columns, corrupts column schema when row 0 is `null`, skips `AuthorizeWrite` in `TruncateAsync`, and ignores `append`** (`src/ETL-SQL.Connectors.Files/Parquet/ParquetDataSource.cs:83, 155-250, 252-323, 363-367, 402`).
+- [x] **[P1 Bug / Security] `ParquetDataSource` crashes on non-nullable `int`/`float` columns, corrupts column schema when row 0 is `null`, skips `AuthorizeWrite` in `TruncateAsync`, and ignores `append`** (`src/ETL-SQL.Connectors.Files/Parquet/ParquetDataSource.cs:83, 155-250, 252-323, 363-367, 402`).
   `ReadNonNullableColumnAsync` falls through to `string?[]` for `int`, `short`, `byte`, `float`, `Guid`, and `DateTimeOffset`; `WriteBatches` infers column types from `firstBatch.Rows[0][col]` (typing any column whose first row is `null` as `string`); `TruncateAsync` deletes `_filePath` without `FileConnectorPathHelper.AuthorizeWrite`; `WriteBatches` is unwrapped and overwrites on `append: true`.
   **Verify:** Write a batch where row 0 has `null` and row 1 has `12.34m` in a numeric column to `ParquetDataSource`, or read a Parquet file with a non-nullable `INT32` column.
-- [ ] **[P1 Bug] `AvroDataSource` maps engine `decimal` integers to Avro `double`, types leading-`null` columns as `string`, ignores `append`, and leaves `WriteBatches` unwrapped** (`src/ETL-SQL.Connectors.Files/Avro/AvroDataSource.cs:117-125, 141-228`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Bug] `AvroDataSource` maps engine `decimal` integers to Avro `double`, types leading-`null` columns as `string`, ignores `append`, and leaves `WriteBatches` unwrapped** (`src/ETL-SQL.Connectors.Files/Avro/AvroDataSource.cs:117-125, 141-228`).
   `GenerateSchemaJson` maps `decimal => "double"`, defaults `null` in row 0 to `"string"`, interpolates column names into JSON without escaping, and ignores `append`.
   **Verify:** Write an engine `INT` column (`decimal` at runtime) to `AvroDataSource` and inspect the schema.
-- [ ] **[P1 Bug] `FlatFileDataSource.WriteBatches` overwrites existing data and omits headers when `append = true` with `COMPRESS=ON` or `ENCRYPT=ON`** (`src/ETL-SQL.Connectors.Files/FlatFile/FlatFileDataSource.cs:912-926, 1073-1105`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Bug] `FlatFileDataSource.WriteBatches` overwrites existing data and omits headers when `append = true` with `COMPRESS=ON` or `ENCRYPT=ON`** (`src/ETL-SQL.Connectors.Files/FlatFile/FlatFileDataSource.cs:912-926, 1073-1105`).
   Line 912 skips copying `_filePath` to `tempFile` when `_compress` or `_encryption.Enabled` is true, while line 920 still sets `headersWritten = true` if `_filePath` exists, causing `PublishStagedFile` to replace `_filePath` with a headerless file containing only the new batch.
   **Verify:** Append a batch to an existing compressed or encrypted CSV file via `FlatFileDataSource.WriteBatches(..., append: true)`.
-- [ ] **[P1 Bug] `ExcelDataSource.GetColumnsAsync(string, CancellationToken)` ignores `tableName`, `GetSeekableStreamAsync` leaks streams on cancellation, and `WriteBatches` is unwrapped** (`src/ETL-SQL.Connectors.Files/Excel/ExcelDataSource.cs:261, 386-528, 651-655, 725-752`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Bug] `ExcelDataSource.GetColumnsAsync(string, CancellationToken)` ignores `tableName`, `GetSeekableStreamAsync` leaks streams on cancellation, and `WriteBatches` is unwrapped** (`src/ETL-SQL.Connectors.Files/Excel/ExcelDataSource.cs:261, 386-528, 651-655, 725-752`).
   Both branches of the ternary in `GetColumnsAsync(string tableName, CancellationToken)` call `GetColumnsAsync(cancellationToken)`, ignoring `tableName`.
   **Verify:** Inspect `ExcelDataSource.cs:652-655`.
-- [ ] **[P2 Bug] `JsonDataSource` and `XmlDataSource` ignore `append` and `_encoding` on write, `JsonDataSource` never uses `_encoding` on read, and `XmlConnector.GetTablesAsync` disagrees with `XmlDataSource.GetTablesAsync`** (`JsonDataSource.cs:27, 53-62, 80-94, 99-182`, `XmlDataSource.cs:79-133, 296-416, 475`, `XmlConnector.cs:54`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P2 Bug] `JsonDataSource` and `XmlDataSource` ignore `append` and `_encoding` on write, `JsonDataSource` never uses `_encoding` on read, and `XmlConnector.GetTablesAsync` disagrees with `XmlDataSource.GetTablesAsync`** (`JsonDataSource.cs:27, 53-62, 80-94, 99-182`, `XmlDataSource.cs:79-133, 296-416, 475`, `XmlConnector.cs:54`).
   `_encoding` in `JsonDataSource` is never read; both `WriteBatches` implementations use `FileMode.Create` and UTF-8 regardless of `append` or `_encoding`.
   **Verify:** Inspect `JsonDataSource.cs:27, 53-62, 99-182` and `XmlDataSource.cs:296-416`.
+  **Outcome (2026-11-02):** Real. Fixed.
 
 #### `src/ETL-SQL.Connectors.Messaging`
 
@@ -1694,12 +1709,15 @@ Recorded for verification only (no source fixes applied during the audit).
 - [ ] **[P1 Bug] `MockDataSeeder`, `PortalDataSource`, `OrchestratorDataSource`, and `RestDataSource` store integer columns as `int`/`long` instead of `decimal`** (`MockDataSeeder.cs:205-675`, `PortalDataSource.cs:2120, 2209`, `OrchestratorDataSource.cs:534, 572, 698, 743, 901, 1214`, `RestDataSource.cs:1217-1219, 1234, 1287`).
   Integer fields are populated as `int` or `long` instead of `decimal`.
   **Verify:** Query `SELECT UserID FROM mock.Users` and check `row["UserID"].GetType()`.
-- [ ] **[P1 Resource Leak] `RestDataSource` leaks `HttpResponseMessage` and `HttpRequestMessage` across pagination, retries, redirects, and `GetColumnsAsync`** (`src/ETL-SQL.Connectors/Rest/RestDataSource.cs:530-680, 1110-1180, 1389-1438, 1807-1821`).
+  **Outcome (2026-11-02):** Same finding and **decision** as the Connectors.Databases integer item.
+- [x] **[P1 Resource Leak] `RestDataSource` leaks `HttpResponseMessage` and `HttpRequestMessage` across pagination, retries, redirects, and `GetColumnsAsync`** (`src/ETL-SQL.Connectors/Rest/RestDataSource.cs:530-680, 1110-1180, 1389-1438, 1807-1821`).
   `GetColumnsAsync` never disposes `request` or `response`; retry loops in `ReadBatchesCore` and `SendHttpRequestAsync` overwrite `response` without disposing the previous response; `SendWithRedirectsAsync` leaks `response` when `EnforceEnterpriseUrl` throws on a redirect.
   **Verify:** Inspect `RestDataSource.cs:1807-1821` and `550-555`.
-- [ ] **[P1 Security / Bug] `PortalDataSource`, `OrchestratorDataSource`, and `OrchestratorAssertionExchange` echo unsanitized HTTP response bodies, chain raw `HttpRequestException`, let `EnsureSuccessStatusCode` escape, miss `ResolvePath` on `KEY_FILE`, and dispose shared `HttpClient` in `PortalDataSource.WithTable`** (`OrchestratorDataSource.cs:185, 240, 268, 289, 513, 553, 594, 610, 624, 639, 819, 828, 1002, 1028, 1044, 1058, 1068`, `OrchestratorAssertionExchange.cs:114, 144`, `PortalDataSource.cs:66-77, 309-310, 322, 326, 504, 912, 958, 1471, 1661, 1708, 1804, 1819, 1851, 1876, 1909, 1938`).
+  **Outcome (2026-11-02):** Real. Responses and cloned requests disposed across retries, paging, redirects and `GetColumnsAsync` (no dedicated leak test: static client has no handler seam).
+- [x] **[P1 Security / Bug] `PortalDataSource`, `OrchestratorDataSource`, and `OrchestratorAssertionExchange` echo unsanitized HTTP response bodies, chain raw `HttpRequestException`, let `EnsureSuccessStatusCode` escape, miss `ResolvePath` on `KEY_FILE`, and dispose shared `HttpClient` in `PortalDataSource.WithTable`** (`OrchestratorDataSource.cs:185, 240, 268, 289, 513, 553, 594, 610, 624, 639, 819, 828, 1002, 1028, 1044, 1058, 1068`, `OrchestratorAssertionExchange.cs:114, 144`, `PortalDataSource.cs:66-77, 309-310, 322, 326, 504, 912, 958, 1471, 1661, 1708, 1804, 1819, 1851, 1876, 1909, 1938`).
   `PublishBundleAsync` (`OrchestratorDataSource.cs:819`) omits `_context.ResolvePath(stmt.KeyFile)`; 15 error sites in `OrchestratorDataSource` skip `SanitizeBody(body)`; 8 methods in `PortalDataSource` call `resp.EnsureSuccessStatusCode()` outside `try/catch`; `PortalDataSource.WithTable` shares `_http` which `DisposeAsync` disposes unconditionally.
   **Verify:** Trigger a non-2xx response in `PortalDataSource.ShowUsersAsync` or dispose a `PortalDataSource.WithTable` instance and reuse the parent connection.
+  **Outcome (2026-11-02):** Partly real. Bodies sanitized, transport errors redacted, `EnsureSuccessStatusCode` replaced, WithTable keeps the parent client. KEY_FILE is only metadata (false positive).
 
 #### `src/ETL-SQL.Portal`
 
@@ -1904,7 +1922,7 @@ Recorded for verification only (no source fixes applied during the audit).
   **Outcome (2026-11-02):** Real. Fixed.
 - [x] **[P2 Security / Bug] Unvalidated `img.src` in slicer option images and protocol-relative / tag-corrupted URLs in `renderInlineMarkdown`** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-controls-input.ts:185-194`, `src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-util.ts:175-187`).
   `createOptionImage` sets `img.src = src` without `safeUrl(src)`, and `renderInlineMarkdown` allows `//evil.example` and runs `*`/`_`/`` ` `` replacements before link parsing, injecting `<em>`/`<code>` tags inside `href="..."`.
-  **Verify:** Call `renderInlineMarkdown("[link](//evil.example)")` or `renderInlineMarkdown("[link](https://example.com/a_b_c)")`.
+  **Verify:** Call `renderInlineMarkdown` on a markdown link whose target is `//evil.example`, or `https://example.com/a_b_c`.
   **Outcome (2026-11-02):** Partly real (no XSS). Images through `safeUrl`; links extracted before emphasis.
 - [x] **[P2 Bug] Unescaped CSS attribute selectors in `SET_UI_STATE` and `applyPresentationState`** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-actions.ts:751, 753`, `src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-views.ts:141, 150`).
   `querySelectorAll('[data-tag="${tagName}"]')` and `querySelector('[data-name="${objName}"]')` omit `CSS.escape`.
@@ -2094,6 +2112,15 @@ Recorded for verification only (no source fixes applied during the audit).
   `TestDelimiterColumnSuggestions` and `PrintDiagnostics` have zero assertions; `DropView_RemovesView` never asserts that `V` was removed; `ModalOverlays_AreHiddenFromTheAccessibilityTreeWhenClosed` uses a narrow hardcoded selector list; `PortalBrowserFactory.Dispose` does not catch `OperationCanceledException` from `StopAsync`.
   **Verify:** Inspect the cited test methods.
   **Outcome (2026-11-02):** Real. Fixed.
+
+#### Found while verifying (2026-11-02)
+
+- [ ] **[P1 Security] `Security:MaxRecursiveNestingDepth` (5) is overwritten with the CTE limit (10000)** (`src/ETL-SQL.Engine/Evaluator.cs:156, 706`, `src/appsettings.json:58`).
+  `Evaluator.MaxRecursiveDepth` writes the shared `SecurityService.MaxRecursiveDepth`, and every Evaluator constructor sets it from `Engine:MaxRecursiveDepth`. The five-level file-nesting guardrail is in practice 10000. Fix needs the CTE recursion limit and the file-nesting depth split into two settings. Related: `EXEC 'script'` at depth 0 resets the file-operation counter through `Evaluate()`.
+- [ ] **[P2 Bug] Anonymous `GET /api/policy-authority/envelope` returns 500 on a Shared Tenancy host** (`src/ETL-SQL.Portal/Program.cs`, `PolicyAuthorityService` factory).
+  The factory throws when no tenant context is bound, so a machine polling a Shared host gets a server error instead of a tenant-scoped answer or a clean refusal.
+- [ ] **[P2 Security] Pass the caller's `ExecutionIdentity` to process-spawned Orchestrator runs** (`src/ETL-SQL.Orchestrator/Execution/ProcessJobExecutor.cs`).
+  Identity-bound runs under `Jobs:UseProcessSpawning` are now refused (fail closed). Supporting them needs the identity and tenant carried to the child App, which has no `IOrchestratorObjectAuthorizer`.
 
 ---
 

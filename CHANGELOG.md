@@ -922,6 +922,17 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 - Language server: signature help works, out-of-range positions no longer throw, closed documents
   release their state, and the lint pass no longer erases fast-pass diagnostics.
 - The REPL answers `ping` and `cancel` while a script runs.
+- A writable SQLite database with a script extension is refused; WHAT_IF also skips data-source
+  writes and truncates; MongoDB checks every seed host; database diagnostic probes keep the
+  authorized host.
+- INSERT INTO compressed or encrypted flat files, Parquet, Avro, JSON and XML keeps existing rows;
+  Parquet and Avro column types come from all values; JSON honours ENCODING on read and XML on
+  write; Excel answers for the sheet asked.
+- Snowflake, Oracle, Postgres, SQL Server, BigQuery, Neo4j and ODBC fixes: leaked connections and
+  cursors, unwrapped provider errors, Oracle quoted identifiers, Neo4j `?` inside literals, ODBC
+  `@pN` markers. Snowflake and BigQuery read `Connectors:DataWarehouse:DefaultCommandTimeoutSeconds`.
+- REST responses are disposed across retries, paging and redirects; Portal and Orchestrator
+  connector errors are redacted.
 - Test lanes: the fuzzer's NoREC oracle runs on generated queries, SLT honours stacked
   `skipif`/`onlyif` and fails with no corpus, unconfigured scale certifications skip, and several
   tests now assert what their names claim.
