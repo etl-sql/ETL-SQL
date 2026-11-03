@@ -1076,6 +1076,28 @@ readiness observation. Linux/macOS performance and all browser shards also pass 
 this does not explain or close the separate `ERR_NO_BUFFER_SPACE` transport failure. Original
 failure, profiles and local reports: `release-validation/critical-path/`.
 
+**Rule (owner, 2026-11-03):** a time check must fail only when the code got slower. Hang guards
+use a generous limit; performance budgets use repeated samples or work counts, not one wall-clock
+sample on a shared runner. Keep failing on real slowness.
+
+- [ ] **Studio startup budget: measure work, not one cold sample.** Release Certification
+  `41710847926` measured 5,757 ms against 5,000 ms on Windows. Startup is one stopwatch sample
+  covering first navigation, server warm-up, JIT and asset load, in a shard sharing the runner.
+  Add an unmeasured warm-up load, take the median of 3–5 loads, and gate on stable work counts
+  (requests, JavaScript bytes, long tasks or main-thread CPU time). Keep a generous wall-clock
+  ceiling (about 2× budget) for hangs and gross regressions. Verify a deliberate regression
+  (extra script load) still fails.
+- [ ] **Stale-diagnostics journey: wait on app state, then check the text.**
+  `PortalRateLimitedAnalysisExplainsStaleDiagnosticsAndRetriesTheKeptBuffer` timed out waiting
+  for 'Previous diagnostics are stale' (job `126181482741`). Read the retained trace first: it
+  may be a real race (message late or overwritten), not a slow runner. Then expose a completion
+  marker (for example a `data-state` attribute) and wait on it before asserting the message.
+- [ ] **Preflight watchdog: per-check hang limits.** `test-workflows` hit the shared 60 s
+  preflight limit (CI `41676267442`). Give each check a limit from its measured normal duration
+  plus headroom, or speed the check up; the watchdog catches stuck checks, not slow runners.
+  Remove the matching `preflight-check-watchdog` signature from
+  `scripts/lib/candidate-failure-signatures.mjs` once fixed, as with the two above.
+
 - [ ] **Browser lane on the Windows CI runner:** `net::ERR_NO_BUFFER_SPACE` and 30 s navigation
   timeouts, one test per run. The recorded next step is to capture failed requests and the process's
   handle and socket counts when a navigation fails.
