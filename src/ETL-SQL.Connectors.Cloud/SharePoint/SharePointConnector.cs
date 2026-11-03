@@ -23,6 +23,7 @@ namespace ETL_SQL.Connectors
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
         private readonly HttpClient _httpClient;
+        private readonly bool _ownsHttpClient = true;
 
         private readonly string _siteUrl = "";
         private readonly string _authMode = "INTEGRATED";
@@ -96,6 +97,15 @@ namespace ETL_SQL.Connectors
 
         public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
+            // The registered connector has no site of its own: probe the site it is handed.
+            if (string.IsNullOrEmpty(_siteUrl) && !string.IsNullOrEmpty(connectionString))
+            {
+                if (!Uri.TryCreate(connectionString, UriKind.Absolute, out _))
+                    return "SharePoint REST API Connector v1.0 (Offline - Invalid Site URL)";
+                await using var probe = new SharePointConnector(context, connectionString);
+                return await probe.GetVersionAsync(context, connectionString);
+            }
+
             if (string.IsNullOrEmpty(_siteUrl) || !Uri.TryCreate(_siteUrl, UriKind.Absolute, out var uri))
             {
                 return "SharePoint REST API Connector v1.0 (Offline - Invalid Site URL)";
@@ -285,7 +295,31 @@ namespace ETL_SQL.Connectors
 
         // ── IRemoteFileSystem Implementation ──────────────────────────────────────
 
-        public async IAsyncEnumerable<FileMetaData> ListFilesAsync(string path)
+        // Transport, JSON-shape and local-file failures are provider errors: they leave the connector
+        // as a sanitized ExecutionException. Policy denials and cancellation pass through unchanged.
+        private static bool ShouldWrapProviderException(Exception ex) =>
+            ex is HttpRequestException or JsonException or IOException or UnauthorizedAccessException
+                or UriFormatException or InvalidOperationException or KeyNotFoundException or FormatException;
+
+        private static async Task Guard(Func<Task> operation)
+        {
+            try
+            {
+                await operation();
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("SharePoint", ex);
+            }
+        }
+
+        private static Task<T> Guard<T>(Func<Task<T>> operation) =>
+            ConnectorExceptionWrapper.RunAsync("SharePoint", ShouldWrapProviderException, operation);
+
+        public IAsyncEnumerable<FileMetaData> ListFilesAsync(string path) =>
+            ConnectorExceptionWrapper.WrapAsync(ListFilesCoreAsync(path), "SharePoint", ShouldWrapProviderException);
+
+        private async IAsyncEnumerable<FileMetaData> ListFilesCoreAsync(string path)
         {
             await AuthenticateAsync();
             string folderUrl = GetServerRelativeUrl(path);
@@ -295,7 +329,7 @@ namespace ETL_SQL.Connectors
             _httpClient.DefaultRequestHeaders.Accept.Clear();
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-            var response = await _httpClient.GetAsync(requestUrl);
+            using var response = await _httpClient.GetAsync(requestUrl);
             if (!response.IsSuccessStatusCode)
             {
                 if (response.StatusCode == HttpStatusCode.NotFound) yield break;
@@ -347,7 +381,10 @@ namespace ETL_SQL.Connectors
             }
         }
 
-        public async Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
+        public Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true) =>
+            Guard(() => UploadFileCoreAsync(localPath, remotePath, overwrite));
+
+        private async Task UploadFileCoreAsync(string localPath, string remotePath, bool overwrite)
         {
             if (_context != null && _context.IsWhatIf) return;
             await AuthenticateAsync();
@@ -367,14 +404,17 @@ namespace ETL_SQL.Connectors
             using var content = new StreamContent(fileStream);
             content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
-            var response = await _httpClient.PostAsync(requestUrl, content);
+            using var response = await _httpClient.PostAsync(requestUrl, content);
             if (!response.IsSuccessStatusCode)
             {
                 throw new ExecutionException($"Failed to upload file to SharePoint: {response.StatusCode}");
             }
         }
 
-        public async Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true)
+        public Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true) =>
+            Guard(() => DownloadFileCoreAsync(remotePath, localPath, overwrite));
+
+        private async Task DownloadFileCoreAsync(string remotePath, string localPath, bool overwrite)
         {
             await AuthenticateAsync();
 
@@ -385,7 +425,7 @@ namespace ETL_SQL.Connectors
 
             string relativeUrl = GetServerRelativeUrl(remotePath);
             string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{Uri.EscapeDataString(relativeUrl)}')/$value";
-            var response = await _httpClient.GetAsync(requestUrl);
+            using var response = await _httpClient.GetAsync(requestUrl);
             if (!response.IsSuccessStatusCode)
             {
                 throw new ExecutionException($"Failed to download file from SharePoint: {response.StatusCode}");
@@ -395,25 +435,29 @@ namespace ETL_SQL.Connectors
             await response.Content.CopyToAsync(destStream);
         }
 
-        public async Task DeleteFileAsync(string remotePath)
+        public Task DeleteFileAsync(string remotePath) => Guard(() => DeleteFileCoreAsync(remotePath));
+
+        private async Task DeleteFileCoreAsync(string remotePath)
         {
             if (_context != null && _context.IsWhatIf) return;
             await AuthenticateAsync();
             string relativeUrl = GetServerRelativeUrl(remotePath);
             string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{Uri.EscapeDataString(relativeUrl)}')";
 
-            var req = new HttpRequestMessage(HttpMethod.Post, requestUrl);
+            using var req = new HttpRequestMessage(HttpMethod.Post, requestUrl);
             req.Headers.Add("X-HTTP-Method", "DELETE");
             req.Headers.Add("IF-MATCH", "*");
 
-            var response = await _httpClient.SendAsync(req);
+            using var response = await _httpClient.SendAsync(req);
             if (!response.IsSuccessStatusCode && response.StatusCode != HttpStatusCode.NotFound)
             {
                 throw new ExecutionException($"Failed to delete file on SharePoint: {response.StatusCode}");
             }
         }
 
-        public async Task<bool> FileExistsAsync(string remotePath)
+        public Task<bool> FileExistsAsync(string remotePath) => Guard(() => FileExistsCoreAsync(remotePath));
+
+        private async Task<bool> FileExistsCoreAsync(string remotePath)
         {
             await AuthenticateAsync();
             string relativeUrl = GetServerRelativeUrl(remotePath);
@@ -422,11 +466,13 @@ namespace ETL_SQL.Connectors
             _httpClient.DefaultRequestHeaders.Accept.Clear();
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-            var response = await _httpClient.GetAsync(requestUrl);
+            using var response = await _httpClient.GetAsync(requestUrl);
             return response.IsSuccessStatusCode;
         }
 
-        public async Task<bool> DirectoryExistsAsync(string remotePath)
+        public Task<bool> DirectoryExistsAsync(string remotePath) => Guard(() => DirectoryExistsCoreAsync(remotePath));
+
+        private async Task<bool> DirectoryExistsCoreAsync(string remotePath)
         {
             await AuthenticateAsync();
             string relativeUrl = GetServerRelativeUrl(remotePath);
@@ -435,11 +481,14 @@ namespace ETL_SQL.Connectors
             _httpClient.DefaultRequestHeaders.Accept.Clear();
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-            var response = await _httpClient.GetAsync(requestUrl);
+            using var response = await _httpClient.GetAsync(requestUrl);
             return response.IsSuccessStatusCode;
         }
 
-        public async Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true)
+        public Task RenameFileAsync(string remoteSource, string remoteDest, bool overwrite = true) =>
+            Guard(() => RenameFileCoreAsync(remoteSource, remoteDest, overwrite));
+
+        private async Task RenameFileCoreAsync(string remoteSource, string remoteDest, bool overwrite)
         {
             if (_context != null && _context.IsWhatIf) return;
             await AuthenticateAsync();
@@ -448,14 +497,16 @@ namespace ETL_SQL.Connectors
 
             string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFileByServerRelativeUrl('{Uri.EscapeDataString(srcUrl)}')/MoveTo(newUrl='{Uri.EscapeDataString(destUrl)}', flags={(overwrite ? 1 : 0)})";
 
-            var response = await _httpClient.PostAsync(requestUrl, null);
+            using var response = await _httpClient.PostAsync(requestUrl, null);
             if (!response.IsSuccessStatusCode)
             {
                 throw new ExecutionException($"Failed to rename SharePoint file: {response.StatusCode}");
             }
         }
 
-        public async Task CreateDirectoryAsync(string remotePath)
+        public Task CreateDirectoryAsync(string remotePath) => Guard(() => CreateDirectoryCoreAsync(remotePath));
+
+        private async Task CreateDirectoryCoreAsync(string remotePath)
         {
             if (_context != null && _context.IsWhatIf) return;
             await AuthenticateAsync();
@@ -466,27 +517,29 @@ namespace ETL_SQL.Connectors
             string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{Uri.EscapeDataString(parentPath)}')/Folders";
 
             var payload = new { ServerRelativeUrl = relativeUrl };
-            var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
-            var response = await _httpClient.PostAsync(requestUrl, content);
+            using var response = await _httpClient.PostAsync(requestUrl, content);
             if (!response.IsSuccessStatusCode)
             {
                 throw new ExecutionException($"Failed to create folder on SharePoint: {response.StatusCode}");
             }
         }
 
-        public async Task DeleteDirectoryAsync(string remotePath)
+        public Task DeleteDirectoryAsync(string remotePath) => Guard(() => DeleteDirectoryCoreAsync(remotePath));
+
+        private async Task DeleteDirectoryCoreAsync(string remotePath)
         {
             if (_context != null && _context.IsWhatIf) return;
             await AuthenticateAsync();
             string relativeUrl = GetServerRelativeUrl(remotePath);
             string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/GetFolderByServerRelativeUrl('{Uri.EscapeDataString(relativeUrl)}')";
 
-            var req = new HttpRequestMessage(HttpMethod.Post, requestUrl);
+            using var req = new HttpRequestMessage(HttpMethod.Post, requestUrl);
             req.Headers.Add("X-HTTP-Method", "DELETE");
             req.Headers.Add("IF-MATCH", "*");
 
-            var response = await _httpClient.SendAsync(req);
+            using var response = await _httpClient.SendAsync(req);
             if (!response.IsSuccessStatusCode && response.StatusCode != HttpStatusCode.NotFound)
             {
                 throw new ExecutionException($"Failed to delete folder on SharePoint: {response.StatusCode}");
@@ -550,15 +603,7 @@ namespace ETL_SQL.Connectors
                     var newRow = table.NewRow();
                     foreach (var prop in rowObj.EnumerateObject())
                     {
-                        newRow[prop.Name] = prop.Value.ValueKind switch
-                        {
-                            JsonValueKind.String => prop.Value.GetString() ?? "",
-                            JsonValueKind.Number => prop.Value.GetRawText(),
-                            JsonValueKind.True => "True",
-                            JsonValueKind.False => "False",
-                            JsonValueKind.Null => "",
-                            _ => prop.Value.GetRawText()
-                        };
+                        newRow[prop.Name] = ListValue(prop.Value);
                     }
                     await table.AddRowAsync(newRow);
                     if (table.Rows.Count >= batchSize)
@@ -589,9 +634,28 @@ namespace ETL_SQL.Connectors
         /// Encodes a list title as an OData string literal. A single quote is doubled before URL
         /// escaping: SharePoint decodes <c>%27</c> back to a quote before it parses the literal.
         /// </summary>
+        /// <summary>
+        /// Maps a list field to the engine's runtime types: numbers are <see cref="decimal"/> (double
+        /// only when out of decimal range), booleans stay booleans, JSON null is SQL NULL, and nested
+        /// objects/arrays keep their JSON text.
+        /// </summary>
+        // COMPAT_BREAK: 0.22.0 — list numbers and booleans were strings ("7", "True") and null was "".
+        internal static object? ListValue(JsonElement value) => value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? "",
+            JsonValueKind.Number => value.TryGetDecimal(out var number) ? number : value.GetDouble(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            _ => value.GetRawText()
+        };
+
         internal static string ODataTitle(string title) => Uri.EscapeDataString(title.Replace("'", "''"));
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
+            Guard(() => WriteBatchesCoreAsync(batches));
+
+        private async Task WriteBatchesCoreAsync(IAsyncEnumerable<DataTable> batches)
         {
             if (_context != null && _context.IsWhatIf) return;
 
@@ -616,8 +680,8 @@ namespace ETL_SQL.Connectors
                         }
                     }
 
-                    var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-                    var response = await _httpClient.PostAsync(requestUrl, content);
+                    using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+                    using var response = await _httpClient.PostAsync(requestUrl, content);
                     if (!response.IsSuccessStatusCode)
                     {
                         throw new ExecutionException($"Failed to write item to SharePoint list: {response.StatusCode}");
@@ -633,12 +697,27 @@ namespace ETL_SQL.Connectors
         {
             var options = new Dictionary<string, string>(_options, StringComparer.OrdinalIgnoreCase);
             options["LIST_NAME"] = tableName;
-            return new SharePointConnector(_context!, _siteUrl, options);
+            // The clone borrows this connection's HttpClient (same site, same credentials) instead
+            // of opening an undisposed client and socket handler per table reference.
+            return new SharePointConnector(this, options);
+        }
+
+        private SharePointConnector(SharePointConnector parent, Dictionary<string, string> options)
+        {
+            _context = parent._context;
+            _logger = parent._logger;
+            _siteUrl = parent._siteUrl;
+            _httpClient = parent._httpClient;
+            _ownsHttpClient = false;
+            foreach (var kv in options) _options[kv.Key] = kv.Value;
+            _authMode = parent._authMode;
+            _documentLibrary = _options.GetValueOrDefault("DOCUMENT_LIBRARY", "Shared Documents");
+            _listName = _options.GetValueOrDefault("LIST_NAME", "");
         }
 
         public ValueTask DisposeAsync()
         {
-            _httpClient.Dispose();
+            if (_ownsHttpClient) _httpClient.Dispose();
             return ValueTask.CompletedTask;
         }
 

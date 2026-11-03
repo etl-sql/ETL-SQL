@@ -83,7 +83,7 @@ public sealed class SharePointListRegressionTests
         using var handler = new FixtureHandler(_ => "{\"d\":{\"results\":[{\"Id\":1}]}}");
         var rows = await Read(handler);
         Assert.Single(rows);
-        Assert.Equal("1", rows[0]["Id"]);
+        Assert.Equal(1m, rows[0]["Id"]);
     }
 
     private static async Task<List<Row>> Read(HttpMessageHandler handler, int batchSize = 100)
