@@ -126,7 +126,7 @@ namespace ETL_SQL.Connectors.SqlServer
                 await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
                 return [new DiagnosticStep("AUTH", DiagnosticStatus.Ok, "MSSQL authentication succeeded.")];
             }
-            catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException or OperationCanceledException)
+            catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException or OperationCanceledException or ArgumentException)
             {
                 return
                 [
@@ -137,9 +137,13 @@ namespace ETL_SQL.Connectors.SqlServer
             }
         }
 
-        private string BuildDiagnosticConnectionString(string target, IReadOnlyDictionary<string, string>? options)
+        // ConnectionDiagnosticEngine authorizes GetHost(target, options) before this probe runs, and
+        // GetHost prefers the SERVER option. The probe must dial that same host: building from
+        // options that lack SERVER would drop the target's server and let the driver fall back to
+        // a local instance the policy never checked.
+        internal string BuildDiagnosticConnectionString(string target, IReadOnlyDictionary<string, string>? options)
         {
-            if (options is { Count: > 0 } && (options.ContainsKey("SERVER") || options.ContainsKey("DATABASE") || options.ContainsKey("USER")))
+            if (options is { Count: > 0 } && options.ContainsKey("SERVER"))
                 return BuildConnectionString(new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase));
             return target;
         }
