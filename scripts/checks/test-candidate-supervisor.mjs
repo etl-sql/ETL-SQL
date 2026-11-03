@@ -16,7 +16,7 @@ const samples = {
   'windows-payload-dependency': { log: '[stderr] Shared Windows payload selection failed; no rebuild fallback is permitted.' },
   'studio-performance-budget': { log: 'Studio startup measured 5757.64 ms; budget is 5000.00 ms.' },
   'playwright-wait': { log: "Microsoft.Playwright.PlaywrightException : Locator expected to contain text 'Previous diagnostics are stale'" },
-  'preflight-check-watchdog': { log: 'FAIL test-workflows (60.0s): /home/runner/x.log' },
+  'preflight-check-watchdog': { log: 'FAIL test-workflows (60.0s): release-validation/preflight/1/test-workflows.log' },
 };
 for (const [id, input] of Object.entries(samples)) assert.equal(classifyFailure(input)?.id, id);
 // Real defects from today's rounds stay unclassified.
