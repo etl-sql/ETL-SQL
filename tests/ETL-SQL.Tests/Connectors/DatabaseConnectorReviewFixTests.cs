@@ -141,7 +141,7 @@ public sealed class DatabaseConnectorReviewFixTests
         var keyDir = Path.Combine(Path.GetTempPath(), $"etlsql-sf-{Guid.NewGuid():N}");
         Directory.CreateDirectory(keyDir);
         var key = Path.Combine(keyDir, "rsa_key.p8");
-        File.WriteAllText(key, "-----BEGIN PRIVATE KEY-----");
+        File.WriteAllText(key, "-----BEGIN PRIVATE KEY-----"); // pragma: allowlist secret (truncated header, not a key)
         try
         {
             var source = new SnowflakeDataSource(Context().Object, "account=a;user=alice;authenticator=snowflake_jwt", "t",

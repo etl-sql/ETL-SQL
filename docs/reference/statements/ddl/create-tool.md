@@ -5,6 +5,13 @@ Tools let scripts (Python, PowerShell, etc.) or binaries take part in a pipeline
 > [!IMPORTANT]
 > A script cannot register a tool. `CREATE TOOL` and `DROP TOOL` parse but fail with an error: tools are trusted administrator configuration, stored in the machine tool catalog by the `etl-sql admin machine tool` commands. The tool catalog must be configured (`Governance:Tools:Provider = Local` and `Governance:Tools:LocalRoot`).
 
+## Syntax
+```sql
+-- Parses, then fails with an error. Register tools with `etl-sql admin machine tool` (below).
+CREATE TOOL tool_name AS { EXECUTABLE | CONTAINER } ( option = value [, ...] );
+DROP TOOL tool_name;
+```
+
 ## Registering a tool
 ```text
 # Executable tool

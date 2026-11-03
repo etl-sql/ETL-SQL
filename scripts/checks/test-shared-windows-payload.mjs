@@ -51,6 +51,23 @@ try {
     await fs.symlink(temporary, path.join(bin, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
     await assert.rejects(verifyWindowsPayload(bundle, sha, version, manifestHash), /Linked/);
     await fs.unlink(path.join(bin, 'linked'));
+    // A manifest path that is a symlink must be rejected even when its target holds the exact bytes.
+    const manifestPath = path.join(bundle, 'windows-payload.json'), outside = path.join(temporary, 'outside-manifest.json');
+    await fs.writeFile(outside, original);
+    await fs.unlink(manifestPath);
+    let linkedManifest = true;
+    try { await fs.symlink(outside, manifestPath, 'file'); } catch (error) {
+        // Unprivileged Windows cannot create file symlinks; POSIX and CI runners exercise this case.
+        if (process.platform !== 'win32' || error.code !== 'EPERM') throw error;
+        linkedManifest = false;
+        console.log('Symlinked-manifest case NOT run: this Windows account cannot create file symlinks.');
+    }
+    if (linkedManifest) {
+        await assert.rejects(verifyWindowsPayload(bundle, sha, version, manifestHash), /Invalid Windows payload manifest/);
+        await fs.unlink(manifestPath);
+    }
+    await fs.writeFile(manifestPath, original);
+    await verifyWindowsPayload(bundle, sha, version, manifestHash);
 
     const now = Date.parse('2026-11-01T12:00:00Z'), time = offset => new Date(now + offset).toISOString();
     const root = 'repos/owner/repo/actions';

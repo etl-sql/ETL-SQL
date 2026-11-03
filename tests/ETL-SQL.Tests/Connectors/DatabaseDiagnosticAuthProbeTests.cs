@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
-using MySqlConn = ETL_SQL.Connectors.MySql.MySqlConnector;
 using ETL_SQL.Connectors.Postgres;
 using ETL_SQL.Connectors.SqlServer;
 using ETL_SQL.Core.Diagnostics;
@@ -10,6 +9,7 @@ using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Services;
 using Xunit;
+using MySqlConn = ETL_SQL.Connectors.MySql.MySqlConnector;
 
 namespace ETL_SQL.Tests.Connectors;
 

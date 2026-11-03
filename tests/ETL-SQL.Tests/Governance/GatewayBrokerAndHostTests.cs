@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Gateway;
 using ETL_SQL.Services;
+using ETL_SQL.TestSupport;
 
 namespace ETL_SQL.Tests.Governance;
 
@@ -487,11 +488,12 @@ public sealed class GatewayBrokerAndHostTests
             WorkloadPublicKeyThumbprint = Thumbprint
         });
 
-        IGatewaySession? session = null;
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (!registry.TryGet(TenantA, GatewayId, out session) && DateTime.UtcNow < deadline)
-            await Task.Yield();
-        Assert.NotNull(session);
+        var session = await LoadAwareWait.UntilAsync<IGatewaySession?>(
+            "gateway session to register",
+            _ => Task.FromResult(registry.TryGet(TenantA, GatewayId, out var found) ? found : null),
+            found => found is not null,
+            TimeSpan.FromSeconds(10),
+            TimeSpan.FromMilliseconds(10));
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var running = session!.ExecuteAsync(
             new GatewayOperation("op-early", TenantA, GatewayId, "orders", GatewayOperationClass.Read,

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { lstat, readdir, readFile, writeFile, mkdir, copyFile } from 'node:fs/promises';
+import { lstat, open, readdir, readFile, writeFile, mkdir, copyFile } from 'node:fs/promises';
 import { isDeepStrictEqual } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -72,9 +72,16 @@ export async function createWindowsPayload(root, sha, version, dotnetVersion, re
 
 export async function verifyWindowsPayload(root, sha, version, expectedHash, readyToRun = true) {
     identity(sha, version);
-    const file = path.join(root, manifestName), info = await lstat(file);
-    if (!info.isFile() || info.isSymbolicLink() || info.size > 8 * 1024 ** 2) throw new Error('Invalid Windows payload manifest.');
-    const contents = await readFile(file);
+    // Open first, then validate and read through the same handle so the checked file is the read file.
+    // The post-open lstat rejects a symlinked path: its link entry is not the opened target.
+    const file = path.join(root, manifestName), handle = await open(file, 'r');
+    let contents;
+    try {
+        const info = await handle.stat(), entry = await lstat(file);
+        if (!info.isFile() || entry.isSymbolicLink() || entry.ino !== info.ino || entry.dev !== info.dev ||
+            info.size > 8 * 1024 ** 2) throw new Error('Invalid Windows payload manifest.');
+        contents = await handle.readFile();
+    } finally { await handle.close(); }
     if (!/^[a-f0-9]{64}$/.test(expectedHash ?? '') || digest(contents) !== expectedHash) throw new Error('Windows payload manifest hash mismatch.');
     const value = JSON.parse(contents);
     if (value.schemaVersion !== 1 || value.scope !== 'WindowsBuildInputsOnly' || value.sourceSha !== sha || value.version !== version ||

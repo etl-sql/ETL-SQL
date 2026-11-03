@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -44,10 +43,10 @@ namespace ETL_SQL.Tests.UI
             Console.SetIn(input);
 
             var repl = new ReplUi(new CliContext { IsJsonMode = true }, ETL_SQL.TUI.Program.ServiceProvider);
-            var clock = Stopwatch.StartNew();
             var session = Task.Run(repl.RunAsync);
 
-            input.Push("{\"action\":\"run\",\"script\":\"WAITFOR DELAY '00:00:20';\"}");
+            // The delay far exceeds every wait below, so "done" within 10s of cancel proves cancellation.
+            input.Push("{\"action\":\"run\",\"script\":\"WAITFOR DELAY '00:01:00';\"}");
             Assert.True(output.WaitFor("\"type\":\"progress\"", TimeSpan.FromSeconds(15)), output.Text);
 
             input.Push("{\"action\":\"ping\"}");
@@ -57,7 +56,6 @@ namespace ETL_SQL.Tests.UI
             input.Push("{\"action\":\"exit\"}");
 
             await session.WaitAsync(TimeSpan.FromSeconds(10));
-            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(18), $"run was not cancelled: {clock.Elapsed}");
             Assert.Contains("Execution cancellation requested.", output.Text);
             Assert.Contains("\"exitCode\":1", output.Text);
         }

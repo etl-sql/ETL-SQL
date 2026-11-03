@@ -247,14 +247,16 @@ public class ProcessJobExecutorChaosTests
             await Assert.ThrowsAnyAsync<Exception>(() => WarmRunnerClient.StartAsync(
                 exePath, TimeSpan.FromSeconds(3), new Mock<ILogger>().Object, default));
 
-            var deadline = DateTime.UtcNow.AddSeconds(10);
-            Process? survivor;
-            while ((survivor = findRunner()) is not null && DateTime.UtcNow < deadline)
-            {
-                survivor.Dispose();
-                await Task.Delay(100); // flaky-delay-ok: polls for the killed process to disappear
-            }
-            Assert.Null(survivor);
+            await LoadAwareWait.UntilAsync(
+                "handshake-less runner to exit after the failed start",
+                _ =>
+                {
+                    using var survivor = findRunner();
+                    return Task.FromResult(survivor is null);
+                },
+                exited => exited,
+                TimeSpan.FromSeconds(10),
+                describe: exited => $"exited={exited}");
         }
         finally
         {

@@ -28,8 +28,14 @@ export async function prepareVsixTestHost(root, download) {
 }
 
 export async function readVsixTestHost(root, receiptPath) {
-    if ((await fs.stat(receiptPath)).size > 16384) throw new Error('VS Code host receipt is too large.');
-    const receipt = JSON.parse(await fs.readFile(receiptPath, 'utf8'));
+    // Size-check and read through one handle so the checked file is the read file.
+    const handle = await fs.open(receiptPath, 'r');
+    let text;
+    try {
+        if ((await handle.stat()).size > 16384) throw new Error('VS Code host receipt is too large.');
+        text = await handle.readFile('utf8');
+    } finally { await handle.close(); }
+    const receipt = JSON.parse(text);
     if (receipt.schemaVersion !== 1 || receipt.platform !== process.platform || receipt.architecture !== process.arch ||
         !/^[a-f0-9]{64}$/.test(receipt.sha256)) throw new Error('Invalid VS Code host receipt.');
     const host = await hostFile(root, receipt.executable);
