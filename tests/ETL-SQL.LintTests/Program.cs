@@ -11,7 +11,7 @@ namespace ETL_SQL.LintTests
 {
     class Program
     {
-        static async Task Main(string[] args)
+        static async Task<int> Main(string[] args)
         {
             try
             {
@@ -51,10 +51,13 @@ SELECT InvalidCol FROM NonExistentTable;
                 {
                     Console.WriteLine($"[LINTER {res.Severity}] {res.Message} at {res.LineNumber}:{res.ColumnNumber}");
                 }
+
+                return 0;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"CRITICAL FAILURE: {ex.Message}\n{ex.StackTrace}");
+                Console.Error.WriteLine($"CRITICAL FAILURE: {ex.Message}\n{ex.StackTrace}");
+                return 1;
             }
         }
     }

@@ -95,6 +95,7 @@ public sealed class PortalDialogAccessibilityTests
         // announced, still focusable, and still tab-reachable while invisible.
         var root = Path.Combine(RepoRoot(), "src", "ETL-SQL.Portal", "wwwroot");
         var offenders = new List<string>();
+        var rulesChecked = 0;
 
         foreach (var file in Directory.EnumerateFiles(root, "*.*", SearchOption.AllDirectories))
         {
@@ -103,9 +104,12 @@ public sealed class PortalDialogAccessibilityTests
             if (Path.GetExtension(file) is not (".html" or ".js" or ".css")) continue;
 
             var source = File.ReadAllText(file);
+            // Same naming pattern as OverlayClassPattern, not a fixed list: a prefixed overlay class
+            // (studio-dialog-backdrop, gov-modal-overlay, ...) must not slip past this sweep.
             foreach (Match rule in Regex.Matches(
-                source, @"\.(modal-overlay|modal-backdrop|gov-modal-backdrop)\s*\{([^}]*)\}"))
+                source, @"\.((?:[a-z0-9]+-)*(?:modal|dialog)-(?:overlay|backdrop))\s*\{([^}]*)\}", RegexOptions.IgnoreCase))
             {
+                rulesChecked++;
                 var body = rule.Groups[2].Value;
                 var hidesByOpacityOnly =
                     Regex.IsMatch(body, @"opacity\s*:\s*0")
@@ -116,6 +120,8 @@ public sealed class PortalDialogAccessibilityTests
             }
         }
 
+        // The Portal does style its overlays; finding none means the sweep is reading nothing.
+        Assert.True(rulesChecked > 0, "No modal/dialog overlay style rules were found under wwwroot.");
         Assert.True(offenders.Count == 0,
             "These modal styles hide the dialog visually but leave it in the accessibility tree, "
             + "focusable and tab-reachable:\n  " + string.Join("\n  ", offenders));

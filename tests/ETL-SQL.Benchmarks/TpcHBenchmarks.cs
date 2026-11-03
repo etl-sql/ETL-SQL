@@ -27,7 +27,7 @@ namespace ETL_SQL.Benchmarks
 {
     [MemoryDiagnoser]
     [SimpleJob(launchCount: 1, warmupCount: 1, iterationCount: 3)]
-    public class TpcHBenchmarks
+    public class TpcHBenchmarks : IAsyncDisposable
     {
         private readonly double _scaleFactor;
 
@@ -35,6 +35,7 @@ namespace ETL_SQL.Benchmarks
         public TpcHBenchmarks(double scaleFactor) => _scaleFactor = scaleFactor;
 
         private Evaluator _evaluator = null!;
+        private string? _tempSessionDir;
         private string _q1 = null!;
         private string _q6 = null!;
         private string _q3 = null!;
@@ -70,6 +71,7 @@ namespace ETL_SQL.Benchmarks
 
                 var tempSessionDir = Path.Combine(Path.GetTempPath(), "ETL-SQL-Benchmarks-" + Guid.NewGuid());
                 Directory.CreateDirectory(tempSessionDir);
+                _tempSessionDir = tempSessionDir;
 
                 var sessions = new SessionStateManager(l, security, config, new SqliteSessionMetadataStoreFactory(), tempSessionDir);
                 var pushdown = new Mock<ExecutePushdownStatementHandler>(l);
@@ -266,6 +268,38 @@ namespace ETL_SQL.Benchmarks
                 $"SortSpills={_evaluator.Telemetry.SortSpillCount}, " +
                 $"RowsProcessed={_evaluator.Telemetry.RowsProcessed}, " +
                 $"RetainedRows={_evaluator.LastResult?.Rows.Count ?? 0}");
+
+            DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+        /// <summary>
+        /// Releases the evaluator and the per-instance session directory Setup creates, so test
+        /// runs and benchmark processes do not leave ETL-SQL-*Bench* folders in %TEMP%.
+        /// </summary>
+        public async ValueTask DisposeAsync()
+        {
+            if (_evaluator is not null)
+            {
+                await _evaluator.DisposeAsync();
+                _evaluator = null!;
+            }
+
+            if (_tempSessionDir is not null && Directory.Exists(_tempSessionDir))
+            {
+                try
+                {
+                    Directory.Delete(_tempSessionDir, recursive: true);
+                }
+                catch (IOException)
+                {
+                    // A pooled SQLite handle can outlive the evaluator briefly; the directory is
+                    // uniquely named, so a leftover never affects another run.
+                }
+                catch (UnauthorizedAccessException)
+                {
+                }
+            }
+
+            _tempSessionDir = null;
         }
     }
 
