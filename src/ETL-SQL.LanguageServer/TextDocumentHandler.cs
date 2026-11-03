@@ -50,6 +50,18 @@ namespace ETL_SQL.LSP
         // during rapid editing of large scripts.
         private readonly System.Collections.Concurrent.ConcurrentDictionary<DocumentUri, CancellationTokenSource> _lintDebouncers = new();
 
+        // The latest fast pass per document, keyed by the text it analyzes, so the lint pass for
+        // that text waits for its AST instead of linting the previous one when parsing is slow.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<DocumentUri, (string Text, TaskCompletionSource Done)> _fastPasses = new();
+
+        // The latest lint result per document and the text it was computed for. The fast pass
+        // republishes it with fresh parser diagnostics for the same text instead of erasing it.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<DocumentUri, (string Text, List<Diagnostic> Diagnostics)> _lintResults = new();
+
+        // Serializes "read the other pass's result, then publish" so the two passes cannot
+        // overwrite each other's published diagnostics.
+        private readonly object _publishGate = new();
+
         /// <summary>Debounce for fast path: lex → parse → metadata → lineage → parser diagnostics.</summary>
         private const int FastDebounceMs = 300;
 
@@ -95,29 +107,56 @@ namespace ETL_SQL.LSP
             // ── Fast debounce (300 ms) ────────────────────────────────────────────
             // Runs: lex → parse → metadata discovery → lineage → parser diagnostics.
             // Cancelled and restarted on every keystroke.
-            _ = ScheduleDebouncedAsync(_debouncers, uri, FastDebounceMs, async () =>
-            {
-                var parserDiags = await FastAnalyzeAsync(uri, text);
-                PublishDiagnostics(uri, parserDiags);
-            });
+            _ = ScheduleDebouncedAsync(_debouncers, uri, FastDebounceMs, () => RunFastPassAsync(uri, text));
 
             // ── Slow debounce (1 500 ms) ──────────────────────────────────────────
             // Runs: deep lint rules (CredentialLeak, SchemaValidation, AbsolutePath…).
             // Fires only after the user pauses typing for 1.5 s, preventing the
             // expensive lint chain from blocking the LSP thread during rapid edits
             // of large scripts.
-            _ = ScheduleDebouncedAsync(_lintDebouncers, uri, LintDebounceMs, async () =>
-            {
-                // Re-read the document state that the fast pass already stored.
-                var state = _store.GetState(uri);
-                if (state?.Script == null) return;
-                var lintDiags = await RunLintAsync(uri, state.Script);
-                // Merge with the latest parser diagnostics already published.
-                var parserDiags = _store.GetParserDiagnostics(uri);
-                PublishDiagnostics(uri, parserDiags.Concat(lintDiags).ToList());
-            });
+            _ = ScheduleDebouncedAsync(_lintDebouncers, uri, LintDebounceMs, () => RunLintPassAsync(uri, text));
 
             return MediatR.Unit.Value;
+        }
+
+        private async Task RunFastPassAsync(DocumentUri uri, string text)
+        {
+            // Registered before parsing starts, so a lint pass that fires mid-parse finds it.
+            var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _fastPasses[uri] = (text, done);
+            try
+            {
+                var parserDiags = await FastAnalyzeAsync(uri, text);
+                lock (_publishGate)
+                {
+                    var lint = _lintResults.TryGetValue(uri, out var last) && string.Equals(last.Text, text, StringComparison.Ordinal)
+                        ? last.Diagnostics
+                        : [];
+                    PublishDiagnostics(uri, parserDiags.Concat(lint).ToList());
+                }
+            }
+            finally
+            {
+                done.TrySetResult();
+            }
+        }
+
+        private async Task RunLintPassAsync(DocumentUri uri, string text)
+        {
+            if (_fastPasses.TryGetValue(uri, out var fast) && string.Equals(fast.Text, text, StringComparison.Ordinal))
+                await fast.Done.Task;
+
+            var state = _store.GetState(uri);
+            if (state?.Script == null) return;
+            var lintDiags = await RunLintAsync(uri, state.Script);
+            lock (_publishGate)
+            {
+                // A newer edit's fast pass superseded this text; its own lint pass will follow.
+                if (_fastPasses.TryGetValue(uri, out var current) && !string.Equals(current.Text, text, StringComparison.Ordinal))
+                    return;
+                _lintResults[uri] = (text, lintDiags);
+                PublishDiagnostics(uri, _store.GetParserDiagnostics(uri).Concat(lintDiags).ToList());
+            }
         }
 
         public override async Task<MediatR.Unit> Handle(DidOpenTextDocumentParams request, CancellationToken cancellationToken)
@@ -168,6 +207,8 @@ namespace ETL_SQL.LSP
 
             // 2. Clear LSP state store
             _store.RemoveState(uri);
+            _fastPasses.TryRemove(uri, out _);
+            _lintResults.TryRemove(uri, out _);
 
             // 3. Notify the client that the script is closed and its session can be recycled/deleted
             _server?.SendNotification("etlsql/scriptClosed", new { uri = uri.ToString() });
