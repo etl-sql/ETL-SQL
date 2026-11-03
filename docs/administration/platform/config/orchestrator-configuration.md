@@ -113,7 +113,7 @@ Polling reloads the table and timeline catalog when the connection recovers.
 
 | Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `Jobs:UseProcessSpawning` | boolean | `false` | When true, runs jobs in isolated OS sub-processes instead of thread tasks. |
+| `Jobs:UseProcessSpawning` | boolean | `false` | When true, runs jobs in isolated OS sub-processes instead of thread tasks. A child process cannot carry the caller's identity, so runs submitted under one (ad-hoc `POST /jobs` runs and revision runs) are refused while this is on; scheduled runs are unaffected. |
 | `Jobs:UseWarmRunner` | boolean | `false` | When true with process spawning, reuses warm `ETL-SQL runner` child processes. Falls back to one-shot spawning if a runner fails. |
 | `Jobs:ExecutablePath` | string | `""` | Absolute path to `ETL-SQL.exe` when process spawning is active. |
 | `Jobs:ArgumentsTemplate` | string | `""` | Overrides arguments passed to a spawned job. Supports `{ScriptFile}` and `{SessionId}`. **A custom template must keep `--json`** — see below. |

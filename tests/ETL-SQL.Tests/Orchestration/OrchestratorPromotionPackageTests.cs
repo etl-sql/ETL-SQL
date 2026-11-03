@@ -1,5 +1,6 @@
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Multitenancy;
 using ETL_SQL.Core.Quality;
 using ETL_SQL.Orchestrator.Storage;
 
@@ -94,6 +95,37 @@ public sealed class OrchestratorPromotionPackageTests : IDisposable
         var collision = await OrchestratorPromotionPackageService.ValidateAsync(roundTripped, target, target, bindings);
         Assert.False(collision.IsValid);
         Assert.Contains(collision.Findings, finding => finding.Code == "OP003" && finding.Resource == "schedule:nightly");
+    }
+
+    [Fact]
+    public async Task TenantImport_KeepsRunsAndLineageInTheTenant_BoundToTheTargetJob()
+    {
+        var tenant = TenantContext.FromHostConfiguration("tenant-a");
+        var source = new SQLiteJobHistoryStore(_sourcePath);
+        await source.InitializeAsync();
+        await source.SaveJobAsync(new JobDefinition(
+            "tenant-load", "SELECT 1;", 1, "HOUR", null, null, null, TenantId: "tenant-a"));
+        var sourceJob = (await source.GetJobAsync("tenant-a", "tenant-load"))!;
+        var run = await source.LogJobStartAsync(sourceJob.Id);
+        await source.LogJobEndAsync(run, "SUCCESS", rowsProcessed: 5);
+        await source.SaveLineageAsync(tenant,
+            [new LineageEntry("warehouse.orders", "INSERT") { SourceTables = ["stage.orders"] }],
+            "tenant-load", null, new DateTime(2026, 8, 1, 2, 0, 0, DateTimeKind.Utc));
+
+        var package = await OrchestratorPromotionPackageService.ExportAsync(tenant, source, source, source);
+        Assert.Single(package.QualityHistory);
+        Assert.Single(package.LineageAndTags);
+
+        var target = new SQLiteJobHistoryStore(_targetPath);
+        await target.InitializeAsync();
+        await OrchestratorPromotionPackageService.ImportAsync(package, target, target, target);
+        await OrchestratorPromotionPackageService.ImportAsync(package, target, target, target);
+
+        var targetJob = (await target.GetJobAsync("tenant-a", "tenant-load"))!;
+        var importedRun = Assert.Single(await target.GetHistoryForNameAsync("tenant-a", "tenant-load"));
+        Assert.Equal(targetJob.Id, importedRun.JobId);
+        Assert.Equal("tenant-a", importedRun.TenantId);
+        Assert.Single(await target.GetRecentLineageAsync(tenant));
     }
 
     [Fact]

@@ -122,7 +122,13 @@ public class OrchestratorAdminUiIntegrationTests : IClassFixture<OrchestratorGra
             trigger = "Completion"
         }))
         {
-            Assert.True(dispRes.StatusCode == HttpStatusCode.OK || dispRes.StatusCode == HttpStatusCode.NoContent || dispRes.StatusCode == HttpStatusCode.Accepted);
+            // The notification just created is the one dispatched. Its connection is not in the
+            // catalog, so delivery fails on the connection; it is never skipped as missing, which
+            // is what resolving it again outside the caller's tenant used to produce.
+            var dispatchBody = await dispRes.Content.ReadAsStringAsync();
+            Assert.True(dispRes.StatusCode is HttpStatusCode.OK or HttpStatusCode.NoContent or HttpStatusCode.Accepted
+                or HttpStatusCode.BadGateway, $"{dispRes.StatusCode}: {dispatchBody}");
+            Assert.DoesNotContain("does not exist", dispatchBody, StringComparison.OrdinalIgnoreCase);
         }
 
         // 5. Delete notification

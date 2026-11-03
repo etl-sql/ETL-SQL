@@ -165,12 +165,18 @@ public sealed class GatewayOperationDispatcher(
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromSeconds(bounds.TimeoutSeconds));
 
+        // A protocol exception from the ledger after the executor returned is an invariant breach and
+        // propagates. One from the executor itself (the default viewer-context overload, or a host
+        // executor) is an operation failure: it must reach a terminal outcome, not leave the ledger
+        // InFlight and end the session.
+        var executorReturned = false;
         try
         {
             var result = await executor
                 .ExecuteAsync(resource, operation.Class, frame.Request, frame.Parameters,
                     verifiedViewerContext, bounds, deadline.Token)
                 .ConfigureAwait(false);
+            executorReturned = true;
 
             if (verifiedViewerContext is not null)
             {
@@ -236,7 +242,7 @@ public sealed class GatewayOperationDispatcher(
                 }
             ];
         }
-        catch (Exception ex) when (ex is not GatewayProtocolException)
+        catch (Exception ex) when (ex is not GatewayProtocolException || !executorReturned)
         {
             // The executor talks to a real local system, whose exception text can carry the host or
             // the credential. Only a fixed message crosses back to the cloud side.

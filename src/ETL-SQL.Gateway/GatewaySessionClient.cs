@@ -60,9 +60,10 @@ public sealed class GatewaySessionClient(
 {
     /// <summary>
     /// Runs one session to completion. Returns the number of operations served, which lets a host
-    /// distinguish "connected and idle" from "served work".
+    /// distinguish "connected and idle" from "served work". <paramref name="onEstablished"/> runs once
+    /// the broker has acknowledged the session, which is the first moment the Gateway is connected.
     /// </summary>
-    public async Task<int> RunAsync(CancellationToken cancellationToken)
+    public async Task<int> RunAsync(CancellationToken cancellationToken, Action? onEstablished = null)
     {
         options.Validate();
 
@@ -107,6 +108,7 @@ public sealed class GatewaySessionClient(
             throw new GatewayProtocolException(ack?.Reason ?? "The broker refused the Gateway session.");
         }
 
+        onEstablished?.Invoke();
         var served = 0;
         while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
         {

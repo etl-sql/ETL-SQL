@@ -196,6 +196,25 @@ public sealed class GatewayTransportTests
     }
 
     [Fact]
+    public async Task Dispatch_AnExecutorProtocolExceptionReachesATerminalOutcomeInsteadOfEscaping()
+    {
+        // A host executor (or the interface's default viewer-context overload) can throw a
+        // GatewayProtocolException. It used to skip the failure handler, leave the ledger InFlight,
+        // and tear down the session loop.
+        var registry = await ApprovedRegistryAsync();
+        var ledger = new GatewayOutcomeLedger();
+        var dispatcher = new GatewayOperationDispatcher(registry, new ProtocolThrowingExecutor(), ledger);
+
+        var responses = await dispatcher.DispatchAsync(
+            ReadOperation("op-protocol", ResourceId), Tenant, GatewayId, CancellationToken.None);
+
+        var fault = Assert.Single(responses);
+        Assert.Equal(GatewayFrameKind.Fault, fault.Kind);
+        Assert.Equal(GatewayOutcomeState.Failed, fault.OutcomeState);
+        Assert.Equal(GatewayOutcomeState.Failed, ledger.Find(Tenant, "op-protocol")!.State);
+    }
+
+    [Fact]
     public async Task Session_RefusesABrokerThatWillNotAcknowledge()
     {
         await using var broker = await LoopbackBroker.StartAsync();
@@ -284,6 +303,15 @@ public sealed class GatewayTransportTests
             return Task.FromResult(new GatewayExecutionResult(
                 ["Value"], [["1"], ["2"]]));
         }
+    }
+
+    private sealed class ProtocolThrowingExecutor : IGatewayResourceExecutor
+    {
+        public Task<GatewayExecutionResult> ExecuteAsync(
+            GatewayResource resource, GatewayOperationClass operationClass,
+            string? request, IReadOnlyList<string>? parameters,
+            GatewayOperationBounds bounds, CancellationToken cancellationToken) =>
+            throw new GatewayProtocolException("The local result exceeded the Gateway payload limit.");
     }
 
     private sealed class ThrowingExecutor(string message) : IGatewayResourceExecutor

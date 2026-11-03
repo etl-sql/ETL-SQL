@@ -139,8 +139,11 @@ public sealed class GatewayBroker(
 
         try
         {
-            // 4. Acknowledge only after the session is routable through the registry.
-            await SendFrameAsync(socket, new GatewayFrame
+            // 4. Acknowledge only after the session is routable through the registry. The session
+            // holds every operation send until this frame is on the wire, so a caller that routes to
+            // it the moment it is registered can neither overtake the acknowledgement nor write to
+            // the socket at the same time.
+            await session.AcknowledgeAsync(new GatewayFrame
             {
                 Kind = GatewayFrameKind.HelloAck,
                 TenantId = helloFrame.TenantId,
@@ -246,6 +249,9 @@ internal sealed class ActiveGatewaySession : IGatewaySession
             SingleWriter = true
         });
     private readonly TaskCompletionSource _closeTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    // Completed once HelloAck has been sent. Operation sends wait on it, because the session is
+    // registered (and so routable) before the acknowledgement goes out.
+    private readonly TaskCompletionSource _acknowledged = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _sessionCts = new();
     private readonly Task _pumpTask;
     private readonly ITenantMeteringLedger? _meteringLedger;
@@ -461,7 +467,11 @@ internal sealed class ActiveGatewaySession : IGatewaySession
                     stream.Write(buffer, 0, result.Count);
                     if (stream.Length > _maxFrameBytes)
                     {
+                        // The rest of this message is still on the socket, so nothing after it can be
+                        // framed reliably, and the part already read is over the limit. Report it and
+                        // end the session rather than decode the oversized frame.
                         _inboundChannel.Writer.TryWrite(GatewayFrame.Fault(null, "Inbound frame exceeded max size."));
+                        closed = true;
                         break;
                     }
                     if (result.EndOfMessage) break;
@@ -492,8 +502,27 @@ internal sealed class ActiveGatewaySession : IGatewaySession
         }
     }
 
+    /// <summary>Sends the session acknowledgement, then releases operation sends held behind it.</summary>
+    internal async Task AcknowledgeAsync(GatewayFrame ack, CancellationToken cancellationToken)
+    {
+        await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes(ack.Serialize());
+            if (bytes.Length > _maxFrameBytes)
+                throw new GatewayProtocolException("Outbound frame exceeded max frame size.");
+            await _socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _sendGate.Release();
+        }
+        _acknowledged.TrySetResult();
+    }
+
     private async Task SendFrameInternalAsync(GatewayFrame frame, CancellationToken cancellationToken)
     {
+        await _acknowledged.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -513,6 +542,7 @@ internal sealed class ActiveGatewaySession : IGatewaySession
     {
         await _sessionCts.CancelAsync().ConfigureAwait(false);
         _closeTcs.TrySetResult();
+        _acknowledged.TrySetException(new GatewayProtocolException("The Gateway session closed before it was acknowledged."));
         if (_socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
         {
             try

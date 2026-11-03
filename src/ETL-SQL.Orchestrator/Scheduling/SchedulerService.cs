@@ -1109,12 +1109,14 @@ namespace ETL_SQL.Orchestrator.Scheduling
             var nextRun = revision is not null
                 ? job.NextRun
                 : await AdvanceScheduleLinksAsync(job, _clock.GetUtcNow().UtcDateTime) ?? CalculateNextRun(job);
+            var fencedOut = false;
             try
             {
                 // Fenced write: if this node was paused past its lease and another instance took over the
                 // job (advancing the fence token), this update matches zero rows and we skip rescheduling
                 // rather than overwrite the new owner's state (P1.8).
-                if (!await _store.TryUpdateJobLastRunFencedAsync(job.Id, DateTime.Now, nextRun, fenceToken))
+                fencedOut = !await _store.TryUpdateJobLastRunFencedAsync(job.Id, DateTime.Now, nextRun, fenceToken);
+                if (fencedOut)
                     _logger.LogWarning(
                         "Job {JobName}: skipped the last-run/next-run update — the execution lease was reclaimed " +
                         "by another instance (fenced out, token {Token}).", job.Name, fenceToken);
@@ -1124,8 +1126,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 _logger.LogError(ex, "Failed to update last run info for {JobName}.", job.Name);
             }
 
-            // An author's failing draft must not disable the job for everyone else.
-            if (revision is null)
+            // An author's failing draft must not disable the job for everyone else, and a node that
+            // lost the job's lease no longer decides its state: the new owner does.
+            if (revision is null && !fencedOut)
                 await QuarantineIfRepeatedlyFailingAsync(job);
         }
 
@@ -1231,7 +1234,13 @@ namespace ETL_SQL.Orchestrator.Scheduling
             var reason = $"Job quarantined after {threshold} consecutive failures.";
             try
             {
-                await _store.SaveJobAsync(job with { IsEnabled = false, NextRun = null });
+                // From the stored job, not the snapshot this run started with: writing the snapshot back
+                // reverted any edit made while the job ran, and its stale last-run time with it. A job
+                // changed between the read and the write is left for the next failing run to judge.
+                var current = await _store.GetJobByIdAsync(job.Id);
+                if (current is null || !current.IsEnabled
+                    || !await _store.TrySaveJobAsync(current with { IsEnabled = false, NextRun = null }, current.Version))
+                    return;
                 var quarantineId = await _store.LogJobStartAsync(job.Id);
                 await _store.LogJobEndAsync(quarantineId, "QUARANTINED", reason);
                 _logger.LogError("Job {JobName}: {Reason}", job.Name, reason);
