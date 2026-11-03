@@ -36,6 +36,8 @@ namespace ETL_SQL.FuzzTests
         private bool _strictExec;
         private bool _dumpExec;
         private readonly HashSet<string> _execMessages = new(StringComparer.Ordinal);
+        private int _noRecCompared;
+        private int _noRecRewriteRejected;
 
         // Message fragments of ExecutionExceptions that are known-expected engine rejections (not
         // bugs), consulted when strict-exec is enabled. To extend after new surface is fuzzed, run
@@ -89,9 +91,17 @@ namespace ETL_SQL.FuzzTests
             Directory.CreateDirectory(Path.Combine(_fuzzLogDir, "reproducers"));
         }
 
-        public Task DisposeAsync()
+        public async Task DisposeAsync()
         {
-            return Task.CompletedTask;
+            switch (_serviceProvider)
+            {
+                case IAsyncDisposable asyncDisposable:
+                    await asyncDisposable.DisposeAsync();
+                    break;
+                case IDisposable disposable:
+                    disposable.Dispose();
+                    break;
+            }
         }
 
         /// <summary>
@@ -287,6 +297,7 @@ namespace ETL_SQL.FuzzTests
             double transPct = totalTransitions == 0 ? 0 : 100.0 * reachedTransitions / totalTransitions;
 
             Console.WriteLine(results.Summary());
+            Console.WriteLine($"[Fuzzer] NoREC: compared={_noRecCompared} rewriteRejected={_noRecRewriteRejected}");
             Console.WriteLine($"[Fuzzer] grammar coverage: states {reachedStates}/{totalStates} ({statePct:F1}%), " +
                               $"transitions {reachedTransitions}/{totalTransitions} ({transPct:F1}%)");
 
@@ -308,6 +319,14 @@ namespace ETL_SQL.FuzzTests
                         WriteReproducer(bucket.Name, sample.Tokens, sample.Query, sample.Exception);
                     }
                 }
+            }
+
+            // About one generated query in ten is NoREC-eligible, so a run this long that compared
+            // none means the eligibility gate has gone vacuous again.
+            if (iterations >= 200)
+            {
+                Assert.True(_noRecCompared > 0,
+                    $"NoREC compared no queries in {iterations} iterations (rewriteRejected={_noRecRewriteRejected}); the differential check is not running.");
             }
 
             int bugCount = results.BugBuckets.Sum(b => b.Count);
@@ -355,8 +374,10 @@ namespace ETL_SQL.FuzzTests
         private async Task VerifyNoRECParity(SelectStatement selectStmt)
         {
             if (selectStmt.WhereClause == null) return;
-            if (selectStmt.FromTable.ConnectionName != null ||
-                selectStmt.IntoTable != null ||
+            // Every generated query reads src.<table>, so a connection-qualified FROM must stay in
+            // scope: excluding it skipped NoREC on 100% of queries.
+            if (selectStmt.IntoTable != null ||
+                selectStmt.OnFailureActions != null ||
                 selectStmt.Joins.Count > 0 ||
                 selectStmt.IsDistinct ||
                 selectStmt.TopCount != null ||
@@ -380,7 +401,7 @@ namespace ETL_SQL.FuzzTests
                 "cnt",
                 null
             );
-            var q1 = selectStmt with { Columns = new List<SelectColumn> { countCol } };
+            var q1 = selectStmt with { Columns = new List<SelectColumn> { countCol }, OrderBy = null, OrderByAll = false, OrderByAllDescending = false };
             var sql1 = new Script { Statements = new List<Statement> { q1 } }.ToSql();
 
             // 2. Build Query 2 (NoREC SUM(CASE...))
@@ -393,7 +414,7 @@ namespace ETL_SQL.FuzzTests
                 "cnt",
                 null
             );
-            var q2 = selectStmt with { Columns = new List<SelectColumn> { sumCol }, WhereClause = null };
+            var q2 = selectStmt with { Columns = new List<SelectColumn> { sumCol }, WhereClause = null, OrderBy = null, OrderByAll = false, OrderByAllDescending = false };
             var sql2 = new Script { Statements = new List<Statement> { q2 } }.ToSql();
 
             // 3. Evaluate both
@@ -415,6 +436,8 @@ namespace ETL_SQL.FuzzTests
                 {
                     throw new NoRecMismatchException($"NoREC correctness mismatch! Optimized: {val1}, Unoptimized: {val2}. Query1: {sql1}, Query2: {sql2}");
                 }
+
+                _noRecCompared++;
             }
             catch (Exception ex) when (!(ex is NoRecMismatchException) && !IsSevereCrash(ex))
             {
@@ -422,6 +445,7 @@ namespace ETL_SQL.FuzzTests
                 // invalid rewrites, sanitized database exceptions). Severe crashes (NRE, cast,
                 // index) and mismatches fall through and propagate so the differential rewrite
                 // path cannot silently hide engine bugs.
+                _noRecRewriteRejected++;
             }
         }
 
