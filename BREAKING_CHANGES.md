@@ -17,6 +17,27 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: OLTP, REST and webhook command timeouts default to 30 seconds
+- **What changed**: Without `TIMEOUT_SECONDS`, MSSQL, Postgres, Oracle, MySQL, SQLite, ODBC, REST and webhook connectors read `Connectors:DataWarehouse:DefaultCommandTimeoutSeconds` (1800 in the shipped `appsettings.json`) and waited up to 30 minutes. They now use their own 30-second default.
+- **Who is affected**: Scripts whose long-running OLTP or HTTP calls relied on the 30-minute wait.
+- **Migration**: Set `TIMEOUT_SECONDS` on the connection.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — TypeSystem: Cloud and messaging connectors return decimal integers and typed SharePoint fields
+- **What changed**: Kafka `Partition`/`Offset` and the S3/Azure Blob listing `Size` column were `int`/`long`; they are now `decimal`, the runtime integer type. SharePoint list numbers and booleans were strings (`"7"`, `"True"`) and JSON null was `''`; they are now `decimal` (double only beyond decimal range), boolean, and `NULL`.
+- **Who is affected**: Scripts reading those columns, especially ones comparing SharePoint fields as text or testing for `''` instead of `IS NULL`.
+- **Migration**: Compare numerically and use `IS NULL`; `CAST` explicitly where text is wanted.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Connector: S3 refuses a malformed ENDPOINT; SMTP and Azure Blob errors are sanitized
+- **What changed**: An S3 `ENDPOINT` that is not an absolute `http://`/`https://` URL used to pass egress validation as `s3.<region>.amazonaws.com`; it now fails. SMTP errors no longer chain the raw MailKit/MimeKit exception, and an empty or malformed Azure Blob connection string is a configuration error with no inner exception.
+- **Who is affected**: S3 connections with a scheme-less endpoint (`minio:9000`); tooling that read `InnerException` on SMTP failures.
+- **Migration**: Write the endpoint as a full URL, for example `ENDPOINT = 'http://minio:9000'`.
+- **Diagnostic**: `S3 ENDPOINT must be an absolute http:// or https:// URL`, `SMTP connector error:`, `Azure Blob connection string is not valid`.
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Connector: MOCKDB initializes data on demand and rejects failed seeding
 - **What changed**: Declared metadata no longer starts row generation. Rows initialize once when data access, truncation or inferred schema requires them. A failed initialization now raises a sanitized `ExecutionException` on every data read, including failures that previously exposed partially seeded rows.
 - **Who is affected**: MOCKDB consumers and custom `IMockDataSeeder` implementations that depend on constructor-time side effects or consume data after a failed seed.

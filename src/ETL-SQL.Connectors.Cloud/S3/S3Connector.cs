@@ -210,6 +210,7 @@ namespace ETL_SQL.Connectors.S3
                     return uri.Host;
                 }
 
+                // COMPAT_BREAK: 0.22.0 — a malformed ENDPOINT used to validate the AWS default host.
                 throw new ExecutionException("S3 ENDPOINT must be an absolute http:// or https:// URL, for example https://minio.example.com:9000.");
             }
 

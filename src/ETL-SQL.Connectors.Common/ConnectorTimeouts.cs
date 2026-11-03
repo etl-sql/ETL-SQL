@@ -25,6 +25,7 @@ public static class ConnectorTimeouts
             return optionSeconds;
         }
 
+        // COMPAT_BREAK: 0.22.0 — the 1800s data-warehouse default no longer applies here.
         return fallbackSeconds;
     }
 }

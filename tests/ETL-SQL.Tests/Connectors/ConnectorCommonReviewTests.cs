@@ -10,6 +10,7 @@ using Xunit;
 namespace ETL_SQL.Tests.Connectors;
 
 /// <summary>Regression tests for the 2026-11-01 review of ETL-SQL.Connectors.Common.</summary>
+[Trait("CompatBreak", "0.22.0")]
 public sealed class ConnectorCommonReviewTests
 {
     private static IExecutionContext ContextWithAppSettingsWarehouseTimeout()

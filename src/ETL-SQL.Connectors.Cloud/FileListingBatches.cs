@@ -29,6 +29,7 @@ namespace ETL_SQL.Connectors
                 {
                     ["Name"] = f.Name,
                     ["FullPath"] = f.FullPath,
+                    // COMPAT_BREAK: 0.22.0 — Size was long; listings also arrived as one batch.
                     ["Size"] = (decimal)f.Size,
                     ["LastModified"] = f.LastModified,
                     ["IsDirectory"] = f.IsDirectory

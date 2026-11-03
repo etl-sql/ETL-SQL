@@ -237,7 +237,7 @@ In Shared (multi-tenant) mode, each binding requires a `Scope` naming its tenant
 | :--- | :--- | :--- | :--- |
 | `Connectors:Retry:MaxAttempts` | integer | `3` | Number of times connection attempts are retried. |
 | `Connectors:Retry:BaseDelaySeconds` | float | `1.0` | Initial delay between failed requests (exponential backoff). |
-| `Connectors:DataWarehouse:DefaultCommandTimeoutSeconds` | integer | `1800` | Max duration of SQL commands on target database servers (30 minutes). |
+| `Connectors:DataWarehouse:DefaultCommandTimeoutSeconds` | integer | `1800` | Data-warehouse command timeout (30 minutes). OLTP, REST and webhook connectors do not read it: they use `TIMEOUT_SECONDS`, or 30 seconds. |
 | `Connectors:DataWarehouse:SchemaCacheTtlSeconds` | integer | `300` | Duration target table schemas are cached to skip re-verification. |
 | `Connectors:DataWarehouse:SchemaSoftRefreshIntervalSeconds` | integer | `300` | Age at which cached metadata remains usable but triggers background refresh. |
 | `Connectors:DataWarehouse:SchemaDiskCacheMaxAgeDays` | integer | `14` | Maximum age for on-disk schema cache files before they are ignored and pruned. |
