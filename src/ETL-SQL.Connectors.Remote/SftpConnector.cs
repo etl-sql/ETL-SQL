@@ -197,19 +197,23 @@ namespace ETL_SQL.Connectors
                 && options.TryGetValue("ALLOW_UNPINNED_HOST_KEY", out var allowUnpinnedStr)
                 && ConnectorOptionValues.IsTrue(allowUnpinnedStr);
 
-            string host = connectionString;
+            // A catalog connection may carry its host only in the HOST option.
+            string target = string.IsNullOrWhiteSpace(connectionString)
+                ? options?.GetValueOrDefault("HOST") ?? ""
+                : connectionString;
+            string host = target;
             int port = 22;
             if (options != null && options.TryGetValue("PORT", out var portStr) && int.TryParse(portStr, out var parsedPort))
             {
                 port = parsedPort;
             }
-            else if (!string.IsNullOrEmpty(connectionString))
+            else if (!string.IsNullOrEmpty(target))
             {
-                int colonIdx = connectionString.IndexOf(':');
+                int colonIdx = target.IndexOf(':');
                 if (colonIdx >= 0)
                 {
-                    host = connectionString.Substring(0, colonIdx);
-                    var portPart = connectionString.Substring(colonIdx + 1);
+                    host = target.Substring(0, colonIdx);
+                    var portPart = target.Substring(colonIdx + 1);
                     if (int.TryParse(portPart, out var parsedPortFromConnStr))
                     {
                         port = parsedPortFromConnStr;

@@ -1,15 +1,22 @@
 using ETL_SQL.Core;
-using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Connectors.Shared;
 
 public static class ConnectorTimeouts
 {
+    /// <summary>
+    /// Resolves a command timeout for OLTP and HTTP connectors: the <c>TIMEOUT_SECONDS</c> option when
+    /// it is a positive integer, otherwise <paramref name="fallbackSeconds"/> (30 seconds by default).
+    /// The context parameter is kept for call-site compatibility; the data-warehouse default
+    /// (<c>Connectors:DataWarehouse:DefaultCommandTimeoutSeconds</c>) is deliberately not read here,
+    /// because it gave every OLTP, REST and webhook connector a 30-minute timeout.
+    /// </summary>
     public static int ResolveCommandTimeoutSeconds(
         IExecutionContext? context,
         Dictionary<string, string>? options,
         int fallbackSeconds = 30)
     {
+        _ = context;
         if (options != null
             && options.TryGetValue("TIMEOUT_SECONDS", out var optionValue)
             && int.TryParse(optionValue, out var optionSeconds)
@@ -18,20 +25,7 @@ public static class ConnectorTimeouts
             return optionSeconds;
         }
 
-        var configured = GetConfiguration(context)
-            ?.GetValue<int?>("Connectors:DataWarehouse:DefaultCommandTimeoutSeconds");
-        return configured is > 0 ? configured.Value : fallbackSeconds;
-    }
-
-    private static IConfiguration? GetConfiguration(IExecutionContext? context)
-    {
-        try
-        {
-            return context?.ServiceProvider?.GetService(typeof(IConfiguration)) as IConfiguration;
-        }
-        catch
-        {
-            return null;
-        }
+        // COMPAT_BREAK: 0.22.0 — the 1800s data-warehouse default no longer applies here.
+        return fallbackSeconds;
     }
 }

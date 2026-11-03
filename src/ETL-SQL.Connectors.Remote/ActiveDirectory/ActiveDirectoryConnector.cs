@@ -113,6 +113,22 @@ namespace ETL_SQL.Connectors
 
         public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
+            // The registered connector has no server of its own (its defaults name localhost): probe
+            // the directory it is handed.
+            if (_context == null && !string.IsNullOrWhiteSpace(connectionString))
+            {
+                ActiveDirectoryConnector probe;
+                try
+                {
+                    probe = new ActiveDirectoryConnector(context, connectionString);
+                }
+                catch (UriFormatException)
+                {
+                    throw new ExecutionException("Active Directory connection string is not a valid ldap:// or ldaps:// URL.");
+                }
+                return await probe.GetVersionAsync(context, connectionString);
+            }
+
             if (!string.IsNullOrEmpty(_host))
             {
                 ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, _host);
@@ -264,13 +280,41 @@ namespace ETL_SQL.Connectors
                 "groups" or "group" => "(|(objectClass=group)(objectClass=groupOfNames)(objectClass=groupOfUniqueNames))",
                 "computers" or "computer" => "(objectClass=computer)",
                 "contacts" or "contact" => "(objectClass=contact)",
-                _ => $"(objectClass={_filterContext})"
+                _ => $"(objectClass={EscapeLdapFilterValue(_filterContext)})"
             };
         }
 
+        /// <summary>
+        /// Escapes an assertion value for an LDAP search filter (RFC 4515 §3): <c>\ * ( ) NUL</c>
+        /// become <c>\5c \2a \28 \29 \00</c>, so a table name cannot add filter clauses.
+        /// </summary>
+        internal static string EscapeLdapFilterValue(string value)
+        {
+            var builder = new StringBuilder(value.Length);
+            foreach (var c in value)
+            {
+                builder.Append(c switch
+                {
+                    '\\' => @"\5c",
+                    '*' => @"\2a",
+                    '(' => @"\28",
+                    ')' => @"\29",
+                    '\0' => @"\00",
+                    _ => c.ToString()
+                });
+            }
+            return builder.ToString();
+        }
+
+        internal bool UsesSsl => _useSsl;
+
         // ── IDataSource Implementation ────────────────────────────────────────────
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "Active Directory",
+                ex => ex is DirectoryException or InvalidOperationException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
             string ldapFilter = ResolveLdapFilter();
             _logger.Debug("Executing Active Directory LDAP Search. BaseDN: {BaseDN}, Filter: {Filter}", _baseDn, ldapFilter);
@@ -381,6 +425,13 @@ namespace ETL_SQL.Connectors
         {
             var options = new Dictionary<string, string>(_options, StringComparer.OrdinalIgnoreCase);
             options["FILTER_CONTEXT"] = tableName;
+            // Carry the parsed endpoint explicitly: re-parsing the bare host dropped the port, LDAPS
+            // and BASE_DN that came from an ldaps://host:port/DN connection string, so a SIMPLE bind
+            // could fall back to plaintext LDAP on 389.
+            options["HOST"] = _host;
+            options["PORT"] = _port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            options["USE_SSL"] = _useSsl ? "TRUE" : "FALSE";
+            options["BASE_DN"] = _baseDn;
             return new ActiveDirectoryConnector(_context!, _host, options);
         }
 

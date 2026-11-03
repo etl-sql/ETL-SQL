@@ -47,12 +47,34 @@ namespace ETL_SQL.Connectors
         {
             _context = context;
             _logger = context.Logger;
-            _client = new BlobServiceClient(connectionString);
-            _containerName = containerName;
 
-            // Security Hardening: egress control
+            // Security Hardening: egress control, before the SDK parses the connection string.
             var host = GetHostStatic(connectionString);
             if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
+
+            _client = CreateClient(connectionString);
+            _containerName = containerName;
+        }
+
+        /// <summary>
+        /// Builds the SDK client. An empty or malformed connection string makes the SDK throw an
+        /// ArgumentException or FormatException whose message can quote the string, account key
+        /// included, so it is reported as a plain configuration error with no inner exception.
+        /// </summary>
+        private static BlobServiceClient CreateClient(string connectionString)
+        {
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new ExecutionException(
+                    "Azure Blob connection details are missing. Set CONNECTION_STRING, or ACCOUNT_NAME with ACCOUNT_KEY or SAS_TOKEN.");
+            try
+            {
+                return new BlobServiceClient(connectionString);
+            }
+            catch (Exception ex) when (ex is ArgumentException or FormatException or InvalidOperationException)
+            {
+                throw new ExecutionException(
+                    "Azure Blob connection string is not valid. Check CONNECTION_STRING, ACCOUNT_NAME, ACCOUNT_KEY, SAS_TOKEN and BLOB_ENDPOINT.");
+            }
         }
 
 
@@ -327,23 +349,9 @@ namespace ETL_SQL.Connectors
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
             ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "Azure Blob", ShouldWrapProviderException);
 
-        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
-        {
-            var table = new DataTable();
-            table.SetColumns(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
-            await foreach (var f in ListFilesAsync(""))
-            {
-                await table.AddRowAsync(new Row
-                {
-                    ["Name"] = f.Name,
-                    ["FullPath"] = f.FullPath,
-                    ["Size"] = f.Size,
-                    ["LastModified"] = f.LastModified,
-                    ["IsDirectory"] = f.IsDirectory
-                });
-            }
-            yield return table;
-        }
+        private IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize) =>
+            FileListingBatches.ReadAsync(ListFilesAsync(""), batchSize,
+                _context?.CancellationToken ?? System.Threading.CancellationToken.None);
 
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("Writing batches to Azure Blob directly is not supported. Use SEND FILE.");
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
@@ -375,7 +383,10 @@ namespace ETL_SQL.Connectors
             return null;
         }
 
+        // Azure.Identity is not referenced, so AuthenticationFailedException cannot occur here; a
+        // rejected account key or SAS token surfaces as RequestFailedException (403).
         private static bool ShouldWrapProviderException(Exception ex) =>
-            ex is RequestFailedException or InvalidOperationException or AggregateException;
+            ex is RequestFailedException or InvalidOperationException or AggregateException
+                or FormatException or System.Net.Http.HttpRequestException or IOException;
     }
 }

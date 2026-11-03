@@ -198,9 +198,20 @@ namespace ETL_SQL.Connectors.S3
         {
             var opts = options ?? _options;
             string endpoint = opts.GetValueOrDefault("ENDPOINT", "");
-            if (!string.IsNullOrEmpty(endpoint) && Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
+            if (!string.IsNullOrEmpty(endpoint))
             {
-                return uri.Host;
+                // The SDK connects to ENDPOINT, so the host validated must be ENDPOINT's own. An
+                // endpoint that is not an absolute http(s) URL is refused rather than validated as
+                // the AWS default while the client is still pointed at it.
+                if (Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
+                    && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+                    && !string.IsNullOrEmpty(uri.Host))
+                {
+                    return uri.Host;
+                }
+
+                // COMPAT_BREAK: 0.22.0 — a malformed ENDPOINT used to validate the AWS default host.
+                throw new ExecutionException("S3 ENDPOINT must be an absolute http:// or https:// URL, for example https://minio.example.com:9000.");
             }
 
             string region = opts.GetValueOrDefault("REGION", "us-east-1");
@@ -224,27 +235,38 @@ namespace ETL_SQL.Connectors.S3
                 Prefix = prefix
             };
 
-            ListObjectsV2Response response;
-            try
+            // ListObjectsV2 returns at most 1,000 keys per call; follow the continuation token.
+            var seenTokens = new HashSet<string>(StringComparer.Ordinal);
+            while (true)
             {
-                response = await client.ListObjectsV2Async(request);
-            }
-            catch (Exception ex) when (ShouldWrapProviderException(ex))
-            {
-                throw ConnectorExceptionWrapper.Wrap("S3", ex);
-            }
-
-            foreach (var obj in response.S3Objects)
-            {
-                string name = System.IO.Path.GetFileName(obj.Key);
-                yield return new FileMetaData
+                ListObjectsV2Response response;
+                try
                 {
-                    Name = name,
-                    FullPath = obj.Key,
-                    Size = obj.Size ?? 0L,
-                    LastModified = obj.LastModified,
-                    IsDirectory = false
-                };
+                    response = await client.ListObjectsV2Async(request, _context?.CancellationToken ?? default);
+                }
+                catch (Exception ex) when (ShouldWrapProviderException(ex))
+                {
+                    throw ConnectorExceptionWrapper.Wrap("S3", ex);
+                }
+
+                foreach (var obj in response.S3Objects ?? new List<S3Object>())
+                {
+                    string name = System.IO.Path.GetFileName(obj.Key);
+                    yield return new FileMetaData
+                    {
+                        Name = name,
+                        FullPath = obj.Key,
+                        Size = obj.Size ?? 0L,
+                        LastModified = obj.LastModified,
+                        IsDirectory = false
+                    };
+                }
+
+                if (response.IsTruncated != true || string.IsNullOrEmpty(response.NextContinuationToken))
+                    yield break;
+                if (!seenTokens.Add(response.NextContinuationToken))
+                    throw new ExecutionException("S3 listing repeated a continuation token; the listing was stopped.");
+                request.ContinuationToken = response.NextContinuationToken;
             }
         }
 
@@ -468,23 +490,9 @@ namespace ETL_SQL.Connectors.S3
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
             ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "S3", ShouldWrapProviderException);
 
-        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
-        {
-            var table = new DataTable();
-            table.SetColumns(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
-            await foreach (var f in ListFilesAsync(""))
-            {
-                await table.AddRowAsync(new Row
-                {
-                    ["Name"] = f.Name,
-                    ["FullPath"] = f.FullPath,
-                    ["Size"] = f.Size,
-                    ["LastModified"] = f.LastModified,
-                    ["IsDirectory"] = f.IsDirectory
-                });
-            }
-            yield return table;
-        }
+        private IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize) =>
+            FileListingBatches.ReadAsync(ListFilesAsync(""), batchSize,
+                _context?.CancellationToken ?? System.Threading.CancellationToken.None);
 
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("Writing batches to S3 directly is not supported. Use SEND FILE.");
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
