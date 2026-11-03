@@ -62,7 +62,7 @@ namespace ETL_SQL.Connectors.BigQuery
             _location = options?.GetValueOrDefault("LOCATION")
                 ?? BigQueryConnector.ParseField(connectionString, "location");
 
-            _commandTimeout = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 1800;
+            _commandTimeout = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : ETL_SQL.Connectors.Shared.DataWarehouseTimeouts.DefaultSeconds(context);
 
             ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, "bigquery.googleapis.com");
         }
@@ -85,9 +85,9 @@ namespace ETL_SQL.Connectors.BigQuery
                 await client.ExecuteQueryAsync("SELECT 1", null);
                 return $"BigQuery (project: {_projectId})";
             }
-            catch (Google.GoogleApiException ex)
+            catch (Exception ex) when (IsProviderException(ex))
             {
-                throw new ExecutionException($"BigQuery error: {ex.Error?.Message ?? ex.Message}");
+                throw ConnectorExceptionWrapper.Wrap("BigQuery", ex);
             }
         }
 
@@ -96,7 +96,12 @@ namespace ETL_SQL.Connectors.BigQuery
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
             ReadBatches(batchSize, CancellationToken.None);
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(
+        // Rows page in lazily while the results are enumerated, so a page fetch can fail long after
+        // ExecuteQueryAsync returned. The whole enumeration is wrapped, not just the first call.
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize, cancellationToken), "BigQuery", IsProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(
             int batchSize,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
@@ -116,9 +121,9 @@ namespace ETL_SQL.Connectors.BigQuery
                             null, BuildQueryOptions(), BuildResultsOptions(), ct);
                     }, effectiveCancellationToken);
             }
-            catch (Google.GoogleApiException ex)
+            catch (Exception ex) when (IsProviderException(ex))
             {
-                throw new ExecutionException($"BigQuery read error: {ex.Error?.Message ?? ex.Message}");
+                throw ConnectorExceptionWrapper.Wrap("BigQuery", ex);
             }
 
             var fieldNames = results!.Schema?.Fields?.Select(f => f.Name).ToList() ?? new List<string>();
@@ -204,7 +209,13 @@ namespace ETL_SQL.Connectors.BigQuery
         public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
             ExecuteRawSql(sql, parameters, CancellationToken.None);
 
-        public async IAsyncEnumerable<DataTable> ExecuteRawSql(
+        public IAsyncEnumerable<DataTable> ExecuteRawSql(
+            string sql,
+            IEnumerable<object?>? parameters,
+            CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(ExecuteRawSqlCore(sql, parameters, cancellationToken), "BigQuery", IsProviderException);
+
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(
             string sql,
             IEnumerable<object?>? parameters,
             [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -222,9 +233,9 @@ namespace ETL_SQL.Connectors.BigQuery
                         results = await client.ExecuteQueryAsync(sql, bqParams, BuildQueryOptions(), BuildResultsOptions(), ct);
                     }, effectiveCancellationToken);
             }
-            catch (Google.GoogleApiException ex)
+            catch (Exception ex) when (IsProviderException(ex))
             {
-                throw new ExecutionException($"BigQuery error: {ex.Error?.Message ?? ex.Message}");
+                throw ConnectorExceptionWrapper.Wrap("BigQuery", ex);
             }
 
             var fieldNames = results!.Schema?.Fields?.Select(f => f.Name).ToList() ?? new List<string>();
@@ -279,9 +290,9 @@ namespace ETL_SQL.Connectors.BigQuery
                 }
                 return tables;
             }
-            catch (Google.GoogleApiException ex)
+            catch (Exception ex) when (IsProviderException(ex))
             {
-                throw new ExecutionException($"BigQuery error: {ex.Error?.Message ?? ex.Message}");
+                throw ConnectorExceptionWrapper.Wrap("BigQuery", ex);
             }
         }
 
@@ -304,9 +315,9 @@ namespace ETL_SQL.Connectors.BigQuery
                 }
                 return views;
             }
-            catch (Google.GoogleApiException ex)
+            catch (Exception ex) when (IsProviderException(ex))
             {
-                throw new ExecutionException($"BigQuery error: {ex.Error?.Message ?? ex.Message}");
+                throw ConnectorExceptionWrapper.Wrap("BigQuery", ex);
             }
         }
 
@@ -336,9 +347,9 @@ namespace ETL_SQL.Connectors.BigQuery
                     .Where(n => n.Length > 0)
                     .ToList();
             }
-            catch (Google.GoogleApiException ex)
+            catch (Exception ex) when (IsProviderException(ex))
             {
-                throw new ExecutionException($"BigQuery error: {ex.Error?.Message ?? ex.Message}");
+                throw ConnectorExceptionWrapper.Wrap("BigQuery", ex);
             }
         }
 
@@ -379,7 +390,8 @@ namespace ETL_SQL.Connectors.BigQuery
             }
             catch (Exception ex) when (ex is not ExecutionException)
             {
-                throw new ExecutionException($"BigQuery: failed to create client — {ex.Message}");
+                // Credential loading reports the file path and its parse errors; sanitize them.
+                throw ConnectorExceptionWrapper.Wrap("BigQuery client creation", ex);
             }
         }
 
@@ -416,7 +428,10 @@ namespace ETL_SQL.Connectors.BigQuery
                 });
         }
 
-        private static (BigQueryDbType Type, object? Value) InferParameter(object? value)
+        private static bool IsProviderException(Exception ex) =>
+            ex is Google.GoogleApiException or HttpRequestException or InvalidOperationException;
+
+        internal static (BigQueryDbType Type, object? Value) InferParameter(object? value)
         {
             return value switch
             {
@@ -425,7 +440,10 @@ namespace ETL_SQL.Connectors.BigQuery
                 byte or sbyte or short or ushort or int or uint or long => (BigQueryDbType.Int64, Convert.ToInt64(value)),
                 ulong v when v <= long.MaxValue => (BigQueryDbType.Int64, Convert.ToInt64(v)),
                 float or double => (BigQueryDbType.Float64, Convert.ToDouble(value)),
-                decimal v => (BigQueryDbType.Numeric, BigQueryNumeric.Parse(v.ToString(CultureInfo.InvariantCulture))),
+                // NUMERIC holds 9 fractional digits; a finer engine decimal binds as BIGNUMERIC
+                // (38 digits) instead of failing to parse.
+                decimal v when v.Scale <= 9 => (BigQueryDbType.Numeric, BigQueryNumeric.Parse(v.ToString(CultureInfo.InvariantCulture))),
+                decimal v => (BigQueryDbType.BigNumeric, BigQueryBigNumeric.Parse(v.ToString(CultureInfo.InvariantCulture))),
                 DateTimeOffset v => (BigQueryDbType.Timestamp, v.UtcDateTime),
                 DateTime v when v.Kind == DateTimeKind.Utc => (BigQueryDbType.Timestamp, v),
                 DateTime v => (BigQueryDbType.DateTime, v),

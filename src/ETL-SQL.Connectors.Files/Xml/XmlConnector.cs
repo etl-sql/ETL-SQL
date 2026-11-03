@@ -51,7 +51,8 @@ namespace ETL_SQL.Connectors.Xml
             return new XmlDataSource(context, connectionString, options);
         }
 
-        public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        // Matches XmlDataSource.GetTablesAsync: an XML connection exposes one table, ROOT.
+        public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => Task.FromResult<IEnumerable<string>>(new[] { "ROOT" });
 
         public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 

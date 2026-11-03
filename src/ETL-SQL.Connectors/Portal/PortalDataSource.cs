@@ -33,6 +33,8 @@ namespace ETL_SQL.Connectors.Portal
         private readonly string _password;
         private readonly ILogger _logger;
         private readonly HttpClient _http;
+        // A WithTable view borrows its parent's client; only the connection that created it disposes it.
+        private readonly bool _ownsHttp = true;
         private readonly string? _tableName;
         private string? _token;
         private DateTime _tokenExpiry = DateTime.MinValue;
@@ -70,6 +72,7 @@ namespace ETL_SQL.Connectors.Portal
             _password = other._password;
             _logger = other._logger;
             _http = other._http;
+            _ownsHttp = false;
             _token = other._token;
             _tokenExpiry = other._tokenExpiry;
             _tableName = tableName;
@@ -307,7 +310,11 @@ namespace ETL_SQL.Connectors.Portal
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
         public IDataSource WithTable(string tableName) => new PortalDataSource(this, tableName);
-        public ValueTask DisposeAsync() { _http.Dispose(); return ValueTask.CompletedTask; }
+        public ValueTask DisposeAsync()
+        {
+            if (_ownsHttp) _http.Dispose();
+            return ValueTask.CompletedTask;
+        }
 
         // ── Authentication ────────────────────────────────────────────────────────
 
@@ -319,11 +326,11 @@ namespace ETL_SQL.Connectors.Portal
             var req = new { Username = _username, Password = _password };
             HttpResponseMessage resp;
             try { resp = await _http.PostAsJsonAsync("api/auth/login", req); }
-            catch (HttpRequestException ex) { throw new ExecutionException($"Portal connection error: {ex.Message}", ex); }
+            catch (HttpRequestException ex) { throw ConnectionError(ex); }
             if (!resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
-                throw new ExecutionException($"Portal login failed ({(int)resp.StatusCode}): {body}");
+                throw new ExecutionException($"Portal login failed ({(int)resp.StatusCode}): {SanitizeBody(body)}");
             }
             var result = await resp.Content.ReadFromJsonAsync<LoginResponse>(_json)
                 ?? throw new ExecutionException("Portal login returned empty response.");
@@ -500,8 +507,7 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task ShowUsersAsync(IExecutionContext context)
         {
-            var resp = await _http.GetAsync("api/admin/users");
-            resp.EnsureSuccessStatusCode();
+            var resp = await GetCheckedAsync("api/admin/users");
             var users = await ReadJsonItemsAsync(resp);
             var table = new DataTable();
             table.SetColumns(["Id", "Username", "Email", "FirstName", "LastName", "IsActive", "Roles"]);
@@ -909,7 +915,7 @@ namespace ETL_SQL.Connectors.Portal
             }
             catch (HttpRequestException ex)
             {
-                throw new ExecutionException($"Portal connection error: {ex.Message}", ex);
+                throw ConnectionError(ex);
             }
 
             if (!resp.IsSuccessStatusCode)
@@ -954,8 +960,7 @@ namespace ETL_SQL.Connectors.Portal
                 url = $"api/folders/{folderId}/reports";
             }
 
-            var resp = await _http.GetAsync(url);
-            resp.EnsureSuccessStatusCode();
+            var resp = await GetCheckedAsync(url);
             var reports = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
             var table = new DataTable();
             table.SetColumns(["Id", "Name", "Description", "FolderPath", "ScriptPath", "UpdatedAt"]);
@@ -1468,7 +1473,7 @@ namespace ETL_SQL.Connectors.Portal
             try { resp = await _http.GetAsync("api/admin/configuration/export"); }
             catch (HttpRequestException ex)
             {
-                throw new ExecutionException($"Portal connection error: {ex.Message}", ex);
+                throw ConnectionError(ex);
             }
 
             using var _ = resp;
@@ -1657,8 +1662,7 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task<int?> TryLookupUserIdAsync(string username)
         {
-            var resp = await _http.GetAsync("api/admin/users");
-            resp.EnsureSuccessStatusCode();
+            var resp = await GetCheckedAsync("api/admin/users");
             var users = await ReadJsonItemsAsync(resp);
             var user = users.FirstOrDefault(u =>
                 u.TryGetProperty("username", out var v) &&
@@ -1702,10 +1706,10 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task<JsonElement?> TryLookupAlertByNameAsync(string name)
         {
-            using var response = await _http.GetAsync($"api/alerts/by-name/{Uri.EscapeDataString(name)}");
+            using var response = await SendGetAsync($"api/alerts/by-name/{Uri.EscapeDataString(name)}");
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 return null;
-            response.EnsureSuccessStatusCode();
+            await EnsureSuccessAsync(response);
             await using var stream = await response.Content.ReadAsStreamAsync();
             using var document = await JsonDocument.ParseAsync(stream);
             return document.RootElement.Clone();
@@ -1800,8 +1804,7 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task<int?> TryLookupGroupIdAsync(string name)
         {
-            var resp = await _http.GetAsync("api/admin/groups");
-            resp.EnsureSuccessStatusCode();
+            var resp = await GetCheckedAsync("api/admin/groups");
             var groups = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
             var group = groups.FirstOrDefault(g =>
                 g.TryGetProperty("name", out var v) &&
@@ -1815,8 +1818,7 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task<int?> TryLookupFolderIdAsync(string path)
         {
-            var resp = await _http.GetAsync("api/folders");
-            resp.EnsureSuccessStatusCode();
+            var resp = await GetCheckedAsync("api/folders");
             // Flatten the tree by traversing it
             var tree = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
             var match = FindFolderByPath(tree, path.TrimEnd('/'));
@@ -1847,8 +1849,7 @@ namespace ETL_SQL.Connectors.Portal
         /// An ambiguous name still throws — that is a configuration error, not an absence.</summary>
         private async Task<int?> TryLookupReportIdAsync(string name)
         {
-            var resp = await _http.GetAsync("api/admin/reports");
-            resp.EnsureSuccessStatusCode();
+            var resp = await GetCheckedAsync("api/admin/reports");
             var reports = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
             var target = name.Trim();
             var matches = reports.Where(r =>
@@ -1872,8 +1873,7 @@ namespace ETL_SQL.Connectors.Portal
 
         private async Task<int> LookupDatasetIdAsync(string name, string folderPath)
         {
-            var resp = await _http.GetAsync("api/datasets");
-            resp.EnsureSuccessStatusCode();
+            var resp = await GetCheckedAsync("api/datasets");
             var datasets = await resp.Content.ReadFromJsonAsync<List<JsonElement>>(_json) ?? [];
             var dataset = datasets.FirstOrDefault(d =>
                 d.TryGetProperty("name", out var n) &&
@@ -1906,7 +1906,7 @@ namespace ETL_SQL.Connectors.Portal
             }
             catch (HttpRequestException ex)
             {
-                throw new ExecutionException($"Portal connection error: {ex.Message}", ex);
+                throw ConnectionError(ex);
             }
 
             if (!resp.IsSuccessStatusCode)
@@ -1935,7 +1935,7 @@ namespace ETL_SQL.Connectors.Portal
                 await ApplyVersionHeaderAsync(req);
                 resp = await _http.SendAsync(req);
             }
-            catch (HttpRequestException ex) { throw new ExecutionException($"Portal connection error: {ex.Message}", ex); }
+            catch (HttpRequestException ex) { throw ConnectionError(ex); }
             using var _ = resp;
             var bodyText = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
@@ -2169,6 +2169,33 @@ namespace ETL_SQL.Connectors.Portal
             _logger.WriteLine(
                 $"{statement}: not yet supported — {reason}. See TODO.md v1.1 item.",
                 ConsoleColor.Yellow);
+        }
+
+        private static ExecutionException ConnectionError(HttpRequestException ex) =>
+            new($"Portal connection error: {SanitizeBody(ex.Message)}");
+
+        private async Task<HttpResponseMessage> SendGetAsync(string url)
+        {
+            try { return await _http.GetAsync(url); }
+            catch (HttpRequestException ex) { throw ConnectionError(ex); }
+        }
+
+        /// <summary>GET that fails as an ExecutionException with a sanitized body, never a raw
+        /// HttpRequestException from EnsureSuccessStatusCode.</summary>
+        private async Task<HttpResponseMessage> GetCheckedAsync(string url)
+        {
+            var resp = await SendGetAsync(url);
+            await EnsureSuccessAsync(resp);
+            return resp;
+        }
+
+        private static async Task EnsureSuccessAsync(HttpResponseMessage resp)
+        {
+            if (resp.IsSuccessStatusCode) return;
+            var status = resp.StatusCode;
+            string bodyText;
+            using (resp) bodyText = await resp.Content.ReadAsStringAsync();
+            throw new ExecutionException($"Portal API error ({(int)status} {status}): {SanitizeBody(bodyText)}");
         }
 
         private static string SanitizeBody(string body)

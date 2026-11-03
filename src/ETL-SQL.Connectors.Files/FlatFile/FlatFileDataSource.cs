@@ -909,15 +909,28 @@ namespace ETL_SQL.Connectors.FlatFile
 
             try
             {
-                if (append && System.IO.File.Exists(_filePath) && !_compress && !_encryption.Enabled)
+                bool appendToExisting = append && System.IO.File.Exists(_filePath);
+                if (appendToExisting)
                 {
                     effectiveCancellationToken.ThrowIfCancellationRequested();
-                    System.IO.File.Copy(_filePath, tempFile, true);
+                    if (!_compress && !_encryption.Enabled)
+                    {
+                        System.IO.File.Copy(_filePath, tempFile, true);
+                    }
+                    else
+                    {
+                        // A compressed or encrypted file is staged as its plain content, so the new
+                        // rows are appended to the existing rows and the whole file is re-packed.
+                        // Copying nothing here published a file holding only the new batch.
+                        await using var existing = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".csv");
+                        await using var staged = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None);
+                        await existing.CopyToAsync(staged, effectiveCancellationToken);
+                    }
                 }
 
-                using (var writer = new StreamWriter(tempFile, append, _encoding))
+                using (var writer = new StreamWriter(tempFile, appendToExisting, _encoding))
                 {
-                    bool headersWritten = append && System.IO.File.Exists(_filePath) && new System.IO.FileInfo(_filePath).Length > 0;
+                    bool headersWritten = appendToExisting && new System.IO.FileInfo(tempFile).Length > 0;
                     int totalRows = 0;
 
                     await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))

@@ -527,156 +527,167 @@ namespace ETL_SQL.Connectors.Rest
                     }
                 }
 
+                // Each page's response is disposed when the page is done, including a retried
+                // response that is replaced and a page the consumer stops reading part way.
                 HttpResponseMessage? response = null;
-                int attempts = 0;
-                string responseBodyText;
-
-                while (true)
+                try
                 {
-                    effectiveCancellationToken.ThrowIfCancellationRequested();
-                    using var request = await BuildRequestAsync(requestUrl, effectiveCancellationToken);
-                    try
-                    {
-                        using var cts = CreateTimeoutCts(effectiveCancellationToken);
-                        response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseContentRead, cts.Token);
+                    int attempts = 0;
+                    string responseBodyText;
 
-                        int statusCode = (int)response.StatusCode;
-                        if (response.IsSuccessStatusCode)
+                    while (true)
+                    {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
+                        using var request = await BuildRequestAsync(requestUrl, effectiveCancellationToken);
+                        try
                         {
-                            responseBodyText = await response.Content.ReadAsStringAsync(effectiveCancellationToken);
+                            using var cts = CreateTimeoutCts(effectiveCancellationToken);
+                            response?.Dispose();
+                            response = null;
+                            response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseContentRead, cts.Token);
+
+                            int statusCode = (int)response.StatusCode;
+                            if (response.IsSuccessStatusCode)
+                            {
+                                responseBodyText = await response.Content.ReadAsStringAsync(effectiveCancellationToken);
+                                break;
+                            }
+
+                            if (attempts < retryCount && retryStatuses.Contains(statusCode))
+                            {
+                                attempts++;
+                                int delayMs = CalculateRetryDelay(response, retryBackoffMs, attempts);
+                                await Task.Delay(delayMs, effectiveCancellationToken);
+                                continue;
+                            }
+
+                            var error = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync(effectiveCancellationToken));
+                            throw new HttpRequestException($"API request failed with status {response.StatusCode}: {error}");
+                        }
+                        catch (Exception ex) when (ex is not HttpRequestException && ex is not SecurityException && ex is not ExecutionException
+                            && !(ex is OperationCanceledException && effectiveCancellationToken.IsCancellationRequested))
+                        {
+                            if (attempts < retryCount)
+                            {
+                                attempts++;
+                                int delayMs = CalculateRetryDelay(null, retryBackoffMs, attempts);
+                                await Task.Delay(delayMs, effectiveCancellationToken);
+                                continue;
+                            }
+                            throw new HttpRequestException($"API request failed with exception: {SanitizeForDiagnostics(ex.Message)}", ex);
+                        }
+                    }
+
+                    int rowsInPage = 0;
+                    using (var doc = JsonDocument.Parse(responseBodyText))
+                    {
+                        await foreach (var batch in JsonExtractor.ExtractBatches(doc, rootPath, batchSize)
+                            .WithCancellation(effectiveCancellationToken))
+                        {
+                            rowsInPage += batch.Rows.Count;
+                            yield return batch;
+                        }
+
+                        if (rowsInPage == 0)
+                        {
+                            hasMore = false;
                             break;
                         }
 
-                        if (attempts < retryCount && retryStatuses.Contains(statusCode))
+                        if (paginationMode == "CURSOR" && !string.IsNullOrEmpty(cursorPath))
                         {
-                            attempts++;
-                            int delayMs = CalculateRetryDelay(response, retryBackoffMs, attempts);
-                            await Task.Delay(delayMs, effectiveCancellationToken);
-                            continue;
-                        }
-
-                        var error = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync(effectiveCancellationToken));
-                        throw new HttpRequestException($"API request failed with status {response.StatusCode}: {error}");
-                    }
-                    catch (Exception ex) when (ex is not HttpRequestException && ex is not SecurityException && ex is not ExecutionException
-                        && !(ex is OperationCanceledException && effectiveCancellationToken.IsCancellationRequested))
-                    {
-                        if (attempts < retryCount)
-                        {
-                            attempts++;
-                            int delayMs = CalculateRetryDelay(null, retryBackoffMs, attempts);
-                            await Task.Delay(delayMs, effectiveCancellationToken);
-                            continue;
-                        }
-                        throw new HttpRequestException($"API request failed with exception: {SanitizeForDiagnostics(ex.Message)}", ex);
-                    }
-                }
-
-                int rowsInPage = 0;
-                using (var doc = JsonDocument.Parse(responseBodyText))
-                {
-                    await foreach (var batch in JsonExtractor.ExtractBatches(doc, rootPath, batchSize)
-                        .WithCancellation(effectiveCancellationToken))
-                    {
-                        rowsInPage += batch.Rows.Count;
-                        yield return batch;
-                    }
-
-                    if (rowsInPage == 0)
-                    {
-                        hasMore = false;
-                        break;
-                    }
-
-                    if (paginationMode == "CURSOR" && !string.IsNullOrEmpty(cursorPath))
-                    {
-                        var cursorElem = ResolveJsonElement(doc.RootElement, cursorPath);
-                        if (cursorElem.HasValue && cursorElem.Value.ValueKind != JsonValueKind.Null && cursorElem.Value.ValueKind != JsonValueKind.Undefined)
-                        {
-                            string? nextCursor = cursorElem.Value.ValueKind == JsonValueKind.String ? cursorElem.Value.GetString() : cursorElem.Value.GetRawText();
-                            if (!string.IsNullOrWhiteSpace(nextCursor) && nextCursor != currentCursor)
+                            var cursorElem = ResolveJsonElement(doc.RootElement, cursorPath);
+                            if (cursorElem.HasValue && cursorElem.Value.ValueKind != JsonValueKind.Null && cursorElem.Value.ValueKind != JsonValueKind.Undefined)
                             {
-                                currentCursor = nextCursor;
-                            }
-                            else
-                            {
-                                hasMore = false;
-                            }
-                        }
-                        else
-                        {
-                            hasMore = false;
-                        }
-                    }
-                    else if (!string.IsNullOrEmpty(nextUrlPath))
-                    {
-                        var nextUrlElem = ResolveJsonElement(doc.RootElement, nextUrlPath);
-                        if (nextUrlElem.HasValue && nextUrlElem.Value.ValueKind == JsonValueKind.String)
-                        {
-                            var nextUrl = nextUrlElem.Value.GetString();
-                            if (!string.IsNullOrEmpty(nextUrl))
-                            {
-                                if (Uri.TryCreate(nextUrl, UriKind.Absolute, out var nextUri))
+                                string? nextCursor = cursorElem.Value.ValueKind == JsonValueKind.String ? cursorElem.Value.GetString() : cursorElem.Value.GetRawText();
+                                if (!string.IsNullOrWhiteSpace(nextCursor) && nextCursor != currentCursor)
                                 {
-                                    currentUrl = nextUrl;
-                                }
-                                else if (Uri.TryCreate(new Uri(currentUrl), nextUrl, out var absoluteNextUri))
-                                {
-                                    currentUrl = absoluteNextUri.AbsoluteUri;
+                                    currentCursor = nextCursor;
                                 }
                                 else
                                 {
-                                    throw new ExecutionException($"Invalid next URL returned by API: '{nextUrl}'");
+                                    hasMore = false;
                                 }
-                                ValidateRequestUrl(currentUrl);
                             }
                             else
                             {
                                 hasMore = false;
                             }
                         }
+                        else if (!string.IsNullOrEmpty(nextUrlPath))
+                        {
+                            var nextUrlElem = ResolveJsonElement(doc.RootElement, nextUrlPath);
+                            if (nextUrlElem.HasValue && nextUrlElem.Value.ValueKind == JsonValueKind.String)
+                            {
+                                var nextUrl = nextUrlElem.Value.GetString();
+                                if (!string.IsNullOrEmpty(nextUrl))
+                                {
+                                    if (Uri.TryCreate(nextUrl, UriKind.Absolute, out var nextUri))
+                                    {
+                                        currentUrl = nextUrl;
+                                    }
+                                    else if (Uri.TryCreate(new Uri(currentUrl), nextUrl, out var absoluteNextUri))
+                                    {
+                                        currentUrl = absoluteNextUri.AbsoluteUri;
+                                    }
+                                    else
+                                    {
+                                        throw new ExecutionException($"Invalid next URL returned by API: '{nextUrl}'");
+                                    }
+                                    ValidateRequestUrl(currentUrl);
+                                }
+                                else
+                                {
+                                    hasMore = false;
+                                }
+                            }
+                            else
+                            {
+                                hasMore = false;
+                            }
+                        }
+                    }
+
+                    if (paginationMode == "PAGE")
+                    {
+                        currentPage++;
+                    }
+                    else if (paginationMode == "OFFSET")
+                    {
+                        int increment = pageSize ?? rowsInPage;
+                        currentOffset += increment;
+                    }
+                    else if (paginationMode == "LINK_HEADER")
+                    {
+                        var nextUrl = ParseLinkHeaderNextUrl(response);
+                        if (!string.IsNullOrEmpty(nextUrl))
+                        {
+                            if (Uri.TryCreate(nextUrl, UriKind.Absolute, out var nextUri))
+                            {
+                                currentUrl = nextUrl;
+                            }
+                            else if (Uri.TryCreate(new Uri(currentUrl), nextUrl, out var absoluteNextUri))
+                            {
+                                currentUrl = absoluteNextUri.AbsoluteUri;
+                            }
+                            else
+                            {
+                                throw new ExecutionException($"Invalid next URL returned by API: '{nextUrl}'");
+                            }
+                            ValidateRequestUrl(currentUrl);
+                        }
                         else
                         {
                             hasMore = false;
                         }
                     }
-                }
 
-                if (paginationMode == "PAGE")
-                {
-                    currentPage++;
+                    pageCount++;
                 }
-                else if (paginationMode == "OFFSET")
+                finally
                 {
-                    int increment = pageSize ?? rowsInPage;
-                    currentOffset += increment;
+                    response?.Dispose();
                 }
-                else if (paginationMode == "LINK_HEADER")
-                {
-                    var nextUrl = ParseLinkHeaderNextUrl(response);
-                    if (!string.IsNullOrEmpty(nextUrl))
-                    {
-                        if (Uri.TryCreate(nextUrl, UriKind.Absolute, out var nextUri))
-                        {
-                            currentUrl = nextUrl;
-                        }
-                        else if (Uri.TryCreate(new Uri(currentUrl), nextUrl, out var absoluteNextUri))
-                        {
-                            currentUrl = absoluteNextUri.AbsoluteUri;
-                        }
-                        else
-                        {
-                            throw new ExecutionException($"Invalid next URL returned by API: '{nextUrl}'");
-                        }
-                        ValidateRequestUrl(currentUrl);
-                    }
-                    else
-                    {
-                        hasMore = false;
-                    }
-                }
-
-                pageCount++;
             }
         }
 
@@ -1117,66 +1128,76 @@ namespace ETL_SQL.Connectors.Rest
 
             var singleRow = rows != null && rows.Count == 1 ? rows[0] : null;
 
-            while (true)
+            // A retried response is disposed before it is replaced, and the last one when the loop ends.
+            try
             {
-                effectiveCancellationToken.ThrowIfCancellationRequested();
-                using var request = new HttpRequestMessage(new HttpMethod(method), url);
-                if (content != null)
+                while (true)
                 {
-                    request.Content = new StringContent(content, System.Text.Encoding.UTF8, GetBodyContentType());
-                }
-
-                await ApplyHeadersAsync(request, singleRow, idempotencyKeyCol, idempotencyHeader, columnNames, effectiveCancellationToken);
-
-                try
-                {
-                    using var cts = CreateTimeoutCts(effectiveCancellationToken);
-                    response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseContentRead, cts.Token);
-                    statusCode = (int)response.StatusCode;
-
-                    if (successStatuses.Contains(statusCode.Value))
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
+                    using var request = new HttpRequestMessage(new HttpMethod(method), url);
+                    if (content != null)
                     {
-                        responseBodyText = await response.Content.ReadAsStringAsync(effectiveCancellationToken);
-                        errorMessage = null;
+                        request.Content = new StringContent(content, System.Text.Encoding.UTF8, GetBodyContentType());
+                    }
+
+                    await ApplyHeadersAsync(request, singleRow, idempotencyKeyCol, idempotencyHeader, columnNames, effectiveCancellationToken);
+
+                    try
+                    {
+                        using var cts = CreateTimeoutCts(effectiveCancellationToken);
+                        response?.Dispose();
+                        response = null;
+                        response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseContentRead, cts.Token);
+                        statusCode = (int)response.StatusCode;
+
+                        if (successStatuses.Contains(statusCode.Value))
+                        {
+                            responseBodyText = await response.Content.ReadAsStringAsync(effectiveCancellationToken);
+                            errorMessage = null;
+                            break;
+                        }
+
+                        if (attempts < retryCount && retryStatuses.Contains(statusCode.Value))
+                        {
+                            attempts++;
+                            int delayMs = CalculateRetryDelay(response, retryBackoffMs, attempts);
+                            await Task.Delay(delayMs, effectiveCancellationToken);
+                            continue;
+                        }
+
+                        var errorContent = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync(effectiveCancellationToken));
+                        responseBodyText = errorContent;
+                        if (errorContent.Length > errorBodyMaxChars)
+                        {
+                            errorContent = errorContent.Substring(0, errorBodyMaxChars);
+                        }
+                        errorMessage = $"API request failed with status {response.StatusCode}: {errorContent}";
                         break;
                     }
-
-                    if (attempts < retryCount && retryStatuses.Contains(statusCode.Value))
+                    catch (Exception ex) when (ex is SecurityException or ExecutionException)
                     {
-                        attempts++;
-                        int delayMs = CalculateRetryDelay(response, retryBackoffMs, attempts);
-                        await Task.Delay(delayMs, effectiveCancellationToken);
-                        continue;
+                        // Blocked redirect target or redirect loop: surface immediately with its own
+                        // message instead of retrying or masking it as a generic request failure.
+                        throw;
                     }
-
-                    var errorContent = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync(effectiveCancellationToken));
-                    responseBodyText = errorContent;
-                    if (errorContent.Length > errorBodyMaxChars)
+                    catch (Exception ex)
                     {
-                        errorContent = errorContent.Substring(0, errorBodyMaxChars);
-                    }
-                    errorMessage = $"API request failed with status {response.StatusCode}: {errorContent}";
-                    break;
-                }
-                catch (Exception ex) when (ex is SecurityException or ExecutionException)
-                {
-                    // Blocked redirect target or redirect loop: surface immediately with its own
-                    // message instead of retrying or masking it as a generic request failure.
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    if (attempts < retryCount)
-                    {
-                        attempts++;
-                        int delayMs = CalculateRetryDelay(null, retryBackoffMs, attempts);
-                        await Task.Delay(delayMs, effectiveCancellationToken);
-                        continue;
-                    }
+                        if (attempts < retryCount)
+                        {
+                            attempts++;
+                            int delayMs = CalculateRetryDelay(null, retryBackoffMs, attempts);
+                            await Task.Delay(delayMs, effectiveCancellationToken);
+                            continue;
+                        }
 
-                    errorMessage = $"API request failed with exception: {SanitizeForDiagnostics(ex.Message)}";
-                    break;
+                        errorMessage = $"API request failed with exception: {SanitizeForDiagnostics(ex.Message)}";
+                        break;
+                    }
                 }
+            }
+            finally
+            {
+                response?.Dispose();
             }
             stopwatch.Stop();
 
@@ -1388,7 +1409,16 @@ namespace ETL_SQL.Connectors.Rest
 
             while (true)
             {
-                var response = await _httpClient.SendAsync(current, completion, ct);
+                HttpResponseMessage response;
+                try
+                {
+                    response = await _httpClient.SendAsync(current, completion, ct);
+                }
+                catch
+                {
+                    if (current != request) current.Dispose();
+                    throw;
+                }
                 if (!IsRedirectStatus(response.StatusCode))
                 {
                     return response;
@@ -1417,8 +1447,18 @@ namespace ETL_SQL.Connectors.Rest
                     throw new ExecutionException($"REST redirect to unsupported scheme '{target.Scheme}' was blocked.");
                 }
 
-                // Re-validate every hop against the egress policy before following it.
-                if (_context != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(_context, target);
+                // Re-validate every hop against the egress policy before following it. A blocked
+                // hop releases the redirect response and any cloned request before it throws.
+                try
+                {
+                    if (_context != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(_context, target);
+                }
+                catch
+                {
+                    response.Dispose();
+                    if (current != request) current.Dispose();
+                    throw;
+                }
 
                 // Credentials are bound to the full origin, including its effective port.
                 bool stripCredentials = ShouldStripCredentialsOnRedirect(current.RequestUri!, target);
@@ -1804,8 +1844,8 @@ namespace ETL_SQL.Connectors.Rest
                 }
 
                 var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
-                var request = await BuildRequestAsync(cancellationToken: effectiveCancellationToken);
-                var response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseHeadersRead, effectiveCancellationToken);
+                using var request = await BuildRequestAsync(cancellationToken: effectiveCancellationToken);
+                using var response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseHeadersRead, effectiveCancellationToken);
                 if (!response.IsSuccessStatusCode) return Enumerable.Empty<string>();
 
                 using var stream = await response.Content.ReadAsStreamAsync(effectiveCancellationToken);

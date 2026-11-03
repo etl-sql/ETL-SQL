@@ -55,7 +55,7 @@ namespace ETL_SQL.Connectors.Snowflake
             _options = options;
             _commandTimeout = options != null
                 && options.TryGetValue("TIMEOUT_SECONDS", out var ts)
-                && int.TryParse(ts, out var t) ? t : 1800;
+                && int.TryParse(ts, out var t) ? t : ETL_SQL.Connectors.Shared.DataWarehouseTimeouts.DefaultSeconds(context);
 
             var host = SnowflakeConnector.GetHostStatic(connectionString, options);
             if (!string.IsNullOrEmpty(host))
@@ -94,18 +94,25 @@ namespace ETL_SQL.Connectors.Snowflake
             return null;
         }
 
-        private static string ReplaceConnectionStringValue(string cs, string key, string newValue)
+        // Sets key=newValue, appending it when the connection string does not carry the key yet: a
+        // PRIVATE_KEY_FILE given only as an option was validated and then silently dropped.
+        internal static string ReplaceConnectionStringValue(string cs, string key, string newValue)
         {
             var parts = cs.Split(';');
+            var found = false;
             for (int i = 0; i < parts.Length; i++)
             {
                 var kv = parts[i].Trim().Split('=', 2);
                 if (kv.Length == 2 && kv[0].Equals(key, StringComparison.OrdinalIgnoreCase))
                 {
                     parts[i] = $"{kv[0]}={newValue}";
+                    found = true;
                 }
             }
-            return string.Join(";", parts);
+            if (found) return string.Join(";", parts);
+            var trimmed = cs.TrimEnd();
+            var separator = trimmed.Length == 0 || trimmed.EndsWith(';') ? "" : ";";
+            return $"{trimmed}{separator}{key}={newValue};";
         }
 
         public string ConnectionString => _connectionString;
@@ -129,9 +136,9 @@ namespace ETL_SQL.Connectors.Snowflake
                 var result = await cmd.ExecuteScalarAsync();
                 return $"Snowflake {result}";
             }
-            catch (SnowflakeDbException ex)
+            catch (Exception ex) when (IsSnowflakeProviderException(ex))
             {
-                throw new ExecutionException($"Snowflake error: {ex.Message}");
+                throw ConnectorExceptionWrapper.Wrap("Snowflake", ex);
             }
             finally
             {
@@ -144,7 +151,13 @@ namespace ETL_SQL.Connectors.Snowflake
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
             ReadBatches(batchSize, CancellationToken.None);
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(
+                ReadBatchesCore(batchSize, cancellationToken),
+                "Snowflake",
+                IsSnowflakeProviderException);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(
             int batchSize,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
@@ -228,9 +241,9 @@ namespace ETL_SQL.Connectors.Snowflake
                     }
                 }
             }
-            catch (SnowflakeDbException ex)
+            catch (Exception ex) when (IsSnowflakeProviderException(ex))
             {
-                throw new ExecutionException($"Snowflake write error: {ex.Message}");
+                throw ConnectorExceptionWrapper.Wrap("Snowflake", ex);
             }
             finally
             {
@@ -326,9 +339,9 @@ namespace ETL_SQL.Connectors.Snowflake
                 using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 return Enumerable.Range(0, reader.FieldCount).Select(i => reader.GetName(i)).ToList();
             }
-            catch (SnowflakeDbException ex)
+            catch (Exception ex) when (IsSnowflakeProviderException(ex))
             {
-                throw new ExecutionException($"Snowflake error: {ex.Message}");
+                throw ConnectorExceptionWrapper.Wrap("Snowflake", ex);
             }
             finally { if (!isShared) await conn.DisposeAsync(); }
         }
@@ -357,9 +370,9 @@ namespace ETL_SQL.Connectors.Snowflake
                 }
                 return result;
             }
-            catch (SnowflakeDbException ex)
+            catch (Exception ex) when (IsSnowflakeProviderException(ex))
             {
-                throw new ExecutionException($"Snowflake error: {ex.Message}");
+                throw ConnectorExceptionWrapper.Wrap("Snowflake", ex);
             }
             finally { if (!isShared) await conn.DisposeAsync(); }
         }
@@ -387,9 +400,9 @@ namespace ETL_SQL.Connectors.Snowflake
                 }
                 return result;
             }
-            catch (SnowflakeDbException ex)
+            catch (Exception ex) when (IsSnowflakeProviderException(ex))
             {
-                throw new ExecutionException($"Snowflake error: {ex.Message}");
+                throw ConnectorExceptionWrapper.Wrap("Snowflake", ex);
             }
             finally { if (!isShared) await conn.DisposeAsync(); }
         }
@@ -408,9 +421,9 @@ namespace ETL_SQL.Connectors.Snowflake
                 using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
                 return Enumerable.Range(0, reader.FieldCount).Select(i => reader.GetName(i)).ToList();
             }
-            catch (SnowflakeDbException ex)
+            catch (Exception ex) when (IsSnowflakeProviderException(ex))
             {
-                throw new ExecutionException($"Snowflake error: {ex.Message}");
+                throw ConnectorExceptionWrapper.Wrap("Snowflake", ex);
             }
             finally { if (!isShared) await conn.DisposeAsync(); }
         }
@@ -421,30 +434,42 @@ namespace ETL_SQL.Connectors.Snowflake
         public async Task BeginTransactionAsync()
         {
             if (_transactionState.Transaction != null) return;
-            _transactionState.Connection = new SnowflakeDbConnection { ConnectionString = _connectionString };
-            await ConnectorRetryPolicy.ForSnowflake(_logger)
-                .ExecuteAsync(async ct => await _transactionState.Connection.OpenAsync(ct));
-            _transactionState.Transaction = await _transactionState.Connection.BeginTransactionAsync();
+            var (conn, _) = await GetConnectionAsync();
+            try
+            {
+                _transactionState.Transaction = await conn.BeginTransactionAsync();
+                _transactionState.Connection = conn;
+            }
+            catch (Exception ex) when (IsSnowflakeProviderException(ex))
+            {
+                await conn.DisposeAsync();
+                throw ConnectorExceptionWrapper.Wrap("Snowflake", ex);
+            }
         }
 
-        public async Task CommitAsync()
-        {
-            if (_transactionState.Transaction == null) return;
-            await _transactionState.Transaction.CommitAsync();
-            await _transactionState.Transaction.DisposeAsync();
-            if (_transactionState.Connection != null) await _transactionState.Connection.DisposeAsync();
-            _transactionState.Transaction = null;
-            _transactionState.Connection = null;
-        }
+        public Task CommitAsync() => EndTransactionAsync(commit: true);
 
-        public async Task RollbackAsync()
+        public Task RollbackAsync() => EndTransactionAsync(commit: false);
+
+        private async Task EndTransactionAsync(bool commit)
         {
             if (_transactionState.Transaction == null) return;
-            await _transactionState.Transaction.RollbackAsync();
-            await _transactionState.Transaction.DisposeAsync();
-            if (_transactionState.Connection != null) await _transactionState.Connection.DisposeAsync();
-            _transactionState.Transaction = null;
-            _transactionState.Connection = null;
+            try
+            {
+                if (commit) await _transactionState.Transaction.CommitAsync();
+                else await _transactionState.Transaction.RollbackAsync();
+            }
+            catch (Exception ex) when (IsSnowflakeProviderException(ex))
+            {
+                throw ConnectorExceptionWrapper.Wrap("Snowflake", ex);
+            }
+            finally
+            {
+                await _transactionState.Transaction.DisposeAsync();
+                if (_transactionState.Connection != null) await _transactionState.Connection.DisposeAsync();
+                _transactionState.Transaction = null;
+                _transactionState.Connection = null;
+            }
         }
 
         public async ValueTask DisposeAsync()
@@ -460,9 +485,17 @@ namespace ETL_SQL.Connectors.Snowflake
         {
             if (_transactionState.Connection != null) return (_transactionState.Connection, true);
             var conn = new SnowflakeDbConnection { ConnectionString = _connectionString };
-            await ConnectorRetryPolicy.ForSnowflake(_logger)
-                .ExecuteAsync(async ct => await conn.OpenAsync(ct), cancellationToken);
-            return (conn, false);
+            try
+            {
+                await ConnectorRetryPolicy.ForSnowflake(_logger)
+                    .ExecuteAsync(async ct => await conn.OpenAsync(ct), cancellationToken);
+                return (conn, false);
+            }
+            catch (Exception ex) when (IsSnowflakeProviderException(ex))
+            {
+                await conn.DisposeAsync();
+                throw ConnectorExceptionWrapper.Wrap("Snowflake", ex);
+            }
         }
 
         private async Task TruncateAsync(CancellationToken cancellationToken = default)

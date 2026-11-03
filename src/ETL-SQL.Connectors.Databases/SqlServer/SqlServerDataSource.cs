@@ -189,6 +189,7 @@ namespace ETL_SQL.Connectors.SqlServer
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            if (_context != null && _context.IsWhatIf) return;
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for SQL Server data source write.");
 
@@ -687,6 +688,7 @@ namespace ETL_SQL.Connectors.SqlServer
 
         private async Task TruncateAsync(CancellationToken cancellationToken)
         {
+            if (_context != null && _context.IsWhatIf) return;
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for SQL Server truncate.");
 
