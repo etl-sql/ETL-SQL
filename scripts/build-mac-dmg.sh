@@ -95,7 +95,23 @@ chmod -R go-w "$APP_BUNDLE"
 
 # 4. Build DMG
 echo "Creating DMG image..."
-hdiutil create -volname "$APP_NAME" -srcfolder "$BUILD_DIR" -ov -format UDZO "${APP_NAME}_v${VERSION}.dmg"
+# Hosted macOS runners intermittently report "Resource busy" while another process holds the
+# disk-image subsystem (Native Package Certification 41676292135, 2026-11-03). Retry only that
+# error, a bounded number of times; any other failure stops the build immediately.
+DMG_ATTEMPTS=3
+for attempt in $(seq 1 "$DMG_ATTEMPTS"); do
+    if output=$(hdiutil create -volname "$APP_NAME" -srcfolder "$BUILD_DIR" -ov -format UDZO "${APP_NAME}_v${VERSION}.dmg" 2>&1); then
+        [ -n "$output" ] && printf '%s\n' "$output"
+        break
+    fi
+    printf '%s\n' "$output" >&2
+    if [[ "$output" != *"Resource busy"* || "$attempt" -eq "$DMG_ATTEMPTS" ]]; then
+        echo "[ERROR] hdiutil create failed (attempt $attempt of $DMG_ATTEMPTS)." >&2
+        exit 1
+    fi
+    echo "hdiutil reported Resource busy; retrying in ${DMG_RETRY_DELAY_SECONDS:-15}s (attempt $attempt of $DMG_ATTEMPTS)." >&2
+    sleep "${DMG_RETRY_DELAY_SECONDS:-15}"
+done
 echo "[SUCCESS] DMG created: ${APP_NAME}_v${VERSION}.dmg"
 
 echo -e "\nmacOS bundle process complete."

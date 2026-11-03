@@ -1,0 +1,12 @@
+#!/bin/sh
+# Run the impact-selected pre-push validation (AGENTS.md section 19). Its source preflight alone
+# would have stopped release candidate f5c4fd62a, which every hosted workflow then failed on.
+
+set -eu
+
+if command -v pwsh >/dev/null 2>&1; then
+    pwsh -NoProfile -File ./scripts/Test-PrePush.ps1
+else
+    echo "pre-push: PowerShell 7 (pwsh) is required to run scripts/Test-PrePush.ps1." >&2
+    exit 1
+fi

@@ -693,13 +693,13 @@ jobs:
 
   portal-browser-gate:
     name: Portal Browser Journey
-    timeout-minutes: 5
+    timeout-minutes: 12
     needs: [source-preflight, portal-browser-journey]
     if: always() && needs.source-preflight.result == 'success' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'portal-browser-journey') && needs.source-preflight.outputs.browser_shards == '[1,2,3]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-        timeout-minutes: 3
+        timeout-minutes: 8
       - uses: actions/setup-node@v7
         with:
           node-version: 22

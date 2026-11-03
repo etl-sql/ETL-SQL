@@ -38,6 +38,26 @@ try {
   assert.notEqual(overlapping.status, 0);
   assert.match(overlapping.stdout + overlapping.stderr, /must not overlap/);
   assert.deepEqual(readFileSync(stagedCli), before, 'Reject overlap before deleting its published input.');
+  // "Resource busy" is retried until image creation succeeds; any other hdiutil error stops at once.
+  const counter = path.join(root, 'release/hdiutil-calls');
+  const flaky = (failures, message) => [`hdiutil() { n=$(cat "${counter}" 2>/dev/null || echo 0); n=$((n+1)); echo $n > "${counter}";`,
+    `  if [ $n -le ${failures} ]; then echo "hdiutil: create failed - ${message}" >&2; return 1; fi; printf "fixture DMG" > "\${@: -1}"; }`,
+    'export -f hdiutil', 'export DMG_RETRY_DELAY_SECONDS=0', 'bash scripts/build-mac-dmg.sh 0.22.0 release/osx-x64/bin'].join('\n');
+  rmSync(counter, { force: true });
+  const busy = run(bash, ['-euo', 'pipefail', '-c', flaky(2, 'Resource busy')]);
+  assert.equal(busy.status, 0, busy.stdout + busy.stderr);
+  assert.equal(readFileSync(counter, 'utf8').trim(), '3');
+  assert.match(busy.stderr, /retrying in 0s \(attempt 2 of 3\)/);
+  rmSync(counter, { force: true });
+  const exhausted = run(bash, ['-euo', 'pipefail', '-c', flaky(3, 'Resource busy')]);
+  assert.notEqual(exhausted.status, 0);
+  assert.equal(readFileSync(counter, 'utf8').trim(), '3', 'busy retries are bounded');
+  rmSync(counter, { force: true });
+  const other = run(bash, ['-euo', 'pipefail', '-c', flaky(1, 'no space left on device')]);
+  assert.notEqual(other.status, 0);
+  assert.equal(readFileSync(counter, 'utf8').trim(), '1', 'other hdiutil errors are not retried');
+  rmSync(counter, { force: true });
+  rmSync(path.join(root, 'ETL-SQL_v0.22.0.dmg'), { force: true });
   console.log('DMG staging: actual builder preserves a clean Git candidate; only image creation is mocked and release/ holds the generated app.');
 } finally {
   assert.equal(path.dirname(root), parent); assert.ok(path.basename(root).startsWith('dmg-staging-'));

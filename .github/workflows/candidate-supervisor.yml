@@ -1,0 +1,47 @@
+name: Release Candidate Supervisor
+
+# Starts with every push to a release branch and watches all workflow runs for that exact SHA,
+# including Release Certification, native packages and DEB dispatched after the push.
+# Known infrastructure/flaky failures are rerun automatically; a real defect cancels the long
+# package runs and opens an issue within minutes. See scripts/candidate-supervisor.mjs.
+on:
+  push:
+    branches:
+      - 'release/**'
+
+permissions:
+  contents: read
+  actions: write
+  issues: write
+
+# A newer push makes a new candidate; stop supervising the old one.
+concurrency:
+  group: candidate-supervisor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  supervise:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      # Only the supervisor scripts are needed. A slow checkout gets one longer retry so the
+      # supervisor itself survives the Git slowdowns it is meant to absorb.
+      - id: checkout
+        uses: actions/checkout@v6
+        timeout-minutes: 4
+        continue-on-error: true
+        with:
+          sparse-checkout: scripts
+      - if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          sparse-checkout: scripts
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Supervise candidate runs
+        timeout-minutes: 175
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/candidate-supervisor.mjs "$GITHUB_REPOSITORY" "$GITHUB_SHA"

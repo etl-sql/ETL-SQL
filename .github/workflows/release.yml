@@ -426,12 +426,12 @@ jobs:
     name: Promote certified Windows packages
     needs: [validate, prepare-release]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     outputs:
       manifest_sha256: ${{ needs.validate.outputs.windows_manifest_sha256 }}
     steps:
       - uses: actions/checkout@v6
-        timeout-minutes: 3
+        timeout-minutes: 8
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
       - uses: actions/setup-node@v7
@@ -567,7 +567,7 @@ jobs:
     name: Upload retained macOS packages
     needs: [validate, prepare-release, select-macos-intel, select-macos-arm64]
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     outputs:
       intel_manifest_sha256: ${{ needs.select-macos-intel.outputs.manifest_sha256 }}
       arm64_manifest_sha256: ${{ needs.select-macos-arm64.outputs.manifest_sha256 }}
@@ -575,7 +575,7 @@ jobs:
       arm64_selection_artifact_id: ${{ needs.select-macos-arm64.outputs.selection_artifact_id }}
     steps:
       - uses: actions/checkout@v6
-        timeout-minutes: 3
+        timeout-minutes: 8
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
       - uses: actions/setup-node@v7
@@ -646,7 +646,7 @@ jobs:
   # (SBOM = contents, sha256sums = integrity, provenance = authenticity.)
   attest-provenance:
     name: Attest build provenance
-    timeout-minutes: 75
+    timeout-minutes: 85
     outputs:
       operator_artifact_id: ${{ needs.operator-evidence.outputs.artifact_id }}
       operator_manifest_sha256: ${{ needs.operator-evidence.outputs.manifest_sha256 }}
@@ -668,7 +668,7 @@ jobs:
       actions: read        # read the retained hosted-evidence artifact
     steps:
       - name: Checkout
-        timeout-minutes: 3
+        timeout-minutes: 8
         uses: actions/checkout@v6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}

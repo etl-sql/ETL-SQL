@@ -27,6 +27,7 @@ export const releaseAutomationChecks = [
 ].map(name => ({ id: `test-${name}`, command: process.execPath, args: [`scripts/checks/test-${name}.mjs`] }));
 releaseAutomationChecks.push({ id: 'test-release-draft-manifest', command: process.execPath, args: ['scripts/checks/test-release-draft-manifest.mjs'] });
 releaseAutomationChecks.push({ id: 'test-msi-progress', command: process.execPath, args: ['scripts/checks/test-msi-progress.mjs'] });
+releaseAutomationChecks.push({ id: 'test-candidate-supervisor', command: process.execPath, args: ['scripts/checks/test-candidate-supervisor.mjs'] });
 sourceChecks.push(...releaseAutomationChecks);
 // Ordinary branch work may keep draft notes. Tag publication must use finalized metadata.
 if (process.env.ETLSQL_RELEASE_TAG) sourceChecks.push({ id: 'final-release-metadata', command: process.execPath,

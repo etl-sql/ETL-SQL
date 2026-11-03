@@ -149,7 +149,7 @@ jobs:
       manifest_sha256: ${{ steps.identity.outputs.manifest_sha256 }}
     steps:
       - uses: actions/checkout@v6
-        timeout-minutes: 3
+        timeout-minutes: 8
         with:
           ref: ${{ env.CERTIFICATION_SHA }}
           fetch-depth: 0
@@ -201,7 +201,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        timeout-minutes: 3
+        timeout-minutes: 8
         uses: actions/checkout@v6
         with:
           ref: ${{ env.CERTIFICATION_SHA }}
@@ -342,7 +342,7 @@ jobs:
         profile: [workstation, portal]
     steps:
       - name: Checkout
-        timeout-minutes: 3
+        timeout-minutes: 8
         uses: actions/checkout@v6
         with:
           ref: ${{ env.CERTIFICATION_SHA }}
@@ -431,7 +431,7 @@ jobs:
       checks: read
     steps:
       - uses: actions/checkout@v6
-        timeout-minutes: 3
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v7
@@ -548,7 +548,7 @@ jobs:
       ETLSQL_MSI_CHECKPOINT_RUN_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v6
-        timeout-minutes: 3
+        timeout-minutes: 8
       - name: Select original successful MSI build inputs
         id: inputs
         timeout-minutes: 3
