@@ -1,4 +1,4 @@
-using System.Net;
+using System.Text.Json;
 
 namespace ETL_SQL.WorkstationEditor;
 
@@ -6,7 +6,10 @@ internal static class StudioShell
 {
     public static string Html(WorkstationEditorOptions options, WorkstationWorkspace workspace)
     {
-        var initialFile = WebUtility.HtmlEncode(workspace.InitialRelativeFile(options.InitialFile) ?? string.Empty);
+        // A JavaScript string literal, not HTML text: entities are not decoded inside <script>.
+        // The default encoder escapes quotes, <, > and & as \uXXXX, so the name cannot end the
+        // string or the script element.
+        var initialFile = JsonSerializer.Serialize(workspace.InitialRelativeFile(options.InitialFile) ?? string.Empty);
         var readonlyAttr = workspace.ReadOnly ? "true" : "false";
 
         return $$"""
@@ -41,7 +44,7 @@ internal static class StudioShell
   <script type="module">
     import { createStudioWorkbench } from '/designer/studio.js?v={{options.SessionToken}}';
     const token = new URLSearchParams(location.search).get('token') || '';
-    const initialFile = '{{initialFile}}';
+    const initialFile = {{initialFile}};
     const readOnly = {{readonlyAttr}};
     const authFetch = (url, opts = {}) =>
       fetch(url, { ...opts, headers: { 'X-ETLSQL-EDITOR-TOKEN': token, ...(opts.headers || {}) } });

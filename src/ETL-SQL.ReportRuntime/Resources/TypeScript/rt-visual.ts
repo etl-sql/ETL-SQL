@@ -532,9 +532,50 @@ function htmlVisualContainerId(name: string): string {
     return 'etl-v-' + String(name || '').toLowerCase().replaceAll(' ', '-');
 }
 
-function isSafeHtmlVisualUrl(value: unknown): boolean {
-    const url = String(value || '').trim();
-/* eslint-disable-next-line no-control-regex -- matching control characters is the point:
+/**
+ * Splits a `srcset` into its candidate URLs, following the HTML parsing rules closely enough that
+ * a second candidate cannot hide behind a safe first one. A URL runs to the next whitespace (it may
+ * itself contain commas, as data: URLs do); trailing commas end the candidate; descriptors run to
+ * the next comma.
+ */
+function srcsetCandidateUrls(srcset: string): string[] {
+    const urls: string[] = [];
+    let i = 0;
+    while (i < srcset.length) {
+        while (i < srcset.length && (/\s/.test(srcset[i]) || srcset[i] === ',')) i++;
+        if (i >= srcset.length) break;
+        let end = i;
+        while (end < srcset.length && !/\s/.test(srcset[end])) end++;
+        let url = srcset.slice(i, end);
+        i = end;
+        if (/,+$/.test(url)) {
+            url = url.replace(/,+$/, '');
+        } else {
+            while (i < srcset.length && srcset[i] !== ',') i++;
+        }
+        if (url) urls.push(url);
+    }
+    return urls;
+}
+
+/** True when an SVG document is free of script, event handlers, entity tricks and javascript: links. */
+function isScriptFreeSvg(svg: string): boolean {
+    // XML resolves character references in attribute values, so `&#106;avascript:` is javascript:.
+    const decoded = svg.replace(/&#(x[0-9a-f]+|\d+);?/gi, (_, code: string) => {
+        const point = code[0].toLowerCase() === 'x' ? parseInt(code.slice(1), 16) : parseInt(code, 10);
+        return Number.isFinite(point) && point <= 0x10ffff ? String.fromCodePoint(point) : '';
+    });
+    // URL parsers drop tabs and newlines, so compare with all whitespace and controls removed.
+    /* eslint-disable-next-line no-control-regex -- stripping control characters is the point. */
+    const compact = decoded.replace(/[\s\u0000-\u001f\u007f]+/g, '');
+    if (/(?:javascript|vbscript):/i.test(compact)) return false;
+    // An internal DTD entity can expand to markup that the patterns below never see.
+    if (/<!ENTITY/i.test(decoded)) return false;
+    return !/<\s*(?:script|foreignObject|iframe|embed|object)\b|\bon[a-z]+\s*=|<\s*(?:set|animate\w*)\b[^>]*attributeName\s*=\s*['"]?\s*(?:xlink:)?href/i.test(decoded);
+}
+
+function isSafeSingleHtmlVisualUrl(url: string): boolean {
+    /* eslint-disable-next-line no-control-regex -- matching control characters is the point:
        a URL carrying one is how a javascript: scheme gets past a prefix check. */
     if (/[\u0000-\u001f\u007f]/.test(url)) return false;
     if (/^(https?:|mailto:|tel:|#)/i.test(url)) return true;
@@ -545,10 +586,28 @@ function isSafeHtmlVisualUrl(value: unknown): boolean {
         const header = url.slice(0, comma);
         const payload = url.slice(comma + 1);
         const svg = /;base64/i.test(header) ? atob(payload) : decodeURIComponent(payload);
-        return !/<\s*(?:script|foreignObject)\b|\bon[a-z]+\s*=|(?:href|src)\s*=\s*['"]?\s*javascript:/i.test(svg);
+        return isScriptFreeSvg(svg);
     } catch {
         return false;
     }
+}
+
+/**
+ * The URL rule for HTML visual `href`, `src`, `cite` and `srcset` attributes. Allowed: http:,
+ * https:, mailto:, tel: and #fragment URLs, data:image/png|jpeg|gif|webp, and data:image/svg+xml
+ * whose decoded document is script-free (see isScriptFreeSvg). Every `srcset` candidate must pass
+ * on its own. Relative and protocol-relative (`//host`) URLs are refused.
+ */
+function isSafeHtmlVisualUrl(value: unknown, attributeName: string = 'src'): boolean {
+    const url = String(value || '').trim();
+    if (attributeName.toLowerCase() === 'srcset') {
+        // Whitespace separates candidates here, so only the other control characters are refused.
+        /* eslint-disable-next-line no-control-regex -- see isSafeSingleHtmlVisualUrl. */
+        if (/[\u0000-\u0008\u000b\u000e-\u001f\u007f]/.test(url)) return false;
+        const candidates = srcsetCandidateUrls(url);
+        return candidates.length > 0 && candidates.every(isSafeSingleHtmlVisualUrl);
+    }
+    return isSafeSingleHtmlVisualUrl(url);
 }
 
 function copyHtmlVisualNode(source: Node, ownerDocument: Document): Node | null {
@@ -566,7 +625,7 @@ function copyHtmlVisualNode(source: Node, ownerDocument: Document): Node | null 
             && !name.startsWith('aria-')
             && !name.startsWith('data-etl-')
             && !elementAttributes.has(name)) continue;
-        if (['href', 'src', 'cite', 'srcset'].includes(name) && !isSafeHtmlVisualUrl(attribute.value)) continue;
+        if (['href', 'src', 'cite', 'srcset'].includes(name) && !isSafeHtmlVisualUrl(attribute.value, name)) continue;
         if (sourceElement.tagName === 'BUTTON' && name === 'type' && attribute.value.toLowerCase() !== 'button') continue;
         if (sourceElement.tagName === 'A' && name === 'target' && attribute.value !== '_blank') continue;
         target.setAttribute(name, attribute.value);

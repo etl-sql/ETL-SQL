@@ -25,6 +25,9 @@ import * as logger from './logger';
 import { ensureExecutable } from './permissions';
 import { getTerminalCommand } from './terminalCommandBuilder';
 import { cleanupTempFiles } from './cleanupService';
+import { shadowCopyExecutable as shadowCopyToStorage, cleanupShadowDirectory as cleanupShadowStorage } from './shadowCopy';
+import { sanitizeVariableForClient, sanitizeVariablesForClient } from './clientSanitizer';
+import { ETL_DOCUMENT_SELECTOR, ETL_FILE_WATCH_GLOB } from './lspSelectors';
 import { generateScriptFromSpec } from './generateScriptFromSpec';
 import { markPolicySave, consumePolicySave } from './saveGuard';
 
@@ -48,24 +51,6 @@ function sanitizeConnectionForClient(value: unknown): Connection {
     };
 }
 
-function isSensitiveName(name: unknown): boolean {
-    const text = String(name ?? '');
-    return /(password|passwd|pwd|secret|token|api[_-]?key|credential|private[_-]?key)/i.test(text);
-}
-
-function sanitizeVariableForClient(value: unknown): unknown {
-    if (!isObject(value)) {
-        return value;
-    }
-
-    const name = value.name;
-    const typeName = value.typeName ?? value.type;
-    if (isSensitiveName(name) || isSensitiveName(typeName)) {
-        return { ...value, value: '(secret)' };
-    }
-
-    return value;
-}
 
 function buildSafeConnectionSnippet(conn: { name: string; type: string }): string {
     return `CREATE CONNECTION ${conn.name} AS ${conn.type}(/* connection options */);`;
@@ -156,9 +141,11 @@ export async function activate(context: vscode.ExtensionContext) {
         sidebarProvider.postMessage({ type: 'connections', connections: connectionsProvider.getConnections() });
     });
 
+    // The engine streams raw runtime values, so mask them here exactly as the LSP path does.
     ReplManager.getInstance().onVariablesChange(vars => {
-        connectionsProvider.updateVariables(vars as { name: string; value: string; type: string }[]);
-        sidebarProvider.postMessage({ type: 'variables', variables: vars });
+        const safeVars = sanitizeVariablesForClient(vars);
+        connectionsProvider.updateVariables(safeVars as { name: string; value: string; type: string }[]);
+        sidebarProvider.postMessage({ type: 'variables', variables: safeVars });
     });
 
     let lastActiveUri: string | undefined = vscode.window.activeTextEditor?.document.uri.toString();
@@ -271,12 +258,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
         const lspOutputChannel = vscode.window.createOutputChannel('ETL-SQL Language Server', { log: true });
         const clientOptions: LanguageClientOptions = {
-            documentSelector: [
-                { scheme: 'file', language: 'etlsql' },
-                { scheme: 'untitled', language: 'etlsql' }
-            ],
+            documentSelector: ETL_DOCUMENT_SELECTOR,
             synchronize: {
-                fileEvents: vscode.workspace.createFileSystemWatcher('**/*.etlsql')
+                fileEvents: vscode.workspace.createFileSystemWatcher(ETL_FILE_WATCH_GLOB)
             },
             outputChannel: lspOutputChannel
         };
@@ -1009,8 +993,9 @@ async function launchReport(context: vscode.ExtensionContext, mode: 'file' | 'di
     const dir = path.dirname(targetPath);
 
     if (mode === 'dir') {
-        args.push('--dir', `"${dir}"`);
-        args.push('--open', `"${path.basename(targetPath)}"`);
+        // Raw values: getTerminalCommand quotes every argument for the active shell.
+        args.push('--dir', dir);
+        args.push('--open', path.basename(targetPath));
     } else if (mode === 'manifest') {
         // Look for reports.json in current or parent dirs
         let currentDir = dir;
@@ -1028,11 +1013,11 @@ async function launchReport(context: vscode.ExtensionContext, mode: 'file' | 'di
             vscode.window.showErrorMessage('ETL-SQL: No reports.json manifest found in current or parent directories.');
             return;
         }
-        args.push('--manifest', `"${manifestPath}"`);
-        args.push('--open', `"${path.basename(targetPath)}"`);
+        args.push('--manifest', manifestPath);
+        args.push('--open', path.basename(targetPath));
     } else {
         // Single file mode
-        args.push(`"${targetPath}"`);
+        args.push(targetPath);
     }
 
     const command = getTerminalCommand(reportExe.exe, args);
@@ -1132,60 +1117,18 @@ async function exportNotebookToSql() {
     }
 }
 
-async function shadowCopyExecutable(context: vscode.ExtensionContext, srcPath: string): Promise<string> {
-    try {
-        const version = context.extension.packageJSON.version;
-        const tempDir = path.join(os.tmpdir(), 'etl-sql-shadow', version);
-        const destPath = path.join(tempDir, path.basename(srcPath));
-
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-        }
-
-        const srcStats = fs.statSync(srcPath);
-        let needsCopy = true;
-
-        if (fs.existsSync(destPath)) {
-            const destStats = fs.statSync(destPath);
-            if (srcStats.size === destStats.size) {
-                needsCopy = false;
-            }
-        }
-
-        if (needsCopy) {
-            outputChannel?.appendLine(`[Extension] Shadow copying executable to temp directory: ${destPath}`);
-            fs.copyFileSync(srcPath, destPath);
-            if (os.platform() !== 'win32') {
-                fs.chmodSync(destPath, 0o755);
-            }
-        }
-
-        return destPath;
-    } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        outputChannel?.appendLine(`[Extension] Failed to shadow copy executable: ${message}. Using source path.`);
-        return srcPath;
-    }
+function shadowCopyExecutable(context: vscode.ExtensionContext, srcPath: string): Promise<string> {
+    return Promise.resolve(shadowCopyToStorage(
+        srcPath,
+        context.globalStorageUri.fsPath,
+        context.extension.packageJSON.version,
+        message => outputChannel?.appendLine(message)));
 }
 
-async function cleanupShadowDirectory(context: vscode.ExtensionContext) {
-    try {
-        const currentVersion = context.extension.packageJSON.version;
-        const parentDir = path.join(os.tmpdir(), 'etl-sql-shadow');
-        if (!fs.existsSync(parentDir)) {
-            return;
-        }
-
-        const entries = await fs.promises.readdir(parentDir, { withFileTypes: true });
-        for (const entry of entries) {
-            if (entry.isDirectory() && entry.name !== currentVersion) {
-                const oldDir = path.join(parentDir, entry.name);
-                outputChannel?.appendLine(`[Extension] Cleaning up old shadow directory: ${oldDir}`);
-                await fs.promises.rm(oldDir, { recursive: true, force: true });
-            }
-        }
-    } catch {
-        // Best-effort cleanup.
-    }
+function cleanupShadowDirectory(context: vscode.ExtensionContext): Promise<void> {
+    return cleanupShadowStorage(
+        context.globalStorageUri.fsPath,
+        context.extension.packageJSON.version,
+        message => outputChannel?.appendLine(message));
 }
 

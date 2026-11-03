@@ -77,6 +77,20 @@ export function setParameterAccessibleName(control: HTMLElement, visual: Control
     control.setAttribute('aria-label', qualifier ? `${baseName} ${qualifier}` : baseName);
 }
 
+let multiselectOutsideClickHandlerAdded = false;
+
+/**
+ * One document listener closes every open multiselect popup on an outside click. Adding one per
+ * render kept a listener, and the detached popup it closed over, alive for every re-render.
+ */
+function ensureMultiselectOutsideClickHandler(): void {
+    if (multiselectOutsideClickHandlerAdded) return;
+    multiselectOutsideClickHandlerAdded = true;
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.multiselect-popup.open').forEach(p => p.classList.remove('open'));
+    });
+}
+
 export function renderSlicer(container: HTMLElement, visual: ControlVisual & { name: string; columns: string[]; actions: ReportAction[]; visualType: string }, manifest: ControlManifest | null | undefined): void {
     const wrapper = document.createElement('div');
     wrapper.className = 'slicer-wrapper';
@@ -184,8 +198,12 @@ export function renderSlicer(container: HTMLElement, visual: ControlVisual & { n
 
     function createOptionImage(src: string | null): HTMLImageElement | null {
         if (!src) return null;
+        // Option images come from report data. Keep inline data:image icons, and send anything
+        // else through the same scheme check as links, so a javascript: or other scheme is dropped.
+        const safeSrc = /^\s*data:image\//i.test(src) ? src.trim() : safeUrl(src);
+        if (!safeSrc || safeSrc === '#') return null;
         const img = document.createElement('img');
-        img.src = src;
+        img.src = safeSrc;
         img.className = 'slicer-option-image' + (imgPos === 'TOP' ? ' pos-top' : '');
         img.style.width = imgSize;
         img.style.height = imgSize;
@@ -537,7 +555,7 @@ export function renderSlicer(container: HTMLElement, visual: ControlVisual & { n
                 if (!isOpen) popup.classList.add('open');
             });
             popup.addEventListener('click', e => e.stopPropagation());
-            document.addEventListener('click', () => { popup.classList.remove('open'); });
+            ensureMultiselectOutsideClickHandler();
 
             dropWrapper.appendChild(toggle);
             dropWrapper.appendChild(popup);

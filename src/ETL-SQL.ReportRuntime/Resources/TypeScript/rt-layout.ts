@@ -223,6 +223,25 @@ function renderResponsiveLayout(content: HTMLElement, page: LayoutPage, manifest
     else if (typeof query.addListener === 'function') query.addListener(onChange);
 }
 
+/**
+ * The part of a TABLE that falls on one physical page, rows `start` to `end` inclusive. Every
+ * row-indexed array is cut with the rows, and micro-chart row indexes are rebased onto the slice:
+ * cutting only `rows` gave page 2 the first page's row colours, detail keys and sparklines.
+ */
+function sliceTableVisualRows(visual: LayoutVisual, start: number, end: number): LayoutVisual {
+    const sliced = JSON.parse(JSON.stringify(visual)) as LayoutVisual;
+    for (const key of ['rows', 'rowStyles', 'rowFontStyles', 'rowDetailKeys'] as const) {
+        const values = sliced[key];
+        if (Array.isArray(values)) sliced[key] = values.slice(start, end + 1);
+    }
+    if (Array.isArray(sliced.microCharts)) {
+        sliced.microCharts = (sliced.microCharts as Array<{ rowIndex?: unknown }>)
+            .filter(micro => typeof micro.rowIndex !== 'number' || (micro.rowIndex >= start && micro.rowIndex <= end))
+            .map(micro => typeof micro.rowIndex === 'number' ? { ...micro, rowIndex: micro.rowIndex - start } : micro);
+    }
+    return sliced;
+}
+
 function renderPhysicalPages(container: HTMLElement, pageDef: LayoutPage, manifest: LayoutManifest, pageTheme: string | null): void {
     container.style.display = 'flex';
     container.style.flexDirection = 'column';
@@ -271,10 +290,7 @@ function renderPhysicalPages(container: HTMLElement, pageDef: LayoutPage, manife
             if (pv.visual) {
                 let visToRender = pv.visual;
                 if (pv.startRowIndex !== undefined && pv.endRowIndex !== undefined && visToRender.visualType === 'TABLE') {
-                    visToRender = JSON.parse(JSON.stringify(pv.visual));
-                    if (visToRender.rows) {
-                        visToRender.rows = visToRender.rows.slice(pv.startRowIndex, pv.endRowIndex + 1);
-                    }
+                    visToRender = sliceTableVisualRows(pv.visual, pv.startRowIndex, pv.endRowIndex);
                 }
                 renderVisual(wrapper, visToRender, pageTheme, manifest);
             }

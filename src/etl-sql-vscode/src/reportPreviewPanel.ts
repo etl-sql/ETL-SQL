@@ -15,6 +15,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as nodeCrypto from 'crypto';
 import * as logger from './logger';
+import { escapeHtml } from './htmlEscape';
+import { isAllowedDrillReport, resolveDrillReport } from './drillTarget';
 
 export class ReportPreviewPanel {
     public static readonly viewType = 'etlsql.reportPreview';
@@ -150,28 +152,24 @@ export class ReportPreviewPanel {
     }
 
     private async _handleDrillReport(target: string, parameters?: Record<string, unknown>): Promise<void> {
-        // Resolve target relative to current script
-        let targetPath = path.resolve(path.dirname(this._scriptPath), target);
-        
-        // If not found with .rptsql, try adding it
-        if (!fs.existsSync(targetPath) && !targetPath.endsWith('.rptsql')) {
-            targetPath += '.rptsql';
-        }
+        // The target comes from the report (and so from the webview). Opening it builds and runs it,
+        // so only a .rptsql report inside the workspace, or beside this report when there is no
+        // workspace, may be opened.
+        const allowedRoots = vscode.workspace.workspaceFolders?.map(folder => folder.uri.fsPath)
+            ?? [path.dirname(this._scriptPath)];
+        let targetPath = resolveDrillReport(this._scriptPath, target, allowedRoots);
 
-        if (!fs.existsSync(targetPath)) {
-            // Try workspace search
-            const files = await vscode.workspace.findFiles(`**/${target}`);
-            if (files.length > 0) {
-                targetPath = files[0].fsPath;
-            } else if (!target.endsWith('.rptsql')) {
-                const files2 = await vscode.workspace.findFiles(`**/${target}.rptsql`);
-                if (files2.length > 0) {
-                    targetPath = files2[0].fsPath;
-                }
+        if (!targetPath || !fs.existsSync(targetPath)) {
+            // Try workspace search by file name only; a target with glob or path syntax is not a name.
+            const name = path.basename(target);
+            if (name === target && /^[\w .-]+$/.test(name)) {
+                const fileName = name.toLowerCase().endsWith('.rptsql') ? name : `${name}.rptsql`;
+                const files = await vscode.workspace.findFiles(`**/${fileName}`);
+                targetPath = files.map(file => file.fsPath).find(file => isAllowedDrillReport(file, allowedRoots));
             }
         }
 
-        if (!fs.existsSync(targetPath)) {
+        if (!targetPath || !fs.existsSync(targetPath)) {
             vscode.window.showErrorMessage(`ETL-SQL: Could not find target report '${target}' in workspace.`);
             return;
         }
@@ -391,7 +389,7 @@ export class ReportPreviewPanel {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};">
     <link rel="stylesheet" href="${runtimeCssUri}">
-    <title>${manifest.title || 'ETL-SQL Report'}</title>
+    <title>${escapeHtml(manifest.title || 'ETL-SQL Report')}</title>
 </head>
 <body class="vscode-theme">
     ${JSON.stringify(manifest).includes('"visualType":"Search"') || JSON.stringify(manifest).includes('"type":"Search"')

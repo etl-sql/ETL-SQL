@@ -107,6 +107,7 @@ function App() {
                     manifest={reportManifest} 
                     onRefresh={(params) => postMessage({ type: 'refreshReport', parameters: params })} 
                     onExport={(format) => postMessage({ type: 'exportReport', format })}
+                    onServe={() => postMessage({ type: 'serve' })}
                 />
             ) : (
                 <div className="flex-1 flex items-center justify-center bg-[var(--bg)] h-full">

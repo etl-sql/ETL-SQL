@@ -277,10 +277,10 @@ export function destroyDetailSurfaces(scope: ParentNode | null | undefined): voi
  * @param {string} mappingColumn  column whose value becomes the row context
  * @returns {{destroy: function}} handle used to tear the surface down on refresh/unmount
  */
-export function attachDetailSurface(wrapper: HTMLElement, visual: DetailVisual, manifest: DetailManifest, pageTheme: string | null, mappingColumn: string | null): { destroy: () => void } {
+export function attachDetailSurface(wrapper: HTMLElement, visual: DetailVisual, manifest: DetailManifest, pageTheme: string | null, mappingColumn: string | null): { destroy: () => void; refresh: () => void } {
     const tooltipValue = visual.tooltip;
     const mode = detailSurfaceMode(tooltipValue);
-    if (!mode) return { destroy: function () { } };
+    if (!mode) return { destroy: function () { }, refresh: function () { } };
     const tooltip = tooltipValue!;
 
     const surfaceId = 'detail-' + Math.random().toString(36).slice(2, 10);
@@ -598,6 +598,10 @@ export function attachDetailSurface(wrapper: HTMLElement, visual: DetailVisual, 
     wrapper.addEventListener('focusout', onFocusOut);
 
     return {
+        /** Makes marks focusable again after the chart's SVG was replaced (a responsive redraw). */
+        refresh: function () {
+            if (!destroyed) prepareMarks();
+        },
         /** Closes any surface this attachment owns and detaches every listener. */
         destroy: function () {
             destroyed = true;

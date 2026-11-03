@@ -21,6 +21,12 @@ class MockNode {
         for (const c of children) this.appendChild(c);
     }
 
+    get nextSibling() {
+        const siblings = this.parentNode?.children;
+        if (!siblings) return null;
+        return siblings[siblings.indexOf(this) + 1] ?? null;
+    }
+
     remove() {
         if (this.parentNode) {
             const idx = this.parentNode.children.indexOf(this);
@@ -168,12 +174,13 @@ globalThis.DOMParser = class {
 };
 mockDoc.importNode = node => node;
 
+const ctxMenuCalls = [];
 const dependencies = {
     ...util,
     actionsFor: () => [],
     applyPageCrossFilter: () => {},
     executeAction: () => {},
-    showCtxMenu: () => {},
+    showCtxMenu: (...args) => ctxMenuCalls.push(args),
     crossFilterActive: () => false,
     resolveInteraction: () => ({}),
     _uiStates: {},
@@ -323,6 +330,56 @@ const { renderTable } = rtTable;
     expBtn.dispatchEvent({ type: 'click', stopPropagation() {} });
     assert.equal(expBtn.getAttribute('aria-expanded'), 'false');
     assert.equal(detailRow.style.display, 'none');
+}
+
+const rightClick = (wrapper, target) => {
+    ctxMenuCalls.length = 0;
+    wrapper.dispatchEvent({ type: 'contextmenu', target, clientX: 1, clientY: 1, preventDefault() {} });
+    assert.equal(ctxMenuCalls.length, 1, 'context menu opens');
+    return ctxMenuCalls[0][3];
+};
+
+// ── 5. Context menu picks the clicked row past an expanded detail row ───────
+{
+    const container = new MockElement('div');
+    const manifest = { visuals: [{ name: 'order_items', columns: ['OrderID'], rows: [['101']] }] };
+    const visual = {
+        name: 'orders_table',
+        columns: ['OrderID', 'Customer'],
+        rows: [['101', 'Acme Corp'], ['102', 'Globex']],
+        rowDetail: { targetName: 'order_items' },
+        rowDetailKeys: [{ OrderID: '101' }, { OrderID: '102' }]
+    };
+
+    renderTable(container, visual, manifest);
+    const wrapper = container.querySelector('.table-wrapper');
+    const tbody = container.querySelector('tbody');
+    tbody.querySelector('.expand-btn').dispatchEvent({ type: 'click', stopPropagation() {} });
+    const dataRows = tbody.rows.filter(r => !r.classList.contains('detail-row'));
+    assert.equal(tbody.rows.length, 3, 'the expanded detail row sits between the data rows');
+
+    // The detail row used to count as a data row, so this answered with a row past the end.
+    assert.deepEqual(rightClick(wrapper, dataRows[1].children[1]), ['102', 'Globex']);
+    assert.deepEqual(rightClick(wrapper, dataRows[0]), ['101', 'Acme Corp']);
+    assert.equal(rightClick(wrapper, tbody.querySelector('.detail-row')), null, 'a detail row is not a data row');
+}
+
+// ── 6. Context menu follows the sorted order when paging is off ─────────────
+{
+    const container = new MockElement('div');
+    const visual = {
+        name: 'unpaged',
+        columns: ['Name', 'Value'],
+        rows: [['b', 2], ['a', 1], ['c', 3]],
+        options: { PAGE_SIZE: '-1', DEFAULT_SORT: 'Value ASC' }
+    };
+
+    renderTable(container, visual, null);
+    const wrapper = container.querySelector('.table-wrapper');
+    const first = container.querySelector('tbody').rows[0];
+    assert.equal(first.children[0].textContent, 'a', 'rows render sorted');
+    // With PAGE_SIZE <= 0 the lookup used to index the unsorted rows.
+    assert.deepEqual(rightClick(wrapper, first), ['a', 1]);
 }
 
 console.log('test-runtime-table: all assertions passed');

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ChevronRight, ChevronDown, Table as TableIcon, RefreshCw, Box, type LucideIcon } from 'lucide-react';
 import type { ProtocolMessage } from '../types';
+import { newestMetadataResponse } from '../utils/metadata_utils';
 
 interface ChildItem {
   label: string;
@@ -29,6 +30,8 @@ export const MetadataItem: React.FC<MetadataItemProps> = ({
   const [children, setChildren] = useState<ChildItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [requestId] = useState(() => Math.random().toString(36).substring(7));
+  // The last message already handled, so a response is applied once however many arrive per render.
+  const lastSeenRef = useRef<ProtocolMessage | null>(null);
 
   const hasChildren = type !== 'column' && type !== 'variable';
 
@@ -50,11 +53,11 @@ export const MetadataItem: React.FC<MetadataItemProps> = ({
 
   // Handle responses from the extension
   useEffect(() => {
-    const latest = messages[messages.length - 1];
-    if (!latest || !('requestId' in latest) || (latest as { requestId: string }).requestId !== requestId) return;
+    const latest = newestMetadataResponse(messages, lastSeenRef.current, requestId);
+    lastSeenRef.current = messages.length > 0 ? messages[messages.length - 1] : null;
+    if (!latest) return;
 
     if (latest.type === 'tablesResponse') {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setChildren(latest.tables.map(t => ({ label: t, type: 'table' as const })));
         setLoading(false);
     } else if (latest.type === 'columnsResponse') {

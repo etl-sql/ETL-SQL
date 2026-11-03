@@ -249,6 +249,8 @@ export function renderTable(container: EtlSqlVisualHost, visual: TableVisual, ma
 
     const tbody = document.createElement('tbody');
     table.appendChild(tbody);
+    // The data row each rendered <tr> shows; detail rows and nested tables have no entry.
+    const rowByElement = new WeakMap<Element, TableRow>();
 
     // Summary (Top or Bottom)
     const totalPosition = (visual.summaryData?.totalPosition || opts['TOTAL_POSITION'] || opts['total_position'] || 'BOTTOM').toUpperCase();
@@ -345,6 +347,7 @@ export function renderTable(container: EtlSqlVisualHost, visual: TableVisual, ma
         pageRows.forEach((row, localIdx) => {
             const origIdx = allRows.indexOf(row);
             const tr = document.createElement('tr');
+            rowByElement.set(tr, row);
             if (isClickable) tr.style.cursor = 'pointer';
 
             // Striped
@@ -601,11 +604,10 @@ export function renderTable(container: EtlSqlVisualHost, visual: TableVisual, ma
     // Right-click → Drill Down & Export
     wrapper.addEventListener('contextmenu', (e: MouseEvent) => {
         e.preventDefault();
-        const tr  = /** @type {Element | null} */ ((e.target) as Element | null)?.closest('tr') ?? null;
-        const idx = tr ? Array.from(tbody.rows).indexOf(tr) : -1;
-        const filtered = getFilteredRows();
-        const start = pageSize > 0 ? state.page * pageSize : 0;
-        const rowData = idx >= 0 ? (pageSize > 0 ? filtered : allRows)[start + idx] : null;
+        // Look the row up by its element. Counting <tr>s miscounted past an expanded detail row,
+        // and with paging off it indexed the unsorted, unfiltered rows.
+        const tr = ((e.target) as Element | null)?.closest('tr') ?? null;
+        const rowData = tr ? rowByElement.get(tr) ?? null : null;
         // A linked table's left click selects, so its ON_CLICK actions move to this menu.
         showCtxMenu(e.clientX, e.clientY, visual, rowData, crossFilter ? clickActions : []);
     });
