@@ -12,6 +12,9 @@ namespace ETL_SQL.Analysis.Linting.Rules;
 public class CredentialLeakRule : ILintRule
 {
     private readonly string[] _sensitiveKeywords;
+
+    // Same shape the engine's string interpolation accepts.
+    private static readonly Regex InterpolationPattern = new(@"\$\{(@?[a-zA-Z_][a-zA-Z0-9_]*)\}", RegexOptions.Compiled, TimeSpan.FromSeconds(1));
     private static readonly string[] DefaultKeywords = { "password", "secret", "token", "key", "pwd", "apikey", "connectionstring", "conn", "connection", "accesskey", "bearer", "auth", "cert", "privatekey", "passphrase", "pat", "credential", "auth_type", "accountkey", "sshkey", "fingerprint", "access_token", "refresh_token", "client_secret", "client_id", "credentials", "authorization", "proxy_info", "keyfile", "hostkey" };
 
     public CredentialLeakRule() : this(null) { }
@@ -213,9 +216,21 @@ public class CredentialLeakRule : ILintRule
             }
             if (@case.ElseResult != null) FindSensitiveVariablesRecursive(@case.ElseResult, scopes, detected);
         }
-        else if (expr is LiteralExpression literal && literal.Value is string s && s.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase))
+        else if (expr is LiteralExpression literal && literal.Value is string s)
         {
-            detected.Add("hardcoded 'ENC:' string");
+            if (s.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase))
+                detected.Add("hardcoded 'ENC:' string");
+            // The engine interpolates ${@var} / ${var} inside string literals, so the literal
+            // carries the variable's value into the sink just as a bare @var would.
+            if (s.Contains("${", StringComparison.Ordinal))
+            {
+                foreach (Match match in InterpolationPattern.Matches(s))
+                {
+                    var name = match.Groups[1].Value;
+                    if (!name.StartsWith('@')) name = "@" + name;
+                    if (IsVariableSensitive(name, scopes)) detected.Add(name);
+                }
+            }
         }
         else if (expr is ListExpression list)
         {

@@ -23,6 +23,9 @@ public class ScriptMetadataOverlay : IMetadataProvider
         _baseProvider = baseProvider;
     }
 
+    /// <summary>The provider this overlay wraps; null when it wraps none.</summary>
+    public IMetadataProvider? BaseProvider => _baseProvider;
+
     public void RegisterConnection(string name, string type)
     {
         _connections[name] = type;
