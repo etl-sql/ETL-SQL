@@ -1,6 +1,12 @@
 ﻿-- JSON Kitchen Sink
 SET WHAT_IF OFF;
 
+-- INSERT appends, and a ROOT_PATH file cannot be appended to: start each run from fresh files.
+DELETE FILE 'samples/output/std.json';
+DELETE FILE 'samples/output/root.json';
+DELETE FILE 'samples/output/data.json.gz';
+DELETE FILE 'samples/output/data.json.gz.zip'; -- COMPRESS=ON stores the file under this name
+
 SELECT 1 AS ID, 'Alice' AS Name, 'HR' AS Dept INTO #sample;
 INSERT INTO #sample VALUES (2, 'Bob', 'IT');
 
