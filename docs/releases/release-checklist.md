@@ -1145,6 +1145,10 @@ unversioned `certification-results/` and `coverage/report/` trees are never atta
 
 ## Phase 6 — Post-release
 
+- [ ] Confirm the `Publish VS Code Extensions to Marketplace` job (`release.yml`) published the
+      certified platform VSIXs (`win32-x64`, `linux-x64`, `darwin-x64`, `darwin-arm64`) to the
+      Visual Studio Marketplace via Trusted Publishing.
+
 - [ ] `docs/guides/onboarding/migration-guide.md` baseline lines reflect x.y.z (Set-Version updates these — confirm).
 - [ ] Open a fresh `## [Unreleased]` section in `CHANGELOG.md`.
 - [ ] **Re-enable Dependabot.** Restore any commented-out or paused Dependabot schedules in `.github/dependabot.yml`.

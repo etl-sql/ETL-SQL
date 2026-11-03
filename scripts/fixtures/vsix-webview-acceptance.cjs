@@ -12,7 +12,9 @@ exports.run = async function () {
     const result = {startedAt: new Date().toISOString(), passed: false, views: {}, errors: []};
     const reportPath = process.env.ETLSQL_ACCEPTANCE_REPORT;
     try {
-        const extension = vscode.extensions.getExtension('etl-sql.etl-sql-vscode');
+        const extension = vscode.extensions.getExtension('Octocolee.etl-sql-vscode')
+            || vscode.extensions.getExtension('etl-sql.etl-sql-vscode')
+            || vscode.extensions.all.find(ext => ext.packageJSON?.name === 'etl-sql-vscode');
         assert.ok(extension, 'Packaged extension must be installed.');
         result.extension = extension.extensionPath;
         result.version = extension.packageJSON.version;

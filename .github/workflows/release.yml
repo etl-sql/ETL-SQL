@@ -1002,3 +1002,41 @@ jobs:
           $latest = Get-ReleaseLatestValue -CandidateTag $env:TAG_NAME -Releases $releases
           gh release edit $env:TAG_NAME --repo $env:GITHUB_REPOSITORY --draft=false "--latest=$latest"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot publish draft release.' }
+
+  # 7. Publish certified VS Code extensions to Visual Studio Marketplace via OIDC Trusted Publishing.
+  publish-marketplace:
+    name: Publish VS Code Extensions to Marketplace
+    timeout-minutes: 20
+    needs: [publish-release]
+    if: ${{ !cancelled() && needs.publish-release.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download certified VSIX packages
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir dist
+          gh release download "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --dir dist --pattern '*.vsix'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Publish platform VSIXs via OIDC Trusted Publishing
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          vsix_files=(dist/*.vsix)
+          if [ ${#vsix_files[@]} -eq 0 ]; then
+            echo "::error::No VSIX packages found in release assets."
+            exit 1
+          fi
+          for vsix in "${vsix_files[@]}"; do
+            echo "Publishing $(basename "$vsix") to Visual Studio Marketplace via OIDC..."
+            npx --yes @vscode/vsce@latest publish --oidc --packagePath "$vsix"
+          done

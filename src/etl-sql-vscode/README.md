@@ -7,14 +7,15 @@
 <p align="center">
   <a href="https://marketplace.visualstudio.com/"><img src="https://img.shields.io/badge/VS%20Code-Marketplace-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="VS Code Marketplace" /></a>
   <img src="https://img.shields.io/badge/ETL--SQL-v0.22.0-5C6BC0?style=for-the-badge&logo=dotnet&logoColor=white" alt="ETL-SQL Version" />
+  <img src="https://img.shields.io/badge/Tests-10%2C000%2B%20Passing-brightgreen?style=for-the-badge&logo=checkmarx&logoColor=white" alt="10,000+ Tests Passing" />
   <img src="https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20macOS-4CAF50?style=for-the-badge" alt="Platform" />
 </p>
 
 ---
 
-> **Build cross-source data pipelines, governance, and dashboards without stitching together three separate tools.**
+> **Build cross-source data pipelines, in-stream data quality, governance, and dashboards without stitching together separate tools.**
 >
-> ETL-SQL is a single SQL dialect that connects to anything, transforms everything, and delivers interactive dashboards — all in one script.
+> ETL-SQL is a single, deterministic SQL dialect that connects to anything, enforces data quality rules, and delivers interactive dashboards in source-control friendly scripts backed by 10,000+ tests.
 
 ---
 
@@ -32,11 +33,11 @@ The typical answer: stitch together Python, a scheduler, a BI tool, and hope not
 -- @description: Daily adjusted revenue — CRM + warehouse + vendor drop;
 -- @schedule: daily;
 
-CREATE CONNECTION crm      AS MSSQL(SERVER='crm-prod', DATABASE='CRM', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION crm       AS MSSQL(SERVER='crm-prod', DATABASE='CRM', TRUSTED_CONNECTION=TRUE);
 CREATE CONNECTION warehouse AS POSTGRES(HOST='dw-host', DATABASE='analytics', USER='etl', PASSWORD='ENC:...');
 CREATE CONNECTION drops     AS SFTP(HOST='vendor.com', USER='feeds', KEYFILE='C:\keys\vendor.pem');
 
--- 1. Pull active customers from CRM
+-- 1. Pull active customers from CRM with governance metadata
 SELECT
     c.CustomerId  /* @d: Internal customer key; @nullable: false */,
     c.Region      /* @d: Sales region; @owner: sales_ops */,
@@ -45,11 +46,13 @@ INTO #customers
 FROM crm.dbo.Customers c
 WHERE c.Active = 1;
 
--- 2. Aggregate orders from the warehouse
+-- 2. Aggregate orders from warehouse with in-stream data quality gates
 SELECT
-    o.CustomerId  /* @d: Internal customer key */,
+    o.CustomerId  /* @d: Internal customer key */
+        EXPECT NOT NULL ON FAILURE THROW,
     SUM(o.Amount) /* @d: Total order revenue for period; @unit: USD */
         AS Revenue
+        EXPECT >= 0     ON FAILURE THROW
 INTO #orders
 FROM warehouse.public.orders o
 GROUP BY o.CustomerId;
@@ -80,7 +83,7 @@ SELECT
         AS AdjustedRevenue
 INTO #final
 FROM #customers c
-JOIN #orders o      ON c.CustomerId = o.CustomerId
+JOIN #orders o           ON c.CustomerId = o.CustomerId
 LEFT JOIN #adjustments a ON c.CustomerId = a.CustomerId
 GROUP BY c.Region, c.Tier;
 
@@ -112,10 +115,11 @@ CREATE PAGE Overview AS DASHBOARD (
 
 | If you're using… | The ETL-SQL advantage |
 | :--- | :--- |
-| **Python + pandas** | No environment setup, no dependency hell. SQL is the orchestration language — readable by your whole team. |
-| **SSIS / Azure Data Factory** | Plain-text scripts in source control. No XML designer files. Run anywhere: CLI, VS Code, cron, CI/CD. |
-| **dbt** | ETL-SQL moves data *and* builds dashboards. No separate BI tool required. Works across SQL and non-SQL sources. |
-| **Raw SQL scripts** | Cross-source joins, procedural control flow, SFTP, emails, file ops, scheduling, and reporting — all in one dialect. |
+| **Python + pandas** | No environment setup, no dependency drift. SQL is the orchestration language — readable and maintainable across your entire team. |
+| **SSIS / Azure Data Factory** | Plain-text scripts in Git. No proprietary XML or UI-locked designer formats. Run anywhere: CLI, VS Code, cron, or CI/CD. |
+| **dbt** | ETL-SQL moves data across heterogeneous systems, enforces in-stream quality gates, *and* renders vector dashboards without third-party BI dependencies. |
+| **AI Agents & Copilots** | Spec-driven and LLM-friendly. Clean, deterministic plain-text SQL enables reliable AI pair programming and automated script generation. |
+| **Raw SQL scripts** | Cross-source joins, procedural control flow, SFTP, emails, file ops, scheduling, lineage, and reporting — all in one unified dialect. |
 
 ---
 
@@ -129,15 +133,16 @@ Both examples use the built-in `MOCKDB()` connector. No credentials, no network 
 CREATE CONNECTION demo AS MOCKDB();
 
 BEGIN TRY
-    -- Extract into engine-managed #temp tables
-    SELECT Region, Total
+    -- 1. Extract and enforce in-stream Data Quality with first-class metadata tags
+    SELECT
+        Region      /* @d: Sales territory; @owner: rev_ops */
+            EXPECT NOT NULL ON FAILURE THROW,
+        Total       /* @d: Order total amount; @unit: USD */
+            EXPECT >= 0     ON FAILURE THROW
     INTO #orders
     FROM demo.Orders;
 
-    -- Validate assumptions before touching anything downstream
-    ASSERT (SELECT COUNT(*) FROM #orders) > 0, 'Expected orders — got nothing.';
-
-    -- Transform in engine memory
+    -- 2. Transform in engine memory
     SELECT
         Region,
         COUNT(*)    AS TotalOrders,
@@ -147,9 +152,15 @@ BEGIN TRY
     FROM #orders
     GROUP BY Region;
 
+    -- 3. Output results
     SELECT Region, TotalOrders, Revenue, AvgOrder
     FROM #summary
     ORDER BY Revenue DESC;
+
+    -- 4. Inspect column-level lineage automatically captured by the engine
+    SELECT target_column, source_tables, source_columns, transformation_kind
+    FROM eng.lineage
+    WHERE target_table = '#summary';
 
 END TRY
 BEGIN CATCH
@@ -201,40 +212,50 @@ CREATE PAGE SalesDashboard AS DASHBOARD (
 
 ## What This Extension Gives You
 
-### 🧠 IntelliSense That Knows Your Data
+### 🛡️ In-Stream Data Quality (`EXPECT`) & Quarantine
+- **Grammar-Level Quality Gates** — declare validation rules directly on `SELECT` columns (`EXPECT NOT NULL`, `EXPECT UNIQUE`, `EXPECT >= 0`, `EXPECT MATCHES '<regex>'`).
+- **Pluggable Failure Actions** — halt immediately with `ON FAILURE THROW`, warn with `ON FAILURE WARN`, or divert invalid rows to durable storage with `ON FAILURE QUARANTINE TO #bad_rows`.
+- **Automated Quarantine Remediation** — inspect metadata-enriched quarantine tables and reprocess corrected records with `REPLAY QUARANTINE`.
 
+### 🏷️ First-Class Metadata & Automated Lineage
+- **Contextual Governance Tags** — declare metadata in SQL comments (`/* @d: Description; @owner: team; @pii: false */`). Tags stick to columns across joins, unions, and aggregations.
+- **Queryable Metadata Catalogs** — query active tags and dependencies via `eng.tags` and `eng.lineage` within any script session.
+- **OpenLineage Standard** — export execution provenance directly to OpenLineage-compatible platforms (DataHub, Collibra, Marquez).
+
+### 🤖 Agent-First & Spec-Driven Development
+- **LLM & Agent-Friendly Syntax** — clean, deterministic plain-text SQL eliminates opaque configuration files, making AI pair programming and code reviews transparent.
+- **Spec-to-Script Generation** — right-click any PDF, Excel, Word, CSV, or JSON specification and select **ETL-SQL: Generate Script from Spec** to generate a complete pipeline scaffold with data types, validation gates, and governance tags.
+- **Headless Automation** — run the exact same `gen-script` workflow in CI/CD pipelines and command-line runners.
+
+### 📊 See Your Dashboard Before You Ship It
+- **Live `.rptsql` Preview** — open a report file and watch the interactive dashboard render side-by-side with your code. Every save refreshes the preview.
+- **Native Grammar of Graphics Engine** — 100% managed rendering pipeline (`PlotPlan`) generating native SVG vector graphics with layered marks (`RECT`, `LINE`, `POINT`, `AREA`, `BAR`, `RULE`, `TEXT`), named scales, coordinates, and facets.
+- **Interactive Preview** — slicers, cascading filters, date pickers, sliders, search boxes, drill-downs, parameter overrides, and cross-highlighting work directly in the preview pane.
+- **One-Click Export** — export your rendered report to native SVG, PDF, or Markdown directly from the preview panel.
+
+### 🧠 IntelliSense That Knows Your Data
 - **Live Schema Autocomplete** — connects to your actual databases and completes real table and column names as you type, not generic SQL keywords.
 - **Dialect-Aware Linting** — warns you the moment you write `TOP 10` against a Postgres connection or `GETDATE()` against Oracle. Catch cross-dialect mistakes before they become runtime errors.
 - **Hover Documentation** — hover over any built-in function or keyword to see its full signature and a copy-pasteable example, right in the editor.
 - **Variable & Temp Table Tracking** — IntelliSense follows your `@variables` and `#temp` tables across the entire script session.
 
 ### ▶️ Execute and Explore Without Leaving the Editor
-
 - **F5 to Run** — execute the full script, or highlight any block and run just that selection.
 - **Interactive Results Grid** — sort, filter, and page through multi-result sets. Stack two result sets side-by-side with **Compare Mode** to diff them instantly.
 - **Step Profiling** — inspect per-statement execution time, memory peaks, and spill events in the results panel.
 - **Lineage-Aware Workflow** — inspect lineage metadata from executed scripts and use built-in lineage commands for audit output.
 
-### 📊 See Your Dashboard Before You Ship It
-
-- **Live `.rptsql` Preview** — open a report file and watch the interactive dashboard render side-by-side with your code. Every save refreshes the preview.
-- **Native Grammar of Graphics Engine** — 100% managed rendering pipeline (`PlotPlan`) generating native SVG vector graphics with layered marks (`RECT`, `LINE`, `POINT`, `AREA`, `BAR`, `RULE`, `TEXT`), named scales, coordinates, and facets — zero external JavaScript charting runtimes (ECharts retired).
-- **Interactive Preview** — slicers, cascading filters, date pickers, sliders, search boxes, drill-downs, parameter overrides, and cross-highlighting work in the preview pane.
-- **One-Click Export** — export your rendered report to native SVG, PDF, or Markdown directly from the preview panel.
-
 ### 📓 Notebooks for Iterative Development (`.etlnb`)
-
 - **Cell-Based Pipelines** — break complex workflows into cells that share a single live session. Run them one at a time or all at once.
 - **Mermaid Lineage in Cells** — lineage diagrams render inline as notebook output.
 - **Export to Script** — convert any notebook back to a standard `.etlsql` file for headless deployment with a single command.
 
 ### 🔒 Security That Catches Mistakes Before You Ship Them
-
+- **Zero-Trust Boundary** — path containment enforced before any file I/O runs.
 - **Credentials Guard** — scans for plaintext passwords and API keys on every save and surfaces a warning immediately.
-- **Save Policy Encryption** — applies the script save policy to convert flagged plaintext secrets into `ENC:...` encrypted values when requested.
+- **Save Policy Encryption** — applies the script save policy to convert flagged plaintext secrets into `ENC:...` encrypted values automatically.
 
 ### 🗂️ Metadata Explorer Sidebar
-
 Browse all active connections, catalog schemas, declared `@variables`, and live `#temp` tables in a structured sidebar panel — no context-switching required.
 
 ---
@@ -243,7 +264,7 @@ Browse all active connections, catalog schemas, declared `@variables`, and live 
 
 ETL-SQL keeps governance metadata in the script instead of a separate after-the-fact catalog. Inline tags such as `/* @pii; @classification: confidential; @owner: finance_ops */` travel with columns through joins, aggregations, and derived expressions, so lineage stays connected to the transformations that created the data.
 
-After a script runs, lineage is queryable with `LINEAGE` and tag metadata is queryable through `eng.tags`, exportable as Markdown, and exportable as OpenLineage events for tools such as DataHub, Marquez, Airflow, Collibra, and Alation. See the [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/session-control/lineage.md) for the full tag catalog and examples.
+After a script runs, lineage is queryable with `eng.lineage` and tag metadata is queryable through `eng.tags`, exportable as Markdown, and exportable as OpenLineage events for tools such as DataHub, Marquez, Airflow, Collibra, and Alation. See the [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/session-control/lineage.md) for the full tag catalog and examples.
 
 ---
 

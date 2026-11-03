@@ -49,7 +49,7 @@ export function packagingIdentity(root, requested) {
         /<VersionSuffix>[^<]+<\/VersionSuffix>/.test(properties)) throw new Error('A single explicit release version is required in Directory.Build.props.');
     if (manifest.version !== version || lock.version !== version || lock.packages?.['']?.version !== version ||
         (requested !== undefined && requested !== version)) throw new Error(`Extension, lockfile, requested version, and .NET version must agree (${version}).`);
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(manifest.name ?? '') || !/^[a-z0-9][a-z0-9-]*$/.test(manifest.publisher ?? ''))
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(manifest.name ?? '') || !/^[a-zA-Z0-9][a-zA-Z0-9-]*$/.test(manifest.publisher ?? ''))
         throw new Error('Extension name and publisher must be explicit package identities.');
     return { name: manifest.name, publisher: manifest.publisher, version };
 }
