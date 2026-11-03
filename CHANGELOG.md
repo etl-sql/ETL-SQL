@@ -456,6 +456,16 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 - LDAP sign-in refuses a name qualified with a domain other than `Identity:Ldap:Domain`.
 - Share links and embed tokens are stored as hashes and shown once, when created. Listings return
   the id instead of the token, and `DELETE .../share-links/by-id/{id}` revokes by id.
+- Machine-bound encrypted files use format `ETLSQLMF4` with separate encryption and MAC keys;
+  `ETLSQLMF3` files are refused.
+- `${@var}` interpolation no longer decrypts a sensitive `ENC:` value outside credential options.
+- Number literals and casts ignore the host locale; `0x` alone and oversized hex literals are errors.
+- Password and LDAP sign-in answer 401 on a Shared Tenancy Portal; use the tenant's OIDC provider.
+- `admin restore` refuses archives holding files the backup manifest does not list.
+- OLTP, REST and webhook connections without `TIMEOUT_SECONDS` time out after 30 seconds, not 30
+  minutes.
+- Kafka `Partition`/`Offset` and S3/Azure Blob `Size` are decimal; SharePoint list fields keep their
+  number, boolean and NULL types. A scheme-less S3 `ENDPOINT` is refused.
 
 ### Added
 
@@ -843,6 +853,78 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 
 ### Fixed
 
+- A script can no longer switch off the `Security:MaxSpillBytesPerScript` ceiling with
+  `SET TELEMETRY = OFF`.
+- `PARALLEL` branches share the parent's file-operation budget, recursion depth, limits and
+  cancellation, and a `SECRET` declared in a branch stays masked.
+- `PRINT` masks `SECRET`/`SENSITIVE` variables declared in a procedure or local scope.
+- `SYNC DIRECTORY` keeps every write and delete inside the destination when the source holds a
+  link that points elsewhere.
+- `EXPORT DATASET` / `PUBLISH DATASET` authorize the `KEYFILE` path and stage plaintext in a private
+  temporary directory.
+- A path holding an unexpanded `${...}` placeholder is still validated.
+- `*.example.com` in `Security:AllowedHosts` matches only at a label boundary; `evil-example.com`
+  no longer passes. `Users/Public` in the sensitive-directory list now matches, and a safe-zone
+  override no longer follows a link out of the zone.
+- `RUN SCRIPT` lint preflight reads only `.etlsql`/`.sql` files outside protected locations.
+  `CredentialLeakRule` catches `${@var}` interpolation; `FileSystemSecurityRule` matches credential
+  directories anywhere in a path and covers the file-transfer and dataset statements.
+- `EXPORT REPORT` accepts `BROWSER_PATH` only for a browser the engine discovers itself and `HOST`
+  only as an allowed `http(s)` URL; the PDF exporter refuses `file:` and other schemes.
+- The constrained HTML sanitizer (server and report runtime) parses `>` inside quoted attributes,
+  checks every `srcset` candidate and decodes SVG `data:` URLs before scanning for script.
+- Report CSV output neutralizes cells starting with `=`, `+`, `-`, `@`, tab or CR.
+- ReportPlayer refuses cross-site API requests, including cross-site GETs that change the session,
+  and encodes report titles.
+- WorkstationEditor `GET /studio` needs the session token and no longer embeds it for anyone who
+  asks; non-loopback `Host` headers are refused, and preview runs under the run guard.
+- VS Code: notebook table output is HTML-escaped, pre-quoted terminal arguments cannot inject
+  commands, the executable shadow copy lives in private extension storage, report drill targets
+  stay inside the workspace, and REPL variables are sanitized before reaching webviews.
+- `--json` runs and the REPL mask `SECRET`/`SENSITIVE` variables in variable events; REPL and TUI
+  exports go through path policy; support bundles stage in an owner-only folder.
+- Shared Tenancy Portal: Policy Authority machine listing, registration and revocation are tenant
+  scoped; folder, group and preview-as diagnostics stay in the caller's tenant; anonymous share,
+  embed and studio-session endpoints no longer answer 500; audit rows record the tenant for OIDC,
+  service-account and workload-identity sign-ins; alert names are unique per tenant.
+- The Orchestrator refuses identity-bound runs under `Jobs:UseProcessSpawning` instead of running
+  them as the host; federated connection administration needs an object administrator;
+  notification dispatch resolves the tenant's own rule and checks attachment paths before
+  existence; imported history and lineage stay in their tenant; tenant purge removes lineage,
+  bundles and fence records.
+- `etl-sql-tenant-validator` refuses unknown, repeated or incomplete arguments, so a mistyped
+  `--require-signature` no longer validates an unsigned bundle.
+- Kafka `CREATE CONNECTION` with options only reaches its brokers, and every broker is checked
+  against the egress fence. SFTP/FTP connections take `HOST` from options. Active Directory escapes
+  the table name in its filter and keeps the port, LDAPS and base DN in `WithTable`.
+- `EXECUTE ... BEGIN ... END` pushdown blocks no longer end at a `CASE ... END`.
+- Columnar predicates fall back to row mode for fractional constants on integer columns, integer
+  division and zero divisors, instead of rounding or throwing.
+- Report tables keep row styles, row details and micro-charts aligned after sorting and page
+  splitting; numbers sort and format the same under any locale; summaries can name a mapped
+  display column; a corrupt `.etlsnap` opens as missing.
+- `EXPORT REPORT` scopes report state to the export; the ReportBuilder CLI sets the script path and
+  escapes errors; dashboard drill state is thread-safe and `@`-prefixed parameters are one
+  parameter.
+- Report runtime: table context menus pick the right row, responsive chart redraws keep
+  crosshairs and hover, bookmark names with quotes no longer abort restore, and modal and
+  multiselect listeners are released.
+- Portal export honours folder owners and per-report grants; folder owners see their folder in the
+  tree and catalog search.
+- Gateway: an executor protocol error ends in a recorded outcome, `HelloAck` is sent before routed
+  work, an oversized frame ends the session, and `Connected` is reported only after connecting.
+- Orchestrator: list endpoints fill each page from rows the caller can see; scheduled-job updates
+  validate the schedule; a scheduler node that lost its lease no longer quarantines the job; a warm
+  runner that fails its handshake is killed.
+- S3 file listings follow continuation tokens past 1,000 objects; SharePoint, SMTP, Azure Blob and
+  Active Directory errors are wrapped; cloud listings honour batch size and cancellation.
+- Connection strings keep a `'` inside an unquoted password, and doubled quotes and braces.
+- Language server: signature help works, out-of-range positions no longer throw, closed documents
+  release their state, and the lint pass no longer erases fast-pass diagnostics.
+- The REPL answers `ping` and `cancel` while a script runs.
+- Test lanes: the fuzzer's NoREC oracle runs on generated queries, SLT honours stacked
+  `skipif`/`onlyif` and fails with no corpus, unconfigured scale certifications skip, and several
+  tests now assert what their names claim.
 - Gateway reconnect backoff doubles across failed connections instead of staying at twice the
   initial delay, and waits before reconnecting after a session ends.
 - A Gateway result larger than one frame is sent as several row batches; it used to end the

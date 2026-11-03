@@ -1448,126 +1448,161 @@ Recorded for verification only (no source fixes applied during the audit).
 - [ ] **[P1 Security] Wildcard host allowlist suffix bypass and unconditional loopback exemption** (`src/ETL-SQL.Core/SecurityService.cs:322-355`).
   `ValidateHost` strips `"*."` via `allowed.Substring(2)` and checks `host.EndsWith(domain, StringComparison.OrdinalIgnoreCase)` without requiring a leading `.` boundary, so `*.example.com` allows `evil-example.com`. Lines 329–334 also allow `localhost`, `127.0.0.1`, and `::1` before consulting `AllowedHosts`, and do not normalize alternate loopback encodings via `NetworkDestinationRules.Normalize`.
   **Verify:** Configure `AllowedHosts = ["*.example.com"]` (`IsTestMode = false`) and call `ValidateHost("evil-example.com")`; no `SecurityException` is thrown.
-- [ ] **[P1 Security] Dangling symlink bypass in `ResolvePathSymlinks` and missing symlink resolution in `IsWithinSafeZone`** (`src/ETL-SQL.Core/SecurityService.cs:1205-1225, 1235-1258`).
+  **Outcome (2026-11-02):** Partly real. Wildcard bypass fixed (label-boundary match). Loopback exemption is deliberate and pinned by a test, but `security-configuration.md` says `AllowedHosts` governs loopback: **decide** keep-and-fix-doc or strict allowlist.
+- [x] **[P1 Security] Dangling symlink bypass in `ResolvePathSymlinks` and missing symlink resolution in `IsWithinSafeZone`** (`src/ETL-SQL.Core/SecurityService.cs:1205-1225, 1235-1258`).
   `ResolvePathSymlinks` checks `if (File.Exists(current) || Directory.Exists(current))`, which returns `false` for a dangling symlink whose target does not exist yet. File writes (`CryptoUtils.EncryptFile`, `SafeZipExtractor.Extract`, CSV/Parquet writers) can create or overwrite forbidden targets through a dangling symlink. `IsWithinSafeZone` also calls `Path.GetFullPath` without `ResolvePathSymlinks`.
   **Verify:** Create a symlink `out.csv` in an allowed directory targeting a non-existent `target.etlsql` and pass it to `ResolvePathSymlinks` and `ValidatePath`.
-- [ ] **[P1 Security] `"Users/Public"` in `SensitiveDirectories` never matches** (`src/ETL-SQL.Core/SecurityService.cs:237-239, 445-452, 485-489`).
+  **Outcome (2026-11-02):** Partly real. Dangling-link part was a false positive (`File.Exists` reports the link). `IsWithinSafeZone` now canonicalizes path and zones.
+- [x] **[P1 Security] `"Users/Public"` in `SensitiveDirectories` never matches** (`src/ETL-SQL.Core/SecurityService.cs:237-239, 445-452, 485-489`).
   `ValidatePath` and `IsSensitivePath` split `normalizedPath` on `'/'` into single segments and compare each segment to `blocked.Trim('/')`. Because a single segment never contains `'/'`, `"Users/Public"` is dead code.
   **Verify:** Call `new SecurityService(NullLogger.Instance) { IsTestMode = false }.ValidatePath(@"C:\Users\Public\Documents\test.csv")`.
-- [ ] **[P1 Bug] Columnar predicate compiler rounds fractional constants to integers and throws on arithmetic overflow/divide-by-zero** (`src/ETL-SQL.Core/Data/ColumnarPredicateCompiler.cs:136-139, 168-169`, `src/ETL-SQL.Core/Data/ColumnBatchKernels.cs:267-270`).
+  **Outcome (2026-11-02):** Real. Fixed with consecutive-segment matching.
+- [x] **[P1 Bug] Columnar predicate compiler rounds fractional constants to integers and throws on arithmetic overflow/divide-by-zero** (`src/ETL-SQL.Core/Data/ColumnarPredicateCompiler.cs:136-139, 168-169`, `src/ETL-SQL.Core/Data/ColumnBatchKernels.cs:267-270`).
   `ConvertConstant` / `SelectColumnLiteral` converts fractional `decimal`/`double` constants to the integer column type `T` via `Convert.ChangeType`, rounding `5.2m` to `5` (`WHERE int_col = 5.2` matches `5`; `WHERE int_col > 5.6` excludes `6`). `ColumnBatchKernels.SelectArithmeticComparison` uses `checked` arithmetic and raw `/` and `%`, throwing on overflow or divide-by-zero where row mode returns `null`.
   **Verify:** Evaluate `WHERE col = 5.2` against a `ColumnBatch` with `int` column `[5, 6]`.
-- [ ] **[P1 Bug] `CaptureRawBlock` terminates `EXECUTE ... BEGIN ... END` early on `CASE ... END`** (`src/ETL-SQL.Core/Parser/Parser.cs:351-368`, `src/ETL-SQL.Core/Parser/StatementParser.cs:705-732`).
+  **Outcome (2026-11-02):** Real (also integer division). Integer columns with fractional constants, integer division and zero divisors fall back to row mode.
+- [x] **[P1 Bug] `CaptureRawBlock` terminates `EXECUTE ... BEGIN ... END` early on `CASE ... END`** (`src/ETL-SQL.Core/Parser/Parser.cs:351-368`, `src/ETL-SQL.Core/Parser/StatementParser.cs:705-732`).
   `CaptureRawBlock` increments depth on `TokenType.BEGIN` and decrements on `TokenType.END` without tracking `TokenType.CASE`, so any `CASE ... END` inside `EXECUTE conn BEGIN ... END` closes the block prematurely.
   **Verify:** Parse `EXECUTE db BEGIN SELECT CASE WHEN 1=1 THEN 1 ELSE 0 END; END;`.
-- [ ] **[P1 Bug] Locale-sensitive number parsing in lexer/parser/evaluator and uncaught exception on malformed hex literals** (`src/ETL-SQL.Core/Parser/Lexer.cs:682-690`, `src/ETL-SQL.Core/Parser/ExpressionParser.cs:501`, `src/ETL-SQL.Core/Parser/Parser.cs:404, 614, 649, 658`, `src/ETL-SQL.Core/Data/EvaluationUtils.cs:63`, `src/ETL-SQL.Core/Data/TypeConverter.cs:14-27`).
+  **Outcome (2026-11-02):** Real. `CASE` opens a depth level; `END CASE` handled.
+- [x] **[P1 Bug] Locale-sensitive number parsing in lexer/parser/evaluator and uncaught exception on malformed hex literals** (`src/ETL-SQL.Core/Parser/Lexer.cs:682-690`, `src/ETL-SQL.Core/Parser/ExpressionParser.cs:501`, `src/ETL-SQL.Core/Parser/Parser.cs:404, 614, 649, 658`, `src/ETL-SQL.Core/Data/EvaluationUtils.cs:63`, `src/ETL-SQL.Core/Data/TypeConverter.cs:14-27`).
   `decimal.Parse`/`TryParse` and `double.Parse` are called without `CultureInfo.InvariantCulture`, parsing `1.234` as `1234m` under `de-DE`. In `Lexer.ReadNumber` (line 688), `Convert.ToInt64(numStr.Substring(2), 16)` throws `ArgumentOutOfRangeException` on `0x` and `OverflowException` on unsigned 64-bit hex values.
   **Verify:** Under `CultureInfo("de-DE")`, evaluate `SELECT 1.234`; or tokenize `SELECT 0x`.
-- [ ] **[P2 Security] `MachineBoundCrypto` reuses the same 32-byte key for AES-256-CBC and HMAC-SHA256** (`src/ETL-SQL.Core/Common/MachineBoundCrypto.cs:33-49, 69-76, 114-115`).
+  **Outcome (2026-11-02):** Real. Invariant culture across literals, casts and option parsers; malformed/oversized hex is a syntax error.
+- [x] **[P2 Security] `MachineBoundCrypto` reuses the same 32-byte key for AES-256-CBC and HMAC-SHA256** (`src/ETL-SQL.Core/Common/MachineBoundCrypto.cs:33-49, 69-76, 114-115`).
   `SealToMachine` and `UnsealFromMachine` use `fileKey` directly for both `aes.Key` and `HMACSHA256` instead of deriving independent keys via HKDF.
   **Verify:** Inspect `MachineBoundCrypto.cs:39, 43`.
-- [ ] **[P2 Bug] Tautological `ByteLength` check for encrypted entries in `TenantBundleValidator.ValidateInventory`** (`src/ETL-SQL.Core/Portability/TenantBundleValidator.cs:206`).
+  **Outcome (2026-11-02):** Real. HKDF-derived encryption and MAC keys; file magic `ETLSQLMF4` (breaking, recorded).
+- [x] **[P2 Bug] Tautological `ByteLength` check for encrypted entries in `TenantBundleValidator.ValidateInventory`** (`src/ETL-SQL.Core/Portability/TenantBundleValidator.cs:206`).
   `item.ByteLength != (component.PlaintextSha256 is null ? component.ByteLength : item.ByteLength)` compares `item.ByteLength != item.ByteLength` when `PlaintextSha256` is non-null.
   **Verify:** Inspect `TenantBundleValidator.cs:206`.
+  **Outcome (2026-11-02):** Real. Plaintext length now checked against the decrypted byte count when a recipient key is supplied.
 
 #### `src/ETL-SQL.Engine`
 
-- [ ] **[P0 Security] Spill byte accounting and `MaxSpillBytesPerScript` ceiling are bypassed when `TelemetryEnabled` is `false`** (`src/ETL-SQL.Engine/Spill/SpillStore.cs:510-518, 740-749, 861-867, 887-894`).
+- [x] **[P0 Security] Spill byte accounting and `MaxSpillBytesPerScript` ceiling are bypassed when `TelemetryEnabled` is `false`** (`src/ETL-SQL.Engine/Spill/SpillStore.cs:510-518, 740-749, 861-867, 887-894`).
   `SecureSpillWriter` and `ArrowSpillWriter` guard `_bytesWritten` updates and `OperationPolicyBoundary.EnforceSpillCeiling` behind `if (_context.Telemetry?.TelemetryEnabled ?? false)`. Because `TelemetryEnabled` defaults to `false` (and scripts can run `SET TELEMETRY = OFF`), `TotalSpilledBytes` stays `0` and spill ceilings are never enforced in normal runs.
   **Verify:** Set `MaxSpillBytes` to `1024` with default telemetry (`TelemetryEnabled == false`) and write >1 KiB through `SpillStore.CreateWriter()`.
-- [ ] **[P1 Security / Bug] `PARALLEL` resets file operation budgets and recursion depth, ignores `CancellationToken`, and drops scoped variable updates** (`src/ETL-SQL.Engine/Evaluator.cs:1771-1833`, `src/ETL-SQL.Engine/Handlers/ParallelStatementHandler.cs:35-58`, `src/ETL-SQL.Engine/Services/VariableScopeManager.cs:203-231, 289-304`).
+  **Outcome (2026-11-02):** Partly real: telemetry defaults on, but `SET TELEMETRY = OFF` disabled the ceiling. Accounting now runs regardless.
+- [x] **[P1 Security / Bug] `PARALLEL` resets file operation budgets and recursion depth, ignores `CancellationToken`, and drops scoped variable updates** (`src/ETL-SQL.Engine/Evaluator.cs:1771-1833`, `src/ETL-SQL.Engine/Handlers/ParallelStatementHandler.cs:35-58`, `src/ETL-SQL.Engine/Services/VariableScopeManager.cs:203-231, 289-304`).
   `Evaluator.Fork()` starts every branch with `_operationCount = 0` and `CurrentRecursiveDepth = 0`, omits `CurrentScriptPath`, `WorkingDirectory`, `SessionRoot`, `MaxFileOperations`, and `MaxRecursiveDepth`, and `Merge()` never folds `_operationCount` back into the parent. `VariableScopeManager.Merge()` only copies root `_variables`, losing updates made inside procedures/loops. `ParallelStatementHandler` also omits `context.CancellationToken`.
   **Verify:** Run two `PARALLEL` branches performing 60 file operations each (120 total) without `SET ALLOW_FILE_OPERATIONS`.
-- [ ] **[P1 Security] String interpolation (`${@var}`) decrypts `ENC:` values into plaintext and scoped `VariableMetadata` is invisible to `PrintStatementHandler`** (`src/ETL-SQL.Engine/ExpressionEvaluator.cs:1047-1077`, `src/ETL-SQL.Engine/Services/VariableScopeManager.cs:25-33, 118-126`, `src/ETL-SQL.Engine/Handlers/PrintStatementHandler.cs:33-39`, `src/ETL-SQL.Engine/Handlers/SetVariableStatementHandler.cs:41-44`).
+  **Outcome (2026-11-02):** Real. Forks share the operation counter, start at the parent depth, copy limits/paths; `Merge` folds local-scope writes and metadata; cancellation passed.
+- [x] **[P1 Security] String interpolation (`${@var}`) decrypts `ENC:` values into plaintext and scoped `VariableMetadata` is invisible to `PrintStatementHandler`** (`src/ETL-SQL.Engine/ExpressionEvaluator.cs:1047-1077`, `src/ETL-SQL.Engine/Services/VariableScopeManager.cs:25-33, 118-126`, `src/ETL-SQL.Engine/Handlers/PrintStatementHandler.cs:33-39`, `src/ETL-SQL.Engine/Handlers/SetVariableStatementHandler.cs:41-44`).
   `InterpolateStringVariables` unconditionally calls `_context.DecryptValue(enc)` on `IsSensitive` variables starting with `ENC:`, so `PRINT '${@pw}'` or `SELECT '${@pw}'` exposes plaintext. In addition, `VariableScopeManager.VariableMetadata` only exposes the root `_variableMetadata` dictionary and ignores `_metadataStack`, so `SECRET`/`SENSITIVE` variables declared inside procedures or local scopes are not masked by `PRINT`.
   **Verify:** Run `SET PASSWORD = 'k'; DECLARE @pw STRING SENSITIVE = 'ENC:...'; PRINT '${@pw}';` or declare a `SECRET` variable inside a `CREATE PROCEDURE` and `PRINT` it.
-- [ ] **[P1 Security] Symlink relative-path traversal in `SYNC DIRECTORY` writes/deletes outside `dest`** (`src/ETL-SQL.Engine/Handlers/SyncDirectoryStatementHandler.cs:92-107, 160-180, 189-198`).
+  **Outcome (2026-11-02):** Real. Interpolation decrypts only for credential consumers; `TryGetVariableMetadata` searches local scopes.
+- [x] **[P1 Security] Symlink relative-path traversal in `SYNC DIRECTORY` writes/deletes outside `dest`** (`src/ETL-SQL.Engine/Handlers/SyncDirectoryStatementHandler.cs:92-107, 160-180, 189-198`).
   `EnumerateFiles` returns canonical symlink target paths. `Path.GetRelativePath(source, sourceFile)` then produces `..\...` when a symlink in `source` points to another authorized directory outside `source`, and `Path.Combine(dest, relativePath)` escapes `dest`.
   **Verify:** Place a symlink in `source` pointing to a sibling allowed directory and run `SYNC DIRECTORY`.
-- [ ] **[P1 Security] Unvalidated `KEYFILE` path and unencrypted temp staging in `EXPORT DATASET` and `PUBLISH DATASET`** (`src/ETL-SQL.Engine/Handlers/ExportDatasetStatementHandler.cs:80-93, 107-111`, `src/ETL-SQL.Engine/Handlers/PublishDatasetStatementHandler.cs:125-136, 197-200`).
+  **Outcome (2026-11-02):** Real. Relative paths from the enumerated path; every target must stay inside `dest`.
+- [x] **[P1 Security] Unvalidated `KEYFILE` path and unencrypted temp staging in `EXPORT DATASET` and `PUBLISH DATASET`** (`src/ETL-SQL.Engine/Handlers/ExportDatasetStatementHandler.cs:80-93, 107-111`, `src/ETL-SQL.Engine/Handlers/PublishDatasetStatementHandler.cs:125-136, 197-200`).
   Both handlers pass `stmt.KeyFile` directly into `EncryptionOptions["KEYFILE"]` without `context.ResolvePath` or `FileSystemPolicyAuthorizer.Authorize`, and stage unencrypted `.parquet` files in shared `Path.GetTempPath()`.
   **Verify:** Run `EXPORT DATASET` with `ENCRYPT = 'SSH'` and an unauthorized `KEYFILE` path.
-- [ ] **[P1 Security] `Evaluator.ResolvePath` skips `ValidatePath` when path contains `"${"` and allows `..` traversal from connection base URIs** (`src/ETL-SQL.Engine/Evaluator.Validation.cs:40-61`).
+  **Outcome (2026-11-02):** Real. KEYFILE resolved and authorized; plaintext staged in a private temp subdirectory.
+- [x] **[P1 Security] `Evaluator.ResolvePath` skips `ValidatePath` when path contains `"${"` and allows `..` traversal from connection base URIs** (`src/ETL-SQL.Engine/Evaluator.Validation.cs:40-61`).
   When `StorageCapability` is null, `if (resolved.Contains("${")) return resolved;` returns before `Path.GetFullPath`, `ResolvePathSymlinks`, and `_securityService.ValidatePath`. Connection-prefix expansion (`connName/subpath`) also fails to verify `SafePath.IsWithinRoot(baseUri, fullPath)`.
   **Verify:** Call `evaluator.ResolvePath(@"C:\Windows\System32\${x}\..\drivers\etc\hosts")` with `StorageCapability == null`.
-- [ ] **[P1 Bug] `ExpressionEvaluator.EvaluateStream` leaks `OuterRowStack` frames on early termination or exception** (`src/ETL-SQL.Engine/ExpressionEvaluator.cs:280-285`).
+  **Outcome (2026-11-02):** Partly real. Placeholder paths now validated. Connection-prefix `..` is a false positive: the base path is not a boundary and the result is still validated.
+- [x] **[P1 Bug] `ExpressionEvaluator.EvaluateStream` leaks `OuterRowStack` frames on early termination or exception** (`src/ETL-SQL.Engine/ExpressionEvaluator.cs:280-285`).
   `_context.OuterRowStack.Push(context)` is not guarded by `try ... finally` around the `await foreach` generator in `EvaluateStream`, leaving stale outer rows on `OuterRowStack` when a caller stops enumeration early (`EXISTS`, `FIRST`, `LIMIT`) or throws.
   **Verify:** Break early from `EvaluateStream` on a `SubqueryExpression` and inspect `_context.OuterRowStack.Count`.
+  **Outcome (2026-11-02):** Real. Pop moved into `finally`.
 - [ ] **[P1 Bug / Security] `ExecuteToolStatementHandler` drops `CAPABILITY_SECRETS` for `EXECUTABLE` tools and skips `ResolvePath` on `CAPABILITY_MOUNTS` for `CONTAINER` tools** (`src/ETL-SQL.Engine/Handlers/ExecuteToolStatementHandler.cs:79-84, 135-160, 180-197`).
   `CAPABILITY_SECRETS` are only populated into the `CONTAINER` branch (`docker run -e`) and never added to `startInfo.EnvironmentVariables` for `EXECUTABLE` tools. In the `CONTAINER` branch, `CAPABILITY_MOUNTS` host paths are passed to `-v` without `context.ResolvePath` / `FileSystemPolicyAuthorizer`.
   **Verify:** Run `EXECUTE TOOL` on an `EXECUTABLE` tool with `CAPABILITY_SECRETS` and inspect the child environment.
+  **Outcome (2026-11-02):** Secrets for EXECUTABLE: false positive (documented container-only). Mounts: **decide** whether catalog mounts are trusted admin config (fix the doc) or must be authorized.
 - [ ] **[P2 Security] Scalar file functions in `FileFunctions` bypass operation budgets and recursive depth limits** (`src/ETL-SQL.Engine/Functions/FileFunctions.cs:49-107, 161-200`).
   `FILE_EXISTS`, `DIRECTORY_EXISTS`, `FILE_SIZE`, `FILE_MODIFIED`, `FILE_HASH`, and `FILE_LIST` never call `context.IncrementOperationCount`, and `FILE_LIST(path, true)` uses `SearchOption.AllDirectories` without enforcing `MaxRecursiveDepth`.
   **Verify:** Call `FILE_HASH` >100 times in a `SELECT` without `SET ALLOW_FILE_OPERATIONS`.
+  **Outcome (2026-11-02):** Partly real. Each call is already path-authorized. **Decide** whether scalar file functions count against the 100-operation budget (would break `SELECT FILE_EXISTS(path) FROM #t` beyond 100 rows).
 
 #### `src/ETL-SQL.Analysis`
 
 - [ ] **[P1 Security] Arbitrary file read and content disclosure during static linting in `RunScriptDependencyPreflightRule`** (`src/ETL-SQL.Analysis/Linting/Rules/RunScriptDependencyPreflightRule.cs:29-88, 91-109`).
   Static linting resolves any literal `RUN SCRIPT '...'` path via `Path.GetFullPath` without `SecurityService.ValidatePath`, safe-zone checks, or extension validation, reads the file via `File.ReadAllTextAsync`, and surfaces token values and `@variable` names in `LINT025` diagnostics.
   **Verify:** Lint `RUN SCRIPT 'C:/Windows/win.ini';` via `Linter.AnalyzeAsync`.
-- [ ] **[P2 Security] `CredentialLeakRule` misses `SECRET`-typed variables and `${@var}` string interpolation** (`src/ETL-SQL.Analysis/Linting/Rules/CredentialLeakRule.cs:43-48, 185-229`).
+  **Outcome (2026-11-02):** Real, fixed for local lint (only `.etlsql`/`.sql` outside protected locations). **Decide** for server-side lint: Portal and Orchestrator should disable dependency preflight or pass an authorizer.
+- [x] **[P2 Security] `CredentialLeakRule` misses `SECRET`-typed variables and `${@var}` string interpolation** (`src/ETL-SQL.Analysis/Linting/Rules/CredentialLeakRule.cs:43-48, 185-229`).
   `Analyze` checks `declare.IsSensitive || IsSensitiveName(declare.VariableName)` but ignores `declare.IsSecret`, and `FindSensitiveVariablesRecursive` does not inspect string literals for `${@var}` interpolations.
   **Verify:** Lint `DECLARE @v SECRET = 'SECRET:k'; PRINT @v;` and `DECLARE @pw STRING SENSITIVE = 'ENC:x'; PRINT '${@pw}';`.
-- [ ] **[P2 Security] `FileSystemSecurityRule` only checks `.StartsWith(".GIT"/".SSH")` and omits several file statements** (`src/ETL-SQL.Analysis/Linting/Rules/FileSystemSecurityRule.cs:17-19, 31-113, 163-169`).
+  **Outcome (2026-11-02):** Partly real. SECRET already sets `IsSensitive` (false positive); `${@var}` interpolation now flagged.
+- [x] **[P2 Security] `FileSystemSecurityRule` only checks `.StartsWith(".GIT"/".SSH")` and omits several file statements** (`src/ETL-SQL.Analysis/Linting/Rules/FileSystemSecurityRule.cs:17-19, 31-113, 163-169`).
   `IsForbiddenPath` uses `StartsWith` on unnormalized paths, missing `/home/user/.ssh/id_rsa`, `C:\repo\.git\config`, and `data/../../.ssh/id_rsa`, and does not inspect `CREATE CONNECTION`, `MERGE FILES`, `SPLIT FILE`, `SYNC DIRECTORY`, `CONVERT FILE ENCODING`, `EXPORT DATASET`, or `PUBLISH DATASET`.
   **Verify:** Lint `IMPORT FILE '/home/user/.ssh/id_rsa' INTO #t USING CSV;`.
-- [ ] **[P2 Bug] `Linter.AnalyzeAsync` permanently mutates `DefaultLintContext.Metadata`** (`src/ETL-SQL.Analysis/Linting/Linter.cs:38-45`).
+  **Outcome (2026-11-02):** Partly real. Segment matching anywhere in the path; more statements covered. `IMPORT FILE` is not ETL-SQL syntax.
+- [x] **[P2 Bug] `Linter.AnalyzeAsync` permanently mutates `DefaultLintContext.Metadata`** (`src/ETL-SQL.Analysis/Linting/Linter.cs:38-45`).
   `defaultContext.Metadata = new ScriptMetadataOverlay(context.Metadata)` is never restored after `AnalyzeAsync` completes, stacking overlays and leaking script-local tables/connections across lint invocations.
   **Verify:** Reuse a `DefaultLintContext` across two `Linter.AnalyzeAsync` calls.
+  **Outcome (2026-11-02):** Partly real. Overlays no longer stack; the overlay deliberately stays on the context.
 
 #### `src/ETL-SQL.App`
 
-- [ ] **[P1 Security] `EngineRunner` writes unmasked `SECRET` and `SENSITIVE` variables in plaintext JSON to stdout during `--json` runs** (`src/ETL-SQL.App/App/EngineRunner.cs:613-624, 658-669`).
+- [x] **[P1 Security] `EngineRunner` writes unmasked `SECRET` and `SENSITIVE` variables in plaintext JSON to stdout during `--json` runs** (`src/ETL-SQL.App/App/EngineRunner.cs:613-624, 658-669`).
   Both the 500ms progress heartbeat and post-execution variable dump serialize `evaluator.VarContext.GetVariablesWithMetadata()` without checking `IsSecret`/`IsSensitive` or calling `SecretRedactor.Redact`. While a script is running (before `PurgeSecretVariables()` runs in `finally`), resolved `SECRET:` plaintext is emitted in `"type":"variables"` JSON events.
   **Verify:** Run a script with `--json` containing `DECLARE @s SECRET = 'SECRET:test'; WAITFOR DELAY '00:00:01';`.
-- [ ] **[P1 Security] `BackupRestoreService.RestoreCoreAsync` extracts archives without `SafeZipExtractor` and copies unattested extra files omitted from `backup-manifest.json`** (`src/ETL-SQL.App/App/BackupRestoreService.cs:390-391, 437-442, 649-670, 1051-1052`).
+  **Outcome (2026-11-02):** Real. Heartbeat and final dump mask SECRET/SENSITIVE and redact the rest.
+- [x] **[P1 Security] `BackupRestoreService.RestoreCoreAsync` extracts archives without `SafeZipExtractor` and copies unattested extra files omitted from `backup-manifest.json`** (`src/ETL-SQL.App/App/BackupRestoreService.cs:390-391, 437-442, 649-670, 1051-1052`).
   `RestoreCoreAsync` calls raw `ZipFile.ExtractToDirectory` instead of `SafeZipExtractor.Extract`, and `ValidateAsync` only verifies that files listed in `manifest["files"]` exist without rejecting extra files in `data.zip` or `keys.zip` before `CopyTreeAsync` copies the entire extracted directory tree.
   **Verify:** Add an unlisted file under `content/reports/` or `dp-keys/` in backup archives and run `admin restore --validate`.
-- [ ] **[P2 Security] `SupportBundleBuilder` stages support bundles in shared `Path.GetTempPath()` without owner-only ACLs** (`src/ETL-SQL.App/App/SupportBundleBuilder.cs:50-81`).
+  **Outcome (2026-11-02):** Partly real. Zip-slip was a false positive (`ExtractToDirectory` refuses escapes). Unattested files now fail restore.
+- [x] **[P2 Security] `SupportBundleBuilder` stages support bundles in shared `Path.GetTempPath()` without owner-only ACLs** (`src/ETL-SQL.App/App/SupportBundleBuilder.cs:50-81`).
   Unlike `BackupRestoreService`, `SupportBundleBuilder.RunAsync` creates its staging directory in `Path.GetTempPath()` and writes the output archive without `RestrictToOwner`.
   **Verify:** Inspect `SupportBundleBuilder.cs:50-81`.
+  **Outcome (2026-11-02):** Real. Staging in the owner-only per-user root.
 
 #### `src/ETL-SQL.TUI`
 
-- [ ] **[P1 Security] `ReplUi` leaks unmasked sensitive variables to stdout and writes exports without `ResolvePath` / `ValidatePath`** (`src/ETL-SQL.TUI/UI/ReplUi.cs:334-345, 392-461`, `src/ETL-SQL.TUI/UI/ConsoleEditor.cs:1947-1955`).
+- [x] **[P1 Security] `ReplUi` leaks unmasked sensitive variables to stdout and writes exports without `ResolvePath` / `ValidatePath`** (`src/ETL-SQL.TUI/UI/ReplUi.cs:334-345, 392-461`, `src/ETL-SQL.TUI/UI/ConsoleEditor.cs:1947-1955`).
   `ReplUi` serializes `_evaluator.Variables` without masking `IsSecret`/`IsSensitive` metadata, and `HandleExport` (as well as `ConsoleEditor.ExportResults`) writes directly to `cmd.Path` without calling `_evaluator.ResolvePath` or `_security.ValidatePath`.
   **Verify:** Send `{"action":"export","format":"csv","path":"script.etlsql"}` to `ReplUi`.
-- [ ] **[P1 Bug] `ReplUi` blocks its stdin command loop while a script is running, breaking `"cancel"`, `"exit"`, and `"ping"`** (`src/ETL-SQL.TUI/UI/ReplUi.cs:96-166`).
+  **Outcome (2026-11-02):** Real. Variables masked; exports resolved and authorized.
+- [x] **[P1 Bug] `ReplUi` blocks its stdin command loop while a script is running, breaking `"cancel"`, `"exit"`, and `"ping"`** (`src/ETL-SQL.TUI/UI/ReplUi.cs:96-166`).
   Line 165 synchronously awaits `await activeExecutionTask;` inside the `Console.In.ReadLine()` loop, so subsequent `"cancel"`, `"exit"`, or `"ping"` commands are not read until execution completes.
   **Verify:** Send a `"run"` command with `WAITFOR DELAY '00:00:10'` followed by `"cancel"`.
-- [ ] **[P2 Bug] `ConsoleEditor.ExportReport` passes raw SQL text instead of the file path to `ManifestBuilder.BuildAsync`** (`src/ETL-SQL.TUI/UI/ConsoleEditor.cs:472-474`).
+  **Outcome (2026-11-02):** Real. stdin read on its own task; `ping`/`cancel` answered mid-run.
+- [x] **[P2 Bug] `ConsoleEditor.ExportReport` passes raw SQL text instead of the file path to `ManifestBuilder.BuildAsync`** (`src/ETL-SQL.TUI/UI/ConsoleEditor.cs:472-474`).
   `BuildAsync(_buffer.GetText())` passes the script contents as `sourcePath`, setting `manifest.Source` to the full script text and breaking relative path resolution.
   **Verify:** Call `ExportReport(false)` in `ConsoleEditor` and inspect `manifest.Source`.
+  **Outcome (2026-11-02):** Real. Passes the script path.
 
 #### `src/ETL-SQL.Connectors.Common`
 
-- [ ] **[P1 Bug] `ConnectorTimeouts.ResolveCommandTimeoutSeconds` applies the 1800s Data Warehouse timeout to all OLTP, REST, and Webhook connectors** (`src/ETL-SQL.Connectors.Common/ConnectorTimeouts.cs:8-24`, `src/appsettings.json:143-146`).
+- [x] **[P1 Bug] `ConnectorTimeouts.ResolveCommandTimeoutSeconds` applies the 1800s Data Warehouse timeout to all OLTP, REST, and Webhook connectors** (`src/ETL-SQL.Connectors.Common/ConnectorTimeouts.cs:8-24`, `src/appsettings.json:143-146`).
   `ResolveCommandTimeoutSeconds` reads `IConfiguration["Connectors:DataWarehouse:DefaultCommandTimeoutSeconds"]` (`1800` in `appsettings.json`) before falling back to `fallbackSeconds = 30`, giving every OLTP and HTTP connector a 30-minute timeout when `TIMEOUT_SECONDS` is not explicitly set.
   **Verify:** Construct `SqlServerDataSource`, `PostgresDataSource`, or `RestDataSource` with a host `IExecutionContext` loaded from `src/appsettings.json` and no `TIMEOUT_SECONDS` option.
-- [ ] **[P1 Bug] `ConnectionStringBuilder` rejects valid connector names (`FTP_CONN`, `S3`, etc.) and returns `""` for `AZURE_BLOB`** (`src/ETL-SQL.Connectors.Common/ConnectionStringBuilder.cs:15-22, 55-62, 130-137`).
+  **Outcome (2026-11-02):** Real. OLTP/REST/Webhook use `TIMEOUT_SECONDS` or a 30s fallback (breaking, recorded).
+- [x] **[P1 Bug] `ConnectionStringBuilder` rejects valid connector names (`FTP_CONN`, `S3`, etc.) and returns `""` for `AZURE_BLOB`** (`src/ETL-SQL.Connectors.Common/ConnectionStringBuilder.cs:15-22, 55-62, 130-137`).
   `ValidProviders` omits `"FTP_CONN"`, causing `new FtpConnector().BuildConnectionString(...)` to throw `ArgumentException: Unsupported provider: 'FTP_CONN'`. `BuildRemote` for `"AZURE_BLOB"` looks up `"HOST"` instead of `CONNECTION_STRING`/`ACCOUNT_NAME`/`BLOB_ENDPOINT` and returns `""`.
   **Verify:** Call `new FtpConnector().BuildConnectionString(new Dictionary<string, string> { ["HOST"] = "h" })` and `new AzureBlobConnector().BuildConnectionString(new Dictionary<string, string> { ["ACCOUNT_NAME"] = "a" })`.
-- [ ] **[P2 Bug] `ConnectionStringParser.SplitKeyValuePairs` strips `{`/`}` and quotes from values and misparses single quotes in passwords** (`src/ETL-SQL.Connectors.Common/ConnectionStringParser.cs:281-340`).
+  **Outcome (2026-11-02):** Partly real. FTP_CONN fixed; AZURE_BLOB/S3 never use this builder.
+- [x] **[P2 Bug] `ConnectionStringParser.SplitKeyValuePairs` strips `{`/`}` and quotes from values and misparses single quotes in passwords** (`src/ETL-SQL.Connectors.Common/ConnectionStringParser.cs:281-340`).
   Any `'`, `"`, or `{` toggles `inQuotes` and is omitted from `currentValue`, stripping `{}` from ODBC `DRIVER={...}` values and swallowing subsequent `;KEY=VALUE` pairs when an unquoted password contains `'`.
   **Verify:** Call `ConnectionStringParser.ExtractCredentials("DRIVER={ODBC Driver 18 for SQL Server};UID=sa;PWD=p", out var d)` and inspect `d["DRIVER"]`.
+  **Outcome (2026-11-02):** Partly real. Mid-value `'` no longer opens a quote; doubled closers kept. Brace de-quoting is correct.
 
 #### `src/ETL-SQL.Connectors.Cloud`
 
-- [ ] **[P1 Security / Bug] `AzureBlobConnector` bypasses `ResolvePath` in `UploadFileAsync`/`DownloadFileAsync` and lets `ArgumentException`/`FormatException`/`AuthenticationFailedException` escape unwrapped** (`src/ETL-SQL.Connectors.Cloud/AzureBlobConnector.cs:48-55, 92-122, 201-232, 378-379`).
+- [x] **[P1 Security / Bug] `AzureBlobConnector` bypasses `ResolvePath` in `UploadFileAsync`/`DownloadFileAsync` and lets `ArgumentException`/`FormatException`/`AuthenticationFailedException` escape unwrapped** (`src/ETL-SQL.Connectors.Cloud/AzureBlobConnector.cs:48-55, 92-122, 201-232, 378-379`).
   `UploadFileAsync` and `DownloadFileAsync` pass `localPath` directly to `File.OpenRead`/`File.Exists`/`DownloadToAsync` without `_context?.ResolvePath(localPath)` or `SecurityService` validation. `new BlobServiceClient(connectionString)` at line 50 is outside `try/catch`, and `ShouldWrapProviderException` omits `FormatException` and `AuthenticationFailedException`.
   **Verify:** Call `new AzureBlobConnector().CreateDataSource(context, "", new Dictionary<string, string> { ["CONTAINER"] = "c" })`.
-- [ ] **[P1 Security] `S3Connector.GetHost` falls back to `"s3.us-east-1.amazonaws.com"` when `ENDPOINT` fails `Uri.TryCreate`, bypassing egress validation** (`src/ETL-SQL.Connectors.Cloud/S3/S3Connector.cs:84-90, 197-208`).
+  **Outcome (2026-11-02):** Partly real. `ResolvePath` is a false positive (callers authorize first). Exceptions now wrapped without echoing secrets.
+- [x] **[P1 Security] `S3Connector.GetHost` falls back to `"s3.us-east-1.amazonaws.com"` when `ENDPOINT` fails `Uri.TryCreate`, bypassing egress validation** (`src/ETL-SQL.Connectors.Cloud/S3/S3Connector.cs:84-90, 197-208`).
   When `options["ENDPOINT"]` is set but fails `Uri.TryCreate(..., UriKind.Absolute)`, `GetHost` returns `"s3.us-east-1.amazonaws.com"` to `EnforceEnterpriseHost` while `GetClient()` still sets `config.ServiceURL = _endpoint`.
   **Verify:** Call `new S3Connector().GetHost("", new Dictionary<string, string> { ["ENDPOINT"] = "//internal-host:9000" })`.
-- [ ] **[P1 Bug] `S3Connector.ListFilesAsync` does not paginate `ListObjectsV2Async`, truncating results at 1,000 objects** (`src/ETL-SQL.Connectors.Cloud/S3/S3Connector.cs:212-249`).
+  **Outcome (2026-11-02):** Real. Non-absolute http(s) ENDPOINT refused.
+- [x] **[P1 Bug] `S3Connector.ListFilesAsync` does not paginate `ListObjectsV2Async`, truncating results at 1,000 objects** (`src/ETL-SQL.Connectors.Cloud/S3/S3Connector.cs:212-249`).
   `ListFilesAsync` calls `ListObjectsV2Async` once without checking `response.IsTruncated` or `NextContinuationToken`, truncating both `ListFilesAsync` and `ReadBatchesCore` at 1,000 objects.
   **Verify:** Inspect `S3Connector.cs:232-240`.
-- [ ] **[P1 Bug / Security] `SharePointConnector` has broken `GetVersionAsync`, unwrapped exceptions in 10 methods, missing `ResolvePath` in file transfers, stringified numbers/booleans, and `HttpClient` leaks in `WithTable`** (`src/ETL-SQL.Connectors.Cloud/SharePoint/SharePointConnector.cs:97-150, 200-494, 540-637`).
+  **Outcome (2026-11-02):** Real. Follows continuation tokens.
+- [x] **[P1 Bug / Security] `SharePointConnector` has broken `GetVersionAsync`, unwrapped exceptions in 10 methods, missing `ResolvePath` in file transfers, stringified numbers/booleans, and `HttpClient` leaks in `WithTable`** (`src/ETL-SQL.Connectors.Cloud/SharePoint/SharePointConnector.cs:97-150, 200-494, 540-637`).
   `GetVersionAsync(context, connectionString)` checks `_siteUrl` (empty on the DI singleton) instead of `connectionString` and always returns `"Offline - Invalid Site URL"`. Ten methods omit `ConnectorExceptionWrapper.Wrap`, `UploadFileAsync`/`DownloadFileAsync` skip `ResolvePath(localPath)`, `ReadBatchesCore` converts JSON numbers/booleans to strings, and `WithTable` allocates an undisposed `HttpClient`.
   **Verify:** Call `await new SharePointConnector().GetVersionAsync(context, "https://contoso.sharepoint.com/sites/test")`.
-- [ ] **[P2 Bug] `AzureBlobConnector.ReadBatches` and `S3Connector.ReadBatches` ignore `batchSize`, drop `CancellationToken`, and store `Size` as `long` instead of `decimal`** (`src/ETL-SQL.Connectors.Cloud/AzureBlobConnector.cs:327-346`, `src/ETL-SQL.Connectors.Cloud/S3/S3Connector.cs:468-487`).
+  **Outcome (2026-11-02):** Real except `ResolvePath` (false positive).
+- [x] **[P2 Bug] `AzureBlobConnector.ReadBatches` and `S3Connector.ReadBatches` ignore `batchSize`, drop `CancellationToken`, and store `Size` as `long` instead of `decimal`** (`src/ETL-SQL.Connectors.Cloud/AzureBlobConnector.cs:327-346`, `src/ETL-SQL.Connectors.Cloud/S3/S3Connector.cs:468-487`).
   Neither implements `ReadBatches(int, CancellationToken)` or batches rows, and both assign `row["Size"] = f.Size` (`long`).
   **Verify:** Inspect `AzureBlobConnector.cs:327-346` and `S3Connector.cs:468-487`.
+  **Outcome (2026-11-02):** Real. Shared `FileListingBatches` helper.
 
 #### `src/ETL-SQL.Connectors.Databases`
 
@@ -1622,30 +1657,37 @@ Recorded for verification only (no source fixes applied during the audit).
 
 #### `src/ETL-SQL.Connectors.Messaging`
 
-- [ ] **[P0 Bug] `KafkaConnector.CreateDataSource` passes the original empty `connectionString` instead of resolved `connStr` to `KafkaDataSource`** (`src/ETL-SQL.Connectors.Messaging/Kafka/KafkaConnector.cs:86-116`).
+- [x] **[P0 Bug] `KafkaConnector.CreateDataSource` passes the original empty `connectionString` instead of resolved `connStr` to `KafkaDataSource`** (`src/ETL-SQL.Connectors.Messaging/Kafka/KafkaConnector.cs:86-116`).
   When `connectionString` is empty and `BOOTSTRAP_SERVERS` is provided in `options`, `CreateDataSource` computes `connStr = BuildConnectionString(options)` at line 97 but passes `connectionString` (`""`) to `new KafkaDataSource(...)` at line 115.
   **Verify:** Call `new KafkaConnector().CreateDataSource(context, "", new Dictionary<string, string> { ["BOOTSTRAP_SERVERS"] = "localhost:9092", ["TOPIC"] = "t" })`.
-- [ ] **[P1 Security] `KafkaConnector.GetHost` only validates the first broker in a comma-separated `BOOTSTRAP_SERVERS` list** (`src/ETL-SQL.Connectors.Messaging/Kafka/KafkaConnector.cs:24-28, 128-143`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Security] `KafkaConnector.GetHost` only validates the first broker in a comma-separated `BOOTSTRAP_SERVERS` list** (`src/ETL-SQL.Connectors.Messaging/Kafka/KafkaConnector.cs:24-28, 128-143`).
   `GetHost` splits on `,` and only returns `servers[0]`, bypassing `EnforceEnterpriseHost` for subsequent brokers.
   **Verify:** Call `new KafkaConnector().GetHost("", new Dictionary<string, string> { ["BOOTSTRAP_SERVERS"] = "allowed:9092,blocked:9092" })`.
-- [ ] **[P1 Bug] `KafkaDataSource` stores `Partition`/`Offset` as `int`/`long` instead of `decimal` and shares `_consumer`/`_producer` unsafely across `WithTable`** (`src/ETL-SQL.Connectors.Messaging/Kafka/KafkaDataSource.cs:48-60, 130-138, 164, 288-311`).
+  **Outcome (2026-11-02):** Partly real. `GetVersionAsync` now checks every broker; `CreateDataSource` already did.
+- [x] **[P1 Bug] `KafkaDataSource` stores `Partition`/`Offset` as `int`/`long` instead of `decimal` and shares `_consumer`/`_producer` unsafely across `WithTable`** (`src/ETL-SQL.Connectors.Messaging/Kafka/KafkaDataSource.cs:48-60, 130-138, 164, 288-311`).
   Disposing a `WithTable` clone disposes the parent's consumer and producer, and `ReadBatchesCore` writes `int` and `long` into `Row`.
   **Verify:** Inspect `KafkaDataSource.cs:133-134, 288-311`.
-- [ ] **[P1 Security / Resource Leak] `SmtpDataSource.WriteBatches` chains raw MailKit exceptions with unsanitized messages and leaks attachment `FileStream`s when parsing/copying fails before `try`** (`src/ETL-SQL.Connectors.Messaging/Email/SmtpDataSource.cs:91-208`).
+  **Outcome (2026-11-02):** Real. Decimal columns; clones no longer dispose parent clients.
+- [x] **[P1 Security / Resource Leak] `SmtpDataSource.WriteBatches` chains raw MailKit exceptions with unsanitized messages and leaks attachment `FileStream`s when parsing/copying fails before `try`** (`src/ETL-SQL.Connectors.Messaging/Email/SmtpDataSource.cs:91-208`).
   Address parsing and attachment stream opening happen before the `try/catch/finally` block at line 183, and line 201 throws `new ExecutionException($"SMTP connector error: {ex.Message}", ex)` without `ConnectorExceptionWrapper.Wrap` / `SecretRedactor.Redact`.
   **Verify:** Pass a valid first attachment and a failing second attachment (or invalid `CC` address) to `SmtpDataSource.WriteBatches`.
+  **Outcome (2026-11-02):** Real. Parsing inside try/finally; sanitized wrap.
 
 #### `src/ETL-SQL.Connectors.Remote`
 
-- [ ] **[P0 Security] `SftpConnector.DiagnoseAuthenticationAsync` bypasses `EnforceEnterpriseHost` and `ResolvePath`/`ValidatePath` on `KEYFILE`** (`src/ETL-SQL.Connectors.Remote/SftpConnector.cs:684-795`).
+- [x] **[P0 Security] `SftpConnector.DiagnoseAuthenticationAsync` bypasses `EnforceEnterpriseHost` and `ResolvePath`/`ValidatePath` on `KEYFILE`** (`src/ETL-SQL.Connectors.Remote/SftpConnector.cs:684-795`).
   `DiagnoseAuthenticationAsync` connects to `context.Target` without calling `ConnectorPolicyAuthorizer.EnforceEnterpriseHost` and passes `keyFile` directly to `new PrivateKeyFile(keyFile, passphrase)` without `ResolvePath` or `SecurityService.ValidatePath`.
   **Verify:** Call `SftpConnector.DiagnoseAuthenticationAsync` with a blocked target host or unauthorized `KEYFILE`.
-- [ ] **[P1 Bug] `SftpConnector.CreateDataSource` and `FtpConnector.CreateDataSource` ignore `options["HOST"]` when `connectionString` is empty** (`src/ETL-SQL.Connectors.Remote/SftpConnector.cs:166-219`, `src/ETL-SQL.Connectors.Remote/FtpConnector.cs:89-115`).
+  **Outcome (2026-11-02):** False positive. `ConnectionDiagnosticEngine.DiagnoseAsync` runs the egress fence and KEYFILE `ValidatePath` before any probe; test added.
+- [x] **[P1 Bug] `SftpConnector.CreateDataSource` and `FtpConnector.CreateDataSource` ignore `options["HOST"]` when `connectionString` is empty** (`src/ETL-SQL.Connectors.Remote/SftpConnector.cs:166-219`, `src/ETL-SQL.Connectors.Remote/FtpConnector.cs:89-115`).
   Both validate `GetHost(connectionString, options)` using `options["HOST"]`, but pass the empty `connectionString` (`""`) into the `SftpConnector`/`FtpConnector` constructor.
   **Verify:** Call `new SftpConnector().CreateDataSource(context, "", new Dictionary<string, string> { ["HOST"] = "sftp.example.com", ["USER"] = "u", ["PASSWORD"] = "p" })` and inspect `Path`.
-- [ ] **[P1 Security / Bug] `ActiveDirectoryConnector` has LDAP filter injection in `WithTable`, connects to `"localhost"` in `GetVersionAsync`, and leaves synchronous `LdapException` unwrapped in `ReadBatches`** (`src/ETL-SQL.Connectors.Remote/ActiveDirectory/ActiveDirectoryConnector.cs:114-158, 254-356, 380-385`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Security / Bug] `ActiveDirectoryConnector` has LDAP filter injection in `WithTable`, connects to `"localhost"` in `GetVersionAsync`, and leaves synchronous `LdapException` unwrapped in `ReadBatches`** (`src/ETL-SQL.Connectors.Remote/ActiveDirectory/ActiveDirectoryConnector.cs:114-158, 254-356, 380-385`).
   `GetVersionAsync(context, connectionString)` uses `_host` (`"localhost"`) instead of parsing `connectionString`; `ResolveLdapFilter` interpolates `_filterContext` unescaped into `(objectClass={_filterContext})`; `ReadBatches` has no `try/catch` around `LdapConnection`.
   **Verify:** Inspect `ActiveDirectoryConnector.cs:127, 267, 273-356`.
+  **Outcome (2026-11-02):** Real. Also fixed `WithTable` dropping port/LDAPS/base DN.
 
 #### `src/ETL-SQL.Connectors`
 
@@ -1661,312 +1703,397 @@ Recorded for verification only (no source fixes applied during the audit).
 
 #### `src/ETL-SQL.Portal`
 
-- [ ] **[P0 Security] Cross-tenant Policy Authority read/write/revoke and machine inventory disclosure in Shared Tenancy mode** (`src/ETL-SQL.Portal/Services/DedicatedPolicyAuthorityGuard.cs:16-44`, `src/ETL-SQL.Portal/Controllers/PolicyAuthorityController.cs:34-54, 98-440`).
+- [x] **[P0 Security] Cross-tenant Policy Authority read/write/revoke and machine inventory disclosure in Shared Tenancy mode** (`src/ETL-SQL.Portal/Services/DedicatedPolicyAuthorityGuard.cs:16-44`, `src/ETL-SQL.Portal/Controllers/PolicyAuthorityController.cs:34-54, 98-440`).
   `DedicatedPolicyAuthorityGuard` only checks `config.TenantId` and ignores `config.SharedTenancy.Enabled` and `RequestTenantContextAccessor`. When `config.TenantId` is unset in Shared Tenancy mode, `IsDedicated` is `false` and any tenant Admin can pass `?tenant=other-tenant` to read, publish, roll back, or revoke another tenant's policies and machines.
   **Verify:** With `SharedTenancy.Enabled = true` and `TenantId = null`, call `GET /api/admin/policy-authority/active?tenant=tenant-b` using a `tenant-a` Admin JWT.
-- [ ] **[P1 Security / Bug] `AuthController.Login` queries users/LDAP groups globally without `TenantId` and throws unhandled `UnauthorizedAccessException` (HTTP 500) in Shared Tenancy mode** (`src/ETL-SQL.Portal/Controllers/AuthController.cs:56, 98-198, 240-256`, `src/ETL-SQL.Portal/Services/TokenService.cs:122-127`).
+  **Outcome (2026-11-02):** Partly real: machine list/register/revoke were unscoped (signed versions already scoped). Guard binds the verified tenant.
+- [x] **[P1 Security / Bug] `AuthController.Login` queries users/LDAP groups globally without `TenantId` and throws unhandled `UnauthorizedAccessException` (HTTP 500) in Shared Tenancy mode** (`src/ETL-SQL.Portal/Controllers/AuthController.cs:56, 98-198, 240-256`, `src/ETL-SQL.Portal/Services/TokenService.cs:122-127`).
   `Login` calls `userManager.FindByNameAsync` and queries `db.Groups.Where(g => g.Provider == "LDAP")` without tenant scoping, then passes `sessionTenant = config.TenantId` (`null` in Shared Tenancy) to `tokenService.GenerateJwt`, throwing `UnauthorizedAccessException` after committing DB changes.
   **Verify:** Send `POST /api/auth/login` with valid credentials when `SharedTenancy.Enabled = true`.
-- [ ] **[P1 Bug] `[AllowAnonymous]` endpoints on `ReportsController` (`/api/share/{token}`, `/api/embed/{token}`) and `StudioController` (`/api/studio/session`) throw HTTP 500 in Shared Tenancy mode** (`src/ETL-SQL.Portal/Program.cs:598-606`, `src/ETL-SQL.Portal/Controllers/ReportsController.cs:62`, `src/ETL-SQL.Portal/Controllers/StudioController.cs:33`, `src/ETL-SQL.Portal/Services/DatasetTenantScope.cs:10-16`).
+  **Outcome (2026-11-02):** Real. Password/LDAP login answers 401 on Shared hosts (breaking, recorded).
+- [x] **[P1 Bug] `[AllowAnonymous]` endpoints on `ReportsController` (`/api/share/{token}`, `/api/embed/{token}`) and `StudioController` (`/api/studio/session`) throw HTTP 500 in Shared Tenancy mode** (`src/ETL-SQL.Portal/Program.cs:598-606`, `src/ETL-SQL.Portal/Controllers/ReportsController.cs:62`, `src/ETL-SQL.Portal/Controllers/StudioController.cs:33`, `src/ETL-SQL.Portal/Services/DatasetTenantScope.cs:10-16`).
   When `RequestTenantContextAccessor.Current` is `null` on anonymous requests, the `DatasetTenantScope` DI registration returns `null!`, and both controllers run `?? new DatasetTenantScope(portalConfig)` in their constructors, which throws `UnauthorizedAccessException` before the action runs.
   **Verify:** Send an anonymous `GET /api/studio/session` or `GET /api/share/{token}` with `SharedTenancy.Enabled = true`.
-- [ ] **[P1 Security / Bug] `AuditService` records `"portal-host"` instead of the tenant ID for OIDC logins and service-account / workload-identity token exchanges in Shared Tenancy mode** (`src/ETL-SQL.Portal/Services/AuditService.cs:8-11, 28`, `src/ETL-SQL.Portal/Controllers/OidcController.cs:20-26, 169`, `src/ETL-SQL.Portal/Controllers/ServiceAccountTokenController.cs:17-26, 55, 83`, `src/ETL-SQL.Portal/Controllers/WorkloadIdentityTokenController.cs:17-26, 66, 89`).
+  **Outcome (2026-11-02):** Real. Deferred tenant scope; share/embed bind the report's tenant.
+- [x] **[P1 Security / Bug] `AuditService` records `"portal-host"` instead of the tenant ID for OIDC logins and service-account / workload-identity token exchanges in Shared Tenancy mode** (`src/ETL-SQL.Portal/Services/AuditService.cs:8-11, 28`, `src/ETL-SQL.Portal/Controllers/OidcController.cs:20-26, 169`, `src/ETL-SQL.Portal/Controllers/ServiceAccountTokenController.cs:17-26, 55, 83`, `src/ETL-SQL.Portal/Controllers/WorkloadIdentityTokenController.cs:17-26, 66, 89`).
   `AuditService` captures `DatasetTenantScope?` at constructor time when `[AllowAnonymous]` controllers activate (before `tenantAccessor.SetVerifiedCredential` is called in the action), so `tenantScope` is `null` and audit rows are written under `"portal-host"`.
   **Verify:** Issue a service-account token in Shared Tenancy mode and inspect `audit_logs.tenant_id`.
-- [ ] **[P1 Security / Bug] Cross-tenant folder/group leakage in `AdminController` and `DesignerController` and inverted permission ordering (`Author > Manage`)** (`src/ETL-SQL.Portal/Controllers/AdminController.cs:515, 535-537, 1647-1650, 1700-1718, 2104, 2132`, `src/ETL-SQL.Portal/Controllers/DesignerController.cs:795-810`).
+  **Outcome (2026-11-02):** Real. Tenant read when the audit row is written.
+- [x] **[P1 Security / Bug] Cross-tenant folder/group leakage in `AdminController` and `DesignerController` and inverted permission ordering (`Author > Manage`)** (`src/ETL-SQL.Portal/Controllers/AdminController.cs:515, 535-537, 1647-1650, 1700-1718, 2104, 2132`, `src/ETL-SQL.Portal/Controllers/DesignerController.cs:795-810`).
   `GetEffectivePermissionsForFolder`, `GetEffectivePermissionsForUser`, and `DeleteUser` query `db.Folders` instead of `catalogScope.Folders`; `DesignerController.PreviewAsVocabulary` queries `_db.Groups` across all tenants; `BuildFolderPermissionEntry` sorts by raw enum value (`Author = 3 > Manage = 2`) instead of `FolderPermissions.Max`.
   **Verify:** Call `GET /api/designer/preview-as` or `GET /api/admin/permissions/folder/{otherTenantFolderId}` in a multi-tenant Portal database.
-- [ ] **[P1 Bug] `ExportController.CanReadAsync` ignores `Folder.OwnerId` and `ReportAcls`, denying exports to folder owners and per-report grantees** (`src/ETL-SQL.Portal/Controllers/ExportController.cs:44-56`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Bug] `ExportController.CanReadAsync` ignores `Folder.OwnerId` and `ReportAcls`, denying exports to folder owners and per-report grantees** (`src/ETL-SQL.Portal/Controllers/ExportController.cs:44-56`).
   `CanReadAsync` only checks `db.FolderAcls` and does not delegate to `FolderPermissionService.GetEffectiveReportPermissionAsync`.
   **Verify:** Grant a user report access via `ReportAcl` or `Folder.OwnerId` and call `GET /api/reports/{id}/export/csv`.
-- [ ] **[P2 Bug] `VisibleFoldersQuery` in `FoldersController` and `CatalogController` omits `f.OwnerId == userId`** (`src/ETL-SQL.Portal/Controllers/FoldersController.cs:397-407`, `src/ETL-SQL.Portal/Controllers/CatalogController.cs:506-516`).
+  **Outcome (2026-11-02):** Real. Uses `GetEffectiveReportPermissionAsync`.
+- [x] **[P2 Bug] `VisibleFoldersQuery` in `FoldersController` and `CatalogController` omits `f.OwnerId == userId`** (`src/ETL-SQL.Portal/Controllers/FoldersController.cs:397-407`, `src/ETL-SQL.Portal/Controllers/CatalogController.cs:506-516`).
   Non-Admin folder owners without a matching group `FolderAcl` cannot see their own folders in `GET /api/folders` or `GET /api/catalog/search`.
   **Verify:** Create a folder owned by a `Publisher` user with no group `FolderAcl` and call `GET /api/folders`.
+  **Outcome (2026-11-02):** Real. Fixed.
 
 #### `src/ETL-SQL.Portal.Data`
 
-- [ ] **[P1 Bug / Security] Global unique indexes on `report_alerts.name` and `policy_machines.machine_id` omit `TenantId`** (`src/ETL-SQL.Portal.Data/PortalDbContext.cs:354-363, 572-576`).
+- [x] **[P1 Bug / Security] Global unique indexes on `report_alerts.name` and `policy_machines.machine_id` omit `TenantId`** (`src/ETL-SQL.Portal.Data/PortalDbContext.cs:354-363, 572-576`).
   `ReportAlert.Name` and `PolicyMachineRegistration.MachineId` have single-column unique indexes instead of composite `(TenantId, Name)` and `(TenantId, MachineId)` indexes, causing cross-tenant `DbUpdateException` collisions.
   **Verify:** Create an alert with the same `Name` in two different tenants.
+  **Outcome (2026-11-02):** `report_alerts.name` real: new `TenantQualifyReportAlertNames` migration pair. `policy_machines.machine_id` false positive (global GUID identity on purpose).
 - [ ] **[P1 Bug] Non-deterministic `IDataProtector.Protect` encryption on `PortalUser.NormalizedEmail` breaks SQL equality lookups (`FindByEmailAsync`)** (`src/ETL-SQL.Portal.Data/PortalDbContext.cs:627-628`, `src/ETL-SQL.Portal.Data/PortalPiiEncryption.cs:30-36`).
   `IDataProtector.Protect` generates a fresh random IV on every call, so `WHERE normalized_email = @p0` never matches stored ciphertexts.
   **Verify:** Enable `PiiEncryptionProtector`, save a user with an email, and call `userManager.FindByEmailAsync(email)`.
-- [ ] **[P2 Bug] `DbGatewayEnrollmentStore.ConsumeAsync` loads all historical enrollment rows for a tenant into memory** (`src/ETL-SQL.Portal.Data/DbGatewayEnrollmentStore.cs:65-74`).
+  **Outcome (2026-11-02):** Partly real, latent (nothing calls `FindByEmailAsync`). **Decide**: deterministic HMAC blind index, or document email lookup as unsupported.
+- [x] **[P2 Bug] `DbGatewayEnrollmentStore.ConsumeAsync` loads all historical enrollment rows for a tenant into memory** (`src/ETL-SQL.Portal.Data/DbGatewayEnrollmentStore.cs:65-74`).
   `ConsumeAsync` fetches every enrollment record for `tenant.Value` with `ToListAsync` and hashes `oneTimeToken` against each row's salt in memory.
   **Verify:** Inspect `DbGatewayEnrollmentStore.cs:65-74`.
+  **Outcome (2026-11-02):** Real (performance). Seeks the one row by the unique hash index.
 
 #### `src/ETL-SQL.Portal.Migrations.Postgres`
 
-- [ ] **[P1 Bug] `20260718193818_AddRefreshTokenHashIndex.cs` is missing `[DbContext]` and `[Migration]` attributes and has no `.Designer.cs`** (`src/ETL-SQL.Portal.Migrations.Postgres/Migrations/20260718193818_AddRefreshTokenHashIndex.cs:1-29`).
+- [x] **[P1 Bug] `20260718193818_AddRefreshTokenHashIndex.cs` is missing `[DbContext]` and `[Migration]` attributes and has no `.Designer.cs`** (`src/ETL-SQL.Portal.Migrations.Postgres/Migrations/20260718193818_AddRefreshTokenHashIndex.cs:1-29`).
   EF Core's migration discovery skips classes without `[Migration]`, so `ix_refresh_tokens_token_hash` is never applied by this migration.
   **Verify:** Call `db.Database.GetMigrations()` on a Postgres `PortalDbContext`.
-- [ ] **[P1 Bug] `20260729133100_AddShareLinkNames.cs` unconditionally appends `' ' || "Id"` to all existing `ReportEmbedTokens.Name` values** (`src/ETL-SQL.Portal.Migrations.Postgres/Migrations/20260729133100_AddShareLinkNames.cs:36-46`).
+  **Outcome (2026-11-02):** Real but already repaired by `StandardizeSnakeCaseNaming`; test now pins it as the only orphan.
+- [x] **[P1 Bug] `20260729133100_AddShareLinkNames.cs` unconditionally appends `' ' || "Id"` to all existing `ReportEmbedTokens.Name` values** (`src/ETL-SQL.Portal.Migrations.Postgres/Migrations/20260729133100_AddShareLinkNames.cs:36-46`).
   `UPDATE "ReportEmbedTokens" SET "Name" = "Name" || ' ' || "Id"` runs without a `WHERE "Name" = ''` filter, corrupting existing embed token names and failing when the resulting length exceeds `varchar(200)`.
   **Verify:** Inspect `20260729133100_AddShareLinkNames.cs:43-46`.
-- [ ] **[P2 Security] `20260816135557_AddPrincipalKeys.cs` backfills `PrincipalKey` using predictable `md5(random()::text || clock_timestamp()::text)`** (`src/ETL-SQL.Portal.Migrations.Postgres/Migrations/20260816135557_AddPrincipalKeys.cs:31-35`).
+  **Outcome (2026-11-02):** Partly real, not changed: deliberate de-duplication in shipped history; only fails on pre-July databases with ~190-char names.
+- [x] **[P2 Security] `20260816135557_AddPrincipalKeys.cs` backfills `PrincipalKey` using predictable `md5(random()::text || clock_timestamp()::text)`** (`src/ETL-SQL.Portal.Migrations.Postgres/Migrations/20260816135557_AddPrincipalKeys.cs:31-35`).
   Uses PostgreSQL's non-cryptographic `random()` and `clock_timestamp()` with MD5 to generate security-sensitive `PrincipalKey` identifiers.
   **Verify:** Inspect `20260816135557_AddPrincipalKeys.cs:31-35`.
+  **Outcome (2026-11-02):** False positive. `PrincipalKey` is an opaque identifier, not a secret.
 
 #### `src/ETL-SQL.Gateway`
 
-- [ ] **[P1 Bug / Security] Uncaught `GatewayProtocolException` from `_executor.ExecuteAsync` leaves ledger entries stuck in `Dispatched` and tears down the `GatewaySessionClient` WebSocket loop** (`src/ETL-SQL.Gateway/GatewayOperationDispatcher.cs:163-261`, `src/ETL-SQL.Gateway/GatewaySessionClient.cs:111-123`).
+- [x] **[P1 Bug / Security] Uncaught `GatewayProtocolException` from `_executor.ExecuteAsync` leaves ledger entries stuck in `Dispatched` and tears down the `GatewaySessionClient` WebSocket loop** (`src/ETL-SQL.Gateway/GatewayOperationDispatcher.cs:163-261`, `src/ETL-SQL.Gateway/GatewaySessionClient.cs:111-123`).
   Line 244 filters `catch (Exception ex) when (ex is not GatewayProtocolException)`, so any `GatewayProtocolException` thrown by `GatewayResourceExecutor` (e.g., when a SQL/HTTP response exceeds `MaxPayloadBytes`) skips ledger completion and crashes `GatewaySessionClient.RunAsync`.
   **Verify:** Execute a gateway `DatabaseQuery` whose serialized result exceeds `GatewayFrame.MaxPayloadBytes`.
-- [ ] **[P1 Bug] Race condition in `GatewayBroker.HandleInboundConnectionAsync`: session is registered before `HelloAck` is sent, and `HelloAck` bypasses `session._sendGate`** (`src/ETL-SQL.Gateway/GatewayBroker.cs:128-150, 495-510`).
+  **Outcome (2026-11-02):** Real. Executor protocol errors end in a recorded outcome.
+- [x] **[P1 Bug] Race condition in `GatewayBroker.HandleInboundConnectionAsync`: session is registered before `HelloAck` is sent, and `HelloAck` bypasses `session._sendGate`** (`src/ETL-SQL.Gateway/GatewayBroker.cs:128-150, 495-510`).
   `_sessionRegistry.Register(session)` at line 128 allows concurrent `DispatchAsync` callers to write `Request` frames via `session.SendAsync` before or concurrently with `SendFrameAsync(socket, ackFrame)` at line 141.
   **Verify:** Inspect `GatewayBroker.cs:128-145`.
-- [ ] **[P1 Bug] Oversized inbound WebSocket message in `GatewayBroker.PumpInboundAsync` only breaks the inner fragment loop and still calls `GatewayFrame.Deserialize`** (`src/ETL-SQL.Gateway/GatewayBroker.cs:451-482`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Bug] Oversized inbound WebSocket message in `GatewayBroker.PumpInboundAsync` only breaks the inner fragment loop and still calls `GatewayFrame.Deserialize`** (`src/ETL-SQL.Gateway/GatewayBroker.cs:451-482`).
   When `stream.Length > GatewayFrame.MaxFrameBytes`, `break;` at line 474 exits only the inner `do-while` loop and falls through to `GatewayFrame.Deserialize(stream.ToArray())` at line 482.
   **Verify:** Send a multi-fragment WebSocket message exceeding `GatewayFrame.MaxFrameBytes`.
-- [ ] **[P2 Bug] `GatewayHost.RunAsync` marks status `Connected` before connecting and resets exponential backoff when a failed connect attempt takes `>= MaxBackoff`** (`src/ETL-SQL.Gateway/GatewayHost.cs:74-102`).
+  **Outcome (2026-11-02):** Partly real. Oversized frame now ends the session.
+- [x] **[P2 Bug] `GatewayHost.RunAsync` marks status `Connected` before connecting and resets exponential backoff when a failed connect attempt takes `>= MaxBackoff`** (`src/ETL-SQL.Gateway/GatewayHost.cs:74-102`).
   `_health.SetStatus(GatewayHostStatus.Connected)` runs at line 74 before `_sessionClient.RunAsync`, and `DateTimeOffset.UtcNow - connectedAt >= _options.MaxBackoff` resets `attempt = 0` after any slow connection timeout.
   **Verify:** Inspect `GatewayHost.cs:74-97`.
+  **Outcome (2026-11-02):** Real. Fixed.
 
 #### `src/ETL-SQL.Orchestrator`
 
-- [ ] **[P0 Security] `ProcessJobExecutor.ExecuteTextCoreAsync` drops `ExecutionIdentity`, running federated ad-hoc and revision scripts with unrestricted host identity** (`src/ETL-SQL.Orchestrator/Execution/ProcessJobExecutor.cs:114-155`, `src/ETL-SQL.Orchestrator/SchedulerService.cs:530-540, 902-906`).
+- [x] **[P0 Security] `ProcessJobExecutor.ExecuteTextCoreAsync` drops `ExecutionIdentity`, running federated ad-hoc and revision scripts with unrestricted host identity** (`src/ETL-SQL.Orchestrator/Execution/ProcessJobExecutor.cs:114-155`, `src/ETL-SQL.Orchestrator/SchedulerService.cs:530-540, 902-906`).
   `ExecuteTextCoreAsync` accepts `ExecutionIdentity? executionIdentity` at line 120 and never validates, serializes, or passes it (`--execution-identity-file` / `--tenant`) to the child `ETL-SQL.App` process.
   **Verify:** Inspect `ProcessJobExecutor.cs:114-155`.
+  **Outcome (2026-11-02):** Real. Identity-bound runs under `Jobs:UseProcessSpawning` are refused (fail closed). Passing the identity to the child process is a follow-up.
 - [ ] **[P0 Security] Bundle storage (`PublishBundleAsync`, `GetLatestVersionAsync`, `GetFileAsync`, etc.) omits `tenant_id` in SQL queries, enabling cross-tenant bundle overwrite and read** (`src/ETL-SQL.Orchestrator/Storage/SQLiteJobHistoryStore.cs:328-367, 2504-2793`).
   Although `bundles` and `bundle_files` have `(tenant_id, bundle_name, version)` primary keys, none of the bundle store methods bind or filter by `tenant_id`; all writes go to `'default'` with `INSERT OR REPLACE` and all reads match `WHERE bundle_name = $name` across tenants.
   **Verify:** Inspect `SQLiteJobHistoryStore.cs:2504-2793`.
-- [ ] **[P1 Bug] Fenced-out scheduler nodes in `SchedulerService.ExecuteLeasedJobAsync` still dispatch notifications, trigger linked schedules, and overwrite `Jobs` via unfenced `QuarantineIfRepeatedlyFailingAsync`** (`src/ETL-SQL.Orchestrator/SchedulerService.cs:1100-1130, 1210-1243, 1337-1414`).
+  **Outcome (2026-11-02):** Real. **Decide** the shape: `IBundleStore` takes no tenant, so a fix spans Core, Engine handlers, Service and LanguageServer (suggested: `ITenantBundleStore` taking `TenantContext`).
+- [x] **[P1 Bug] Fenced-out scheduler nodes in `SchedulerService.ExecuteLeasedJobAsync` still dispatch notifications, trigger linked schedules, and overwrite `Jobs` via unfenced `QuarantineIfRepeatedlyFailingAsync`** (`src/ETL-SQL.Orchestrator/SchedulerService.cs:1100-1130, 1210-1243, 1337-1414`).
   When `!leaseContext.HasValidLease`, both the normal completion path (lines 1127–1129) and the `catch` block (lines 1227–1229) still invoke `QuarantineIfRepeatedlyFailingAsync` (which calls unfenced `SaveJobAsync`), `DispatchJobNotificationsAsync`, and `TriggerLinkedSchedulesAsync`.
   **Verify:** Inspect `SchedulerService.cs:1108-1129` and `1213-1229`.
-- [ ] **[P1 Bug] `ImportJobHistoryAsync` and `OrchestratorPromotionPackageService.ImportAsync` omit `tenant_id` and `job_id` when importing job history and lineage** (`src/ETL-SQL.Orchestrator/Storage/SQLiteJobHistoryStore.cs:1451-1498`, `src/ETL-SQL.Orchestrator/Portability/OrchestratorPromotionPackageService.cs:277-313, 335-337`).
+  **Outcome (2026-11-02):** Partly real. Quarantine re-reads and version-checks the job, and is skipped on a fenced node.
+- [x] **[P1 Bug] `ImportJobHistoryAsync` and `OrchestratorPromotionPackageService.ImportAsync` omit `tenant_id` and `job_id` when importing job history and lineage** (`src/ETL-SQL.Orchestrator/Storage/SQLiteJobHistoryStore.cs:1451-1498`, `src/ETL-SQL.Orchestrator/Portability/OrchestratorPromotionPackageService.cs:277-313, 335-337`).
   Imported history and lineage rows are written with `tenant_id = 'default'` and `job_id = ''`, making them invisible to tenant-scoped queries after promotion import.
   **Verify:** Import a tenant promotion package for `tenant-a` and query history/lineage scoped to `tenant-a`.
-- [ ] **[P1 Bug] `SharedTenantLifecycleStore.DeleteTenantJobsAsync` leaves tenant rows in `lineage_history` and fencing/cutover tables on tenant purge** (`src/ETL-SQL.Orchestrator/Storage/SharedTenantLifecycleStore.cs:425-459`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Bug] `SharedTenantLifecycleStore.DeleteTenantJobsAsync` leaves tenant rows in `lineage_history` and fencing/cutover tables on tenant purge** (`src/ETL-SQL.Orchestrator/Storage/SharedTenantLifecycleStore.cs:425-459`).
   `DeleteTenantJobsAsync` never deletes from `lineage_history`, `shared_tenant_lifecycle_fenced_jobs`, `tenant_portability_fenced_jobs`, or `tenant_portability_cutovers`.
   **Verify:** Purge a tenant via `SharedTenantLifecycleStore.PurgeAsync` and query `lineage_history`.
-- [ ] **[P1 Bug] `ProcessJobExecutor.RunProcessAsync` does not flush async stdout/stderr handlers after `WaitForExitAsync(CancellationToken)`, and `WarmRunnerClient.StartAsync` leaks an orphan process on startup timeout** (`src/ETL-SQL.Orchestrator/Execution/ProcessJobExecutor.cs:232-288, 754-791`).
+  **Outcome (2026-11-02):** Real. Purge covers lineage, bundles and fences; metering and lifecycle audit kept on purpose.
+- [x] **[P1 Bug] `ProcessJobExecutor.RunProcessAsync` does not flush async stdout/stderr handlers after `WaitForExitAsync(CancellationToken)`, and `WarmRunnerClient.StartAsync` leaks an orphan process on startup timeout** (`src/ETL-SQL.Orchestrator/Execution/ProcessJobExecutor.cs:232-288, 754-791`).
   `await process.WaitForExitAsync(cts.Token)` returns before `OutputDataReceived`/`ErrorDataReceived` finish flushing unless `process.WaitForExit()` is called, and `WarmRunnerClient.StartAsync` does not kill/dispose `process` if the ready-line read times out or fails.
   **Verify:** Inspect `ProcessJobExecutor.cs:252-288` and `754-791`.
+  **Outcome (2026-11-02):** Partly real. Flush claim false (.NET 10 waits for redirected output); orphaned warm runner fixed.
 
 #### `src/ETL-SQL.Orchestrator.Service`
 
 - [ ] **[P0 Security] Missing RBAC and scope-ceiling checks on `POST /jobs`, `/api/admin/connections/*`, and `/api/bundles/*`** (`src/ETL-SQL.Orchestrator.Service/Api/JobApiEndpoints.cs:209-236, 1356-1676, 2073-2128`).
   `POST /jobs` and `/api/admin/connections/*` accept any federated principal (including `Viewer` role or `orchestrator.read` service-account tokens) without checking `IsFederatedOperator` or admin scopes, and `/api/bundles/*` does not call `TryAuthorizeFederatedRequest` at all.
   **Verify:** Call `POST /jobs` or `DELETE /api/admin/connections/{alias}` with a `Viewer` / `orchestrator.read` federated token.
-- [ ] **[P0 Security] Arbitrary host file exfiltration and file-existence oracle via `AttachmentPaths` and `RecipientOverride` in `POST /api/notifications/{name}/dispatch`** (`src/ETL-SQL.Orchestrator.Service/Api/JobApiEndpoints.cs:1285-1337`, `src/ETL-SQL.Orchestrator/Notifications/NotificationDispatchService.cs:228-249, 320-343`).
+  **Outcome (2026-11-02):** Partly real. `/api/admin/connections/*` fixed. **Decide** `POST /jobs` (engine refuses each statement by scope today, by design) and `/api/bundles` (tied to the bundle-tenant item).
+- [x] **[P0 Security] Arbitrary host file exfiltration and file-existence oracle via `AttachmentPaths` and `RecipientOverride` in `POST /api/notifications/{name}/dispatch`** (`src/ETL-SQL.Orchestrator.Service/Api/JobApiEndpoints.cs:1285-1337`, `src/ETL-SQL.Orchestrator/Notifications/NotificationDispatchService.cs:228-249, 320-343`).
   Caller-supplied `AttachmentPaths` are checked with raw `File.Exists` (returning `"Attachment file not found: {path}"` when missing) and attached via `new Attachment(attachmentPath)` to an email sent to caller-supplied `RecipientOverride` without path policy validation.
   **Verify:** Call `POST /api/notifications/{name}/dispatch` with `attachmentPaths` pointing to a host file and `recipientOverride`.
-- [ ] **[P1 Bug / Security] `POST /api/notifications/{name}/dispatch` omits `NotificationId` and `TenantId` in `NotificationDispatchPayload`, resolving the rule in unbound (`null`) tenant scope** (`src/ETL-SQL.Orchestrator.Service/Api/JobApiEndpoints.cs:1294-1337`, `src/ETL-SQL.Orchestrator/Notifications/NotificationDispatchService.cs:94-98`).
+  **Outcome (2026-11-02):** Partly real. Path policy now checked before existence (no oracle); SMTP already validated paths.
+- [x] **[P1 Bug / Security] `POST /api/notifications/{name}/dispatch` omits `NotificationId` and `TenantId` in `NotificationDispatchPayload`, resolving the rule in unbound (`null`) tenant scope** (`src/ETL-SQL.Orchestrator.Service/Api/JobApiEndpoints.cs:1294-1337`, `src/ETL-SQL.Orchestrator/Notifications/NotificationDispatchService.cs:94-98`).
   `DispatchCoreAsync` calls `GetNotificationByNameAsync(payload.NotificationName, payload.TenantId)` with `TenantId == null`, which runs `SELECT ... WHERE name = $name` without a `tenant_id` filter.
   **Verify:** Inspect `JobApiEndpoints.cs:1310-1324` and `NotificationDispatchService.cs:94-98`.
-- [ ] **[P1 Bug] Pre-authorization SQL `LIMIT`/`OFFSET` pagination in `/api/schedules`, `/api/notifications`, `/api/history`, and `/api/data-quality/*` returns empty pages when earlier rows belong to other principals** (`src/ETL-SQL.Orchestrator.Service/Api/JobApiEndpoints.cs:610-645, 763-774, 927, 996-1007, 1139`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Bug] Pre-authorization SQL `LIMIT`/`OFFSET` pagination in `/api/schedules`, `/api/notifications`, `/api/history`, and `/api/data-quality/*` returns empty pages when earlier rows belong to other principals** (`src/ETL-SQL.Orchestrator.Service/Api/JobApiEndpoints.cs:610-645, 763-774, 927, 996-1007, 1139`).
   SQL queries apply `LIMIT`/`OFFSET` before C# filters results by `IsJobVisibleToPrincipal`.
   **Verify:** Query `GET /api/history?limit=50&offset=0` as a federated user when the newest 50 rows belong to another job/tenant.
-- [ ] **[P2 Bug] `PUT /api/scheduled-jobs/{name}` omits schedule validation (`Interval`, `Unit`, `AtTime`)** (`src/ETL-SQL.Orchestrator.Service/Api/JobApiEndpoints.cs:467-485`).
+  **Outcome (2026-11-02):** Real. Pages filled from visible rows (scan capped at 50,000).
+- [x] **[P2 Bug] `PUT /api/scheduled-jobs/{name}` omits schedule validation (`Interval`, `Unit`, `AtTime`)** (`src/ETL-SQL.Orchestrator.Service/Api/JobApiEndpoints.cs:467-485`).
   Unlike `POST /api/scheduled-jobs`, `PUT` writes unvalidated `Interval <= 0`, invalid `Unit`, and malformed `AtTime` values directly to `Jobs`.
   **Verify:** Send `PUT /api/scheduled-jobs/{name}` with `interval = -1, unit = "INVALID"`.
+  **Outcome (2026-11-02):** Real. Fixed.
 
 #### `src/ETL-SQL.TenantValidator`
 
-- [ ] **[P1 Security / Bug] Unvalidated CLI flags allow silent `--require-signature` bypass on flag typo or missing `--trust-root` value** (`src/ETL-SQL.TenantValidator/Program.cs:12-27`).
+- [x] **[P1 Security / Bug] Unvalidated CLI flags allow silent `--require-signature` bypass on flag typo or missing `--trust-root` value** (`src/ETL-SQL.TenantValidator/Program.cs:12-27`).
   The `switch (args[i])` parser ignores unknown flags (e.g., `--require-signatures`) and does not check if `args[i + 1]` is another flag, so `--trust-root --require-signature` consumes `"--require-signature"` as `trustRoot` and leaves `requireSignature = false`, allowing unsigned bundles to pass with exit code `0`.
   **Verify:** Run `etl-sql-tenant-validator --bundle unsigned.zip --tenant t1 --trust-root --require-signature`.
-- [ ] **[P2 Bug] Narrow exception filter in `Program.cs:37` crashes with unhandled exception instead of exit code `1` on malformed manifest nulls or invalid tenant slugs** (`src/ETL-SQL.TenantValidator/Program.cs:20-41`, `src/ETL-SQL.Core/Portability/TenantBundleValidator.cs:157-159, 329`).
+  **Outcome (2026-11-02):** Partly real. Unknown/repeated/missing-value arguments exit 2.
+- [x] **[P2 Bug] Narrow exception filter in `Program.cs:37` crashes with unhandled exception instead of exit code `1` on malformed manifest nulls or invalid tenant slugs** (`src/ETL-SQL.TenantValidator/Program.cs:20-41`, `src/ETL-SQL.Core/Portability/TenantBundleValidator.cs:157-159, 329`).
   `ArgumentException`, `NullReferenceException`, and `OverflowException` are not caught by `when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)`.
   **Verify:** Run `etl-sql-tenant-validator --bundle b.zip --tenant INVALID_SLUG!`.
+  **Outcome (2026-11-02):** Partly real. NullReference/overflow now exit 2.
 
 #### `src/ETL-SQL.Reporting.Contracts`
 
-- [ ] **[P1 Security] `ConstrainedHtmlPolicy` sanitizer bypasses via `>` inside quoted attributes, multi-candidate `srcset`, and XML-entity/SMIL SVG `data:` URLs** (`src/ETL-SQL.Reporting.Contracts/ConstrainedHtmlPolicy.cs:71, 87-138, 120, 408-449`).
+- [x] **[P1 Security] `ConstrainedHtmlPolicy` sanitizer bypasses via `>` inside quoted attributes, multi-candidate `srcset`, and XML-entity/SMIL SVG `data:` URLs** (`src/ETL-SQL.Reporting.Contracts/ConstrainedHtmlPolicy.cs:71, 87-138, 120, 408-449`).
   `TagPattern` uses `(?<attrs>[^>]*)`, stopping at `>` inside a quoted attribute (e.g., `<img alt="a > b" src="x" onerror="alert(1)">`) and treating the remaining attributes as text between tags; `ValidateUrl` parses comma-separated `srcset` candidates as a single URI; `ValidateSvgDataUrl` misses XML entities (`&#x6a;avascript:`) and SMIL `<set>`/`<animate>` tags.
   **Verify:** Call `ConstrainedHtmlPolicy.Validate("<img alt=\"a > b\" src=\"https://ok.example/x.png\" onerror=\"alert(1)\">")`.
-- [ ] **[P2 Bug] `ChartDataFrame.Validate` throws `NullReferenceException` instead of `InvalidDataException` when `Values.IsDefault` is `true`** (`src/ETL-SQL.Reporting.Contracts/TypedChartData.cs:96-97`).
+  **Outcome (2026-11-02):** Real. Fixed; rule matches the client-side check.
+- [x] **[P2 Bug] `ChartDataFrame.Validate` throws `NullReferenceException` instead of `InvalidDataException` when `Values.IsDefault` is `true`** (`src/ETL-SQL.Reporting.Contracts/TypedChartData.cs:96-97`).
   Evaluating `{Values.Length}` inside the exception message string when `Values.IsDefault` is `true` throws `NullReferenceException`.
   **Verify:** Call `new ChartDataFrame(1, [new ChartColumn("c", ChartColumnRole.Measure, ChartValueType.Number, default)]).Validate()`.
+  **Outcome (2026-11-02):** Real (in `ChartColumn.Validate`; `ChartDataSet.Columns` too).
 
 #### `src/ETL-SQL.Reporting`
 
-- [ ] **[P0 Security] Arbitrary OS command execution via `BrowserPath` in `BrowserReportPdfExporter`** (`src/ETL-SQL.Reporting/BrowserReportPdfExporter.cs:33, 41, 100-123, 157-164`).
+- [x] **[P0 Security] Arbitrary OS command execution via `BrowserPath` in `BrowserReportPdfExporter`** (`src/ETL-SQL.Reporting/BrowserReportPdfExporter.cs:33, 41, 100-123, 157-164`).
   `ResolveBrowserPath(options.BrowserPath)` accepts any existing file path and `StartBrowser` launches it via `Process.Start`, allowing `EXPORT REPORT ... WITH (FORMAT = 'PDF', BROWSER_PATH = '...')` to execute arbitrary binaries.
   **Verify:** Inspect `BrowserReportPdfExporter.cs:100-123, 157-164`.
-- [ ] **[P1 Security] SSRF and local file disclosure (`file:///`) via `options.Host` in `BrowserReportPdfExporter`** (`src/ETL-SQL.Reporting/BrowserReportPdfExporter.cs:22-29, 59-78`).
+  **Outcome (2026-11-02):** Real. `BROWSER_PATH` must be an engine-discovered browser.
+- [x] **[P1 Security] SSRF and local file disclosure (`file:///`) via `options.Host` in `BrowserReportPdfExporter`** (`src/ETL-SQL.Reporting/BrowserReportPdfExporter.cs:22-29, 59-78`).
   When `options.Host` is set, `ExportAsync` navigates headless Chromium directly to `options.Host` via `Page.navigate` without scheme or host policy validation.
   **Verify:** Inspect `BrowserReportPdfExporter.cs:59-78`.
-- [ ] **[P1 Bug] `VisualBuilder.ApplyTableSort` desynchronizes `RowStyles`, `RowFontStyles`, `SegmentRowStyles`, and `RowDetailKeys` from `Rows`** (`src/ETL-SQL.Reporting/Builders/VisualBuilder.cs:555-560, 929-989, 1263-1331`).
+  **Outcome (2026-11-02):** Real. `HOST` must be an allowed http(s) URL. Pages the browser loads after the first navigation are not fenced.
+- [x] **[P1 Bug] `VisualBuilder.ApplyTableSort` desynchronizes `RowStyles`, `RowFontStyles`, `SegmentRowStyles`, and `RowDetailKeys` from `Rows`** (`src/ETL-SQL.Reporting/Builders/VisualBuilder.cs:555-560, 929-989, 1263-1331`).
   `ApplyTableSort` reorders `vm.Rows` and `vm.RawRows` for `DEFAULT_SORT` without reordering parallel per-row arrays (`RowStyles`, `RowFontStyles`, `SegmentRowStyles`, `RowDetailKeys`).
   **Verify:** Build a `TABLE` visual with `DEFAULT_SORT` and `ROW_COLOR` or `DETAIL` rows.
-- [ ] **[P1 Bug] Culture-sensitive number parsing and formatting in `VisualBuilder` breaks under non-US locales** (`src/ETL-SQL.Reporting/Builders/VisualBuilder.cs:764, 1073, 1346-1355, 1365`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Bug] Culture-sensitive number parsing and formatting in `VisualBuilder` breaks under non-US locales** (`src/ETL-SQL.Reporting/Builders/VisualBuilder.cs:764, 1073, 1346-1355, 1365`).
   `ApplyDrillAggregation`, `ApplyTableMappings`, `ComputeAggregate`, and `IsNumericColumn` call `decimal.TryParse`/`double.TryParse`/`.ToString("G29")` without `CultureInfo.InvariantCulture`.
   **Verify:** Set `CultureInfo.CurrentCulture = new CultureInfo("de-DE")` and build a `TABLE` visual with decimal values and `SUMMARY` or `DATA_BAR`.
-- [ ] **[P2 Bug] `CalculateSummaries` runs before `ApplyTableMappings`, leaving `SummaryData.Aggregates` with pre-mapping column names and failing display-name summary lookups** (`src/ETL-SQL.Reporting/Builders/VisualBuilder.cs:555-557, 1054-1060, 1223-1260`).
+  **Outcome (2026-11-02):** Real (10.5 sorted before 9.75 under de-DE). Fixed.
+- [x] **[P2 Bug] `CalculateSummaries` runs before `ApplyTableMappings`, leaving `SummaryData.Aggregates` with pre-mapping column names and failing display-name summary lookups** (`src/ETL-SQL.Reporting/Builders/VisualBuilder.cs:555-557, 1054-1060, 1223-1260`).
   `CalculateSummaries` at line 555 runs before `ApplyTableMappings` renames `vm.Columns` at line 1059.
   **Verify:** Build a `TABLE` visual with `MAP col AS 'Display'` and `SUMMARY (SUM('Display'))`.
-- [ ] **[P2 Bug] `SnapshotStore.LoadAsync` only catches `JsonException` and crashes on corrupt `.etlsnap` files** (`src/ETL-SQL.Reporting/SnapshotStore.cs:38, 122-146`).
+  **Outcome (2026-11-02):** Partly real. Summaries resolve display names.
+- [x] **[P2 Bug] `SnapshotStore.LoadAsync` only catches `JsonException` and crashes on corrupt `.etlsnap` files** (`src/ETL-SQL.Reporting/SnapshotStore.cs:38, 122-146`).
   `SnapshotPackageService.LoadAsync` throws `InvalidDataException` or `CryptographicException` on corrupt `.etlsnap` files, which `SnapshotStore.LoadAsync` does not catch.
   **Verify:** Pass a truncated `.etlsnap` file to `SnapshotStore.LoadAsync`.
-- [ ] **[P2 Security] `CsvRenderer` does not neutralize spreadsheet formula injection (`=`, `+`, `-`, `@`)** (`src/ETL-SQL.Reporting/CsvRenderer.cs:62-75`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P2 Security] `CsvRenderer` does not neutralize spreadsheet formula injection (`=`, `+`, `-`, `@`)** (`src/ETL-SQL.Reporting/CsvRenderer.cs:62-75`).
   Unlike `XlsxWriter.NeutralizeFormula`, `CsvRenderer.EscapeCsv` writes cells beginning with formula triggers verbatim.
   **Verify:** Render a manifest cell starting with `=HYPERLINK(...)` via `CsvRenderer.Render`.
+  **Outcome (2026-11-02):** Real. Fixed.
 
 #### `src/ETL-SQL.ReportRuntime`
 
-- [ ] **[P1 Security] Client-side `isSafeHtmlVisualUrl` in `rt-visual.ts` allows multi-candidate `srcset` and XML-entity/SMIL SVG `data:` URLs** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-visual.ts:535-552, 569`).
+- [x] **[P1 Security] Client-side `isSafeHtmlVisualUrl` in `rt-visual.ts` allows multi-candidate `srcset` and XML-entity/SMIL SVG `data:` URLs** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-visual.ts:535-552, 569`).
   `isSafeHtmlVisualUrl` only tests `/^(https?:|mailto:|tel:|#)/i` at the start of `srcset` and uses a narrow regex for `data:image/svg+xml`.
   **Verify:** Render an `HTML` visual with `<source srcset="https://ok.example/a.png 1x, //evil.example/b.png 2x">`.
-- [ ] **[P1 Bug] Table right-click context menu selects the wrong row when row details are expanded or when `pageSize <= 0`** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-table.ts:403, 602-611`).
+  **Outcome (2026-11-02):** Partly real (low impact). Every srcset candidate checked; SVG decoded before scanning.
+- [x] **[P1 Bug] Table right-click context menu selects the wrong row when row details are expanded or when `pageSize <= 0`** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-table.ts:403, 602-611`).
   `Array.from(tbody.rows).indexOf(tr)` counts expanded `<tr class="detail-row">` elements in `idx`, and `(pageSize > 0 ? filtered : allRows)[start + idx]` indexes into `allRows` instead of `filtered` when `pageSize <= 0`.
   **Verify:** Expand row 0's detail row in a table with `DRILL_DOWN`, then right-click row 1.
-- [ ] **[P1 Bug] Responsive chart redraw (`updateNativeVisualInPlace`) breaks crosshairs, hover focus, and mark keyboard accessibility** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-charts.ts:144-273, 610-646`, `src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-detail.ts:307-325`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Bug] Responsive chart redraw (`updateNativeVisualInPlace`) breaks crosshairs, hover focus, and mark keyboard accessibility** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-charts.ts:144-273, 610-646`, `src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-detail.ts:307-325`).
   Replacing `oldSvg` with `newSvg` on resize discards pointer listeners attached to `oldSvg`, inserts an empty `<g class="plot-crosshair-group">` with no `<line>` children, and never re-runs `prepareMarks()`.
   **Verify:** Resize a chart with `CROSSHAIR = true` or `HOVER_FOCUS = true` and hover/tab through marks.
-- [ ] **[P2 Bug] Physical page splitting of `TABLE` visuals in `rt-layout.ts` does not slice `rowStyles`, `rowFontStyles`, `rowDetailKeys`, or `microCharts`** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-layout.ts:273-279`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P2 Bug] Physical page splitting of `TABLE` visuals in `rt-layout.ts` does not slice `rowStyles`, `rowFontStyles`, `rowDetailKeys`, or `microCharts`** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-layout.ts:273-279`).
   `renderPhysicalPages` slices `visToRender.rows` for each page split without slicing the parallel row-indexed arrays.
   **Verify:** Render a multi-page report where a `TABLE` with `ROW_COLOR` or `SPARKLINE` spans onto page 2.
-- [ ] **[P2 Security / Bug] Unvalidated `img.src` in slicer option images and protocol-relative / tag-corrupted URLs in `renderInlineMarkdown`** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-controls-input.ts:185-194`, `src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-util.ts:175-187`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P2 Security / Bug] Unvalidated `img.src` in slicer option images and protocol-relative / tag-corrupted URLs in `renderInlineMarkdown`** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-controls-input.ts:185-194`, `src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-util.ts:175-187`).
   `createOptionImage` sets `img.src = src` without `safeUrl(src)`, and `renderInlineMarkdown` allows `//evil.example` and runs `*`/`_`/`` ` `` replacements before link parsing, injecting `<em>`/`<code>` tags inside `href="..."`.
   **Verify:** Call `renderInlineMarkdown("[link](//evil.example)")` or `renderInlineMarkdown("[link](https://example.com/a_b_c)")`.
-- [ ] **[P2 Bug] Unescaped CSS attribute selectors in `SET_UI_STATE` and `applyPresentationState`** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-actions.ts:751, 753`, `src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-views.ts:141, 150`).
+  **Outcome (2026-11-02):** Partly real (no XSS). Images through `safeUrl`; links extracted before emphasis.
+- [x] **[P2 Bug] Unescaped CSS attribute selectors in `SET_UI_STATE` and `applyPresentationState`** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-actions.ts:751, 753`, `src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-views.ts:141, 150`).
   `querySelectorAll('[data-tag="${tagName}"]')` and `querySelector('[data-name="${objName}"]')` omit `CSS.escape`.
   **Verify:** Trigger `SET_UI_STATE` with a target name containing `"` or `]`.
-- [ ] **[P2 Bug] Document event listener leaks in `showModalDialog` and multiselect `renderSlicer`** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-chrome.ts:666-682`, `src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-controls-input.ts:540`).
+  **Outcome (2026-11-02):** Real (SyntaxError, not injection). `CSS.escape`.
+- [x] **[P2 Bug] Document event listener leaks in `showModalDialog` and multiselect `renderSlicer`** (`src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-chrome.ts:666-682`, `src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-controls-input.ts:540`).
   `showModalDialog` only removes its `document` `keydown` listener when closed via `Escape`, and multiselect `renderSlicer` attaches a new `document` `click` listener on every render.
   **Verify:** Inspect `rt-chrome.ts:666-682` and `rt-controls-input.ts:540`.
+  **Outcome (2026-11-02):** Real. Fixed.
 
 #### `src/ETL-SQL.ReportBuilder`
 
-- [ ] **[P0 Security] `ExportReportStatementHandler` forwards unvalidated `BROWSER_PATH` and `HOST` options to `ReportPdfExporter`** (`src/ETL-SQL.ReportBuilder/ExportReportStatementHandler.cs:72, 91-103`).
+- [x] **[P0 Security] `ExportReportStatementHandler` forwards unvalidated `BROWSER_PATH` and `HOST` options to `ReportPdfExporter`** (`src/ETL-SQL.ReportBuilder/ExportReportStatementHandler.cs:72, 91-103`).
   `BuildPdfExportOptionsAsync` assigns `stmt.BrowserPath` and `stmt.Host` directly to `PdfExportOptions` without `context.ResolvePath` or URL/host policy validation.
   **Verify:** Inspect `ExportReportStatementHandler.cs:91-103`.
-- [ ] **[P1 Bug] `ExportReportStatementHandler` does not reset or scope `context.ReportContext` across exports** (`src/ETL-SQL.ReportBuilder/ExportReportStatementHandler.cs:47-63`).
+  **Outcome (2026-11-02):** Real. Both options validated before the report runs.
+- [x] **[P1 Bug] `ExportReportStatementHandler` does not reset or scope `context.ReportContext` across exports** (`src/ETL-SQL.ReportBuilder/ExportReportStatementHandler.cs:47-63`).
   Running two `EXPORT REPORT` statements in the same script evaluates the second `.rptsql` into the same `context.ReportContext`, carrying over visuals, pages, and datasets from the first report.
   **Verify:** Execute two `EXPORT REPORT` statements sequentially in one `.etlsql` script and inspect the second output file.
+  **Outcome (2026-11-02):** Real. Report state saved, cleared and restored.
 
 #### `src/ETL-SQL.ReportBuilder.CLI`
 
-- [ ] **[P2 Bug] `build --format pdf` uses legacy `PdfExporter` instead of `ReportPdfExporter`** (`src/ETL-SQL.ReportBuilder.CLI/Program.cs:121-125`).
+- [x] **[P2 Bug] `build --format pdf` uses legacy `PdfExporter` instead of `ReportPdfExporter`** (`src/ETL-SQL.ReportBuilder.CLI/Program.cs:121-125`).
   `BuildCommand` invokes `new PdfExporter(evaluator.Logger).ExportAsync(manifest)` instead of `ReportPdfExporter`.
   **Verify:** Inspect `Program.cs:121-125`.
-- [ ] **[P2 Bug] `PrintCommand` passes unescaped error messages into `AnsiConsole.MarkupLine`** (`src/ETL-SQL.ReportBuilder.CLI/Program.cs:261, 267`).
+  **Outcome (2026-11-02):** False positive. STATIC mode `ReportPdfExporter` is `PdfExporter`; output identical.
+- [x] **[P2 Bug] `PrintCommand` passes unescaped error messages into `AnsiConsole.MarkupLine`** (`src/ETL-SQL.ReportBuilder.CLI/Program.cs:261, 267`).
   Error messages containing `[` or `]` throw `InvalidOperationException` in Spectre.Console because `Markup.Escape` is omitted.
   **Verify:** Run `etl-report print` on a script that produces a diagnostic containing `[col]`.
-- [ ] **[P2 Bug] `EvaluateScriptFile` never sets `evaluator.CurrentScriptPath` and never disposes `ServiceProvider`/`Evaluator`** (`src/ETL-SQL.ReportBuilder.CLI/Program.cs:346-370`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P2 Bug] `EvaluateScriptFile` never sets `evaluator.CurrentScriptPath` and never disposes `ServiceProvider`/`Evaluator`** (`src/ETL-SQL.ReportBuilder.CLI/Program.cs:346-370`).
   Relative paths inside `.rptsql` scripts resolve against the process working directory instead of the script directory, and the DI container is leaked on every call.
   **Verify:** Inspect `Program.cs:346-370`.
+  **Outcome (2026-11-02):** Real (relative FLATFILE read empty). DI leak not worth fixing (one-shot process).
 
 #### `src/ETL-SQL.ReportHosting`
 
-- [ ] **[P1 Bug] Race conditions on `_drillStates` and `_manifest`, plus `IndexOutOfRangeException` before bounds check in `DashboardService.DrillInAsync`** (`src/ETL-SQL.ReportHosting/DashboardService.cs:56, 167-175, 587, 701-765`).
+- [x] **[P1 Bug] Race conditions on `_drillStates` and `_manifest`, plus `IndexOutOfRangeException` before bounds check in `DashboardService.DrillInAsync`** (`src/ETL-SQL.ReportHosting/DashboardService.cs:56, 167-175, 587, 701-765`).
   `DrillInAsync` and `DrillUpAsync` read/write `_drillStates` outside `_lock`, `GetManifestAsync` reads/mutates `_manifest` without `_lock`, and `DrillInAsync` indexes `hierarchy[path.Count]` at line 714 before checking `if (path.Count >= hierarchy.Length)` at line 717.
   **Verify:** Call `DrillInAsync` when `path.Count == hierarchy.Length`; line 714 throws `IndexOutOfRangeException`.
-- [ ] **[P1 Security / Bug] `DashboardService.RunScriptAsync` fallback `Evaluator` bypasses tenant storage isolation and `PathProtectionMode.Defined`, and `CurrentScriptPath` is never set** (`src/ETL-SQL.ReportHosting/DashboardService.cs:487-493, 611-649`).
+  **Outcome (2026-11-02):** Partly real. Drill race fixed; the IndexOutOfRange was unreachable.
+- [x] **[P1 Security / Bug] `DashboardService.RunScriptAsync` fallback `Evaluator` bypasses tenant storage isolation and `PathProtectionMode.Defined`, and `CurrentScriptPath` is never set** (`src/ETL-SQL.ReportHosting/DashboardService.cs:487-493, 611-649`).
   When `_evaluator == null` (e.g., when loaded from a snapshot with `UseSnapshotFirst = true`), `RunScriptAsync` constructs a bare `Evaluator` without `_tenantStorage`, `SessionRoot`, or `PathProtectionMode.Defined`.
   **Verify:** Inspect `DashboardService.cs:487-493` vs `615-649`.
-- [ ] **[P2 Bug] Inconsistent `@` prefix normalization in `DashboardService._parameters` creates duplicate parameter entries** (`src/ETL-SQL.ReportHosting/DashboardService.cs:262, 269, 310, 319, 344, 455, 653-658`).
+  **Outcome (2026-11-02):** Real. Always uses the session's configured evaluator.
+- [x] **[P2 Bug] Inconsistent `@` prefix normalization in `DashboardService._parameters` creates duplicate parameter entries** (`src/ETL-SQL.ReportHosting/DashboardService.cs:262, 269, 310, 319, 344, 455, 653-658`).
   `SetParametersAsync` stores raw `name` while cascade resets and `ApplyBookmarkAsync` normalize with `name.TrimStart('@')`.
   **Verify:** Call `SetParameterAsync("@Region", "West")` followed by `ApplyBookmarkAsync` with `"Region" = "East"`.
+  **Outcome (2026-11-02):** Real. Fixed.
 
 #### `src/ETL-SQL.ReportPlayer`
 
-- [ ] **[P1 Security] Stored/reflected XSS and duplicate `<title>` tags in `GetDashboardHtml`, `GetDashboardShellHtml`, and `GetCatalogHtml`** (`src/ETL-SQL.ReportPlayer/Program.cs:657-663, 697-698, 734-735`).
+- [x] **[P1 Security] Stored/reflected XSS and duplicate `<title>` tags in `GetDashboardHtml`, `GetDashboardShellHtml`, and `GetCatalogHtml`** (`src/ETL-SQL.ReportPlayer/Program.cs:657-663, 697-698, 734-735`).
   `manifest.Title`, `reportName`, `r.Name`, and `r.Description` are interpolated into HTML without `WebUtility.HtmlEncode`, and `<title>` is emitted twice in `GetDashboardHtml` and `GetDashboardShellHtml`.
   **Verify:** Inspect `src/ETL-SQL.ReportPlayer/Program.cs:662-663, 697-698, 734-735`.
-- [ ] **[P1 Security] Cross-origin state mutation / CSRF via `GET /api/manifest` and `GET /api/refresh`** (`src/ETL-SQL.ReportPlayer/Program.cs:127-150, 211-226, 312-318, 343-354, 423-427`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Security] Cross-origin state mutation / CSRF via `GET /api/manifest` and `GET /api/refresh`** (`src/ETL-SQL.ReportPlayer/Program.cs:127-150, 211-226, 312-318, 343-354, 423-427`).
   Requests without an `Origin` header pass the origin middleware, and `GET /api/manifest?...` and `GET /api/refresh` mutate singleton `DashboardService` parameters and trigger full script rebuilds.
   **Verify:** Send `GET /api/manifest?Param=NewVal` with no `Origin` header.
-- [ ] **[P1 Bug] Single-report mode is missing `POST /api/run-script`** (`src/ETL-SQL.ReportPlayer/Program.cs:276-285` vs `341-443`).
+  **Outcome (2026-11-02):** Real. Cross-site API requests refused (`Sec-Fetch-Site`) on top of the existing Host/Origin/JSON guard.
+- [x] **[P1 Bug] Single-report mode is missing `POST /api/run-script`** (`src/ETL-SQL.ReportPlayer/Program.cs:276-285` vs `341-443`).
   Multi-report mode maps `/reports/{name}/api/run-script`, but single-report mode omits `/api/run-script`, causing `RUN_SCRIPT` actions to fail with 404.
   **Verify:** Inspect `Program.cs:341-443`.
-- [ ] **[P2 Bug] `POST /api/parameter` and `POST /reports/{name}/api/parameter` ignore `body.IsInteraction`** (`src/ETL-SQL.ReportPlayer/Program.cs:236, 361, 777-782`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P2 Bug] `POST /api/parameter` and `POST /reports/{name}/api/parameter` ignore `body.IsInteraction`** (`src/ETL-SQL.ReportPlayer/Program.cs:236, 361, 777-782`).
   Both endpoints call `svc.SetParameterAsync(body.Name, body.Value ?? "")` without passing `body.IsInteraction`.
   **Verify:** Inspect `Program.cs:236, 361`.
+  **Outcome (2026-11-02):** Real (low impact). Fixed.
 
 #### `src/ETL-SQL.WorkstationEditor`
 
-- [ ] **[P0 Security] Unauthenticated `GET /studio` endpoint leaks active `SessionToken` in plaintext HTML** (`src/ETL-SQL.WorkstationEditor/WorkstationEditorApp.cs:85-101, 164-165`, `src/ETL-SQL.WorkstationEditor/StudioShell.cs:19-20, 40-42`).
+- [x] **[P0 Security] Unauthenticated `GET /studio` endpoint leaks active `SessionToken` in plaintext HTML** (`src/ETL-SQL.WorkstationEditor/WorkstationEditorApp.cs:85-101, 164-165`, `src/ETL-SQL.WorkstationEditor/StudioShell.cs:19-20, 40-42`).
   The session-token middleware only guards `/api` and `/`, leaving `/studio` unauthenticated while `StudioShell.Html` embeds `?v={{options.SessionToken}}` in four asset URLs.
   **Verify:** Request `GET /studio` without `X-ETLSQL-Session` or `?token=` and read `SessionToken` from the HTML response.
-- [ ] **[P1 Security] Missing `Host` and `Origin` header validation enables DNS rebinding attacks against local WorkstationEditor** (`src/ETL-SQL.WorkstationEditor/WorkstationEditorApp.cs:72-101, 1303-1313`).
+  **Outcome (2026-11-02):** Real. `/studio` needs the token and no longer embeds it.
+- [x] **[P1 Security] Missing `Host` and `Origin` header validation enables DNS rebinding attacks against local WorkstationEditor** (`src/ETL-SQL.WorkstationEditor/WorkstationEditorApp.cs:72-101, 1303-1313`).
   `WorkstationEditorApp` does not validate `Request.Host` or `Request.Headers.Origin`. Combined with unauthenticated `GET /studio`, a DNS-rebinding page can read `SessionToken` and call `POST /api/run`.
   **Verify:** Send `GET /studio` with `Host: evil.example` and `Origin: http://evil.example`.
-- [ ] **[P1 Bug] `WorkstationPreviewService.BuildAsync` leaks `ExecutionSession`, bypasses `WorkstationRunGuard`, and passes full script text as `scriptSource`** (`src/ETL-SQL.WorkstationEditor/WorkstationPreviewService.cs:48-62`).
+  **Outcome (2026-11-02):** Partly real. Non-loopback Host refused.
+- [x] **[P1 Bug] `WorkstationPreviewService.BuildAsync` leaks `ExecutionSession`, bypasses `WorkstationRunGuard`, and passes full script text as `scriptSource`** (`src/ETL-SQL.WorkstationEditor/WorkstationPreviewService.cs:48-62`).
   `new ExecutionSession(...)` is never disposed, `WorkstationRunGuard.FindDestructiveStatements` is not checked on `/api/report/preview` or `/api/report/export-pdf`, and `ManifestBuilder.BuildAsync(scriptText)` receives the script contents instead of a file path.
   **Verify:** Inspect `WorkstationPreviewService.cs:48-62`.
-- [ ] **[P2 Bug] Broken `/feedback.js` URL in `EditorShell.cs` causes `ReferenceError: ETLSQLFeedback is not defined`** (`src/ETL-SQL.WorkstationEditor/EditorShell.cs:40, 71, 76, 99`).
+  **Outcome (2026-11-02):** Real. Run guard applied; session disposed; source name passed.
+- [x] **[P2 Bug] Broken `/feedback.js` URL in `EditorShell.cs` causes `ReferenceError: ETLSQLFeedback is not defined`** (`src/ETL-SQL.WorkstationEditor/EditorShell.cs:40, 71, 76, 99`).
   Shared runtime assets are served under `/runtime`, so `/feedback.js` returns 404 in `EditorShell.cs`.
   **Verify:** Inspect `EditorShell.cs:40` vs `StudioShell.cs:40`.
-- [ ] **[P2 Bug] `.sql` files are editable in `WorkstationWorkspace` but excluded from `WorkstationGitService.CommitExtensions`** (`src/ETL-SQL.WorkstationEditor/WorkstationWorkspace.cs:8-13`, `src/ETL-SQL.WorkstationEditor/WorkstationGitService.cs:9-13, 194`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P2 Bug] `.sql` files are editable in `WorkstationWorkspace` but excluded from `WorkstationGitService.CommitExtensions`** (`src/ETL-SQL.WorkstationEditor/WorkstationWorkspace.cs:8-13`, `src/ETL-SQL.WorkstationEditor/WorkstationGitService.cs:9-13, 194`).
   Users can edit and save `.sql` files, but committing them fails with `"No editable script changes to commit."`.
   **Verify:** Inspect `WorkstationWorkspace.cs:8-13` and `WorkstationGitService.cs:9-13`.
-- [ ] **[P2 Bug] `WebUtility.HtmlEncode` is used inside a `<script>` JS string literal for `initialFile`** (`src/ETL-SQL.WorkstationEditor/StudioShell.cs:9, 44`, `src/ETL-SQL.WorkstationEditor/EditorShell.cs:9, 44`).
+  **Outcome (2026-11-02):** Real. Uses `IsEditableScript`.
+- [x] **[P2 Bug] `WebUtility.HtmlEncode` is used inside a `<script>` JS string literal for `initialFile`** (`src/ETL-SQL.WorkstationEditor/StudioShell.cs:9, 44`, `src/ETL-SQL.WorkstationEditor/EditorShell.cs:9, 44`).
   HTML entities (`&amp;`, `&#39;`) are not decoded inside `<script>` tags, corrupting filenames containing `&` or `'`.
   **Verify:** Launch WorkstationEditor with a default script containing `&` in its filename.
+  **Outcome (2026-11-02):** Real. `JsonSerializer.Serialize`.
 
 #### `src/ETL-SQL.LanguageServer`
 
-- [ ] **[P1 Security / Bug] Unrestricted script evaluation in `etlsql/getReportManifest`, arbitrary SQLite path open in `etlsql/setPortalDbPath`, and null-reference on `request.parameters`** (`src/ETL-SQL.LanguageServer/CustomMethodsHandler.cs:128-133, 221-266`, `src/ETL-SQL.LanguageServer/DatasetStore.cs:32-65`, `src/ETL-SQL.LanguageServer/Program.cs:147-161`).
+- [x] **[P1 Security / Bug] Unrestricted script evaluation in `etlsql/getReportManifest`, arbitrary SQLite path open in `etlsql/setPortalDbPath`, and null-reference on `request.parameters`** (`src/ETL-SQL.LanguageServer/CustomMethodsHandler.cs:128-133, 221-266`, `src/ETL-SQL.LanguageServer/DatasetStore.cs:32-65`, `src/ETL-SQL.LanguageServer/Program.cs:147-161`).
   `etlsql/getReportManifest` runs `evaluator.Evaluate(script)` with all DDL/DML/file/remote handlers active and iterates `request.parameters` without a null check; `etlsql/setPortalDbPath` opens any `request.path` with `SqliteConnection` without `ResolvePath` or path-policy checks.
   **Verify:** Send `etlsql/getReportManifest` with `"parameters": null` or non-report statements.
-- [ ] **[P1 Bug] `SignatureHelpProvider.Handle` always returns `null` and `Resolve` sets `ActiveParameter = -1` for 0-argument functions** (`src/ETL-SQL.LanguageServer/SignatureHelpProvider.cs:191-204, 252`).
+  **Outcome (2026-11-02):** Partly real. Null `parameters` guarded. Evaluation and `setPortalDbPath` are false positives (user's own document, read-only DB, same process).
+- [x] **[P1 Bug] `SignatureHelpProvider.Handle` always returns `null` and `Resolve` sets `ActiveParameter = -1` for 0-argument functions** (`src/ETL-SQL.LanguageServer/SignatureHelpProvider.cs:191-204, 252`).
   `Handle` never reads `DocumentStateStore` or calls `Resolve`, and `Math.Min(activeParam, info.Params.Length - 1)` yields `-1` when `info.Params` is empty.
   **Verify:** Call `new SignatureHelpProvider().Handle(...)` and `new SignatureHelpProvider().Resolve("SELECT NOW(", 11)`.
-- [ ] **[P1 Bug] Out-of-bounds exceptions on cursor/range coordinates in `DefinitionProvider`, `HoverProvider`, and `FormattingProvider`** (`src/ETL-SQL.LanguageServer/DefinitionProvider.cs:34-49`, `src/ETL-SQL.LanguageServer/HoverProvider.cs:57-70`, `src/ETL-SQL.LanguageServer/FormattingProvider.cs:161-181`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Bug] Out-of-bounds exceptions on cursor/range coordinates in `DefinitionProvider`, `HoverProvider`, and `FormattingProvider`** (`src/ETL-SQL.LanguageServer/DefinitionProvider.cs:34-49`, `src/ETL-SQL.LanguageServer/HoverProvider.cs:57-70`, `src/ETL-SQL.LanguageServer/FormattingProvider.cs:161-181`).
   Unlike `CompletionProvider`, these handlers do not guard `Line < 0` or clamp `Character` to `currentLine.Length`, throwing `IndexOutOfRangeException` or `ArgumentOutOfRangeException` when `Character > currentLine.Length`.
   **Verify:** Call `DefinitionProvider.Handle` or `FormattingProvider.Handle(DocumentRangeFormattingParams)` with `Character = 500` on a short line.
-- [ ] **[P2 Bug] `DocumentStateStore.RemoveState` leaks `_parserDiagnostics` and `_notebookContexts`, and `TextDocumentHandler` races `FastAnalyzeAsync` against `RunLintAsync`** (`src/ETL-SQL.LanguageServer/DocumentStateStore.cs:24-29, 50-51, 72-77`, `src/ETL-SQL.LanguageServer/TextDocumentHandler.cs:109-118, 151-176`).
+  **Outcome (2026-11-02):** Real. Coordinates clamped.
+- [x] **[P2 Bug] `DocumentStateStore.RemoveState` leaks `_parserDiagnostics` and `_notebookContexts`, and `TextDocumentHandler` races `FastAnalyzeAsync` against `RunLintAsync`** (`src/ETL-SQL.LanguageServer/DocumentStateStore.cs:24-29, 50-51, 72-77`, `src/ETL-SQL.LanguageServer/TextDocumentHandler.cs:109-118, 151-176`).
   Closing a document leaves its diagnostics and notebook cells in memory, and `FastAnalyzeAsync` / `RunLintAsync` overwrite each other's published diagnostics if parse takes >1200ms.
   **Verify:** Call `SetParserDiagnostics`, `UpdateNotebookCell`, and `RemoveState(uri)` on `DocumentStateStore`.
+  **Outcome (2026-11-02):** Real. Fixed.
 
 #### `src/etl-sql-vscode` (`src/` and `ui/src/`)
 
-- [ ] **[P0 Security] XSS / raw HTML injection in notebook cell table output** (`src/etl-sql-vscode/src/notebookController.ts:63-66, 102-119`).
+- [x] **[P0 Security] XSS / raw HTML injection in notebook cell table output** (`src/etl-sql-vscode/src/notebookController.ts:63-66, 102-119`).
   `_formatTable` interpolates raw column names and cell values into `<th>${col}</th>` and `<td>${row[col] ?? ''}</td>` and renders them via `vscode.NotebookCellOutputItem.text(html, 'text/html')`.
   **Verify:** Run `SELECT '<img src=x onerror="alert(1)">' AS col;` in an `.etlnb` cell.
-- [ ] **[P1 Security] Shell command injection via pre-quoted arguments in `launchReport` + `getTerminalCommand`** (`src/etl-sql-vscode/src/terminalCommandBuilder.ts:8-35`, `src/etl-sql-vscode/src/extension.ts:1011-1039`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Security] Shell command injection via pre-quoted arguments in `launchReport` + `getTerminalCommand`** (`src/etl-sql-vscode/src/terminalCommandBuilder.ts:8-35`, `src/etl-sql-vscode/src/extension.ts:1011-1039`).
   `launchReport` wraps file paths in `"..."` before calling `getTerminalCommand`, and `escapeArg` returns any argument starting and ending with `"` completely unescaped, allowing `$(...)`, backticks, or embedded quotes to execute in the terminal shell.
   **Verify:** Call `getTerminalCommand('etl', ['"/tmp/$(whoami).rptsql"'])`.
-- [ ] **[P1 Security / Bug] Shared `/tmp/etl-sql-shadow` binary directory and size-only cache check in `shadowCopyExecutable`** (`src/etl-sql-vscode/src/extension.ts:1135-1169`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1 Security / Bug] Shared `/tmp/etl-sql-shadow` binary directory and size-only cache check in `shadowCopyExecutable`** (`src/etl-sql-vscode/src/extension.ts:1135-1169`).
   `shadowCopyExecutable` uses a predictable world-accessible directory `path.join(os.tmpdir(), 'etl-sql-shadow', version)` and skips copying whenever `srcStats.size === destStats.size` (no hash or mtime check).
   **Verify:** Inspect `extension.ts:1135-1169`.
-- [ ] **[P1 Security] Unescaped `<title>` HTML injection and relative path traversal in `ReportPreviewPanel`** (`src/etl-sql-vscode/src/reportPreviewPanel.ts:152-186, 394`).
+  **Outcome (2026-11-02):** Real on Linux/macOS. Private globalStorage, size+mtime check.
+- [x] **[P1 Security] Unescaped `<title>` HTML injection and relative path traversal in `ReportPreviewPanel`** (`src/etl-sql-vscode/src/reportPreviewPanel.ts:152-186, 394`).
   `_getReportHtml` interpolates `<title>${manifest.title || 'ETL-SQL Report'}</title>` without escaping, and `_handleDrillReport` resolves `targetReport` with `path.resolve(path.dirname(this._scriptPath), target)` without checking workspace containment or `.rptsql` extension.
   **Verify:** Inspect `reportPreviewPanel.ts:152-186, 394`.
-- [ ] **[P2 Bug / Security] `ReportDesignerPanel` reads and writes directly via `fs.readFileSync`/`fs.writeFileSync`, bypassing dirty editor buffers and the `onDidSaveTextDocument` credential encryption policy** (`src/etl-sql-vscode/src/reportDesignerPanel.ts:123-133, 144-146`).
+  **Outcome (2026-11-02):** Title partly (CSP limits it); drill traversal real. Fixed.
+- [x] **[P2 Bug / Security] `ReportDesignerPanel` reads and writes directly via `fs.readFileSync`/`fs.writeFileSync`, bypassing dirty editor buffers and the `onDidSaveTextDocument` credential encryption policy** (`src/etl-sql-vscode/src/reportDesignerPanel.ts:123-133, 144-146`).
   Saving from the Report Designer writes directly to disk instead of updating the `TextDocument` buffer.
   **Verify:** Inspect `reportDesignerPanel.ts:123-133, 144-146`.
-- [ ] **[P2 Security] Runtime REPL variable updates bypass `sanitizeVariableForClient` before posting to Sidebar and Connections tree** (`src/etl-sql-vscode/src/extension.ts:159-162` vs `309-317`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P2 Security] Runtime REPL variable updates bypass `sanitizeVariableForClient` before posting to Sidebar and Connections tree** (`src/etl-sql-vscode/src/extension.ts:159-162` vs `309-317`).
   `ReplManager.getInstance().onVariablesChange` forwards raw `vars` without masking secret-named or `SECRET`-typed variables via `sanitizeVariableForClient`.
   **Verify:** Inspect `extension.ts:159-162`.
-- [ ] **[P2 Bug] LSP `clientOptions.documentSelector` and `fileEvents` omit `rptsql` and `vscode-notebook-cell`** (`src/etl-sql-vscode/src/extension.ts:273-282`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P2 Bug] LSP `clientOptions.documentSelector` and `fileEvents` omit `rptsql` and `vscode-notebook-cell`** (`src/etl-sql-vscode/src/extension.ts:273-282`).
   Only `file`/`untitled` with `language: 'etlsql'` and `**/*.etlsql` are registered in `clientOptions`.
   **Verify:** Inspect `extension.ts:273-282`.
-- [ ] **[P2 Bug] `cleanupTempFiles` calls `fs.promises.unlink` on `etlsql-preview-*` directories, failing silently** (`src/etl-sql-vscode/src/cleanupService.ts:12-24`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P2 Bug] `cleanupTempFiles` calls `fs.promises.unlink` on `etlsql-preview-*` directories, failing silently** (`src/etl-sql-vscode/src/cleanupService.ts:12-24`).
   `reportPreviewPanel.ts:264` creates directories with `fs.mkdtempSync(..., 'etlsql-preview-')`, which `fs.promises.unlink` cannot remove.
   **Verify:** Call `cleanupTempFiles(0)` with an expired `etlsql-preview-*` directory in `os.tmpdir()`.
-- [ ] **[P1/P2 Bug] Webview UI state bugs in `MetadataItem.tsx`, `SidebarExplorer.tsx`, `useVsCodeApi.ts`, `ReportTab.tsx`, and `ResultGrid.tsx`** (`src/etl-sql-vscode/ui/src/components/MetadataItem.tsx:52-73`, `SidebarExplorer.tsx:39-52`, `useVsCodeApi.ts:73-77`, `ReportTab.tsx:89`, `ResultGrid.tsx:27-50, 62, 90`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P1/P2 Bug] Webview UI state bugs in `MetadataItem.tsx`, `SidebarExplorer.tsx`, `useVsCodeApi.ts`, `ReportTab.tsx`, and `ResultGrid.tsx`** (`src/etl-sql-vscode/ui/src/components/MetadataItem.tsx:52-73`, `SidebarExplorer.tsx:39-52`, `useVsCodeApi.ts:73-77`, `ReportTab.tsx:89`, `ResultGrid.tsx:27-50, 62, 90`).
   `MetadataItem` only checks `messages[messages.length - 1]` and gets stuck loading when messages interleave; `SidebarExplorer` does not filter `scriptVariables` by `activeUri` and double-posts `{ type: 'ready' }` with `useVsCodeApi`; `ReportTab` calls undefined `window.vscode?.postMessage({ type: 'serve' })`; `ResultGrid` checks `v instanceof Date` on JSON-parsed values.
   **Verify:** Inspect the cited lines in `src/etl-sql-vscode/ui/src/`.
+  **Outcome (2026-11-02):** Mostly real and fixed. `ResultGrid` date formatting needs column types in the `results` message (protocol change); left as raw ISO strings.
 
 #### `tests/` Projects
 
-- [ ] **[P1 Bug] `ETL-SQL.LanguageServer.Tests`: `Server_Should_Initialize_Without_DI_Errors` times out on an empty stream and passes with zero assertions while omitting 11 of 12 LSP handlers** (`tests/ETL-SQL.LanguageServer.Tests/LanguageServerSmokeTests.cs:31-65`).
+- [x] **[P1 Bug] `ETL-SQL.LanguageServer.Tests`: `Server_Should_Initialize_Without_DI_Errors` times out on an empty stream and passes with zero assertions while omitting 11 of 12 LSP handlers** (`tests/ETL-SQL.LanguageServer.Tests/LanguageServerSmokeTests.cs:31-65`).
   `LanguageServer.From` waits for an LSP `initialize` message on the empty `MemoryStream`, so `Task.Delay(2000)` always wins and enters the empty `else` branch.
   **Verify:** Inspect `LanguageServerSmokeTests.cs:31-65`.
-- [ ] **[P1 Bug] `ETL-SQL.FuzzTests`: `VerifyNoRECParity` exits early on 100% of `src.<Table>` queries, leaves `OrderBy` on `COUNT(1)` rewrites, and `DisposeAsync` is a no-op** (`tests/ETL-SQL.FuzzTests/ParserFuzzTests.cs:92-95, 355-405`, `tests/ETL-SQL.FuzzTests/GrammarWalkGenerator.cs:358`).
+  **Outcome (2026-11-02):** Real. Real `initialize` over pipes; all handlers resolve.
+- [x] **[P1 Bug] `ETL-SQL.FuzzTests`: `VerifyNoRECParity` exits early on 100% of `src.<Table>` queries, leaves `OrderBy` on `COUNT(1)` rewrites, and `DisposeAsync` is a no-op** (`tests/ETL-SQL.FuzzTests/ParserFuzzTests.cs:92-95, 355-405`, `tests/ETL-SQL.FuzzTests/GrammarWalkGenerator.cs:358`).
   `VerifyNoRECParity` returns early when `selectStmt.FromTable.ConnectionName != null`, which is true for every `src.FuzzTable_*` query (`ConnectionName == "src"`).
   **Verify:** Inspect `ParserFuzzTests.cs:358, 374`.
-- [ ] **[P1 Bug] `ETL-SQL.SqlLogicTests`: `SltParser` drops stacked `skipif`/`onlyif` directives and `RunAllSltTests` passes with 0 files if `slt_data` is missing** (`tests/ETL-SQL.SqlLogicTests/SltParser.cs:78-121`, `tests/ETL-SQL.SqlLogicTests/SltTests.cs:14-90`).
+  **Outcome (2026-11-02):** Real. NoREC now runs (218 comparisons on the CI seed, 0 mismatches).
+- [x] **[P1 Bug] `ETL-SQL.SqlLogicTests`: `SltParser` drops stacked `skipif`/`onlyif` directives and `RunAllSltTests` passes with 0 files if `slt_data` is missing** (`tests/ETL-SQL.SqlLogicTests/SltParser.cs:78-121`, `tests/ETL-SQL.SqlLogicTests/SltTests.cs:14-90`).
   When two `skipif`/`onlyif` lines precede a query, `SltParser` consumes both directives and parses the query as unconditional.
   **Verify:** Parse two consecutive `skipif` lines followed by `statement ok` in `SltParser.ParseFile`.
+  **Outcome (2026-11-02):** Real. Fixed.
 - [ ] **[P1 Bug] `ETL-SQL.LintTests`: console entrypoint has zero xUnit tests and catches all exceptions with exit code `0`** (`tests/ETL-SQL.LintTests/Program.cs:14-59`).
   `dotnet test` discovers 0 tests in `ETL-SQL.LintTests`, and `Program.Main` swallows exceptions in `catch (Exception ex)` without setting a non-zero exit code.
   **Verify:** Inspect `tests/ETL-SQL.LintTests/Program.cs:14-59`.
-- [ ] **[P2 Bug] `ETL-SQL.Scale.Tests`: unconfigured `Cert_Stress_*` and `Cert_Huge_*` `[Fact]` methods return `Task.CompletedTask` (recording Passed instead of Skipped), and `MemoryBoundMB` shadows the `Huge` tier when `rowScale <= 10`** (`tests/ETL-SQL.Scale.Tests/ScaleCertificationTests.cs:343-371, 516-542`).
+  **Outcome (2026-11-02):** Partly real. `Main` returns 1 on error. **Decide**: delete the project, convert to xUnit, or move under `tools/`.
+- [x] **[P2 Bug] `ETL-SQL.Scale.Tests`: unconfigured `Cert_Stress_*` and `Cert_Huge_*` `[Fact]` methods return `Task.CompletedTask` (recording Passed instead of Skipped), and `MemoryBoundMB` shadows the `Huge` tier when `rowScale <= 10`** (`tests/ETL-SQL.Scale.Tests/ScaleCertificationTests.cs:343-371, 516-542`).
   Returning early from a `[Fact]` when `CERT_STRESS_ROW_SCALE` / `CERT_HUGE_ROW_SCALE` is unset marks the test as passed.
   **Verify:** Run `dotnet test --filter "FullyQualifiedName~Cert_Stress_SmokeScenarioSet_RowScale100"` without environment variables set.
-- [ ] **[P2 Bug] `ETL-SQL.PerfTests`: `TestLargeJoinPerformance` never asserts `indexTime`** (`tests/ETL-SQL.PerfTests/PerformanceTests.cs:206-241`).
+  **Outcome (2026-11-02):** Real (skip part). `MemoryBoundMB` part is a false positive (by design).
+- [x] **[P2 Bug] `ETL-SQL.PerfTests`: `TestLargeJoinPerformance` never asserts `indexTime`** (`tests/ETL-SQL.PerfTests/PerformanceTests.cs:206-241`).
   `indexTime` is measured at line 237 and logged at line 239, but only `hashTime < nestedTime` is asserted at line 240.
   **Verify:** Inspect `PerformanceTests.cs:232-241`.
-- [ ] **[P2 Bug] `ETL-SQL.Benchmarks`: `TpcHBenchmarks` and `BenchSetupTest` leak `ETL-SQL-Benchmarks-*` temp directories and evaluators, and `TestQ1DeterministicAtSF01` does not normalize line endings** (`tests/ETL-SQL.Benchmarks/TpcHBenchmarks.cs:71-74, 255-270`, `tests/ETL-SQL.Benchmarks/BenchSetupTest.cs:15-98, 317-325`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P2 Bug] `ETL-SQL.Benchmarks`: `TpcHBenchmarks` and `BenchSetupTest` leak `ETL-SQL-Benchmarks-*` temp directories and evaluators, and `TestQ1DeterministicAtSF01` does not normalize line endings** (`tests/ETL-SQL.Benchmarks/TpcHBenchmarks.cs:71-74, 255-270`, `tests/ETL-SQL.Benchmarks/BenchSetupTest.cs:15-98, 317-325`).
   `tempSessionDir` and `_evaluator` are never cleaned up, and `Assert.Equal(baseline.Trim(), json.Trim())` compares unnormalized `\r\n` vs `\n`.
   **Verify:** Inspect `TpcHBenchmarks.cs:71-74, 255-270` and `BenchSetupTest.cs:317-325`.
-- [ ] **[P2 Bug] Vacuous / incomplete assertions in `SuggestTests`, `OpTempDiagTests`, `ViewStatementTests`, `PortalDialogAccessibilityTests`, and `PortalBrowserFactory.Dispose`** (`tests/ETL-SQL.Tests/UI/SuggestTests.cs:130-140`, `tests/ETL-SQL.Tests/Operations/OpTempDiagTests.cs:19-45`, `tests/ETL-SQL.Tests/Engine/ViewStatementTests.cs:70-74`, `tests/ETL-SQL.Portal.Tests/PortalDialogAccessibilityTests.cs:90-122`, `tests/ETL-SQL.Portal.BrowserTests/PortalBrowserFactory.cs:147-159`).
+  **Outcome (2026-11-02):** Real. Fixed.
+- [x] **[P2 Bug] Vacuous / incomplete assertions in `SuggestTests`, `OpTempDiagTests`, `ViewStatementTests`, `PortalDialogAccessibilityTests`, and `PortalBrowserFactory.Dispose`** (`tests/ETL-SQL.Tests/UI/SuggestTests.cs:130-140`, `tests/ETL-SQL.Tests/Operations/OpTempDiagTests.cs:19-45`, `tests/ETL-SQL.Tests/Engine/ViewStatementTests.cs:70-74`, `tests/ETL-SQL.Portal.Tests/PortalDialogAccessibilityTests.cs:90-122`, `tests/ETL-SQL.Portal.BrowserTests/PortalBrowserFactory.cs:147-159`).
   `TestDelimiterColumnSuggestions` and `PrintDiagnostics` have zero assertions; `DropView_RemovesView` never asserts that `V` was removed; `ModalOverlays_AreHiddenFromTheAccessibilityTreeWhenClosed` uses a narrow hardcoded selector list; `PortalBrowserFactory.Dispose` does not catch `OperationCanceledException` from `StopAsync`.
   **Verify:** Inspect the cited test methods.
+  **Outcome (2026-11-02):** Real. Fixed.
 
 ---
 

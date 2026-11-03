@@ -17,6 +17,41 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.22.0 — Runtime: machine-bound encrypted files use format ETLSQLMF4
+- **What changed**: Machine-bound file encryption (`ENCRYPT = MACHINE`) used one key for both AES and HMAC. It now derives separate keys with HKDF and writes the `ETLSQLMF4` header. Files written with `ETLSQLMF3` are refused.
+- **Who is affected**: Anyone holding machine-bound encrypted export files written before v0.22.0. In-memory machine-bound values are unaffected.
+- **Migration**: Re-export the data with v0.22.0.
+- **Diagnostic**: `Unsupported machine-bound encrypted file format`
+- **Earliest removal**: N/A
+
+### v0.22.0 — Semantic: `${@var}` interpolation keeps sensitive values encrypted
+- **What changed**: Interpolating a SENSITIVE variable holding an `ENC:` value into a string decrypted it, so `PRINT '${@pw}'` showed the plaintext. Interpolation now decrypts only where a credential option asks for the value, the same rule a bare `@var` follows.
+- **Who is affected**: Scripts that built plaintext strings from encrypted variables outside connection options.
+- **Migration**: Pass the variable to the credential option directly.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.22.0 — Syntax: number literals are culture-invariant; malformed hex is an error
+- **What changed**: Number literals and string-to-number casts used the host locale, so `1.234` read as `1234` under `de-DE`. They now always use `.` as the decimal point. `0x` with no digits and hex literals too large for a decimal are syntax errors, and a hex literal with the top bit set reads as unsigned (`0xFFFFFFFFFFFFFFFF` used to read as `-1`).
+- **Who is affected**: Scripts run on hosts with a comma-decimal locale that relied on the locale's separators, and scripts using oversized hex literals.
+- **Migration**: Write decimals with `.`; keep hex literals within decimal range.
+- **Diagnostic**: Parser error at the literal.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Security: password and LDAP sign-in are refused on a Shared Tenancy Portal
+- **What changed**: On a Shared Tenancy host, password and LDAP login looked users up across every tenant and then failed with HTTP 500. They now answer 401 ("Use single sign-on") before any lookup.
+- **Who is affected**: Shared Tenancy deployments that tried local or LDAP accounts. Dedicated hosts are unchanged.
+- **Migration**: Sign in through the tenant's OIDC provider.
+- **Diagnostic**: HTTP 401 with `Use single sign-on`.
+- **Earliest removal**: N/A
+
+### v0.22.0 — Runtime: `admin restore` refuses archives with files the manifest does not list
+- **What changed**: Restore copied every file in the data and keys archives, including files `backup-manifest.json` did not attest. Validation (and `--validate`) now fails on an unlisted data file, any keys-archive file other than the manifest, `secrets.json` and `.portal-keys/*`, or a key-ring count that differs from the manifest.
+- **Who is affected**: Operators restoring hand-edited backup archives.
+- **Migration**: Restore archives exactly as `admin backup` wrote them.
+- **Diagnostic**: Restore validation error naming the unattested file.
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: OLTP, REST and webhook command timeouts default to 30 seconds
 - **What changed**: Without `TIMEOUT_SECONDS`, MSSQL, Postgres, Oracle, MySQL, SQLite, ODBC, REST and webhook connectors read `Connectors:DataWarehouse:DefaultCommandTimeoutSeconds` (1800 in the shipped `appsettings.json`) and waited up to 30 minutes. They now use their own 30-second default.
 - **Who is affected**: Scripts whose long-running OLTP or HTTP calls relied on the 30-minute wait.
