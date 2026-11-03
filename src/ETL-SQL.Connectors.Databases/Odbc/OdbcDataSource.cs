@@ -151,6 +151,7 @@ namespace ETL_SQL.Connectors.Odbc
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            if (_context != null && _context.IsWhatIf) return;
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for ODBC data source write.");
 
@@ -235,16 +236,13 @@ namespace ETL_SQL.Connectors.Odbc
             var (conn, isShared) = await GetConnectionAsync(effectiveCancellationToken);
             try
             {
-                using var cmd = CreateCommand(sql, conn);
+                var (commandText, ordered) = BindPositionally(sql, parameters?.ToList());
+                using var cmd = CreateCommand(commandText, conn);
                 if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
 
-                int paramCount = 0;
-                if (parameters != null)
+                for (int paramCount = 0; paramCount < ordered.Count; paramCount++)
                 {
-                    foreach (var param in parameters)
-                    {
-                        cmd.Parameters.Add(new OdbcParameter($"p{paramCount++}", param ?? DBNull.Value));
-                    }
+                    cmd.Parameters.Add(new OdbcParameter($"p{paramCount}", ordered[paramCount] ?? DBNull.Value));
                 }
 
                 using var reader = await cmd.ExecuteReaderAsync(effectiveCancellationToken);
@@ -318,15 +316,8 @@ namespace ETL_SQL.Connectors.Odbc
             try
             {
                 effectiveCancellationToken.ThrowIfCancellationRequested();
-                var tables = new List<string>();
                 using var schemaTable = conn.GetSchema("Tables");
-                foreach (System.Data.DataRow row in schemaTable.Rows)
-                {
-                    effectiveCancellationToken.ThrowIfCancellationRequested();
-                    var table = row["TABLE_NAME"].ToString();
-                    if (!string.IsNullOrEmpty(table)) tables.Add(table);
-                }
-                return tables;
+                return SelectBaseTables(schemaTable, effectiveCancellationToken);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -491,6 +482,7 @@ namespace ETL_SQL.Connectors.Odbc
 
         private async Task TruncateAsync(CancellationToken cancellationToken)
         {
+            if (_context != null && _context.IsWhatIf) return;
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for ODBC truncate.");
 
@@ -517,6 +509,80 @@ namespace ETL_SQL.Connectors.Odbc
             cmd.CommandText = sql;
             cmd.CommandTimeout = _commandTimeout;
             return cmd;
+        }
+
+        /// <summary>
+        /// ODBC binds parameters by position to <c>?</c> markers. The query compiler emits named
+        /// <c>@p0..@pN</c> markers, which an ODBC driver passes through as text. Each <c>@pN</c>
+        /// outside a quoted literal becomes <c>?</c>, and the values are reordered to match the
+        /// order the markers appear in. SQL written with <c>?</c> keeps its values as given.
+        /// </summary>
+        internal static (string Sql, List<object?> Parameters) BindPositionally(string sql, List<object?>? parameters)
+        {
+            parameters ??= [];
+            if (parameters.Count == 0 || !sql.Contains("@p", StringComparison.Ordinal)) return (sql, parameters);
+
+            var sb = new System.Text.StringBuilder(sql.Length);
+            var ordered = new List<object?>();
+            for (int i = 0; i < sql.Length; i++)
+            {
+                char c = sql[i];
+                if (c is '\'' or '"' or '[')
+                {
+                    char close = c == '[' ? ']' : c;
+                    int end = i + 1;
+                    while (end < sql.Length)
+                    {
+                        if (sql[end] == close)
+                        {
+                            if (close != ']' && end + 1 < sql.Length && sql[end + 1] == close) { end += 2; continue; }
+                            break;
+                        }
+                        end++;
+                    }
+                    int stop = Math.Min(end, sql.Length - 1);
+                    sb.Append(sql, i, stop - i + 1);
+                    i = stop;
+                    continue;
+                }
+                if (c == '@' && i + 2 < sql.Length && sql[i + 1] == 'p' && char.IsAsciiDigit(sql[i + 2])
+                    && (i == 0 || !(char.IsLetterOrDigit(sql[i - 1]) || sql[i - 1] == '_')))
+                {
+                    int j = i + 2;
+                    while (j < sql.Length && char.IsAsciiDigit(sql[j])) j++;
+                    if (j == sql.Length || !(char.IsLetterOrDigit(sql[j]) || sql[j] == '_'))
+                    {
+                        int index = int.Parse(sql.AsSpan(i + 2, j - i - 2), System.Globalization.CultureInfo.InvariantCulture);
+                        if (index >= parameters.Count)
+                            throw new ExecutionException($"ODBC query references parameter @p{index}, but only {parameters.Count} were supplied.");
+                        ordered.Add(parameters[index]);
+                        sb.Append('?');
+                        i = j - 1;
+                        continue;
+                    }
+                }
+                sb.Append(c);
+            }
+            return ordered.Count == 0 ? (sql, parameters) : (sb.ToString(), ordered);
+        }
+
+        /// <summary>Keeps base tables from a GetSchema("Tables") result; drivers also list views and system tables there.</summary>
+        internal static List<string> SelectBaseTables(System.Data.DataTable schemaTable, CancellationToken cancellationToken = default)
+        {
+            var hasType = schemaTable.Columns.Contains("TABLE_TYPE");
+            var tables = new List<string>();
+            foreach (System.Data.DataRow row in schemaTable.Rows)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var type = hasType ? row["TABLE_TYPE"]?.ToString() : null;
+                if (hasType
+                    && !string.Equals(type, "TABLE", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(type, "BASE TABLE", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var table = row["TABLE_NAME"].ToString();
+                if (!string.IsNullOrEmpty(table)) tables.Add(table);
+            }
+            return tables;
         }
 
         private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>

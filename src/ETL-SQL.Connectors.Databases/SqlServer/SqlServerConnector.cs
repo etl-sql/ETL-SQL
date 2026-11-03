@@ -86,13 +86,20 @@ namespace ETL_SQL.Connectors.SqlServer
             var host = GetHost(connectionString);
             if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
 
-            await using var conn = new SqlConnection(connectionString);
-            await conn.OpenAsync();
-            var procs = new List<string>();
-            await using var cmd = new SqlCommand("SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_TYPE = 'PROCEDURE'", conn);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync()) procs.Add(reader.GetString(0));
-            return procs;
+            try
+            {
+                await using var conn = new SqlConnection(connectionString);
+                await conn.OpenAsync();
+                var procs = new List<string>();
+                await using var cmd = new SqlCommand("SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_TYPE = 'PROCEDURE'", conn);
+                await using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync()) procs.Add(reader.GetString(0));
+                return procs;
+            }
+            catch (Exception ex) when (ex is SqlException or InvalidOperationException or ArgumentException)
+            {
+                throw ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.Wrap("SQL Server", ex);
+            }
         }
 
         public string BuildConnectionString(Dictionary<string, string> properties) =>

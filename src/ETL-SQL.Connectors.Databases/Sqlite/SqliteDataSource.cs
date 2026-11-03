@@ -63,6 +63,12 @@ namespace ETL_SQL.Connectors.Sqlite
             {
                 dbPath = context.ResolvePath(dbPath);
                 builder.DataSource = dbPath;
+
+                // ResolvePath validates the path for reading. A writable SQLite connection also
+                // creates and modifies the file, so it passes the same script-immutability guard
+                // file writers do: a database must not be created as, or over, a .etlsql/.py file.
+                if (builder.Mode != SqliteOpenMode.ReadOnly)
+                    context.SecurityService.ValidateWriteAccess(dbPath);
             }
             _connectionString = builder.ConnectionString;
         }

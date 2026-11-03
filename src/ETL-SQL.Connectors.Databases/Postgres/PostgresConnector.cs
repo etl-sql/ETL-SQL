@@ -77,13 +77,20 @@ namespace ETL_SQL.Connectors.Postgres
             var host = GetHost(connectionString);
             if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
 
-            var procs = new List<string>();
-            await using var conn = new NpgsqlConnection(connectionString);
-            await conn.OpenAsync();
-            await using var cmd = new NpgsqlCommand("SELECT routine_name FROM information_schema.routines WHERE routine_schema = 'public' AND routine_type = 'PROCEDURE'", conn);
-            await using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync()) procs.Add(reader.GetString(0));
-            return procs;
+            try
+            {
+                var procs = new List<string>();
+                await using var conn = new NpgsqlConnection(connectionString);
+                await conn.OpenAsync();
+                await using var cmd = new NpgsqlCommand("SELECT routine_name FROM information_schema.routines WHERE routine_schema = 'public' AND routine_type = 'PROCEDURE'", conn);
+                await using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync()) procs.Add(reader.GetString(0));
+                return procs;
+            }
+            catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException or ArgumentException)
+            {
+                throw ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.Wrap("Postgres", ex);
+            }
         }
 
         public string BuildConnectionString(Dictionary<string, string> properties) =>

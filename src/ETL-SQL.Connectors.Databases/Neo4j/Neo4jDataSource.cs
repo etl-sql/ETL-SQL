@@ -747,44 +747,7 @@ namespace ETL_SQL.Connectors.Neo4j
             var database = _options?.GetValueOrDefault("DATABASE", "neo4j") ?? "neo4j";
 
             var paramDict = new Dictionary<string, object?>();
-            string cypherQuery = sql;
-
-            int paramIndex = 1;
-            while (cypherQuery.Contains("?"))
-            {
-                int qIdx = cypherQuery.IndexOf('?');
-                if (qIdx + 1 < cypherQuery.Length && char.IsDigit(cypherQuery[qIdx + 1]))
-                {
-                    break;
-                }
-                var paramName = $"p{paramIndex}";
-                cypherQuery = cypherQuery.Substring(0, qIdx) + $"${paramName}" + cypherQuery.Substring(qIdx + 1);
-
-                if (parameters != null)
-                {
-                    var list = parameters.ToList();
-                    if (paramIndex - 1 < list.Count)
-                    {
-                        paramDict[paramName] = list[paramIndex - 1];
-                    }
-                    else
-                    {
-                        paramDict[paramName] = null;
-                    }
-                }
-                paramIndex++;
-            }
-
-            if (parameters != null)
-            {
-                var list = parameters.ToList();
-                for (int i = 0; i < list.Count; i++)
-                {
-                    var paramName = $"p{i + 1}";
-                    cypherQuery = cypherQuery.Replace($"?{i + 1}", $"${paramName}");
-                    paramDict[paramName] = list[i];
-                }
-            }
+            string cypherQuery = RewritePositionalParameters(sql, parameters?.ToList(), paramDict);
 
             if (_activeTransaction != null)
             {
@@ -891,7 +854,72 @@ namespace ETL_SQL.Connectors.Neo4j
             }
         }
 
-        private static object? NormalizePropertyValue(object? value, string columnName)
+        /// <summary>
+        /// Rewrites positional <c>?</c> and <c>?N</c> placeholders to Cypher <c>$pN</c> parameters,
+        /// skipping string literals, backtick identifiers and comments: a <c>?</c> inside
+        /// <c>'what?'</c> is text, not a parameter. Every supplied value is also bound as
+        /// <c>$p1..$pN</c>, so a query may name the parameters directly.
+        /// </summary>
+        internal static string RewritePositionalParameters(
+            string cypher, IReadOnlyList<object?>? parameters, Dictionary<string, object?> bound)
+        {
+            var sb = new System.Text.StringBuilder(cypher.Length + 8);
+            int sequential = 1;
+            int len = cypher.Length;
+            for (int i = 0; i < len; i++)
+            {
+                char c = cypher[i];
+                if (c is '\'' or '"' or '`')
+                {
+                    int end = i + 1;
+                    while (end < len)
+                    {
+                        if (c != '`' && cypher[end] == '\\' && end + 1 < len) { end += 2; continue; }
+                        if (cypher[end] == c)
+                        {
+                            if (end + 1 < len && cypher[end + 1] == c) { end += 2; continue; }
+                            break;
+                        }
+                        end++;
+                    }
+                    int stop = Math.Min(end, len - 1);
+                    sb.Append(cypher, i, stop - i + 1);
+                    i = stop;
+                    continue;
+                }
+                if (c == '/' && i + 1 < len && (cypher[i + 1] == '/' || cypher[i + 1] == '*'))
+                {
+                    bool block = cypher[i + 1] == '*';
+                    int end = block ? cypher.IndexOf("*/", i + 2, StringComparison.Ordinal) : cypher.IndexOf('\n', i + 2);
+                    int stop = end < 0 ? len - 1 : (block ? end + 1 : end);
+                    sb.Append(cypher, i, stop - i + 1);
+                    i = stop;
+                    continue;
+                }
+                if (c == '?')
+                {
+                    int j = i + 1;
+                    while (j < len && char.IsAsciiDigit(cypher[j])) j++;
+                    int index = j > i + 1 ? int.Parse(cypher.AsSpan(i + 1, j - i - 1), System.Globalization.CultureInfo.InvariantCulture) : sequential++;
+                    var name = $"p{index}";
+                    sb.Append('$').Append(name);
+                    if (parameters != null)
+                        bound[name] = index >= 1 && index <= parameters.Count ? parameters[index - 1] : null;
+                    i = j - 1;
+                    continue;
+                }
+                sb.Append(c);
+            }
+
+            if (parameters != null)
+            {
+                for (int p = 0; p < parameters.Count; p++)
+                    bound.TryAdd($"p{p + 1}", parameters[p]);
+            }
+            return sb.ToString();
+        }
+
+        internal static object? NormalizePropertyValue(object? value, string columnName)
         {
             if (value == null || value == DBNull.Value) return null;
             if (value is string or bool or int or long or float or double) return value;
@@ -904,7 +932,15 @@ namespace ETL_SQL.Connectors.Neo4j
                 }
                 return Convert.ToInt64(ulongValue);
             }
-            if (value is decimal decimalValue) return Convert.ToDouble(decimalValue);
+            // Engine integers are decimal at runtime. Store a whole value as a Neo4j INTEGER so ids keep
+            // their type and do not lose precision above 2^53; only a fractional value becomes FLOAT.
+            if (value is decimal decimalValue)
+            {
+                return decimalValue == decimal.Truncate(decimalValue)
+                       && decimalValue >= long.MinValue && decimalValue <= long.MaxValue
+                    ? (object)decimal.ToInt64(decimalValue)
+                    : (object)Convert.ToDouble(decimalValue);
+            }
             if (value is char charValue) return charValue.ToString();
             if (value is Guid guidValue) return guidValue.ToString();
             if (value is DateTime dateTimeValue) return dateTimeValue.ToString("O");
