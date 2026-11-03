@@ -60,7 +60,7 @@ public static class EvaluationUtils
             if (b is bool bb && a is string sa1 && (sa1.Equals("ON", StringComparison.OrdinalIgnoreCase) || sa1.Equals("OFF", StringComparison.OrdinalIgnoreCase)))
                 return bb == sa1.Equals("ON", StringComparison.OrdinalIgnoreCase);
 
-            if (decimal.TryParse(a?.ToString(), out var m1) && decimal.TryParse(b?.ToString(), out var m2)) return m1 == m2;
+            if (decimal.TryParse(Convert.ToString(a, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var m1) && decimal.TryParse(Convert.ToString(b, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var m2)) return m1 == m2;
 
             if (DateTime.TryParse(a?.ToString(), out var dt1) && DateTime.TryParse(b?.ToString(), out var dt2)) return dt1.Year == dt2.Year && dt1.Month == dt2.Month && dt1.Day == dt2.Day && dt1.Hour == dt2.Hour && dt1.Minute == dt2.Minute && dt1.Second == dt2.Second;
         }
@@ -106,8 +106,8 @@ public static class EvaluationUtils
         // Numeric comparison via decimal (handles mixed numeric types and numeric-looking strings).
         // TryParse instead of Parse-in-try/catch avoids throwing and catching a FormatException on
         // every non-numeric comparison (e.g. a plain string sort) — an expensive per-call cost.
-        if (decimal.TryParse(a?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var da)
-            && decimal.TryParse(b?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var db))
+        if (decimal.TryParse(Convert.ToString(a, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var da)
+            && decimal.TryParse(Convert.ToString(b, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var db))
             return da.CompareTo(db);
 
         if (TryToDateTime(a, out var dta) && TryToDateTime(b, out var dtb))

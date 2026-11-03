@@ -93,7 +93,7 @@ public class DataGenerator
         if (args.Length == 0) return index => index;
 
         string startStr = args[0].Trim('\'', '\"');
-        decimal step = args.Length > 1 && decimal.TryParse(args[1], out var s) ? s : 1;
+        decimal step = args.Length > 1 && decimal.TryParse(args[1], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var s) ? s : 1;
         string unit = args.Length > 2 ? args[2].ToUpperInvariant().Trim('\'', '\"') : "";
 
         if (DateTime.TryParse(startStr, out var startDate))
@@ -114,7 +114,7 @@ public class DataGenerator
             };
         }
 
-        if (decimal.TryParse(startStr, out var startNum))
+        if (decimal.TryParse(startStr, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var startNum))
         {
             return index => startNum + (index * step);
         }
@@ -131,8 +131,8 @@ public class DataGenerator
 
     private Func<int, object?> CreateRandomDecimalGenerator(string[] args)
     {
-        double min = args.Length > 0 && double.TryParse(args[0], out var low) ? low : 0;
-        double max = args.Length > 1 && double.TryParse(args[1], out var high) ? high : 100;
+        double min = args.Length > 0 && double.TryParse(args[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var low) ? low : 0;
+        double max = args.Length > 1 && double.TryParse(args[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var high) ? high : 100;
         return _ => (decimal)(_random.NextDouble() * (max - min) + min);
     }
 

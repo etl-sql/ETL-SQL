@@ -684,9 +684,17 @@ public class Lexer
             Advance(); Advance(); // skip "0x"
             var hexStart = _position;
             while (IsHexDigit(CurrentChar)) Advance();
-            // Convert hex string to decimal so the rest of the engine sees a plain number.
-            long hexValue = Convert.ToInt64(_source.Substring(hexStart, _position - hexStart), 16);
-            return new Token(TokenType.NUMBER, hexValue.ToString(), line, column, _line, _column, startOffset, _position);
+            // A bare "0x" is not a number; lexing it as 0 followed by "x" would silently read as an alias.
+            if (_position == hexStart)
+                throw new SyntaxException("Hex literal '0x' has no hex digits", line, column);
+            // Convert the hex digits (unsigned) to a decimal so the rest of the engine sees a plain number.
+            var hexValue = System.Numerics.BigInteger.Parse(
+                "0" + _source.Substring(hexStart, _position - hexStart),
+                System.Globalization.NumberStyles.AllowHexSpecifier,
+                System.Globalization.CultureInfo.InvariantCulture);
+            if (hexValue > new System.Numerics.BigInteger(decimal.MaxValue))
+                throw new SyntaxException("Hex literal is too large for a number", line, column);
+            return new Token(TokenType.NUMBER, hexValue.ToString(System.Globalization.CultureInfo.InvariantCulture), line, column, _line, _column, startOffset, _position);
         }
 
         bool hasDecimal = false;

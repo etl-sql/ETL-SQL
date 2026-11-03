@@ -197,14 +197,14 @@ public class ReportParser : ParserComponent
             {
                 Match(TokenType.EQUALS);
                 var minStr = ConsumeReportOptionValue();
-                if (double.TryParse(minStr, out var minVal)) min = minVal;
+                if (double.TryParse(minStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var minVal)) min = minVal;
                 options.Add(new VisualOption { Key = "MIN", Value = minStr });
             }
             else if (Match(TokenType.MAX))
             {
                 Match(TokenType.EQUALS);
                 var maxStr = ConsumeReportOptionValue();
-                if (double.TryParse(maxStr, out var maxVal)) max = maxVal;
+                if (double.TryParse(maxStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var maxVal)) max = maxVal;
                 options.Add(new VisualOption { Key = "MAX", Value = maxStr });
             }
             else if (Match(TokenType.DECIMALS))
@@ -1529,26 +1529,26 @@ public class ReportParser : ParserComponent
             {
                 Advance();
                 Match(TokenType.EQUALS);
-                layout = layout with { CustomWidth = decimal.Parse(ConsumeReportOptionValue()) };
+                layout = layout with { CustomWidth = decimal.Parse(ConsumeReportOptionValue(), System.Globalization.CultureInfo.InvariantCulture) };
             }
             else if (IsCurrentValue("CUSTOM_HEIGHT"))
             {
                 Advance();
                 Match(TokenType.EQUALS);
-                layout = layout with { CustomHeight = decimal.Parse(ConsumeReportOptionValue()) };
+                layout = layout with { CustomHeight = decimal.Parse(ConsumeReportOptionValue(), System.Globalization.CultureInfo.InvariantCulture) };
             }
             else if (IsCurrentValue("MARGINS") || Match(TokenType.MARGIN))
             {
                 if (IsCurrentValue("MARGINS") || IsCurrentValue("MARGIN")) Advance();
                 Match(TokenType.EQUALS);
                 Consume(TokenType.LPAREN, "Expected '(' for margins");
-                var top = decimal.Parse(ConsumeReportOptionValue());
+                var top = decimal.Parse(ConsumeReportOptionValue(), System.Globalization.CultureInfo.InvariantCulture);
                 Match(TokenType.COMMA);
-                var right = decimal.Parse(ConsumeReportOptionValue());
+                var right = decimal.Parse(ConsumeReportOptionValue(), System.Globalization.CultureInfo.InvariantCulture);
                 Match(TokenType.COMMA);
-                var bottom = decimal.Parse(ConsumeReportOptionValue());
+                var bottom = decimal.Parse(ConsumeReportOptionValue(), System.Globalization.CultureInfo.InvariantCulture);
                 Match(TokenType.COMMA);
-                var left = decimal.Parse(ConsumeReportOptionValue());
+                var left = decimal.Parse(ConsumeReportOptionValue(), System.Globalization.CultureInfo.InvariantCulture);
                 Consume(TokenType.RPAREN, "Expected ')' for margins");
                 layout = layout with { MarginTop = top, MarginRight = right, MarginBottom = bottom, MarginLeft = left };
             }
