@@ -110,7 +110,11 @@ namespace ETL_SQL.Connectors
                 port = parsedPort;
             string? useSsl = options?.GetValueOrDefault("USE_SSL");
             bool passive = options?.GetValueOrDefault("PASSIVE")?.ToUpperInvariant() != "OFF";
-            return new FtpConnector(context, connectionString, user, pass, port, useSsl, passive);
+            // A catalog connection may carry its host only in the HOST option.
+            string host = string.IsNullOrWhiteSpace(connectionString)
+                ? options?.GetValueOrDefault("HOST") ?? ""
+                : connectionString;
+            return new FtpConnector(context, host, user, pass, port, useSsl, passive);
         }
 
         public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetTablesAsync instead.");
