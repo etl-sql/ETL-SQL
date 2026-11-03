@@ -59,6 +59,43 @@ namespace ETL_SQL.Tests.Reporting
         }
 
         [Fact]
+        public async Task MachineBoundCrypto_FileFormat_UsesSeparateEncryptionAndMacKeys()
+        {
+            var plain = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            var encrypted = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            try
+            {
+                File.WriteAllText(plain, "id,amount\n1,100\n");
+                await MachineBoundCrypto.EncryptFileAsync(plain, encrypted);
+                var bytes = File.ReadAllBytes(encrypted);
+                Assert.Equal("ETLSQLMF4", System.Text.Encoding.ASCII.GetString(bytes, 0, 9));
+
+                var keys = ((byte[] EncryptionKey, byte[] MacKey))typeof(MachineBoundCrypto)
+                    .GetMethod("GetMachineFileKeys", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+                    .Invoke(null, null)!;
+                Assert.False(keys.EncryptionKey.SequenceEqual(keys.MacKey));
+
+                // The trailing tag is HMAC-SHA256(magic || iv || ciphertext) under the MAC key only.
+                var authenticated = bytes.AsSpan(0, bytes.Length - 32).ToArray();
+                var tag = bytes.AsSpan(bytes.Length - 32).ToArray();
+                Assert.Equal(tag, System.Security.Cryptography.HMACSHA256.HashData(keys.MacKey, authenticated));
+                Assert.NotEqual(tag, System.Security.Cryptography.HMACSHA256.HashData(keys.EncryptionKey, authenticated));
+
+                // A file in the retired single-key v3 format is refused, not misread.
+                bytes[8] = (byte)'3';
+                File.WriteAllBytes(encrypted, bytes);
+                using var stream = File.OpenRead(encrypted);
+                var refused = Assert.ThrowsAny<System.Security.Cryptography.CryptographicException>(() => MachineBoundCrypto.DecryptStream(stream));
+                Assert.Contains("Unsupported", refused.Message);
+            }
+            finally
+            {
+                foreach (var f in new[] { plain, encrypted })
+                    if (File.Exists(f)) File.Delete(f);
+            }
+        }
+
+        [Fact]
         public async Task StreamDecryption_RefusesATamperedFile()
         {
             var dir = Path.GetTempPath();
