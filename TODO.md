@@ -1031,6 +1031,13 @@ normal/captured builds. Runtime, workstation and execution-context causality rem
 all 48 measured cases, failed comparisons and branch restoration. The original gate stays failed; baseline files and
 bands are unchanged, and the final clean-candidate gate remains required.
 
+- [ ] **Re-land the Stress/Huge Skipped fix with the next scale recalibration.** Commit `8b50435fe`
+  made the opt-in `Cert_Stress_*`/`Cert_Huge_*` facts report Skipped instead of a false Passed when
+  their row-scale variable is unset. It edited `ScaleCertificationTests.cs`, a fixture input, so the
+  fixture hash no longer matched the stored baselines and both regression checks failed on candidate
+  `f5c4fd62a`. It was reverted for v0.22.0 (owner decision 2026-11-03). Re-apply it in the same change
+  that recalibrates `certification-results/baseline-*.json` against the new fixture hash.
+
 ### 3. Flaky tests — the dedicated fix
 
 **Record:** [flaky-test stability](docs/releases/flaky-test-stability.md). v0.21.0 deferred these
