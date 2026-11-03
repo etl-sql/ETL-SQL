@@ -59,7 +59,8 @@ SET TELEMETRY = OFF;";
             await _evaluator.Evaluate(script);
         }
 
-        private const string OurEngineName = "etlsql";
+        /// <summary>The engine name skipif/onlyif directives are matched against.</summary>
+        public const string OurEngineName = "etlsql";
 
         public string? CurrentFile { get; set; }
 
@@ -89,9 +90,9 @@ SET TELEMETRY = OFF;";
 
         public async Task RunTestAsync(SltRecord record)
         {
-            // skipif etlsql → skip; onlyif etlsql → run; otherwise opposite
-            if (record.Type == SltRecordType.SkipIf && record.EngineCondition == OurEngineName) return;
-            if (record.Type == SltRecordType.OnlyIf && record.EngineCondition != OurEngineName) return;
+            // Every stacked skipif/onlyif must agree before the record runs. Halt records carry no
+            // SQL; the file loop stops on them (see SltTests).
+            if (!record.AppliesTo(OurEngineName) || record.Type == SltRecordType.Halt) return;
 
             if (string.IsNullOrWhiteSpace(record.Sql)) return;
 
