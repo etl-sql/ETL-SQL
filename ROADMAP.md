@@ -612,6 +612,37 @@ own tenant binding.
 **Acceptance evidence:** A two-tenant test where tenant B can neither read nor overwrite tenant A's
 bundle of the same name, on SQLite and Postgres.
 
+### Security — Caller Identity for Process-Spawned Orchestrator Runs
+
+**Status:** Accepted
+**Horizon:** Next (v0.23.0)
+
+**Problem and Intended Outcome:** With `Jobs:UseProcessSpawning`, the Orchestrator runs a job in a
+child `etl-sql` process. The child gets no caller identity or tenant and has no
+`IOrchestratorObjectAuthorizer`, so v0.22.0 refuses identity-bound runs in this mode (fail closed).
+The outcome is that a spawned run executes as its caller, with the same identity, tenant, RLS and
+per-object checks as an in-process run.
+
+**Why next:** Found while verifying the v0.22.0 security review. Passing identity on the command
+line or in plain environment variables would let any local user start the App as someone else, so
+the fix needs a tamper-evident hand-off, too much for v0.22.0.
+
+**Boundaries:** In-process runs are unchanged. Runs without an identity keep working in spawn mode.
+
+**Dependencies:** The Orchestrator identity secret (already used to sign the job channel).
+
+**Slices:**
+
+1. A signed identity envelope (identity, tenant, scopes, job id, expiry; HMAC with the Orchestrator
+   identity secret), written to a private temp file the child reads once and deletes.
+2. The child App verifies the envelope, rejects expired or replayed ones, and binds the identity and
+   tenant before the script runs.
+3. An authorizer in the child that applies the same per-object checks, or calls back to the
+   Orchestrator for them.
+
+**Acceptance evidence:** A spawn-mode test where a run executes as its caller and is refused an
+object the caller cannot use; and a test where a forged, altered or expired envelope is refused.
+
 ### SaaS Operations — Shared Lifecycle, Metering, and Hosted Launch Evidence
 
 **Status:** Incremental

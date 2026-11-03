@@ -8,7 +8,7 @@ Items are grouped by when they can be done, not by topic:
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 19 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 18 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: when an item is verified, record the outcome in `CHANGELOG.md` and mark it complete. Remove
@@ -2121,8 +2121,9 @@ Recorded for verification only (no source fixes applied during the audit).
 - [x] **[P2 Bug] Anonymous `GET /api/policy-authority/envelope` returns 500 on a Shared Tenancy host** (`src/ETL-SQL.Portal/Program.cs`, `PolicyAuthorityService` factory).
   The factory throws when no tenant context is bound, so a machine polling a Shared host gets a server error instead of a tenant-scoped answer or a clean refusal.
   **Outcome (2026-11-03):** Fixed. The controller resolves `PolicyAuthorityService` after the tenant guard, so an unverified Shared caller gets the guard's audited 403.
-- [ ] **[P2 Security] Pass the caller's `ExecutionIdentity` to process-spawned Orchestrator runs** (`src/ETL-SQL.Orchestrator/Execution/ProcessJobExecutor.cs`).
+- [x] **[P2 Security] Pass the caller's `ExecutionIdentity` to process-spawned Orchestrator runs** (`src/ETL-SQL.Orchestrator/Execution/ProcessJobExecutor.cs`).
   Identity-bound runs under `Jobs:UseProcessSpawning` are now refused (fail closed). Supporting them needs the identity and tenant carried to the child App, which has no `IOrchestratorObjectAuthorizer`.
+  **Outcome (2026-11-03):** Stays fail closed for v0.22.0. Moved to ROADMAP.md "Security — Caller Identity for Process-Spawned Orchestrator Runs" for v0.23.0 (owner): it needs a signed identity hand-off so a local user cannot start the App as someone else.
 - [x] **[P2 Bug] Portal admin user search never matches email, first or last name** (`src/ETL-SQL.Portal/Controllers/AdminController.cs:222-226`).
   The search runs `LOWER(col) LIKE '%term%'` in SQL, but those columns hold non-deterministic PII ciphertext, so only the username can match. Substring search on encrypted columns has to run in memory or over a separate search key.
   **Outcome (2026-11-03):** Fixed. The other filters still run in SQL; the text match runs on the decrypted rows before paging, as the group-member search already did.
