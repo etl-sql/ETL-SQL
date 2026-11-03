@@ -62,7 +62,7 @@ namespace ETL_SQL.Connectors.BigQuery
             _location = options?.GetValueOrDefault("LOCATION")
                 ?? BigQueryConnector.ParseField(connectionString, "location");
 
-            _commandTimeout = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 1800;
+            _commandTimeout = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : ETL_SQL.Connectors.Shared.DataWarehouseTimeouts.DefaultSeconds(context);
 
             ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, "bigquery.googleapis.com");
         }

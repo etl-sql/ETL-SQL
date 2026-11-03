@@ -55,7 +55,7 @@ namespace ETL_SQL.Connectors.Snowflake
             _options = options;
             _commandTimeout = options != null
                 && options.TryGetValue("TIMEOUT_SECONDS", out var ts)
-                && int.TryParse(ts, out var t) ? t : 1800;
+                && int.TryParse(ts, out var t) ? t : ETL_SQL.Connectors.Shared.DataWarehouseTimeouts.DefaultSeconds(context);
 
             var host = SnowflakeConnector.GetHostStatic(connectionString, options);
             if (!string.IsNullOrEmpty(host))

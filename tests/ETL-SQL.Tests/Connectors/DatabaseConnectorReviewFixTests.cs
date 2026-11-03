@@ -361,4 +361,35 @@ public sealed class DatabaseConnectorReviewFixTests
 
         Assert.Equal(["orders", "customers"], OdbcDataSource.SelectBaseTables(schema));
     }
+
+    // ── Data-warehouse default timeout comes from configuration ──
+
+    private static Mock<IExecutionContext> ContextWithConfig(string? defaultSeconds)
+    {
+        var values = new Dictionary<string, string?>();
+        if (defaultSeconds != null) values["Connectors:DataWarehouse:DefaultCommandTimeoutSeconds"] = defaultSeconds;
+        var configuration = Microsoft.Extensions.Configuration.MemoryConfigurationBuilderExtensions.AddInMemoryCollection(new Microsoft.Extensions.Configuration.ConfigurationBuilder(), values).Build();
+        var services = new Mock<IServiceProvider>();
+        services.Setup(s => s.GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration))).Returns(configuration);
+        var context = Context();
+        context.Setup(c => c.ServiceProvider).Returns(services.Object);
+        return context;
+    }
+
+    [Theory]
+    [InlineData("600", 600)]
+    [InlineData(null, 1800)]
+    [InlineData("0", 1800)]
+    [InlineData("not-a-number", 1800)]
+    public void DataWarehouseDefaultTimeout_ReadsTheConfigurationKey(string? configured, int expected)
+    {
+        Assert.Equal(expected, ETL_SQL.Connectors.Shared.DataWarehouseTimeouts.DefaultSeconds(ContextWithConfig(configured).Object));
+    }
+
+    [Fact]
+    public void DataWarehouseDefaultTimeout_WithoutServices_IsTheBuiltInDefault()
+    {
+        Assert.Equal(1800, ETL_SQL.Connectors.Shared.DataWarehouseTimeouts.DefaultSeconds(Context().Object));
+        Assert.Equal(1800, ETL_SQL.Connectors.Shared.DataWarehouseTimeouts.DefaultSeconds(null));
+    }
 }
