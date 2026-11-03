@@ -36,6 +36,29 @@ namespace ETL_SQL.Tests.CliCommands
         // ── support-bundle redaction ──────────────────────────────────────────
 
         [Fact]
+        public async Task SupportBundle_StagesUnderOwnerOnlyRootNotSharedTemp()
+        {
+            var staging = await SupportBundleBuilder.CreateStagingDirectoryAsync();
+            try
+            {
+                var sharedTemp = Path.GetFullPath(Path.GetTempPath());
+                var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (!string.IsNullOrWhiteSpace(localAppData))
+                    Assert.False(
+                        Path.GetFullPath(staging).StartsWith(sharedTemp, StringComparison.OrdinalIgnoreCase),
+                        $"staging '{staging}' is under the shared temp directory '{sharedTemp}'");
+                if (!OperatingSystem.IsWindows())
+                    Assert.Equal(
+                        UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute,
+                        File.GetUnixFileMode(staging));
+            }
+            finally
+            {
+                Directory.Delete(staging, recursive: true);
+            }
+        }
+
+        [Fact]
         public void SupportBundle_Redaction_MasksSecretsButKeepsConfigKnobs()
         {
             const string secret = "SuperSecretValue-DO-NOT-LEAK";
