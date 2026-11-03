@@ -183,6 +183,14 @@ namespace ETL_SQL.Tests
             Assert.True(aggGroupCount > 0, "GROUP BY returned no groups");
         }
 
+        private static decimal SingleCount(Evaluator eval)
+        {
+            var result = eval.LastResult as DataTable;
+            Assert.NotNull(result);
+            Assert.Single(result!.Rows);
+            return Convert.ToDecimal(result.Rows[0][0]);
+        }
+
         private static Script Parse(string sql) => new Parser(new Lexer(sql).Tokenize()).Parse();
 
         private static async Task Execute(Evaluator eval, string sql)
@@ -222,12 +230,14 @@ namespace ETL_SQL.Tests
             await Execute(eval, "SELECT COUNT(*) FROM #t1 JOIN #t2 ON (#t1.ID + 0) = #t2.ID;");
             sw.Stop();
             long nestedTime = sw.ElapsedMilliseconds;
+            Assert.Equal(10000m, SingleCount(eval));
             Console.WriteLine($"Nested Loop Time: {nestedTime} ms");
 
             sw.Restart();
             await Execute(eval, "SELECT COUNT(*) FROM #t1 JOIN #t2 ON #t1.ID = #t2.ID;");
             sw.Stop();
             long hashTime = sw.ElapsedMilliseconds;
+            Assert.Equal(10000m, SingleCount(eval));
             Console.WriteLine($"Hash Join Time: {hashTime} ms");
 
             await Execute(eval, "CREATE INDEX idx_t2_id ON #t2 (ID);");
@@ -235,9 +245,11 @@ namespace ETL_SQL.Tests
             await Execute(eval, "SELECT COUNT(*) FROM #t1 JOIN #t2 ON #t1.ID = #t2.ID;");
             sw.Stop();
             long indexTime = sw.ElapsedMilliseconds;
+            Assert.Equal(10000m, SingleCount(eval));
             Console.WriteLine($"Index Join Time: {indexTime} ms");
 
-            Assert.True(hashTime < nestedTime, "Hash join should be faster than nested loop");
+            Assert.True(hashTime < nestedTime, $"Hash join ({hashTime} ms) should be faster than nested loop ({nestedTime} ms)");
+            Assert.True(indexTime < nestedTime, $"Index join ({indexTime} ms) should be faster than nested loop ({nestedTime} ms)");
         }
 
         [Fact]
