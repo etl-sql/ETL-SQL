@@ -2137,6 +2137,10 @@ Recorded for verification only (no source fixes applied during the audit).
 - [x] **[P2 Bug] `CREATE TOOL` parses but has no statement handler** (`src/ETL-SQL.Core/Parser/Components/PortalParser.cs:400`, `docs/reference/statements/ddl/create-tool.md`).
   `CreatePortalToolStatement` and `DropPortalToolStatement` have no handler, so the statement the reference page documents does nothing. Tools are registered only through `etl-sql admin machine tool set`. Either add a handler that writes the catalog (with an admin check) or remove the statement and point the doc at the CLI.
   **Outcome (2026-11-03):** `CREATE TOOL` and `DROP TOOL` now fail with an error naming `etl-sql admin machine tool set`/`delete`; `create-tool.md` documents the CLI. A script-side catalog writer would make mounts script-controlled, which contradicts the trusted-admin-config decision above.
+- [ ] **[P2 Bug] JSON `COMPRESS=ON` writes a ZIP named `<path>.zip`, not the gzip file the path names** (`src/ETL-SQL.Connectors.Files/Json/JsonDataSource.cs:187-198`).
+  `AS JSON('samples/output/data.json.gz', COMPRESS=ON)` produces `data.json.gz.zip`, a ZIP archive. `DELETE FILE` on the named path misses it, and later INSERTs append to the leftover archive. Found by `samples/10_Kitchen_Sinks/json_sink.etlsql` (2026-11-03), which now deletes both names.
+- [ ] **[P2 Bug] A JSON write through `ROOT_PATH` writes a top-level array, so it cannot be read back** (`src/ETL-SQL.Connectors.Files/Json/JsonDataSource.cs`, `WriteBatches`).
+  `AS JSON('root.json', ROOT_PATH='$.data.orders')` writes `[ {...}, ... ]` instead of nesting the rows at `data.orders`, and `SELECT` through the same connection returns no rows. Either write the rows at the root path or refuse `ROOT_PATH` on write. Found by the same sample.
 
 ---
 
