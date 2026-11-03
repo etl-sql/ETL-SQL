@@ -5,10 +5,9 @@
 </p>
 
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/"><img src="https://img.shields.io/badge/VS%20Code-Marketplace-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="VS Code Marketplace" /></a>
-  <img src="https://img.shields.io/badge/ETL--SQL-v0.22.0-5C6BC0?style=for-the-badge&logo=dotnet&logoColor=white" alt="ETL-SQL Version" />
+  <a href="https://marketplace.visualstudio.com/items?itemName=Octocolee.etl-sql-vscode"><img src="https://img.shields.io/badge/VS%20Code-Marketplace-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="VS Code Marketplace" /></a>
   <img src="https://img.shields.io/badge/Tests-10%2C000%2B%20Passing-brightgreen?style=for-the-badge&logo=checkmarx&logoColor=white" alt="10,000+ Tests Passing" />
-  <img src="https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20macOS-4CAF50?style=for-the-badge" alt="Platform" />
+  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-4CAF50?style=for-the-badge" alt="Platform" />
 </p>
 
 ---
@@ -21,32 +20,30 @@
 
 ## The Problem It Solves
 
-You have data in SQL Server. More data in a Postgres instance. A vendor drops CSVs on an SFTP server every morning. Your analyst wants a dashboard. Your manager wants it automated.
+You have data in SQL Server. More data in a Postgres instance. Your analyst wants a dashboard. Your manager wants it automated.
 
 The typical answer: stitch together Python, a scheduler, a BI tool, and hope nothing breaks overnight.
 
-**The ETL-SQL answer:**
+**The ETL-SQL answer** (a production-shaped script, swap in your own servers):
 
 ```sql
 -- @author: data_team;
 -- @domain: Revenue;
--- @description: Daily adjusted revenue — CRM + warehouse + vendor drop;
+-- @description: Daily revenue by region, CRM + warehouse;
 -- @schedule: daily;
 
 CREATE CONNECTION crm       AS MSSQL(SERVER='crm-prod', DATABASE='CRM', TRUSTED_CONNECTION=TRUE);
 CREATE CONNECTION warehouse AS POSTGRES(HOST='dw-host', DATABASE='analytics', USER='etl', PASSWORD='ENC:...');
-CREATE CONNECTION drops     AS SFTP(HOST='vendor.com', USER='feeds', KEYFILE='C:\keys\vendor.pem');
 
 -- 1. Pull active customers from CRM with governance metadata
 SELECT
     c.CustomerId  /* @d: Internal customer key; @nullable: false */,
-    c.Region      /* @d: Sales region; @owner: sales_ops */,
-    c.Tier        /* @d: Customer tier (Gold/Silver/Bronze); @example: Gold */
+    c.Region      /* @d: Sales region; @owner: sales_ops */
 INTO #customers
 FROM crm.dbo.Customers c
 WHERE c.Active = 1;
 
--- 2. Aggregate orders from warehouse with in-stream data quality gates
+-- 2. Aggregate orders from the warehouse with in-stream data quality gates
 SELECT
     o.CustomerId  /* @d: Internal customer key */
         EXPECT NOT NULL ON FAILURE THROW,
@@ -57,49 +54,28 @@ INTO #orders
 FROM warehouse.public.orders o
 GROUP BY o.CustomerId;
 
--- 3. Download vendor adjustment file and load it
-RECEIVE FILE FROM '/drops/daily_adjustments.csv'
-    TO 'C:\stage\daily_adjustments.csv'
-    AT drops WITH(OVERWRITE=ON);
-
-CREATE CONNECTION adj_file AS FLATFILE(
-    PATH      = 'C:\stage\daily_adjustments.csv',
-    FORMAT    = 'DELIMITED',
-    DELIMITER = ',',
-    HEADER    = ON
-);
-
-SELECT
-    CustomerId    /* @d: Customer key for adjustment */,
-    Adjustment    /* @d: Revenue adjustment amount; @unit: USD */
-INTO #adjustments
-FROM adj_file;
-
--- 4. Join all three sources in engine memory
-SELECT
-    c.Region,
-    c.Tier,
-    SUM(o.Revenue + COALESCE(a.Adjustment, 0)) /* @d: Revenue after vendor adjustments; @unit: USD */
-        AS AdjustedRevenue
+-- 3. Join both sources in engine memory
+SELECT c.Region, SUM(o.Revenue) AS Revenue
 INTO #final
 FROM #customers c
-JOIN #orders o           ON c.CustomerId = o.CustomerId
-LEFT JOIN #adjustments a ON c.CustomerId = a.CustomerId
-GROUP BY c.Region, c.Tier;
+JOIN #orders o ON c.CustomerId = o.CustomerId
+GROUP BY c.Region;
 
--- 5. Deliver a live dashboard in the same file
+-- 4. Deliver a live dashboard from the same file
 CREATE VISUAL RevenueChart AS BAR (
     SOURCE   = #final,
-    MAPPINGS (X = Region, Y = AdjustedRevenue, SERIES = Tier),
+    MAPPINGS (X = Region, Y = Revenue),
     STYLE    (HEIGHT = '400px', THEME = dark)
 );
 
 CREATE PAGE Overview AS DASHBOARD (
-    TITLE     = 'Adjusted Revenue by Region',
-    STRUCTURE = 'A A',
+    TITLE     = 'Revenue by Region',
+    STRUCTURE = 'A',
     MAP ('A' = RevenueChart)
 );
 ```
+
+Files, SFTP, REST, and the rest of the [connectors](#connectors--everything-you-already-have) mix into the same script.
 
 ---
 
@@ -116,9 +92,9 @@ CREATE PAGE Overview AS DASHBOARD (
 | If you're using… | The ETL-SQL advantage |
 | :--- | :--- |
 | **Python + pandas** | No environment setup, no dependency drift. SQL is the orchestration language — readable and maintainable across your entire team. |
-| **SSIS / Azure Data Factory** | Plain-text scripts in Git. No proprietary XML or UI-locked designer formats. Run anywhere: CLI, VS Code, cron, or CI/CD. |
-| **dbt** | ETL-SQL moves data across heterogeneous systems, enforces in-stream quality gates, *and* renders vector dashboards without third-party BI dependencies. |
-| **AI Agents & Copilots** | Spec-driven and LLM-friendly. Clean, deterministic plain-text SQL enables reliable AI pair programming and automated script generation. |
+| **SSIS / Azure Data Factory** | Plain-text scripts in Git. No proprietary XML or UI-locked designer formats. Run from the CLI, VS Code, the Orchestrator, or CI/CD. |
+| **dbt** | ETL-SQL moves data across heterogeneous systems, enforces in-stream quality gates, *and* renders dashboards from the same script. |
+| **AI Agents & Copilots** | Plain-text, deterministic SQL that agents can read, write, and review. |
 | **Raw SQL scripts** | Cross-source joins, procedural control flow, SFTP, emails, file ops, scheduling, lineage, and reporting — all in one unified dialect. |
 
 ---
@@ -218,18 +194,19 @@ CREATE PAGE SalesDashboard AS DASHBOARD (
 - **Automated Quarantine Remediation** — inspect metadata-enriched quarantine tables and reprocess corrected records with `REPLAY QUARANTINE`.
 
 ### 🏷️ First-Class Metadata & Automated Lineage
-- **Contextual Governance Tags** — declare metadata in SQL comments (`/* @d: Description; @owner: team; @pii: false */`). Tags stick to columns across joins, unions, and aggregations.
+- **Contextual Governance Tags** — declare metadata in SQL comments (`/* @d: Description; @owner: team; @pii: false */`).
 - **Queryable Metadata Catalogs** — query active tags and dependencies via `eng.tags` and `eng.lineage` within any script session.
-- **OpenLineage Standard** — export execution provenance directly to OpenLineage-compatible platforms (DataHub, Collibra, Marquez).
+- **Tags Travel With Columns** — tags such as `@pii`, `@classification`, and `@owner` follow columns through joins, aggregations, and derived expressions, so lineage stays tied to the transformations that created the data.
+- **OpenLineage Export** — send execution provenance to DataHub, Marquez, Airflow, Collibra, and Alation, or export lineage as Markdown. See the [Lineage Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/session-control/lineage.md) for the full tag catalog.
 
 ### 🤖 Agent-First & Spec-Driven Development
 - **LLM & Agent-Friendly Syntax** — clean, deterministic plain-text SQL eliminates opaque configuration files, making AI pair programming and code reviews transparent.
-- **Spec-to-Script Generation** — right-click any PDF, Excel, Word, CSV, or JSON specification and select **ETL-SQL: Generate Script from Spec** to generate a complete pipeline scaffold with data types, validation gates, and governance tags.
-- **Headless Automation** — run the exact same `gen-script` workflow in CI/CD pipelines and command-line runners.
+- **Spec-to-Script Generation** — configure `etlsql.ai.*`, then right-click a PDF, Excel, Word, CSV, JSON, or TXT spec and run **ETL-SQL: Generate Script from Spec**. You get a pipeline scaffold with schemas, validation gates, quarantine, and governance tags.
+- **Headless Automation** — the same `gen-script` workflow runs in CI/CD. See [Spec-Driven Development](https://github.com/etl-sql/ETL-SQL/blob/main/docs/spec-import/spec-driven-development.md).
 
 ### 📊 See Your Dashboard Before You Ship It
 - **Live `.rptsql` Preview** — open a report file and watch the interactive dashboard render side-by-side with your code. Every save refreshes the preview.
-- **Native Grammar of Graphics Engine** — 100% managed rendering pipeline (`PlotPlan`) generating native SVG vector graphics with layered marks (`RECT`, `LINE`, `POINT`, `AREA`, `BAR`, `RULE`, `TEXT`), named scales, coordinates, and facets.
+- **Native Grammar of Graphics Engine** — a managed rendering pipeline (`PlotPlan`) that generates SVG vector graphics with layered marks (`RECT`, `LINE`, `POINT`, `AREA`, `BAR`, `RULE`, `TEXT`), named scales, coordinates, and facets.
 - **Interactive Preview** — slicers, cascading filters, date pickers, sliders, search boxes, drill-downs, parameter overrides, and cross-highlighting work directly in the preview pane.
 - **One-Click Export** — export your rendered report to native SVG, PDF, or Markdown directly from the preview panel.
 
@@ -260,22 +237,6 @@ Browse all active connections, catalog schemas, declared `@variables`, and live 
 
 ---
 
-## 🏷️ Data Governance & Lineage
-
-ETL-SQL keeps governance metadata in the script instead of a separate after-the-fact catalog. Inline tags such as `/* @pii; @classification: confidential; @owner: finance_ops */` travel with columns through joins, aggregations, and derived expressions, so lineage stays connected to the transformations that created the data.
-
-After a script runs, lineage is queryable with `eng.lineage` and tag metadata is queryable through `eng.tags`, exportable as Markdown, and exportable as OpenLineage events for tools such as DataHub, Marquez, Airflow, Collibra, and Alation. See the [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/session-control/lineage.md) for the full tag catalog and examples.
-
----
-
-## 🤖 AI-Assisted Script Generation
-
-Vendor file specs usually arrive as PDFs, spreadsheets, Word docs, or sample files. The extension can turn those specs into an ETL-SQL starter pipeline with schema definitions, validation gates, quarantine scaffolding, and governance tags.
-
-Configure `etlsql.ai.*`, then right-click a PDF, Excel, CSV, Word, JSON, or TXT spec and run **ETL-SQL: Generate Script from Spec**. The same workflow is available headlessly through the `gen-script` CLI flow. See [Spec-Driven Development](https://github.com/etl-sql/ETL-SQL/blob/main/docs/spec-import/spec-driven-development.md) for provider setup, supported file types, and the JSON contract format.
-
----
-
 ## Connectors — Everything You Already Have
 
 Mix and match any of these freely within a single script.
@@ -301,10 +262,10 @@ Mix and match any of these freely within a single script.
 
 **1. Install This Extension**
 
-Install **ETL-SQL Tools** from the VS Code Marketplace. The VSIX bundles everything you need to start immediately — the engine (`ETL-SQL.exe`), language server (`ETL-SQL-LSP.exe`), and report CLI (`ETL-SQL-Report.exe`) are included. No separate SDK download required.
+Install **ETL-SQL Tools** from the VS Code Marketplace. The VSIX bundles everything you need to start immediately — the engine, language server, and report CLI are included for your platform (Windows, Linux, or macOS). No separate SDK download required.
 
 **Want the full platform?** Download the optional extras from [github.com/etl-sql/ETL-SQL](https://github.com/etl-sql/ETL-SQL):
-- **Terminal IDE** (`ETL-SQL-TUI.exe`) — full-featured TUI editor with autocomplete and results grid for headless environments
+- **Terminal IDE** (`ETL-SQL-TUI`) — full-featured TUI editor with autocomplete and results grid for headless environments
 - **Orchestrator** — always-on job runner with scheduling, history, and dependency management
 - **Portal** — multi-report hosting, permissions, subscriptions, alerts, and usage metrics
 
@@ -331,6 +292,8 @@ Press **F5** to execute and open the **ETL-SQL Results** console.
 
 ## Extension Settings
 
+Formatting options (`etlsql.format.*`: keyword casing, indent size, comma placement, JOIN and CASE layout) are in the VS Code Settings UI.
+
 | Setting | Default | Description |
 | :--- | :--- | :--- |
 | `etlsql.executable.path` | `""` | Override path to `ETL-SQL.exe`. Leave blank to auto-detect. |
@@ -338,13 +301,6 @@ Press **F5** to execute and open the **ETL-SQL Results** console.
 | `etlsql.report.executable.path` | `""` | Override path to `ETL-SQL-Report.exe`. Leave blank to auto-detect. |
 | `etlsql.report.autoOpenPreview` | `false` | Auto-open the Report Preview pane when opening a `.rptsql` file. |
 | `etlsql.portal.url` | `""` | Base URL of your hosted ETL-SQL Portal (for publishing). |
-| `etlsql.format.keywordCasing` | `"upper"` | SQL keyword casing: `"upper"`, `"lower"`, `"pascal"`, `"preserve"`. |
-| `etlsql.format.indentSize` | `4` | Spaces per indentation level. |
-| `etlsql.format.commaPlacement` | `"leading"` | Comma placement: `"leading"` or `"trailing"`. |
-| `etlsql.format.indentJoins` | `true` | Indent JOIN clauses relative to FROM. |
-| `etlsql.format.onClauseOnNewLine` | `false` | Place the ON clause of a JOIN on a new line. |
-| `etlsql.format.caseWhenThenNewLine` | `true` | Place THEN on a new line in CASE WHEN expressions. |
-| `etlsql.format.breakoutWindowFunctions` | `true` | Break PARTITION BY / ORDER BY onto separate lines in window functions. |
 | `etlsql.ai.provider` | `"Gemini"` | AI provider for spec-driven script generation. |
 | `etlsql.ai.apiKey` | `""` | API key for the selected AI provider. Not required for VS Code Chat Extensions. |
 | `etlsql.ai.model` | `""` | Optional model override for spec-driven script generation. |
@@ -371,7 +327,7 @@ Press **F5** to execute and open the **ETL-SQL Results** console.
 | [Report-SQL & Dashboards](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/reporting/README.md) | Dashboards, cascading slicers, parameters, RLS, and custom theming |
 | [Data Quality & Governance](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/data-quality/README.md) | Value rules (`EXPECT`), quarantine remediation, cross-table checks, and impact analysis |
 | [ETL Pipelines & Orchestration](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/pipelines/README.md) | Staged vs. streaming ingestion, modular scripts, parallel runs, and unit testing |
-| [Pattern Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/etl/README.md) | 29 production-grade, copy-pasteable ETL recipes |
+| [Pattern Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/etl/README.md) | Production-grade, copy-pasteable ETL recipes |
 | [Task Index](https://github.com/etl-sql/ETL-SQL/blob/main/docs/task-index.md) | Goal-oriented "How do I..." locator for common tasks |
 | [Syntax Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/syntax-index.md) | Complete language syntax reference and function signatures |
 | [Data Connectors](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/connectors/README.md) | Every connector, its options, and authentication patterns |
