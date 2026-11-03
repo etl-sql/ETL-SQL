@@ -6,25 +6,55 @@ namespace ETL_SQL.Portal.Services;
 /// <summary>Server-derived partition boundary for the shared dataset catalog and its key namespace.</summary>
 public sealed class DatasetTenantScope
 {
+    private const string UnverifiedMessage = "Shared dataset access requires a verified tenant context.";
+    private readonly RequestTenantContextAccessor? _deferredAccessor;
+    private TenantContext? _context;
+
     public DatasetTenantScope(PortalConfig config, TenantContext? context = null)
     {
         if (config.SharedTenancy.Enabled)
         {
             if (context is null || context.Origin != TenantContextOrigin.VerifiedCredential)
-                throw new UnauthorizedAccessException(
-                    "Shared dataset access requires a verified tenant context.");
-            Context = context;
-            TenantId = context.Tenant.Value;
+                throw new UnauthorizedAccessException(UnverifiedMessage);
+            _context = context;
             return;
         }
 
-        Context = TenantContext.FromHostConfiguration(
+        _context = TenantContext.FromHostConfiguration(
             string.IsNullOrWhiteSpace(config.TenantId) ? "portal-host" : config.TenantId);
-        TenantId = Context.Tenant.Value;
     }
 
-    public TenantContext Context { get; }
-    public string TenantId { get; }
+    private DatasetTenantScope(RequestTenantContextAccessor accessor) => _deferredAccessor = accessor;
+
+    /// <summary>
+    /// A Shared-mode scope for a request whose tenant is not verified yet: an anonymous endpoint that
+    /// establishes the tenant from its own credential (a refresh secret, an OIDC callback, a share
+    /// link) after the controller and its services were constructed. It binds on first use to the
+    /// request's verified credential, and refuses any use before one exists.
+    /// </summary>
+    public static DatasetTenantScope Deferred(RequestTenantContextAccessor accessor)
+    {
+        ArgumentNullException.ThrowIfNull(accessor);
+        return new DatasetTenantScope(accessor);
+    }
+
+    public TenantContext Context => _context ??= Bind();
+    public string TenantId => Context.Tenant.Value;
+
+    /// <summary>The tenant when one is established, without throwing when it is not.</summary>
+    public bool TryGetTenantId(out string tenantId)
+    {
+        if (_context is null && _deferredAccessor?.Current is
+            { Origin: TenantContextOrigin.VerifiedCredential } verified)
+            _context = verified;
+        tenantId = _context?.Tenant.Value ?? string.Empty;
+        return _context is not null;
+    }
+
+    private TenantContext Bind() =>
+        _deferredAccessor?.Current is { Origin: TenantContextOrigin.VerifiedCredential } verified
+            ? verified
+            : throw new UnauthorizedAccessException(UnverifiedMessage);
 
     public IQueryable<Dataset> Query(PortalDbContext db) =>
         db.Datasets.Where(dataset => dataset.TenantId == TenantId);

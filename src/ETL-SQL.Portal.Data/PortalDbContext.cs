@@ -355,7 +355,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         {
             e.HasOne(x => x.Owner).WithMany(u => u.ReportAlerts).HasForeignKey(x => x.OwnerId);
             e.HasOne(x => x.Report).WithMany(r => r.Alerts).HasForeignKey(x => x.ReportId);
-            e.HasIndex(x => x.Name).IsUnique();
+            e.Property(x => x.TenantId).HasMaxLength(128);
+            e.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
             e.Property(x => x.DisplayName).HasMaxLength(300);
             e.Property(x => x.Description).HasMaxLength(2000);
             e.HasMany(x => x.Notifications).WithOne(n => n.Alert).HasForeignKey(n => n.AlertId)

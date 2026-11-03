@@ -581,7 +581,7 @@ builder.Services.AddScoped<ETL_SQL.Core.Governance.PolicyAuthorityService>(sp =>
         sp.GetRequiredService<ETL_SQL.Core.Governance.IPolicyEnvelopeSigner>(),
         authorityTenant: tenant);
 });
-builder.Services.AddSingleton<ETL_SQL.Portal.Services.DedicatedPolicyAuthorityGuard>();
+builder.Services.AddScoped<ETL_SQL.Portal.Services.DedicatedPolicyAuthorityGuard>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.ReportPublishingPolicyService>();
 builder.Services.AddScoped<ETL_SQL.Portal.Services.SubscriptionDeliveryStatusService>();
 // Scoped: it reads the current principal's live group membership, so it must not outlive a request.
@@ -600,8 +600,11 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.DatasetTenantScope>(sp =>
     var config = sp.GetRequiredService<PortalConfig>();
     var accessor = sp.GetRequiredService<ETL_SQL.Portal.Services.RequestTenantContextAccessor>();
     var context = accessor.Current;
+    // An anonymous Shared request has no tenant when its controller is built; it may establish one
+    // from its own credential later in the action. Defer the binding rather than handing out null,
+    // which made every consumer either fall back to an unscoped query or throw at construction.
     return (config.SharedTenancy.Enabled && (context is null || context.Origin != ETL_SQL.Core.Multitenancy.TenantContextOrigin.VerifiedCredential))
-        ? null!
+        ? ETL_SQL.Portal.Services.DatasetTenantScope.Deferred(accessor)
         : new ETL_SQL.Portal.Services.DatasetTenantScope(config, context);
 });
 builder.Services.AddScoped<ETL_SQL.Portal.Services.PortalTenantCatalogScope>();

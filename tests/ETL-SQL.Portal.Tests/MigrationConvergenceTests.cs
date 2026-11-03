@@ -171,6 +171,40 @@ public sealed class MigrationConvergenceTests : IDisposable
         Assert.NotEmpty(migrations.Migrations);
     }
 
+    /// <summary>
+    /// A migration class without its designer half has no [Migration] attribute, and EF skips it
+    /// silently. The one shipped orphan (PostgreSQL AddRefreshTokenHashIndex) is compensated by
+    /// StandardizeSnakeCaseNaming, which creates ix_refresh_tokens_token where it is missing; any
+    /// other orphan would be a schema change that never runs.
+    /// </summary>
+    [Fact]
+    public void EveryShippedMigrationClass_IsDiscoverableByEf()
+    {
+        static IReadOnlyList<string> Orphans(DbContextOptions<PortalDbContext> options)
+        {
+            using var db = new PortalDbContext(options);
+            var discovered = db.GetInfrastructure().GetRequiredService<IMigrationsAssembly>()
+                .Migrations.Values.Select(type => type.AsType()).ToHashSet();
+            var assembly = discovered.First().Assembly;
+            return [.. assembly.GetTypes()
+                .Where(type => !type.IsAbstract && typeof(Migration).IsAssignableFrom(type))
+                .Where(type => !discovered.Contains(type))
+                .Select(type => type.FullName!)];
+        }
+
+        var sqlite = Orphans(Options("discovery.db"));
+        var postgres = Orphans(new DbContextOptionsBuilder<PortalDbContext>()
+            .UseNpgsql(
+                "Host=localhost;Database=portal_migration_discovery;Username=postgres;Password=unused",
+                npg => npg.MigrationsAssembly(PortalDatabase.PostgresMigrationsAssembly))
+            .Options);
+
+        Assert.Empty(sqlite);
+        Assert.Equal(
+            ["ETLSQL.Portal.Migrations.Postgres.Migrations.AddRefreshTokenHashIndex"],
+            postgres);
+    }
+
     [Fact]
     public void PostgresMigrations_ContainEveryEditLeaseColumnUsedByThePortalModel()
     {

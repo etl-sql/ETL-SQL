@@ -35,6 +35,23 @@ public sealed class DedicatedPolicyAuthorityGuardTests
     }
 
     [Fact]
+    public void SharedHostBindsTheVerifiedRequestTenantAndRefusesWithoutOne()
+    {
+        var config = new PortalConfig { SharedTenancy = new SharedTenancyConfig { Enabled = true } };
+        var accessor = new RequestTenantContextAccessor(config);
+        var guard = new DedicatedPolicyAuthorityGuard(config, accessor);
+
+        Assert.True(guard.IsTenantBound);
+        Assert.Throws<UnauthorizedAccessException>(() => guard.AuthorizeRead("tenant-beta"));
+        Assert.Throws<UnauthorizedAccessException>(() => guard.AuthorizeRead(null));
+
+        accessor.SetVerifiedCredential(ETL_SQL.Core.Multitenancy.TenantContext.FromVerifiedCredential("tenant-alpha"));
+        Assert.Equal("tenant-alpha", guard.AuthorizeRead(null));
+        Assert.Equal("tenant-alpha", guard.AuthorizeRead("tenant-alpha"));
+        Assert.Throws<UnauthorizedAccessException>(() => guard.AuthorizeRead("tenant-beta"));
+    }
+
+    [Fact]
     public async Task ExecutionArtifactCarriesNeitherProviderBindingNorResolvedMaterial()
     {
         var secret = Convert.ToBase64String(Enumerable.Repeat((byte)29, 32).ToArray());

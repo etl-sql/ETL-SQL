@@ -797,7 +797,10 @@ public class DesignerController : ControllerBase
         if (_db is null)
             return Ok(new PreviewAsVocabularyResponse(false, [], [], "This host defines no groups or roles."));
 
+        // Groups are tenant-owned; roles are the host's fixed vocabulary and carry no tenant.
+        var tenantId = HttpContext.RequestServices.GetRequiredService<PortalTenantCatalogScope>().TenantId;
         var groups = await _db.Groups.AsNoTracking()
+            .Where(group => group.TenantId == tenantId)
             .Select(group => group.Name)
             .Where(name => name != null)
             .OrderBy(name => name)

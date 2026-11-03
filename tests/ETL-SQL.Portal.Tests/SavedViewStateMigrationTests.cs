@@ -43,9 +43,10 @@ internal static class SavedViewStateMigrationContract
     {
         await using var db = new PortalDbContext(options);
         var migrations = db.Database.GetMigrations().ToArray();
-        Assert.EndsWith("_ConsolidateSavedViewState", migrations[^1], StringComparison.Ordinal);
+        var viewMigrationIndex = Array.FindIndex(migrations, value => value.EndsWith("_ConsolidateSavedViewState", StringComparison.Ordinal));
+        Assert.True(viewMigrationIndex > 0);
         var migrator = db.GetService<IMigrator>();
-        await migrator.MigrateAsync(migrations[^2], CancellationToken.None);
+        await migrator.MigrateAsync(migrations[viewMigrationIndex - 1], CancellationToken.None);
         var user = new PortalUser { UserName = "view-owner", IsActive = true };
         db.Users.Add(user);
         await db.SaveChangesAsync(CancellationToken.None);

@@ -63,23 +63,15 @@ internal static class AlertInlineDeliveryMigrationContract
         var report = new Report { FolderId = folder.Id, Name = "Revenue", ScriptPath = "revenue.rptsql", CreatedBy = owner.Id };
         db.Reports.Add(report);
         await db.SaveChangesAsync(CancellationToken.None);
-        var alert = new ReportAlert
-        {
-            ReportId = report.Id,
-            OwnerId = owner.Id,
-            Name = "RevenueFloor",
-            VisualName = "Revenue",
-            Operator = "<",
-            Threshold = 100m,
-            Description = "Existing alert",
-            Notifications = [new AlertNotification { OrchestratorAlias = "operations", NotificationName = "FinanceOps" }]
-        };
-        db.ReportAlerts.Add(alert);
-        await db.SaveChangesAsync(CancellationToken.None);
-        var alertId = alert.Id;
+        // The current model has columns later migrations add (tenant_id), so the pre-migration row is
+        // written with SQL against the schema as it stood, not through the entity.
+        var now = DateTime.UtcNow;
         await db.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE report_alerts SET recipient = {"retired@example.invalid"}, smtp_alias = {"retired-smtp"} WHERE id = {alertId}",
+            $"INSERT INTO report_alerts (report_id, owner_id, name, visual_name, operator, threshold, description, is_active, created_at, updated_at, recipient, smtp_alias) VALUES ({report.Id}, {owner.Id}, {"RevenueFloor"}, {"Revenue"}, {"<"}, {100m}, {"Existing alert"}, {true}, {now}, {now}, {"retired@example.invalid"}, {"retired-smtp"})",
             CancellationToken.None);
+        var alertId = await db.ReportAlerts.Select(value => value.Id).SingleAsync(CancellationToken.None);
+        db.Set<AlertNotification>().Add(new AlertNotification { AlertId = alertId, OrchestratorAlias = "operations", NotificationName = "FinanceOps" });
+        await db.SaveChangesAsync(CancellationToken.None);
 
         await migrator.MigrateAsync(cancellationToken: CancellationToken.None);
         await migrator.MigrateAsync(cancellationToken: CancellationToken.None);

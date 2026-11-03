@@ -44,6 +44,13 @@ public class AuthController(
     [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginRequest req)
     {
+        // A Shared host has no tenant for a password: usernames repeat across tenants and LDAP
+        // groups are tenant-owned, so a lookup here could only be global. Shared sign-in starts at
+        // the routed host's identity authority (OIDC) and refresh preserves its partition. Refuse
+        // before any lookup or LDAP provisioning rather than minting nothing after writing rows.
+        if (config.SharedTenancy.Enabled)
+            return Unauthorized(new { error = "Use single sign-on for this host" });
+
         bool isDomainQualified = req.Username.Contains("@") || req.Username.Contains("\\");
         // COMPAT_BREAK: 0.22.0 — a name qualified with a domain other than Identity:Ldap:Domain is
         // refused. It used to be stripped to the bare name and sign in as this domain's account.
