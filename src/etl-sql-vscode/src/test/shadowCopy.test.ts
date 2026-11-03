@@ -30,7 +30,7 @@ describe('shadowCopyExecutable', () => {
         const copy = shadowCopyExecutable(source, storage, '1.2.3');
         // A planted or stale binary of exactly the same length used to be trusted on size alone.
         fs.writeFileSync(copy, 'evil-binary');
-        expect(fs.statSync(copy).size).toBe(fs.statSync(source).size);
+        expect(fs.readFileSync(copy).length).toBe(fs.readFileSync(source).length);
         const past = new Date(Date.now() - 60_000);
         fs.utimesSync(copy, past, past);
 

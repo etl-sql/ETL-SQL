@@ -1,6 +1,6 @@
 // Portable local phase evidence. Hosted/operator/package certification remains separate.
 import { createHash } from 'node:crypto';
-import { lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { candidateFindings } from './check-release-evidence.mjs';
@@ -34,8 +34,20 @@ export function createBundle(stateFile, sha, directory, { now = Date.now() } = {
   mkdirSync(directory);
   const files = [];
   function retain(source, name) {
-    if (!lstatSync(source).isFile() || lstatSync(source).isSymbolicLink()) throw new Error('Evidence input must be a regular file.');
-    const bytes = readFileSync(source);
+    // Validate and read through one open descriptor so the checked file is the file that is read.
+    // O_NOFOLLOW refuses a link where the platform supports it; the post-open lstat covers Windows.
+    let descriptor;
+    try {
+      descriptor = openSync(source, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    } catch (error) {
+      if (error?.code === 'ELOOP') throw new Error('Evidence input must be a regular file.');
+      throw error;
+    }
+    let bytes;
+    try {
+      if (!fstatSync(descriptor).isFile() || lstatSync(source).isSymbolicLink()) throw new Error('Evidence input must be a regular file.');
+      bytes = readFileSync(descriptor);
+    } finally { closeSync(descriptor); }
     mkdirSync(path.dirname(path.join(directory, name)), { recursive: true });
     writeFileSync(path.join(directory, name), bytes, { flag: 'wx' });
     files.push({ path: name, sha256: hash(bytes), bytes: bytes.length });

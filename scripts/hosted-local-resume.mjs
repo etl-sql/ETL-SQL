@@ -152,19 +152,32 @@ function previousCheckpoint(ctx, attempt) {
   const prior = Math.max(0, ...started.filter(number => number < attempt));
   if (!prior) throw new Error('Original controlled-host checkpoint is missing; no automatic full rerun.');
   const file = owned(ctx.workspace, path.join(ctx.root, `attempt-${prior}.checkpoint.json`));
-  if (!existsSync(file)) throw new Error('Previous controlled attempt has no closed checkpoint; inspect its retained diagnostics.');
-  return json(file);
+  // Read rather than test for the checkpoint, so nothing can change between the check and the read.
+  try {
+    return json(file);
+  } catch (error) {
+    if (error?.code === 'ENOENT') throw new Error('Previous controlled attempt has no closed checkpoint; inspect its retained diagnostics.');
+    throw error;
+  }
 }
 
 export async function beginHostedLocalAttempt(workspace, identity) {
   const ctx = context(workspace, identity), ownerFile = path.join(ctx.root, 'owner.json');
-  if (!existsSync(ownerFile)) {
+  // Read the owner record rather than testing for it; a missing record is the fresh-run case.
+  let ownerRecord;
+  try {
+    ownerRecord = json(owned(ctx.workspace, ownerFile));
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  if (ownerRecord === undefined) {
     if (identity.attempt !== 1) throw new Error('Original controlled-host workspace is missing; no automatic full rerun.');
     if (existsSync(ctx.stateFile)) throw new Error('A fresh controlled run cannot inherit workstation state.');
     mkdirSync(ctx.root, { recursive: true });
     writeFileSync(ownerFile, JSON.stringify(ctx.owner), { flag: 'wx' });
+    ownerRecord = json(owned(ctx.workspace, ownerFile));
   }
-  if (digest(canonical(json(owned(ctx.workspace, ownerFile)))) !== digest(canonical(ctx.owner))) throw new Error('Candidate, workflow run, runner, workspace or toolchain changed; no resume.');
+  if (digest(canonical(ownerRecord)) !== digest(canonical(ctx.owner))) throw new Error('Candidate, workflow run, runner, workspace or toolchain changed; no resume.');
   if (readdirSync(ctx.root).some(name => Number(name.match(/^attempt-([1-9][0-9]*)\.started\.json$/)?.[1]) >= identity.attempt)) {
     throw new Error('This controlled attempt is already claimed or superseded.');
   }

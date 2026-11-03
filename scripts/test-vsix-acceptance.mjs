@@ -107,8 +107,11 @@ const unpackedExtension = path.join(tempDir, 'extension');
 fs.mkdirSync(unpackedExtension, { recursive: true });
 
 const fixturePath = options.fixture ?? path.join(tempDir, 'asset-proof.rptsql');
-if (!fs.existsSync(fixturePath)) {
-    fs.writeFileSync(fixturePath, 'CREATE DATASET &proof AS (SELECT 21 AS Value);\nCREATE VISUAL AssetProof AS TABLE (SOURCE = &proof);\n');
+// Create exclusively instead of testing first: a supplied or existing fixture is left untouched.
+try {
+    fs.writeFileSync(fixturePath, 'CREATE DATASET &proof AS (SELECT 21 AS Value);\nCREATE VISUAL AssetProof AS TABLE (SOURCE = &proof);\n', { flag: 'wx' });
+} catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
 }
 
 console.log(`Extracting ${path.basename(options.vsix)} to temporary directory...`);

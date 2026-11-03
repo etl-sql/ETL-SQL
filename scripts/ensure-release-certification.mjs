@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,15 +55,18 @@ export async function ensureCertification({ sha, branch, directory }, { execute 
   const key = createHash('sha256').update(JSON.stringify(identity)).digest('hex');
   mkdirSync(directory, { recursive: true });
   const receipt = path.join(directory, `${key}.json`);
-  if (existsSync(receipt)) {
+  // Persist before dispatch: a network timeout may happen after GitHub accepted the request.
+  // A resumed driver waits for that request instead of spending runner time on a duplicate.
+  // Creating exclusively (rather than checking first) leaves no window between check and write.
+  try {
+    writeFileSync(receipt, JSON.stringify({ identity, requestedAt: new Date().toISOString() }, null, 2), { flag: 'wx' });
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
     const saved = JSON.parse(readFileSync(receipt, 'utf8'));
     if (JSON.stringify(saved.identity) !== JSON.stringify(identity)) throw new Error('Certification request identity mismatch.');
     report('A request for this candidate is already recorded. Waiting for registration; not dispatching duplicate work.');
     return { dispatched: false, workflow: 'release-certification.yml', pendingRegistration: true };
   }
-  // Persist before dispatch: a network timeout may happen after GitHub accepted the request.
-  // A resumed driver waits for that request instead of spending runner time on a duplicate.
-  writeFileSync(receipt, JSON.stringify({ identity, requestedAt: new Date().toISOString() }, null, 2), { flag: 'wx' });
   await execute(['workflow', 'run', 'release-certification.yml', '--repo', repository, '--ref', branch, '-f', `candidate_sha=${sha}`]);
   report(`Requested full release certification for ${sha}. Request record: ${receipt}`);
   return { dispatched: true, workflow: 'release-certification.yml' };

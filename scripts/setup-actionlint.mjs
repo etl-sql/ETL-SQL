@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,14 +17,22 @@ export async function setup() {
   const name = `actionlint_${lock.version}_${entry[0]}`;
   const archive = path.join(directory, name);
   const digest = bytes => createHash('sha256').update(bytes).digest('hex');
-  if (!existsSync(archive)) {
+  // Read the cached archive rather than testing for it, so nothing can change between check and use.
+  let cached = null;
+  try {
+    cached = readFileSync(archive);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  if (cached === null) {
     const response = await fetch(`https://github.com/rhysd/actionlint/releases/download/v${lock.version}/${name}`, { signal: AbortSignal.timeout(60000) });
     if (!response.ok) throw new Error(`actionlint download failed: HTTP ${response.status}`);
     const bytes = Buffer.from(await response.arrayBuffer());
     if (digest(bytes) !== entry[1]) throw new Error('actionlint archive checksum mismatch.');
     writeFileSync(archive, bytes);
+    cached = bytes;
   }
-  if (digest(readFileSync(archive)) !== entry[1]) throw new Error(`actionlint archive checksum mismatch: ${archive}`);
+  if (digest(cached) !== entry[1]) throw new Error(`actionlint archive checksum mismatch: ${archive}`);
   const result = process.platform === 'win32'
     ? spawnSync('pwsh', ['-NoProfile', '-Command', 'Expand-Archive -LiteralPath $env:ACTIONLINT_ARCHIVE -DestinationPath $env:ACTIONLINT_DIRECTORY -Force'], {
       env: { ...process.env, ACTIONLINT_ARCHIVE: archive, ACTIONLINT_DIRECTORY: directory }, stdio: 'inherit', windowsHide: true, timeout: 30000 })
