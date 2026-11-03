@@ -131,6 +131,15 @@ public static class ColumnarPredicateCompiler
         try { column = batch.GetColumn(columnName); }
         catch (KeyNotFoundException) { return false; }
 
+        // Row mode evaluates numbers as decimal. An integer kernel would round a fractional
+        // constant or operand (int_col = 5.2 matching 5), truncate division (int_col / 2), and
+        // throw on a zero divisor where row mode decides. Leave those shapes to row mode.
+        if (arithmetic == ColumnArithmetic.Divide && IsZero(operand)) return false;
+        if (IsIntegral(column.ElementType)
+            && (!IsWholeNumber(constant)
+                || (arithmetic != null && (arithmetic == ColumnArithmetic.Divide || !IsWholeNumber(operand)))))
+            return false;
+
         try
         {
             if (column.ElementType == typeof(byte)) selection = Apply(batch, columnName, arithmetic, operand, comparison, Convert.ToByte(constant), input, cancellationToken);
@@ -146,13 +155,36 @@ public static class ColumnarPredicateCompiler
             else return false;
             return true;
         }
-        catch (Exception exception) when (exception is FormatException or InvalidCastException or OverflowException)
+        catch (Exception exception) when (exception is FormatException or InvalidCastException or OverflowException or DivideByZeroException)
         {
             selection?.Dispose();
             selection = null;
             return false;
         }
     }
+
+    private static bool IsIntegral(Type type)
+        => type == typeof(byte) || type == typeof(short) || type == typeof(int) || type == typeof(long);
+
+    private static bool IsWholeNumber(object? value) => value switch
+    {
+        null => false,
+        decimal number => decimal.Truncate(number) == number,
+        double number => double.IsFinite(number) && Math.Truncate(number) == number,
+        float number => float.IsFinite(number) && MathF.Truncate(number) == number,
+        byte or sbyte or short or ushort or int or uint or long or ulong => true,
+        // Other shapes (strings, booleans) keep the existing convert-or-fall-back path.
+        _ => true
+    };
+
+    private static bool IsZero(object? value) => value switch
+    {
+        decimal number => number == 0m,
+        double number => number == 0d,
+        float number => number == 0f,
+        byte or sbyte or short or ushort or int or uint or long or ulong => Convert.ToDecimal(value) == 0m,
+        _ => false
+    };
 
     private static SelectionVector Apply<T>(
         ColumnBatch batch,

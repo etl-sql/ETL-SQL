@@ -706,11 +706,12 @@ public class StatementParser
     {
         int depth = 1;
         string raw = "";
+        var previous = TokenType.BEGIN;
         while (depth > 0 && _parser.Current.Type != TokenType.EOF)
         {
-            if (_parser.Current.Type == TokenType.BEGIN) depth++;
-            if (_parser.Current.Type == TokenType.END) depth--;
+            depth += Parser.RawBlockDepthDelta(previous, _parser.Current.Type);
             if (depth == 0) break;
+            previous = _parser.Current.Type;
 
             var t = _parser.Advance();
             string val = t.Type == TokenType.STRING_LITERAL ? $"'{t.Value.Replace("'", "''")}'" : t.Value;

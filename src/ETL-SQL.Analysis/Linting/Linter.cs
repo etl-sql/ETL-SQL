@@ -35,10 +35,14 @@ public class Linter
         var logger = context.Logger ?? _logger;
 
         // 1. Discovery Pass (populate in-script metadata)
-        var overlay = new ScriptMetadataOverlay(context.Metadata);
+        // A context reused across runs still carries the previous run's overlay: build on what it
+        // wrapped, so one script's tables and connections never leak into the next script's lint.
+        var baseMetadata = context.Metadata is ScriptMetadataOverlay previous ? previous.BaseProvider : context.Metadata;
+        var overlay = new ScriptMetadataOverlay(baseMetadata);
         DiscoverScriptMetadata(script, overlay);
 
-        // 2. Wrap context with overlay
+        // 2. Wrap context with overlay. The overlay stays on the context after the run so callers can
+        // read what the script declared.
         if (context is DefaultLintContext defaultContext)
         {
             defaultContext.Metadata = overlay;

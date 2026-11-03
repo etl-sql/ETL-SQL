@@ -520,7 +520,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                 {
                     int declaredDigits = constraint.Value.Digits;
                     string signChar = constraint.Value.Sign;
-                    if (decimal.TryParse(val.ToString(), out var numVal))
+                    if (decimal.TryParse(Convert.ToString(val, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var numVal))
                     {
                         if (signChar == "+" && numVal < 0)
                         {

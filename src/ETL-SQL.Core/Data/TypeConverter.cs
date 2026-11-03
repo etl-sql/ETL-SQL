@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Globalization;
 using ETL_SQL.Common;
 
 namespace ETL_SQL.Core.Data;
@@ -11,20 +12,20 @@ public static class TypeConverter
 {
     private static readonly Dictionary<string, Func<object, object?>> _converters = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["INT"] = v => Math.Truncate(Convert.ToDecimal(v)),
-        ["INTEGER"] = v => Math.Truncate(Convert.ToDecimal(v)),
-        ["DECIMAL"] = v => { var d = Convert.ToDecimal(v); return ((decimal.GetBits(d)[3] >> 16) & 0x7F) == 0 ? d * 1.0m : d; },
-        ["MONEY"] = v => Convert.ToDecimal(v),
-        ["NUMERIC"] = v => { var d = Convert.ToDecimal(v); return ((decimal.GetBits(d)[3] >> 16) & 0x7F) == 0 ? d * 1.0m : d; },
-        ["FLOAT"] = v => Convert.ToDouble(v),
-        ["DOUBLE"] = v => Convert.ToDouble(v),
+        ["INT"] = v => Math.Truncate(Convert.ToDecimal(v, CultureInfo.InvariantCulture)),
+        ["INTEGER"] = v => Math.Truncate(Convert.ToDecimal(v, CultureInfo.InvariantCulture)),
+        ["DECIMAL"] = v => { var d = Convert.ToDecimal(v, CultureInfo.InvariantCulture); return ((decimal.GetBits(d)[3] >> 16) & 0x7F) == 0 ? d * 1.0m : d; },
+        ["MONEY"] = v => Convert.ToDecimal(v, CultureInfo.InvariantCulture),
+        ["NUMERIC"] = v => { var d = Convert.ToDecimal(v, CultureInfo.InvariantCulture); return ((decimal.GetBits(d)[3] >> 16) & 0x7F) == 0 ? d * 1.0m : d; },
+        ["FLOAT"] = v => Convert.ToDouble(v, CultureInfo.InvariantCulture),
+        ["DOUBLE"] = v => Convert.ToDouble(v, CultureInfo.InvariantCulture),
         ["BIT"] = v => Convert.ToBoolean(v),
         ["BOOLEAN"] = v => Convert.ToBoolean(v),
         ["BOOL"] = v => Convert.ToBoolean(v),
-        ["TINYINT"] = v => Math.Truncate(Convert.ToDecimal(v)),
-        ["SMALLINT"] = v => Math.Truncate(Convert.ToDecimal(v)),
-        ["BIGINT"] = v => Math.Truncate(Convert.ToDecimal(v)),
-        ["REAL"] = v => Convert.ToSingle(v),
+        ["TINYINT"] = v => Math.Truncate(Convert.ToDecimal(v, CultureInfo.InvariantCulture)),
+        ["SMALLINT"] = v => Math.Truncate(Convert.ToDecimal(v, CultureInfo.InvariantCulture)),
+        ["BIGINT"] = v => Math.Truncate(Convert.ToDecimal(v, CultureInfo.InvariantCulture)),
+        ["REAL"] = v => Convert.ToSingle(v, CultureInfo.InvariantCulture),
         ["DATETIME"] = v => v is DateTime dt ? dt : (v is DateTimeOffset dto ? dto.DateTime : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2 : DateTime.Parse(v.ToString() ?? ""))),
         ["DATE"] = v => v is DateTime dt ? dt.Date : (v is DateTimeOffset dto ? dto.DateTime.Date : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2.Date : DateTime.Parse(v.ToString() ?? "").Date)),
         ["TIMESTAMP"] = v => v is DateTime dt ? dt : (v is DateTimeOffset dto ? dto.DateTime : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2 : DateTime.Parse(v.ToString() ?? ""))),

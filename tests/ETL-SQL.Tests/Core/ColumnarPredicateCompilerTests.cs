@@ -50,6 +50,40 @@ public sealed class ColumnarPredicateCompilerTests
         using (selected) Assert.Equal(new[] { 2 }, selected!.Indices.ToArray());
     }
 
+    [Theory]
+    [InlineData(TokenType.EQUALS, 1.2)]
+    [InlineData(TokenType.GREATER_THAN, 0.6)]
+    public void FractionalConstantOnIntegerColumnFallsBackInsteadOfRounding(TokenType op, double constant)
+    {
+        using var batch = CreateBatch();
+        var predicate = new BinaryExpression(
+            new IdentifierExpression("Id"),
+            op,
+            new LiteralExpression((decimal)constant, TokenType.NUMBER));
+
+        Assert.False(ColumnarPredicateCompiler.TrySelect(batch, predicate, out var selected));
+        Assert.Null(selected);
+    }
+
+    [Theory]
+    [InlineData(TokenType.SLASH, 2)]   // integer division would make 3 / 2 = 1
+    [InlineData(TokenType.SLASH, 0)]   // a zero divisor threw DivideByZeroException
+    [InlineData(TokenType.PLUS, 0.5)]  // a fractional operand was rounded
+    public void IntegerColumnArithmeticThatRowModeEvaluatesDifferentlyFallsBack(TokenType op, double operand)
+    {
+        using var batch = CreateBatch();
+        var predicate = new BinaryExpression(
+            new BinaryExpression(
+                new IdentifierExpression("Id"),
+                op,
+                new LiteralExpression((decimal)operand, TokenType.NUMBER)),
+            TokenType.EQUALS,
+            new LiteralExpression(1m, TokenType.NUMBER));
+
+        Assert.False(ColumnarPredicateCompiler.TrySelect(batch, predicate, out var selected));
+        Assert.Null(selected);
+    }
+
     [Fact]
     public void UnsupportedExpressionsReturnFallbackWithoutAllocatingAResult()
     {

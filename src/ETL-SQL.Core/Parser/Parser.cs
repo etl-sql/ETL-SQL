@@ -354,13 +354,14 @@ public class Parser : IParser
         var startToken = Consume(TokenType.BEGIN, "Expected BEGIN");
         int depth = 1;
         var tokens = new List<Token>();
+        var previous = startToken.Type;
 
         while (depth > 0 && Current.Type != TokenType.EOF)
         {
-            if (Current.Type == TokenType.BEGIN) depth++;
-            else if (Current.Type == TokenType.END) depth--;
+            depth += RawBlockDepthDelta(previous, Current.Type);
 
             if (depth == 0) break;
+            previous = Current.Type;
             tokens.Add(Advance());
         }
 
@@ -372,6 +373,20 @@ public class Parser : IParser
         // Fallback: reconstruct from tokens if source is missing
         return string.Join(" ", tokens.Select(t => t.Type == TokenType.STRING_LITERAL ? $"'{t.Value.Replace("'", "''")}'" : t.Value));
     }
+
+    /// <summary>
+    /// How a token moves the nesting depth of a raw <c>BEGIN ... END</c> block. <c>CASE</c> opens
+    /// a level that its <c>END</c> closes, so <c>CASE WHEN ... END</c> inside the block does not end
+    /// it early. A <c>CASE</c> straight after <c>END</c> is the procedural <c>END CASE</c> closer,
+    /// whose <c>END</c> already closed the level.
+    /// </summary>
+    internal static int RawBlockDepthDelta(TokenType previous, TokenType current) => current switch
+    {
+        TokenType.BEGIN => 1,
+        TokenType.CASE when previous != TokenType.END => 1,
+        TokenType.END => -1,
+        _ => 0
+    };
 
     private string ReconstructFromSource(Token startToken, Token endToken)
     {
@@ -401,7 +416,7 @@ public class Parser : IParser
             if (Current.Type == TokenType.NUMBER)
             {
                 var t = Advance();
-                topCount = new LiteralExpression(decimal.Parse(t.Value), TokenType.NUMBER) { Line = t.Line, Column = t.Column };
+                topCount = new LiteralExpression(decimal.Parse(t.Value, System.Globalization.CultureInfo.InvariantCulture), TokenType.NUMBER) { Line = t.Line, Column = t.Column };
             }
             else if (Current.Type == TokenType.VARIABLE)
             {
@@ -611,7 +626,7 @@ public class Parser : IParser
             if (Current.Type == TokenType.NUMBER)
             {
                 var t = Advance();
-                limitCount = new LiteralExpression(decimal.Parse(t.Value), TokenType.NUMBER) { Line = t.Line, Column = t.Column };
+                limitCount = new LiteralExpression(decimal.Parse(t.Value, System.Globalization.CultureInfo.InvariantCulture), TokenType.NUMBER) { Line = t.Line, Column = t.Column };
             }
             else if (Current.Type == TokenType.VARIABLE)
             {
@@ -646,7 +661,7 @@ public class Parser : IParser
             Advance(); // USING
             Advance(); // SAMPLE
             var numTok = Consume(TokenType.NUMBER, "Expected a number after SAMPLE");
-            decimal count = decimal.Parse(numTok.Value);
+            decimal count = decimal.Parse(numTok.Value, System.Globalization.CultureInfo.InvariantCulture);
             bool isPercent = true;
             if (Match(TokenType.MODULO)) isPercent = true;            // n%
             else if (Match(TokenType.PERCENT)) isPercent = true;      // n PERCENT
@@ -655,7 +670,7 @@ public class Parser : IParser
             if (Match(TokenType.REPEATABLE))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after REPEATABLE");
-                seed = (int)decimal.Parse(Consume(TokenType.NUMBER, "Expected seed number").Value);
+                seed = (int)decimal.Parse(Consume(TokenType.NUMBER, "Expected seed number").Value, System.Globalization.CultureInfo.InvariantCulture);
                 Consume(TokenType.RPAREN, "Expected ')' after REPEATABLE seed");
             }
             sample = new SampleClause(count, isPercent, seed);

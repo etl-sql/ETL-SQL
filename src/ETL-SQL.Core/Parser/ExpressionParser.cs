@@ -498,7 +498,7 @@ public partial class ExpressionParser
         if (_parser.Match(TokenType.NUMBER))
         {
             var t = _parser.Previous;
-            return new LiteralExpression(decimal.Parse(t.Value), TokenType.NUMBER) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
+            return new LiteralExpression(decimal.Parse(t.Value, System.Globalization.CultureInfo.InvariantCulture), TokenType.NUMBER) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
         }
         if (_parser.Match(TokenType.TRUE))
         {

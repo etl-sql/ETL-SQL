@@ -18,7 +18,8 @@ namespace ETL_SQL.Core.Common;
 public static class MachineBoundCrypto
 {
     private static readonly byte[] MagicV3 = Encoding.ASCII.GetBytes("ETLSQLM3");
-    private static readonly byte[] FileMagicV3 = Encoding.ASCII.GetBytes("ETLSQLMF3");
+    // v4: the AES-CBC key and the HMAC-SHA256 key are derived separately (v3 used one key for both).
+    private static readonly byte[] FileMagicV4 = Encoding.ASCII.GetBytes("ETLSQLMF4");
 
     private static readonly Lazy<byte[]> KeyFileSecret = new(() => ETL_SQL.Common.CryptoUtils.GetMachineKey(null), LazyThreadSafetyMode.ExecutionAndPublication);
     private const int AesIvLength = 16;
@@ -30,7 +31,7 @@ public static class MachineBoundCrypto
 
     public static async Task EncryptFileAsync(string inputPath, string outputPath, CancellationToken cancellationToken = default)
     {
-        var fileKey = GetMachineFileKey();
+        var (fileKey, macKey) = GetMachineFileKeys();
         using var aes = Aes.Create();
         aes.Key = fileKey;
         aes.GenerateIV();
@@ -46,7 +47,7 @@ public static class MachineBoundCrypto
                 await fsIn.CopyToAsync(cs, cancellationToken).ConfigureAwait(false);
             }
 
-            await WriteAuthenticatedFileAsync(outputPath, FileMagicV3, aes.IV, fileKey, tempCipher, cancellationToken).ConfigureAwait(false);
+            await WriteAuthenticatedFileAsync(outputPath, FileMagicV4, aes.IV, macKey, tempCipher, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -66,8 +67,8 @@ public static class MachineBoundCrypto
             if (cipherLength < 0)
                 throw new CryptographicException("Ciphertext is too short to contain authenticated payload metadata.");
 
-            var fileKey = GetMachineFileKey();
-            await VerifyAuthenticatedFileAsync(fsIn, magic, iv, fileKey, cipherStart, cipherLength, cancellationToken).ConfigureAwait(false);
+            var (fileKey, macKey) = GetMachineFileKeys();
+            await VerifyAuthenticatedFileAsync(fsIn, magic, iv, macKey, cipherStart, cipherLength, cancellationToken).ConfigureAwait(false);
 
             fsIn.Position = cipherStart;
             using var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
@@ -111,8 +112,10 @@ public static class MachineBoundCrypto
     private static byte[] GetMachineKey() =>
         HKDF.DeriveKey(HashAlgorithmName.SHA256, KeyFileSecret.Value, 32, info: "etl-sql-machine-bound-v3"u8.ToArray());
 
-    private static byte[] GetMachineFileKey() =>
-        HKDF.DeriveKey(HashAlgorithmName.SHA256, KeyFileSecret.Value, 32, info: "etl-sql-machine-bound-file-stream-v3"u8.ToArray());
+    // Independent keys for the file format's AES-256-CBC encryption and its HMAC-SHA256 tag.
+    private static (byte[] EncryptionKey, byte[] MacKey) GetMachineFileKeys() =>
+        (HKDF.DeriveKey(HashAlgorithmName.SHA256, KeyFileSecret.Value, 32, info: "etl-sql-machine-bound-file-stream-v4-enc"u8.ToArray()),
+         HKDF.DeriveKey(HashAlgorithmName.SHA256, KeyFileSecret.Value, 32, info: "etl-sql-machine-bound-file-stream-v4-mac"u8.ToArray()));
 
     // ── AES-256-GCM helpers ───────────────────────────────────────────────────
 
@@ -225,22 +228,22 @@ public static class MachineBoundCrypto
     /// <summary>Returns the file format's magic, or null when the file is not in it.</summary>
     private static async Task<byte[]?> TryReadFileMagicAsync(FileStream fs, CancellationToken cancellationToken)
     {
-        if (fs.Length < FileMagicV3.Length) return null;
-        var magic = new byte[FileMagicV3.Length];
+        if (fs.Length < FileMagicV4.Length) return null;
+        var magic = new byte[FileMagicV4.Length];
         await fs.ReadExactlyAsync(magic, cancellationToken).ConfigureAwait(false);
         return MatchFileMagic(magic);
     }
 
     private static byte[]? TryReadFileMagic(Stream fs)
     {
-        if (fs.Length < FileMagicV3.Length) return null;
-        var magic = new byte[FileMagicV3.Length];
-        fs.ReadExactly(magic, 0, FileMagicV3.Length);
+        if (fs.Length < FileMagicV4.Length) return null;
+        var magic = new byte[FileMagicV4.Length];
+        fs.ReadExactly(magic, 0, FileMagicV4.Length);
         return MatchFileMagic(magic);
     }
 
     private static byte[]? MatchFileMagic(byte[] magic) =>
-        magic.AsSpan().SequenceEqual(FileMagicV3) ? FileMagicV3 : null;
+        magic.AsSpan().SequenceEqual(FileMagicV4) ? FileMagicV4 : null;
 
     public static Stream DecryptStream(Stream fsIn)
     {
@@ -253,8 +256,8 @@ public static class MachineBoundCrypto
             if (cipherLength < 0)
                 throw new CryptographicException("Ciphertext is too short.");
 
-            var fileKey = GetMachineFileKey();
-            ETL_SQL.Common.CryptoUtils.VerifyStreamTag(fsIn, fileKey, cipherStart, cipherLength, magic, iv);
+            var (fileKey, macKey) = GetMachineFileKeys();
+            ETL_SQL.Common.CryptoUtils.VerifyStreamTag(fsIn, macKey, cipherStart, cipherLength, magic, iv);
             var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
             var aes = Aes.Create();
             var decryptor = aes.CreateDecryptor(fileKey, iv);
