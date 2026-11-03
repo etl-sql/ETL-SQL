@@ -6,6 +6,7 @@
 
 <p align="center">
   <a href="https://marketplace.visualstudio.com/items?itemName=Octocolee.etl-sql-vscode"><img src="https://img.shields.io/badge/VS%20Code-Marketplace-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="VS Code Marketplace" /></a>
+  <img src="https://img.shields.io/badge/ETL--SQL-v0.22.0-5C6BC0?style=for-the-badge&logo=dotnet&logoColor=white" alt="ETL-SQL Version" />
   <img src="https://img.shields.io/badge/Tests-10%2C000%2B%20Passing-brightgreen?style=for-the-badge&logo=checkmarx&logoColor=white" alt="10,000+ Tests Passing" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-4CAF50?style=for-the-badge" alt="Platform" />
 </p>

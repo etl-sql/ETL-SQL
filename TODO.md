@@ -1037,6 +1037,12 @@ bands are unchanged, and the final clean-candidate gate remains required.
   fixture hash no longer matched the stored baselines and both regression checks failed on candidate
   `f5c4fd62a`. It was reverted for v0.22.0 (owner decision 2026-11-03). Re-apply it in the same change
   that recalibrates `certification-results/baseline-*.json` against the new fixture hash.
+- [ ] **Explain the TempTableSpill GC-pause gap before v0.23.0.** On candidate `83d21e23a` the
+  local gate's smoke regression check fails only `TempTableSpill_50000_SELECT_INTO GC_PAUSE_MS`
+  (stored 4.7 ms, measured 11.2 ms, 35% band); the standard tier passes. This is the unexplained
+  gap recorded above (the released control also measures about 12 ms). **Owner decision
+  2026-11-03:** accepted as a known pre-existing measurement gap for v0.22.0; record it in the
+  release evidence, do not change the baseline or band, and keep this item open.
 
 ### 3. Flaky tests — the dedicated fix
 
