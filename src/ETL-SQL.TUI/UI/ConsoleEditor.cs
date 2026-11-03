@@ -457,6 +457,13 @@ namespace ETL_SQL.TUI.UI
         /// <summary>Exports the current report to PDF next to the script.</summary>
         public Task ExportReportPdf() => ExportReport(pdf: true);
 
+        /// <summary>
+        /// The manifest's Source is the script path (renderers print it and derive the file
+        /// name from it), never the script text.
+        /// </summary>
+        internal Task<ETL_SQL.Reporting.ReportManifest> BuildExportManifestAsync() =>
+            new ETL_SQL.Reporting.ManifestBuilder(_evaluator).BuildAsync(Path.GetFullPath(_filePath));
+
         private async Task ExportReport(bool pdf)
         {
             if (string.IsNullOrEmpty(_filePath) || _filePath == "untitled.etlsql")
@@ -470,7 +477,7 @@ namespace ETL_SQL.TUI.UI
                 _renderer.Render(this, Console.WindowWidth, Console.WindowHeight);
 
                 await RunScript(); // populate the report context for the manifest
-                var manifest = await new ETL_SQL.Reporting.ManifestBuilder(_evaluator).BuildAsync(_buffer.GetText());
+                var manifest = await BuildExportManifestAsync();
                 string outPath = Path.ChangeExtension(Path.GetFullPath(_filePath), pdf ? ".pdf" : ".md");
 
                 if (pdf)
@@ -1947,6 +1954,7 @@ namespace ETL_SQL.TUI.UI
             try
             {
                 var rs = _evaluator.LastResultSets[_renderer.ActiveResultSetIndex];
+                path = ReplUi.AuthorizeExportPath(_evaluator, path);
                 await using var writer = new StreamWriter(path, append: false, System.Text.Encoding.UTF8);
                 await writer.WriteLineAsync(string.Join(",", rs.ColumnNames.Select(EscapeCsv)));
                 foreach (var row in rs.Rows)
