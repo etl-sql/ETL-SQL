@@ -154,8 +154,19 @@ namespace ETL_SQL.Connectors.Parquet
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
-            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
+            try
+            {
+                await WriteBatchesCore(batches, append, EffectiveCancellationToken(cancellationToken));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ParquetException or InvalidDataException)
+            {
+                throw ConnectorExceptionWrapper.Wrap("Parquet", ex);
+            }
+        }
+
+        private async Task WriteBatchesCore(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken effectiveCancellationToken)
+        {
             await using var enumerator = batches.GetAsyncEnumerator(effectiveCancellationToken);
             if (!await enumerator.MoveNextAsync())
             {
@@ -171,36 +182,39 @@ namespace ETL_SQL.Connectors.Parquet
                 colNames = firstBatch.Rows[0].Columns.Keys.ToList();
             }
 
-            var fields = new List<Field>();
-            foreach (var col in colNames)
-            {
-                object? firstVal = firstBatch.Rows.Count > 0 ? firstBatch.Rows[0][col] : null;
-                Type t = firstVal?.GetType() ?? typeof(string);
-
-                if (t == typeof(int) || t == typeof(long)) fields.Add(new DataField<long>(col, nullable: true));
-                else if (t == typeof(decimal)) fields.Add(new DataField<decimal>(col, nullable: true));
-                else if (t == typeof(double) || t == typeof(float)) fields.Add(new DataField<double>(col, nullable: true));
-                else if (t == typeof(bool)) fields.Add(new DataField<bool>(col, nullable: true));
-                else if (t == typeof(DateTime)) fields.Add(new DataField<DateTime>(col, nullable: true));
-                else fields.Add(new DataField<string>(col, nullable: true));
-            }
-
             string targetPath = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
             string? publicationFile = null;
 
             var dir = System.IO.Path.GetDirectoryName(_filePath);
             if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
 
-            var schema = new ParquetSchema(fields);
-
             try
             {
+                // INSERT INTO a Parquet file arrives here with append: true. The existing file is
+                // staged as plain Parquet and the new rows are added as row groups, in its schema.
+                bool appendToExisting = append && System.IO.File.Exists(_filePath);
+                ParquetSchema schema;
+                if (appendToExisting)
+                {
+                    if (_encryption.Enabled)
+                        await _encryption.DecryptFileAsync(_filePath, targetPath, effectiveCancellationToken);
+                    else
+                        System.IO.File.Copy(_filePath, targetPath, overwrite: true);
+                    schema = await ReadAppendableSchemaAsync(targetPath, colNames, effectiveCancellationToken);
+                }
+                else
+                {
+                    schema = new ParquetSchema(colNames.Select(col => (Field)CreateField(col, InferColumnType(firstBatch.Rows, col))).ToList());
+                }
+
                 var options = new ParquetOptions();
                 if (Enum.TryParse<CompressionMethod>(_compression, true, out var comp))
                     options.CompressionMethod = comp;
 
-                using (var stream = System.IO.File.Create(targetPath))
-                await using (var writer = await ParquetWriter.CreateAsync(schema, stream, options))
+                using (var stream = appendToExisting
+                    ? new FileStream(targetPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None)
+                    : System.IO.File.Create(targetPath))
+                await using (var writer = await ParquetWriter.CreateAsync(schema, stream, options, appendToExisting, effectiveCancellationToken))
                 {
                     bool hasMore = true;
                     DataTable batch = firstBatch;
@@ -242,6 +256,8 @@ namespace ETL_SQL.Connectors.Parquet
 
         public async Task TruncateAsync()
         {
+            // Deleting the file is a write: the same guard WriteBatches applies.
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
             if (System.IO.File.Exists(_filePath))
             {
                 System.IO.File.Delete(_filePath);
@@ -280,7 +296,135 @@ namespace ETL_SQL.Connectors.Parquet
             return await ReadNonNullableColumnAsync(rgReader, field, rowCount, cancellationToken);
         }
 
-        private static async Task<object?[]> ReadNonNullableColumnAsync(
+        /// <summary>
+        /// The column type for a new file: every non-null value in the first batch is considered,
+        /// not just row 0, so a leading null no longer makes a numeric column a string. Mixed
+        /// integer and decimal values widen to decimal; integer or decimal with double widen to
+        /// double; anything else mixed is written as text.
+        /// </summary>
+        internal static Type InferColumnType(IEnumerable<Row> rows, string column)
+        {
+            Type? inferred = null;
+            foreach (var row in rows)
+            {
+                var value = row[column];
+                if (value is null || value is DBNull) continue;
+                Type kind = value switch
+                {
+                    int or long or short or byte or sbyte or uint or ushort => typeof(long),
+                    decimal => typeof(decimal),
+                    double or float => typeof(double),
+                    bool => typeof(bool),
+                    DateTime => typeof(DateTime),
+                    _ => typeof(string)
+                };
+                if (inferred is null || inferred == kind) { inferred = kind; continue; }
+                if (IsNumeric(inferred) && IsNumeric(kind))
+                    inferred = inferred == typeof(double) || kind == typeof(double) ? typeof(double) : typeof(decimal);
+                else
+                    return typeof(string);
+            }
+            return inferred ?? typeof(string);
+
+            static bool IsNumeric(Type t) => t == typeof(long) || t == typeof(decimal) || t == typeof(double);
+        }
+
+        private static DataField CreateField(string name, Type type) =>
+            type == typeof(long) ? new DataField<long>(name, nullable: true)
+            : type == typeof(decimal) ? new DataField<decimal>(name, nullable: true)
+            : type == typeof(double) ? new DataField<double>(name, nullable: true)
+            : type == typeof(bool) ? new DataField<bool>(name, nullable: true)
+            : type == typeof(DateTime) ? new DataField<DateTime>(name, nullable: true)
+            : new DataField<string>(name, nullable: true);
+
+        private static readonly HashSet<Type> AppendableTypes =
+            [typeof(long), typeof(decimal), typeof(double), typeof(bool), typeof(DateTime), typeof(string)];
+
+        /// <summary>
+        /// The existing file's schema, when this connector can add row groups to it: flat nullable
+        /// columns of the types it writes, holding every incoming column. Anything else is refused,
+        /// because writing the rows another way would change or drop data.
+        /// </summary>
+        private static async Task<ParquetSchema> ReadAppendableSchemaAsync(
+            string path, IReadOnlyCollection<string> incomingColumns, CancellationToken cancellationToken)
+        {
+            ParquetSchema schema;
+            await using (var stream = System.IO.File.OpenRead(path))
+            await using (var reader = await ParquetReader.CreateAsync(stream, cancellationToken: cancellationToken))
+            {
+                schema = reader.Schema;
+            }
+
+            var dataFields = schema.GetDataFields();
+            if (dataFields.Length != schema.Fields.Count)
+                throw new ExecutionException("Cannot append to this Parquet file: it has nested columns. Write to a new file instead.");
+            foreach (var field in dataFields)
+            {
+                if ((field.ClrType != typeof(string) && !field.IsNullable) || field.IsArray || !AppendableTypes.Contains(field.ClrType))
+                    throw new ExecutionException(
+                        $"Cannot append to this Parquet file: column '{field.Name}' has a type or nullability this connector does not write. Write to a new file instead.");
+            }
+            var missing = incomingColumns.Where(c => !dataFields.Any(f => string.Equals(f.Name, c, StringComparison.Ordinal))).ToList();
+            if (missing.Count > 0)
+                throw new ExecutionException(
+                    $"Cannot append to this Parquet file: it has no column {string.Join(", ", missing.Select(m => $"'{m}'"))}.");
+            return schema;
+        }
+
+        private static long ToInt64Exact(object value, string column)
+        {
+            if (value is decimal d && d != decimal.Truncate(d)
+                || value is double dbl && dbl != Math.Truncate(dbl)
+                || value is float flt && flt != MathF.Truncate(flt))
+                throw new ExecutionException(
+                    $"Parquet column '{column}' is an integer column; value {value} has a fractional part and would be rounded.");
+            return Convert.ToInt64(value);
+        }
+
+        private static Task<object?[]> ReadNonNullableColumnAsync(
+            ParquetRowGroupReader rgReader,
+            DataField field,
+            int rowCount,
+            CancellationToken cancellationToken)
+        {
+            var clrType = Nullable.GetUnderlyingType(field.ClrType) ?? field.ClrType;
+            // Non-nullable INT32/INT16/FLOAT and friends are common in files other tools write.
+            // Every value type gets a typed buffer; only text and binary fall through.
+            if (clrType == typeof(int)) return ReadValuesAsync<int>(rgReader, field, rowCount, cancellationToken);
+            if (clrType == typeof(short)) return ReadValuesAsync<short>(rgReader, field, rowCount, cancellationToken);
+            if (clrType == typeof(byte)) return ReadValuesAsync<byte>(rgReader, field, rowCount, cancellationToken);
+            if (clrType == typeof(sbyte)) return ReadValuesAsync<sbyte>(rgReader, field, rowCount, cancellationToken);
+            if (clrType == typeof(ushort)) return ReadValuesAsync<ushort>(rgReader, field, rowCount, cancellationToken);
+            if (clrType == typeof(uint)) return ReadValuesAsync<uint>(rgReader, field, rowCount, cancellationToken);
+            if (clrType == typeof(ulong)) return ReadValuesAsync<ulong>(rgReader, field, rowCount, cancellationToken);
+            if (clrType == typeof(float)) return ReadValuesAsync<float>(rgReader, field, rowCount, cancellationToken);
+            if (clrType == typeof(Guid)) return ReadValuesAsync<Guid>(rgReader, field, rowCount, cancellationToken);
+            if (clrType == typeof(DateTimeOffset)) return ReadValuesAsync<DateTimeOffset>(rgReader, field, rowCount, cancellationToken);
+            if (clrType == typeof(TimeSpan)) return ReadValuesAsync<TimeSpan>(rgReader, field, rowCount, cancellationToken);
+            if (clrType == typeof(DateOnly)) return ReadValuesAsync<DateOnly>(rgReader, field, rowCount, cancellationToken);
+            if (clrType == typeof(TimeOnly)) return ReadValuesAsync<TimeOnly>(rgReader, field, rowCount, cancellationToken);
+            if (clrType == typeof(byte[])) return ReadBinaryAsync(rgReader, field, rowCount, cancellationToken);
+            return ReadKnownNonNullableColumnAsync(rgReader, field, rowCount, cancellationToken);
+        }
+
+        private static async Task<object?[]> ReadValuesAsync<T>(
+            ParquetRowGroupReader rgReader, DataField field, int rowCount, CancellationToken cancellationToken)
+            where T : struct
+        {
+            var buf = new T[rowCount];
+            await rgReader.ReadAsync(field, buf.AsMemory(), null, cancellationToken);
+            return Array.ConvertAll(buf, v => (object?)v);
+        }
+
+        private static async Task<object?[]> ReadBinaryAsync(
+            ParquetRowGroupReader rgReader, DataField field, int rowCount, CancellationToken cancellationToken)
+        {
+            var buf = new byte[]?[rowCount];
+            await rgReader.ReadAsync(field, buf.AsMemory(), null, cancellationToken);
+            return Array.ConvertAll(buf, v => (object?)v);
+        }
+
+        private static async Task<object?[]> ReadKnownNonNullableColumnAsync(
             ParquetRowGroupReader rgReader,
             DataField field,
             int rowCount,
@@ -333,7 +477,7 @@ namespace ETL_SQL.Connectors.Parquet
             if (clrType == typeof(long))
             {
                 var buf = new long?[count];
-                for (int r = 0; r < count; r++) { cancellationToken.ThrowIfCancellationRequested(); var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToInt64(v) : (long?)null; }
+                for (int r = 0; r < count; r++) { cancellationToken.ThrowIfCancellationRequested(); var v = rows[r][field.Name]; buf[r] = v != null && v is not DBNull ? ToInt64Exact(v, field.Name) : (long?)null; }
                 await rgWriter.WriteAsync(field, new ReadOnlyMemory<long?>(buf), null, null, cancellationToken);
             }
             else if (clrType == typeof(decimal))
