@@ -20,6 +20,17 @@ try {
         if ((Get-MsiDiagnosticAction $file) -cne 'InstallServices') { throw 'Bounded log tail lost its action.' }
         [IO.File]::WriteAllText($file, "Action start 12:34:56: https://secret.invalid.`nProperty(S): private-value", $encoding)
         if ($null -ne (Get-MsiDiagnosticAction $file)) { throw 'Log values escaped action filtering.' }
+        # InstallFinalize runs the deferred script; its operations log as "Executing op" lines. The
+        # uninstall stall is inside it, so the latest deferred operation must be named too.
+        [IO.File]::WriteAllText($file, "Action start 12:34:56: InstallFinalize.`r`n" +
+            "MSI (s) (5C:08) [12:34:57:100]: Executing op: ActionStart(Name=StopServices,Description=Stopping services,Template=Service: [1])`r`n" +
+            "MSI (s) (5C:08) [12:34:57:200]: Executing op: ServiceControl(,Name=ETL-SQL-Portal,Action=2,Wait=1,)`r`n", $encoding)
+        if ((Get-MsiDiagnosticAction $file) -cne 'StopServices') { throw 'Deferred operation was not named.' }
+        [IO.File]::WriteAllText($file, "MSI (s) (5C:08) [12:34:57:100]: Executing op: ActionStart(Name=StopServices,Description=x)`r`n" +
+            "Action start 12:34:58: InstallFinalize.`r`n", $encoding)
+        if ((Get-MsiDiagnosticAction $file) -cne 'InstallFinalize') { throw 'The latest action did not win.' }
+        [IO.File]::WriteAllText($file, "MSI (s) (5C:08) [12:34:57:100]: Executing op: ActionStart(Name=https://secret.invalid,Description=x)`r`n", $encoding)
+        if ($null -ne (Get-MsiDiagnosticAction $file)) { throw 'Deferred values escaped action filtering.' }
     }
     if ($null -ne (Get-MsiDiagnosticAction (Join-Path $root 'missing.log'))) { throw 'Missing log returned an action.' }
     foreach ($mode in @('normal', 'diagnostic', 'failure', 'timeout')) {

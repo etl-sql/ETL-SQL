@@ -245,8 +245,13 @@ function Get-MsiDiagnosticAction {
             if ($newline -lt 0) { return $null }
             $text = $text.Substring($newline + 1)
         }
-        $actions = [regex]::Matches($text, '(?m)^Action start [0-9]{1,2}:[0-9]{2}:[0-9]{2}: ([A-Za-z][A-Za-z0-9_]{0,63})\.\r?$')
-        if ($actions.Count) { return $actions[$actions.Count - 1].Groups[1].Value }
+        # Immediate actions log "Action start"; the deferred script that InstallFinalize runs logs
+        # "Executing op: ActionStart(Name=...". Only a bare action name is ever returned.
+        $actions = [regex]::Matches($text, '(?m)^(?:Action start [0-9]{1,2}:[0-9]{2}:[0-9]{2}: ([A-Za-z][A-Za-z0-9_]{0,63})\.\r?$|MSI \(s\) \([0-9A-F]{1,8}:[0-9A-F]{1,8}\) \[[0-9:]{8,12}\]: Executing op: ActionStart\(Name=([A-Za-z][A-Za-z0-9_]{0,63}),)')
+        if ($actions.Count) {
+            $last = $actions[$actions.Count - 1]
+            return $(if ($last.Groups[1].Success) { $last.Groups[1].Value } else { $last.Groups[2].Value })
+        }
     } catch [IO.IOException] { } catch [UnauthorizedAccessException] { }
     finally { if ($stream) { $stream.Dispose() } }
     return $null
