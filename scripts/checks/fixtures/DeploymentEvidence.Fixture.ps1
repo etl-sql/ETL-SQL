@@ -72,7 +72,7 @@ function Add-FixtureExecutionEvidence {
         })
         $report.scenarioEvidenceFiles = @(foreach ($id in (Get-ExpectedScenarioIds $report.lanes)) {
             $null = New-Item -ItemType Directory -Path (Join-Path $directory 'scenario-evidence') -Force
-            $relative = "scenario-evidence/$id.json"
+            $relative = "scenario-evidence/lifecycle-$($id.ToLowerInvariant()).json"
             @{ schemaVersion = 'etl-sql.deployment-scenario-evidence/v1'; scenarioId = $id; topology = @{}; artifactHashes = @{}; mappingDecisions = @(); continuity = @{}; negativeIsolation = @{}; rollback = @{} } |
                 ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $directory $relative)
             @{ scenarioId = $id; path = $relative; sha256 = (Get-FileHash -LiteralPath (Join-Path $directory $relative) -Algorithm SHA256).Hash.ToLowerInvariant() }

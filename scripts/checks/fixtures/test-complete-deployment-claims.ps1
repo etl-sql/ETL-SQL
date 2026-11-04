@@ -151,8 +151,8 @@ Assert-Rejected 'TRX outside phase window' { param($e) $e.reports.Solo.phases[1]
 Assert-Rejected 'unproven Enterprise prerequisite' { param($e) $e.reports.Enterprise.hostedPrerequisites[0].proven = $false }
 Assert-Rejected 'missing Enterprise prerequisite' { param($e) $e.reports.Enterprise.hostedPrerequisites = @($e.reports.Enterprise.hostedPrerequisites | Select-Object -Skip 1) }
 Assert-Rejected 'missing concrete scenario reference' { param($e) $e.reports.Upgrade.scenarioEvidenceFiles = @() }
-Assert-Rejected 'missing concrete scenario file' { param($e) [IO.File]::Delete((Join-Path $e.root 'Transition-Upgrade/scenario-evidence/SoloUpgrade.json')) }
-Assert-Rejected 'changed concrete scenario file' { param($e) [IO.File]::AppendAllText((Join-Path $e.root 'Transition-Upgrade/scenario-evidence/SoloUpgrade.json'), ' ') }
+Assert-Rejected 'missing concrete scenario file' { param($e) [IO.File]::Delete((Join-Path $e.root 'Transition-Upgrade/scenario-evidence/lifecycle-soloupgrade.json')) }
+Assert-Rejected 'changed concrete scenario file' { param($e) [IO.File]::AppendAllText((Join-Path $e.root 'Transition-Upgrade/scenario-evidence/lifecycle-soloupgrade.json'), ' ') }
 Assert-Rejected 'missing nested fault bundle' { param($e) [IO.File]::Delete((Join-Path $e.root 'Profile-Solo/provider-neutral-faults/Solo/certification.json')) }
 $nestedPath = 'Profile-Solo/provider-neutral-faults/Solo/certification.json'
 Assert-Rejected 'nested fault report missing receipt' { param($e) $path = Join-Path $e.root $nestedPath; $r = Get-Content $path -Raw | ConvertFrom-Json -AsHashtable; $r.runs[0].testEvidence = $null; $r | ConvertTo-Json -Depth 32 | Set-Content $path }

@@ -41,6 +41,21 @@ public sealed class ProductionCanaryScriptContractTests
         Assert.DoesNotContain("customer-", manifest, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// The canary report records the plan file's SHA-256 and release validation recomputes it on
+    /// another host. With core.autocrlf=true a Windows checkout would hash CRLF bytes that the Linux
+    /// Release job can never match, so the plan is pinned to LF in every checkout.
+    /// </summary>
+    [Fact]
+    public void PlanHashIsTheSameOnEveryCheckout()
+    {
+        var attributes = File.ReadAllText(Path.Combine(RepoRoot(), ".gitattributes"));
+        Assert.Contains("/tests/fixtures/production-canary-plan.json text eol=lf", attributes, StringComparison.Ordinal);
+
+        var plan = File.ReadAllBytes(Path.Combine(RepoRoot(), "tests", "fixtures", "production-canary-plan.json"));
+        Assert.DoesNotContain((byte)'\r', plan);
+    }
+
     private static string RepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

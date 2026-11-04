@@ -114,7 +114,9 @@ function Assert-DeploymentExecutionEvidence {
     $expectedScenarios = @(Get-ExpectedScenarioIds $report.lanes)
     foreach ($id in $expectedScenarios) {
         $matches = @($report.scenarioEvidenceFiles | Where-Object { $_.scenarioId -ceq $id })
-        if ($matches.Count -ne 1 -or $matches[0].path -cne "scenario-evidence/$id.json") { throw 'Required concrete scenario evidence is missing or ambiguous.' }
+        # The producer records each file under the name its test wrote; identity comes from the
+        # scenarioId inside the file, which is checked below.
+        if ($matches.Count -ne 1 -or -not [regex]::IsMatch([string]$matches[0].path, '^scenario-evidence/[^/\\]+\.json$')) { throw 'Required concrete scenario evidence is missing or ambiguous.' }
         $path = Resolve-ReleaseEvidenceFile -Root $root -RelativePath $matches[0].path
         if ($matches[0].sha256 -cne (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()) { throw 'Concrete scenario evidence changed.' }
         $scenario = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json

@@ -35,6 +35,14 @@ try {
     const original = readFileSync(path.join(input, relative)); alter(relative, action);
     assert.notEqual(validate(input).status, 0, relative); writeFileSync(path.join(input, relative), original);
   }
+  const versionLog = path.join(input, 'evidence/recovery/cli-version.log'), versionBytes = readFileSync(versionLog);
+  for (const text of [`Security: Loaded 1 allowed hosts.
+${version}+${'b'.repeat(40)}
+`, `${version}+${sha} (dirty)
+`]) {
+    writeFileSync(versionLog, text); assert.notEqual(validate(input).status, 0, text);
+  }
+  writeFileSync(versionLog, versionBytes);
   // Exercise the actual publication guard with a valid ZIP; only GitHub transport is replaced.
   const archiveRoot = path.join(root, 'attachment'); mkdirSync(archiveRoot); cpSync(bundle, path.join(archiveRoot, 'bundle'), { recursive: true });
   const selection = { ...selected, repository: 'owner/repo', evidenceTag: `operator-check-${sha}`, releaseId: 123, assetId: 456,

@@ -18,6 +18,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   them. Those phases ran their filters against the Portal tests, so the release receipt check
   failed. A contract test now requires every phase filter to name tests in its own project.
   Production-canary bundles are ignored by Git, so a run no longer trips its own source-drift check.
+- Accept real deployment and recovery evidence in the operator submission. The validator required
+  scenario files named after their ID, but certification records the names its tests write; it
+  also required the CLI version log to be one line, but the CLI prints its security-policy lines
+  first. The canary plan is pinned to LF so its recorded hash matches on every checkout.
 - Monitor MSI certification from an independent Linux runner. Retain its progress report before
   cancelling a run whose active test stops delivering checkpoints for five minutes. Successful
   jobs and installer artifacts remain available for failed-job-only recovery. Recheck the attempt

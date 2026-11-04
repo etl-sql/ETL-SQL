@@ -11,7 +11,11 @@ export function operatorFixture(directory, { sha = 'a'.repeat(40), version = '1.
   const write = (name, bytes) => { mkdirSync(path.dirname(path.join(directory, name)), { recursive: true }); writeFileSync(path.join(directory, name), bytes); };
   for (const row of checklist.reports) {
     write(row.path, '{"fixture":"not execution evidence"}');
-    if (row.id === 'recovery') { write(row.cliVersionLog, `${version}+${sha}`); write(row.transcript, 'Synthetic validation transcript'); }
+    if (row.id === 'recovery') { // The real CLI prints its security-policy start-up lines before the version.
+      write(row.cliVersionLog, `Security: Path Protection Mode set to 1.
+Security: Loaded 1 allowed hosts.
+${version}+${sha}
+`); write(row.transcript, 'Synthetic validation transcript'); }
   }
   for (const row of checklist.reviews) for (const name of row.evidence) write(name, 'Synthetic operator review; not release evidence.');
   write('checklist.json', JSON.stringify(checklist));

@@ -52,8 +52,10 @@ if ((ConvertTo-DeploymentEvidenceTime $claims.generatedUtc) -gt (ConvertTo-Deplo
 Require-Canary
 $recovery = Get-Content -LiteralPath (Get-ReportPath 'recovery') -Raw | ConvertFrom-Json
 $recoveryRow = @($checklist.reports | Where-Object id -CEQ 'recovery')[0]
-$cliVersion = [IO.File]::ReadAllText((Resolve-ReleaseEvidenceFile $root $recoveryRow.cliVersionLog)).Trim()
-if ($cliVersion -cne "$Version+$CandidateSha" -or
+# The CLI prints its security-policy start-up lines before the version, as the native package
+# check also allows; require the exact candidate version as one whole line.
+$cliVersionLines = @([IO.File]::ReadAllLines((Resolve-ReleaseEvidenceFile $root $recoveryRow.cliVersionLog)) | ForEach-Object { $_.Trim() })
+if ($cliVersionLines -cnotcontains "$Version+$CandidateSha" -or
     (Get-Item -LiteralPath (Resolve-ReleaseEvidenceFile $root $recoveryRow.transcript)).Length -eq 0 -or
     $recovery.appVersion -cne "$Version.0") { throw 'Recovery validation lacks candidate CLI and backup version evidence.' }
 if ($recovery.schemaVersion -cne '1.0' -or $recovery.operation -cne 'validate' -or $recovery.status -cne 'Pass' -or
