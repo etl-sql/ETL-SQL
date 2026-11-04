@@ -6,7 +6,7 @@ finished items live in Git history (this file before 2026-11-03 holds the full d
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 24 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 25 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -129,6 +129,12 @@ sample on a shared runner. Keep failing on real slowness.
   plus headroom, or speed the check up; the watchdog catches stuck checks, not slow runners.
   Remove the matching `preflight-check-watchdog` signature from
   `scripts/lib/candidate-failure-signatures.mjs` once fixed, as with the two above.
+- [ ] **First-run sign-in: wait on the login response, not 20 s of form visibility.**
+  `PortalBrowserFixture.SignInAsync` timed out waiting for `#changeForm` on CI `41744076759`
+  shard 3 (2026-11-04); the next test took 19 s, so the Portal was slow, but a refused login would
+  look the same. Wait for the login request's response, report its status and the page text on
+  failure, and capture the transport/process snapshot like navigation failures do. Remove the
+  `first-run-sign-in-wait` supervisor signature once fixed.
 - [ ] **Windows browser lane: `ERR_NO_BUFFER_SPACE`, navigation timeouts, missing chart payload.**
   The upstream Chromium mitigation is backported and passed three consecutive hosted inventories;
   navigation, locator and startup failures now retain transport/process snapshots.

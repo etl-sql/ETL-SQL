@@ -503,14 +503,15 @@ Future timing incidents belong in this document only when they add a reusable le
 diagnostics belong in generated evidence, not a new release-specific tracking file.
 ## Release-candidate flakes and supervised reruns (v0.22.0)
 
-Three failures on 2026-11-03 candidates passed on an unchanged rerun of the failed job. All three are
-still open defects; a green rerun does not close them.
+These failures on 2026-11-03/04 candidates are intermittent on unchanged code. All of them are still
+open defects; a green rerun does not close them.
 
 | Test | Failure | Job |
 | :--- | :--- | :--- |
 | `StudioPerformanceBudgetTests.CanonicalStudioFixture_StaysWithinPlatformBudgets` | Studio startup measured 5757.64 ms; budget is 5000.00 ms | [Release Certification 41710847926, Portal Browser Journey (1/3)](https://github.com/etl-sql/ETL-SQL/actions/runs/41710847926/job/126181482465) |
 | `StudioDocumentLimitJourneyTests.PortalRateLimitedAnalysisExplainsStaleDiagnosticsAndRetriesTheKeptBuffer` | Locator expected to contain text 'Previous diagnostics are stale' | [Release Certification 41710847926, Portal Browser Journey (2/3)](https://github.com/etl-sql/ETL-SQL/actions/runs/41710847926/job/126181482741) |
 | Source preflight `test-workflows` | FAIL test-workflows (60.0s): the preflight per-check watchdog | [CI 41676267442, Source preflight](https://github.com/etl-sql/ETL-SQL/actions/runs/41676267442/job/126057603643) |
+| `PortalBrowserFixture.SignInAsync` (first sign-in of a collection, in `StudioPersistenceTests.ConnectionWizard_UsesProductionRegistryAndInsertsParserValidMockDb`) | Timeout 20000ms exceeded waiting for `#changeForm` to be visible; the next test took 19 s. Passed on 2026-11-03 rounds 4 and 5 with no Portal change | [CI 41744076759, Portal Browser Journey (3/3)](https://github.com/etl-sql/ETL-SQL/actions/runs/41744076759) |
 
 The Release Candidate Supervisor (`.github/workflows/candidate-supervisor.yml`) reruns a failed job
 once when its log matches one of these signatures in

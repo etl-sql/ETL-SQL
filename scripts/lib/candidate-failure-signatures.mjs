@@ -47,6 +47,11 @@ export const candidateFailureSignatures = [
     evidence: 'Release Certification 41710847926 Portal Browser Journey 2/3, 2026-11-03',
   },
   {
+    id: 'first-run-sign-in-wait', kind: 'flaky', source: 'log',
+    pattern: /waiting for Locator\("#changeForm"\) to be visible/,
+    evidence: 'CI 41744076759 Portal Browser Journey 3/3, 2026-11-04 (same shard passed on 2026-11-03 rounds 4 and 5)',
+  },
+  {
     id: 'preflight-check-watchdog', kind: 'flaky', source: 'log',
     pattern: /FAIL [\w-]+ \(60\.0s\)/,
     evidence: 'CI 41676267442 source preflight test-workflows hit its 60s watchdog, 2026-11-03',
