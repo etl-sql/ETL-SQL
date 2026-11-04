@@ -668,6 +668,9 @@ function Invoke-LoggedPhase {
     # Start clean: the streamed writes below append, and a re-run of a failed phase under -Resume
     # would otherwise read as one log with two interleaved attempts in it.
     Remove-Item -LiteralPath $phaseLog -Force -ErrorAction SilentlyContinue
+    # Tee-Object creates nothing for a phase that prints nothing (a clean Format verify), and release
+    # evidence requires every passed phase's log to exist.
+    New-Item -ItemType File -Path $phaseLog -Force | Out-Null
 
     $watchdog = Start-PhaseWatchdog -Name $Name -LogPath $phaseLog -LogBase $phaseLogBase
 

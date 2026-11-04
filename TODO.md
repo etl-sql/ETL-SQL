@@ -109,6 +109,8 @@ Scoped browser-test PR: 19m21s (PR 48). Broad package PR: 49m18s, native package
   The released code measures the same way; allocations and checksums match; runtime, workstation and
   context causes are unproven. **Owner, 2026-11-03/04:** all three accepted as one known gap for
   v0.22.0; record them in the release evidence and change no baseline or band.
+  `a30d372b5` also failed `SpillCleanupSuccess_50000 ROWS_PER_SECOND` (20.3% against a 20% band),
+  derived from the same elapsed slowdown (47 → 59 ms). **Owner, 2026-11-04:** accepted as the same gap.
 
 ### 3. Flaky tests — the dedicated fix
 
@@ -160,6 +162,15 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   as local time, so on a UTC−6 workstation a fresh run looks six hours in the future and is skipped
   ("No eligible pre-tag MSI certification"). Hosted `ubuntu-latest` is UTC, so Release is unaffected.
   Parse the raw string, or use `[datetimeoffset]$Run.created_at` with an explicit UTC kind.
+- [ ] **The candidate supervisor misreads three infrastructure failures as defects** (`scripts/lib/candidate-failure-signatures.mjs`).
+  On `a30d372b5` it cancelled native and DEB three times: CI Docker pulls hit "no space left on
+  device"; MSI's summary job reports "required but ended as 'skipped'" after a payload checkout
+  timeout; and the MSI progress monitor reports "stalled" when the portal runner is lost at an
+  uninstall. Add signatures with evidence, and dispatch native and DEB from the push instead of by hand.
+- [ ] **The workstation driver test runs a stand-in gate** (`scripts/checks/test-workstation-certification-driver.mjs`).
+  The real gate failed through the driver twice on 2026-11-04 (absolute `-OutDir`; a silent phase left
+  no log, so the checkpoint could not close). Both are fixed with targeted checks; add one end-to-end
+  run of the real gate in a tiny scope through the driver.
 - [ ] **Finish the review.** About 376 tracked script files and 1,856 test files remain unreviewed
   beyond the installer, packaging, changelog and version tools. **Left:** the rest of `scripts/`
   and `tests/`; native installed-MSI certification of the fixed installer paths.

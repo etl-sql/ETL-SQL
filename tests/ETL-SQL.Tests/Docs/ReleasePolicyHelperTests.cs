@@ -191,6 +191,23 @@ public sealed class ReleasePolicyHelperTests
         Assert.Contains(prerequisite, result.Output);
     }
 
+    // Format verify prints nothing on a clean tree. Tee-Object creates no file for empty input, and the
+    // workstation checkpoint refuses a passed phase whose log is missing.
+    [Fact]
+    public async Task SilentPassingPhaseStillLeavesItsLog()
+    {
+        var result = await RunHelper(PhaseRunnerFixture + """
+
+            try {
+                Invoke-LoggedPhase -Name 'Silent phase' -Command 'silent' -Action { $global:LASTEXITCODE = 0 } `
+                    -PreviousPhaseMap @{} -Fingerprint $fingerprint -Results $results
+                'RESULT|' + $results[0].status + '|' + (Test-Path -LiteralPath $results[0].log -PathType Leaf)
+            } finally { Remove-PhaseFixture }
+            """);
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Contains("RESULT|Passed|True", result.Output);
+    }
+
     [Fact]
     public async Task PrePush_PreparesBeforeInvokingDotnetFormat()
     {
