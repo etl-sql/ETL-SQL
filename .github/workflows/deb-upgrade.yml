@@ -28,7 +28,7 @@ jobs:
     name: Build DEB candidate
     runs-on: ubuntu-latest
     # Preserve upload time after preparation, publish and package deadlines.
-    timeout-minutes: 130
+    timeout-minutes: 140
     outputs:
       artifact_id: ${{ steps.artifact.outputs.artifact-id }}
     steps:
@@ -36,6 +36,17 @@ jobs:
         timeout-minutes: 7
         with:
           ref: ${{ env.CANDIDATE_SHA }}
+      # The self-contained publish plus its package copy nearly fills a hosted runner: candidate
+      # bbab22fbd's rerun died with "No space left on device" while packaging (run 41744127229),
+      # where the same image passed on a0ba387ca. Remove preinstalled toolchains this job never
+      # uses, and record free space so the margin is measured rather than guessed.
+      - name: Free runner disk space
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL
+          df -h /
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -119,6 +130,10 @@ jobs:
             linuxZipSha256 = (Get-FileHash candidate/current.zip -Algorithm SHA256).Hash
             linuxVsixSha256 = (Get-FileHash candidate/current.vsix -Algorithm SHA256).Hash
           } | ConvertTo-Json | Set-Content candidate/candidate.json
+      - name: Report free disk space
+        if: always()
+        timeout-minutes: 1
+        run: df -h /
       - name: Retain build diagnostics
         if: always()
         timeout-minutes: 5
