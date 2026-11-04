@@ -99,11 +99,14 @@ Scoped browser-test PR: 19m21s (PR 48). Broad package PR: 49m18s, native package
   their row-scale variable is unset. It changed the fixture hash, so both baseline checks failed on
   `f5c4fd62a`; reverted for v0.22.0 (owner, 2026-11-03). Re-apply it in the change that recalibrates
   `certification-results/baseline-*.json`.
-- [ ] **Explain the TempTableSpill GC-pause gap before v0.23.0.** The smoke check fails only
-  `TempTableSpill_50000_SELECT_INTO GC_PAUSE_MS` (stored 4.7 ms, measured 11–15 ms; the released
-  code measures about 12 ms too). Allocations and checksums match; runtime, workstation and context
-  causes are unproven. **Owner, 2026-11-03:** accepted as a known gap for v0.22.0; record it in the
-  release evidence and change no baseline or band.
+- [ ] **Explain the spill GC-pause gap before v0.23.0.** The smoke check fails three spill
+  metrics, identical on `a0ba387ca` and `64123da37` with no engine change:
+  `TempTableSpill_50000_SELECT_INTO GC_PAUSE_MS` (stored 4.7 ms, measured 10.6–12.2 ms),
+  `SpillCleanupSuccess_50000 GC_PAUSE_MS` (stored 4.8 ms, measured 14.2–14.5 ms) and
+  `SpillCleanupSuccess_50000 ELAPSED_MS` (stored 47 ms, measured 57 ms, 21.3% against a 20% band).
+  The released code measures the same way; allocations and checksums match; runtime, workstation and
+  context causes are unproven. **Owner, 2026-11-03/04:** all three accepted as one known gap for
+  v0.22.0; record them in the release evidence and change no baseline or band.
 
 ### 3. Flaky tests — the dedicated fix
 
