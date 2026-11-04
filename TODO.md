@@ -34,8 +34,10 @@ Scoped browser-test PR: 19m21s (PR 48). Broad package PR: 49m18s, native package
 - [ ] **Fail fast on candidate failures.** The Release Candidate Supervisor
   (`.github/workflows/candidate-supervisor.yml`) reruns known infrastructure/flaky/dependent
   failures within a budget, and on a real defect cancels MSI/native/DEB and opens one issue.
-  **Left:** its first hosted run (round 5, `9254f83d8`); the first scheduled nightly run; owner
-  decision on carrying forward prior-SHA results for lanes the impact manifest marks unaffected.
+  **Left:** its first hosted run (round 5, `9254f83d8`); the first scheduled nightly run; carry
+  forward prior-SHA results for lanes the impact manifest marks unaffected. **Owner, 2026-11-04:**
+  yes: a lane that passed the pre-release gate and CI is not rerun on a recommit. Change the
+  checklist rule and the supervisor/release drivers to match.
 - [ ] **Impact-selected CI and targeted fix rounds.** `ci-impact.json` and `select-ci-lanes.mjs`
   select regular CI, native and MSI lanes; unknown/shared paths and missing bases go broad; full
   certification ignores the diff; manual diagnostic selections cannot certify.

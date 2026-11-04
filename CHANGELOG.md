@@ -12,6 +12,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.22.0] — 2026-11-04
+
 - Monitor MSI certification from an independent Linux runner. Retain its progress report before
   cancelling a run whose active test stops delivering checkpoints for five minutes. Successful
   jobs and installer artifacts remain available for failed-job-only recovery. Recheck the attempt
