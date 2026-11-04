@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Run the Shared SaaS metering and backup-recovery certification tests in the project that holds
+  them. Those phases ran their filters against the Portal tests, so the release receipt check
+  failed. A contract test now requires every phase filter to name tests in its own project.
+  Production-canary bundles are ignored by Git, so a run no longer trips its own source-drift check.
 - Monitor MSI certification from an independent Linux runner. Retain its progress report before
   cancelling a run whose active test stops delivering checkpoints for five minutes. Successful
   jobs and installer artifacts remain available for failed-job-only recovery. Recheck the attempt

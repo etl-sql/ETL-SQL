@@ -92,6 +92,57 @@ public sealed class DeploymentProfileCertificationScriptContractTests
         Assert.Equal(new[] { "EnterpriseUpgrade" }, plan.RootElement.GetProperty("scenarios").EnumerateArray().Select(item => item.GetString()));
     }
 
+    /// <summary>
+    /// A phase runs one test project with a <c>FullyQualifiedName~</c> filter. A filter naming a class
+    /// that lives in another project matches nothing there, so its proof silently never runs; the
+    /// receipt check then fails the lane only on release day. Every filter token must name a class,
+    /// method or namespace declared in the phase's own project.
+    /// </summary>
+    [Fact]
+    public async Task EveryPhaseFilterNamesTestsDeclaredInThePhaseProject()
+    {
+        var result = await ETL_SQL.Tests.Docs.ReleasePolicyHelperTests.RunHelper("""
+            $phases = @()
+            foreach ($kind in 'Profile', 'Transition') {
+                $phases += @(Get-DeploymentCertificationPlan -Kind $kind -Names @(Get-DeploymentCertificationLanes -Kind $kind))
+            }
+            @($phases | Where-Object { $_['filter'] } | ForEach-Object {
+                [pscustomobject]@{ name = $_['name']; project = $_['project']; filter = $_['filter'] }
+            }) | ConvertTo-Json -Depth 4
+            """, helperName: "DeploymentCertification.Plan.ps1");
+        Assert.True(result.ExitCode == 0, result.Output);
+        using var plan = JsonDocument.Parse(result.Output);
+
+        var sources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var missing = new List<string>();
+        foreach (var phase in plan.RootElement.EnumerateArray())
+        {
+            var project = phase.GetProperty("project").GetString()!;
+            var projectDirectory = Path.GetDirectoryName(Path.Combine(RepoRoot(), project))!;
+            if (!sources.TryGetValue(projectDirectory, out var source))
+            {
+                source = string.Join('\n', Directory
+                    .EnumerateFiles(projectDirectory, "*.cs", SearchOption.AllDirectories)
+                    .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                        && !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                    .Select(File.ReadAllText));
+                sources[projectDirectory] = source;
+            }
+
+            foreach (var token in phase.GetProperty("filter").GetString()!.Split('|'))
+            {
+                Assert.StartsWith("FullyQualifiedName~", token, StringComparison.Ordinal);
+                var name = System.Text.RegularExpressions.Regex.Escape(
+                    token["FullyQualifiedName~".Length..].Split('.')[0]);
+                var declared = System.Text.RegularExpressions.Regex.IsMatch(source,
+                    $@"\b(class|record|struct)\s+{name}\b|\bnamespace\s+[\w.]*{name}|\s{name}\w*\s*\(");
+                if (!declared) missing.Add($"{phase.GetProperty("name").GetString()}: {token} is not in {project}");
+            }
+        }
+
+        Assert.True(missing.Count == 0, string.Join(Environment.NewLine, missing));
+    }
+
     private static string RepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
