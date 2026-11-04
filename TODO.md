@@ -155,6 +155,11 @@ sample on a shared runner. Keep failing on real slowness.
 The v0.22.0 security review covered `src/` only. Installer, packaging, changelog and version-tool
 reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git history).
 
+- [ ] **MSI reuse misreads run times off UTC** (`scripts/MsiReuse.Helpers.ps1`, `Test-MsiCandidateRun`).
+  PowerShell turns `created_at` into a `DateTime`; `[string]` drops the `Z` and `TryParse` reads it
+  as local time, so on a UTC−6 workstation a fresh run looks six hours in the future and is skipped
+  ("No eligible pre-tag MSI certification"). Hosted `ubuntu-latest` is UTC, so Release is unaffected.
+  Parse the raw string, or use `[datetimeoffset]$Run.created_at` with an explicit UTC kind.
 - [ ] **Finish the review.** About 376 tracked script files and 1,856 test files remain unreviewed
   beyond the installer, packaging, changelog and version tools. **Left:** the rest of `scripts/`
   and `tests/`; native installed-MSI certification of the fixed installer paths.

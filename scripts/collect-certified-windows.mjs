@@ -65,7 +65,10 @@ export async function verifyCertifiedNative(directory, sha, version, platform) {
   for (const name of [`ETL-SQL-v${version}-${platform}.zip`, `etl-sql-vscode-${version}-${descriptor.target}.vsix`]) file(directory, `release/${name}`);
   await verifyPackages(path.join(directory, 'release'), sha, version, platform, manifestSha256);
   const webviewFile = file(directory, `${evidence}/packaged-webview.json`), webviews = json(webviewFile);
-  const cliFile = file(directory, `${evidence}/cli-version.log`), cli = readFileSync(cliFile, 'utf8').replace(/^\uFEFF/, '').trim();
+  // The CLI prints its start-up and security-policy lines before the version, as the native
+  // workflow's own launch check allows; require the exact candidate version as one whole line.
+  const cliFile = file(directory, `${evidence}/cli-version.log`);
+  const cliLines = readFileSync(cliFile, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/).map(line => line.trim());
   const logs = ['publish.log', 'packaged-assets.log', 'vsix-acceptance.log', 'dotnet-info.log'].map(name => file(directory, `${evidence}/${name}`));
   const viewsValid = ['designer', 'preview'].every(kind => {
     const view = webviews.views?.[kind];
@@ -80,7 +83,7 @@ export async function verifyCertifiedNative(directory, sha, version, platform) {
       webviews.passed !== true || !Array.isArray(webviews.errors) || webviews.errors.length !== 0 ||
       webviews.version !== version || !viewsValid ||
       webviews.views?.preview?.runtime !== true || webviews.installedAssets !== summary.vsixInstalledAssets ||
-      cli !== `${version}+${sha}` || !/^v22\.\d+\.\d+$/.test(summary.toolchain?.nodeVersion ?? '') ||
+      !cliLines.includes(`${version}+${sha}`) || !/^v22\.\d+\.\d+$/.test(summary.toolchain?.nodeVersion ?? '') ||
       !/^10\.\d+\.\d+$/.test(summary.toolchain?.dotnetVersion ?? '')) throw new Error('Native acceptance evidence is incomplete or mismatched.');
   if (platform === 'osx-x64') {
     const dmg = `ETL-SQL_v${version}.dmg`;

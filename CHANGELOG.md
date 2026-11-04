@@ -22,6 +22,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   scenario files named after their ID, but certification records the names its tests write; it
   also required the CLI version log to be one line, but the CLI prints its security-policy lines
   first. The canary plan is pinned to LF so its recorded hash matches on every checkout.
+- Promote certified Windows and macOS packages whose launch log carries the CLI's start-up lines.
+  Release selection required the log to hold only the version, so it would have refused every
+  real native package after tagging. It now requires the exact candidate version as one line.
 - Monitor MSI certification from an independent Linux runner. Retain its progress report before
   cancelling a run whose active test stops delivering checkpoints for five minutes. Successful
   jobs and installer artifacts remain available for failed-job-only recovery. Recheck the attempt

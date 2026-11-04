@@ -39,7 +39,8 @@ async function payload(directory, candidate = sha) {
     resources: [{ name: 'fixture/deliberately-missing-module.js', status: 404 }] }]));
   writeFileSync(path.join(evidence, 'certification.json'), JSON.stringify(summary));
   writeFileSync(path.join(evidence, 'packaged-webview.json'), JSON.stringify({ passed: true, version, installedAssets: 59, errors: [], views, startedAt: time(-5000), finishedAt: time(-4000) }));
-  writeFileSync(path.join(evidence, 'cli-version.log'), `${version}+${candidate}\n`);
+  // The real CLI prints its start-up and security-policy lines before the version.
+  writeFileSync(path.join(evidence, 'cli-version.log'), `[PROC_START] ETL-SQL Engine process identified.\r\nSecurity: Loaded 1 allowed hosts.\r\n${version}+${candidate}\r\n`);
   for (const log of ['publish.log', 'packaged-assets.log', 'vsix-acceptance.log', 'dotnet-info.log']) writeFileSync(path.join(evidence, log), `Synthetic ${log}`);
 }
 async function collect({ mutate = () => {}, change = () => {}, transform, expectedSelection } = {}) {
@@ -93,6 +94,9 @@ try {
     value => { value.views.designer.errors.push('view error'); }, value => { value.views.preview.runtime = false; },
     value => { value.views.designer.missingRejected = false; }, value => { value.installedAssets = 1; }, value => { value.finishedAt = time(-1000); }]) {
     await assert.rejects(collect({ change: alter(webviewPath, action) }));
+  }
+  for (const text of [`Security: Loaded 1 allowed hosts.\n${version}+${'b'.repeat(40)}\n`, `${version}+${sha} (dirty)\n`]) {
+    await assert.rejects(collect({ change: directory => { writeFileSync(path.join(directory, 'artifacts/native-packages/win-x64/cli-version.log'), text); } }), undefined, text);
   }
   for (const relative of ['release/ETL-SQL-v1.2.3-win-x64.zip', 'release/etl-sql-vscode-1.2.3-win32-x64.vsix', 'release/windows-package-inputs.json',
     'artifacts/native-packages/win-x64/cli-version.log', 'artifacts/native-packages/win-x64/publish.log']) {
