@@ -1,6 +1,6 @@
 # Release Reliability Plan
 
-Status: **draft for owner approval** (written 2026-11-04, work starts Saturday 2026-11-07).
+Status: **approved by the owner 2026-11-04** (work starts Saturday 2026-11-07).
 Owner decision: v0.22.0 is delayed until this plan's exit criteria are met.
 
 ## 1. Goal and finish line
@@ -67,14 +67,14 @@ ODBC setting, running work during the gate).
 
 | # | Step | Est. | Output |
 |---|---|---|---|
-| 1 | Owner reviews and approves this plan (scope and cut line) | 30 min | Agreed scope |
+| 1 | Plan approved 2026-11-04; confirm nothing changed | 5 min | Agreed scope |
 | 2 | Push `diag/msi-portal-uninstall` **from the main checkout**; dispatch 3 Portal diagnostics on candidate 7's inputs (`13358924791`) and 2 control runs on the last passing inputs (`13338906263`, from 899ff8701) | 30 min, runs ~15 min | Last deferred MSI operation before the runner dies, and whether old passing inputs now fail too |
 | 3 | While diagnostics run: failure census (W0) | 3 h | Table of every v0.21.0/v0.22.0 failure by cause and hours lost |
 | 4 | Read diagnostic results; form one hypothesis for the MSI cause. If the control runs also fail, the cause is the hosted environment, not our code | 1 h | Named cause or next diagnostic |
 | 5 | Size the two JSON bugs (COMPRESS=ON writes `<path>.zip`; ROOT_PATH writes not readable) | 1 h | In or out of v0.22.0 |
 | 6 | Fix the pre-push fixtures that inherit `GIT_DIR` (W5 item; it can corrupt the repo) | 1 h | Safe to push from anywhere |
 | 6b | Start W1: extend the existing nightly workflow | rest of day | First manual rehearsal run |
-| 7 | Update ROADMAP/TODO from the approved plan; add a ROADMAP item to replace the Portal's older designer with Studio once Studio is feature complete | 30 min | Plan is the tracked source |
+| 7 | Update TODO from the approved plan (ROADMAP updated 2026-11-04) | 30 min | Plan is the tracked source |
 
 ## 4. Workstreams
 
@@ -251,8 +251,8 @@ with a merge queue, required checks and GitHub's built-in rerun of failed jobs.
 
 ## 8. Decisions needed from the owner
 
-1. Approve the finish line and the two-week timebox (section 1).
-2. Approve the cut line (W6, W7 and W8 below it).
+1. ~~Finish line and two-week timebox~~ approved 2026-11-04.
+2. ~~Cut line (W6, W7 and W8 below it)~~ approved 2026-11-04.
 3. W2: approve the design note before evidence reuse is coded.
 4. W8: which claims keep their operator evidence.
 5. Later, after W6 data: whether to pay for a dedicated performance machine.

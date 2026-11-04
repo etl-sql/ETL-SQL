@@ -85,124 +85,58 @@ that does not schedule their proposed implementation.
 
 ## Foundation and Next Horizon
 
-### Release Engineering — Faster Release Certification
+### Release Engineering — Routine, GitHub-Built Releases
 
-**Status:** Accepted  
-**Horizon:** Next (v0.22.0)  
-**Authoritative design:** [release checklist](docs/releases/release-checklist.md) (to be revised by this work)
+**Status:** Planned  
+**Horizon:** Foundation (blocks v0.22.0)  
+**Authoritative design:** [Release reliability plan](docs/RELEASE_RELIABILITY_PLAN.md)
 
-**Problem and Intended Outcome:** Certifying v0.21.0 took more than 24 hours of active work, spread over two days.
-The release branch ran 14 CI rounds (8 failed), 14 MSI upgrade rounds (10 failed) and 14 CodeQL
-rounds. Most of that time went on waiting for a full round to finish after a one-line fix. The
-outcome: the same evidence, with a full release in four hours or less from frozen candidate cut
-through publication, and ordinary PR validation in about 30 minutes. Include queueing, builds,
-tests, installation, evidence handling and publication. Aim for one full certification on the
-frozen candidate, with no more than two full rounds.
-Measure clean and recovery runs separately; watchdog ceilings are not timing targets.
+**Problem and intended outcome:** v0.22.0 took seven candidates on 2026-11-04. Five restarts came
+from release-only tooling that had been tested on invented data and first ran for real on release
+day; one came from the MSI Portal uninstall losing its hosted runner. The earlier goal (release in
+four hours with the same evidence) optimized the length of a good run while restarts dominated.
+The outcome now: releases are routine, built and published only by GitHub Actions, and kept
+healthy by a nightly release rehearsal rather than by another sprint. v0.22.0 is the first public
+release (VS Code Marketplace via OIDC Trusted Publishing), so the owner's machine must not be a
+source of truth for anything a user installs.
 
-**First priority — separate regular CI from release certification:**
+**Why foundation:** the owner delayed v0.22.0 until this is done (2026-11-04) so the team can return
+to feature work without a release sprint every month.
 
-- Share a tested impact manifest between focused local pre-push and regular push/PR CI. Run cheap
-  checks plus affected builds, tests and dependent consumers; target 30 minutes or less for ordinary
-  scoped changes. Unknown paths, missing diff bases and shared inputs expand coverage conservatively.
-- Run explicit full pre-tag certification on a frozen candidate, with independent resumable jobs
-  and retained artifacts. Nightly broad checks catch integration defects before release day.
-- Tag publication verifies full certification and hashes and promotes the certified bytes without
-  repeating the build/test cycle. Regular CI success alone cannot authorize publication.
-- Reuse successful jobs only for unchanged candidate and inputs. A source fix receives targeted
-  diagnostic validation, then full certification of the new candidate.
+**Boundaries:**
+- Default to common practice; anything heavier needs a stated reason tied to a real user or claim.
+- Remove before adding: a new gate must replace or simplify an existing one.
+- No waivers: a failing gate is fixed, re-baselined with a stated reason, or made report-only.
+- Shared SaaS and ETL-SQL Studio ship as alpha; evidence that only backs them can be deferred.
+- Not in scope: the full script and test review (a v0.23.0 priority) and Open VSX publishing
+  (owner: v0.23.0 or v0.24.0, after the Marketplace path proves out).
 
-Implement selection and tests first, and establish the full release gate before trimming existing
-lanes or local requirements. Migrate drivers, required checks and checklist policy together.
-Measure clean-run, recovery and publication times; the targets still require hosted evidence.
+**Dependencies:** the existing `nightly-release.yml` and its scheduler, the candidate supervisor,
+`release.yml` and its `publish-marketplace` job, and the MSI and DEB certification workflows.
 
-**Lessons from v0.21.0:**
+**Vertical delivery slices** (plan section 4; W6–W8 move to the backlog if the two-week timebox
+runs out):
+1. W0: failure census since v0.21.0, to confirm the order below with data.
+2. W1: extend the nightly run into a full release rehearsal (native packages, every post-tag
+   collector, operator validator, dry-run release up to the publish call).
+3. W2: reuse a lane's result when its inputs are unchanged (design note first).
+4. W3: MSI Portal uninstall runner loss fixed at the cause; installers certified nightly.
+5. W4: release tooling tested on recorded real outputs.
+6. W4b/W4c: remove the workstation from the release path; tag and publish from GitHub only, with
+   the Marketplace job hardened (pinned `vsce`, safe reruns).
+7. W5: flaky tests fixed at the cause, including the pre-push fixtures that inherit `GIT_DIR`.
+8. Below the cut line: W6 performance certification redesign (deterministic hard gates, same-host
+   A/B timing), W7 fast pre-push hook and local gate hygiene, W8 evidence scaled to current claims.
 
-1. **Defects surfaced at the end.** The installed-upgrade checks found the `admin backup` gap: it
-   missed the Orchestrator database the services write. They also found six installer defects, a
-   stale secrets file left by an earlier purge, and an MSI custom action that resolved the
-   installing user's profile instead of LocalSystem's. The Portal shards found a test broken by a
-   constructor change (`JobEntry` tenant id). The HA soak contracts found a moved module path. All of
-   these existed for weeks before certification ran.
-2. **Every fix cost a full round.** The longest CI job ran 39–61 minutes and the MSI certification
-   about 25 minutes. A fix to one script re-ran every lane.
-3. **Flaky browser tests cost reruns.** Each run failed a different single test: 1 of about 986, from
-   `net::ERR_NO_BUFFER_SPACE`, navigation timeouts or a host exit timeout. All passed locally and
-   on rerun. The final `main` push hit another one.
-4. **Lost runners left no evidence.** Hosted runners "lost communication": four times in the MSI
-   Portal-profile step (both of the tag's attempts) and once in the in-place step. A step timeout
-   discards the whole log. The Portal step passes in about 5 minutes. On both tag attempts, the
-   runner was lost about 10 minutes after the 35-minute watchdog was due, so the watchdog fired
-   but its evidence never uploaded. Either the script hangs, or the watchdog's `taskkill /T` takes
-   the runner down. Find out which before trusting that step. Diagnosis was blind until the MSI step got its own watchdog that
-   writes evidence before killing.
-5. **The local machine is a bottleneck.** The Portal lane runs out of memory as a single test host
-   (it had to be sharded by class name). Concurrent background lanes were killed under memory
-   pressure, so everything ran serially.
-6. **Performance drift was found too late to fix.** The Smoke deviation took a candidate/control
-   worktree pair and a bisect, and the control needed `NuGetAudit=false` to build.
-7. **The process is manual and scattered.** The checklist is 588 lines. Evidence lives in
-   gitignored folders under `artifacts/`. Status and date edits span four files (CHANGELOG, release
-   notes, releases index, TODO). The `TODO.md` gates were reconciled by hand.
-8. **Tooling traps cost retries.** A double-encoded em dash in `codeql.yml`, PowerShell here-strings
-   that do not pipe to `git commit`, and line-ending rewrites by Git Bash `sed`.
-9. **Branch policy and Dependabot got in the way.** Dependabot PR #35 could not merge into the old
-   `main` because of an unrelated package advisory, and had to be superseded by the release merge.
+**Acceptance evidence** (two weeks from 2026-11-07, with a re-plan check at the end of week 1):
+the nightly rehearsal is green five nights running with no manual help; the v0.22.0 candidate
+passes every certification on its first attempt; no gate is passed by waiver; a script or docs fix
+reruns only the lanes whose inputs changed; and a release reaches the Marketplace with one approval
+and no command on the owner's machine.
 
-**Ideas for getting the same evidence faster:**
-
-- **Shift left.** Run the installed-upgrade (DEB in a container, MSI Portal profile) and Portal-shard
-  lanes nightly on the release branch from the day it is cut, not at the end. A defect then costs a
-  normal fix, not a certification round.
-- **Rerun, don't re-push.** Diagnose the failure and preserve its evidence; retry only the failed
-  job when unchanged inputs justify a retry. Make a fix commit run only
-  the lanes its paths touch, using path filters and a manifest of which lanes cover which paths. The
-  final full round runs once.
-- **Shorten the longest job.** Split the Portal browser lane across parallel jobs, so the critical path
-  falls from about 60 minutes to about 20.
-- **Contain flakes.** Retry a browser test once, and record every retry in the flaky-test record as
-  evidence. Fix the recurring flakes in the v0.22.0 flaky-test work so retries trend to zero.
-- **Never lose a log.** Give every long step a watchdog with a timeout below the GitHub step timeout.
-  Stream its console to an artifact, and upload diagnostics on failure, as `msi-upgrade.yml` now
-  does.
-- **Move local-only lanes into CI.** That covers Docker integration, the Portal shards, HA soak
-  contracts and the recovery drill, so nothing needs the workstation's memory. The local gate shrinks
-  to the operator certifications that need a real host.
-- **Track performance continuously.** A nightly scale comparison against the last release catches
-  drift when it lands. It uses the calibrated process-isolated scale harness.
-- **One-command release metadata.** `Set-Version.ps1` (or a release step) flips the CHANGELOG
-  date, the release-notes status and the releases index together.
-- **An evidence manifest instead of hand reconciliation.** A script collects the run IDs, lane results
-  and certification outcomes into a retained candidate artifact/release attachment outside the
-  frozen commit. The checklist points at it; commit a historical reference later.
-- **Trim the checklist.** Turn every automated step into a single line that names its job, and keep
-  prose only for the judgement calls.
-- **Keep `main` releasable.** Pause Dependabot automatically during the release window, and keep
-  `main` green between releases so a release merge never inherits unrelated failures.
-
-**Boundaries:** Keep the evidence the same. Do not drop a lane, loosen a band or count a skipped
-check as passed; faster means less waiting and fewer repeats. Larger or self-hosted runners are an
-option only if the changes above leave the critical path too long.
-
-**Dependencies:** The [completed scale calibration](docs/benchmarks/scale-baseline-calibration-2026-10-23.md#scaled-warm-up-calibration)
-supplies the performance reference. The v0.22.0 flaky-test work remains required for flake containment.
-
-**Vertical Delivery Slices:**
-
-1. Separate regular CI from full release certification with tested impact selection and enforced
-   publication gates. Record the release timeline throughout this work.
-2. Nightly release-branch lanes: installed upgrades and Portal shards.
-3. Path-filtered fix rounds, plus the Portal browser lane split into parallel jobs.
-4. Watchdogs and log streaming on every long step.
-5. A one-command metadata flip and the evidence manifest.
-6. Move the local-only lanes into CI, then trim the checklist to match.
-
-**Acceptance Evidence:** measure release elapsed time from candidate cut through publication against
-the four-hour target, recording clean and recovery runs separately, with no more than two full CI
-rounds on the final candidate. Measure ordinary PR validation against the 30-minute target.
-Demonstrate affected-lane selection, conservative fallback, failed-job-only recovery and publication
-without rebuilding certified packages. Its evidence manifest covers every gate v0.21.0 covered.
-
+**Lessons kept from v0.21.0:** defects surfaced only at certification (shift installer and Portal
+lanes to nightly); hosted runners lost mid-step need watchdogs that upload evidence first; local
+memory pressure made the workstation a bottleneck; release metadata edits must be one command.
 
 ## Later Reporting and Presentation Work
 
@@ -457,7 +391,9 @@ administration rights.
 
 **Why next:** Resume the remaining authoring, recovery and certification work next sprint. Completeness
 is measured by successful report and ETL journeys across both hosts, with visual helpers and code
-editing working together. Entry-point retirement is a separate future decision. Mobile authoring
+editing working together. Once Studio is feature complete, it replaces the Portal's older designer
+(`designer.html`); the owner confirmed this direction on 2026-11-04, and the timing is a separate
+future decision. Mobile authoring
 retains its separate Later horizon.
 
 **Boundaries:** Preserve standard `.rptsql` and `.etlsql` scripts as the source of truth, surgical

@@ -20,7 +20,7 @@ outcome in `CHANGELOG.md` and delete it. Deferred initiatives stay in `ROADMAP.m
 
 ### 1. Faster release certification
 
-**Design:** [`ROADMAP.md`](ROADMAP.md#release-engineering--faster-release-certification).
+**Design:** [`ROADMAP.md`](ROADMAP.md#release-engineering--routine-github-built-releases).
 **Goal:** a full release in four hours or less, from frozen candidate through publication, with the
 same evidence as v0.21.0; ordinary PR validation in about 30 minutes. Measure clean and recovery
 runs separately; watchdog ceilings are not timing targets. A source fix creates a new candidate;
