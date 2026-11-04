@@ -119,4 +119,23 @@ scope:{quick:false,forceResume:false,skipNode:false,skipScale:false,includeSlt:t
   }
 } finally { rmSync(root, { recursive: true, force: true }); }
 
+// The driver above runs a stand-in gate. This drives the real one with the absolute -OutDir the
+// driver passes, so a gate that re-roots that path under the repository fails here, not on the workstation.
+{
+  const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const outDir = path.join(mkdtempSync(path.join(os.tmpdir(), 'prerelease-outdir-')), 'validation');
+  try {
+    const plan = spawnSync('pwsh', ['-NoProfile', '-File', path.join(repo, 'scripts/Test-PreRelease.ps1'), '-Explain', '-Configuration', 'Release', '-OutDir', outDir],
+      { cwd: repo, env, windowsHide: true, encoding: 'utf8', timeout: 60000 });
+    assert.ifError(plan.error);
+    assert.equal(plan.status, 0, plan.stdout + plan.stderr);
+    const results = /^Results: (.+)$/m.exec(plan.stdout)?.[1]?.trim();
+    assert.equal(path.dirname(results ?? ''), outDir, plan.stdout);
+    const lane = /^Coverage results \(repo-relative\): (.+)$/m.exec(plan.stdout)?.[1]?.trim();
+    assert.ok(lane && !path.isAbsolute(lane), `child lanes join -ResultsDirectory onto the repo root: ${lane}`);
+    assert.equal(path.resolve(repo, lane), path.join(results, 'coverage'));
+    console.log('Pre-release gate: an absolute -OutDir is used as given.');
+  } finally { rmSync(path.dirname(outDir), { recursive: true, force: true }); }
+}
+
 await import('./fixtures/test-workstation-resume.mjs');

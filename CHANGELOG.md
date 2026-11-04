@@ -23,6 +23,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   also required the CLI version log to be one line, but the CLI prints its security-policy lines
   first. The canary plan is pinned to LF so its recorded hash matches on every checkout.
 - Promote certified Windows and macOS packages whose launch log carries the CLI's start-up lines.
+- Run the Windows workstation check with its absolute evidence path instead of nesting it under the repository.
   Release selection required the log to hold only the version, so it would have refused every
   real native package after tagging. It now requires the exact candidate version as one line.
 - Monitor MSI certification from an independent Linux runner. Retain its progress report before

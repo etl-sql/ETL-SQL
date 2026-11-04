@@ -79,14 +79,16 @@ $RepoRoot = Resolve-Path (Join-Path $ScriptRoot "..")
 . (Join-Path $ScriptRoot "lib/DependencyAudit.ps1")
 . (Join-Path $ScriptRoot "Release.Helpers.ps1")
 . (Join-Path $ScriptRoot "lib/PhaseWatchdog.Helpers.ps1")
-$ValidationRoot = Join-Path $RepoRoot $OutDir
+# The workstation driver passes an absolute evidence path; Join-Path would re-root it under the repo.
+$ValidationRoot = if ([IO.Path]::IsPathRooted($OutDir)) { [IO.Path]::GetFullPath($OutDir) } else { Join-Path $RepoRoot $OutDir }
 $LatestDir = Join-Path $ValidationRoot "latest"
 $StatePath = Join-Path $LatestDir "state.json"
 $RunId = Get-Date -Format "yyyyMMdd-HHmmss"
 $RunDir = Join-Path $ValidationRoot $RunId
 $ReportJsonPath = Join-Path $RunDir "pre-release-report.json"
 $ReportMarkdownPath = Join-Path $RunDir "pre-release-report.md"
-$CoverageResultsRelative = Join-Path $OutDir "$RunId\coverage"
+# Child lanes join this onto the repo root, so it must stay relative even when -OutDir is absolute.
+$CoverageResultsRelative = [IO.Path]::GetRelativePath([string]$RepoRoot, (Join-Path $RunDir "coverage"))
 $CoverageReportDir = Join-Path $RunDir "coverage\report"
 $smokeBaselineReport = Join-Path $RunDir "cert-baseline-smoke.md"
 $standardBaselineReport = Join-Path $RunDir "cert-baseline-standard.md"
@@ -187,6 +189,8 @@ function Get-PlannedPreReleasePhases {
 function Show-PreReleasePlan {
     Write-Host "Pre-release validation plan" -ForegroundColor Cyan
     Write-Host ("Configuration: {0}" -f $Configuration)
+    Write-Host ("Results: {0}" -f $RunDir)
+    Write-Host ("Coverage results (repo-relative): {0}" -f $CoverageResultsRelative)
     Write-Host ("Quick: {0}; IncludeSlt: {1}; Docker: {2}; StandardScale: {3}; BuildInstallers: {4}" -f `
         [bool]$Quick, [bool]$IncludeSlt, [bool]$EffectiveIncludeDockerIntegration, [bool]$EffectiveIncludeStandardScale, [bool]$EffectiveBuildInstallers)
     Write-Host ""
