@@ -332,3 +332,12 @@ configured), the Orchestrator's orphan cleanup (identity-checked), and machine-w
 proxy or firewall changes in the product (none in the source). Still open: what kills the VM within
 about 1–2 s of an `msiexec` that touches the Portal profile, when the Workstation profile never
 fails.
+
+**MSI diagnostics, round 4 (2026-11-07): runner image A/B** (`bb51fb9d1`, runs
+42401023017–42401079909, same retained inputs). `windows-latest` (windows-2025-vs2026): 4 passed,
+2 lost. `windows-2022`: 2 passed, 4 lost. The hosted-image regression reported in
+actions/runner-images#14938 and microsoft/aspire#21570 is not the cause. All six losses were at the
+fresh uninstall, within about 0.5–2 s of `msiexec` starting, with no ETL-SQL process running and
+no file holders. Also ruled out: console control events from the product (none in the source).
+The loss is instant and total (runner and heartbeat both stop, nothing uploads), which looks like
+a VM-level crash or network loss that cannot be observed from inside the job.
