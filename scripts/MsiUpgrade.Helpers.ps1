@@ -315,6 +315,63 @@ function Read-MsiDiagnosticEvents {
     return $result
 }
 
+# Asks Restart Manager which processes hold files under a directory: the same question MSI asks in
+# InstallValidate before it shuts applications down in a silent install. Diagnostic only.
+function Get-RestartManagerHolders {
+    param([string]$Directory)
+    if (-not (Test-Path -LiteralPath $Directory)) { return @() }
+    if (-not ('EtlSqlDiagnostics.RestartManagerProbe' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+namespace EtlSqlDiagnostics {
+public static class RestartManagerProbe {
+    [StructLayout(LayoutKind.Sequential)] struct RM_UNIQUE_PROCESS { public int dwProcessId; public System.Runtime.InteropServices.ComTypes.FILETIME ProcessStartTime; }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct RM_PROCESS_INFO {
+        public RM_UNIQUE_PROCESS Process;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string strAppName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)] public string strServiceShortName;
+        public int ApplicationType; public uint AppStatus; public uint TSSessionId; [MarshalAs(UnmanagedType.Bool)] public bool bRestartable; }
+    [DllImport("rstrtmgr.dll", CharSet = CharSet.Unicode)] static extern int RmStartSession(out uint h, int flags, string key);
+    [DllImport("rstrtmgr.dll")] static extern int RmEndSession(uint h);
+    [DllImport("rstrtmgr.dll", CharSet = CharSet.Unicode)] static extern int RmRegisterResources(uint h, uint nFiles, string[] files, uint nApps, IntPtr apps, uint nSvc, string[] svc);
+    [DllImport("rstrtmgr.dll")] static extern int RmGetList(uint h, out uint needed, ref uint count, [In, Out] RM_PROCESS_INFO[] info, ref uint reasons);
+    static readonly string[] Types = { "RmUnknownApp", "RmMainWindow", "RmOtherWindow", "RmService", "RmExplorer", "RmConsole" };
+    public static List<string[]> Holders(string[] files) {
+        var result = new List<string[]>();
+        uint h; if (RmStartSession(out h, 0, Guid.NewGuid().ToString("N")) != 0) return result;
+        try {
+            if (RmRegisterResources(h, (uint)files.Length, files, 0, IntPtr.Zero, 0, null) != 0) return result;
+            uint needed = 0, count = 0, reasons = 0;
+            int rc = RmGetList(h, out needed, ref count, null, ref reasons);
+            if (rc != 234 || needed == 0) return result;
+            var info = new RM_PROCESS_INFO[needed]; count = needed;
+            if (RmGetList(h, out needed, ref count, info, ref reasons) != 0) return result;
+            for (int i = 0; i < count; i++) {
+                int t = info[i].ApplicationType;
+                result.Add(new[] { t >= 0 && t < Types.Length ? Types[t] : "Rm" + t, info[i].strAppName ?? "", info[i].Process.dwProcessId.ToString() });
+            }
+        } finally { RmEndSession(h); }
+        return result;
+    }
+}
+}
+'@
+    }
+    $files = @(Get-ChildItem -LiteralPath $Directory -Recurse -File -Force -ErrorAction SilentlyContinue | ForEach-Object FullName)
+    if (-not $files.Count) { return @() }
+    $byPid = @{}
+    foreach ($process in @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)) { $byPid[[int]$process.ProcessId] = $process }
+    return @([EtlSqlDiagnostics.RestartManagerProbe]::Holders($files) | ForEach-Object {
+            $process = $byPid[[int]$_[2]]
+            $parent = if ($process) { $byPid[[int]$process.ParentProcessId] } else { $null }
+            $image = if ($process) { [IO.Path]::GetFileNameWithoutExtension($process.Name) } else { $_[1] }
+            $parentImage = if ($parent) { [IO.Path]::GetFileNameWithoutExtension($parent.Name) } else { 'none' }
+            ConvertTo-MsiDiagnosticToken 'holder' "$($_[0]) $image pid $($_[2]) parent $parentImage"
+        })
+}
+
 function Invoke-MsiExec {
     param([string[]]$Arguments, [string]$LogPath, [string]$Stage, [int]$TimeoutMinutes = 10)
 
@@ -332,6 +389,13 @@ function Invoke-MsiExec {
         $name = [IO.Path]::GetFileNameWithoutExtension($LogPath)
         $lastAction = $null
         $logState = @{ Offset = 0; Decoder = $null; Carry = '' }
+        # Restart Manager shut applications down right before every lost runner (2026-11-07). Name
+        # what held installed files just before msiexec, as MSI's own check will see it.
+        try {
+            $holders = @(Get-RestartManagerHolders $(if ($env:ETLSQL_MSI_PROBE_DIRECTORY) { $env:ETLSQL_MSI_PROBE_DIRECTORY } else { 'C:\Program Files\ETL-SQL' }))
+            if (-not $holders.Count) { $holders = @('holder_none') }
+            foreach ($holder in $holders) { $null = Write-MsiDurableCheckpoint -Stage "msi $name $holder" }
+        } catch { $null = Write-MsiDurableCheckpoint -Stage "msi $name holder_probe_failed" }
         $null = Write-MsiDurableCheckpoint -Stage "msi $name process_started"
     }
     # Use the same bounded polling for quiet certification and observed diagnostics. Diagnostics poll

@@ -61,6 +61,30 @@ try {
         if ($null -ne $third.Action -or $third.RestartManager.Count) { throw 'Lines were read twice.' }
     }
     if ((ConvertTo-MsiDiagnosticToken 'rm_holds' ('x' * 200)).Length -gt 64) { throw 'Checkpoint token exceeded the stage grammar.' }
+
+    # Real Restart Manager: a console process holding a file must be named with its PID, as MSI
+    # will see it, and nothing once it exits.
+    if ($IsWindows) {
+        $held = Join-Path $root 'held'
+        New-Item -ItemType Directory -Path $held | Out-Null
+        $heldFile = Join-Path $held 'held.dll'
+        Set-Content -LiteralPath $heldFile -Value 'x'
+        # Start-Process is stubbed above for the msiexec fixture.
+        $start = [Diagnostics.ProcessStartInfo]::new((Get-Process -Id $PID).Path)
+        foreach ($argument in @('-NoProfile', '-Command', "`$s = [IO.File]::Open('$heldFile', 'Open', 'Read', 'Read'); Start-Sleep 60")) { $start.ArgumentList.Add($argument) }
+        $start.CreateNoWindow = $true
+        $holder = [Diagnostics.Process]::Start($start)
+        try {
+            $deadline = [DateTime]::UtcNow.AddSeconds(20); $named = @()
+            while ([DateTime]::UtcNow -lt $deadline) {
+                $named = @(Get-RestartManagerHolders $held)
+                if ($named.Count) { break }
+                Start-Sleep -Milliseconds 250
+            }
+            if (($named -join ',') -notmatch "^holder_RmConsole_pwsh_pid_$($holder.Id)_parent_") { throw "Restart Manager probe did not name the holder: '$($named -join ',')'." }
+        } finally { Stop-Process -Id $holder.Id -Force -ErrorAction SilentlyContinue; $holder.WaitForExit(10000) | Out-Null }
+        if (@(Get-RestartManagerHolders $held).Count) { throw 'Restart Manager probe named an exited process.' }
+    }
     foreach ($mode in @('normal', 'diagnostic', 'failure', 'timeout')) {
         $global:MsiActionFixtureTrace.Clear()
         $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = if ($mode -eq 'normal') { '0' } else { '1' }
