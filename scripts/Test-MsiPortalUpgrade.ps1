@@ -29,7 +29,7 @@ param(
     [Parameter(Mandatory)] [string]$PreviousMsi,
     [Parameter(Mandatory)] [string]$CurrentMsi,
     [string]$OutDir = './release-validation/msi-portal-upgrade',
-    [ValidateSet('All', 'UpgradeRollback')] [string]$DiagnosticScenario = 'All'
+    [ValidateSet('All', 'UpgradeRollback', 'FreshNoBackup', 'FreshServicesRunning')] [string]$DiagnosticScenario = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -247,7 +247,9 @@ function Get-DatabaseFiles {
 
 $services = 'ETL-SQL-Orchestrator', 'ETL-SQL-Portal'
 try {
-    if ($DiagnosticScenario -ceq 'All') {
+    # FreshNoBackup and FreshServicesRunning are diagnostic-only isolation runs for the Portal runner
+    # loss: the fresh uninstall without the admin-backup CLI, and without stopping the services first.
+    if ($DiagnosticScenario -cin @('All', 'FreshNoBackup', 'FreshServicesRunning')) {
         # 0. Fresh install of the candidate, with no operator configuration at all.
         Write-Line "== fresh install of $($contract.CurrentVersion)"
         Test-Step 'fresh: msiexec install' { Install-Msi $currentPath '00-fresh.log' }
@@ -265,7 +267,8 @@ try {
         Test-Step 'fresh: served assets match the candidate' { Invoke-Assets @('--inventory-root', $repoRoot, '--out', (Join-Path $out 'fresh-assets.json')) }
         # `admin backup` runs as the operator, not LocalSystem, so it must be told where the service's
         # job history is. Before v0.21.0 it silently backed up no Orchestrator database.
-        Test-Step 'fresh: admin backup includes the job history the service writes' {
+        if ($DiagnosticScenario -ceq 'FreshNoBackup') { Test-Step 'diagnostic: services stopped without admin backup' { Set-ServicesState 'Stopped' } }
+        if ($DiagnosticScenario -ceq 'All') { Test-Step 'fresh: admin backup includes the job history the service writes' {
             Write-ResourceSnapshot 'fresh backup start'
             $jobHistory = Join-Path $systemData 'etlsql.db'
             if ((Get-Setting 'Portal:Orchestrator:DatabasePath') -ne $jobHistory) { throw "Portal:Orchestrator:DatabasePath is '$(Get-Setting 'Portal:Orchestrator:DatabasePath')', expected $jobHistory." }
@@ -296,7 +299,7 @@ try {
                 if ($entries -notcontains $name) { throw "The backup has no $name ($($entries -join ', '))." }
             }
             Write-ResourceSnapshot 'fresh backup complete'
-        }
+        } }
         $null = Write-MsiDurableCheckpoint -Stage 'fresh uninstall start'
         Uninstall-All '00-fresh-uninstall.log'
         $null = Write-MsiDurableCheckpoint -Stage 'fresh uninstall complete'
