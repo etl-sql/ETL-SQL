@@ -29,7 +29,7 @@ param(
     [Parameter(Mandatory)] [string]$PreviousMsi,
     [Parameter(Mandatory)] [string]$CurrentMsi,
     [string]$OutDir = './release-validation/msi-portal-upgrade',
-    [ValidateSet('All', 'UpgradeRollback', 'FreshNoBackup', 'FreshServicesRunning')] [string]$DiagnosticScenario = 'All'
+    [ValidateSet('All', 'UpgradeRollback', 'FreshNoBackup', 'FreshServicesRunning', 'FreshIdle', 'FreshIdleNoStart')] [string]$DiagnosticScenario = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -246,6 +246,73 @@ function Get-DatabaseFiles {
 }
 
 $services = 'ETL-SQL-Orchestrator', 'ETL-SQL-Portal'
+
+# FreshIdle and FreshIdleNoStart are diagnostic-only isolation runs for the Portal runner loss: install,
+# sit idle for 90 s with a checkpoint every 10 s, then uninstall. FreshIdleNoStart installs a copy of the
+# candidate whose ServiceControl rows no longer start the services on install, so the two services are
+# registered but never run. If only FreshIdle loses runners, something the running services do is the
+# trigger.
+function New-MsiWithoutServiceStart([string]$Source, [string]$Destination) {
+    Copy-Item -LiteralPath $Source -Destination $Destination -Force
+    # PowerShell 7 cannot late-bind WindowsInstaller.Installer's methods directly; InvokeMember can.
+    $call = { param($Object, $Name, $Kind, [object[]]$Arguments) $Object.GetType().InvokeMember($Name, $Kind, $null, $Object, $Arguments) }
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    $db = & $call $installer 'OpenDatabase' 'InvokeMethod' @($Destination, 1)   # msiOpenDatabaseModeTransact
+    $rows = @()
+    $view = & $call $db 'OpenView' 'InvokeMethod' @('SELECT `ServiceControl`, `Event` FROM `ServiceControl`')
+    [void](& $call $view 'Execute' 'InvokeMethod' @())
+    while ($null -ne ($record = & $call $view 'Fetch' 'InvokeMethod' @())) {
+        $rows += [pscustomobject]@{ Id = & $call $record 'StringData' 'GetProperty' @(1); Event = & $call $record 'IntegerData' 'GetProperty' @(2) }
+    }
+    [void](& $call $view 'Close' 'InvokeMethod' @())
+    $changed = 0
+    foreach ($row in $rows | Where-Object { $_.Event -band 1 }) {   # msidbServiceControlEventStart
+        $update = & $call $db 'OpenView' 'InvokeMethod' @("UPDATE ``ServiceControl`` SET ``Event`` = $($row.Event -band -bnot 1) WHERE ``ServiceControl`` = '$($row.Id)'")
+        [void](& $call $update 'Execute' 'InvokeMethod' @()); [void](& $call $update 'Close' 'InvokeMethod' @()); $changed++
+    }
+    [void](& $call $db 'Commit' 'InvokeMethod' @())
+    # Every view and record holds the database open; msiexec cannot open the copy until all are gone.
+    $view = $update = $record = $db = $installer = $null
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers(); [GC]::Collect()
+    if ($changed -lt 2) { throw "Expected to remove the install-time start from both services; changed $changed of $($rows.Count) rows." }
+    Write-Line "NOTE diagnostic: removed the install-time start from $changed ServiceControl row(s)"
+}
+
+if ($DiagnosticScenario -cin @('FreshIdle', 'FreshIdleNoStart')) {
+    try {
+        $msi = $currentPath
+        if ($DiagnosticScenario -ceq 'FreshIdleNoStart') {
+            $msi = Join-Path ([IO.Path]::GetTempPath()) 'etlsql-no-service-start.msi'
+            New-MsiWithoutServiceStart $currentPath $msi
+        }
+        Write-Line "== fresh install of $($contract.CurrentVersion)"
+        Test-Step 'fresh: msiexec install' { Install-Msi $msi '00-fresh.log' }
+        $expected = $DiagnosticScenario -ceq 'FreshIdle' ? 'Running' : 'Stopped'
+        foreach ($service in $services) {
+            Test-Step "diagnostic: $service is $expected" { (Get-Service -Name $service).Status.ToString() -ceq $expected }
+        }
+        foreach ($second in 10, 20, 30, 40, 50, 60, 70, 80, 90) {
+            Start-Sleep -Seconds 10
+            $null = Write-MsiDurableCheckpoint -Stage "msi 00-fresh idle_$($second)s"
+        }
+        Test-Step "diagnostic: services still $expected after 90 s" {
+            @($services | Where-Object { (Get-Service -Name $_).Status.ToString() -cne $expected }).Count -eq 0
+        }
+        $null = Write-MsiDurableCheckpoint -Stage 'fresh uninstall start'
+        Uninstall-All '00-fresh-uninstall.log'
+        $null = Write-MsiDurableCheckpoint -Stage 'fresh uninstall complete'
+    } catch {
+        Write-Line "ABORT — $($_.Exception.Message)"
+        $script:failed = 1
+    } finally {
+        Remove-Item -LiteralPath $privateBackupRoot -Recurse -Force -ErrorAction SilentlyContinue
+        Uninstall-All '04-cleanup-uninstall.log'
+        Test-Step 'cleanup: no product remains' { [void](Assert-EntryCount 0 'Cleanup') }
+    }
+    Write-Line ($script:failed -eq 0 ? 'RESULT PASS' : 'RESULT FAIL')
+    exit $script:failed
+}
+
 try {
     # FreshNoBackup and FreshServicesRunning are diagnostic-only isolation runs for the Portal runner
     # loss: the fresh uninstall without the admin-backup CLI, and without stopping the services first.
