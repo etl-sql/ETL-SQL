@@ -257,6 +257,64 @@ function Get-MsiDiagnosticAction {
     return $null
 }
 
+function ConvertTo-MsiDiagnosticToken {
+    param([string]$Prefix, [string]$Text)
+    $body = ([regex]::Replace($Text, '[^A-Za-z0-9]+', '_')).Trim('_')
+    $token = "${Prefix}_$body"
+    if ($token.Length -gt 64) { $token = $token.Substring(0, 64).TrimEnd('_') }
+    return $token
+}
+
+# Reads only what MSI appended since the last call, so every Restart Manager decision is seen even
+# when the whole immediate sequence runs between two polls (about one second on a hosted runner).
+# Returns the newest action name and one token per Restart Manager line, in log order. Only action
+# names and Restart Manager application names and types leave the log, never property values.
+function Read-MsiDiagnosticEvents {
+    param([string]$LogPath, [hashtable]$State)
+    $result = @{ Action = $null; RestartManager = [Collections.Generic.List[string]]::new() }
+    $stream = $null
+    try {
+        $stream = [IO.FileStream]::new($LogPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
+        if ($stream.Length -le $State.Offset) { return $result }
+        if (-not $State.Decoder) {
+            $signature = [byte[]]::new(2)
+            if ($stream.Read($signature, 0, 2) -lt 2) { return $result }
+            $unicode = $signature[0] -eq 255 -and $signature[1] -eq 254
+            $State.Decoder = $(if ($unicode) { [Text.Encoding]::Unicode } else { [Text.Encoding]::UTF8 }).GetDecoder()
+            $State.Offset = 0
+            $State.Carry = ''
+        }
+        $null = $stream.Seek($State.Offset, [IO.SeekOrigin]::Begin)
+        $buffer = [byte[]]::new([int][math]::Min(4194304, $stream.Length - $State.Offset))
+        $count = $stream.Read($buffer, 0, $buffer.Length)
+        $State.Offset += $count
+        $chars = [char[]]::new($State.Decoder.GetCharCount($buffer, 0, $count))
+        $null = $State.Decoder.GetChars($buffer, 0, $count, $chars, 0)
+        $text = ($State.Carry + [string]::new($chars)).TrimStart([char]0xFEFF)
+        $end = $text.LastIndexOf("`n", [StringComparison]::Ordinal)
+        if ($end -lt 0) { $State.Carry = $text; return $result }
+        $State.Carry = $text.Substring($end + 1)
+        foreach ($line in $text.Substring(0, $end).Split("`n")) {
+            $line = $line.TrimEnd("`r")
+            $action = [regex]::Match($line, '^(?:Action start [0-9]{1,2}:[0-9]{2}:[0-9]{2}: ([A-Za-z][A-Za-z0-9_]{0,63})\.$|MSI \(s\) \([0-9A-F]{1,8}[:!][0-9A-F]{1,8}\) \[[0-9:]{8,12}\]: Executing op: ActionStart\(Name=([A-Za-z][A-Za-z0-9_]{0,63}),)')
+            if ($action.Success) {
+                $result.Action = $(if ($action.Groups[1].Success) { $action.Groups[1].Value } else { $action.Groups[2].Value })
+                continue
+            }
+            $restart = [regex]::Match($line, '^MSI \([sc]\) \([0-9A-F]{1,8}[:!][0-9A-F]{1,8}\) \[[0-9:]{8,12}\]: RESTART MANAGER: (.+)$')
+            if (-not $restart.Success) { continue }
+            $holder = [regex]::Match($restart.Groups[1].Value, "friendly name '([^']{1,80})', of type ([A-Za-z]{1,32})")
+            $result.RestartManager.Add($(if ($holder.Success) {
+                        ConvertTo-MsiDiagnosticToken 'rm_holds' "$($holder.Groups[2].Value) $($holder.Groups[1].Value)"
+                    } else {
+                        ConvertTo-MsiDiagnosticToken 'rm' (($restart.Groups[1].Value -split '\s+' | Select-Object -First 10) -join ' ')
+                    }))
+        }
+    } catch [IO.IOException] { } catch [UnauthorizedAccessException] { }
+    finally { if ($stream) { $stream.Dispose() } }
+    return $result
+}
+
 function Invoke-MsiExec {
     param([string[]]$Arguments, [string]$LogPath, [string]$Stage, [int]$TimeoutMinutes = 10)
 
@@ -273,13 +331,20 @@ function Invoke-MsiExec {
     if ($diagnostic) {
         $name = [IO.Path]::GetFileNameWithoutExtension($LogPath)
         $lastAction = $null
+        $logState = @{ Offset = 0; Decoder = $null; Carry = '' }
         $null = Write-MsiDurableCheckpoint -Stage "msi $name process_started"
     }
-    # Use the same bounded polling for quiet certification and observed diagnostics.
+    # Use the same bounded polling for quiet certification and observed diagnostics. Diagnostics poll
+    # faster: the runner has died within about a second of an uninstall starting.
+    $pollMilliseconds = if ($diagnostic) { 200 } else { 1000 }
     while ($watch.ElapsedMilliseconds -lt $TimeoutMinutes * 60000) {
-        $finished = $process.WaitForExit([int][math]::Max(0, [math]::Min(1000, $TimeoutMinutes * 60000 - $watch.ElapsedMilliseconds)))
+        $finished = $process.WaitForExit([int][math]::Max(0, [math]::Min($pollMilliseconds, $TimeoutMinutes * 60000 - $watch.ElapsedMilliseconds)))
         if ($diagnostic) {
-            $action = Get-MsiDiagnosticAction $LogPath
+            $events = Read-MsiDiagnosticEvents $LogPath $logState
+            # Restart Manager lines are rare and name what it may shut down, so they go first; only
+            # the newest action follows, because each checkpoint is a network call.
+            foreach ($token in $events.RestartManager) { $null = Write-MsiDurableCheckpoint -Stage "msi $name $token" }
+            $action = $events.Action
             if ($action -and $action -cne $lastAction) {
                 $null = Write-MsiDurableCheckpoint -Stage "msi $name $action"
                 $lastAction = $action

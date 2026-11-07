@@ -33,6 +33,34 @@ try {
         if ($null -ne (Get-MsiDiagnosticAction $file)) { throw 'Deferred values escaped action filtering.' }
     }
     if ($null -ne (Get-MsiDiagnosticAction (Join-Path $root 'missing.log'))) { throw 'Missing log returned an action.' }
+
+    # Real output: action and Restart Manager lines of a passing Portal uninstall on a hosted runner
+    # (run 42391957207). Its whole immediate sequence ran in about a second, between two old polls.
+    $real = Join-Path $PSScriptRoot 'fixtures/msi-diagnostic/portal-fresh-uninstall-20261107.excerpt.log'
+    $events = Read-MsiDiagnosticEvents $real @{ Offset = 0; Decoder = $null; Carry = '' }
+    if ($events.Action -cne 'PublishProduct') { throw "Real uninstall log: newest action was '$($events.Action)'." }
+    if (($events.RestartManager -join ',') -cne 'rm_Session_opened,rm_Session_closed') { throw "Real uninstall log: Restart Manager events were '$($events.RestartManager -join ',')'." }
+
+    foreach ($encoding in @([Text.Encoding]::UTF8, [Text.Encoding]::Unicode)) {
+        $file = Join-Path $root ($encoding.WebName + '-events.log')
+        $state = @{ Offset = 0; Decoder = $null; Carry = '' }
+        [IO.File]::WriteAllText($file, "MSI (s) (80:60) [16:37:06:045]: RESTART MANAGER: Session opened.`r`nAction start 16:37:06: InstallVal", $encoding)
+        $first = Read-MsiDiagnosticEvents $file $state
+        if ($null -ne $first.Action -or ($first.RestartManager -join ',') -cne 'rm_Session_opened') { throw 'A partial line was read, or the first Restart Manager line was missed.' }
+        $append = "idate.`r`n" +
+            "MSI (s) (80:60) [16:37:06:400]: RESTART MANAGER: Detected that application with id 1184, friendly name 'Network Store Interface Service', of type RmService and status 1 holds file[s] in use.`r`n" +
+            "Property(S): secret = private-value`r`n" +
+            "MSI (s) (80!D0) [16:37:06:500]: Executing op: ActionStart(Name=StopServices,Description=x)`r`n"
+        $bytes = $encoding.GetBytes($append)
+        $stream = [IO.File]::Open($file, 'Append'); $stream.Write($bytes, 0, $bytes.Length); $stream.Dispose()
+        $second = Read-MsiDiagnosticEvents $file $state
+        if ($second.Action -cne 'StopServices') { throw "Incremental read lost the newest action: '$($second.Action)'." }
+        if (($second.RestartManager -join ',') -cne 'rm_holds_RmService_Network_Store_Interface_Service') { throw "Restart Manager holder was not named: '$($second.RestartManager -join ',')'." }
+        if ((@($first.RestartManager) + @($second.RestartManager) + @($second.Action)) -join ' ' -match 'private|secret') { throw 'Log values escaped event filtering.' }
+        $third = Read-MsiDiagnosticEvents $file $state
+        if ($null -ne $third.Action -or $third.RestartManager.Count) { throw 'Lines were read twice.' }
+    }
+    if ((ConvertTo-MsiDiagnosticToken 'rm_holds' ('x' * 200)).Length -gt 64) { throw 'Checkpoint token exceeded the stage grammar.' }
     foreach ($mode in @('normal', 'diagnostic', 'failure', 'timeout')) {
         $global:MsiActionFixtureTrace.Clear()
         $env:ETLSQL_MSI_DIAGNOSTIC_ONLY = if ($mode -eq 'normal') { '0' } else { '1' }
@@ -46,7 +74,8 @@ try {
             param([int]$Milliseconds)
             $this.Waits.Add($Milliseconds); $this.Calls++
             $action = if ($this.Calls -eq 1) { 'InstallValidate' } else { 'InstallServices' }
-            [IO.File]::AppendAllText($this.LogPath, "Action start 12:34:56: $action.`r`n", [Text.Encoding]::Unicode)
+            $restart = if ($this.Calls -eq 1) { "MSI (s) (80:60) [12:34:56:100]: RESTART MANAGER: Detected that application with id 7, friendly name 'Fixture', of type RmService and status 1 holds file[s] in use.`r`n" } else { '' }
+            [IO.File]::AppendAllText($this.LogPath, "Action start 12:34:56: $action.`r`n$restart", [Text.Encoding]::Unicode)
             return $Milliseconds -gt 1000 -or $this.Calls -ge 3
         }
         $global:MsiActionFixtureProcess | Add-Member ScriptMethod Kill { $this.Killed = $true }
@@ -61,9 +90,13 @@ try {
             if (-not $global:MsiActionFixtureProcess.Killed) { throw 'Diagnostic timeout did not stop its own process.' }
         } else {
             $exitAction = 'process_exited_' + $global:MsiActionFixtureProcess.ExitCode
-            foreach ($action in @('process_started', 'InstallValidate', 'InstallServices', $exitAction)) {
+            foreach ($action in @('process_started', 'rm_holds_RmService_Fixture', 'InstallValidate', 'InstallServices', $exitAction)) {
                 if ($global:MsiActionFixtureTrace -cnotcontains "msi 02-upgrade $action") { throw "Missing diagnostic MSI action: $action" }
             }
+            if ($global:MsiActionFixtureTrace.IndexOf('msi 02-upgrade rm_holds_RmService_Fixture') -gt $global:MsiActionFixtureTrace.IndexOf('msi 02-upgrade InstallValidate')) {
+                throw 'Restart Manager events must be posted before the newest action.'
+            }
+            if (@($global:MsiActionFixtureProcess.Waits | Where-Object { $_ -gt 200 }).Count) { throw 'Diagnostic polling slowed down.' }
         }
     }
     Write-Host 'MSI action diagnostics: bounded tails expose only action names; quiet and diagnostic waits poll under the same deadline and preserve failure/timeout cleanup. No installer executed.'
