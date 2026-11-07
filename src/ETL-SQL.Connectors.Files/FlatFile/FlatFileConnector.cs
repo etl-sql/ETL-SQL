@@ -93,7 +93,7 @@ namespace ETL_SQL.Connectors.FlatFile
             "  START_AT: <n> (Start reading at line n)\n" +
             "  END_AT: <n> (Stop reading at line n)\n" +
             "  COUNT_AT_END: ON (Validate row count at trailer)\n" +
-            "  COMPRESS: ON | OFF (Transparent GZip support)\n" +
+            "  COMPRESS: ON | OFF (ZIP archive; adds .zip to the path)\n" +
             "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
             "  PASSWORD: Password for encryption/decryption";
 

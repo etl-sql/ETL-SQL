@@ -67,6 +67,57 @@ namespace ETL_SQL.Tests.Connectors
             finally { if (File.Exists(jsonFile)) File.Delete(jsonFile); }
         }
 
+        [Theory]
+        [InlineData("data.items")]
+        [InlineData("$.data.items")]
+        public async Task RootPath_AcceptsTheDocumentedJsonPathForm(string rootPath)
+        {
+            // The docs show ROOT_PATH='$.data.orders'; the reader used to look for a property named "$".
+            string jsonFile = $"JsonTest_RootRead_{rootPath.Length}.json";
+            await File.WriteAllTextAsync(jsonFile, @"{""data"": {""items"": [{""val"": 10}, {""val"": 20}]}}");
+
+            try
+            {
+                var options = new Dictionary<string, string> { { "ROOT_PATH", rootPath } };
+                var ds = new JsonDataSource(SystemExecutionContext.Instance, jsonFile, options);
+
+                var batches = await ds.ReadBatches().ToListAsync();
+                Assert.Equal(2, batches.Sum(b => b.Rows.Count));
+                Assert.Equal(new[] { "val" }, await ds.GetColumnsAsync());
+            }
+            finally { if (File.Exists(jsonFile)) File.Delete(jsonFile); }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task WriteThroughRootPath_IsRefusedAndLeavesTheFileUnchanged(bool append)
+        {
+            // The writer only writes a top-level array, so rows written through ROOT_PATH could not
+            // be read back through the same connection. Refuse instead of writing an unreadable file.
+            string jsonFile = $"JsonTest_RootWrite_{append}.json";
+            const string original = @"{""data"": {""items"": [{""val"": 1}]}}";
+            await File.WriteAllTextAsync(jsonFile, original);
+
+            try
+            {
+                var options = new Dictionary<string, string> { { "ROOT_PATH", "data.items" } };
+                var ds = new JsonDataSource(SystemExecutionContext.Instance, jsonFile, options);
+                var batch = new DataTable();
+                batch.SetColumns(new[] { "val" });
+                var row = batch.NewRow();
+                row["val"] = 2m;
+                await batch.AddRowAsync(row);
+
+                var ex = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(
+                    () => ds.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append));
+
+                Assert.Contains("ROOT_PATH", ex.Message);
+                Assert.Equal(original, await File.ReadAllTextAsync(jsonFile));
+            }
+            finally { if (File.Exists(jsonFile)) File.Delete(jsonFile); }
+        }
+
         [Fact]
         public async Task TestJsonAggregation()
         {

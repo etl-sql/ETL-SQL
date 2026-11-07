@@ -177,10 +177,15 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
 
 ### 5. JSON connector defects (found 2026-11-03)
 
-- [ ] **[P2 Bug] JSON `COMPRESS=ON` writes a ZIP named `<path>.zip`, not the gzip file the path names** (`src/ETL-SQL.Connectors.Files/Json/JsonDataSource.cs:187-198`).
-  `AS JSON('samples/output/data.json.gz', COMPRESS=ON)` produces `data.json.gz.zip`, a ZIP archive. `DELETE FILE` on the named path misses it, and later INSERTs append to the leftover archive. Found by `samples/10_Kitchen_Sinks/json_sink.etlsql`, which now deletes both names.
-- [ ] **[P2 Bug] A JSON write through `ROOT_PATH` writes a top-level array, so it cannot be read back** (`src/ETL-SQL.Connectors.Files/Json/JsonDataSource.cs`, `WriteBatches`).
-  `AS JSON('root.json', ROOT_PATH='$.data.orders')` writes `[ {...}, ... ]` instead of nesting the rows at `data.orders`, and `SELECT` through the same connection returns no rows. Either write the rows at the root path or refuse `ROOT_PATH` on write. Found by the same sample.
+- [x] **[P2 Bug] JSON `COMPRESS=ON` writes a ZIP named `<path>.zip`, not the gzip file the path names.**
+  Fixed 2026-11-07 as a documentation defect: ZIP plus a forced `.zip` suffix is the deliberate
+  behaviour of every file connector (`FileConnectorPathHelper`); the help and reference pages said
+  GZip. Help, docs, examples and the sample now say ZIP and use `.zip` paths. Real gzip support
+  would be a new option, not this fix.
+- [x] **[P2 Bug] A JSON write through `ROOT_PATH` writes a top-level array, so it cannot be read back.**
+  Fixed 2026-11-07: writes through a `ROOT_PATH` connection are refused. The "no rows" half was a
+  separate read bug: the reader treated the `$` in the documented `$.data.orders` as a property
+  name, so every `$.`-prefixed `ROOT_PATH` read returned nothing. Both forms now read.
 
 ### 6. VS Code extension issues (planned for v0.23.0)
 

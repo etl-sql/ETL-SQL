@@ -113,6 +113,10 @@ namespace ETL_SQL.Connectors.Json
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            // The writer only writes a top-level array, so rows written through ROOT_PATH could not be
+            // read back through the same connection, and the rest of the document would be lost.
+            if (!string.IsNullOrEmpty(_rootPath))
+                throw new ExecutionException("Cannot write to a JSON connection with ROOT_PATH: rows are written as a top-level array, so they could not be read back through it. Write through a connection without ROOT_PATH.");
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
             string tempFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
             string? publicationFile = null;
@@ -130,8 +134,6 @@ namespace ETL_SQL.Connectors.Json
                 JsonDocument? existing = null;
                 if (append && System.IO.File.Exists(_filePath) && new System.IO.FileInfo(_filePath).Length > 0)
                 {
-                    if (!string.IsNullOrEmpty(_rootPath))
-                        throw new ExecutionException("Cannot append to a JSON file read through ROOT_PATH: the rows are not the top-level array. Write to a new file instead.");
                     await using var existingStream = OpenDecodedReadStream();
                     existing = await JsonDocument.ParseAsync(existingStream, cancellationToken: effectiveCancellationToken);
                     if (existing.RootElement.ValueKind != JsonValueKind.Array)

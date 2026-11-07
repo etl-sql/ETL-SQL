@@ -18,7 +18,7 @@ Aliases: `XLSX`, `XLS`
 | `IGNORE_EXTRA_COLUMNS` | `ON`/`OFF` — omit source columns not present in the template schema | No |
 | `NULL_MISSING_COLUMNS` | `ON`/`OFF` — include template columns missing from the source and fill with `NULL` | No |
 | `MAP_BY_HEADER_NAME` | `ON`/`OFF` — align by case-insensitive header name instead of position; requires unique source headers | No |
-| `COMPRESS` | `ON`/`OFF` — GZip the output file after writing | No |
+| `COMPRESS` | `ON`/`OFF` — store the file as a ZIP archive (one entry); `.zip` is added to the path if it does not end in `.zip` | No |
 | `ENCRYPT` | `ON`/`OFF` — AES file encryption (default: `OFF`) | No |
 | `PASSWORD` | Password for encryption/decryption (required if `ENCRYPT=ON`) | Conditional |
 | `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (default: `SHA2_256`) | No |

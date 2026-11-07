@@ -30,7 +30,7 @@ Aliases: `CSV`, `TSV`
 | `MAP_BY_HEADER_NAME` | `ON`/`OFF` — align by case-insensitive header name instead of position; requires unique source headers | No |
 | `FORMAT` | `DELIMITED` (default) or `FIXED` | No |
 | `TEMPLATE` | Name of a `#temp` table defining fixed-width offsets (required if `FORMAT=FIXED`) | Conditional |
-| `COMPRESS` | `ON`/`OFF` — transparent GZip read/write (default: `OFF`) | No |
+| `COMPRESS` | `ON`/`OFF` — store the file as a ZIP archive (one entry); `.zip` is added to the path if it does not end in `.zip` (default: `OFF`) | No |
 | `ENCRYPT` | `ON`/`OFF` — AES file encryption (default: `OFF`) | No |
 | `PASSWORD` | Password for encryption/decryption (required if `ENCRYPT=ON`) | Conditional |
 | `ALGORITHM` | Hash algorithm: `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (default: `SHA2_256`) | No |
@@ -109,7 +109,7 @@ Flat file operations use local file system permissions or storage connector cred
 CREATE CONNECTION csv_in AS FLATFILE(PATH='C:\Data\employees.csv', HEADER=ON, DELIMITER='PIPE', ENCODING='UTF8');
 
 -- Encrypted and GZip-compressed
-CREATE CONNECTION secure_file AS FLATFILE(PATH='C:\Data\payroll.csv.gz', COMPRESS=ON, ENCRYPT=ON, PASSWORD='s3cr3t');
+CREATE CONNECTION secure_file AS FLATFILE(PATH='C:\Data\payroll.csv.zip', COMPRESS=ON, ENCRYPT=ON, PASSWORD='s3cr3t');
 
 -- European locale with semicolon delimiter and custom date format
 CREATE CONNECTION eu_data AS FLATFILE(PATH='C:\Data\german_sales.csv', DELIMITER='SEMICOLON', CULTURE='de-DE', DATE_FORMAT='dd.MM.yyyy');

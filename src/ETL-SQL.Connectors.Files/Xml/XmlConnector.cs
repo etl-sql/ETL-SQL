@@ -41,7 +41,7 @@ namespace ETL_SQL.Connectors.Xml
             "XML Connector: Connects to XML files.\n" +
             "Options:\n" +
             "  ROOT_PATH: XPath to the repeating element (e.g. '/Catalog/Book')\n" +
-            "  COMPRESS: ON | OFF (Transparent GZip support)\n" +
+            "  COMPRESS: ON | OFF (ZIP archive; adds .zip to the path)\n" +
             "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
             "  PASSWORD: Password for encryption/decryption\n" +
             "  TRANSACTIONAL: ON | OFF (Stage write locally and rename atomically)";
