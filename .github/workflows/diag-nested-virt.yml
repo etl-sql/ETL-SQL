@@ -1,0 +1,55 @@
+name: Diagnostic nested virtualization probe
+
+# Diagnostic only: can a GitHub-hosted Windows runner host a throwaway VM or container for the MSI
+# certification, so a crash during install cannot take the runner and its logs with it?
+on:
+  push:
+    branches: [ 'diag/nested-virt-probe' ]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, windows-2022 ]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Virtualization the VM exposes
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $os = Get-CimInstance Win32_OperatingSystem
+          "OS: $($os.Caption) $($os.Version)"
+          $cs = Get-CimInstance Win32_ComputerSystem
+          "Model: $($cs.Model); HypervisorPresent: $($cs.HypervisorPresent); logical CPUs: $($cs.NumberOfLogicalProcessors); RAM GiB: $([math]::Round($cs.TotalPhysicalMemory / 1GB, 1))"
+          Get-CimInstance Win32_Processor | Select-Object Name, VirtualizationFirmwareEnabled, VMMonitorModeExtensions, SecondLevelAddressTranslationExtensions | Format-List | Out-String
+          systeminfo | Select-String -Pattern 'Hyper-V|hypervisor|Virtualization' | ForEach-Object { $_.Line }
+      - name: Hyper-V role state and whether installing it needs a reboot
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          Get-WindowsFeature Hyper-V, Hyper-V-PowerShell, Containers | Format-Table Name, InstallState -AutoSize | Out-String
+          try {
+            $r = Install-WindowsFeature Hyper-V -IncludeManagementTools -ErrorAction Stop
+            "Install-WindowsFeature Hyper-V: Success=$($r.Success) RestartNeeded=$($r.RestartNeeded) ExitCode=$($r.ExitCode)"
+          } catch { "Install-WindowsFeature Hyper-V failed: $($_.Exception.Message)" }
+          "Get-VM available: $([bool](Get-Command Get-VM -ErrorAction SilentlyContinue))"
+          try { Get-VMHost -ErrorAction Stop | Select-Object Name, LogicalProcessorCount | Format-List | Out-String } catch { "Get-VMHost: $($_.Exception.Message)" }
+      - name: Windows containers (process and Hyper-V isolation)
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          docker version --format 'docker server {{.Server.Version}} {{.Server.Os}}'
+          docker info --format 'isolation default: {{.Isolation}}'
+          $build = [Environment]::OSVersion.Version.Build
+          $tag = $build -ge 26100 ? 'ltsc2025' : 'ltsc2022'
+          $image = "mcr.microsoft.com/windows/servercore:$tag"
+          "pulling $image"
+          docker pull -q $image
+          "process isolation:"; docker run --rm --isolation=process $image cmd /c "ver && sc query state= all | find /c ""SERVICE_NAME"""; "exit $LASTEXITCODE"
+          "hyperv isolation:"; docker run --rm --isolation=hyperv $image cmd /c ver; "exit $LASTEXITCODE"
+          exit 0
