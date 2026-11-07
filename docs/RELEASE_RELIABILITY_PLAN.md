@@ -341,3 +341,12 @@ fresh uninstall, within about 0.5–2 s of `msiexec` starting, with no ETL-SQL p
 no file holders. Also ruled out: console control events from the product (none in the source).
 The loss is instant and total (runner and heartbeat both stop, nothing uploads), which looks like
 a VM-level crash or network loss that cannot be observed from inside the job.
+
+**MSI diagnostics, round 5 (2026-11-07): step isolation** (`0d3704bca`, runs 42403630300–42403718030,
+6 each). `FreshNoBackup` (services stopped, no admin-backup CLI) lost 4; `FreshServicesRunning`
+(no stop, no backup) lost 3; `UpgradeRollback` (no fresh section) lost 4, all at the rollback
+uninstall. Neither the backup CLI nor the service state is the trigger, and one loss came before
+`msiexec` started at all. Pattern across all rounds: the runner dies about 5–20 s after an MSI
+install or upgrade of the **Portal profile** completes (services installed and started), at the
+next step whatever it is. The Workstation profile (no services) has never lost a runner.
+Totals for 2026-11-07: 43 diagnostic runs, 25 lost.
