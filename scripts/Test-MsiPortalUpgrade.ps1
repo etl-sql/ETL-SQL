@@ -29,7 +29,7 @@ param(
     [Parameter(Mandatory)] [string]$PreviousMsi,
     [Parameter(Mandatory)] [string]$CurrentMsi,
     [string]$OutDir = './release-validation/msi-portal-upgrade',
-    [ValidateSet('All', 'UpgradeRollback', 'FreshNoBackup', 'FreshServicesRunning', 'FreshIdle', 'FreshIdleNoStart', 'FreshIdleHealth', 'FreshIdleAssets')] [string]$DiagnosticScenario = 'All'
+    [ValidateSet('All', 'UpgradeRollback', 'FreshNoBackup', 'FreshServicesRunning', 'FreshIdle', 'FreshIdleNoStart', 'FreshIdleHealth', 'FreshIdleAssets', 'FreshChecks', 'FreshChecksIdle', 'FreshQuick')] [string]$DiagnosticScenario = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -278,7 +278,7 @@ function New-MsiWithoutServiceStart([string]$Source, [string]$Destination) {
     Write-Line "NOTE diagnostic: removed the install-time start from $changed ServiceControl row(s)"
 }
 
-if ($DiagnosticScenario -cin @('FreshIdle', 'FreshIdleNoStart', 'FreshIdleHealth', 'FreshIdleAssets')) {
+if ($DiagnosticScenario -cin @('FreshIdle', 'FreshIdleNoStart', 'FreshIdleHealth', 'FreshIdleAssets', 'FreshChecks', 'FreshChecksIdle', 'FreshQuick')) {
     try {
         $msi = $currentPath
         if ($DiagnosticScenario -ceq 'FreshIdleNoStart') {
@@ -295,11 +295,30 @@ if ($DiagnosticScenario -cin @('FreshIdle', 'FreshIdleNoStart', 'FreshIdleHealth
         # split is what the full scenario does to the running Portal: poll /health, then fetch every asset.
         if ($DiagnosticScenario -cin @('FreshIdleHealth', 'FreshIdleAssets')) { Test-Step 'fresh: Portal healthy' { Wait-Portal 'fresh' } }
         if ($DiagnosticScenario -ceq 'FreshIdleAssets') { Test-Step 'fresh: served assets match the candidate' { Invoke-Assets @('--inventory-root', $repoRoot, '--out', (Join-Path $out 'fresh-assets.json')) } }
-        foreach ($second in 10, 20, 30, 40, 50, 60, 70, 80, 90) {
+        # FreshIdleHealth and FreshIdleAssets passed 12 of 12 too (42412839628..42412934653). What is
+        # left is the remaining fresh checks and the time between install and uninstall: FreshChecks runs
+        # every fresh check and uninstalls at once (the control), FreshChecksIdle adds the 90 s idle, and
+        # FreshQuick uninstalls at once with no checks.
+        if ($DiagnosticScenario -cin @('FreshChecks', 'FreshChecksIdle')) {
+            Test-Step 'fresh: Portal healthy' { Wait-Portal 'fresh' }
+            foreach ($service in $services) {
+                Test-Step "fresh: $service runs the installed executable" { Assert-ServiceRunsVersion $service $contract.CurrentVersion }
+            }
+            Test-Step 'fresh: one-time sign-in for Administrators and SYSTEM only' {
+                $signIn = Join-Path $installDir 'first-run-password.txt'
+                $grantees = (Get-Acl -LiteralPath $signIn).Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } | Sort-Object -Unique
+                if (($grantees -join ',') -ne 'S-1-5-18,S-1-5-32-544') { throw "Grantees: $($grantees -join ', ')" }
+            }
+            Test-Step 'fresh: dataset at-rest key generated' { -not [string]::IsNullOrWhiteSpace((Get-Setting 'Portal:Dataset:AtRestKey')) }
+            Test-Step 'fresh: secrets only in the Administrators and SYSTEM file' { Assert-SecretsProtected }
+            Test-Step 'fresh: served assets match the candidate' { Invoke-Assets @('--inventory-root', $repoRoot, '--out', (Join-Path $out 'fresh-assets.json')) }
+        }
+        $idleSeconds = $DiagnosticScenario -cin @('FreshChecks', 'FreshQuick') ? @() : @(10, 20, 30, 40, 50, 60, 70, 80, 90)
+        foreach ($second in $idleSeconds) {
             Start-Sleep -Seconds 10
             $null = Write-MsiDurableCheckpoint -Stage "msi 00-fresh idle_$($second)s"
         }
-        Test-Step "diagnostic: services still $expected after 90 s" {
+        Test-Step "diagnostic: services still $expected before uninstall" {
             @($services | Where-Object { (Get-Service -Name $_).Status.ToString() -cne $expected }).Count -eq 0
         }
         $null = Write-MsiDurableCheckpoint -Stage 'fresh uninstall start'

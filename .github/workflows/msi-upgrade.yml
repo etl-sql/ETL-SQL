@@ -22,7 +22,7 @@ on:
       diagnostic_scenario:
         description: Retained-input diagnostic scope only; ordinary certification always runs All
         type: choice
-        options: ['All', 'UpgradeRollback', 'FreshNoBackup', 'FreshServicesRunning', 'FreshIdle', 'FreshIdleNoStart', 'FreshIdleHealth', 'FreshIdleAssets']
+        options: ['All', 'UpgradeRollback', 'FreshNoBackup', 'FreshServicesRunning', 'FreshIdle', 'FreshIdleNoStart', 'FreshIdleHealth', 'FreshIdleAssets', 'FreshChecks', 'FreshChecksIdle', 'FreshQuick']
         default: 'All'
       diagnostic_runner:
         description: Hosted Windows image for the Portal diagnostic only (A/B for the runner-loss investigation)
