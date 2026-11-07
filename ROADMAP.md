@@ -108,7 +108,7 @@ to feature work without a release sprint every month.
 - Remove before adding: a new gate must replace or simplify an existing one.
 - No waivers: a failing gate is fixed, re-baselined with a stated reason, or made report-only.
 - Shared SaaS and ETL-SQL Studio ship as alpha; evidence that only backs them can be deferred.
-- Not in scope: the full script and test review (a v0.23.0 priority) and Open VSX publishing
+- Not in scope: the full script and test review (a v0.23.0 priority), VS Code SecretStorage migration for AI API keys (v0.23.0), and Open VSX publishing
   (owner: v0.23.0 or v0.24.0, after the Marketplace path proves out).
 
 **Dependencies:** the existing `nightly-release.yml` and its scheduler, the candidate supervisor,

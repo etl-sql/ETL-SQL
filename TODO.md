@@ -182,6 +182,10 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
 - [ ] **[P2 Bug] A JSON write through `ROOT_PATH` writes a top-level array, so it cannot be read back** (`src/ETL-SQL.Connectors.Files/Json/JsonDataSource.cs`, `WriteBatches`).
   `AS JSON('root.json', ROOT_PATH='$.data.orders')` writes `[ {...}, ... ]` instead of nesting the rows at `data.orders`, and `SELECT` through the same connection returns no rows. Either write the rows at the root path or refuse `ROOT_PATH` on write. Found by the same sample.
 
+### 6. VS Code extension issues (planned for v0.23.0)
+
+- [ ] **[Security] Migrate `etlsql.ai.apiKey` to SecretStorage:** Currently stored as plain text in `settings.json`, which VS Code Settings Sync copies across machines. Migrate to `vscode.SecretStorage` (`context.secrets`), following the pattern used for Portal authentication tokens in `portalPublishCommand.ts`.
+
 ---
 
 ## v0.22.0 Release — run on the final candidate

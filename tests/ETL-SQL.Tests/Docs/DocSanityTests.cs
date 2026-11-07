@@ -1020,7 +1020,7 @@ namespace ETL_SQL.Tests.Docs
             var readmePath = RepoFile("src/etl-sql-vscode/README.md");
             Assert.True(File.Exists(readmePath), $"Missing VS Code README.md");
             var readme = File.ReadAllText(readmePath);
-            Assert.Contains($"ETL--SQL-v{currentVersion}-5C6BC0", readme);
+            Assert.Contains("img.shields.io/visual-studio-marketplace/v/Octocolee.etl-sql-vscode", readme);
 
             // 4. Verify WelcomeView.ts uses correct restructured documentation links
             var welcomeViewPath = RepoFile("src/etl-sql-vscode/src/WelcomeView.ts");

@@ -5,8 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=Octocolee.etl-sql-vscode"><img src="https://img.shields.io/badge/VS%20Code-Marketplace-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="VS Code Marketplace" /></a>
-  <img src="https://img.shields.io/badge/ETL--SQL-v0.22.0-5C6BC0?style=for-the-badge&logo=dotnet&logoColor=white" alt="ETL-SQL Version" />
+  <a href="https://marketplace.visualstudio.com/items?itemName=Octocolee.etl-sql-vscode"><img src="https://img.shields.io/visual-studio-marketplace/v/Octocolee.etl-sql-vscode?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="Visual Studio Marketplace Version" /></a>
   <img src="https://img.shields.io/badge/Tests-10%2C000%2B%20Passing-brightgreen?style=for-the-badge&logo=checkmarx&logoColor=white" alt="10,000+ Tests Passing" />
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-4CAF50?style=for-the-badge" alt="Platform" />
 </p>
@@ -15,7 +14,17 @@
 
 > **Build cross-source data pipelines, in-stream data quality, governance, and dashboards without stitching together separate tools.**
 >
-> ETL-SQL is a single, deterministic SQL dialect that connects to anything, enforces data quality rules, and delivers interactive dashboards in source-control friendly scripts backed by 10,000+ tests.
+> ETL-SQL is a single, deterministic SQL dialect that connects to 30+ sources, enforces data quality rules, and delivers interactive dashboards in source-control friendly scripts backed by 10,000+ tests.
+
+**v0.22.0 is the first public release.** If you run into issues or have feedback, report them at [github.com/etl-sql/ETL-SQL/issues](https://github.com/etl-sql/ETL-SQL/issues).
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/etl-sql/ETL-SQL/main/docs/assets/vscode-demo.gif" alt="ETL-SQL VS Code Extension Demo" />
+</p>
+
+<p align="center">
+  <em>Schema autocomplete · inline diagnostics · live results console · report preview · notebook execution · data lineage</em>
+</p>
 
 ---
 
@@ -25,7 +34,7 @@ You have data in SQL Server. More data in a Postgres instance. Your analyst want
 
 The typical answer: stitch together Python, a scheduler, a BI tool, and hope nothing breaks overnight.
 
-**The ETL-SQL answer** (a production-shaped script, swap in your own servers):
+**The ETL-SQL answer** (`revenue.rptsql` — a complete script; swap in your own servers):
 
 ```sql
 -- @author: data_team;
@@ -76,15 +85,9 @@ CREATE PAGE Overview AS DASHBOARD (
 );
 ```
 
+Save as `revenue.rptsql` and press **`F1` → `ETL-SQL: Preview Report`** to render the dashboard side-by-side with your code.
+
 Files, SFTP, REST, and the rest of the [connectors](#connectors--everything-you-already-have) mix into the same script.
-
----
-
-## See It In Action
-
-![ETL-SQL VS Code Extension Demo](https://raw.githubusercontent.com/etl-sql/ETL-SQL/main/docs/assets/vscode-demo.gif)
-
-*Schema autocomplete · inline diagnostics · REPL results console · live report preview · cell-by-cell notebook execution · data lineage*
 
 ---
 
@@ -122,9 +125,9 @@ BEGIN TRY
     -- 2. Transform in engine memory
     SELECT
         Region,
-        COUNT(*)    AS TotalOrders,
-        SUM(Total)  AS Revenue,
-        AVG(Total)  AS AvgOrder
+        COUNT(*)               AS TotalOrders,
+        SUM(Total)             AS Revenue,
+        ROUND(AVG(Total), 2)   AS AvgOrder
     INTO #summary
     FROM #orders
     GROUP BY Region;
@@ -135,7 +138,7 @@ BEGIN TRY
     ORDER BY Revenue DESC;
 
     -- 4. Inspect column-level lineage automatically captured by the engine
-    SELECT target_column, source_tables, source_columns, transformation_kind
+    SELECT target_column, source_tables, source_columns
     FROM eng.lineage
     WHERE target_table = '#summary';
 
@@ -189,52 +192,35 @@ CREATE PAGE SalesDashboard AS DASHBOARD (
 
 ## What This Extension Gives You
 
-### 🛡️ In-Stream Data Quality (`EXPECT`) & Quarantine
-- **Grammar-Level Quality Gates** — declare validation rules directly on `SELECT` columns (`EXPECT NOT NULL`, `EXPECT UNIQUE`, `EXPECT >= 0`, `EXPECT MATCHES '<regex>'`).
-- **Pluggable Failure Actions** — halt immediately with `ON FAILURE THROW`, warn with `ON FAILURE WARN`, or divert invalid rows to durable storage with `ON FAILURE QUARANTINE TO #bad_rows`.
-- **Automated Quarantine Remediation** — inspect metadata-enriched quarantine tables and reprocess corrected records with `REPLAY QUARANTINE`.
-
-### 🏷️ First-Class Metadata & Automated Lineage
-- **Contextual Governance Tags** — declare metadata in SQL comments (`/* @d: Description; @owner: team; @pii: false */`).
-- **Queryable Metadata Catalogs** — query active tags and dependencies via `eng.tags` and `eng.lineage` within any script session.
-- **Tags Travel With Columns** — tags such as `@pii`, `@classification`, and `@owner` follow columns through joins, aggregations, and derived expressions, so lineage stays tied to the transformations that created the data.
-- **OpenLineage Export** — send execution provenance to DataHub, Marquez, Airflow, Collibra, and Alation, or export lineage as Markdown. See the [Lineage Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/session-control/lineage.md) for the full tag catalog.
-
-### 🤖 Agent-First & Spec-Driven Development
-- **LLM & Agent-Friendly Syntax** — clean, deterministic plain-text SQL eliminates opaque configuration files, making AI pair programming and code reviews transparent.
-- **Spec-to-Script Generation** — configure `etlsql.ai.*`, then right-click a PDF, Excel, Word, CSV, JSON, or TXT spec and run **ETL-SQL: Generate Script from Spec**. You get a pipeline scaffold with schemas, validation gates, quarantine, and governance tags.
-- **Headless Automation** — the same `gen-script` workflow runs in CI/CD. See [Spec-Driven Development](https://github.com/etl-sql/ETL-SQL/blob/main/docs/spec-import/spec-driven-development.md).
-
-### 📊 See Your Dashboard Before You Ship It
-- **Live `.rptsql` Preview** — open a report file and watch the interactive dashboard render side-by-side with your code. Every save refreshes the preview.
-- **Native Grammar of Graphics Engine** — a managed rendering pipeline (`PlotPlan`) that generates SVG vector graphics with layered marks (`RECT`, `LINE`, `POINT`, `AREA`, `BAR`, `RULE`, `TEXT`), named scales, coordinates, and facets.
-- **Interactive Preview** — slicers, cascading filters, date pickers, sliders, search boxes, drill-downs, parameter overrides, and cross-highlighting work directly in the preview pane.
-- **One-Click Export** — export your rendered report to native SVG, PDF, or Markdown directly from the preview panel.
+### ▶️ Interactive Results & Live Execution
+- **F5 to Run** — execute the full script or highlight any query block to run just that selection.
+- **Interactive Results Grid** — sort, filter, and page through multi-result sets directly in the editor.
+- **Dataset Diff & Compare** — stack two result sets side-by-side with Compare Mode to inspect differences immediately.
 
 ### 🧠 IntelliSense That Knows Your Data
-- **Live Schema Autocomplete** — connects to your actual databases and completes real table and column names as you type, not generic SQL keywords.
-- **Dialect-Aware Linting** — warns you the moment you write `TOP 10` against a Postgres connection or `GETDATE()` against Oracle. Catch cross-dialect mistakes before they become runtime errors.
-- **Hover Documentation** — hover over any built-in function or keyword to see its full signature and a copy-pasteable example, right in the editor.
-- **Variable & Temp Table Tracking** — IntelliSense follows your `@variables` and `#temp` tables across the entire script session.
+- **Live Schema Autocomplete** — connects to your real databases to complete table and column names as you type.
+- **Dialect-Aware Linting** — catches cross-dialect mismatches before runtime (e.g. `TOP` against Postgres or `GETDATE()` against Oracle).
+- **Hover Documentation** — hover over any built-in function or keyword for full signatures and copy-pasteable examples.
+- **Variable & Temp Table Tracking** — tracks declared `@variables` and `#temp` tables across your entire session.
 
-### ▶️ Execute and Explore Without Leaving the Editor
-- **F5 to Run** — execute the full script, or highlight any block and run just that selection.
-- **Interactive Results Grid** — sort, filter, and page through multi-result sets. Stack two result sets side-by-side with **Compare Mode** to diff them instantly.
-- **Step Profiling** — inspect per-statement execution time, memory peaks, and spill events in the results panel.
-- **Lineage-Aware Workflow** — inspect lineage metadata from executed scripts and use built-in lineage commands for audit output.
+### 📊 Live Dashboard & Visual Reporting (`.rptsql`)
+- **Side-by-Side Preview** — open a `.rptsql` file and watch the interactive dashboard render alongside your code on every save.
+- **Crisp SVG Visualizations** — charts render as crisp SVG with bars, lines, areas, points, and cards.
+- **Interactive Controls** — test slicers, cascading filters, date pickers, sliders, and cross-highlighting right in the preview pane.
+- **One-Click Export** — export rendered reports to SVG, PDF, or Markdown directly from VS Code.
 
-### 📓 Notebooks for Iterative Development (`.etlnb`)
-- **Cell-Based Pipelines** — break complex workflows into cells that share a single live session. Run them one at a time or all at once.
-- **Mermaid Lineage in Cells** — lineage diagrams render inline as notebook output.
-- **Export to Script** — convert any notebook back to a standard `.etlsql` file for headless deployment with a single command.
+### 🛡️ In-Stream Data Quality (`EXPECT`) & Lineage
+- **Inline Validation Gates** — declare rules directly in queries (`EXPECT NOT NULL`, `EXPECT UNIQUE`, `EXPECT >= 0`, regex matches).
+- **Flexible Failure Actions** — halt pipelines with `ON FAILURE THROW`, warn with `ON FAILURE WARN`, or route invalid records to quarantine tables with `ON FAILURE QUARANTINE`.
+- **Queryable Lineage** — query column-level lineage and dependencies with `SELECT ... FROM eng.lineage`.
+- **OpenLineage Export** — send execution provenance to any OpenLineage-compatible catalog, such as Marquez or DataHub.
 
-### 🔒 Security That Catches Mistakes Before You Ship Them
-- **Zero-Trust Boundary** — path containment enforced before any file I/O runs.
-- **Credentials Guard** — scans for plaintext passwords and API keys on every save and surfaces a warning immediately.
-- **Save Policy Encryption** — applies the script save policy to convert flagged plaintext secrets into `ENC:...` encrypted values automatically.
+### 🔒 Built-in Security & Safety Guards
+- **Project Sandbox** — scripts can't read files outside your project.
+- **Credentials Guard** — automatically warns if plaintext passwords or connection strings are detected on save.
+- **Save Policy Encryption** — automatically encrypts flagged plaintext credentials into `ENC:...` strings on save.
 
-### 🗂️ Metadata Explorer Sidebar
-Browse all active connections, catalog schemas, declared `@variables`, and live `#temp` tables in a structured sidebar panel — no context-switching required.
+*Also included: [Notebooks (`.etlnb`)](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/tooling/notebook-guide.md) for cell-based development, [AI Spec-to-Script Generation](https://github.com/etl-sql/ETL-SQL/blob/main/docs/spec-import/spec-driven-development.md) from specifications (spec contents are sent to your chosen AI provider; default is Gemini), and the [Metadata Explorer Sidebar](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/onboarding/getting-started.md).*
 
 ---
 
@@ -259,11 +245,23 @@ Mix and match any of these freely within a single script.
 
 ---
 
+## Requirements
+
+Supported operating systems:
+- **Windows**: x64 (ARM64 is not currently supported)
+- **Linux**: x64 (ARM64 is not currently supported)
+- **macOS**: x64 (Intel) and Apple Silicon (ARM64)
+- **VS Code**: version 1.91.0 or higher
+
+The extension bundles the native language server and engine binaries for supported platforms; no external runtime or SDK installation is required.
+
+---
+
 ## Getting Started
 
 **1. Install This Extension**
 
-Install **ETL-SQL Tools** from the VS Code Marketplace. The VSIX bundles everything you need to start immediately — the engine, language server, and report CLI are included for your platform (Windows, Linux, or macOS). No separate SDK download required.
+Install **ETL-SQL Tools** from the VS Code Marketplace. The VSIX bundles everything you need to start immediately — the engine, language server, and report CLI are included for your platform (Windows x64, Linux x64, macOS Intel or Apple Silicon). No separate SDK download required.
 
 **Want the full platform?** Download the optional extras from [github.com/etl-sql/ETL-SQL](https://github.com/etl-sql/ETL-SQL):
 - **Terminal IDE** (`ETL-SQL-TUI`) — full-featured TUI editor with autocomplete and results grid for headless environments
@@ -302,8 +300,8 @@ Formatting options (`etlsql.format.*`: keyword casing, indent size, comma placem
 | `etlsql.report.executable.path` | `""` | Override path to `ETL-SQL-Report.exe`. Leave blank to auto-detect. |
 | `etlsql.report.autoOpenPreview` | `false` | Auto-open the Report Preview pane when opening a `.rptsql` file. |
 | `etlsql.portal.url` | `""` | Base URL of your hosted ETL-SQL Portal (for publishing). |
-| `etlsql.ai.provider` | `"Gemini"` | AI provider for spec-driven script generation. |
-| `etlsql.ai.apiKey` | `""` | API key for the selected AI provider. Not required for VS Code Chat Extensions. |
+| `etlsql.ai.provider` | `"Gemini"` | AI provider for spec-driven script generation. Document contents are sent to the selected provider for processing. |
+| `etlsql.ai.apiKey` | `""` | API key for the selected AI provider. Stored in `settings.json` (migration to secure SecretStorage planned for v0.23.0). Not required for VS Code Chat Extensions. |
 | `etlsql.ai.model` | `""` | Optional model override for spec-driven script generation. |
 | `etlsql.ai.endpoint` | `""` | Optional custom endpoint for compatible providers. |
 

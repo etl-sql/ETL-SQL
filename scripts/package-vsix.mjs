@@ -70,7 +70,7 @@ export function packagingInputSignature(root) {
     for (const relative of ['Directory.Build.props', 'Directory.Build.targets', 'Directory.Packages.props',
         'global.json', 'NuGet.Config', 'LICENSE.md', 'NOTICE.md', 'THIRD-PARTY-NOTICES.md', 'THIRD-PARTY-INVENTORY.md',
         'src/etl-sql-vscode/package.json', 'src/etl-sql-vscode/package-lock.json', 'src/etl-sql-vscode/.vscodeignore',
-        'src/etl-sql-vscode/README.md', 'src/etl-sql-vscode/language-configuration.json', 'src/etl-sql-vscode/tsconfig.json',
+        'src/etl-sql-vscode/README.md', 'src/etl-sql-vscode/CHANGELOG.md', 'src/etl-sql-vscode/language-configuration.json', 'src/etl-sql-vscode/tsconfig.json',
         'scripts/package-vsix.mjs', 'certification-results/ha-large-job-soak-scenarios.json']) {
         const file = safeAssetPath(root, relative);
         if (fs.existsSync(file)) selected.add(file);
