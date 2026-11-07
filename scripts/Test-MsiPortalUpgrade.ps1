@@ -29,7 +29,7 @@ param(
     [Parameter(Mandatory)] [string]$PreviousMsi,
     [Parameter(Mandatory)] [string]$CurrentMsi,
     [string]$OutDir = './release-validation/msi-portal-upgrade',
-    [ValidateSet('All', 'UpgradeRollback', 'FreshNoBackup', 'FreshServicesRunning', 'FreshIdle', 'FreshIdleNoStart', 'FreshIdleHealth', 'FreshIdleAssets', 'FreshChecks', 'FreshChecksIdle', 'FreshQuick', 'FreshQuickNoRmShutdown')] [string]$DiagnosticScenario = 'All'
+    [ValidateSet('All', 'UpgradeRollback', 'FreshNoBackup', 'FreshServicesRunning', 'FreshIdle', 'FreshIdleNoStart', 'FreshIdleHealth', 'FreshIdleAssets', 'FreshChecks', 'FreshChecksIdle', 'FreshQuick', 'FreshQuickNoRmShutdown', 'FreshQuickRmDisabled')] [string]$DiagnosticScenario = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -233,7 +233,14 @@ function Invoke-Assets([string[]]$Arguments) {
 # finding provjobd (parent hosted-compute-agent, the runner host's own process) holding installed
 # files and announcing a shutdown of applications. FreshQuickNoRmShutdown repeats it with Restart
 # Manager shutdown disabled on every msiexec call.
-$rmProperties = $DiagnosticScenario -ceq 'FreshQuickNoRmShutdown' ? @('MSIRESTARTMANAGERCONTROL=DisableShutdown') : @()
+# DisableShutdown reached msiexec but Restart Manager still shut applications down (run 42417326430:
+# 'Will attempt to shut down ... no UI modes'), and lost 4 of 6 like the control. FreshQuickRmDisabled
+# turns Restart Manager off for the installation; ServiceControl still stops the services.
+$rmProperties = @(switch -CaseSensitive ($DiagnosticScenario) {
+    'FreshQuickNoRmShutdown' { @('MSIRESTARTMANAGERCONTROL=DisableShutdown') }
+    'FreshQuickRmDisabled' { @('MSIRESTARTMANAGERCONTROL=Disable') }
+    default { @() }
+})
 
 function Install-Msi([string]$Msi, [string]$Log) {
     Invoke-MsiExec (@('/i', $Msi, 'DEPLOY_PROFILE=ENTERPRISE') + $rmProperties) (Join-Path $out $Log) "Install $Log"
@@ -284,7 +291,7 @@ function New-MsiWithoutServiceStart([string]$Source, [string]$Destination) {
     Write-Line "NOTE diagnostic: removed the install-time start from $changed ServiceControl row(s)"
 }
 
-if ($DiagnosticScenario -cin @('FreshIdle', 'FreshIdleNoStart', 'FreshIdleHealth', 'FreshIdleAssets', 'FreshChecks', 'FreshChecksIdle', 'FreshQuick', 'FreshQuickNoRmShutdown')) {
+if ($DiagnosticScenario -cin @('FreshIdle', 'FreshIdleNoStart', 'FreshIdleHealth', 'FreshIdleAssets', 'FreshChecks', 'FreshChecksIdle', 'FreshQuick', 'FreshQuickNoRmShutdown', 'FreshQuickRmDisabled')) {
     try {
         $msi = $currentPath
         if ($DiagnosticScenario -ceq 'FreshIdleNoStart') {
@@ -319,7 +326,7 @@ if ($DiagnosticScenario -cin @('FreshIdle', 'FreshIdleNoStart', 'FreshIdleHealth
             Test-Step 'fresh: secrets only in the Administrators and SYSTEM file' { Assert-SecretsProtected }
             Test-Step 'fresh: served assets match the candidate' { Invoke-Assets @('--inventory-root', $repoRoot, '--out', (Join-Path $out 'fresh-assets.json')) }
         }
-        $idleSeconds = $DiagnosticScenario -cin @('FreshChecks', 'FreshQuick', 'FreshQuickNoRmShutdown') ? @() : @(10, 20, 30, 40, 50, 60, 70, 80, 90)
+        $idleSeconds = $DiagnosticScenario -cin @('FreshChecks', 'FreshQuick', 'FreshQuickNoRmShutdown', 'FreshQuickRmDisabled') ? @() : @(10, 20, 30, 40, 50, 60, 70, 80, 90)
         foreach ($second in $idleSeconds) {
             Start-Sleep -Seconds 10
             $null = Write-MsiDurableCheckpoint -Stage "msi 00-fresh idle_$($second)s"
