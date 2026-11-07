@@ -4,6 +4,12 @@
 
 set -eu
 
+# Pushed from a worktree, Git hands the hook GIT_DIR and friends. Fixtures that `git init` a temp
+# repo inherited them and rewrote the shared repository's config and refs (2026-11-04). The hook
+# runs at the worktree root, so Git finds the right repository without them.
+# shellcheck disable=SC2046
+unset $(git rev-parse --local-env-vars)
+
 # Git passes one "<local ref> <local sha> <remote ref> <remote sha>" line per updated ref. A
 # deletion has an all-zero local SHA and pushes no content, so there is nothing to validate.
 zero=0000000000000000000000000000000000000000
