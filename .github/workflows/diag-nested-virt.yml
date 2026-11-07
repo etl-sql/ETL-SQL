@@ -2,9 +2,9 @@ name: Diagnostic nested virtualization probe
 
 # Diagnostic only: can a GitHub-hosted Windows runner host a throwaway VM or container for the MSI
 # certification, so a crash during install cannot take the runner and its logs with it?
+# Answered by run 42415772848; kept for the record, run by hand only.
 on:
-  push:
-    branches: [ 'diag/nested-virt-probe' ]
+  workflow_dispatch:
 
 permissions:
   contents: read

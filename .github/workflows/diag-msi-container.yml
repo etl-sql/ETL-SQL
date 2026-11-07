@@ -1,0 +1,82 @@
+name: Diagnostic MSI in a Hyper-V container probe
+
+# Diagnostic only: does the Portal-profile MSI install, run its services and uninstall inside a
+# Hyper-V-isolated Server Core container on a hosted windows-2022 runner? If so, the certification
+# can run there and a crash during install cannot take the runner and its logs with it.
+# Inputs: retained artifact 13358924791 (msi-inputs-41897668523-2, candidate 7, expires 2026-12-04).
+on:
+  push:
+    branches: [ 'diag/nested-virt-probe' ]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  msi-in-container:
+    runs-on: windows-2022
+    timeout-minutes: 50
+    steps:
+      - uses: actions/download-artifact@v8
+        timeout-minutes: 10
+        with:
+          artifact-ids: '13358924791'
+          run-id: '41897668523'
+          github-token: ${{ github.token }}
+          path: candidate
+          merge-multiple: true
+      - name: Pull Server Core
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          Get-ChildItem candidate -File | ForEach-Object { '{0} {1:N0} MB' -f $_.Name, ($_.Length / 1MB) }
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          docker pull -q mcr.microsoft.com/windows/servercore:ltsc2022
+          if ($LASTEXITCODE -ne 0) { throw 'pull failed' }
+          "pulled in $([int]$sw.Elapsed.TotalSeconds) s"
+      - name: Install, check and quickly uninstall inside a Hyper-V container
+        timeout-minutes: 20
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path probe, out | Out-Null
+          @'
+          $out = 'C:\out'
+          function Log($t) { $line = '{0} {1}' -f (Get-Date).ToString('HH:mm:ss'), $t; $line; Add-Content -Path "$out\inside.txt" -Value $line }
+          $os = Get-CimInstance Win32_OperatingSystem
+          Log "container OS: $($os.Caption) $($os.Version); memory GiB $([math]::Round($os.TotalVisibleMemorySize / 1MB, 1))"
+          Log 'install start'
+          $p = Start-Process msiexec.exe -ArgumentList '/i', 'C:\candidate\current.msi', 'DEPLOY_PROFILE=ENTERPRISE', '/qn', '/l*v', 'C:\out\install.log' -Wait -PassThru
+          Log "install exit $($p.ExitCode)"
+          Get-Service -Name 'ETL-SQL-*' -ErrorAction SilentlyContinue | ForEach-Object { Log "service $($_.Name) $($_.Status)" }
+          $healthy = $false; $deadline = (Get-Date).AddMinutes(4)
+          while ((Get-Date) -lt $deadline) {
+            try { if ((Invoke-WebRequest -Uri 'http://localhost:5002/health' -UseBasicParsing -TimeoutSec 5).StatusCode -eq 200) { $healthy = $true; break } } catch { }
+            Start-Sleep -Seconds 2
+          }
+          Log "portal /health 200: $healthy"
+          try { Log "orchestrator /health: $((Invoke-WebRequest -Uri 'http://localhost:5001/health' -UseBasicParsing -TimeoutSec 5).StatusCode)" } catch { Log "orchestrator /health: $($_.Exception.Message)" }
+          Get-Process | Where-Object { $_.Path -like 'C:\Program Files\ETL-SQL\*' } | ForEach-Object { Log "process $($_.ProcessName) pid $($_.Id) ws $([int]($_.WorkingSet64 / 1MB)) MB" }
+          $entry = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall' | Get-ItemProperty | Where-Object { $_.DisplayName -like 'ETL-SQL*' } | Select-Object -First 1
+          Log "uninstall start $($entry.PSChildName)"
+          $p = Start-Process msiexec.exe -ArgumentList '/x', $entry.PSChildName, '/qn', '/l*v', 'C:\out\uninstall.log' -Wait -PassThru
+          Log "uninstall exit $($p.ExitCode)"
+          Log "services left: $(@(Get-Service -Name 'ETL-SQL-*' -ErrorAction SilentlyContinue).Count)"
+          '@ -replace '(?m)^          ', '' | Set-Content -Path probe/inside.ps1
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          docker run --rm --isolation=hyperv --memory 8g --cpus 4 `
+            -v "${PWD}\candidate:C:\candidate:ro" -v "${PWD}\probe:C:\probe:ro" -v "${PWD}\out:C:\out" `
+            mcr.microsoft.com/windows/servercore:ltsc2022 powershell -NoProfile -ExecutionPolicy Bypass -File C:\probe\inside.ps1
+          "docker exit $LASTEXITCODE after $([int]$sw.Elapsed.TotalSeconds) s"
+          foreach ($log in 'install.log', 'uninstall.log') {
+            $path = Join-Path out $log
+            if (Test-Path $path) { "== $log Restart Manager and errors"; Select-String -Path $path -Pattern 'RESTART MANAGER|Return value 3|Error \d{4}|StartServices|StopServices' | Select-Object -First 25 | ForEach-Object { $_.Line } }
+          }
+      - name: Retain the probe logs
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: msi-container-probe-${{ github.run_id }}
+          path: out/
+          if-no-files-found: warn
+          retention-days: 14
