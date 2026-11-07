@@ -267,3 +267,54 @@ with a merge queue, required checks and GitHub's built-in rerun of failed jobs.
 - MSI dispatch: `gh workflow run msi-upgrade.yml --ref diag/msi-portal-uninstall -f diagnostic_artifact_id=<artifact>`.
 - Evidence and ledgers: `release-validation/v0.22.0-final/` (including `superseded-candidates.txt`).
 - Leftover folder `C:\Users\chuck\scratch\ETL-SQL-diag` can be deleted.
+
+## 10. Failure census (W0, 2026-11-07)
+
+Source: every non-passing GitHub Actions run on `release/v0.21.0` (10-07 to 10-18, 99 runs, 40 commits)
+and `release/v0.22.0` (10-18 to 11-07, 116 runs, 23 commits), plus the superseded-candidate ledger.
+Raw rows came from `gh run list` / `gh run view`; cancelled runs superseded by a newer push are not
+counted as failures.
+
+**Ranked by recurrence**
+
+| # | Cause | v0.21.0 | v0.22.0 | Category | Workstream |
+|---|---|---|---|---|---|
+| 1 | MSI Portal job: "hosted runner lost communication" | 6 | 6 (2 marked failure, 4 cancelled by our silence monitor) | Installer, intermittent | W3 |
+| 2 | Portal Browser Journey (`Run browser lane`) | 16 | 3 | Flaky test / real bugs mixed | W5 |
+| 3 | Sample Scripts (linux), 13 runs in a row on 10-11/12 | 13 | 0 | One defect left red across many pushes | W5 |
+| 4 | Release-only tooling rejected real output (validator, collectors, drivers) | – | 5 candidates | Release-only code | W1, W4, W4b |
+| 5 | Docker Integration Tests | 7 | 0 | Flaky / environment | W5 |
+| 6 | Source preflight findings (CI, MSI, native, DEB all stop at once) | 0 | 3 commits | Caught by pre-push only after f5c4fd62a | W7 (already fixed by the hook) |
+| 7 | MSI Portal profile real assertion failures | 4 | 1 | Installer | W3 |
+| 8 | Browser/consumer contract checks | 4 | 0 | Test | – |
+| 9 | Native macOS `Verify VSIX webviews inside VS Code` | 0 | 2 | Release-only lane | W1 |
+| 10 | Supervisor failures (consequence of the above, not a cause) | – | 5 | Derived | – |
+| 11 | Infrastructure: disk full, checkout timeout, macOS runner not acquired | – | ~3 | Hosted infra | W1 item 4 |
+
+**MSI Portal runner loss rate.** 12 of about 30 real Portal certification attempts since 10-07
+(~40%) lost the runner. Both releases, many different commits, and passing and failing runs on
+the same commit (478380ee1: lost 11-04 and 11-05, passed 11-06 and 11-07). In v0.21.0 the job took
+70–78 minutes before the loss surfaced; the 300 s silence monitor added in v0.22.0 cuts that to
+about 8 minutes. This is a recurring defect, not a one-day hosted outage, and is the largest single
+source of reruns.
+
+**What this changes in the plan**
+
+- Confirms W3 (MSI) as the top fix and W1 (nightly) as the way to see it mid-month: the loss rate
+  was visible in October and never named.
+- Confirms W5: two suites (Portal Browser Journey, Docker integration) account for 26 red CI runs.
+- Confirms W4/W4b: every v0.22.0 superseded candidate except the MSI one was release-only tooling.
+- v0.22.0 CI is much healthier than v0.21.0 (7 failed CI runs vs 29), so the remaining cost is
+  release-path code and the installer, not the main test suite.
+
+**MSI diagnostics, 2026-11-07** (diag branch `4349b8758`, candidate 7 inputs, runs 42391957207,
+42391959458, 42391961725): 1 pass, 2 runner losses. Both losses went silent within about one
+second of `msiexec /x` starting, before any MSI action was logged; the passing run logged
+`ProcessComponents` 1.3 s into its uninstall. So the culprit acts in the first standard actions of
+the uninstall (AppSearch to InstallValidate/InstallInitialize, where Restart Manager checks files
+in use while the Portal service runs), not in a deferred operation, and not in our custom actions
+(none run that early in a silent uninstall). The progress stream samples too coarsely to name the
+action: next diagnostic is per-action logging at uninstall start plus a process list.
+The two control runs (artifact `13338906263`) did not test anything:
+`Prepare-MsiPortalDiagnostic.ps1` only accepts inputs from `msi-upgrade.yml`, and those came from
+`nightly-release.yml`. The census already answers the control's question.
