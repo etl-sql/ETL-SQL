@@ -6,7 +6,7 @@ finished items live in Git history (this file before 2026-11-03 holds the full d
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 25 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 23 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -16,80 +16,61 @@ outcome in `CHANGELOG.md` and delete it. Deferred initiatives stay in `ROADMAP.m
 
 ## Now — v0.22.0 work that can be done today
 
-**Current execution focus:** [release recovery acceptance](docs/releases/recovery-acceptance.md).
+**Current execution focus:** [release reliability](docs/RELEASE_RELIABILITY_PLAN.md) (section 1).
 
-### 1. Faster release certification
+### 1. Release reliability (v0.22.0 ships after this)
 
-**Design:** [`ROADMAP.md`](ROADMAP.md#release-engineering--routine-github-built-releases).
-**Goal:** a full release in four hours or less, from frozen candidate through publication, with the
-same evidence as v0.21.0; ordinary PR validation in about 30 minutes. Measure clean and recovery
-runs separately; watchdog ceilings are not timing targets. A source fix creates a new candidate;
-previous-SHA results do not certify it.
+**Plan:** [`docs/RELEASE_RELIABILITY_PLAN.md`](docs/RELEASE_RELIABILITY_PLAN.md), approved 2026-11-04;
+timebox 2026-11-07 to 2026-11-21, re-plan with the owner if W1 is not running by the end of week 1.
+**Done when:** the nightly rehearsal is green 5 nights running, the v0.22.0 candidate passes every
+certification first time, no gate passes by waiver, and a script or doc fix reruns only its lanes.
+Cut line: W6–W8 move to the feature backlog if the timebox runs out.
 
-**Measured so far (2026-11-03):** round 2 took CI 30m, CodeQL 14.5m, MSI 51.8m, native 65.9m,
-DEB 53m. Round 3 went green after reruns in 2h10m (about 66 min clean). First push to all-green took
-5h51m over three rounds, mostly waiting for the slowest run before acting on an early failure.
-Scoped browser-test PR: 19m21s (PR 48). Broad package PR: 49m18s, native packages last (`fbcbccf85`).
+- [ ] **W1 Nightly release rehearsal.** `nightly-release.yml` already runs CI, both MSI profiles and
+  DEB nightly (green 2026-11-06 and 2026-11-07 on `478380ee1`). **Left:** native package
+  certification; post-tag collectors and the operator-evidence validator against that night's runs;
+  then a `workflow_dispatch` dry-run of `release.yml` that never pushes a tag; "runner not acquired"
+  retried once and reported as infrastructure.
+- [ ] **W2 Reuse evidence when inputs did not change.** Owner approved the policy 2026-11-04.
+  **Left:** one-page design note (what is an input, who checks the fingerprint, cost of a wrong
+  reuse) for owner sign-off, then lanes declare inputs and drivers/supervisor accept reuse.
+- [ ] **W3 MSI Portal runner loss.** 12 of about 30 Portal attempts since 2026-10-07 lost the
+  runner; losses go silent within about 1.3 s of `msiexec /x` starting (census in the plan, section
+  10). **Left:** name the action or Restart Manager decision (diag branch
+  `diag/msi-portal-uninstall`, per-line diagnostics at `59bebcff7`); fix; 5 nightly passes in a row.
+- [ ] **W4 Release tooling tested on real output.** **Left:** recorded real outputs for every
+  post-tag collector and validator; one end-to-end real-gate run through the driver in a tiny scope.
+- [ ] **W4b Remove the workstation from the release path** (owner, 2026-11-04). **Left:** move spill
+  allocated bytes, scale rows/checksums and the grammar lane into CI or nightly; timing report-only;
+  drop the workstation requirement from `release.yml`, drivers and supervisor; delete the
+  workstation driver and resume tooling.
+- [ ] **W4c GitHub is the source of truth.** **Left:** a `workflow_dispatch` "Release" that tags the
+  certified commit from Actions; pin `@vscode/vsce`; make the Marketplace job skip versions already
+  published.
+- [ ] **W5 Flaky tests fixed at the cause.** Pre-push fixtures no longer inherit `GIT_DIR`
+  (`0603c9205`). **Left:** flake rate from nightly runs; Portal Browser Journey and Docker
+  integration (26 red CI runs in the census); the workstation-resume timestamp race; each supervisor
+  retry signature gets an issue.
+- [ ] **W6 Performance certification redesign** (below the cut line). Deterministic metrics gate;
+  timing by same-host interleaved A/B; no waivers.
+- [ ] **W7 Local gate hygiene** (below the cut line). Environment preflight; shrink the pre-push hook.
+- [ ] **W8 Scale release evidence to current claims** (below the cut line; owner sign-off needed).
 
-- [ ] **Fail fast on candidate failures.** The Release Candidate Supervisor
-  (`.github/workflows/candidate-supervisor.yml`) reruns known infrastructure/flaky/dependent
-  failures within a budget, and on a real defect cancels MSI/native/DEB and opens one issue.
-  **Left:** its first hosted run (round 5, `9254f83d8`); the first scheduled nightly run; carry
-  forward prior-SHA results for lanes the impact manifest marks unaffected. **Owner, 2026-11-04:**
-  yes: a lane that passed the pre-release gate and CI is not rerun on a recommit. Change the
-  checklist rule and the supervisor/release drivers to match.
-- [ ] **Impact-selected CI and targeted fix rounds.** `ci-impact.json` and `select-ci-lanes.mjs`
-  select regular CI, native and MSI lanes; unknown/shared paths and missing bases go broad; full
-  certification ignores the diff; manual diagnostic selections cannot certify.
-  **Left:** hosted proof for path families other than browser-only; hosted proof that a superseded
-  run is cancelled; measured mixed extension/browser pre-push timing; impact-driven routing for the
-  remaining local lanes.
-- [ ] **Bring broad package PRs to about 30 minutes.** The eight sequential Intel host publishes
-  take about 29 minutes and VSIX packaging about five. PRs now skip ReadyToRun and restore once.
-  **Left:** hosted timing of those changes; hosted retry of a failed native artifact upload.
-- [ ] **Release timeline.** `collect-release-timeline.mjs` reads runs, attempts and an operator
-  milestone ledger. **Left:** collect the v0.22.0 final-candidate timeline with candidate-cut, tag
-  and publication milestones and per-attempt reasons; runner queue time.
-- [ ] **Find why the MSI Portal runner is lost.** Seen on 2026-10-29, 2026-10-31 and earlier; not
-  in rounds 2–4 on 2026-11-03. Direct check-run annotations survive the loss; the last one before a
-  loss is `fresh backup complete`, and a later diagnostic stalled at fresh-uninstall `InstallFinalize`.
-  **Left:** the cause; hosted acceptance of the 0.21.0→0.22.0 predecessor-secrets fix via the
-  `UpgradeRollback` diagnostic selection.
-- [ ] **Nightly release-branch lanes.** The scheduler dispatches exact-SHA full CI, MSI profiles
-  and DEB installed upgrade nightly (registered on main by PR #41, cron `23 6 * * *`).
-  **Left:** first scheduled run, nightly reuse by the release drivers, and retry evidence.
-- [ ] **Shorten the longest CI job to about 20 minutes.** Browser shards take 15–19 min and
-  Build & Test workers 19.7 min; the Portal smoke/security worker took 24.8 min.
-  **Left:** bring that worker down, then measure full CI on one candidate.
-- [ ] **Hosted watchdog/upload proof for every long step.** Every job and step has an explicit
-  limit, and long steps run under the shared supervisor. Hosted timeout-and-upload behaviour is
-  proven for the browser lane only (`40407383754`).
-  **Left:** the same proof for native, macOS release, DEB, MSI build, Docker, extension and Studio
-  performance jobs, or an owner decision that the browser proof suffices.
-- [ ] **Build once, publish the same bytes.** Release promotes the certified MSI, DEB with Linux
-  ZIP/VSIX, Windows ZIP/VSIX and both macOS architectures instead of rebuilding; draft bytes are
-  rechecked before attestation and publication.
-  **Left:** hosted cross-run reuse and failed-upload recovery on a release-branch candidate; a tag
-  that publishes without any rebuild.
-- [ ] **One release gate owns publication.** Drivers, promotion and publication require exact-SHA
-  CI/CodeQL, package hashes, the full local phase evidence and the operator checklist submission.
-  **Left:** hosted publication and recovery acceptance on the final candidate; final-candidate
-  operator reports.
-- [ ] **Move local-only lanes into CI, then trim the checklist.** HA harness checks and DEB
-  `admin restore --validate` now run in CI. The full Windows workstation check stays local (owner).
-  **Left:** hosted package promotion; Docker integration and recovery drill in CI; then trim the
-  release checklist to match.
-- [ ] **Protect runner capacity.** CI cancels superseded runs within the same event and ref.
-  **Left:** hosted cancellation proof; push/PR deduplication for identical commits; queue, setup,
-  build, test and upload time in the timeline; cold/warm measurement before adding caches.
-- [ ] **Freeze metadata before certification.** Versions and draft notes are 0.22.0; source
-  preflight rejects mismatched release-branch versions; evidence stays outside the candidate commit.
-  **Left:** final date and notes before choosing the candidate SHA; proof every published package
-  resolves to it with no tag movement.
-- [ ] **Recovery rehearsal timings.** Failed-job-only recovery is proven for browser shards,
-  engine groups, MSI profiles and release uploads; the DEB rehearsal reused its build but
-  failed its evidence upload (fixed since; DEB passed on `a0ba387ca`, attempt 1). **Left:** a DEB failed-job recovery; time to first actionable failure
-  and time to recover on the frozen candidate, recorded separately from clean certification time.
+**Parked from the earlier "release in four hours" goal** (superseded by the plan above; each is
+picked up only if a workstream needs it, otherwise moves to `ROADMAP.md` after v0.22.0). Git history
+before 2026-11-07 holds their detail:
+- Fail fast on candidate failures (its carry-forward half is W2)
+- Impact-selected CI and targeted fix rounds
+- Bring broad package PRs to about 30 minutes
+- Release timeline
+- Shorten the longest CI job to about 20 minutes
+- Hosted watchdog/upload proof for every long step
+- Build once, publish the same bytes
+- One release gate owns publication
+- Move local-only lanes into CI, then trim the checklist
+- Protect runner capacity
+- Freeze metadata before certification
+- Recovery rehearsal timings
 
 ### 2. Order-independent scale certification
 
