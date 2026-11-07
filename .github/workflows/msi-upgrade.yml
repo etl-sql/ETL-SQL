@@ -24,6 +24,11 @@ on:
         type: choice
         options: ['All', 'UpgradeRollback']
         default: 'All'
+      diagnostic_runner:
+        description: Hosted Windows image for the Portal diagnostic only (A/B for the runner-loss investigation)
+        type: choice
+        options: ['windows-latest', 'windows-2022']
+        default: 'windows-latest'
   workflow_call:
     inputs:
       source_sha:
@@ -534,7 +539,7 @@ jobs:
   diagnostic-portal:
     name: MSI Portal diagnostic only
     if: github.event_name == 'workflow_dispatch' && inputs.diagnostic_artifact_id != ''
-    runs-on: windows-latest
+    runs-on: ${{ inputs.diagnostic_runner || 'windows-latest' }}
     timeout-minutes: 45
     permissions:
       contents: read
