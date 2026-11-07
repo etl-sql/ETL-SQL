@@ -318,3 +318,17 @@ action: next diagnostic is per-action logging at uninstall start plus a process 
 The two control runs (artifact `13338906263`) did not test anything:
 `Prepare-MsiPortalDiagnostic.ps1` only accepts inputs from `msi-upgrade.yml`, and those came from
 `nightly-release.yml`. The census already answers the control's question.
+
+**MSI diagnostics, rounds 2 and 3 (2026-11-07).** Round 2 (`59bebcff7`, per-line log reading at
+200 ms, runs 42395923811–42395933264): 5 of 5 lost. Each went silent shortly after Restart Manager
+logged "Will attempt to shut down and restart applications in no UI modes" (3 at upgrade, 2 at
+fresh uninstall). Round 3 (`b47a2d91d`, adds a Restart Manager query for the processes holding
+installed files, runs 42397995188–42398008933): 4 of 5 passed, and each passing rollback uninstall
+went through the same Restart Manager shutdown of only our two services (`ETL-SQL-Service`,
+`ETL-SQL-Portal`) and survived. The one loss was a fresh uninstall with **no** file holders, silent
+right after `msiexec` started. Ruled out so far: our custom actions, Restart Manager shutting down
+a harness process (no harness process ever held installed files), service recovery reboots (none
+configured), the Orchestrator's orphan cleanup (identity-checked), and machine-wide network,
+proxy or firewall changes in the product (none in the source). Still open: what kills the VM within
+about 1–2 s of an `msiexec` that touches the Portal profile, when the Workstation profile never
+fails.
