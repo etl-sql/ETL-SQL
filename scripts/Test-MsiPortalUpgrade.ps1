@@ -29,7 +29,7 @@ param(
     [Parameter(Mandatory)] [string]$PreviousMsi,
     [Parameter(Mandatory)] [string]$CurrentMsi,
     [string]$OutDir = './release-validation/msi-portal-upgrade',
-    [ValidateSet('All', 'UpgradeRollback', 'FreshNoBackup', 'FreshServicesRunning', 'FreshIdle', 'FreshIdleNoStart')] [string]$DiagnosticScenario = 'All'
+    [ValidateSet('All', 'UpgradeRollback', 'FreshNoBackup', 'FreshServicesRunning', 'FreshIdle', 'FreshIdleNoStart', 'FreshIdleHealth', 'FreshIdleAssets')] [string]$DiagnosticScenario = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -278,7 +278,7 @@ function New-MsiWithoutServiceStart([string]$Source, [string]$Destination) {
     Write-Line "NOTE diagnostic: removed the install-time start from $changed ServiceControl row(s)"
 }
 
-if ($DiagnosticScenario -cin @('FreshIdle', 'FreshIdleNoStart')) {
+if ($DiagnosticScenario -cin @('FreshIdle', 'FreshIdleNoStart', 'FreshIdleHealth', 'FreshIdleAssets')) {
     try {
         $msi = $currentPath
         if ($DiagnosticScenario -ceq 'FreshIdleNoStart') {
@@ -287,10 +287,14 @@ if ($DiagnosticScenario -cin @('FreshIdle', 'FreshIdleNoStart')) {
         }
         Write-Line "== fresh install of $($contract.CurrentVersion)"
         Test-Step 'fresh: msiexec install' { Install-Msi $msi '00-fresh.log' }
-        $expected = $DiagnosticScenario -ceq 'FreshIdle' ? 'Running' : 'Stopped'
+        $expected = $DiagnosticScenario -ceq 'FreshIdleNoStart' ? 'Stopped' : 'Running'
         foreach ($service in $services) {
             Test-Step "diagnostic: $service is $expected" { (Get-Service -Name $service).Status.ToString() -ceq $expected }
         }
+        # FreshIdle and FreshIdleNoStart passed 12 of 12 (runs 42411007616..42411100783), so the next
+        # split is what the full scenario does to the running Portal: poll /health, then fetch every asset.
+        if ($DiagnosticScenario -cin @('FreshIdleHealth', 'FreshIdleAssets')) { Test-Step 'fresh: Portal healthy' { Wait-Portal 'fresh' } }
+        if ($DiagnosticScenario -ceq 'FreshIdleAssets') { Test-Step 'fresh: served assets match the candidate' { Invoke-Assets @('--inventory-root', $repoRoot, '--out', (Join-Path $out 'fresh-assets.json')) } }
         foreach ($second in 10, 20, 30, 40, 50, 60, 70, 80, 90) {
             Start-Sleep -Seconds 10
             $null = Write-MsiDurableCheckpoint -Stage "msi 00-fresh idle_$($second)s"
