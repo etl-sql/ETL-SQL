@@ -3,7 +3,9 @@ param(
     [Parameter(Mandatory)] [string]$ManifestPath,
     [Parameter(Mandatory)] [int]$Shard,
     [Parameter(Mandatory)] [string]$TrxPath,
-    [Parameter(Mandatory)] [string]$OutputPath
+    [Parameter(Mandatory)] [string]$OutputPath,
+    # A failed first-run case is accepted only when its method passed in every case of this rerun.
+    [string]$RetryTrxPath
 )
 $ErrorActionPreference = 'Stop'
 $manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
@@ -20,14 +22,23 @@ foreach ($test in $trx.SelectNodes('//t:TestDefinitions/t:UnitTest', $ns)) {
     $method = $test.SelectSingleNode('t:TestMethod', $ns)
     $definitions[$test.id] = "$($method.className.Split(',')[0]).$($method.name)"
 }
+$retriedPassed = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+if ($RetryTrxPath) {
+    . (Join-Path $PSScriptRoot 'TestRetry.Helpers.ps1')
+    $retried = Get-TestOutcomesByMethod -TrxPath $RetryTrxPath
+    foreach ($method in $retried.Keys) {
+        if (@($retried[$method] | Where-Object { $_ -cne 'Passed' }).Count -eq 0) { [void]$retriedPassed.Add($method) }
+    }
+}
 $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+$flaky = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 $results = @($trx.SelectNodes('//t:UnitTestResult', $ns))
 if ($results.Count -eq 0) { throw 'No browser results.' }
 foreach ($result in $results) {
     $method = $definitions[$result.testId]
-    if ($result.outcome -cne 'Passed' -or $method -cnotin $selected[0].methods) {
-        throw "Failed, skipped or unexpected browser result: $($result.testName)"
-    }
+    if ($method -cnotin $selected[0].methods) { throw "Unexpected browser result: $($result.testName)" }
+    if ($result.outcome -ceq 'Failed' -and $retriedPassed.Contains($method)) { [void]$flaky.Add($method) }
+    elseif ($result.outcome -cne 'Passed') { throw "Failed or skipped browser result: $($result.testName)" }
     [void]$seen.Add($method)
 }
 foreach ($method in $selected[0].methods) {
@@ -41,6 +52,7 @@ if ($results.Count -lt $selected[0].discoveredCases) { throw 'Browser shard retu
     shardCount = $manifest.shardCount
     methods = @($seen | Sort-Object)
     actualCases = $results.Count
+    flakyMethods = @($flaky | Sort-Object)
     status = 'Passed'
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $OutputPath -Encoding utf8NoBOM
 Write-Host "Browser shard $Shard result coverage verified: $($results.Count) cases."

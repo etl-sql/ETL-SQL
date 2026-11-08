@@ -984,6 +984,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: integration-diagnostics-${{ github.run_attempt }}
-          path: release-validation/integration
+          # test-lane-results holds the TRX files and any flaky-tests.jsonl from retry-once.
+          path: |
+            release-validation/integration
+            release-validation/test-lane-results
           if-no-files-found: warn
           retention-days: 30

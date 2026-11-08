@@ -117,21 +117,37 @@ function Invoke-DotNetTest {
         )
     }
 
+    # The TRX lets a failed run retry its failed tests once (scripts/TestRetry.Helpers.ps1).
+    $trxDirectory = Join-Path $repoRoot 'release-validation/test-lane-results'
+    New-Item -ItemType Directory -Force -Path $trxDirectory | Out-Null
+    $trxName = "$Lane-$([IO.Path]::GetFileNameWithoutExtension($Project))-$([guid]::NewGuid().ToString('N')).trx"
+    $args += @("--logger", "trx;LogFileName=$trxName")
+    if (-not $CollectCoverage) { $args += @("--results-directory", $trxDirectory) }
+    $trxPath = Join-Path $(if ($CollectCoverage) { Join-Path $repoRoot $ResultsDirectory } else { $trxDirectory }) $trxName
+
     $testsExecuted = $false
     & dotnet @args 2>&1 | ForEach-Object {
         $testsExecuted = $testsExecuted -or (Test-ReleaseTestOutputExecuted -Output "$_")
         Write-Host $_
     }
-    if ($LASTEXITCODE -eq 0 -and -not $testsExecuted) {
+    $testExit = $LASTEXITCODE
+    if ($testExit -ne 0 -and (Test-Path -LiteralPath $trxPath)) {
+        . (Join-Path $PSScriptRoot 'TestRetry.Helpers.ps1')
+        $retry = Invoke-FailedTestRetry -TrxPath $trxPath -Project $projectPath -Configuration $Configuration `
+            -ResultsDirectory (Split-Path -Parent $trxPath) -Label "$Lane lane $Project"
+        if ($retry.Cleared) { return }
+        Write-Warning "$Lane lane $Project not retried or still failing: $($retry.Reason)"
+    }
+    if ($testExit -eq 0 -and -not $testsExecuted) {
         throw "Test lane '$Lane' produced no passed test summary for '$Project' with filter '$Filter'."
     }
-    if ($LASTEXITCODE -ne 0) {
+    if ($testExit -ne 0) {
         if ($ContinueOnFailure) {
             $script:LaneFailures += "$Project $Filter".Trim()
-            $script:LaneExitCode = $LASTEXITCODE
+            $script:LaneExitCode = $testExit
             return
         }
-        exit $LASTEXITCODE
+        exit $testExit
     }
 }
 
@@ -284,12 +300,22 @@ function Invoke-ShardedTests {
             $script:LaneExitCode = 1
             continue
         }
-        if ($process.ExitCode -ne 0) {
+        $trxPath = Join-Path $EvidenceDirectory ("shard-{0:D2}.trx" -f $number)
+        $shardExit = $process.ExitCode
+        # A test that fails, then passes rerun alone on the same build, is recorded as a flake and
+        # does not fail the shard; failing twice, or failing without a failed result, still does.
+        if ($shardExit -ne 0 -and (Test-Path -LiteralPath $trxPath)) {
+            . (Join-Path $PSScriptRoot 'TestRetry.Helpers.ps1')
+            $retry = Invoke-FailedTestRetry -TrxPath $trxPath -Project $projectPath -Configuration $Configuration `
+                -ResultsDirectory $EvidenceDirectory -Label "$LaneName shard $number/$ShardCount"
+            if ($retry.Cleared) { $shardExit = 0; $shardEntries[$number]['flakyMethods'] = @($retry.Methods) }
+            else { Write-Warning "$LaneName shard $number not retried or still failing: $($retry.Reason)" }
+        }
+        if ($shardExit -ne 0) {
             $script:LaneFailures += "$LaneName shard $number/$ShardCount"
-            $script:LaneExitCode = $process.ExitCode
+            $script:LaneExitCode = $shardExit
         }
 
-        $trxPath = Join-Path $EvidenceDirectory ("shard-{0:D2}.trx" -f $number)
         if (-not (Test-Path -LiteralPath $trxPath)) {
             $script:LaneFailures += "$LaneName shard $number/$ShardCount missing TRX"
             $script:LaneExitCode = 1

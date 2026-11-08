@@ -16,8 +16,19 @@ A timeout reports the condition, elapsed time, baseline and scaled budgets, cali
 attempt count, and last state. Set `ETLSQL_WAIT_TIMING_EVIDENCE` to a JSONL path to retain the same
 data for successful waits.
 
-Do not add retries around a flaky test. Retries hide intermittent product defects as effectively as
-they hide scheduler noise.
+Do not add retries inside a test or around an assertion. Retries there hide intermittent product
+defects as effectively as they hide scheduler noise.
+
+**Lane retry-once (owner decision, 2026-11-08).** The engine, browser and plain `dotnet test` lanes
+rerun a failed test once, alone, on the same build (`scripts/TestRetry.Helpers.ps1`). A test that
+then passes is a flake. It does not fail the lane, but it is recorded: a `Flaky test (passed on
+retry)` job warning, a line in `flaky-tests.jsonl` beside the TRX, and `flakyMethods` in the shard
+receipt or manifest. A flake is still an open defect to fix at its cause. A test that fails again,
+more than three failing methods in one run, or a failed run with no failed result (crash, timeout,
+discovery) still fails the lane. Why: on release/v0.22.0, CI passed 16 of 28 runs from 2026-10-25
+to 2026-11-08, and about 13 different tests or steps caused the failures, most of them only once. With a gate that needs every lane
+green in one round, a long tail of rare flakes fails most rounds even though no single test is
+common.
 
 ## Reference pattern
 

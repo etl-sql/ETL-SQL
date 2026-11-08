@@ -91,6 +91,20 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   Portal job): `SandboxStoryTests.Studio_FilterPane_RendersCategoricalNumericAndDateControls`
   read the numeric filter card's inputs with a one-shot `IsVisibleAsync` right after Apply. Its
   checks now use Playwright's waiting `Expect` like the rest of the file.
+  And on `5a7fd7786` (push CI 42520510947, first recorded failure, MSI 42520510981 cancelled
+  again): `StudioInteractionJourneyTests.ACtrlClickOnTwoBarsShowsBothRegions`. `RunReportAsync`
+  waited for the first `ByRegion` bar to be visible; the forced click on it right after threw
+  "Element is not visible" (`StudioInteractionJourneyTests.cs:569`, from `:97`). A forced click
+  fails that way only when the element has no box, so the bar or its container collapsed between
+  the wait and the click. The chart's fade-in only changes opacity, which does not count. Cause
+  not found: a second render of the report is the leading guess, unproven. Not fixed.
+  **Root cause of "fails differently each time" (2026-11-08):** CI passed 16 of 28 runs since
+  10-25. About 13 different tests or steps caused the failures, most only once, so an all-green gate
+  fails on the long tail, not on one bad test. Owner decision: lanes retry a failed test once alone
+  and record a pass as a flake (`scripts/TestRetry.Helpers.ps1`, policy in
+  `docs/releases/flaky-test-stability.md`); flake rates measured by `flake-hunt.yml` on branch
+  `flake/measure`; race-prone test patterns (one-shot `IsVisibleAsync`/`CountAsync`/text reads
+  after an action, `Force = true` clicks) fixed as a class.
 - [ ] **W6 Performance certification redesign** (below the cut line). Deterministic metrics gate;
   timing by same-host interleaved A/B; no waivers.
 - [ ] **W7 Local gate hygiene** (below the cut line). Environment preflight; shrink the pre-push hook.

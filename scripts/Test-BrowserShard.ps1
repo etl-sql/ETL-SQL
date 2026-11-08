@@ -41,15 +41,27 @@ $previousDiagnostics = $env:ETLSQL_BROWSER_DIAGNOSTICS_DIR
 $previousShard = $env:ETLSQL_BROWSER_SHARD
 $env:ETLSQL_BROWSER_DIAGNOSTICS_DIR = Join-Path $evidence 'navigation-diagnostics'
 $env:ETLSQL_BROWSER_SHARD = "$Shard"
+$retryTrx = $null
 try {
     & dotnet @common --settings (Join-Path $evidence "shard-$Shard.runsettings") `
         --results-directory $evidence --logger "trx;LogFileName=$trxName" --logger 'console;verbosity=normal'
     $testExit = $LASTEXITCODE
+    # A test that fails, then passes rerun alone on the same build, is recorded as a flake and does
+    # not fail the shard; failing twice, or failing without a failed result, still does.
+    if ($testExit -ne 0 -and (Test-Path -LiteralPath (Join-Path $evidence $trxName))) {
+        . (Join-Path $PSScriptRoot 'TestRetry.Helpers.ps1')
+        $retry = Invoke-FailedTestRetry -TrxPath (Join-Path $evidence $trxName) -Project $project `
+            -Configuration $Configuration -ResultsDirectory $evidence -Label "browser shard $Shard/$ShardCount"
+        if ($retry.Cleared) { $testExit = 0; $retryTrx = $retry.RetryTrx }
+        else { Write-Host "Browser shard $Shard not retried or still failing: $($retry.Reason)" }
+    }
 } finally {
     $env:ETLSQL_BROWSER_DIAGNOSTICS_DIR = $previousDiagnostics
     $env:ETLSQL_BROWSER_SHARD = $previousShard
 }
 if ($testExit -ne 0) { throw "Browser shard failed with exit code $testExit. Retain the TRX before retrying." }
-& (Join-Path $PSScriptRoot 'Test-BrowserShardResult.ps1') -ManifestPath (Join-Path $evidence 'manifest.json') `
-    -Shard $Shard -TrxPath (Join-Path $evidence $trxName) -OutputPath $receiptPath
+$verifyArgs = @{ ManifestPath = (Join-Path $evidence 'manifest.json'); Shard = $Shard
+    TrxPath = (Join-Path $evidence $trxName); OutputPath = $receiptPath }
+if ($retryTrx) { $verifyArgs.RetryTrxPath = $retryTrx }
+& (Join-Path $PSScriptRoot 'Test-BrowserShardResult.ps1') @verifyArgs
 if ($LASTEXITCODE -ne 0) { throw 'Browser shard result verification failed.' }
