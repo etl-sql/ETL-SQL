@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { classifyFailure } from './lib/candidate-failure-signatures.mjs';
 
 export const rehearsalWorkflows = [
   { file: 'release-certification.yml', candidateInput: true },
@@ -38,6 +39,7 @@ export function collectorSteps({ repository, sha, version, previousTag, director
 }
 
 const settled = run => run.status === 'completed';
+const failedConclusions = ['failure', 'timed_out', 'cancelled', 'startup_failure'];
 
 // One phase per job, because no job may run longer than 180 minutes. Every phase finds the runs
 // this rehearsal started (dispatched for the exact SHA after the rehearsal began), so a rerun of
@@ -86,18 +88,51 @@ export async function rehearse({ repository, sha, branch, directory, version, pr
   let runs = current();
   const missing = rehearsalWorkflows.find((workflow, index) => !runs[index]);
   if (missing) return fail(`Start ${missing.file}`, 'This rehearsal has no run for it; rerun the start job.');
+  // "Runner not acquired" is GitHub capacity, not the candidate: rerun the failed jobs once and keep
+  // waiting. The rule matches the candidate supervisor: one matching failed job makes the attempt
+  // retryable, because jobs that need it fail with it.
+  const notAcquired = run => {
+    if (!settled(run) || run.conclusion === 'success') return false;
+    const jobs = api(`repos/${repository}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`).jobs ?? [];
+    return jobs.filter(job => job.status === 'completed' && failedConclusions.includes(job.conclusion)).some(job => {
+      const annotations = api(`repos/${repository}/check-runs/${job.id}/annotations`);
+      return classifyFailure({ annotations: (Array.isArray(annotations) ? annotations : []).map(a => String(a.message ?? '')) })?.id === 'runner-not-acquired';
+    });
+  };
+  const rerun = new Set();
+  // Returns true while a rerun is requested or not yet visible as a new attempt.
+  const retryNotAcquired = () => {
+    for (const run of runs) {
+      if (run.run_attempt !== 1 || rerun.has(run.id) || !notAcquired(run)) continue;
+      report(`${run.file} ${run.id}: runner not acquired; rerunning its failed jobs once (infrastructure, not the candidate).`);
+      gh(['run', 'rerun', String(run.id), '--failed', '--repo', repository]);
+      rerun.add(run.id);
+    }
+    return runs.some(run => rerun.has(run.id) && run.run_attempt === 1);
+  };
   if (phase === 'wait' || phase === 'all') {
     const deadline = now() + waitMinutes * 60000;
-    while (!runs.every(settled) && now() < deadline) {
+    for (;;) {
+      const retrying = retryNotAcquired();
+      if ((runs.every(settled) && !retrying) || now() >= deadline) break;
       report(runs.map(run => `${run.file} ${run.id}: ${run.status}`).join('; '));
       await sleep(60000);
       runs = current();
     }
   }
+  const infrastructure = run => run.run_attempt > 1 && notAcquired(run);
   steps.push(...runs.map(run => ({ name: run.file, ok: settled(run) && run.conclusion === 'success', runId: run.id,
-    url: run.html_url, detail: settled(run) ? run.conclusion : `still ${run.status}` })));
+    url: run.html_url, detail: (settled(run) ? run.conclusion : `still ${run.status}`) +
+      (run.run_attempt > 1 ? ` (attempt ${run.run_attempt})` : '') })));
   const failedRun = runs.find(run => settled(run) && run.conclusion !== 'success');
-  if (failedRun) return { ok: false, failedStep: failedRun.file, steps };
+  if (failedRun) {
+    // A runner that is still not acquired after the retry is reported as infrastructure.
+    if (infrastructure(failedRun)) {
+      steps.find(step => step.name === failedRun.file).detail += ': runner not acquired after one retry (infrastructure)';
+      return { ok: false, failedStep: failedRun.file, failureKind: 'infrastructure', steps };
+    }
+    return { ok: false, failedStep: failedRun.file, failureKind: 'product', steps };
+  }
   if (!runs.every(settled)) {
     // A first wait job hands over to the second; anywhere else, an unfinished run fails.
     if (phase === 'wait') return { ok: true, settled: false, steps };
@@ -120,7 +155,7 @@ export async function rehearse({ repository, sha, branch, directory, version, pr
 }
 
 export function summarize(result, { sha, branch }) {
-  const verdict = result.ok ? 'PASS' : `FAIL at "${result.failedStep}"`;
+  const verdict = result.ok ? 'PASS' : `FAIL${result.failureKind === 'infrastructure' ? ' (infrastructure, not the candidate)' : ''} at "${result.failedStep}"`;
   const rows = result.steps.map(step => `| ${step.ok ? 'pass' : '**fail**'} | ${step.url ? `[${step.name}](${step.url})` : step.name} | ${String(step.detail ?? '').replace(/\|/g, '/')} |`);
   return [`## Nightly release rehearsal: ${verdict}`, '', `Candidate \`${sha}\` on \`${branch}\`.`, '',
     '| Result | Step | Detail |', '| :--- | :--- | :--- |', ...rows, ''].join('\n');

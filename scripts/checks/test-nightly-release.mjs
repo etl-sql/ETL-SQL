@@ -33,24 +33,43 @@ assert.throws(() => dispatch('owner/repo', () => { throw new Error('API unavaila
 const repo = 'owner/repo', branch = 'release/v0.22.0', startedAt = '2026-11-08T06:30:00Z';
 const options = { repository: repo, sha, branch, directory: mkdtempSync(path.join(tmpdir(), 'rehearsal-')),
   version: '0.22.0', previousTag: 'v0.21.0', startedAt };
-function fakeGitHub({ head = sha, conclusion = () => 'success', existing = [], registers = true, stuck = false } = {}) {
-  const runs = [...existing], dispatched = [];
+// conclusion(file, attempt) and annotation(file, attempt) script each run; `gh run rerun` starts the next attempt.
+function fakeGitHub({ head = sha, conclusion = () => 'success', annotation = () => 'Process completed with exit code 1.',
+  existing = [], registers = true, stuck = false } = {}) {
+  const runs = existing.map(run => ({ run_attempt: 1, ...run })), dispatched = [], reruns = [];
   const gh = args => {
     if (args[0] === 'workflow') {
       dispatched.push(args);
       if (registers) runs.push({ id: 100 + runs.length, file: args[2], head_sha: sha, head_branch: branch,
-        event: 'workflow_dispatch', created_at: '2026-11-08T06:31:00Z' });
+        event: 'workflow_dispatch', created_at: '2026-11-08T06:31:00Z', run_attempt: 1 });
+      return '';
+    }
+    if (args[0] === 'run' && args[1] === 'rerun') {
+      assert.deepEqual(args.slice(3), ['--failed', '--repo', repo]);
+      reruns.push(Number(args[2]));
+      runs.find(candidate => candidate.id === Number(args[2])).run_attempt++;
       return '';
     }
     const endpoint = args[1];
     if (endpoint.includes('/commits/')) return JSON.stringify({ sha: head });
     const listed = /workflows\/([\w-]+\.yml)\/runs/.exec(endpoint);
     if (listed) return JSON.stringify({ workflow_runs: runs.filter(run => run.file === listed[1]) });
+    const attemptJobs = /runs\/(\d+)\/attempts\/(\d+)\/jobs/.exec(endpoint);
+    if (attemptJobs) {
+      const run = runs.find(candidate => candidate.id === Number(attemptJobs[1]));
+      return JSON.stringify({ jobs: [{ id: run.id * 10 + Number(attemptJobs[2]), status: 'completed',
+        conclusion: conclusion(run.file, Number(attemptJobs[2])) }, { id: 1, status: 'completed', conclusion: 'success' }] });
+    }
+    const checkRun = /check-runs\/(\d+)\/annotations/.exec(endpoint);
+    if (checkRun) {
+      const run = runs.find(candidate => candidate.id === Math.floor(Number(checkRun[1]) / 10));
+      return JSON.stringify([{ message: annotation(run.file, Number(checkRun[1]) % 10) }]);
+    }
     const run = runs.find(candidate => endpoint.endsWith(`/runs/${candidate.id}`));
-    return JSON.stringify({ ...run, status: stuck ? 'in_progress' : 'completed', conclusion: conclusion(run.file),
+    return JSON.stringify({ ...run, status: stuck ? 'in_progress' : 'completed', conclusion: conclusion(run.file, run.run_attempt),
       html_url: `https://example.test/${run.id}` });
   };
-  return { gh, dispatched };
+  return { gh, dispatched, reruns };
 }
 let clock = 0;
 const deps = (github, execute = () => ({ status: 0, stdout: '', stderr: '' })) => ({ gh: github.gh, execute,
@@ -113,4 +132,27 @@ github = fakeGitHub({ existing: mine });
 assert.equal((await rehearse(options, { ...deps(github, selecting), phase: 'wait' })).settled, true);
 assert.equal((await rehearse(options, { ...deps(github, selecting), phase: 'collect' })).ok, true);
 assert.equal(github.dispatched.length, 0);
-console.log('Nightly selection: version ordering, released/draft/prerelease boundaries, exact SHA, active-run suppression, API failure and the release rehearsal (single start, rerun reuse, named failing step) passed.');
+
+// "Runner not acquired" reruns the failed jobs once and is reported as infrastructure, never the candidate.
+const notAcquiredMessage = 'The job was not acquired by Runner of type hosted even after multiple attempts';
+const nativeFails = attempts => (file, attempt) => file === 'native-packages.yml' && attempt <= attempts ? 'failure' : 'success';
+github = fakeGitHub({ conclusion: nativeFails(1), annotation: () => notAcquiredMessage });
+result = await rehearse(options, deps(github, selecting));
+assert.equal(result.ok, true, JSON.stringify(result));
+assert.equal(github.reruns.length, 1, 'One rerun for the one run whose runner was not acquired.');
+assert.match(result.steps.find(step => step.name === 'native-packages.yml').detail, /success \(attempt 2\)/);
+github = fakeGitHub({ conclusion: nativeFails(2), annotation: () => notAcquiredMessage });
+result = await rehearse(options, deps(github, selecting));
+assert.equal(github.reruns.length, 1, 'Retried once only.');
+assert.equal(result.failureKind, 'infrastructure');
+assert.equal(result.failedStep, 'native-packages.yml');
+assert.match(summarize(result, { sha, branch }), /FAIL \(infrastructure, not the candidate\) at "native-packages.yml"/);
+github = fakeGitHub({ conclusion: nativeFails(1) });
+result = await rehearse(options, deps(github, selecting));
+assert.equal(github.reruns.length, 0, 'An ordinary failure is never retried.');
+assert.equal(result.failureKind, 'product');
+github = fakeGitHub({ existing: mine.map(run => ({ ...run, run_attempt: 2 })), conclusion: nativeFails(2), annotation: () => notAcquiredMessage });
+result = await rehearse(options, { ...deps(github, selecting), phase: 'wait' });
+assert.equal(github.reruns.length, 0, 'A run already on its second attempt is not retried again.');
+assert.equal(result.failureKind, 'infrastructure');
+console.log('Nightly selection: version ordering, released/draft/prerelease boundaries, exact SHA, active-run suppression, API failure and the release rehearsal (single start, rerun reuse, named failing step, one runner-not-acquired retry reported as infrastructure) passed.');

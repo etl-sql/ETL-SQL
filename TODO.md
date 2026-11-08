@@ -30,8 +30,10 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   (hosted, Windows, both macOS, MSI, DEB) are now in the nightly (`scripts/nightly-rehearsal.mjs`,
   2026-11-08), which starts each certification as its own run and gives one pass/fail.
   `release.yml` has a dry run (`dry_run: true`) that builds, verifies and deletes its own draft.
-  **Left:** prove both on real runs; start the dry run from the nightly; operator evidence once
-  W8 settles its scope; "runner not acquired" retried once and reported as infrastructure.
+  First real rehearsal passed 2026-11-08 (nightly 42477960507 on `c136127e5`). "Runner not
+  acquired" now gets one rerun and is reported as infrastructure (not yet seen on a real run).
+  **Left:** prove the dry run on a real run; start it from the nightly; operator evidence once W8
+  settles its scope.
 - [ ] **W2 Reuse evidence when inputs did not change.** Owner approved the policy 2026-11-04.
   **Left:** one-page design note (what is an input, who checks the fingerprint, cost of a wrong
   reuse) for owner sign-off, then lanes declare inputs and drivers/supervisor accept reuse.
@@ -55,7 +57,12 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
 - [ ] **W5 Flaky tests fixed at the cause.** Pre-push fixtures no longer inherit `GIT_DIR`
   (`0603c9205`). **Left:** flake rate from nightly runs; Portal Browser Journey and Docker
   integration (26 red CI runs in the census); the workstation-resume timestamp race; each supervisor
-  retry signature gets an issue.
+  retry signature gets an issue. The supervisor misread an infrastructure timeout as a defect
+  (2026-11-08, CI 42476400399 on `db0a7d219`): Source preflight's "Prepare pinned workflow
+  checker" (`scripts/setup-actionlint.mjs`) timed out downloading actionlint (`TimeoutError: The
+  operation was aborted due to timeout`), and the supervisor cancelled the MSI run instead of
+  rerunning. Fix the download (retry, or a cached copy) and add a signature to
+  `scripts/lib/candidate-failure-signatures.mjs`.
 - [ ] **W6 Performance certification redesign** (below the cut line). Deterministic metrics gate;
   timing by same-host interleaved A/B; no waivers.
 - [ ] **W7 Local gate hygiene** (below the cut line). Environment preflight; shrink the pre-push hook.

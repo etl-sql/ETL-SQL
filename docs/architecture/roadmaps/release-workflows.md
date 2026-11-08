@@ -107,7 +107,9 @@ browser shards), MSI (both deployment profiles), DEB (fresh install, upgrade, ro
 native packages (Windows and both macOS architectures). It waits for them, then runs the
 release's own collectors against them: CI and CodeQL evidence, certified Windows and macOS
 packages, and the certified MSI and DEB finders. The final job's summary gives one pass/fail and
-names the failing step. No job may exceed 180 minutes, so the wait spans two jobs; each job finds
+names the failing step. A run whose runner was never acquired (the candidate supervisor's
+`runner-not-acquired` signature) gets its failed jobs rerun once; if that fails the same way the
+verdict says infrastructure, not the candidate. No job may exceed 180 minutes, so the wait spans two jobs; each job finds
 the runs this rehearsal started, so a rerun resumes rather than starting duplicates
 (`scripts/nightly-rehearsal.mjs`). The rehearsal never tags, drafts or publishes. Because the runs
 are the same kind a release collects, a green rehearsal on an unchanged candidate is the release's
