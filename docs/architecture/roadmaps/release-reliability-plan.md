@@ -393,3 +393,10 @@ certify a candidate built with it through the normal MSI workflow. The previous 
 the rollback install within about a minute. A Hyper-V-isolated container also isolates the install
 from the runner host (7 of 7 on `windows-2022`, branch `diag/nested-virt-probe`, run
 42418358058); that is the v0.23.0 roadmap's installer entry, not this fix.
+
+**2026-11-08:** the fix certified twice (MSI 42438649067, 42478004428). Then the exposure above
+happened one step earlier than expected: the rollback install of the v0.21.0 MSI, 30 s after the
+upgrade, lost the runner (42488712716; last heartbeat 2 minutes into the rollback). The Portal
+certification script now passes `MSIRESTARTMANAGERCONTROL=Disable` on every `msiexec` call, the
+command-line form that lost 0 of 6 in round 9, so the old MSI gets the same protection. The
+installer source check requires it on both calls.

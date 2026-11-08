@@ -42,9 +42,10 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   uninstall followed an install. A quick uninstall lost 4 of 6 runners by default and 0 of 6 with
   `MSIRESTARTMANAGERCONTROL=Disable`; `DisableShutdown` did not help (plan, section 10, rounds 6–9).
   Fix authored (`677003050`): the MSI sets `Disable` and the source check enforces it.
-  **Left:** certify a candidate built with the fix; 5 nightly passes in a row. Watch the cleanup
-  uninstall of the previous release (v0.21.0 lacks the property) when it follows the rollback install
-  within about a minute.
+  Certified with the fix 2026-11-07 (MSI 42438649067) and 2026-11-08 (42478004428). Then
+  the old v0.21.0 MSI, which lacks the property, lost the runner in its rollback install 30 s after
+  the upgrade (42488712716, 2026-11-08). The certification script now passes the property on every
+  msiexec call, and the installer source check enforces it. **Left:** 5 nightly passes in a row.
 - [ ] **W4 Release tooling tested on real output.** **Left:** recorded real outputs for every
   post-tag collector and validator; one end-to-end real-gate run through the driver in a tiny scope.
 - [ ] **W4b Remove the workstation from the release path** (owner, 2026-11-04). **Left:** move spill

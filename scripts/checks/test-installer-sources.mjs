@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -63,7 +63,14 @@ try {
     rmSync(path.join(root, retired));
   }
   assert.equal(run().status, 0);
-  console.log('Installer source checks: static validation and retired-helper rejection passed.');
+  // The Portal certification runs the previous release's MSI, which lacks the authored property, so
+  // every msiexec call there must pass it on the command line.
+  const certification = readFileSync(new URL('../Test-MsiPortalUpgrade.ps1', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+  assert.match(certification, /^\$restartManager = 'MSIRESTARTMANAGERCONTROL=Disable'$/m);
+  const calls = certification.match(/Invoke-MsiExec @\([^)]*\)/g);
+  assert.equal(calls.length, 2);
+  for (const call of calls) assert.match(call, /, \$restartManager\)$/, call);
+  console.log('Installer source checks: static validation, retired-helper rejection and Restart Manager disabled for every certification msiexec call passed.');
 } finally {
   // Only remove the private fixture created above.
   rmSync(root, { recursive: true, force: true });

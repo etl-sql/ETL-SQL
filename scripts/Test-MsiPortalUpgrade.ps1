@@ -229,13 +229,20 @@ function Invoke-Assets([string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "Served-asset check failed (exit $LASTEXITCODE)." }
 }
 
+# Restart Manager must not shut down the hosted runner's provjobd, which holds newly installed files
+# for about a minute; that loses the runner. The current MSI authors this property. The previous
+# release's MSI (v0.21.0) does not and cannot be rebuilt, and it lost the runner when its rollback
+# install followed the upgrade by 30 s (MSI 42488712716, 2026-11-08). Passing the property on every
+# msiexec call covers both; the command-line form lost 0 of 6 runners in diagnostic round 9.
+$restartManager = 'MSIRESTARTMANAGERCONTROL=Disable'
+
 function Install-Msi([string]$Msi, [string]$Log) {
-    Invoke-MsiExec @('/i', $Msi, 'DEPLOY_PROFILE=ENTERPRISE') (Join-Path $out $Log) "Install $Log"
+    Invoke-MsiExec @('/i', $Msi, 'DEPLOY_PROFILE=ENTERPRISE', $restartManager) (Join-Path $out $Log) "Install $Log"
 }
 
 function Uninstall-All([string]$Log) {
     foreach ($entry in @(Get-EtlSqlUninstallEntries)) {
-        Invoke-MsiExec @('/x', $entry.PSChildName) (Join-Path $out $Log) "Uninstall $Log"
+        Invoke-MsiExec @('/x', $entry.PSChildName, $restartManager) (Join-Path $out $Log) "Uninstall $Log"
     }
 }
 
