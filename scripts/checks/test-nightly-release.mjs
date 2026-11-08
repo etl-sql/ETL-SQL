@@ -155,4 +155,19 @@ github = fakeGitHub({ existing: mine.map(run => ({ ...run, run_attempt: 2 })), c
 result = await rehearse(options, { ...deps(github, selecting), phase: 'wait' });
 assert.equal(github.reruns.length, 0, 'A run already on its second attempt is not retried again.');
 assert.equal(result.failureKind, 'infrastructure');
+
+// Dry-run phase: starts release.yml once with the candidate and its version, waits, never collects.
+github = fakeGitHub();
+let collected = 0;
+result = await rehearse(options, { ...deps(github, () => { collected++; return { status: 0 }; }), phase: 'dry-run' });
+assert.equal(result.ok, true, JSON.stringify(result));
+assert.deepEqual(github.dispatched.map(args => args[2]), ['release.yml']);
+assert.deepEqual(github.dispatched[0].slice(-6), ['-f', 'tag=v0.22.0', '-f', 'dry_run=true', '-f', `candidate_sha=${sha}`]);
+assert.equal(collected, 0);
+assert.deepEqual(result.steps.map(step => step.name), ['release.yml (dry run)']);
+result = await rehearse(options, { ...deps(github), phase: 'dry-run' });
+assert.equal(github.dispatched.length, 1, 'A rerun of the dry-run job reuses its release run.');
+result = await rehearse(options, { ...deps(fakeGitHub({ conclusion: file => file === 'release.yml' ? 'failure' : 'success' })), phase: 'dry-run' });
+assert.equal(result.failedStep, 'release.yml (dry run)');
+assert.match(summarize(result, { sha, branch }), /FAIL at "release.yml \(dry run\)"/);
 console.log('Nightly selection: version ordering, released/draft/prerelease boundaries, exact SHA, active-run suppression, API failure and the release rehearsal (single start, rerun reuse, named failing step, one runner-not-acquired retry reported as infrastructure) passed.');

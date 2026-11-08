@@ -109,7 +109,8 @@ release's own collectors against them: CI and CodeQL evidence, certified Windows
 packages, and the certified MSI and DEB finders. The final job's summary gives one pass/fail and
 names the failing step. A run whose runner was never acquired (the candidate supervisor's
 `runner-not-acquired` signature) gets its failed jobs rerun once; if that fails the same way the
-verdict says infrastructure, not the candidate. No job may exceed 180 minutes, so the wait spans two jobs; each job finds
+verdict says infrastructure, not the candidate. When the collectors pass, a last job starts the
+release dry run (below) on the same candidate and waits for it. No job may exceed 180 minutes, so the wait spans two jobs; each job finds
 the runs this rehearsal started, so a rerun resumes rather than starting duplicates
 (`scripts/nightly-rehearsal.mjs`). The rehearsal never tags, drafts or publishes. Because the runs
 are the same kind a release collects, a green rehearsal on an unchanged candidate is the release's

@@ -3,9 +3,11 @@ name: Nightly Release Checks
 # Release rehearsal for one release-branch candidate. It starts every pre-tag certification as its
 # own run, exactly as a release needs them (Release Certification, MSI, DEB, native packages),
 # waits for them, then runs the release's own evidence collectors against those runs. It never
-# tags, drafts or publishes. The collect job's summary gives one pass/fail and names the failing
-# step. Native packages can take three hours and no job may exceed 180 minutes, so the wait is
-# split over two jobs; every job finds this rehearsal's runs again, so a rerun resumes.
+# tags or publishes. The collect job's summary gives one pass/fail and names the failing step;
+# the dry-run job then runs release.yml with dry_run on the same candidate, which drafts, verifies
+# and deletes its own draft. Native packages can take three hours and no job may exceed 180
+# minutes, so the wait is split over two jobs; every job finds this rehearsal's runs again, so a
+# rerun resumes.
 
 on:
   workflow_dispatch:
@@ -134,3 +136,24 @@ jobs:
           path: release-validation/nightly/
           if-no-files-found: warn
           retention-days: 30
+  dry-run:
+    name: Release dry run
+    needs: collect
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: write # starts release.yml in dry-run mode and reruns a job whose runner was never acquired
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          ref: ${{ inputs.candidate_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Draft, verify and delete a release of this candidate
+        timeout-minutes: 172
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/nightly-rehearsal.mjs dry-run "$GITHUB_REPOSITORY" "$CANDIDATE_SHA" "$GITHUB_REF_NAME" release-validation/nightly

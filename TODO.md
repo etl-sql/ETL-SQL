@@ -32,8 +32,8 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   `release.yml` has a dry run (`dry_run: true`) that builds, verifies and deletes its own draft.
   First real rehearsal passed 2026-11-08 (nightly 42477960507 on `c136127e5`). "Runner not
   acquired" now gets one rerun and is reported as infrastructure (not yet seen on a real run).
-  **Left:** prove the dry run on a real run; start it from the nightly; operator evidence once W8
-  settles its scope.
+  The nightly's last job now starts the dry run on the same candidate (not yet run).
+  **Left:** prove the dry run on a real run; operator evidence once W8 settles its scope.
 - [ ] **W2 Reuse evidence when inputs did not change.** Owner approved the policy 2026-11-04.
   **Left:** one-page design note (what is an input, who checks the fingerprint, cost of a wrong
   reuse) for owner sign-off, then lanes declare inputs and drivers/supervisor accept reuse.
@@ -63,6 +63,14 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   operation was aborted due to timeout`), and the supervisor cancelled the MSI run instead of
   rerunning. Fix the download (retry, or a cached copy) and add a signature to
   `scripts/lib/candidate-failure-signatures.mjs`.
+  Two flakes on `b81a9550e` (2026-11-08, only workflows/scripts/docs changed since the green
+  `c136127e5`), rerun on unchanged inputs: (1) `LedgerBackedSandboxAdmissionControllerTests.
+  LostFenceCancelsExecutionAuthorityAndRequiresReconciliation`, Release Certification
+  42488694536 Engine Coverage (1/3), first recorded failure; (2) `StudioPerformanceBudgetTests.
+  CanonicalStudioFixture_StaysWithinPlatformBudgets`, push CI 42486129266 Portal Browser Journey
+  (1/3). The supervisor's `studio-performance-budget` signature did not match it, so it filed
+  issue #60 as a defect and cancelled MSI, DEB and native packages. A second flake of either
+  moves it out of the gate for a cause fix.
 - [ ] **W6 Performance certification redesign** (below the cut line). Deterministic metrics gate;
   timing by same-host interleaved A/B; no waivers.
 - [ ] **W7 Local gate hygiene** (below the cut line). Environment preflight; shrink the pre-push hook.

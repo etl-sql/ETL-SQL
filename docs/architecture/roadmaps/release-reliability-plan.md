@@ -112,7 +112,8 @@ on the release branch. It validates the branch HEAD instead of a tag, writes to 
 It skips publication, provenance attestation (a permanent public record) and the Marketplace, and
 skips workstation and operator evidence (W4b, W8). Not yet run; the nightly does not start it yet.
 Item 4 written the same day: the wait jobs rerun a run's failed jobs once when the supervisor's
-`runner-not-acquired` signature matches, and a repeat is reported as infrastructure.
+`runner-not-acquired` signature matches, and a repeat is reported as infrastructure. The nightly's
+last job starts the item 3 dry run on the same candidate once the collectors pass.
 First real rehearsal: nightly 42477960507 on `c136127e5` passed (all four runs and all six
 collectors), 2026-11-08.
 

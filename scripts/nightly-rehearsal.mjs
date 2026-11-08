@@ -2,7 +2,7 @@
 // its own run (the same runs a real release collects), wait for them, then run the release's own
 // evidence collectors against them. One pass/fail verdict names the first failing step.
 // Nothing here tags, drafts or publishes.
-// Usage: node scripts/nightly-rehearsal.mjs <start|wait|collect> <owner/repo> <sha> <release/vX.Y.Z> <output-directory>
+// Usage: node scripts/nightly-rehearsal.mjs <start|wait|collect|dry-run> <owner/repo> <sha> <release/vX.Y.Z> <output-directory>
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -10,12 +10,17 @@ import { fileURLToPath } from 'node:url';
 import { classifyFailure } from './lib/candidate-failure-signatures.mjs';
 
 export const rehearsalWorkflows = [
-  { file: 'release-certification.yml', candidateInput: true },
+  { file: 'release-certification.yml', inputs: ({ sha }) => ['-f', `candidate_sha=${sha}`] },
   { file: 'msi-upgrade.yml' },
   { file: 'deb-upgrade.yml' },
   { file: 'native-packages.yml' },
 ];
-export const phases = ['start', 'wait', 'collect'];
+// Last stage: release.yml in dry-run mode on the same candidate, after the collectors pass.
+export const dryRunWorkflows = [
+  { file: 'release.yml', name: 'release.yml (dry run)',
+    inputs: ({ sha, version }) => ['-f', `tag=v${version}`, '-f', 'dry_run=true', '-f', `candidate_sha=${sha}`] },
+];
+export const phases = ['start', 'wait', 'collect', 'dry-run'];
 
 // Collector commands as release.yml runs them. `selects` names the GITHUB_OUTPUT key a finder must
 // write: the MSI and DEB finders exit 0 when nothing is reusable, which is a failed rehearsal.
@@ -59,20 +64,21 @@ export async function rehearse({ repository, sha, branch, directory, version, pr
   const api = endpoint => JSON.parse(gh(['api', endpoint]));
   const dispatched = run => run.head_sha === sha && run.head_branch === branch && run.event === 'workflow_dispatch' &&
     Date.parse(run.created_at) >= Date.parse(startedAt);
+  const tracked = phase === 'dry-run' ? dryRunWorkflows : rehearsalWorkflows;
   const latestRun = file => {
     const runs = api(`repos/${repository}/actions/workflows/${file}/runs?event=workflow_dispatch&head_sha=${sha}&per_page=100`).workflow_runs;
     if (!Array.isArray(runs)) throw new Error(`Invalid ${file} run inventory.`);
     return runs.filter(dispatched).sort((a, b) => b.id - a.id)[0];
   };
 
-  if (phase === 'start' || phase === 'all') {
-    for (const workflow of rehearsalWorkflows) {
+  if (phase === 'start' || phase === 'all' || phase === 'dry-run') {
+    for (const workflow of tracked) {
       let run = latestRun(workflow.file);
       if (run) { report(`${workflow.file}: reusing run ${run.id} started by this rehearsal.`); continue; }
       const head = api(`repos/${repository}/commits/${encodeURIComponent(branch)}`).sha;
       if (head !== sha) return fail(`Start ${workflow.file}`, `${branch} moved to ${head}; tonight's candidate is gone, nothing was started.`);
       gh(['workflow', 'run', workflow.file, '--repo', repository, '--ref', branch,
-        ...(workflow.candidateInput ? ['-f', `candidate_sha=${sha}`] : [])]);
+        ...(workflow.inputs?.({ sha, version }) ?? [])]);
       const deadline = now() + registerMinutes * 60000;
       while (!(run = latestRun(workflow.file)) && now() < deadline) await sleep(10000);
       if (!run) return fail(`Start ${workflow.file}`, `GitHub accepted the request but no run appeared within ${registerMinutes} minutes.`);
@@ -81,12 +87,12 @@ export async function rehearse({ repository, sha, branch, directory, version, pr
     if (phase === 'start') return { ok: true, steps };
   }
 
-  const current = () => rehearsalWorkflows.map(({ file }) => {
+  const current = () => tracked.map(({ file, name }) => {
     const run = latestRun(file);
-    return run && { file, ...api(`repos/${repository}/actions/runs/${run.id}`) };
+    return run && { ...api(`repos/${repository}/actions/runs/${run.id}`), file: name ?? file };
   });
   let runs = current();
-  const missing = rehearsalWorkflows.find((workflow, index) => !runs[index]);
+  const missing = tracked.find((workflow, index) => !runs[index]);
   if (missing) return fail(`Start ${missing.file}`, 'This rehearsal has no run for it; rerun the start job.');
   // "Runner not acquired" is GitHub capacity, not the candidate: rerun the failed jobs once and keep
   // waiting. The rule matches the candidate supervisor: one matching failed job makes the attempt
@@ -110,7 +116,7 @@ export async function rehearse({ repository, sha, branch, directory, version, pr
     }
     return runs.some(run => rerun.has(run.id) && run.run_attempt === 1);
   };
-  if (phase === 'wait' || phase === 'all') {
+  if (phase === 'wait' || phase === 'all' || phase === 'dry-run') {
     const deadline = now() + waitMinutes * 60000;
     for (;;) {
       const retrying = retryNotAcquired();
@@ -139,6 +145,7 @@ export async function rehearse({ repository, sha, branch, directory, version, pr
     return { ok: false, failedStep: runs.find(run => !settled(run)).file, steps };
   }
   if (phase === 'wait') return { ok: true, settled: true, steps };
+  if (phase === 'dry-run') return { ok: true, steps };
 
   for (const step of collectorSteps({ repository, sha, version, previousTag, directory })) {
     const outputs = path.join(directory, `${step.name.replace(/\W+/g, '-').toLowerCase()}.outputs`);
@@ -164,7 +171,7 @@ export function summarize(result, { sha, branch }) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     if (process.argv.length !== 7 || !phases.includes(process.argv[2])) {
-      throw new Error('Usage: node scripts/nightly-rehearsal.mjs <start|wait|collect> <owner/repo> <sha> <release/vX.Y.Z> <output-directory>');
+      throw new Error('Usage: node scripts/nightly-rehearsal.mjs <start|wait|collect|dry-run> <owner/repo> <sha> <release/vX.Y.Z> <output-directory>');
     }
     const [, , phase, repository, sha, branch, directory] = process.argv;
     mkdirSync(directory, { recursive: true });
@@ -185,7 +192,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       { gh, phase, execute: (command, args, env) => run(command, args, env) });
     writeFileSync(path.join(directory, `rehearsal-${phase}.json`), `${JSON.stringify({ sha, branch, version, phase, ...result }, null, 2)}\n`);
     if (process.env.GITHUB_OUTPUT && phase === 'wait') appendFileSync(process.env.GITHUB_OUTPUT, `settled=${result.settled === true}\n`);
-    if (phase === 'collect' || !result.ok) {
+    if (phase === 'collect' || phase === 'dry-run' || !result.ok) {
       const summary = summarize(result, { sha, branch });
       if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
       console.log(summary);
