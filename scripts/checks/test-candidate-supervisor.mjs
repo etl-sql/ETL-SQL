@@ -135,6 +135,35 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
   assert.ok(!calls.some(c => c.includes('/jobs/121/logs')), 'no log fetch for jobs still running');
 }
 
+// 6b. Runs the nightly rehearsal started are its measurement: a defect elsewhere is still reported,
+// but they are never cancelled (nightly 42502844239 lost MSI, DEB and native to one flake).
+{
+  const nightly = (id, name) => ({ ...run(id, name, 'in_progress', null, [job('Build', null)]), startedByNightly: true });
+  const { actions, outcome } = decide({ runs: [
+    run(1, 'Release Certification', 'in_progress', null, [job('Full CI / Engine Coverage (1/3)', 'failure', { log: 'Assert.True() Failure' })]),
+    nightly(2, 'MSI In-Place Upgrade'), nightly(3, 'DEB Installed Upgrade'),
+    run(4, 'Native Package Certification', 'in_progress', null, [job('Native package (win-x64)', null)]),
+  ] }, {});
+  assert.equal(outcome, 'defect');
+  assert.deepEqual(actions.filter(a => a.type === 'cancel').map(a => a.name), ['Native Package Certification']);
+  assert.equal(actions.filter(a => a.type === 'report').length, 1);
+
+  const sha = 'd'.repeat(40);
+  const listed = [
+    { id: 31, name: 'MSI In-Place Upgrade', event: 'workflow_dispatch', triggering_actor: { login: 'github-actions[bot]' } },
+    { id: 32, name: 'DEB Installed Upgrade', event: 'workflow_dispatch', triggering_actor: { login: 'owner' } },
+    { id: 33, name: 'Native Package Certification', event: 'push', triggering_actor: { login: 'github-actions[bot]' } },
+  ].map(r => ({ ...r, head_sha: sha, status: 'in_progress', conclusion: null, run_attempt: 1, html_url: `u${r.id}` }));
+  const query = args => {
+    const route = args.find(a => a.startsWith('repos/')) ?? '';
+    if (route.includes('/actions/runs?head_sha=')) return JSON.stringify({ workflow_runs: listed });
+    if (/\/attempts\/1\/jobs/.test(route)) return JSON.stringify({ jobs: [] });
+    throw new Error(`unexpected gh ${args.join(' ')}`);
+  };
+  const marked = Object.fromEntries(readSnapshot('owner/repo', sha, { query }).runs.map(r => [r.id, r.startedByNightly]));
+  assert.deepEqual(marked, { 31: true, 32: false, 33: false }, 'only a workflow-token dispatch is the nightly\'s');
+}
+
 // 7. Real job logs carry terminal colour codes, which gh prints only with --allow-escape-sequences.
 // Without the flag the log is empty and a known flaky failure would be treated as a real defect.
 {

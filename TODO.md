@@ -84,9 +84,9 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   recorded failure, cause not found by reading (the test's budget, spill format and byte guard are
   all fixed); (2) `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds`, Docker lane, refused
   in 8 ms: the v0.21.0 FTP readiness flake is back after two fixture fixes. Neither had a
-  signature, so the supervisor cancelled the nightly's MSI, DEB and native runs. **Open
-  question:** whether the supervisor should cancel runs the nightly started, since one flake then
-  voids the whole rehearsal.
+  signature, so the supervisor cancelled the nightly's MSI, DEB and native runs. Owner decision
+  2026-11-08: the supervisor never cancels runs the nightly started (workflow-token
+  `workflow_dispatch`); it still reports the defect.
 - [ ] **W6 Performance certification redesign** (below the cut line). Deterministic metrics gate;
   timing by same-host interleaved A/B; no waivers.
 - [ ] **W7 Local gate hygiene** (below the cut line). Environment preflight; shrink the pre-push hook.

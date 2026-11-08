@@ -3,7 +3,7 @@
 //   - Known infrastructure/flaky failures: rerun only the failed jobs once their run completes.
 //   - Anything else (a real defect): cancel the long package runs, which a new candidate voids
 //     anyway, keep CI running so other defects in this round still surface, and open or update
-//     one GitHub issue for the candidate.
+//     one GitHub issue for the candidate. Runs a nightly rehearsal started are never cancelled.
 // Usage: node scripts/candidate-supervisor.mjs <owner/repo> <40-hex SHA>
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -61,7 +61,8 @@ export function decide(snapshot, state) {
   if (defect || exhausted) {
     const cause = defect ?? exhausted;
     for (const run of snapshot.runs) {
-      if (cancelOnDefect.includes(run.name) && run.status !== 'completed' && run.id !== cause.run.id) {
+      // A nightly rehearsal's runs are its measurement: one flake cancelling them voids the night.
+      if (cancelOnDefect.includes(run.name) && run.status !== 'completed' && run.id !== cause.run.id && !run.startedByNightly) {
         state.cancelledRuns.add(run.id);
         actions.push({ type: 'cancel', runId: run.id, name: run.name });
       }
@@ -108,8 +109,11 @@ export function readSnapshot(repository, sha, { query = gh, logCache = new Map()
       }
       Object.assign(job, logCache.get(key));
     }
+    // Only scripts/nightly-rehearsal.mjs dispatches the long package runs with the workflow token;
+    // a person's manual dispatch stays cancellable.
+    const startedByNightly = run.event === 'workflow_dispatch' && run.triggering_actor?.login === 'github-actions[bot]';
     runs.push({ id: run.id, name: run.name, status: run.status, conclusion: run.conclusion,
-      attempt: run.run_attempt, url: run.html_url, jobs });
+      attempt: run.run_attempt, url: run.html_url, jobs, startedByNightly });
   }
   return { runs };
 }
@@ -126,7 +130,7 @@ export function reportBody(action, sha) {
     ? 'A job failed with no known infrastructure or flaky-test signature, so it is treated as a real defect.'
     : `A known retryable failure (\`${action.signature}\`) kept failing after the allowed reruns.`;
   return [`${head}`, '', `- Candidate: \`${sha}\``, `- Workflow: ${action.run.name} (attempt ${action.run.attempt}) ${action.run.url}`,
-    `- Job: ${action.job.name}`, `- Long package runs still in progress were cancelled; CI keeps running.`, '',
+    `- Job: ${action.job.name}`, `- Long package runs still in progress were cancelled, except those a nightly rehearsal started; CI keeps running.`, '',
     'Fix it on a new candidate. If this is infrastructure or a known flake, add a signature with its evidence to',
     '`scripts/lib/candidate-failure-signatures.mjs`.', '', '```text', excerpt(action.job), '```'].join('\n');
 }
