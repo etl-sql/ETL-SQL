@@ -1,0 +1,137 @@
+# Measures per-test flake rates: runs the browser shards and the engine groups several times on one
+# commit and counts how often each test fails. Pushed only to flake/** branches; it is not a gate.
+name: Flake Hunt
+
+on:
+  push:
+    branches: ['flake/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flake-hunt-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    name: Browser shard ${{ matrix.shard }} repeat ${{ matrix.repeat }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        shard: [1, 2, 3]
+        repeat: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 15
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install browser compiler
+        timeout-minutes: 8
+        shell: bash
+        run: mkdir -p artifacts/browser-shard && npm ci --prefix scripts/typecheck
+      - name: Prepare browser assets
+        timeout-minutes: 8
+        run: node scripts/sync-assets.js
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Build VS Code UI package
+        working-directory: src/etl-sql-vscode/ui
+        timeout-minutes: 15
+        shell: bash
+        run: npm ci && npm run build
+      - uses: actions/cache@v6
+        with:
+          path: ~\AppData\Local\ms-playwright
+          key: playwright-windows-${{ hashFiles('Directory.Packages.props') }}
+          restore-keys: playwright-windows-
+      - name: Build browser lane
+        timeout-minutes: 17
+        run: dotnet build tests/ETL-SQL.Portal.BrowserTests/ETL-SQL.Portal.BrowserTests.csproj --configuration Release
+      - name: Run browser lane
+        timeout-minutes: 35
+        shell: pwsh
+        run: ./scripts/Test-BrowserShard.ps1 -Shard ${{ matrix.shard }} -ShardCount 3 -Configuration Release -NoBuild -EvidenceDirectory artifacts/browser-shard
+      - name: Retain results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: flake-browser-${{ matrix.shard }}-${{ matrix.repeat }}
+          path: artifacts/browser-shard/**/*.trx
+          if-no-files-found: warn
+          retention-days: 14
+
+  engine:
+    name: Engine group ${{ matrix.group }} repeat ${{ matrix.repeat }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        group: [1, 2, 3]
+        repeat: [1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 15
+      - uses: ./.github/actions/prepare-test-project
+        with:
+          project: tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj
+          evidence: release-validation/engine-prepare
+      - name: Run assigned engine shards
+        timeout-minutes: 30
+        shell: pwsh
+        run: ./scripts/test-lane.ps1 -Lane engine -Configuration Release -NoRestore -NoBuild -EngineShardCount 12 -EngineShardGroup ${{ matrix.group }} -EngineShardGroupCount 3 -ResultsDirectory release-validation/engine-results
+      - name: Retain results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: flake-engine-${{ matrix.group }}-${{ matrix.repeat }}
+          path: release-validation/engine-results/**/*.trx
+          if-no-files-found: warn
+          retention-days: 14
+
+  summary:
+    name: Flake rates
+    needs: [browser, engine]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: flake-*
+          path: results
+      - name: Count failures per test
+        shell: bash
+        run: |
+          node --input-type=module -e '
+          import { readdirSync, readFileSync, statSync, appendFileSync } from "node:fs";
+          import { join } from "node:path";
+          const walk = d => readdirSync(d).flatMap(n => { const p = join(d, n); return statSync(p).isDirectory() ? walk(p) : [p]; });
+          const files = walk("results").filter(f => f.endsWith(".trx"));
+          const tally = new Map(); let runs = 0, failedRuns = 0;
+          for (const file of files) {
+            const xml = readFileSync(file, "utf8"); runs++;
+            let failedHere = false;
+            for (const m of xml.matchAll(/<UnitTestResult\b[^>]*\btestName="([^"]+)"[^>]*\boutcome="([^"]+)"/g)) {
+              const t = tally.get(m[1]) ?? { pass: 0, fail: 0 };
+              if (m[2] === "Failed") { t.fail++; failedHere = true; } else if (m[2] === "Passed") t.pass++;
+              tally.set(m[1], t);
+            }
+            if (failedHere) failedRuns++;
+          }
+          const flaky = [...tally].filter(([, t]) => t.fail > 0).sort((a, b) => b[1].fail - a[1].fail);
+          const lines = ["## Flake rates", "", `${files.length} result files, ${failedRuns} with a failure.`, "",
+            "| Fails | Runs | Test |", "| ---: | ---: | :--- |",
+            ...flaky.map(([name, t]) => `| ${t.fail} | ${t.fail + t.pass} | ${name.replaceAll("|", "\\|")} |`)];
+          console.log(lines.join("\n"));
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          '
