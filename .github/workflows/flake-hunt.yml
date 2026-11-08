@@ -110,6 +110,7 @@ jobs:
           pattern: flake-*
           path: results
       - name: Count failures per test
+        timeout-minutes: 5
         shell: bash
         run: |
           node --input-type=module -e '
