@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { activeBranches, dispatch } from '../dispatch-nightly-release.mjs';
+import { collectorSteps, rehearsalWorkflows, rehearse, summarize } from '../nightly-rehearsal.mjs';
 
 const sha = 'a'.repeat(40);
 const ref = version => ({ ref: `refs/heads/release/v${version}`, object: { sha } });
@@ -25,4 +29,88 @@ for (const status of ['in_progress', 'queued', 'completed']) {
   if (writes.length) assert.deepEqual(writes[0].slice(-4), ['--ref', 'release/v0.22.0', '-f', `candidate_sha=${sha}`]);
 }
 assert.throws(() => dispatch('owner/repo', () => { throw new Error('API unavailable'); }), /API unavailable/);
-console.log('Nightly selection: version ordering, released/draft/prerelease boundaries, exact SHA, active-run suppression and API failure passed.');
+// Rehearsal: starts each certification once, waits, then runs the release collectors.
+const repo = 'owner/repo', branch = 'release/v0.22.0', startedAt = '2026-11-08T06:30:00Z';
+const options = { repository: repo, sha, branch, directory: mkdtempSync(path.join(tmpdir(), 'rehearsal-')),
+  version: '0.22.0', previousTag: 'v0.21.0', startedAt };
+function fakeGitHub({ head = sha, conclusion = () => 'success', existing = [], registers = true, stuck = false } = {}) {
+  const runs = [...existing], dispatched = [];
+  const gh = args => {
+    if (args[0] === 'workflow') {
+      dispatched.push(args);
+      if (registers) runs.push({ id: 100 + runs.length, file: args[2], head_sha: sha, head_branch: branch,
+        event: 'workflow_dispatch', created_at: '2026-11-08T06:31:00Z' });
+      return '';
+    }
+    const endpoint = args[1];
+    if (endpoint.includes('/commits/')) return JSON.stringify({ sha: head });
+    const listed = /workflows\/([\w-]+\.yml)\/runs/.exec(endpoint);
+    if (listed) return JSON.stringify({ workflow_runs: runs.filter(run => run.file === listed[1]) });
+    const run = runs.find(candidate => endpoint.endsWith(`/runs/${candidate.id}`));
+    return JSON.stringify({ ...run, status: stuck ? 'in_progress' : 'completed', conclusion: conclusion(run.file),
+      html_url: `https://example.test/${run.id}` });
+  };
+  return { gh, dispatched };
+}
+let clock = 0;
+const deps = (github, execute = () => ({ status: 0, stdout: '', stderr: '' })) => ({ gh: github.gh, execute,
+  now: () => clock, sleep: async ms => { clock += ms; }, report: () => {} });
+const selecting = (command, args, env) => {
+  if (args.some(arg => /Find-CertifiedMsi|find-certified-deb/.test(arg))) writeFileSync(env.GITHUB_OUTPUT, 'artifact_id=42\n');
+  return { status: 0, stdout: 'selected', stderr: '' };
+};
+
+let github = fakeGitHub();
+let result = await rehearse(options, deps(github, selecting));
+assert.equal(result.ok, true, JSON.stringify(result));
+assert.deepEqual(github.dispatched.map(args => args[2]), rehearsalWorkflows.map(workflow => workflow.file));
+assert.deepEqual(github.dispatched[0].slice(-2), ['-f', `candidate_sha=${sha}`], 'Release Certification needs the exact candidate.');
+assert.ok(github.dispatched.every(args => args.includes(branch)));
+assert.equal(result.steps.length, rehearsalWorkflows.length + collectorSteps(options).length);
+assert.match(summarize(result, { sha, branch }), /rehearsal: PASS/);
+
+// A rerun reuses the runs this rehearsal started; older runs for the same SHA do not count.
+const mine = rehearsalWorkflows.map((workflow, index) => ({ id: 10 + index, file: workflow.file, head_sha: sha, head_branch: branch,
+  event: 'workflow_dispatch', created_at: '2026-11-08T07:00:00Z' }));
+github = fakeGitHub({ existing: mine });
+assert.equal((await rehearse(options, deps(github, selecting))).ok, true);
+assert.equal(github.dispatched.length, 0);
+github = fakeGitHub({ existing: mine.map(run => ({ ...run, created_at: '2026-11-07T06:00:00Z' })) });
+await rehearse(options, deps(github, selecting));
+assert.equal(github.dispatched.length, rehearsalWorkflows.length, 'Yesterday\'s runs are not tonight\'s rehearsal.');
+
+// Failures name the failing step.
+result = await rehearse(options, deps(fakeGitHub({ conclusion: file => file === 'msi-upgrade.yml' ? 'failure' : 'success' }), selecting));
+assert.equal(result.failedStep, 'msi-upgrade.yml');
+assert.match(summarize(result, { sha, branch }), /FAIL at "msi-upgrade.yml"/);
+result = await rehearse(options, deps(fakeGitHub({ head: 'b'.repeat(40) }), selecting));
+assert.equal(result.failedStep, 'Start release-certification.yml');
+result = await rehearse(options, deps(fakeGitHub({ registers: false }), selecting));
+assert.match(result.steps.at(-1).detail, /no run appeared/);
+result = await rehearse(options, deps(fakeGitHub({ stuck: true }), selecting));
+assert.match(result.steps[0].detail, /still in_progress/);
+result = await rehearse(options, deps(fakeGitHub()));
+assert.equal(result.failedStep, 'Certified MSI', 'A finder that selects nothing fails the rehearsal.');
+result = await rehearse(options, deps(fakeGitHub(), (command, args, env) => args.some(arg => arg.includes('collect-certified-macos')) && args.includes('osx-arm64')
+  ? { status: 1, stdout: '', stderr: 'Native acceptance evidence is incomplete or mismatched.' } : selecting(command, args, env)));
+assert.equal(result.failedStep, 'Certified macOS packages (osx-arm64)');
+assert.match(result.steps.find(step => !step.ok).detail, /incomplete or mismatched/);
+await assert.rejects(rehearse({ ...options, branch: 'release/v0.23.0' }, deps(fakeGitHub())), /VersionPrefix/);
+
+// Phases, one per job: start only starts; a first wait hands over unfinished runs; collect needs them done.
+github = fakeGitHub({ stuck: true });
+assert.deepEqual(await rehearse(options, { ...deps(github), phase: 'start' }), { ok: true, steps: [] });
+assert.equal(github.dispatched.length, rehearsalWorkflows.length);
+result = await rehearse(options, { ...deps(github), phase: 'wait' });
+assert.equal(result.ok, true);
+assert.equal(result.settled, false);
+assert.equal(github.dispatched.length, rehearsalWorkflows.length, 'Waiting never starts runs.');
+result = await rehearse(options, { ...deps(github), phase: 'collect' });
+assert.equal(result.failedStep, 'release-certification.yml');
+result = await rehearse(options, { ...deps(fakeGitHub()), phase: 'wait' });
+assert.equal(result.failedStep, 'Start release-certification.yml', 'A wait without started runs fails.');
+github = fakeGitHub({ existing: mine });
+assert.equal((await rehearse(options, { ...deps(github, selecting), phase: 'wait' })).settled, true);
+assert.equal((await rehearse(options, { ...deps(github, selecting), phase: 'collect' })).ok, true);
+assert.equal(github.dispatched.length, 0);
+console.log('Nightly selection: version ordering, released/draft/prerelease boundaries, exact SHA, active-run suppression, API failure and the release rehearsal (single start, rerun reuse, named failing step) passed.');

@@ -49,7 +49,8 @@ for (const permission of ['contents: read', 'actions: read', 'checks: write']) a
 assert.ok(profile.includes("ETLSQL_MSI_DURABLE_CHECKPOINTS: '1'"));
 assert.ok(profile.includes('ETLSQL_MSI_CHECKPOINT_RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}'));
 assert.ok(profile.includes("Write-MsiDurableCheckpoint -Stage 'supervisor starting'"));
-for (const callerName of ['release.yml', 'nightly-release.yml']) {
+// The nightly starts msi-upgrade.yml as its own run, so only the release calls it as a reusable workflow.
+for (const callerName of ['release.yml']) {
   const caller = readFileSync(new URL(`../../.github/workflows/${callerName}`, import.meta.url), 'utf8');
   const call = caller.split(/^  [\w-]+:\r?\n/m).find(block => block.includes('uses: ./.github/workflows/msi-upgrade.yml'));
   assert.ok(call, callerName);

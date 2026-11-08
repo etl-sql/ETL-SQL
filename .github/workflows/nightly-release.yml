@@ -1,5 +1,12 @@
 name: Nightly Release Checks
 
+# Release rehearsal for one release-branch candidate. It starts every pre-tag certification as its
+# own run, exactly as a release needs them (Release Certification, MSI, DEB, native packages),
+# waits for them, then runs the release's own evidence collectors against those runs. It never
+# tags, drafts or publishes. The collect job's summary gives one pass/fail and names the failing
+# step. Native packages can take three hours and no job may exceed 180 minutes, so the wait is
+# split over two jobs; every job finds this rehearsal's runs again, so a rerun resumes.
+
 on:
   workflow_dispatch:
     inputs:
@@ -15,6 +22,9 @@ concurrency:
   group: nightly-release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+
 jobs:
   candidate:
     timeout-minutes: 5
@@ -22,30 +32,105 @@ jobs:
     steps:
       - name: Require exact release branch candidate
         timeout-minutes: 3
-        env:
-          REQUESTED_SHA: ${{ inputs.candidate_sha }}
         run: |
           set -euo pipefail
           [[ "$GITHUB_REF" == refs/heads/release/v* ]]
-          [[ "$REQUESTED_SHA" == "$GITHUB_SHA" ]]
-  broad-ci:
-    name: Full CI
+          [[ "$CANDIDATE_SHA" == "$GITHUB_SHA" ]]
+  start:
+    name: Start certification runs
     needs: candidate
-    uses: ./.github/workflows/ci.yml
-    with:
-      release_certification: true
-      candidate_sha: ${{ inputs.candidate_sha }}
-  msi:
-    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       actions: write
-      checks: write
-    uses: ./.github/workflows/msi-upgrade.yml
-    with:
-      source_sha: ${{ inputs.candidate_sha }}
-  deb:
-    needs: candidate
-    uses: ./.github/workflows/deb-upgrade.yml
-    with:
-      source_sha: ${{ inputs.candidate_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          ref: ${{ inputs.candidate_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Start Release Certification, MSI, DEB and native package runs
+        timeout-minutes: 20
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/nightly-rehearsal.mjs start "$GITHUB_REPOSITORY" "$CANDIDATE_SHA" "$GITHUB_REF_NAME" release-validation/nightly
+  wait:
+    name: Wait for certification runs
+    needs: start
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    outputs:
+      settled: ${{ steps.wait.outputs.settled }}
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          ref: ${{ inputs.candidate_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Wait up to 170 minutes
+        id: wait
+        timeout-minutes: 172
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/nightly-rehearsal.mjs wait "$GITHUB_REPOSITORY" "$CANDIDATE_SHA" "$GITHUB_REF_NAME" release-validation/nightly
+  wait-more:
+    name: Keep waiting for certification runs
+    needs: wait
+    if: needs.wait.outputs.settled != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          ref: ${{ inputs.candidate_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Wait up to 170 more minutes
+        timeout-minutes: 172
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/nightly-rehearsal.mjs wait "$GITHUB_REPOSITORY" "$CANDIDATE_SHA" "$GITHUB_REF_NAME" release-validation/nightly
+  collect:
+    name: Release rehearsal
+    needs: [wait, wait-more]
+    if: ${{ !cancelled() && needs.wait.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.wait-more.result) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 8
+        with:
+          ref: ${{ inputs.candidate_sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Collect release evidence from tonight's runs
+        timeout-minutes: 100
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/nightly-rehearsal.mjs collect "$GITHUB_REPOSITORY" "$CANDIDATE_SHA" "$GITHUB_REF_NAME" release-validation/nightly
+      - name: Retain rehearsal evidence
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-rehearsal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/nightly/
+          if-no-files-found: warn
+          retention-days: 30

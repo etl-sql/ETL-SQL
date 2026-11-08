@@ -100,6 +100,12 @@ runner was free. W1 extends it rather than building a new one:
 The workstation step is being removed from releases (W4b), so the rehearsal does not need it.
 **Done when:** it runs unattended and reports one pass/fail with the failing step named.
 **First slice (week 1):** items 1 and 2; item 3 follows.
+**Status 2026-11-08:** items 1 and 2 written (`scripts/nightly-rehearsal.mjs`). The nightly now
+starts Release Certification, MSI, DEB and native packages as separate `workflow_dispatch` runs,
+because the collectors accept only completed runs and a run cannot collect from itself. It then
+runs the hosted, Windows, both macOS, MSI and DEB collectors. Operator evidence stays out until
+W8 decides which operator claims remain: it is a human submission, so a nightly would always
+report it missing. Not yet proven by a real run.
 
 ### W2. Reuse evidence when inputs did not change
 Each lane declares its input paths. Its result is reused when the fingerprint of those inputs is

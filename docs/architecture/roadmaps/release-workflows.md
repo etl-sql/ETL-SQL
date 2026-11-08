@@ -88,10 +88,17 @@ does not duplicate certification already running elsewhere.
 releases do not retire an active branch. A branch with a queued or running nightly is skipped.
 The requested workflow rejects a moved branch before starting expensive jobs.
 
-The nightly workflow calls the full CI implementation (including all Portal browser shards),
-both MSI deployment profiles, and DEB fresh-install, upgrade and rollback certification.
-Nightly runs are early integration evidence; the publication gate still requires its explicitly
-accepted exact-candidate certification workflow and package receipts.
+The nightly workflow is a release rehearsal. It starts the runs a release collects, each as its
+own `workflow_dispatch` run on the branch: Release Certification (full CI, including all Portal
+browser shards), MSI (both deployment profiles), DEB (fresh install, upgrade, rollback) and
+native packages (Windows and both macOS architectures). It waits for them, then runs the
+release's own collectors against them: CI and CodeQL evidence, certified Windows and macOS
+packages, and the certified MSI and DEB finders. The final job's summary gives one pass/fail and
+names the failing step. No job may exceed 180 minutes, so the wait spans two jobs; each job finds
+the runs this rehearsal started, so a rerun resumes rather than starting duplicates
+(`scripts/nightly-rehearsal.mjs`). The rehearsal never tags, drafts or publishes. Because the runs
+are the same kind a release collects, a green rehearsal on an unchanged candidate is the release's
+pre-tag evidence; operator evidence is still submitted separately.
 
 The DEB workflow builds a package pair once and retains its SHA and hashes. A separate disposable
 Ubuntu runner verifies the artifact before installing it. Retrying only the failed installation

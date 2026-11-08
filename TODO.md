@@ -26,10 +26,11 @@ timebox 2026-11-07 to 2026-11-21, re-plan with the owner if W1 is not running by
 certification first time, no gate passes by waiver, and a script or doc fix reruns only its lanes.
 Cut line: W6–W8 move to the feature backlog if the timebox runs out.
 
-- [ ] **W1 Nightly release rehearsal.** `nightly-release.yml` already runs CI, both MSI profiles and
-  DEB nightly (green 2026-11-06 and 2026-11-07 on `478380ee1`). **Left:** native package
-  certification; post-tag collectors and the operator-evidence validator against that night's runs;
-  then a `workflow_dispatch` dry-run of `release.yml` that never pushes a tag; "runner not acquired"
+- [ ] **W1 Nightly release rehearsal.** Native package certification and the release collectors
+  (hosted, Windows, both macOS, MSI, DEB) are now in the nightly (`scripts/nightly-rehearsal.mjs`,
+  2026-11-08), which starts each certification as its own run and gives one pass/fail.
+  **Left:** prove it on a real nightly; operator evidence once W8 settles its scope; a
+  `workflow_dispatch` dry-run of `release.yml` that never pushes a tag; "runner not acquired"
   retried once and reported as infrastructure.
 - [ ] **W2 Reuse evidence when inputs did not change.** Owner approved the policy 2026-11-04.
   **Left:** one-page design note (what is an input, who checks the fingerprint, cost of a wrong

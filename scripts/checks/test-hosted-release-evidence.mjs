@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { ensureCertification, reuseFullCi } from '../ensure-release-certification.mjs';
 import { collectHostedEvidence, hostedPolicy } from '../collect-hosted-release-evidence.mjs';
 
@@ -13,9 +12,6 @@ assert.equal(hostedPolicy.workflows[0].fallback.file, 'ci.yml');
 assert.deepEqual(hostedPolicy.workflows[0].fallback.events, ['push'], 'Manual diagnostic runs must never satisfy publication.');
 assert.deepEqual(hostedPolicy.workflows[0].nightlyFallback, { file: 'nightly-release.yml', events: ['workflow_dispatch'],
   jobPrefix: 'Full CI / ', releaseBranchesOnly: true });
-const nightlySource = readFileSync(new URL('../../.github/workflows/nightly-release.yml', import.meta.url), 'utf8');
-assert.match(nightlySource, /broad-ci:\r?\n    name: Full CI/);
-assert.match(nightlySource, /release_certification: true/);
 assert.deepEqual(hostedPolicy.workflows.find(workflow => workflow.file === 'codeql.yml').jobs,
   ['Analyze (csharp)', 'Analyze (javascript-typescript)']);
 const prefix = `repos/${repository}/actions`;

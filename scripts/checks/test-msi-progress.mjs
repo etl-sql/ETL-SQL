@@ -75,7 +75,8 @@ const paginated = await watchProgress({api: async route => {
 assert.match(paginated.message, /own deadline/); assert.equal(pages.length, 2);
 
 const workflow = readFileSync(new URL('../../.github/workflows/msi-upgrade.yml', import.meta.url), 'utf8');
-for (const [file, id] of [['release', 'certify-msi'], ['nightly-release', 'msi']]) {
+// The nightly starts msi-upgrade.yml as its own run; only the release calls it as a reusable workflow.
+for (const [file, id] of [['release', 'certify-msi']]) {
   const caller = readFileSync(new URL(`../../.github/workflows/${file}.yml`, import.meta.url), 'utf8').split(new RegExp(`^  ${id}:\\r?\\n`, 'm'))[1].split(/^  [\w-]+:\r?\n/m)[0];
   assert.match(caller, /actions: write/);
 }
