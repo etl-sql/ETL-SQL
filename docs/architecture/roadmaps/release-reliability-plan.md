@@ -400,3 +400,16 @@ upgrade, lost the runner (42488712716; last heartbeat 2 minutes into the rollbac
 certification script now passes `MSIRESTARTMANAGERCONTROL=Disable` on every `msiexec` call, the
 command-line form that lost 0 of 6 in round 9, so the old MSI gets the same protection. The
 installer source check requires it on both calls.
+
+**2026-11-08, later:** that did not close it. The push run on `76ac443a9` (MSI 42502798421) lost
+the runner during the upgrade to the candidate, about 40 s after the v0.21.0 install; so had
+42486129217 on `b81a9550e`, before the command-line change. The upgrade's
+`RemoveExistingProducts` runs the v0.21.0 uninstall as a nested session whose command line is only
+`UPGRADINGPRODUCTCODE=… REMOVE=ALL`. In the passing upgrade log of 42478004428 the outer session
+says "Disabled by MSIRESTARTMANAGERCONTROL property", and the nested one says "Will attempt to
+shut down and restart applications in no UI modes" and "Successfully shut down all applications".
+When `provjobd` still holds the v0.21.0 files, that shutdown loses the runner. The certification
+script now sets the Windows Installer machine policy `DisableAutomaticApplicationShutdown=1` on
+hosted runners only (it reaches nested sessions). After every `msiexec` call it fails if the log
+shows Restart Manager attempting a shutdown, so a pass shows the policy held. The installer source
+check requires both.

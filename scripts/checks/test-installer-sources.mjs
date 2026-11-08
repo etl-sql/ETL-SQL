@@ -70,6 +70,9 @@ try {
   const calls = certification.match(/Invoke-MsiExec @\([^)]*\)/g);
   assert.equal(calls.length, 2);
   for (const call of calls) assert.match(call, /, \$restartManager\)$/, call);
+  // The upgrade's nested v0.21.0 uninstall ignores the command line; only machine policy reaches it.
+  assert.match(certification, /-Name 'DisableAutomaticApplicationShutdown' -PropertyType DWord -Value 1 /);
+  assert.equal(certification.match(/^\s+Assert-NoRestartManagerShutdown \$Log$/gm)?.length, 2);
   console.log('Installer source checks: static validation, retired-helper rejection and Restart Manager disabled for every certification msiexec call passed.');
 } finally {
   // Only remove the private fixture created above.

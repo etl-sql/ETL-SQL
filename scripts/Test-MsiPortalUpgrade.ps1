@@ -236,13 +236,38 @@ function Invoke-Assets([string[]]$Arguments) {
 # msiexec call covers both; the command-line form lost 0 of 6 runners in diagnostic round 9.
 $restartManager = 'MSIRESTARTMANAGERCONTROL=Disable'
 
+# The command line does not reach the upgrade's RemoveExistingProducts: it runs the v0.21.0
+# uninstall as a nested session that opened Restart Manager and shut applications down
+# (02-upgrade.log of MSI 42478004428). Two of the three runner losses after the property was
+# authored died in that step (42486129217, 42502798421). The machine policy turns Restart Manager
+# off for every Windows Installer session, nested ones included. Hosted runners only: it changes
+# machine policy, and the runner is discarded after the job. The key is created only when missing
+# because New-Item -Force would erase the runner's other Installer policy values.
+$restartManagerOffByPolicy = $env:GITHUB_ACTIONS -ceq 'true'
+if ($restartManagerOffByPolicy) {
+    $installerPolicy = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer'
+    if (-not (Test-Path -LiteralPath $installerPolicy)) { New-Item -Path $installerPolicy | Out-Null }
+    New-ItemProperty -LiteralPath $installerPolicy -Name 'DisableAutomaticApplicationShutdown' -PropertyType DWord -Value 1 -Force | Out-Null
+}
+
+# Proof the policy held: no session in the log, nested or not, may attempt a shutdown.
+function Assert-NoRestartManagerShutdown([string]$Log) {
+    if (-not $restartManagerOffByPolicy) { return }
+    $text = [IO.File]::ReadAllText((Join-Path $out $Log), [Text.Encoding]::Unicode)
+    if ($text.Contains('RESTART MANAGER: Will attempt to shut down')) {
+        throw "Restart Manager attempted to shut down applications during $Log despite the machine policy."
+    }
+}
+
 function Install-Msi([string]$Msi, [string]$Log) {
     Invoke-MsiExec @('/i', $Msi, 'DEPLOY_PROFILE=ENTERPRISE', $restartManager) (Join-Path $out $Log) "Install $Log"
+    Assert-NoRestartManagerShutdown $Log
 }
 
 function Uninstall-All([string]$Log) {
     foreach ($entry in @(Get-EtlSqlUninstallEntries)) {
         Invoke-MsiExec @('/x', $entry.PSChildName, $restartManager) (Join-Path $out $Log) "Uninstall $Log"
+        Assert-NoRestartManagerShutdown $Log
     }
 }
 
