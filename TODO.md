@@ -87,6 +87,10 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   signature, so the supervisor cancelled the nightly's MSI, DEB and native runs. Owner decision
   2026-11-08: the supervisor never cancels runs the nightly started (workflow-token
   `workflow_dispatch`); it still reports the defect.
+  One more on `5e6b0dbf0` (push CI 42515342837, issue #62, MSI 42515342990 cancelled before its
+  Portal job): `SandboxStoryTests.Studio_FilterPane_RendersCategoricalNumericAndDateControls`
+  read the numeric filter card's inputs with a one-shot `IsVisibleAsync` right after Apply. Its
+  checks now use Playwright's waiting `Expect` like the rest of the file.
 - [ ] **W6 Performance certification redesign** (below the cut line). Deterministic metrics gate;
   timing by same-host interleaved A/B; no waivers.
 - [ ] **W7 Local gate hygiene** (below the cut line). Environment preflight; shrink the pre-push hook.

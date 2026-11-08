@@ -6309,14 +6309,16 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await setup.Locator("[data-filter-dialog-field]").SelectOptionAsync("order_date");
         await setup.Locator("[data-filter-dialog-apply]").ClickAsync();
 
-        Assert.Equal(3, await filterSidebar.Locator(".etlsql-filter-card").CountAsync());
-        Assert.True(await filterSidebar.Locator("[data-date-preset='order_date']").IsVisibleAsync());
-        Assert.True(await filterSidebar.Locator("[data-filter-date-min='order_date']").IsVisibleAsync());
-        Assert.True(await filterSidebar.Locator("[data-filter-date-max='order_date']").IsVisibleAsync());
-        Assert.True(await filterSidebar.Locator("[data-filter-min='total_amount']").IsVisibleAsync());
-        Assert.True(await filterSidebar.Locator("[data-filter-max='total_amount']").IsVisibleAsync());
-        Assert.Equal(4, await filterSidebar.Locator("[data-filter-value='region']").CountAsync());
-        Assert.Equal(3, await filterSidebar.Locator("[data-filter-scope]").CountAsync());
+        // Each card's controls render after Apply returns; a one-shot IsVisibleAsync read the numeric
+        // card before its inputs existed (CI 42515342837, 2026-11-08). Expect waits for them.
+        await Expect(filterSidebar.Locator(".etlsql-filter-card")).ToHaveCountAsync(3);
+        await Expect(filterSidebar.Locator("[data-date-preset='order_date']")).ToBeVisibleAsync();
+        await Expect(filterSidebar.Locator("[data-filter-date-min='order_date']")).ToBeVisibleAsync();
+        await Expect(filterSidebar.Locator("[data-filter-date-max='order_date']")).ToBeVisibleAsync();
+        await Expect(filterSidebar.Locator("[data-filter-min='total_amount']")).ToBeVisibleAsync();
+        await Expect(filterSidebar.Locator("[data-filter-max='total_amount']")).ToBeVisibleAsync();
+        await Expect(filterSidebar.Locator("[data-filter-value='region']")).ToHaveCountAsync(4);
+        await Expect(filterSidebar.Locator("[data-filter-scope]")).ToHaveCountAsync(3);
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }
