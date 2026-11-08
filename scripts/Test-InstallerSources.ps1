@@ -19,6 +19,14 @@ try {
         $manifest.DocumentElement.NamespaceURI -cne 'http://schemas.microsoft.com/wix/2006/wi') {
         throw 'Expected a WiX 3 manifest.'
     }
+    # Restart Manager shut down the hosted runner's provjobd and lost the runner; DisableShutdown
+    # did not stop that in silent mode (diagnostic runs 2026-11-07).
+    $namespaces = [Xml.XmlNamespaceManager]::new($manifest.NameTable)
+    $namespaces.AddNamespace('w', 'http://schemas.microsoft.com/wix/2006/wi')
+    $restartManager = $manifest.SelectNodes('/w:Wix/w:Product/w:Property[@Id="MSIRESTARTMANAGERCONTROL"]', $namespaces)
+    if ($restartManager.Count -ne 1 -or $restartManager[0].Value -cne 'Disable') {
+        $findings.Add('MSI must not let Restart Manager shut down other software: author MSIRESTARTMANAGERCONTROL=Disable exactly once.')
+    }
     foreach ($attribute in $manifest.SelectNodes('//@Source | //@SourceFile')) {
         $source = $attribute.Value
         # Published binaries are checked after publish; heat generates wwwroot.wxs then too.

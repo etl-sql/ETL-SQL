@@ -497,7 +497,16 @@ checks and cleanup remain unchanged. Observed diagnostics retain their separate 
 A retained quiet-runtime control passed fresh install/uninstall, upgrade, rollback and cleanup
 without a Restart Manager override or diagnostic callbacks. Normal PR certification subsequently
 passed on failed-job-only recovery, preserving its installer build and workstation execution;
-see [recovery acceptance](recovery-acceptance.md). The first-attempt runner loss remains unexplained.
+see [recovery acceptance](recovery-acceptance.md).
+
+The first-attempt runner loss is explained (2026-11-07): Windows Restart Manager shut down the
+hosted runner's `provjobd`, which reads newly installed files for about a minute, so an uninstall
+soon after an install lost the runner. The MSI authors `MSIRESTARTMANAGERCONTROL=Disable` and the
+source preflight rejects missing, weakened or duplicate authoring. `DisableShutdown` is not enough:
+Restart Manager still shut applications down in silent mode. The MSI's `ServiceControl` and
+`CloseApplication` entries stop ETL-SQL's own services and programs. The
+[Windows Installer property reference](https://learn.microsoft.com/en-us/windows/win32/msi/msirestartmanagercontrol)
+defines the values.
 Do not infer its cause from a successful diagnostic or retry. The frozen release candidate still
 needs eligible release-branch certification.
 
