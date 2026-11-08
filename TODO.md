@@ -69,8 +69,9 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   LostFenceCancelsExecutionAuthorityAndRequiresReconciliation`, Release Certification
   42488694536 Engine Coverage (1/3), first recorded failure; (2) `StudioPerformanceBudgetTests.
   CanonicalStudioFixture_StaysWithinPlatformBudgets`, push CI 42486129266 Portal Browser Journey
-  (1/3). The supervisor's `studio-performance-budget` signature did not match it, so it filed
-  issue #60 as a defect and cancelled MSI, DEB and native packages. A second flake of either
+  (1/3). The supervisor's `studio-performance-budget` signature matched only startup, so it filed
+  issue #60 as a defect and cancelled MSI, DEB and native packages; it now matches every Studio
+  millisecond budget (the MiB heap budget stays a defect). A second flake of either
   moves it out of the gate for a cause fix.
 - [ ] **W6 Performance certification redesign** (below the cut line). Deterministic metrics gate;
   timing by same-host interleaved A/B; no waivers.

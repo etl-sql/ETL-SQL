@@ -20,6 +20,11 @@ const samples = {
   'preflight-check-watchdog': { log: 'FAIL test-workflows (60.0s): release-validation/preflight/1/test-workflows.log' },
 };
 for (const [id, input] of Object.entries(samples)) assert.equal(classifyFailure(input)?.id, id);
+// Every Studio millisecond budget is the same timing flake; the MiB heap budget is not.
+for (const metric of ['keystroke input-to-frame p95', '250-row aggregate/render p95', 'canvas redraw/layout p95']) {
+  assert.equal(classifyFailure({ log: `   Studio ${metric} measured 417.30 ms; budget is 50.00 ms.` })?.id, 'studio-performance-budget', metric);
+}
+assert.equal(classifyFailure({ log: 'Studio post-GC JavaScript heap measured 80.00 MiB; budget is 64.00 MiB.' }), null);
 // Real defects from today's rounds stay unclassified.
 for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
   'Assert.Contains() Failure: Sub-string not found', 'FAIL documentation (11.3s)', 'error CS1002: ; expected']) {

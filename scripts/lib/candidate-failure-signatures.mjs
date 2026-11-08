@@ -37,9 +37,12 @@ export const candidateFailureSignatures = [
     evidence: 'Native Package Certification 41710853145 win-x64 after MSI payload checkout timeout, 2026-11-03',
   },
   {
+    // Every millisecond budget (startup, keystroke, aggregate/render, canvas redraw) measures one
+    // sample on a shared hosted runner. The heap budget is in MiB and stays a defect.
     id: 'studio-performance-budget', kind: 'flaky', source: 'log',
-    pattern: /Studio startup measured [\d.]+ ms; budget is [\d.]+ ms/,
-    evidence: 'Release Certification 41710847926 Portal Browser Journey 1/3, 2026-11-03',
+    pattern: /Studio [a-z0-9/ -]+? measured [\d.]+ ms; budget is [\d.]+ ms/,
+    evidence: 'Release Certification 41710847926 Portal Browser Journey 1/3 (startup), 2026-11-03; ' +
+      'CI 42486129266 Portal Browser Journey 1/3 (keystroke p95 417 ms; same commit passed in Release Certification 42488694536), 2026-11-08',
   },
   {
     id: 'playwright-wait', kind: 'flaky', source: 'log',
