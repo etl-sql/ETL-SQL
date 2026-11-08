@@ -4625,9 +4625,9 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         Assert.Contains("Provider rejected", await page.Locator(".etlsql-cw-diag-result").InnerTextAsync());
 
         await page.Locator("button[data-cat='testdata']").ClickAsync();
-        Assert.Equal(1, await page.Locator("button[data-type='MOCKDB']").CountAsync());
-        Assert.Equal(0, await page.Locator("button[data-type='MSSQL']").CountAsync());
-        Assert.Contains("MOCKDB", await page.Locator(".etlsql-cw-sql-box").InnerTextAsync());
+        await Expect(page.Locator("button[data-type='MOCKDB']")).ToHaveCountAsync(1);
+        await Expect(page.Locator("button[data-type='MSSQL']")).ToHaveCountAsync(0);
+        await Expect(page.Locator(".etlsql-cw-sql-box")).ToContainTextAsync("MOCKDB", new() { UseInnerText = true });
 
         await page.Locator("button[data-cat='files']").ClickAsync();
         await page.Locator("button[data-type='FLATFILE']").ClickAsync();
@@ -4735,9 +4735,9 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
         // Clear only the resource binding; keep the selected Gateway available for another choice.
         await page.Locator("[data-unbind-gateway-resource]").ClickAsync();
-        Assert.Equal("corp-gw", await page.Locator("#etlsql-cw-gateway-select").InputValueAsync());
-        Assert.Equal(0, await page.Locator(".etlsql-cw-gateway-bound-banner").CountAsync());
-        Assert.Contains("SERVER", await page.Locator(".etlsql-cw-content").InnerTextAsync());
+        await Expect(page.Locator("#etlsql-cw-gateway-select")).ToHaveValueAsync("corp-gw");
+        await Expect(page.Locator(".etlsql-cw-gateway-bound-banner")).ToHaveCountAsync(0);
+        await Expect(page.Locator(".etlsql-cw-content")).ToContainTextAsync("SERVER", new() { UseInnerText = true });
 
         // Manual refresh re-runs discovery without changing the selected Gateway.
         await page.Locator("[data-refresh-gateway-resources]").ClickAsync();
@@ -4987,8 +4987,8 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         Assert.Contains("Retry blocked", await page.Locator("#ops-signals").InnerTextAsync());
         Assert.Contains("op-write-7f3a", await page.Locator("#ops-ambiguous-writes").InnerTextAsync());
         await page.GetByRole(AriaRole.Button, new() { Name = "Review case" }).ClickAsync();
-        Assert.Contains("Immutable event history", await page.Locator("#ops-modal-body").InnerTextAsync());
-        Assert.Contains("Detected", await page.Locator("#ops-modal-body").InnerTextAsync());
+        await Expect(page.Locator("#ops-modal-body")).ToContainTextAsync("Immutable event history", new() { UseInnerText = true });
+        await Expect(page.Locator("#ops-modal-body")).ToContainTextAsync("Detected", new() { UseInnerText = true });
         await page.GetByRole(AriaRole.Button, new() { Name = "Record verified outcome" }).ClickAsync();
         await page.Locator("#ops-case-resolution").SelectOptionAsync("confirmed committed");
         await page.Locator("#ops-case-evidence").FillAsync("INC-2042/query-17");
@@ -5280,17 +5280,17 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
         // Cleared: blocked.
         await alias.FillAsync("");
-        Assert.True(await submit.IsDisabledAsync());
+        await Expect(submit).ToBeDisabledAsync();
 
         // Not an identifier: blocked, and the hint says why rather than just "required".
         await alias.FillAsync("9 bad-name");
-        Assert.True(await submit.IsDisabledAsync());
+        await Expect(submit).ToBeDisabledAsync();
         Assert.Contains("must start with a letter",
             await page.Locator(".etlsql-cw-missing-hint").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
 
         // Valid again: re-enabled.
         await alias.FillAsync("good_name");
-        Assert.True(await submit.IsEnabledAsync());
+        await Expect(submit).ToBeEnabledAsync();
 
         Assert.Empty(session.PageErrors);
     }
@@ -5931,7 +5931,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         var input = page.Locator(".etlsql-tab-rename-input");
         await input.FillAsync("discarded-name");
         await input.PressAsync("Escape");
-        Assert.Contains("sales_overview.rptsql", await page.Locator(".etlsql-studio-tab.active").InnerTextAsync());
+        await Expect(page.Locator(".etlsql-studio-tab.active")).ToContainTextAsync("sales_overview.rptsql", new() { UseInnerText = true });
 
         await page.Locator(".etlsql-studio-tab.active .etlsql-tab-title").DispatchEventAsync("dblclick");
         input = page.Locator(".etlsql-tab-rename-input");
@@ -6030,32 +6030,32 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
         // 2. Test projection switching
         await page.Locator("button[data-projection='canvas']").ClickAsync();
-        Assert.True(await page.Locator("[data-visual-stage]").IsVisibleAsync());
-        Assert.False(await page.Locator("[data-code-stage]").IsVisibleAsync());
+        await Expect(page.Locator("[data-visual-stage]")).ToBeVisibleAsync();
+        await Expect(page.Locator("[data-code-stage]")).ToBeHiddenAsync();
 
         await page.Locator("button[data-projection='code']").ClickAsync();
-        Assert.False(await page.Locator("[data-visual-stage]").IsVisibleAsync());
-        Assert.True(await page.Locator("[data-code-stage]").IsVisibleAsync());
+        await Expect(page.Locator("[data-visual-stage]")).ToBeHiddenAsync();
+        await Expect(page.Locator("[data-code-stage]")).ToBeVisibleAsync();
 
         await page.Locator("button[data-projection='split']").ClickAsync();
-        Assert.True(await page.Locator("[data-visual-stage]").IsVisibleAsync());
-        Assert.True(await page.Locator("[data-code-stage]").IsVisibleAsync());
+        await Expect(page.Locator("[data-visual-stage]")).ToBeVisibleAsync();
+        await Expect(page.Locator("[data-code-stage]")).ToBeVisibleAsync();
 
         // 3. Test Activity Rail switching and Filter Pane
         await page.Locator("button.etlsql-studio-rail-btn[data-activity='catalog']").ClickAsync();
-        Assert.Contains("New connection", await page.Locator("[data-sidebar-content]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Connections", await page.Locator("[data-sidebar-content]").InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        await Expect(page.Locator("[data-sidebar-content]")).ToContainTextAsync("New connection", new() { UseInnerText = true, IgnoreCase = true });
+        await Expect(page.Locator("[data-sidebar-content]")).ToContainTextAsync("Connections", new() { UseInnerText = true, IgnoreCase = true });
 
         await page.Locator("button.etlsql-studio-rail-btn[data-activity='filters']").ClickAsync();
-        Assert.Equal("Data", await page.Locator("[data-sidebar-title]").InnerTextAsync(), ignoreCase: true);
-        Assert.True(await page.Locator("[data-studio-sidebar]").IsVisibleAsync());
-        Assert.True(await page.Locator("[data-filter-sidebar]").IsVisibleAsync());
+        await Expect(page.Locator("[data-sidebar-title]")).ToHaveTextAsync("Data", new() { UseInnerText = true, IgnoreCase = true });
+        await Expect(page.Locator("[data-studio-sidebar]")).ToBeVisibleAsync();
+        await Expect(page.Locator("[data-filter-sidebar]")).ToBeVisibleAsync();
         await page.Locator("[data-studio-sidebar] [data-field='region']").ClickAsync();
         var filterDialog = page.Locator(".etlsql-studio-filter-dialog");
         await filterDialog.WaitForAsync();
         Assert.Equal("region", await filterDialog.Locator("[data-filter-dialog-field]").InputValueAsync());
         await filterDialog.Locator("[data-filter-dialog-field]").PressAsync("Escape");
-        Assert.True(await page.Locator("[data-modal-backdrop]").IsHiddenAsync());
+        await Expect(page.Locator("[data-modal-backdrop]")).ToBeHiddenAsync();
 
         // 4. Assert Live Visual Canvas cards
         var kpiCard = page.Locator(".etlsql-studio-canvas-card[data-visual-id='v_RevenueCard_0']");
@@ -6072,16 +6072,16 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
         // Trigger surgical option update on RevenueCard
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__?.surgicalPatchVisualOption('RevenueCard', 'TITLE', 'Executive Net Revenue')");
-        Assert.Contains("Executive Net Revenue", await kpiCard.InnerTextAsync());
+        await Expect(kpiCard).ToContainTextAsync("Executive Net Revenue", new() { UseInnerText = true });
 
         // 7. Switch to ETL tab via overflow dropdown and assert Pipeline DAG rendering
         await overflowBtn.ClickAsync();
         var tabDropdown = page.Locator("[data-studio-tab-dropdown]");
-        Assert.False(await tabDropdown.IsHiddenAsync());
-        Assert.Contains("ingest_orders.etlsql", await tabDropdown.InnerTextAsync());
+        await Expect(tabDropdown).ToBeVisibleAsync();
+        await Expect(tabDropdown).ToContainTextAsync("ingest_orders.etlsql", new() { UseInnerText = true });
         await tabDropdown.Locator(".etlsql-studio-tab-dropdown-item", new() { HasText = "ingest_orders.etlsql" }).ClickAsync();
-        Assert.True(await tabDropdown.IsHiddenAsync());
-        Assert.Contains("ingest_orders.etlsql", await page.Locator(".etlsql-studio-tab.active").InnerTextAsync());
+        await Expect(tabDropdown).ToBeHiddenAsync();
+        await Expect(page.Locator(".etlsql-studio-tab.active")).ToContainTextAsync("ingest_orders.etlsql", new() { UseInnerText = true });
         var dagView = page.Locator("[data-dag-view]");
         await dagView.WaitForAsync();
         Assert.True(await page.Locator("[data-dag-node]").CountAsync() >= 2);
@@ -6271,7 +6271,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
             text => text.Contains("TITLE = 'Total Revenue'", StringComparison.Ordinal));
 
         await diff.Locator("[data-git-diff-close]").ClickAsync();
-        Assert.True(await diff.IsHiddenAsync());
+        await Expect(diff).ToBeHiddenAsync();
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }
@@ -6290,10 +6290,10 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
         var dataSidebar = page.Locator("[data-studio-sidebar]");
         var filterSidebar = page.Locator("[data-filter-sidebar]");
-        Assert.True(await dataSidebar.IsVisibleAsync());
-        Assert.True(await filterSidebar.IsVisibleAsync());
-        Assert.DoesNotContain("Active filters", await dataSidebar.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Connections", await filterSidebar.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        await Expect(dataSidebar).ToBeVisibleAsync();
+        await Expect(filterSidebar).ToBeVisibleAsync();
+        await Expect(dataSidebar).Not.ToContainTextAsync("Active filters", new() { UseInnerText = true, IgnoreCase = true });
+        await Expect(filterSidebar).Not.ToContainTextAsync("Connections", new() { UseInnerText = true, IgnoreCase = true });
 
         await dataSidebar.Locator("[data-field='region']").DragToAsync(filterSidebar.Locator("[data-filter-drop]"));
         var setup = page.Locator(".etlsql-studio-filter-dialog");
@@ -6335,13 +6335,13 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await page.Locator("[data-studio-new-tab]").ClickAsync();
 
         var newScript = page.Locator("[data-new-type='sql']");
-        Assert.Contains("New Script (.etlsql)", await newScript.InnerTextAsync());
+        await Expect(newScript).ToContainTextAsync("New Script (.etlsql)", new() { UseInnerText = true });
         await newScript.ClickAsync();
 
         var activeTab = page.Locator(".etlsql-studio-tab.active");
-        Assert.Contains("untitled_query_", await activeTab.InnerTextAsync());
-        Assert.Contains(".etlsql", await activeTab.InnerTextAsync());
-        Assert.DoesNotContain(".sql", await activeTab.InnerTextAsync());
+        await Expect(activeTab).ToContainTextAsync("untitled_query_", new() { UseInnerText = true });
+        await Expect(activeTab).ToContainTextAsync(".etlsql", new() { UseInnerText = true });
+        await Expect(activeTab).Not.ToContainTextAsync(".sql", new() { UseInnerText = true });
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }
@@ -6469,10 +6469,10 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         Assert.Equal(3, await cards.CountAsync());
         await page.Locator("[data-dismiss-file='reports/sales_overview.rptsql']").ClickAsync();
 
-        Assert.Equal(2, await cards.CountAsync());
-        Assert.Equal(0, await page.Locator("[data-dismiss-file='reports/sales_overview.rptsql']").CountAsync());
-        Assert.Equal(1, await page.Locator(".etlsql-studio-tab", new() { HasText = "sales_overview.rptsql" }).CountAsync());
-        Assert.Contains("file was not deleted", await page.Locator("body").InnerTextAsync());
+        await Expect(cards).ToHaveCountAsync(2);
+        await Expect(page.Locator("[data-dismiss-file='reports/sales_overview.rptsql']")).ToHaveCountAsync(0);
+        await Expect(page.Locator(".etlsql-studio-tab", new() { HasText = "sales_overview.rptsql" })).ToHaveCountAsync(1);
+        await Expect(page.Locator("body")).ToContainTextAsync("file was not deleted", new() { UseInnerText = true });
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }
@@ -6493,7 +6493,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         Assert.True(await page.Locator("[data-action='code-format']").IsVisibleAsync());
 
         await page.Locator("[data-activity='catalog']").ClickAsync();
-        Assert.True(await page.Locator(".etlsql-studio-sidebar [data-action='wizard']").IsVisibleAsync());
+        await Expect(page.Locator(".etlsql-studio-sidebar [data-action='wizard']")).ToBeVisibleAsync();
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }
@@ -6511,14 +6511,14 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
         await page.Locator("[data-activity='git']").ClickAsync();
         var gitState = page.Locator("[data-capability-state='git']");
-        Assert.Contains("Source control is unavailable", await gitState.InnerTextAsync());
-        Assert.DoesNotContain("Branch:", await gitState.InnerTextAsync());
-        Assert.DoesNotContain("Working tree clean", await gitState.InnerTextAsync());
+        await Expect(gitState).ToContainTextAsync("Source control is unavailable", new() { UseInnerText = true });
+        await Expect(gitState).Not.ToContainTextAsync("Branch:", new() { UseInnerText = true });
+        await Expect(gitState).Not.ToContainTextAsync("Working tree clean", new() { UseInnerText = true });
 
         await page.Locator("[data-activity='settings']").ClickAsync();
         var settingsState = page.Locator("[data-capability-state='settings']");
-        Assert.Contains("Settings are unavailable", await settingsState.InnerTextAsync());
-        Assert.Equal(0, await page.Locator("[data-sidebar-content] input").CountAsync());
+        await Expect(settingsState).ToContainTextAsync("Settings are unavailable", new() { UseInnerText = true });
+        await Expect(page.Locator("[data-sidebar-content] input")).ToHaveCountAsync(0);
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }
@@ -6688,25 +6688,25 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await search.WaitForAsync();
         Assert.Equal("Quarterly sales", await search.InputValueAsync());
         await page.GetByRole(AriaRole.Button, new() { Name = "Clear Customer search", Exact = true }).ClickAsync();
-        Assert.Equal("", await search.InputValueAsync());
+        await Expect(search).ToHaveValueAsync("");
         Assert.True(await search.EvaluateAsync<bool>("element => element === document.activeElement"));
 
         var note = page.GetByRole(AriaRole.Textbox, new() { Name = "AnalystNote", Exact = true });
-        Assert.Equal("12", await note.GetAttributeAsync("maxlength"));
+        await Expect(note).ToHaveAttributeAsync("maxlength", "12");
         var quantity = page.GetByRole(AriaRole.Spinbutton, new() { Name = "Quantity", Exact = true });
         await quantity.FillAsync("20");
         await quantity.DispatchEventAsync("change");
-        Assert.Equal("8", await quantity.InputValueAsync());
+        await Expect(quantity).ToHaveValueAsync("8");
         var enabled = page.GetByRole(AriaRole.Checkbox, new() { Name = "Enabled", Exact = true });
-        Assert.True(await enabled.IsCheckedAsync());
+        await Expect(enabled).ToBeCheckedAsync();
         await enabled.UncheckAsync();
-        Assert.False(await enabled.IsCheckedAsync());
+        await Expect(enabled).Not.ToBeCheckedAsync();
         var slider = page.GetByRole(AriaRole.Slider, new() { Name = "Threshold", Exact = true });
-        Assert.Equal("8", await slider.InputValueAsync());
+        await Expect(slider).ToHaveValueAsync("8");
         await slider.FillAsync("24");
         await slider.DispatchEventAsync("input");
-        Assert.Equal("30", await page.Locator(".visual-card[data-name='Threshold'] .range-value").InnerTextAsync());
-        Assert.Contains("interactive in ReportPlayer", await page.Locator(".visual-card[data-name='Region'] .slicer-note").InnerTextAsync());
+        await Expect(page.Locator(".visual-card[data-name='Threshold'] .range-value")).ToHaveTextAsync("30", new() { UseInnerText = true });
+        await Expect(page.Locator(".visual-card[data-name='Region'] .slicer-note")).ToContainTextAsync("interactive in ReportPlayer", new() { UseInnerText = true });
         Assert.Empty(session.PageErrors);
     }
 
@@ -6721,22 +6721,22 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         var end = range.Locator("input[type=text]").Nth(1);
         await start.FillAsync("2026-09-14");
         await start.DispatchEventAsync("change");
-        Assert.Contains("Start date is disabled", await range.Locator(".filter-error").InnerTextAsync());
+        await Expect(range.Locator(".filter-error")).ToContainTextAsync("Start date is disabled", new() { UseInnerText = true });
         await start.FillAsync("2026-09-20");
         await start.DispatchEventAsync("change");
-        Assert.Contains("Start date cannot be after end date", await range.Locator(".filter-error").InnerTextAsync());
+        await Expect(range.Locator(".filter-error")).ToContainTextAsync("Start date cannot be after end date", new() { UseInnerText = true });
         await end.FillAsync("2026-09-21");
         await end.DispatchEventAsync("change");
-        Assert.False(await range.Locator(".filter-error").IsVisibleAsync());
+        await Expect(range.Locator(".filter-error")).ToBeHiddenAsync();
 
         var relative = page.Locator(".visual-card[data-name='RelativeDate']");
         var expression = relative.Locator("input[type=text]");
         await expression.FillAsync("invalid");
         await expression.DispatchEventAsync("change");
-        Assert.True(await relative.Locator(".filter-error").IsVisibleAsync());
+        await Expect(relative.Locator(".filter-error")).ToBeVisibleAsync();
         await relative.GetByRole(AriaRole.Button, new() { Name = "D-1", Exact = true }).ClickAsync();
-        Assert.Equal("D-1", await expression.InputValueAsync());
-        Assert.False(await relative.Locator(".filter-error").IsVisibleAsync());
+        await Expect(expression).ToHaveValueAsync("D-1");
+        await Expect(relative.Locator(".filter-error")).ToBeHiddenAsync();
         Assert.Empty(session.PageErrors);
     }
 
@@ -7438,7 +7438,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         // is; dismissing it is what a reader would do before carrying on.
         await DismissToastsAsync(page);
         await filterSidebar.Locator("[data-filter-show-more='region']").ClickAsync();
-        Assert.Equal(50, await filterSidebar.Locator("[data-filter-value='region']").CountAsync());
+        await Expect(filterSidebar.Locator("[data-filter-value='region']")).ToHaveCountAsync(50);
 
         await filterSidebar.Locator("[data-filter-search='region']").FillAsync("region_4");
         await page.WaitForFunctionAsync(

@@ -340,7 +340,7 @@ public sealed class PortalReaderJourneyTests(PortalJourneyFixture fixture)
             })
             """);
         var target = Array.FindIndex(regions, region => region != "South");
-        await marks.Nth(target).ClickAsync(new() { Force = true });
+        await marks.Nth(target).ClickAsync();
         return regions[target];
     }
 

@@ -1,5 +1,6 @@
 using ETL_SQL.WorkstationEditor;
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace ETL_SQL.Portal.BrowserTests;
 
@@ -380,7 +381,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
         // Its columns are ticked rather than typed.
         await page.Locator("[data-column-pick='columns'][value='UserID']").CheckAsync();
         await page.Locator("[data-column-pick='columns'][value='UserName']").CheckAsync();
-        Assert.Equal("UserID, UserName", await page.Locator("[data-task-field='columns']").InputValueAsync());
+        await Expect(page.Locator("[data-task-field='columns']")).ToHaveValueAsync("UserID, UserName");
         await page.Locator("[data-task-field='target']").FillAsync("#staged_users");
 
         // The statement is on screen before anything is written.

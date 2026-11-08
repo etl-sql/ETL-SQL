@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace ETL_SQL.Portal.BrowserTests;
 
@@ -27,8 +28,8 @@ public sealed class FilterControlBehaviourTests(DetailSurfaceHarnessFixture fixt
 
         await clear.ClickAsync();
 
-        Assert.Equal("", await input.InputValueAsync());
-        Assert.False(await clear.IsVisibleAsync());
+        await Expect(input).ToHaveValueAsync("");
+        await Expect(clear).ToBeHiddenAsync();
         Assert.True(await input.EvaluateAsync<bool>("element => element === document.activeElement"));
     }
 

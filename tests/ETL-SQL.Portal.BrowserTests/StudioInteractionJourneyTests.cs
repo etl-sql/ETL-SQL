@@ -98,7 +98,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         await WaitForRegionsAsync(report, "Detail", regions => regions.SetEquals([first]),
             $"Detail should show only {first} after the first click");
         var second = await RegionOfMarkAsync(report, "ByRegion", 1);
-        await marks.Nth(1).ClickAsync(new() { Modifiers = [KeyboardModifier.Control], Force = true });
+        await marks.Nth(1).ClickAsync(new() { Modifiers = [KeyboardModifier.Control] });
 
         await WaitForRegionsAsync(report, "Detail", regions => regions.SetEquals([first, second]),
             $"Detail should show {first} and {second} after the Ctrl+click");
@@ -170,7 +170,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         Assert.True((await RegionsShownAsync(report, "Orders")).Count > 1, "Orders should start unfiltered.");
         var mark = report.Locator("[data-visual-name='RegionDrill'] [data-row-index]").First;
         var region = await RegionOfMarkAsync(report, "RegionDrill");
-        await mark.ClickAsync(new() { Button = MouseButton.Right, Force = true });
+        await mark.ClickAsync(new() { Button = MouseButton.Right });
         await report.Locator(".report-ctx-menu [data-click-action='SET_PARAMETER']").ClickAsync();
 
         await WaitForRegionsAsync(report, "Orders", regions => regions.Count == 1 && regions.Contains(region),
@@ -245,7 +245,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         var report = await RunReportAsync(studio, reportId);
         var mark = report.Locator("[data-visual-name='ByRegion'] [data-row-index]").First;
         var region = await RegionOfMarkAsync(report, "ByRegion");
-        await mark.HoverAsync(new() { Force = true });
+        await mark.HoverAsync();
         var tooltip = report.Locator(".report-chart-tooltip");
         await Expect(tooltip).ToBeVisibleAsync(new() { Timeout = 15_000 });
         await Expect(tooltip).ToContainTextAsync("Region mix");
@@ -276,7 +276,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         var report = await RunReportAsync(studio, reportId);
         var mark = report.Locator("[data-visual-name='RegionDrill'] [data-row-index]").First;
         var region = await RegionOfMarkAsync(report, "RegionDrill");
-        await mark.ClickAsync(new() { Force = true });
+        await mark.ClickAsync();
         var popover = report.Locator(".report-chart-tooltip.report-chart-detail-pinned");
         await Expect(popover).ToBeVisibleAsync(new() { Timeout = 15_000 });
         await Expect(report.Locator(".report-chart-tooltip-loading")).ToHaveCountAsync(0, new() { Timeout = 15_000 });
@@ -566,7 +566,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
     {
         var mark = report.Locator($"[data-visual-name='{visual}'] [data-row-index]").First;
         var region = await RegionOfMarkAsync(report, visual);
-        await mark.ClickAsync(new() { Force = true });
+        await mark.ClickAsync();
         return region;
     }
 
