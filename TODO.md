@@ -34,10 +34,14 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
 - [ ] **W2 Reuse evidence when inputs did not change.** Owner approved the policy 2026-11-04.
   **Left:** one-page design note (what is an input, who checks the fingerprint, cost of a wrong
   reuse) for owner sign-off, then lanes declare inputs and drivers/supervisor accept reuse.
-- [ ] **W3 MSI Portal runner loss.** 12 of about 30 Portal attempts since 2026-10-07 lost the
-  runner; losses go silent within about 1.3 s of `msiexec /x` starting (census in the plan, section
-  10). **Left:** name the action or Restart Manager decision (diag branch
-  `diag/msi-portal-uninstall`, per-line diagnostics at `59bebcff7`); fix; 5 nightly passes in a row.
+- [ ] **W3 MSI Portal runner loss.** Cause found 2026-11-07: Windows Restart Manager shut down the
+  runner host's `provjobd`, which reads newly installed files for about a minute, when an
+  uninstall followed an install. A quick uninstall lost 4 of 6 runners by default and 0 of 6 with
+  `MSIRESTARTMANAGERCONTROL=Disable`; `DisableShutdown` did not help (plan, section 10, rounds 6–9).
+  Fix authored (`677003050`): the MSI sets `Disable` and the source check enforces it.
+  **Left:** certify a candidate built with the fix; 5 nightly passes in a row. Watch the cleanup
+  uninstall of the previous release (v0.21.0 lacks the property) when it follows the rollback install
+  within about a minute.
 - [ ] **W4 Release tooling tested on real output.** **Left:** recorded real outputs for every
   post-tag collector and validator; one end-to-end real-gate run through the driver in a tiny scope.
 - [ ] **W4b Remove the workstation from the release path** (owner, 2026-11-04). **Left:** move spill
