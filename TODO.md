@@ -16,11 +16,11 @@ outcome in `CHANGELOG.md` and delete it. Deferred initiatives stay in `ROADMAP.m
 
 ## Now — v0.22.0 work that can be done today
 
-**Current execution focus:** [release reliability](docs/RELEASE_RELIABILITY_PLAN.md) (section 1).
+**Current execution focus:** [release reliability](docs/architecture/roadmaps/release-reliability-plan.md) (section 1).
 
 ### 1. Release reliability (v0.22.0 ships after this)
 
-**Plan:** [`docs/RELEASE_RELIABILITY_PLAN.md`](docs/RELEASE_RELIABILITY_PLAN.md), approved 2026-11-04;
+**Plan:** [`docs/architecture/roadmaps/release-reliability-plan.md`](docs/architecture/roadmaps/release-reliability-plan.md), approved 2026-11-04;
 timebox 2026-11-07 to 2026-11-21, re-plan with the owner if W1 is not running by the end of week 1.
 **Done when:** the nightly rehearsal is green 5 nights running, the v0.22.0 candidate passes every
 certification first time, no gate passes by waiver, and a script or doc fix reruns only its lanes.

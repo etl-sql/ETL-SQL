@@ -19,6 +19,7 @@
 | [ETL-SQL Presentation Layer Specification](presentation-layer-strategy.md) | **Status:** Partly implemented (TUI editor, VS Code extension, and basic console output are fully realized; advanced interactive views are strategi... |
 | [Strategy: ETL-SQL Query Execution Efficiency](query-execution-efficiency-strategy.md) | **Status:** Active performance strategy |
 | [Release Capability Matrix](release-capability-matrix.md) | This matrix maps product claims to release evidence. Use it before tagging a release, and keep the public release notes no stronger than the strong... |
+| [Release Reliability Plan](release-reliability-plan.md) | **Status:** Approved 2026-11-04; v0.22.0 ships after its exit criteria hold. Workstreams W0–W8, failure census and MSI runner-loss diagnosis |
 | [Release Workflow Strategy](release-workflows.md) | ETL-SQL releases are local-first while the product remains owner-controlled. The intended flow is: |
 | [Report-SQL Post-Launch Strategy](report-sql-strategy.md) | **Status:** Historical roadmap/backlog — reconcile before using for implementation |
 | [Script Security Strategy](script-security-strategy.md) | **Status:** Implemented (Hash-pinning policies and session-password decryption features are in production) |

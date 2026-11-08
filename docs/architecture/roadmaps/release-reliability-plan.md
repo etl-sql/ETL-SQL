@@ -350,3 +350,30 @@ uninstall. Neither the backup CLI nor the service state is the trigger, and one 
 install or upgrade of the **Portal profile** completes (services installed and started), at the
 next step whatever it is. The Workstation profile (no services) has never lost a runner.
 Totals for 2026-11-07: 43 diagnostic runs, 25 lost.
+
+**MSI diagnostics, rounds 6–9 (2026-11-07): cause found.** Each scenario installs the Portal
+profile, optionally checks it, then uninstalls; 6 runs each on the same retained inputs.
+
+| Round | Scenario | Lost |
+| :--- | :--- | :--- |
+| 6 (`3629a3e97`) | Idle 90 s, services running / never started | 0 of 12 |
+| 7 (`d4645a48a`) | `/health` poll, asset fetch, then idle 90 s | 0 of 12 |
+| 8 (`210679364`) | Fresh checks then uninstall at once / install then uninstall at once / checks and idle | 5 / 6 / 0 of 6 |
+| 9 (`930874264`, `439fd376a`) | Quick uninstall: default / `DisableShutdown` / `Disable` | 8 of 12 / 4 / **0 of 6** |
+
+Time between install and uninstall was the variable, not the services or our checks. Every lost
+quick run's Restart Manager probe found `provjobd` (parent `hosted-compute-agent`, the runner
+host's own process) holding newly installed files; it lets go after about a minute. A silent
+`msiexec` then announced "Will attempt to shut down and restart applications" and the runner went
+silent. `DisableShutdown` reached `msiexec` but Restart Manager still shut applications down, which
+is why the 2026-11-01 attempt (`88d65e72c`) seemed not to work. `Disable` lost no runners, and in
+all six of those runs `provjobd` held installed files. Earlier "no holder" losses fit: the probe runs
+before `msiexec`, and `provjobd` can open files in between.
+
+**Fix:** the MSI authors `MSIRESTARTMANAGERCONTROL=Disable`, enforced by the installer source
+check. It also stops the installer from shutting down unrelated software on users' machines. Left:
+certify a candidate built with it through the normal MSI workflow. The previous release's MSI
+(v0.21.0) does not author it, so the rollback-then-cleanup uninstall is still exposed if it follows
+the rollback install within about a minute. A Hyper-V-isolated container also isolates the install
+from the runner host (7 of 7 on `windows-2022`, branch `diag/nested-virt-probe`, run
+42418358058); that is the v0.23.0 roadmap's installer entry, not this fix.

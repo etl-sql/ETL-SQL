@@ -43,7 +43,7 @@ These verification assets must be uploaded as part of the public release draft.
 
 The active CI, MSI certification and release workflows now provide hosted validation and packaging.
 Local validation remains required by the release checklist. The v0.22.0 work in
-[`TODO.md`](../../../TODO.md#1-faster-release-certification) moves toward reusable candidate artifacts
+[`TODO.md`](../../../TODO.md#1-release-reliability-v0220-ships-after-this) moves toward reusable candidate artifacts
 and an enforced publication gate. MSI certification now has a build job followed by independent
 workstation/Portal jobs consuming one SHA/hash-bound installer pair. Failed-job retries can reuse
 that pair; hosted recovery rehearsal is still required. Release calls that workflow and promotes

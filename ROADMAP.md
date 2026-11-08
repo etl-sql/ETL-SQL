@@ -89,7 +89,7 @@ that does not schedule their proposed implementation.
 
 **Status:** Planned  
 **Horizon:** Foundation (blocks v0.22.0)  
-**Authoritative design:** [Release reliability plan](docs/RELEASE_RELIABILITY_PLAN.md)
+**Authoritative design:** [Release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md)
 
 **Problem and intended outcome:** v0.22.0 took seven candidates on 2026-11-04. Five restarts came
 from release-only tooling that had been tested on invented data and first ran for real on release
@@ -142,7 +142,7 @@ memory pressure made the workstation a bottleneck; release metadata edits must b
 
 **Status:** Accepted  
 **Horizon:** Next (v0.23.0)  
-**Authoritative design:** none yet; [Release reliability plan](docs/RELEASE_RELIABILITY_PLAN.md)
+**Authoritative design:** none yet; [Release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md)
 section 10 holds the runner-loss evidence that prompted it.
 
 **Problem and intended outcome:** The WiX 3.14 MSI does more than install. Five JScript custom
