@@ -92,16 +92,15 @@ jobs:
         with:
           node-version: 22
 
-      - name: Prepare pinned workflow checker
-        timeout-minutes: 5
+      # Source preflight is not rerun here: the exact-candidate CI evidence required below includes
+      # its Source preflight job. Rerunning all lanes on hosted Windows failed 7 of 66 on timeouts and
+      # environment assertions (dry run 42483552717). Only the tag-only metadata check runs here.
+      # A dry run rehearses before the notes are final, so there it reports without failing.
+      - name: Require final release metadata
+        timeout-minutes: 4
+        continue-on-error: ${{ inputs.dry_run == true }}
         shell: pwsh
-        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/setup-actionlint.mjs') -EvidenceDirectory release-validation/supervisors/checker -TimeoutSeconds 180
-      - name: Collect source preflight findings
-        timeout-minutes: 22
-        shell: pwsh
-        env:
-          ETLSQL_RELEASE_TAG: ${{ env.TAG_NAME }}
-        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/release-preflight.mjs') -EvidenceDirectory release-validation/supervisors/preflight -TimeoutSeconds 1200
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/check-release-metadata.mjs', $env:TAG_NAME) -EvidenceDirectory release-validation/supervisors/metadata -TimeoutSeconds 120
 
       - name: Require exact-candidate CI and CodeQL evidence
         timeout-minutes: 12

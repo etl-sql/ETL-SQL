@@ -651,8 +651,7 @@ ${selectionCommands}
   writeFileSync(path.join(directory, 'scripts/Invoke-CertificationProcess.ps1'), readFileSync(new URL('../Invoke-CertificationProcess.ps1', import.meta.url)));
   const candidate = 'a'.repeat(40);
   for (const [name, script, args, evidence, seconds, minutes] of [
-    ['Prepare pinned workflow checker', 'setup-actionlint.mjs', [], 'checker', 180, 5],
-    ['Collect source preflight findings', 'release-preflight.mjs', [], 'preflight', 1200, 22],
+    ['Require final release metadata', 'check-release-metadata.mjs', ['v0.22.0'], 'metadata', 120, 4],
     ['Require exact-candidate CI and CodeQL evidence', 'collect-hosted-release-evidence.mjs', ['owner/repository', candidate, 'release-validation/hosted-release-evidence.json'], 'hosted', 600, 12],
     ['Require uploaded independent workstation evidence', 'collect-workstation-release-evidence.mjs', ['owner/repository', candidate, 'release-validation/selected-local-evidence'], 'workstation', 600, 12],
     ['Require certified pre-tag Windows packages', 'collect-certified-windows.mjs', ['owner/repository', candidate, '0.22.0', 'release-validation/selected-windows'], 'windows', 780, 15],

@@ -180,8 +180,8 @@ Before freezing a stable candidate, run `node scripts/check-release-metadata.mjs
 It requires the tag version to match `VersionPrefix`, one dated changelog heading, finalized
 `docs/releases/vx.y.z.md` notes with the same date, and one release-index link. If the index carries
 a release date, that date must also match. Both release drivers enforce this before pushing/tagging;
-the Release workflow adds it to source preflight through `ETLSQL_RELEASE_TAG`. Ordinary branch
-preflight allows draft notes. This check reads metadata; it does not change dates or mark work shipped.
+the Release workflow runs it in Validate and takes the rest of source preflight from the
+exact-candidate CI run instead of repeating it. Ordinary branch preflight allows draft notes. This check reads metadata; it does not change dates or mark work shipped.
 
 After authoring the release notes and changelog, finalize their metadata together:
 
