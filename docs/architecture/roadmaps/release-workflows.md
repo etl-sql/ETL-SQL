@@ -80,6 +80,19 @@ These templates are historical starting points, not the inventory of active host
 Reconcile a template with the active workflows and release checklist before enabling it, so it
 does not duplicate certification already running elsewhere.
 
+## Release dry run
+
+`release.yml` dispatched on a release branch with `dry_run: true`, `tag: vX.Y.Z` and
+`candidate_sha` (the branch HEAD) rehearses the release without releasing. It validates that
+exact commit instead of a tag and writes to its own draft, `dry-run-vX.Y.Z-<run id>`: every
+`gh release` command targets `DRAFT_TAG`, which equals the tag in a real release. It selects
+and verifies the certified packages, uploads them, checks the draft bytes, then a final job
+deletes that draft whatever happened, refusing anything that is not a dry-run draft. It never
+tags, publishes, attests provenance (attestations are permanent public records) or publishes
+to the Marketplace. Workstation and operator evidence steps are skipped; both are human
+submissions being removed or rescoped. A dry run has its own concurrency group, so it never
+queues a real release. `scripts/checks/test-release-dry-run.mjs` pins these guarantees.
+
 ## Nightly release-branch execution
 
 `nightly-release-scheduler.yml` runs at 06:23 UTC from the default branch. It discovers

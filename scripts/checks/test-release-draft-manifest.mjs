@@ -62,7 +62,7 @@ try {
   const produced = spawnSync(bash, ['-euo', 'pipefail', '-c',
     `node() { ${quote(process.execPath.replaceAll('\\', '/'))} "$@"; }\n` +
     uploadCommands('attest-provenance', 'Bind complete verified draft asset set')], {
-    cwd: producer, env: { ...process.env, SOURCE_SHA: sha, TAG_NAME: tag, GITHUB_OUTPUT: 'outputs.txt' },
+    cwd: producer, env: { ...process.env, SOURCE_SHA: sha, TAG_NAME: tag, DRAFT_TAG: tag, GITHUB_OUTPUT: 'outputs.txt' },
     encoding: 'utf8', windowsHide: true, timeout: 15000,
   });
   passed(produced);
@@ -72,7 +72,7 @@ try {
   const shim = `node() { ${quote(process.execPath.replaceAll('\\', '/'))} "$@"; }\n` +
     `gh() { cp ${quote(assets.replaceAll('\\', '/'))}/* final-draft/; }\n`;
   const run = () => spawnSync(bash, ['-euo', 'pipefail', '-c', shim + commands + '\necho published > publication.txt\n'],
-    { cwd: root, env: { ...process.env, SOURCE_SHA: sha, TAG_NAME: tag, MANIFEST_SHA256: digest, GITHUB_REPOSITORY: 'fixture/local' },
+    { cwd: root, env: { ...process.env, SOURCE_SHA: sha, TAG_NAME: tag, DRAFT_TAG: tag, MANIFEST_SHA256: digest, GITHUB_REPOSITORY: 'fixture/local' },
       encoding: 'utf8', windowsHide: true, timeout: 15000 });
   passed(run());
   assert.ok(existsSync(path.join(root, 'publication.txt')));

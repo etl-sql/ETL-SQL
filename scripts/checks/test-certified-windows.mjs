@@ -146,7 +146,7 @@ try {
     }
 `;
     const result = spawnSync(bash, ['-euo', 'pipefail', '-c', mock + commands], { cwd: executionRoot,
-      env: { ...process.env, TAG_NAME: 'v1.2.3', SOURCE_SHA: sha, GITHUB_REPOSITORY: 'owner/repo', FIXTURE_MODE: mode }, encoding: 'utf8', windowsHide: true, timeout: 15000 });
+      env: { ...process.env, TAG_NAME: 'v1.2.3', DRAFT_TAG: 'v1.2.3', SOURCE_SHA: sha, GITHUB_REPOSITORY: 'owner/repo', FIXTURE_MODE: mode }, encoding: 'utf8', windowsHide: true, timeout: 15000 });
     assert.equal(result.error, undefined);
     assert.equal(result.status === 0, mode === 'valid', `${mode}: ${result.stdout} ${result.stderr}`);
   }

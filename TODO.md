@@ -29,9 +29,9 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
 - [ ] **W1 Nightly release rehearsal.** Native package certification and the release collectors
   (hosted, Windows, both macOS, MSI, DEB) are now in the nightly (`scripts/nightly-rehearsal.mjs`,
   2026-11-08), which starts each certification as its own run and gives one pass/fail.
-  **Left:** prove it on a real nightly; operator evidence once W8 settles its scope; a
-  `workflow_dispatch` dry-run of `release.yml` that never pushes a tag; "runner not acquired"
-  retried once and reported as infrastructure.
+  `release.yml` has a dry run (`dry_run: true`) that builds, verifies and deletes its own draft.
+  **Left:** prove both on real runs; start the dry run from the nightly; operator evidence once
+  W8 settles its scope; "runner not acquired" retried once and reported as infrastructure.
 - [ ] **W2 Reuse evidence when inputs did not change.** Owner approved the policy 2026-11-04.
   **Left:** one-page design note (what is an input, who checks the fingerprint, cost of a wrong
   reuse) for owner sign-off, then lanes declare inputs and drivers/supervisor accept reuse.

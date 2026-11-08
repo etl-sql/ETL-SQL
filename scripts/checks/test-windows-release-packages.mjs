@@ -93,7 +93,7 @@ try {
   await windowsPackages('create', candidate, sourceSha, version);
   const manifest = 'windows-package-inputs.json';
   const retained = new Map([...names, manifest].map(name => [name, readFileSync(path.join(candidate, name))]));
-  const env = { ...process.env, TAG_NAME: `v${version}`, SOURCE_SHA: sourceSha,
+  const env = { ...process.env, TAG_NAME: `v${version}`, DRAFT_TAG: `v${version}`, SOURCE_SHA: sourceSha,
     GITHUB_REPOSITORY: 'fixture/local', MANIFEST_SHA256: digest(retained.get(manifest)) };
   const commands = uploadCommands('upload-windows', 'Verify and upload Windows release assets');
   const run = () => runUpload(commands, rehearsal, env);

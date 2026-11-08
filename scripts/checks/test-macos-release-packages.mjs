@@ -112,7 +112,7 @@ try {
   }
   const commands = uploadCommands('upload-macos', 'Verify and upload native release assets');
   assert.match(commands, /gh release upload/);
-  const env = { ...process.env, TAG_NAME: `v${version}`, SOURCE_SHA: sourceSha, GITHUB_REPOSITORY: 'fixture/local' };
+  const env = { ...process.env, TAG_NAME: `v${version}`, DRAFT_TAG: `v${version}`, SOURCE_SHA: sourceSha, GITHUB_REPOSITORY: 'fixture/local' };
   const retained = new Map();
   for (const [suffix, platform, target] of [['intel', 'osx-x64', 'darwin-x64'], ['arm64', 'osx-arm64', 'darwin-arm64']]) {
     const directory = path.join(rehearsal, 'candidate', suffix, 'release');

@@ -10,6 +10,14 @@ on:
         description: 'Tag to release (e.g. v0.8.0)'
         required: true
         default: 'v0.8.0'
+      dry_run:
+        description: 'Rehearse on a release branch: build a uniquely named draft, verify it, never tag or publish, then delete it'
+        type: boolean
+        default: false
+      candidate_sha:
+        description: 'Dry run only: exact release-branch HEAD to rehearse'
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -17,9 +25,13 @@ permissions:
 
 env:
   TAG_NAME: ${{ inputs.tag || github.ref_name }}
+  # The release a run writes to. A dry run gets its own draft whose name can never be a version tag,
+  # so it cannot touch a real release draft and publishing it could never fire the v* trigger.
+  DRAFT_TAG: ${{ inputs.dry_run && format('dry-run-{0}-{1}', inputs.tag, github.run_id) || inputs.tag || github.ref_name }}
+  DRY_RUN: ${{ inputs.dry_run == true }}
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref_name }}
+  group: release-${{ inputs.dry_run && 'dry-run-' || '' }}${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -42,19 +54,29 @@ jobs:
         timeout-minutes: 9
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.TAG_NAME }}
+          ref: ${{ inputs.dry_run && inputs.candidate_sha || env.TAG_NAME }}
           fetch-depth: 0
 
       - name: Verify release tag is on a supported release branch
         timeout-minutes: 5
         id: candidate
         shell: pwsh
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
         run: |
           . ./scripts/Release.Helpers.ps1
           git fetch --prune origin '+refs/heads/main:refs/remotes/origin/main' '+refs/heads/release/*:refs/remotes/origin/release/*'
           if ($LASTEXITCODE -ne 0) { throw 'Cannot refresh main and maintenance release refs.' }
-          $branch = Assert-ReleaseTagReachable -Tag $env:TAG_NAME
-          Write-Host "Release tag is reachable from $branch."
+          if ($env:DRY_RUN -eq 'true') {
+            if ($env:GITHUB_REF -notmatch '^refs/heads/release/v\d+\.\d+\.\d+$') { throw 'A dry run must be dispatched on a release branch.' }
+            if ($env:CANDIDATE_SHA -cnotmatch '^[0-9a-f]{40}$' -or $env:CANDIDATE_SHA -cne $env:GITHUB_SHA) {
+              throw 'A dry run needs candidate_sha equal to the release branch HEAD it was dispatched on.'
+            }
+            Write-Host "Dry run of $env:TAG_NAME on $env:GITHUB_REF_NAME; draft $env:DRAFT_TAG will be deleted."
+          } else {
+            $branch = Assert-ReleaseTagReachable -Tag $env:TAG_NAME
+            Write-Host "Release tag is reachable from $branch."
+          }
           $sha = (git rev-parse HEAD).Trim()
           if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve candidate commit.' }
           if ($sha -cne $env:GITHUB_SHA) {
@@ -100,6 +122,7 @@ jobs:
           retention-days: 30
 
       - name: Require uploaded independent workstation evidence
+        if: env.DRY_RUN != 'true' # workstation evidence leaves the release path (W4b)
         timeout-minutes: 12
         shell: pwsh
         id: local-selection
@@ -109,6 +132,7 @@ jobs:
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-workstation-release-evidence.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, 'release-validation/selected-local-evidence') -EvidenceDirectory release-validation/supervisors/workstation -TimeoutSeconds 600
 
       - name: Retain verified local phase bundle
+        if: env.DRY_RUN != 'true' # workstation evidence leaves the release path (W4b)
         timeout-minutes: 10
         id: local-evidence
         uses: actions/upload-artifact@v7
@@ -170,6 +194,7 @@ jobs:
         with:
           node-version: 22
       - name: Require candidate operator submission
+        if: env.DRY_RUN != 'true' # operator evidence is a human submission (W8)
         id: selection
         timeout-minutes: 22
         shell: pwsh
@@ -178,6 +203,7 @@ jobs:
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-operator-release-evidence.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, $env:TAG_NAME.TrimStart('v'), 'selected-operator') -EvidenceDirectory release-validation/supervisors/operator -TimeoutSeconds 1200
       - name: Retain verified operator submission
+        if: env.DRY_RUN != 'true' # operator evidence is a human submission (W8)
         id: retain
         timeout-minutes: 5
         uses: actions/upload-artifact@v7
@@ -187,7 +213,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Retain operator diagnostics
-        if: always()
+        if: always() && env.DRY_RUN != 'true'
         timeout-minutes: 2
         uses: actions/upload-artifact@v7
         with:
@@ -207,14 +233,21 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
           PRERELEASE: ${{ contains(env.TAG_NAME, 'alpha') || contains(env.TAG_NAME, 'beta') || contains(env.TAG_NAME, 'rc') }}
         run: |
           args=(--repo "$GITHUB_REPOSITORY")
           if [ "$PRERELEASE" = "true" ]; then args+=(--prerelease); fi
-          if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$TAG_NAME" --draft "${args[@]}"
+          if [ "$DRY_RUN" = "true" ]; then
+            if gh release view "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "::error::Dry-run draft $DRAFT_TAG already exists."; exit 1
+            fi
+            gh release create "$DRAFT_TAG" --draft --target "$SOURCE_SHA" --title "Dry run of $TAG_NAME (run $GITHUB_RUN_ID)" \
+              --notes "Release rehearsal. Never published; deleted at the end of run $GITHUB_RUN_ID." --repo "$GITHUB_REPOSITORY"
+          elif gh release view "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$DRAFT_TAG" --draft "${args[@]}"
           else
-            gh release create "$TAG_NAME" --draft --generate-notes "${args[@]}"
+            gh release create "$DRAFT_TAG" --draft --generate-notes "${args[@]}"
           fi
 
   find-msi:
@@ -315,7 +348,7 @@ jobs:
           Copy-Item candidate/current.msi $destination
           Copy-Item candidate/candidate.json candidate/msi-certification-inputs.json
           Copy-Item certification/certification.json candidate/msi-certification.json
-          gh release upload $env:TAG_NAME $destination candidate/msi-certification-inputs.json candidate/msi-certification.json --clobber
+          gh release upload $env:DRAFT_TAG $destination candidate/msi-certification-inputs.json candidate/msi-certification.json --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Cannot upload certified MSI.' }
 
   find-deb:
@@ -419,7 +452,7 @@ jobs:
           cp candidate/current.vsix "candidate/etl-sql-vscode-${version}-linux-x64.vsix"
           cp candidate/candidate.json candidate/deb-certification-inputs.json
           cp certification/certification.json candidate/deb-certification.json
-          gh release upload "$TAG_NAME" "candidate/etl-sql_${version}_amd64.deb" "candidate/ETL-SQL-v${version}-linux-x64.zip" "candidate/etl-sql-vscode-${version}-linux-x64.vsix" candidate/deb-certification-inputs.json candidate/deb-certification.json --clobber
+          gh release upload "$DRAFT_TAG" "candidate/etl-sql_${version}_amd64.deb" "candidate/ETL-SQL-v${version}-linux-x64.zip" "candidate/etl-sql-vscode-${version}-linux-x64.vsix" candidate/deb-certification-inputs.json candidate/deb-certification.json --clobber
 
   # Promote the Windows ZIP/VSIX already accepted by the candidate's native-package run.
   upload-windows:
@@ -459,7 +492,7 @@ jobs:
           set -euo pipefail
           version="${TAG_NAME#v}"
           node scripts/windows-release-packages.mjs verify candidate/release "$SOURCE_SHA" "$version" "$MANIFEST_SHA256"
-          gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" \
+          gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" \
             "candidate/release/ETL-SQL-${TAG_NAME}-win-x64.zip" \
             "candidate/release/etl-sql-vscode-${version}-win32-x64.vsix" \
             candidate/release/windows-package-inputs.json --clobber
@@ -628,7 +661,7 @@ jobs:
           version="${TAG_NAME#v}"
           node scripts/macos-release-packages.mjs verify candidate/intel "$SOURCE_SHA" "$version" osx-x64 "$INTEL_MANIFEST_SHA256"
           node scripts/macos-release-packages.mjs verify candidate/arm64 "$SOURCE_SHA" "$version" osx-arm64 "$ARM64_MANIFEST_SHA256"
-          gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" candidate/intel/*.zip candidate/intel/*.vsix candidate/intel/*.dmg candidate/intel/osx-*-package-inputs.json candidate/arm64/*.zip candidate/arm64/*.vsix candidate/arm64/osx-*-package-inputs.json --clobber
+          gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" candidate/intel/*.zip candidate/intel/*.vsix candidate/intel/*.dmg candidate/intel/osx-*-package-inputs.json candidate/arm64/*.zip candidate/arm64/*.vsix candidate/arm64/osx-*-package-inputs.json --clobber
       - name: Report macOS upload recovery
         timeout-minutes: 1
         if: failure()
@@ -678,7 +711,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p dist
-          gh release download "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --dir dist \
+          gh release download "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --dir dist \
             --pattern '*.zip' --pattern '*.msi' --pattern '*.deb' \
             --pattern '*.dmg' --pattern '*.vsix' --pattern 'msi-certification-inputs.json' --pattern 'msi-certification.json' \
             --pattern 'deb-certification-inputs.json' --pattern 'deb-certification.json' \
@@ -753,24 +786,26 @@ jobs:
           set -euo pipefail
           node scripts/collect-certified-macos.mjs verify-draft dist dist/certified-osx-x64-selection.json osx-x64
           node scripts/collect-certified-macos.mjs verify-draft dist dist/certified-osx-arm64-selection.json osx-arm64
-          gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" dist/certified-osx-*-selection.json --clobber
+          gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/certified-osx-*-selection.json --clobber
       - name: Attach certified Windows selection to draft
         timeout-minutes: 3
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" dist/certified-windows-selection.json --clobber
+        run: gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/certified-windows-selection.json --clobber
       - name: Attach hosted evidence to draft
         timeout-minutes: 3
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" dist/hosted-release-evidence.json --clobber
+        run: gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/hosted-release-evidence.json --clobber
       - name: Download verified local phase evidence
+        if: env.DRY_RUN != 'true' # workstation evidence leaves the release path (W4b)
         uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ needs.validate.outputs.local_evidence_artifact_id }}
           path: local-evidence
           merge-multiple: true
       - name: Verify and attach local evidence to draft
+        if: env.DRY_RUN != 'true' # workstation evidence leaves the release path (W4b)
         timeout-minutes: 10
         env:
           GH_TOKEN: ${{ github.token }}
@@ -782,14 +817,16 @@ jobs:
           test ! -e local-release-evidence.zip
           ( cd local-evidence && zip -qr ../local-release-evidence.zip bundle selection.json )
           mv local-release-evidence.zip dist/local-release-evidence.zip
-          gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" dist/local-release-evidence.zip --clobber
+          gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/local-release-evidence.zip --clobber
       - name: Download verified operator evidence
+        if: env.DRY_RUN != 'true' # operator evidence is a human submission (W8)
         uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ needs.operator-evidence.outputs.artifact_id }}
           path: operator-evidence
           merge-multiple: true
       - name: Verify and attach operator evidence to draft
+        if: env.DRY_RUN != 'true' # operator evidence is a human submission (W8)
         timeout-minutes: 10
         env:
           GH_TOKEN: ${{ github.token }}
@@ -802,8 +839,9 @@ jobs:
           test ! -e operator-release-evidence.zip
           ( cd operator-evidence && zip -qr ../operator-release-evidence.zip bundle selection.json )
           mv operator-release-evidence.zip dist/operator-release-evidence.zip
-          gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" dist/operator-release-evidence.zip --clobber
+          gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/operator-release-evidence.zip --clobber
       - name: Attest draft artifacts
+        if: env.DRY_RUN != 'true' # attestations are permanent public records
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: 'dist/*'
@@ -819,7 +857,7 @@ jobs:
           ( cd dist && sha256sum -b * > ../sha256sums.txt )
           mkdir -p release
           node scripts/generate-sbom.js   # reads version from Directory.Build.props -> release/sbom.json
-          gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" \
+          gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" \
             sha256sums.txt release/sbom.json --clobber
       - name: Bind complete verified draft asset set
         timeout-minutes: 3
@@ -868,6 +906,7 @@ jobs:
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
         run: node scripts/collect-hosted-release-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-hosted-evidence.json
       - name: Recheck independent workstation evidence before publication
+        if: env.DRY_RUN != 'true' # workstation evidence leaves the release path (W4b)
         timeout-minutes: 15
         env:
           GH_TOKEN: ${{ github.token }}
@@ -875,18 +914,20 @@ jobs:
           MANIFEST_SHA256: ${{ needs.validate.outputs.local_manifest_sha256 }}
         run: node scripts/collect-workstation-release-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-local-evidence "$MANIFEST_SHA256"
       - name: Verify draft local evidence attachment
+        if: env.DRY_RUN != 'true' # workstation evidence leaves the release path (W4b)
         timeout-minutes: 20
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           New-Item -ItemType Directory current-local-attachment | Out-Null
-          gh release download $env:TAG_NAME --repo $env:GITHUB_REPOSITORY --pattern local-release-evidence.zip --dir current-local-attachment
+          gh release download $env:DRAFT_TAG --repo $env:GITHUB_REPOSITORY --pattern local-release-evidence.zip --dir current-local-attachment
           if ($LASTEXITCODE -ne 0) { throw 'Cannot download the draft local evidence attachment.' }
           [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $PWD 'current-local-attachment/local-release-evidence.zip'), (Join-Path $PWD 'current-local-attachment/contents'))
           node scripts/collect-workstation-release-evidence.mjs verify-attachment current-local-attachment/contents current-local-evidence/selection.json
           if ($LASTEXITCODE -ne 0) { throw 'Draft local evidence does not match the current verified selection.' }
       - name: Recheck operator evidence before publication
+        if: env.DRY_RUN != 'true' # operator evidence is a human submission (W8)
         timeout-minutes: 22
         shell: pwsh
         env:
@@ -895,13 +936,14 @@ jobs:
           MANIFEST_SHA256: ${{ needs.attest-provenance.outputs.operator_manifest_sha256 }}
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-operator-release-evidence.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, $env:TAG_NAME.TrimStart('v'), 'current-operator', $env:MANIFEST_SHA256) -EvidenceDirectory release-validation/supervisors/operator -TimeoutSeconds 1200
       - name: Verify draft operator evidence attachment
+        if: env.DRY_RUN != 'true' # operator evidence is a human submission (W8)
         timeout-minutes: 10
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           New-Item -ItemType Directory current-operator-attachment | Out-Null
-          gh release download $env:TAG_NAME --repo $env:GITHUB_REPOSITORY --pattern operator-release-evidence.zip --dir current-operator-attachment
+          gh release download $env:DRAFT_TAG --repo $env:GITHUB_REPOSITORY --pattern operator-release-evidence.zip --dir current-operator-attachment
           if ($LASTEXITCODE -ne 0) { throw 'Cannot download draft operator evidence.' }
           node scripts/collect-operator-release-evidence.mjs extract-attachment current-operator-attachment/operator-release-evidence.zip current-operator-attachment/contents
           if ($LASTEXITCODE -ne 0) { throw 'Draft operator evidence archive is unsafe or exceeds its limits.' }
@@ -926,7 +968,7 @@ jobs:
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
         run: |
           mkdir current-windows-draft
-          gh release download "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --dir current-windows-draft \
+          gh release download "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --dir current-windows-draft \
             --pattern "ETL-SQL-${TAG_NAME}-win-x64.zip" --pattern "etl-sql-vscode-${TAG_NAME#v}-win32-x64.vsix" \
             --pattern windows-package-inputs.json --pattern certified-windows-selection.json --pattern msi-certification-inputs.json
           node scripts/collect-certified-windows.mjs verify-draft current-windows-draft current-windows/certified-windows-selection.json
@@ -971,7 +1013,7 @@ jobs:
           MANIFEST_SHA256: ${{ needs.attest-provenance.outputs.draft_manifest_sha256 }}
         run: |
           mkdir final-draft
-          gh release download "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --dir final-draft
+          gh release download "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --dir final-draft
           node scripts/release-draft-manifest.mjs verify final-draft verified-draft/verified-draft.json "$SOURCE_SHA" "$TAG_NAME" "$MANIFEST_SHA256"
 
       - name: Verify draft macOS packages and selections
@@ -990,6 +1032,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Publish draft release
+        if: env.DRY_RUN != 'true'
         timeout-minutes: 15
         shell: pwsh
         env:
@@ -1000,7 +1043,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate published releases before updating Latest.' }
           $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ })
           $latest = Get-ReleaseLatestValue -CandidateTag $env:TAG_NAME -Releases $releases
-          gh release edit $env:TAG_NAME --repo $env:GITHUB_REPOSITORY --draft=false "--latest=$latest"
+          gh release edit $env:DRAFT_TAG --repo $env:GITHUB_REPOSITORY --draft=false "--latest=$latest"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot publish draft release.' }
 
   # 7. Publish certified VS Code extensions to Visual Studio Marketplace via OIDC Trusted Publishing.
@@ -1008,7 +1051,7 @@ jobs:
     name: Publish VS Code Extensions to Marketplace
     timeout-minutes: 20
     needs: [publish-release]
-    if: ${{ !cancelled() && needs.publish-release.result == 'success' }}
+    if: ${{ !cancelled() && needs.publish-release.result == 'success' && !inputs.dry_run }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1020,7 +1063,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir dist
-          gh release download "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --dir dist --pattern '*.vsix'
+          gh release download "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --dir dist --pattern '*.vsix'
 
       - uses: actions/setup-node@v7
         with:
@@ -1040,3 +1083,27 @@ jobs:
             echo "Publishing $(basename "$vsix") to Visual Studio Marketplace via OIDC..."
             npx --yes @vscode/vsce@latest publish --oidc --packagePath "$vsix"
           done
+
+  # 8. A dry run deletes its own draft. It refuses anything that is not a dry-run draft.
+  discard-dry-run-draft:
+    name: Delete dry-run draft
+    timeout-minutes: 10
+    needs: [prepare-release, promote-msi, promote-deb, upload-windows, upload-macos, attest-provenance, publish-release]
+    if: ${{ always() && inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete the draft this run created
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$DRAFT_TAG" == dry-run-v* ]]
+          if ! state=$(gh release view "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,tagName --jq '"\(.isDraft) \(.tagName)"' 2>/dev/null); then
+            echo "No draft $DRAFT_TAG exists; nothing to delete."; exit 0
+          fi
+          [[ "$state" == "true $DRAFT_TAG" ]] || { echo "::error::$DRAFT_TAG is not a dry-run draft ($state); left untouched."; exit 1; }
+          gh release delete "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --yes
+          echo "Deleted dry-run draft $DRAFT_TAG."

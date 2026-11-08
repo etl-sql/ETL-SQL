@@ -106,6 +106,11 @@ because the collectors accept only completed runs and a run cannot collect from 
 runs the hosted, Windows, both macOS, MSI and DEB collectors. Operator evidence stays out until
 W8 decides which operator claims remain: it is a human submission, so a nightly would always
 report it missing. Not yet proven by a real run.
+Item 3 written the same day: `release.yml` with `dry_run: true` and `candidate_sha`, dispatched
+on the release branch. It validates the branch HEAD instead of a tag, writes to its own draft
+`dry-run-<tag>-<run id>`, runs every collector, upload and draft check, then deletes the draft.
+It skips publication, provenance attestation (a permanent public record) and the Marketplace, and
+skips workstation and operator evidence (W4b, W8). Not yet run; the nightly does not start it yet.
 
 ### W2. Reuse evidence when inputs did not change
 Each lane declares its input paths. Its result is reused when the fingerprint of those inputs is

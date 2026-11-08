@@ -177,7 +177,7 @@ function gh {
 }
 ${script}
 `], { cwd: executionRoot, encoding: 'utf8', windowsHide: true, timeout: 15000,
-      env: { ...process.env, FIXTURE_MODE: mode, FIXTURE_ZIP: archive, TAG_NAME: 'v1.2.3', GITHUB_REPOSITORY: 'owner/repo' } });
+      env: { ...process.env, FIXTURE_MODE: mode, FIXTURE_ZIP: archive, TAG_NAME: 'v1.2.3', DRAFT_TAG: 'v1.2.3', GITHUB_REPOSITORY: 'owner/repo' } });
     assert.ifError(result.error);
     assert.equal(result.status === 0, mode === 'valid', `${mode}: ${result.stdout} ${result.stderr}`);
     assert.equal(existsSync(path.join(executionRoot, 'current-local-attachment/escaped.txt')), false);
