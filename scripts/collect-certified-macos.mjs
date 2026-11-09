@@ -7,7 +7,8 @@ import { collectCertifiedNative, verifyNativeDraft } from './collect-certified-w
 const json = file => JSON.parse(readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 function gh(args, timeout = 60000) {
   const result = spawnSync('gh', args, { encoding: 'utf8', windowsHide: true, timeout, maxBuffer: 32 * 1024 * 1024 });
-  if (result.error || result.status !== 0) throw new Error('Cannot read certified macOS native evidence from GitHub.');
+  if (result.error || result.status !== 0) throw new Error(`Cannot read certified macOS native evidence from GitHub (gh ${args.filter(arg => !arg.startsWith('--')).slice(0, 3).join(' ')}): ${
+    (result.stderr || result.error?.message || `exit ${result.status}`).trim().slice(0, 500)}`);
   return result.stdout;
 }
 
