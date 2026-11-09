@@ -41,8 +41,11 @@ try {
   const retained = JSON.parse(readFileSync(path.join(original.evidence, 'attempt-1.failed-artifacts.json')));
   const failedState = readFileSync(path.join(original.evidence, 'attempt-1.state.json'));
   writeFileSync(original.artifact, 'Report overwritten by the recovered producer');
-  original.state.status = 'Passed'; original.state.generatedAt = new Date().toISOString();
-  original.state.phases.at(-1).status = 'Passed'; original.state.phases.at(-1).completedAt = new Date().toISOString();
+  // One instant for both: a phase completed after the state was generated is rejected, and two
+  // separate clock reads straddled a millisecond on CI 41897725893 (2026-11-04).
+  const recoveredAt = new Date().toISOString();
+  original.state.status = 'Passed'; original.state.generatedAt = recoveredAt;
+  original.state.phases.at(-1).status = 'Passed'; original.state.phases.at(-1).completedAt = recoveredAt;
   original.state.phases.at(-1).log = path.join(original.evidence, 'retry.log'); writeFileSync(original.state.phases.at(-1).log, 'Recovered output');
   writeFileSync(original.stateFile, JSON.stringify(original.state));
   await finishWorkstationAttempt(workspace, original.evidence, identity, plan, 0);
