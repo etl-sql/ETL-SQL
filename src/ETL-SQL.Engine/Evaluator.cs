@@ -144,9 +144,6 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 
     public bool AutoRollbackOnFinish { get => _options.AutoRollbackOnFinish; set => _options.AutoRollbackOnFinish = value; }
 
-    [System.Obsolete("Use Telemetry.ExecutionTree")]
-    public ExecutionTree ExecutionTree => Telemetry.ExecutionTree;
-
     public IReportContext ReportContext => _registry.ReportContext;
 
     public long TempTableSpillThresholdRows { get => _options.TempTableSpillThresholdRows; set => _options.TempTableSpillThresholdRows = value; }

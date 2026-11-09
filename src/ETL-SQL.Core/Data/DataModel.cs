@@ -696,22 +696,6 @@ public class DataTable
         Rows.Add(row);
     }
 
-    [Obsolete("Use AddRowAsync to ensure all constraints (CHECK, FOREIGN KEY) are validated.")]
-    public void AddRow(Row row)
-    {
-        PrepareRowForAdd(row);
-
-        if (AnyConstraintRequiresAsyncValidation())
-        {
-            throw new Core.Common.Exceptions.ExecutionException(
-                "DataTable.AddRow cannot validate CHECK or FOREIGN KEY constraints synchronously. Use AddRowAsync.");
-        }
-
-        ValidateSynchronousConstraints(row);
-        IncrementRowsAdded();
-        Rows.Add(row);
-    }
-
     private void PrepareRowForAdd(Row row)
     {
         if (row.Schema == null) row.SetSchema(Schema);

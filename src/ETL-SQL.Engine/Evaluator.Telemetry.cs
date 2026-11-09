@@ -7,9 +7,6 @@ namespace ETL_SQL.Engine;
 
 public partial class Evaluator
 {
-    [System.Obsolete("Use Telemetry.TotalSpilledBytes")]
-    public long TotalSpilledBytes => Telemetry.TotalSpilledBytes;
-
     public bool IsProfiling { get => Telemetry.IsProfiling; set => Telemetry.IsProfiling = value; }
     public long RowsProcessed => Telemetry.RowsProcessed;
     public int PartitionsCount => Telemetry.PartitionsCount;

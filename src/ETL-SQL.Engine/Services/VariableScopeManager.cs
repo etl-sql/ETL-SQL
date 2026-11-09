@@ -31,11 +31,6 @@ public class VariableScopeManager : IVariableContext
     /// <summary>Gets the current set of variable metadata in the active scope.</summary>
     public IDictionary<string, VariableMetadata> CurrentMetadata { get { lock (_lock) { return _metadataStack.Count > 0 ? _metadataStack.Peek() : _variableMetadata; } } }
 
-    [Obsolete("Use Variables")]
-    public IDictionary<string, object?> GlobalVariables => Variables;
-    [Obsolete("Use VariableMetadata")]
-    public IDictionary<string, VariableMetadata> GlobalMetadata => VariableMetadata;
-
     /// <summary>Pushes a new variable scope onto the stack.</summary>
     public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null)
     {
