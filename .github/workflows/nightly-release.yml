@@ -139,6 +139,9 @@ jobs:
   dry-run:
     name: Release dry run
     needs: collect
+    # The default success() also requires every earlier job to have run, and wait-more is skipped
+    # whenever the first wait is enough, so without this the dry run never starts.
+    if: ${{ !cancelled() && needs.collect.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     permissions:

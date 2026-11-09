@@ -33,7 +33,11 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   First real rehearsal passed 2026-11-08 (nightly 42477960507 on `c136127e5`). "Runner not
   acquired" now gets one rerun and is reported as infrastructure (not yet seen on a real run).
   The nightly's last job now starts the dry run on the same candidate (not yet run; nightly
-  42502844239 on `76ac443a9` failed before it, see W3 and W5).
+  42502844239 on `76ac443a9` failed before it, see W3 and W5). Second full pass 2026-11-08
+  (nightly 42537668606 on `b0e05b498`: all four certification runs and the collectors), but the dry
+  run was skipped. It had no `if:`, so it inherited `success()`, which is false when the optional
+  second wait is skipped; it has never run. Fixed with an explicit condition and a check in
+  `test-nightly-release.mjs`.
   **Left:** prove the dry run on a real run; operator evidence once W8 settles its scope.
 - [ ] **W2 Reuse evidence when inputs did not change.** Owner approved the policy 2026-11-04.
   **Left:** one-page design note (what is an input, who checks the fingerprint, cost of a wrong
@@ -50,7 +54,9 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   v0.21.0 uninstall ignores the command line and still shut applications down, and lost the runner
   twice (42486129217, 42502798421). The script now sets the machine policy
   `DisableAutomaticApplicationShutdown=1` on hosted runners and fails any step whose log shows a
-  Restart Manager shutdown (plan, section 10). **Left:** 5 nightly passes in a row.
+  Restart Manager shutdown (plan, section 10). First pass with the policy 2026-11-08: nightly
+  42537668606 on `b0e05b498` (MSI 42537714849, Portal and Workstation profiles both passed, no
+  shutdown). **Left:** 4 more nightly passes in a row.
 - [ ] **W4 Release tooling tested on real output.** **Left:** recorded real outputs for every
   post-tag collector and validator; one end-to-end real-gate run through the driver in a tiny scope.
 - [ ] **W4b Remove the workstation from the release path** (owner, 2026-11-04). **Left:** move spill

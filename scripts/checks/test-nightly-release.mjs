@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { activeBranches, dispatch } from '../dispatch-nightly-release.mjs';
@@ -170,4 +170,9 @@ assert.equal(github.dispatched.length, 1, 'A rerun of the dry-run job reuses its
 result = await rehearse(options, { ...deps(fakeGitHub({ conclusion: file => file === 'release.yml' ? 'failure' : 'success' })), phase: 'dry-run' });
 assert.equal(result.failedStep, 'release.yml (dry run)');
 assert.match(summarize(result, { sha, branch }), /FAIL at "release.yml \(dry run\)"/);
-console.log('Nightly selection: version ordering, released/draft/prerelease boundaries, exact SHA, active-run suppression, API failure and the release rehearsal (single start, rerun reuse, named failing step, one runner-not-acquired retry reported as infrastructure) passed.');
+// A job without its own if: inherits success(), which is false when any earlier job (here the
+// optional second wait) was skipped. The dry run must depend only on the collectors' result.
+const nightlyWorkflow = readFileSync(new URL('../../.github/workflows/nightly-release.yml', import.meta.url), 'utf8');
+const dryRunJob = nightlyWorkflow.slice(nightlyWorkflow.search(/^  dry-run:/m));
+assert.ok(dryRunJob.includes("if: ${{ !cancelled() && needs.collect.result == 'success' }}"),'The dry run must start when the collectors pass, even if the second wait was skipped.');
+console.log('Nightly selection: version ordering, released/draft/prerelease boundaries, exact SHA, active-run suppression, API failure and the release rehearsal (single start, rerun reuse, named failing step, one runner-not-acquired retry reported as infrastructure, dry run not skipped after a skipped wait) passed.');
