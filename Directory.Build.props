@@ -25,6 +25,12 @@
     <PublishSingleFile Condition="'$(RuntimeIdentifier)' != ''">true</PublishSingleFile>
     <SelfContained Condition="'$(RuntimeIdentifier)' != ''">false</SelfContained>
     <PublishReadyToRun Condition="'$(RuntimeIdentifier)' != ''">true</PublishReadyToRun>
+    <!-- Single-file ReadyToRun defaults to a composite image, which recompiles the whole .NET and
+         ASP.NET Core framework into every host (8 per platform). Non-composite compiles only our
+         assemblies and keeps the runtime pack's precompiled framework: about half the publish
+         time on 4 cores (ETL-SQL.App 79 s -> 41 s), a 74 MB smaller App, ~10 ms slower warm start.
+         Owner decision 2026-11-09, after osx-x64 native publishing outgrew its 75-minute budget. -->
+    <PublishReadyToRunComposite Condition="'$(PublishReadyToRunComposite)' == ''">false</PublishReadyToRunComposite>
     <IncludeNativeLibrariesForSelfExtract Condition="'$(RuntimeIdentifier)' != ''">true</IncludeNativeLibrariesForSelfExtract>
     <DebugType>embedded</DebugType>
   </PropertyGroup>

@@ -142,6 +142,9 @@ Hosted PR packages omit ReadyToRun precompilation. They still publish every sele
 self-contained bundle and run the installed, CLI and webview checks. Local, release-branch push,
 nightly and manually dispatched full certification keep ReadyToRun enabled. Native evidence records
 `publishReadyToRun` as a boolean; publication requires `true`, including the Windows payload origin.
+ReadyToRun is non-composite (`PublishReadyToRunComposite=false` in `Directory.Build.props`): each
+host compiles only its own assemblies and keeps the runtime pack's precompiled framework, instead
+of recompiling the framework into every host. This halves publish time on 4-core runners.
 The shared payload manifest also binds its actual publish options. PR artifacts and missing or
 untyped optimization evidence cannot authorize publication. Measure the complete PR path before
 claiming the 30-minute target; a one-host optimization benchmark does not establish that result.
