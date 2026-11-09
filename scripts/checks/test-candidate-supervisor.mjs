@@ -14,17 +14,18 @@ const samples = {
   'runner-not-acquired': { annotations: ['The job was not acquired by Runner of type hosted even after multiple attempts'] },
   'hdiutil-busy': { log: 'hdiutil: create failed - Resource busy' },
   'windows-payload-dependency': { log: '[stderr] Shared Windows payload selection failed; no rebuild fallback is permitted.' },
-  'studio-performance-budget': { log: 'Studio startup measured 5757.64 ms; budget is 5000.00 ms.' },
   'playwright-wait': { log: "Microsoft.Playwright.PlaywrightException : Locator expected to contain text 'Previous diagnostics are stale'" },
   'first-run-sign-in-wait': { log: '  - waiting for Locator("#changeForm") to be visible' },
-  'preflight-check-watchdog': { log: 'FAIL test-workflows (60.0s): release-validation/preflight/1/test-workflows.log' },
 };
 for (const [id, input] of Object.entries(samples)) assert.equal(classifyFailure(input)?.id, id);
-// Every Studio millisecond budget is the same timing flake; the MiB heap budget is not.
-for (const metric of ['keystroke input-to-frame p95', '250-row aggregate/render p95', 'canvas redraw/layout p95']) {
-  assert.equal(classifyFailure({ log: `   Studio ${metric} measured 417.30 ms; budget is 50.00 ms.` })?.id, 'studio-performance-budget', metric);
+// Fixed causes are defects again: a Studio budget missed by the median of three rounds, and a
+// preflight check that outlives its 180 s hang guard.
+for (const log of ['   Studio startup measured 5757.64 ms; budget is 5000.00 ms.',
+  '   Studio keystroke input-to-frame p95 measured 417.30 ms; budget is 50.00 ms.',
+  'Studio post-GC JavaScript heap measured 80.00 MiB; budget is 64.00 MiB.',
+  'FAIL test-workflows (180.0s): release-validation/preflight/1/test-workflows.log']) {
+  assert.equal(classifyFailure({ log }), null, log);
 }
-assert.equal(classifyFailure({ log: 'Studio post-GC JavaScript heap measured 80.00 MiB; budget is 64.00 MiB.' }), null);
 // Real defects from today's rounds stay unclassified.
 for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
   'Assert.Contains() Failure: Sub-string not found', 'FAIL documentation (11.3s)', 'error CS1002: ; expected']) {
@@ -76,7 +77,7 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
 {
   const state = {};
   const shard = attempt => run(7, 'Release Certification', 'completed', 'failure', [
-    job('Full CI / Portal Browser Journey (1/3)', 'failure', { log: 'Studio startup measured 5757.64 ms; budget is 5000.00 ms.' }),
+    job('Full CI / Portal Browser Journey (1/3)', 'failure', { log: 'Microsoft.Playwright.PlaywrightException : Timeout 5000ms exceeded.' }),
     job('Full CI / Portal Browser Journey', 'failure', { minute: 20 }),
     job('Full CI / Studio Performance Budgets (macos)', 'cancelled', { annotations: ['The job was not acquired by Runner of type hosted even after multiple attempts'] }),
   ], attempt);
@@ -169,7 +170,7 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
 {
   const sha = 'c'.repeat(40);
   const runs = [{ id: 21, name: 'Release Certification', head_sha: sha, status: 'completed', conclusion: 'failure', run_attempt: 1, html_url: 'u21' }];
-  const coloured = '2026-11-03T20:46:59Z [stdout] \x1b[31m[xUnit.net 00:00:49.23]       Studio startup measured 5757.64 ms; budget is 5000.00 ms.\x1b[0m';
+  const coloured = '2026-11-03T20:46:59Z [stdout] \x1b[31m[xUnit.net 00:00:49.23]       Microsoft.Playwright.PlaywrightException : Timeout 5000ms exceeded.\x1b[0m';
   const query = (args, options = {}) => {
     const route = args.find(a => a.startsWith('repos/')) ?? '';
     if (route.includes('/actions/runs?head_sha=')) return JSON.stringify({ workflow_runs: runs });

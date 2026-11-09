@@ -8,7 +8,9 @@
 //   dependent  Fails because another workflow's job failed. Rerun once that job has succeeded.
 // source: 'log' (the job log) or 'annotation' (check-run annotations; jobs that never started
 // have no log).
-// Add an entry only with the run that proved it, so the list stays reviewable.
+// Add an entry only with the run that proved it, so the list stays reviewable. Remove it once the
+// cause is fixed, as on 2026-11-09 for the Studio millisecond budgets (now the median of three
+// rounds) and the preflight per-check deadline (now a 180 s hang guard).
 export const candidateFailureSignatures = [
   {
     id: 'checkout-timeout', kind: 'infra', source: 'log',
@@ -37,14 +39,6 @@ export const candidateFailureSignatures = [
     evidence: 'Native Package Certification 41710853145 win-x64 after MSI payload checkout timeout, 2026-11-03',
   },
   {
-    // Every millisecond budget (startup, keystroke, aggregate/render, canvas redraw) measures one
-    // sample on a shared hosted runner. The heap budget is in MiB and stays a defect.
-    id: 'studio-performance-budget', kind: 'flaky', source: 'log',
-    pattern: /Studio [a-z0-9/ -]+? measured [\d.]+ ms; budget is [\d.]+ ms/,
-    evidence: 'Release Certification 41710847926 Portal Browser Journey 1/3 (startup), 2026-11-03; ' +
-      'CI 42486129266 Portal Browser Journey 1/3 (keystroke p95 417 ms; same commit passed in Release Certification 42488694536), 2026-11-08',
-  },
-  {
     id: 'playwright-wait', kind: 'flaky', source: 'log',
     pattern: /Microsoft\.Playwright\.PlaywrightException : (?:Locator expected|Timeout \d+ms exceeded)/,
     evidence: 'Release Certification 41710847926 Portal Browser Journey 2/3, 2026-11-03',
@@ -53,11 +47,6 @@ export const candidateFailureSignatures = [
     id: 'first-run-sign-in-wait', kind: 'flaky', source: 'log',
     pattern: /waiting for Locator\("#changeForm"\) to be visible/,
     evidence: 'CI 41744076759 Portal Browser Journey 3/3, 2026-11-04 (same shard passed on 2026-11-03 rounds 4 and 5)',
-  },
-  {
-    id: 'preflight-check-watchdog', kind: 'flaky', source: 'log',
-    pattern: /FAIL [\w-]+ \(60\.0s\)/,
-    evidence: 'CI 41676267442 source preflight test-workflows hit its 60s watchdog, 2026-11-03',
   },
 ];
 
