@@ -514,8 +514,8 @@ Future timing incidents belong in this document only when they add a reusable le
 diagnostics belong in generated evidence, not a new release-specific tracking file.
 ## Release-candidate flakes and supervised reruns (v0.22.0)
 
-These failures on 2026-11-03/04 candidates are intermittent on unchanged code. All of them are still
-open defects; a green rerun does not close them.
+These failures on 2026-11-03/04 candidates are intermittent on unchanged code. A green rerun does not
+close them; the table under "Root causes found (2026-11-09)" records which are fixed.
 
 | Test | Failure | Job |
 | :--- | :--- | :--- |
@@ -537,3 +537,36 @@ once when its log matches one of these signatures in
 retry inside the test, so the policy above still applies to the tests themselves. Each supervised
 rerun appears in the supervisor's run log. Record new occurrences here. A second failure of the
 same job on the same candidate is treated as a defect.
+
+### Root causes found (2026-11-09)
+
+A scan of 207 runs from 2026-11-03 to 2026-11-09 found every intermittent failure below. Each
+fix was checked by making the failure happen on purpose first, unless the row says otherwise.
+
+| Failure | Root cause | Fix |
+| :--- | :--- | :--- |
+| `StudioPerformanceBudgetTests` startup over 5000 ms | One sample per run; a single slow start on a shared runner failed it. Twelve CI runs peaked at 3027 ms. | `69d9fd5f2`: the budget applies to the median of three fresh rounds |
+| `StudioDocumentLimitJourneyTests` "Previous diagnostics are stale" | Studio retries after Retry-After (2 s) and clears the message on success; a slow test looked after the retry. A 2.5 s pause failed it every time. | `031d71d0b`: the retry is held until the test has seen the stale state |
+| `SandboxStoryTests.Studio_FilterPane…` | A script change makes Studio re-sample 400 ms later; the story mock answered with untyped rows, so the numeric filter vanished. It failed every time once that re-sample was awaited. | `9da165c03`: the story keeps its typed sample; the test waits for the re-sample |
+| `LedgerBackedSandboxAdmissionControllerTests` heartbeat and lost fence | Fixed sleeps (150 ms, 450 ms) and a 3 s guard raced SQLite renewals on a slow runner. | `5b8d29b11`: condition polling with a 30 s hang guard |
+| `PortalReaderJourneyTests.TwoReaders…` | The report frame loaded the runtime under a second URL, so every report rendered twice and the late render closed the open menu. | `678770d9b` |
+| `StudioInteractionJourneyTests` drill-down and Ctrl+click | Forced clicks on bars still being drawn; state read once after an action. | `b0e05b498` |
+| `ExternalJoinTests.OversizedPartitionsAreRewrittenAsNativeBatches` | The partition count depended on the string hash seed. | `bdcf9ac46` |
+| MSI preflight: every pwsh check aborts | All pwsh processes share one multicore-JIT startup profile; once it is corrupt every later pwsh aborts. Hand-corrupting it reproduces the abort. What corrupts it on the runner was not reproduced. | `de65ec028`: checks run with `DOTNET_MultiCoreJitMinNumCpus=100000`, so pwsh never reads or writes the profile |
+| Preflight `test-workstation-certification-driver` | The fixture read the clock twice; a phase completed 1 ms after its state was generated is rejected. A forced 2 ms gap failed it every time. | `ec75ab073` |
+| Preflight `test-workflows` at 60.0 s | Not slow code: across 39 CI preflights its median was 47.5 s and two other checks reached 55 s, against a 60 s deadline. | `2e15fbc36`: the deadline is 180 s, a hang guard |
+| Browser shard fails after its retry passed | `$LASTEXITCODE` kept the first run's code (see above). | `cd6870b93` |
+
+Instrumented, root cause not yet found. Each now fails with the state needed to diagnose it:
+
+- `ReportLibrarySandboxTests.TheFolderTreeShowsSubfoldersAndOpensThemByMouseAndKeyboard` (CI 42609393604): no
+  reproduction in 80 local runs, including under full CPU load. `3fcdacd27` reports visibility, the
+  view transition, the page text and the reader mock's calls.
+- `PortalBrowserFixture.SignInAsync` first sign-in (CI 41744076759): `55381a37d` says whether the
+  login request was still pending or was refused.
+- `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds` (CI 42502883560): `7f2553f48` names the
+  port that refused.
+
+Not test flakes: checkout and disk-cleanup action timeouts, lost runners, a full disk, and the
+2026-11-03 `documentation`, `flaky-delays` and `DocSanityTests…DeveloperSpecificPaths` failures,
+which were real defects on those commits and are fixed.
