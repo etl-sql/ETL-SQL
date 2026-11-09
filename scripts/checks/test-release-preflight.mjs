@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { runChecks, sourceChecks, releaseAutomationChecks, checksForArguments } from '../release-preflight.mjs';
+import { runChecks, sourceChecks, releaseAutomationChecks, checksForArguments, checkTimeoutMs } from '../release-preflight.mjs';
 import syntaxIndex from '../generate-syntax-index.js';
 
 const catalog = readFileSync(new URL('../../src/ETL-SQL.Core/Common/StewardshipTagCatalog.cs', import.meta.url), 'utf8');
@@ -19,6 +19,8 @@ assert.throws(() => syntaxIndex.extractStewardshipTags(catalog.replace('TableCol
   /Unable to extract/, 'A changed record shape must fail instead of silently dropping an entry.');
 
 assert.equal(releaseAutomationChecks.length, 55);
+// Healthy checks reached 55 s on loaded CI runners; the deadline must stay a hang guard.
+assert.ok(checkTimeoutMs >= 3 * 55000, 'The per-check deadline must leave room for a loaded runner.');
 assert.equal(checksForArguments([]), sourceChecks);
 const branchChecks = checksForArguments(['--release-branch', 'release/v0.22.0']);
 assert.equal(branchChecks.length, sourceChecks.length);

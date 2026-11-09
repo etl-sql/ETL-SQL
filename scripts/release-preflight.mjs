@@ -44,7 +44,12 @@ export function checkEnvironment(base = process.env) {
   return { ...base, DOTNET_MultiCoreJitMinNumCpus: '100000' };
 }
 
-export async function runChecks(checks, { cwd = root, outputDirectory, concurrency = 3, timeoutMs = 60000, heartbeatMs = 15000, streamLogs = false, report = console.log } = {}) {
+// The per-check deadline only catches hangs. Across 39 CI preflights (2026-11) test-workflows took a
+// median 47.5 s and three checks reached 52-55 s, so a 60 s deadline failed a healthy check on a slow
+// runner (CI 41676267442). The enclosing jobs allow 18 minutes for the whole preflight.
+export const checkTimeoutMs = 180000;
+
+export async function runChecks(checks, { cwd = root, outputDirectory, concurrency = 3, timeoutMs = checkTimeoutMs, heartbeatMs = 15000, streamLogs = false, report = console.log } = {}) {
   if (!outputDirectory || !Number.isInteger(concurrency) || concurrency < 1 || timeoutMs < 1 || heartbeatMs < 1) throw new Error('Invalid preflight options.');
   if (checks.length === 0 || new Set(checks.map(c => c.id)).size !== checks.length || checks.some(c => !/^[a-z0-9-]+$/.test(c.id))) throw new Error('Checks need unique, safe IDs.');
   mkdirSync(outputDirectory, { recursive: true });

@@ -275,7 +275,7 @@ API details: [workflow runs](https://docs.github.com/en/rest/actions/workflow-ru
       dispatch/resume protection. They use temporary local inputs,
       not GitHub or an installed product. The standalone consumer gate retains these checks too.
       Up to three checks run together; each
-      has a 60-second deadline. All checks finish or time out before the aggregate exit status is
+      has a 180-second deadline that only catches hangs. All checks finish or time out before the aggregate exit status is
       returned. Inspect the printed report directory under `release-validation/preflight/` for
       per-check logs and `summary.json`. Pre-push and pre-release drivers run this automatically;
       CI, Release and MSI workflows retain its logs even on failure. This source check does not
