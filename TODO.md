@@ -72,14 +72,14 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   certified commit from Actions; pin `@vscode/vsce`; make the Marketplace job skip versions already
   published.
 - [ ] **W5 Flaky tests fixed at the cause.** Pre-push fixtures no longer inherit `GIT_DIR`
-  (`0603c9205`). **Left:** flake rate from nightly runs; Portal Browser Journey and Docker
-  integration (26 red CI runs in the census); the workstation-resume timestamp race; each supervisor
-  retry signature gets an issue. The supervisor misread an infrastructure timeout as a defect
-  (2026-11-08, CI 42476400399 on `db0a7d219`): Source preflight's "Prepare pinned workflow
-  checker" (`scripts/setup-actionlint.mjs`) timed out downloading actionlint (`TimeoutError: The
-  operation was aborted due to timeout`), and the supervisor cancelled the MSI run instead of
-  rerunning. Fix the download (retry, or a cached copy) and add a signature to
-  `scripts/lib/candidate-failure-signatures.mjs`.
+  (`0603c9205`). 2026-11-09: every intermittent failure in 207 runs (2026-11-03 to -09) is fixed
+  at its cause or instrumented; the table is in
+  [flaky-test stability](docs/releases/flaky-test-stability.md) ("Root causes found"). That
+  includes the workstation-resume timestamp race and the actionlint download that timed out on CI
+  42476400399 (now three attempts within the step limit). The Studio budget and preflight
+  watchdog supervisor signatures are removed. **Left:** flake rate from nightly runs; the three
+  instrumented failures (FolderTree, first sign-in, FTP) when they next fail; each remaining
+  supervisor retry signature gets an issue.
   Two flakes on `b81a9550e` (2026-11-08, only workflows/scripts/docs changed since the green
   `c136127e5`), rerun on unchanged inputs: (1) `LedgerBackedSandboxAdmissionControllerTests.
   LostFenceCancelsExecutionAuthorityAndRequiresReconciliation`, Release Certification
@@ -165,29 +165,19 @@ before 2026-11-07 holds their detail:
 use a generous limit; performance budgets use repeated samples or work counts, not one wall-clock
 sample on a shared runner. Keep failing on real slowness.
 
-- [ ] **Studio startup budget: measure work, not one cold sample.** Release Certification
-  `41710847926` measured 5,757 ms against 5,000 ms on Windows. Startup is one stopwatch sample
-  covering first navigation, server warm-up, JIT and asset load, in a shard sharing the runner.
-  Add an unmeasured warm-up load, take the median of 3–5 loads, and gate on stable work counts
-  (requests, JavaScript bytes, long tasks or main-thread CPU time). Keep a generous wall-clock
-  ceiling (about 2× budget) for hangs and gross regressions. Verify a deliberate regression
-  (extra script load) still fails.
-- [ ] **Stale-diagnostics journey: wait on app state, then check the text.**
-  `PortalRateLimitedAnalysisExplainsStaleDiagnosticsAndRetriesTheKeptBuffer` timed out waiting
-  for 'Previous diagnostics are stale' (job `126181482741`). Read the retained trace first: it
-  may be a real race (message late or overwritten), not a slow runner. Then expose a completion
-  marker (for example a `data-state` attribute) and wait on it before asserting the message.
-- [ ] **Preflight watchdog: per-check hang limits.** `test-workflows` hit the shared 60 s
-  preflight limit (CI `41676267442`). Give each check a limit from its measured normal duration
-  plus headroom, or speed the check up; the watchdog catches stuck checks, not slow runners.
-  Remove the matching `preflight-check-watchdog` signature from
-  `scripts/lib/candidate-failure-signatures.mjs` once fixed, as with the two above.
+- [x] **Studio startup budget** (2026-11-09, `69d9fd5f2`): each budget applies to the median of
+  three fresh rounds. Twelve CI runs peaked at 3,027 ms against 5,000 ms. Work-count gates were
+  not added; reopen if a median ever misses on unchanged code.
+- [x] **Stale-diagnostics journey** (2026-11-09, `031d71d0b`): not an app race. Studio retries
+  after Retry-After (2 s) and a success clears the message, so a slow test looked too late. The
+  test now holds the retry until it has seen the stale state.
+- [x] **Preflight watchdog** (2026-11-09, `2e15fbc36`): the per-check deadline is 180 s, a hang
+  guard; CI median for `test-workflows` was 47.5 s. Its supervisor signature is removed.
 - [ ] **First-run sign-in: wait on the login response, not 20 s of form visibility.**
   `PortalBrowserFixture.SignInAsync` timed out waiting for `#changeForm` on CI `41744076759`
-  shard 3 (2026-11-04); the next test took 19 s, so the Portal was slow, but a refused login would
-  look the same. Wait for the login request's response, report its status and the page text on
-  failure, and capture the transport/process snapshot like navigation failures do. Remove the
-  `first-run-sign-in-wait` supervisor signature once fixed.
+  shard 3 (2026-11-04). A timeout now reports the sign-in button text ("Signing in…" means the
+  request was pending) and any error shown (`55381a37d`). **Left:** read that report on the next
+  failure; keep the `first-run-sign-in-wait` signature until then.
 - [ ] **Windows browser lane: `ERR_NO_BUFFER_SPACE`, navigation timeouts, missing chart payload.**
   The upstream Chromium mitigation is backported and passed three consecutive hosted inventories;
   navigation, locator and startup failures now retain transport/process snapshots.
