@@ -183,7 +183,53 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
   assert.ok(!snapshot.runs[0].jobs[0].log.includes('\x1b'), 'colour codes are stripped before classification');
   const { actions, outcome } = decide(snapshot, {});
   assert.equal(outcome, 'running');
-  assert.deepEqual(actions.map(a => a.type), ['rerun'], 'a coloured Studio budget failure is a known flake, not a defect');
+  assert.deepEqual(actions.map(a => a.type), ['rerun'], 'a coloured Playwright wait failure is a known flake, not a defect');
+}
+
+// 8. MSI 41860496122 attempt 2 (2026-11-04): the payload job's checkout timed out, then the summary
+// job failed because the payload was missing. With the payload log unreadable, the summary looked
+// like the only failure and was reported as a defect. An unreadable log is retried, not cached.
+{
+  const sha = 'd'.repeat(40);
+  const runs = [{ id: 41, name: 'MSI In-Place Upgrade', head_sha: sha, status: 'completed', conclusion: 'failure', run_attempt: 2, html_url: 'u41' }];
+  const timeout = "##[error]The action 'Run actions/checkout@v6' has timed out after 8 minutes.";
+  const jobs = [
+    { id: 411, name: 'Publish Windows payload', status: 'completed', conclusion: 'failure', completed_at: t(23) },
+    { id: 412, name: 'MSI In-Place Upgrade', status: 'completed', conclusion: 'failure', completed_at: t(24) },
+  ];
+  const summaryLog = "MSI upgrade certification was required but ended as 'skipped'.";
+  const scenario = ({ payloadLog, payloadAnnotations = [] }) => {
+    const reads = [];
+    const query = args => {
+      const route = args.find(a => a.startsWith('repos/')) ?? '';
+      if (route.includes('/actions/runs?head_sha=')) return JSON.stringify({ workflow_runs: runs });
+      if (/\/runs\/41\/attempts\/2\/jobs/.test(route)) return JSON.stringify({ jobs: jobs.map(job => ({ ...job })) });
+      if (route.endsWith('/jobs/411/logs')) { reads.push(411); return payloadLog(); }
+      if (route.endsWith('/jobs/412/logs')) return summaryLog;
+      if (route.endsWith('/check-runs/411/annotations')) return JSON.stringify(payloadAnnotations.map(message => ({ message })));
+      if (route.includes('/annotations')) return '[]';
+      throw new Error(`unexpected gh ${args.join(' ')}`);
+    };
+    return { query, reads };
+  };
+  // Shortly after the job ended: wait, and read the log again on the next poll.
+  let available = false;
+  const late = scenario({ payloadLog: () => available ? timeout : null });
+  const logCache = new Map(), state = {};
+  const early = readSnapshot('owner/repo', sha, { query: late.query, logCache, now: () => Date.parse(t(25)) });
+  assert.deepEqual(decide(early, state), { actions: [], outcome: 'running' }, 'an unreadable log is not a defect yet');
+  available = true;
+  const next = readSnapshot('owner/repo', sha, { query: late.query, logCache, now: () => Date.parse(t(26)) });
+  assert.equal(late.reads.length, 2, 'the unreadable log is read again');
+  assert.deepEqual(decide(next, state).actions.map(a => [a.type, a.reasons]), [['rerun', ['checkout-timeout']]]);
+  // Still unreadable after the grace period: the timeout annotation identifies the infrastructure failure.
+  const annotated = scenario({ payloadLog: () => null, payloadAnnotations: ["The action 'Run actions/checkout@v6' has timed out after 8 minutes."] });
+  assert.deepEqual(decide(readSnapshot('owner/repo', sha, { query: annotated.query, now: () => Date.parse(t(40)) }), {}).actions.map(a => a.type), ['rerun']);
+  // Nothing readable after the grace period: judged on what there is, so the first failure is a defect.
+  const silent = scenario({ payloadLog: () => null });
+  const judged = decide(readSnapshot('owner/repo', sha, { query: silent.query, now: () => Date.parse(t(40)) }), {});
+  assert.equal(judged.outcome, 'defect');
+  assert.equal(judged.actions.at(-1).job.name, 'Publish Windows payload');
 }
 
 console.log('Candidate supervisor: known infrastructure/flaky/dependent failures rerun within their budgets, real defects cancel only the long package runs and open one issue, gate jobs behind a known failure are not defects.');

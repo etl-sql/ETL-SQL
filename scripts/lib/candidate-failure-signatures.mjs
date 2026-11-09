@@ -55,8 +55,10 @@ const limits = { infra: 3, flaky: 2, dependent: 3 };
 // Returns the first matching signature for a failed job, or null for a real defect.
 export function classifyFailure({ log = '', annotations = [] } = {}) {
   const annotationText = annotations.join('\n');
+  // GitHub also writes step errors such as a checkout timeout as annotations, so a log signature
+  // still matches when the log itself could not be read.
   return candidateFailureSignatures.find(signature =>
-    signature.pattern.test(signature.source === 'annotation' ? annotationText : log)) ?? null;
+    signature.pattern.test(signature.source === 'annotation' ? annotationText : `${log}\n${annotationText}`)) ?? null;
 }
 
 // The highest run attempt at which a failure of this kind may still be rerun.

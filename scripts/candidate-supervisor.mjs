@@ -31,6 +31,7 @@ export function decide(snapshot, state) {
     // A summary/gate job fails after the job it needs. Within one attempt, an unmatched failure is
     // real only when no failure in that attempt matched a known signature.
     if (!retryable.length) {
+      if (failures.some(f => f.job.logPending)) continue; // judge it once its log can be read
       const first = failures.sort((a, b) => Date.parse(a.job.completed_at) - Date.parse(b.job.completed_at))[0];
       defect ??= { run, job: first.job };
       continue;
@@ -85,7 +86,10 @@ function gh(args, { allowFailure = false } = {}) {
 }
 
 // Reads the latest attempt of every run for the SHA, with logs/annotations for failed jobs.
-export function readSnapshot(repository, sha, { query = gh, logCache = new Map() } = {}) {
+// A log that cannot be read yet is not cached. Within logGraceMs of the job ending, its run waits
+// for the next poll instead of being judged: on 2026-11-04 an unreadable log was cached as empty,
+// so a checkout timeout (a known rerun) left only its summary job and was reported as a defect.
+export function readSnapshot(repository, sha, { query = gh, logCache = new Map(), now = () => Date.now(), logGraceMs = 10 * 60000 } = {}) {
   const listed = JSON.parse(query(['api', `repos/${repository}/actions/runs?head_sha=${sha}&per_page=100`])).workflow_runs ?? [];
   const latest = new Map();
   for (const run of listed) {
@@ -101,10 +105,14 @@ export function readSnapshot(repository, sha, { query = gh, logCache = new Map()
       if (!logCache.has(key)) {
         // gh refuses to print a log containing terminal escape codes (most test output is coloured)
         // without --allow-escape-sequences; the codes are then stripped before classification.
-        const log = (query(['api', '--allow-escape-sequences', `repos/${repository}/actions/jobs/${job.id}/logs`], { allowFailure: true }) ?? '')
-          .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+        const raw = query(['api', '--allow-escape-sequences', `repos/${repository}/actions/jobs/${job.id}/logs`], { allowFailure: true });
+        const log = (raw ?? '').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
         const annotations = JSON.parse(query(['api', `repos/${repository}/check-runs/${job.id}/annotations`], { allowFailure: true }) ?? '[]')
           .map(a => String(a.message ?? ''));
+        if (raw === null && now() - Date.parse(job.completed_at) < logGraceMs) {
+          Object.assign(job, { log, annotations, logPending: true });
+          continue;
+        }
         logCache.set(key, { log, annotations });
       }
       Object.assign(job, logCache.get(key));
