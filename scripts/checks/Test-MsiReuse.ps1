@@ -40,6 +40,21 @@ foreach ($change in $cases) {
     foreach ($key in $change.Keys) { $run[$key] = $change[$key] }
     if (Test-MsiReusableRun -Run $run -SourceSha $sha -Repository $repo -Now $now) { throw "Invalid run accepted: $($change.Keys)" }
 }
+# Runs arrive through ConvertFrom-Json, which makes created_at a UTC DateTime. A run one minute old
+# is fresh and one minute ahead is in the future, whatever the host's time zone (the defect showed
+# only off UTC, so hosted Linux runners cannot catch it).
+foreach ($case in @(@{ Minutes = -1; Accepted = $true }, @{ Minutes = 1; Accepted = $false })) {
+    $json = New-Run
+    $json.created_at = $now.AddMinutes($case.Minutes).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    $run = $json | ConvertTo-Json -Depth 4 | ConvertFrom-Json
+    if ($run.created_at -isnot [datetime]) { throw 'Fixture must exercise the DateTime that ConvertFrom-Json produces.' }
+    if ((Test-MsiReusableRun -Run $run -SourceSha $sha -Repository $repo -Now $now) -ne $case.Accepted) {
+        throw "A JSON run created $($case.Minutes) minute(s) from now was judged wrongly."
+    }
+}
+foreach ($text in @('2026-10-19T11:59:00Z', '2026-10-19T05:59:00-06:00', '2026-10-19T11:59:00')) {
+    if ((ConvertTo-MsiRunTime $text) -ne [datetimeoffset]'2026-10-19T11:59:00Z') { throw "Text time read wrongly: $text" }
+}
 # A later successful attempt may reuse the original build artifact from attempt 1.
 $artifacts = @(@{ id = 456; name = 'msi-inputs-123-1'; expired = $false })
 $id = Get-MsiReusableArtifact -Receipt (New-Receipt) -Run (New-Run) -Artifacts $artifacts -SourceSha $sha -Repository $repo -PreviousTag 'v1.2.2'

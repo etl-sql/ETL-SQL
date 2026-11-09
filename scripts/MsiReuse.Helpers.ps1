@@ -1,14 +1,28 @@
 # Pure policy for selecting an exact-commit MSI certification from another run.
+
+# ConvertFrom-Json turns GitHub's "...Z" timestamps into UTC DateTime values. Casting one to
+# [string] drops the zone, so parsing it back read it as local time: on a UTC-6 workstation a fresh
+# run looked six hours in the future and was skipped. Keep the instant; read text as UTC.
+function ConvertTo-MsiRunTime($Value) {
+    if ($Value -is [datetimeoffset]) { return $Value }
+    if ($Value -is [datetime]) {
+        $utc = if ($Value.Kind -eq [DateTimeKind]::Unspecified) { [datetime]::SpecifyKind($Value, [DateTimeKind]::Utc) } else { $Value.ToUniversalTime() }
+        return [datetimeoffset]$utc
+    }
+    $parsed = [datetimeoffset]::MinValue
+    if ([datetimeoffset]::TryParse([string]$Value, [cultureinfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$parsed)) { return $parsed }
+    return $null
+}
+
 function Test-MsiCandidateRun {
     param($Run, [string]$SourceSha, [string]$Repository, [datetimeoffset]$Now = [datetimeoffset]::UtcNow)
-    $created = [datetimeoffset]::MinValue
+    $created = ConvertTo-MsiRunTime $Run.created_at
     return $Run.head_sha -ceq $SourceSha -and
         (($Run.path -ceq '.github/workflows/msi-upgrade.yml' -and $Run.event -in @('push', 'workflow_dispatch')) -or
          ($Run.path -ceq '.github/workflows/nightly-release.yml' -and $Run.event -ceq 'workflow_dispatch')) -and
         $Run.head_repository.full_name -ieq $Repository -and
         $Run.head_branch -clike 'release/*' -and
-        [datetimeoffset]::TryParse([string]$Run.created_at, [ref]$created) -and
-        $created -le $Now -and $created -ge $Now.AddDays(-7)
+        $null -ne $created -and $created -le $Now -and $created -ge $Now.AddDays(-7)
 }
 
 function Test-MsiReusableRun {
