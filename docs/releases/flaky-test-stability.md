@@ -523,6 +523,13 @@ open defects; a green rerun does not close them.
 | `StudioDocumentLimitJourneyTests.PortalRateLimitedAnalysisExplainsStaleDiagnosticsAndRetriesTheKeptBuffer` | Locator expected to contain text 'Previous diagnostics are stale' | [Release Certification 41710847926, Portal Browser Journey (2/3)](https://github.com/etl-sql/ETL-SQL/actions/runs/41710847926/job/126181482741) |
 | Source preflight `test-workflows` | FAIL test-workflows (60.0s): the preflight per-check watchdog | [CI 41676267442, Source preflight](https://github.com/etl-sql/ETL-SQL/actions/runs/41676267442/job/126057603643) |
 | `PortalBrowserFixture.SignInAsync` (first sign-in of a collection, in `StudioPersistenceTests.ConnectionWizard_UsesProductionRegistryAndInsertsParserValidMockDb`) | Timeout 20000ms exceeded waiting for `#changeForm` to be visible; the next test took 19 s. Passed on 2026-11-03 rounds 4 and 5 with no Portal change | [CI 41744076759, Portal Browser Journey (3/3)](https://github.com/etl-sql/ETL-SQL/actions/runs/41744076759) |
+| `SandboxStoryTests.Studio_FilterPane_RendersCategoricalNumericAndDateControls` | `[data-filter-sidebar] [data-filter-min='total_amount']` not visible within 5000 ms; passed when rerun alone. 2026-11-09 | [CI 42660977082 attempt 1, Portal Browser Journey (2/3)](https://github.com/etl-sql/ETL-SQL/actions/runs/42660977082/job/129314627170) |
+
+That 2026-11-09 failure also exposed a defect in `scripts/Test-BrowserShard.ps1`: the in-shard retry
+passed, but the shard failed anyway with "Browser shard result verification failed." The retry runs
+through `Process.Start`, which never updates `$LASTEXITCODE`, and the result verifier runs no native
+command, so the check after it read the first run's failed exit code. A browser shard whose flake
+cleared on retry therefore always failed. The driver now clears the code before verification.
 
 The Release Candidate Supervisor (`.github/workflows/candidate-supervisor.yml`) reruns a failed job
 once when its log matches one of these signatures in

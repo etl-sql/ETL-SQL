@@ -63,5 +63,8 @@ if ($testExit -ne 0) { throw "Browser shard failed with exit code $testExit. Ret
 $verifyArgs = @{ ManifestPath = (Join-Path $evidence 'manifest.json'); Shard = $Shard
     TrxPath = (Join-Path $evidence $trxName); OutputPath = $receiptPath }
 if ($retryTrx) { $verifyArgs.RetryTrxPath = $retryTrx }
+# The retry runs through Process.Start, which never updates $LASTEXITCODE, so it still holds the
+# failed first run's code; the verifier runs no native command, so clear it and read only its own exit.
+$global:LASTEXITCODE = 0
 & (Join-Path $PSScriptRoot 'Test-BrowserShardResult.ps1') @verifyArgs
 if ($LASTEXITCODE -ne 0) { throw 'Browser shard result verification failed.' }
