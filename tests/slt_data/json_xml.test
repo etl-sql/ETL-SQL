@@ -71,13 +71,13 @@ INSERT INTO users_for_format VALUES (1, 'Alice'), (2, 'Bob');
 query T
 SELECT id, name FROM users_for_format WHERE id <= 2 ORDER BY id FOR JSON PATH, ROOT('Users');
 ----
-1 values hashing to 39ec8e19050b0ac4c86d6b89dd560e06
+1 values hashing to 51afd810f0dfd1f76d7aff7d7bfd54fe
 
 # FOR XML PATH
 query T
 SELECT id, name FROM users_for_format WHERE id <= 2 ORDER BY id FOR XML PATH, ROOT('Users');
 ----
-1 values hashing to e8b597f45ee2f4e4ef176b48d72da616
+1 values hashing to da6f32b50ad07d6ce2b12c7d89ed8fd7
 
 # JSON_TABLE
 query T

@@ -57,7 +57,7 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("TRANSLATE", Translate, "TRANSLATE(str, from, to): Replaces characters specified in 'from' with 'to'.");
             registry.RegisterWithHelp("UNICODE", (args, ctx) => args[0]?.ToString() == null || args[0]!.ToString()!.Length == 0 ? null : (decimal)args[0]!.ToString()![0], "UNICODE(str): Returns the Unicode point of the first character.");
             registry.RegisterWithHelp("DATALENGTH", DataLength, "DATALENGTH(val): Returns the number of bytes used to represent any expression.");
-            registry.RegisterWithHelp("TO_STR", (args, ctx) => args[0]?.ToString(), "TO_STR(val): Converts a value to a string.");
+            registry.RegisterWithHelp("TO_STR", (args, ctx) => TypeConverter.ToInvariantText(args[0]), "TO_STR(val): Converts a value to a string (same text as CAST AS STRING).");
 
             registry.RegisterWithHelp("REPLICATE", (args, ctx) =>
             {

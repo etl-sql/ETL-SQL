@@ -31,13 +31,13 @@ public static class TypeConverter
         ["TIMESTAMP"] = v => v is DateTime dt ? dt : (v is DateTimeOffset dto ? dto.DateTime : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2 : DateTime.Parse(v.ToString() ?? ""))),
 
         ["TIME"] = v => TimeSpan.Parse(v.ToString() ?? "00:00:00"),
-        ["STRING"] = v => v.ToString(),
-        ["VARCHAR"] = v => v.ToString(),
-        ["NVARCHAR"] = v => v.ToString(),
-        ["TEXT"] = v => v.ToString(),
-        ["NTEXT"] = v => v.ToString(),
-        ["CHAR"] = v => v.ToString(),
-        ["NCHAR"] = v => v.ToString(),
+        ["STRING"] = v => ToInvariantText(v),
+        ["VARCHAR"] = v => ToInvariantText(v),
+        ["NVARCHAR"] = v => ToInvariantText(v),
+        ["TEXT"] = v => ToInvariantText(v),
+        ["NTEXT"] = v => ToInvariantText(v),
+        ["CHAR"] = v => ToInvariantText(v),
+        ["NCHAR"] = v => ToInvariantText(v),
         ["JSON"] = v =>
         {
             var s = v.ToString() ?? "";
@@ -45,7 +45,7 @@ public static class TypeConverter
             System.Text.Json.JsonDocument.Parse(s); // Validates JSON structure
             return s;
         },
-        ["VARCHAR2"] = v => v.ToString(),
+        ["VARCHAR2"] = v => ToInvariantText(v),
         ["XML"] = v =>
         {
             var s = v.ToString() ?? "";
@@ -137,6 +137,29 @@ public static class TypeConverter
             }
         }
         return value;
+    }
+
+    /// <summary>
+    /// The text a value becomes when cast to a string type. It never depends on the server's
+    /// locale, so the same query returns the same text on every host: dates are ISO
+    /// <c>yyyy-MM-dd HH:mm:ss</c> (fractional seconds only when present, then the offset for a
+    /// DATETIMEOFFSET) and numbers use invariant digits. Locale-aware text is FORMAT's job.
+    /// </summary>
+    public static string? ToInvariantText(object? value) => value switch
+    {
+        null => null,
+        string text => text,
+        DateTime dateTime => FormatDateTime(dateTime),
+        DateTimeOffset offset => FormatDateTime(offset.DateTime) + offset.ToString(" zzz", CultureInfo.InvariantCulture),
+        IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
+        _ => value.ToString()
+    };
+
+    private static string FormatDateTime(DateTime value)
+    {
+        var text = value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        var fraction = value.Ticks % TimeSpan.TicksPerSecond;
+        return fraction == 0 ? text : text + "." + fraction.ToString("D7", CultureInfo.InvariantCulture).TrimEnd('0');
     }
 
     /// <summary>Registers a custom type converter.</summary>

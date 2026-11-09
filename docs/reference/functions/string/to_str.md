@@ -22,7 +22,7 @@ Returns `NULL` when `value` is `NULL`.
 
 ## Remarks
 
-- `TO_STR` is a convenience alias for `CAST(value AS STRING)`.
+- `TO_STR` is a convenience alias for `CAST(value AS STRING)`, so dates come back as ISO `yyyy-MM-dd HH:mm:ss` on every server.
 - For locale-aware formatting of numbers and dates, use [`FORMAT`](../string/format.md) instead.
 
 ## Examples

@@ -68,8 +68,13 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   unpushed: the hosted Engine Certification job runs EBNF, SLT, 10M spill and Smoke/Standard scale
   (timing report-only); Build Verification checks third-party drift; Docker runs smoke parity.
   `release.yml` and both drivers no longer need workstation evidence; the workstation and
-  hosted-local tooling is deleted. **Left:** the first CI run proves Engine Certification and
-  smoke parity on hosted runners.
+  hosted-local tooling is deleted. Smoke parity passed on its first hosted run (CI 42705343857).
+  Engine Certification failed there: 3 SQL logic files showed the engine's text depended on the
+  host (date casts followed the locale, FOR JSON/XML used the platform newline). Owner chose
+  invariant output (ISO dates, LF); fixed with a culture regression test. **Left:** a green hosted
+  run of Engine Certification. Still locale-dependent and out of this fix: chart category labels
+  and variable text in report snapshots (`samples/**/*.snapshot.json` hold en-US dates), string
+  concatenation of dates, and text-to-date casts (`DateTime.Parse` with no culture).
 - [ ] **W4c GitHub is the source of truth.** **Left:** a `workflow_dispatch` "Release" that tags the
   certified commit from Actions; pin `@vscode/vsce`; make the Marketplace job skip versions already
   published.

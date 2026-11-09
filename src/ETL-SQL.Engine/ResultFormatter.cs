@@ -191,7 +191,8 @@ public class ResultFormatter
     {
         XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
         using var stringWriter = new StringWriter();
-        using (var writer = XmlWriter.Create(stringWriter, new XmlWriterSettings { OmitXmlDeclaration = true, Indent = true }))
+        // LF on every host, so FOR XML returns the same text on Windows and Linux.
+        using (var writer = XmlWriter.Create(stringWriter, new XmlWriterSettings { OmitXmlDeclaration = true, Indent = true, NewLineChars = "\n" }))
         {
             writer.WriteStartElement(root?.Trim('[', ']') ?? "root");
             if (includeNulls)
@@ -209,8 +210,9 @@ public class ResultFormatter
         return stringWriter.ToString();
     }
 
+    // LF on every host, so FOR JSON returns the same text on Windows and Linux.
     private static Utf8JsonWriter CreateJsonWriter(Stream stream) =>
-        new(stream, new JsonWriterOptions { Indented = true });
+        new(stream, new JsonWriterOptions { Indented = true, NewLine = "\n" });
 
     private static void WriteJsonRows(Utf8JsonWriter writer, IEnumerable<Row> rows, ForMode mode, string? root, bool includeNulls)
     {

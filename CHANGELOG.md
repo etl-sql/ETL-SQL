@@ -14,6 +14,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Return the same text on every host from string casts, `TO_STR`, `FOR JSON` and `FOR XML`.
+  Casting a date to a string followed the server's locale (`1/8/2024 12:00:00 AM` on Windows
+  en-US, `01/08/2024 00:00:00` on Linux) and the documents used the platform newline, so the SQL
+  logic corpus failed on its first Linux run. Dates now cast to ISO `yyyy-MM-dd HH:mm:ss`, numbers
+  to invariant digits, and both documents use LF. See
+  [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
+- Run the checks that only the owner's workstation ran (EBNF, SQL logic corpus, 10M-row spill and
+  Smoke/Standard scale) in a hosted Engine Certification CI job, and drop the workstation run from
+  the release. A retried test now logs at the first run's verbosity; the SQL logic retry printed
+  428,000 lines until its step deadline killed it.
+
 - Stop the MSI from shutting down other software that has ETL-SQL files open. Windows Restart
   Manager shut down the hosted runner's own `provjobd`, which reads newly installed files for about
   a minute, and the MSI certification lost its runner. The MSI now authors

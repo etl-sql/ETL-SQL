@@ -67,10 +67,12 @@ function Invoke-FailedTestRetry {
     $retryName = "retry-$([IO.Path]::GetFileNameWithoutExtension($TrxPath)).trx"
     $filter = ($methods | ForEach-Object { "FullyQualifiedName=$_" }) -join '|'
     Write-Host "${Label}: retrying $($methods.Count) failed method(s) once: $($methods -join ', ')"
+    # Minimal, like the first run: 'normal' echoed every line a test printed, and the SLT corpus
+    # retry printed 428k lines until its step deadline killed it (CI 42705343857).
     $info = [Diagnostics.ProcessStartInfo]::new($Runner)
     foreach ($a in @($RunnerArgs) + @('test', $Project, '--configuration', $Configuration, '--no-build', '--no-restore',
             '--filter', $filter, '--results-directory', $ResultsDirectory,
-            '--logger', "trx;LogFileName=$retryName", '--logger', 'console;verbosity=normal')) { $info.ArgumentList.Add($a) }
+            '--logger', "trx;LogFileName=$retryName", '--logger', 'console;verbosity=minimal')) { $info.ArgumentList.Add($a) }
     $info.UseShellExecute = $false
     $process = [Diagnostics.Process]::Start($info)
     if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {

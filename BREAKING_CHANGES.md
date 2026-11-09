@@ -38,6 +38,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 - **Diagnostic**: Parser error at the literal.
 - **Earliest removal**: N/A
 
+### v0.22.0 — Semantic: text from CAST, TO_STR, FOR JSON and FOR XML no longer depends on the host
+- **What changed**: Casting a value to a string type (`CAST`/`CONVERT`/`TRY_CAST` to `STRING`, `VARCHAR`, `NVARCHAR`, `TEXT`, `CHAR` and their variants, and `TO_STR`) used the server's locale, so `CAST(DATEADD(day, 7, '2024-01-01') AS STRING)` gave `1/8/2024 12:00:00 AM` on Windows en-US and `01/08/2024 00:00:00` on Linux. Dates are now ISO `yyyy-MM-dd HH:mm:ss` (`2024-01-08 00:00:00`), with fractional seconds only when present and the offset for a `DATETIMEOFFSET` (`2024-01-08 09:30:05 +05:30`). Numbers use `.` as the decimal point. `FOR JSON` and `FOR XML` used the platform newline (CRLF on Windows); they now always use LF.
+- **Who is affected**: Scripts or downstream systems that parse or compare the text of a date cast to a string, or that hash or compare `FOR JSON`/`FOR XML` output produced on Windows.
+- **Migration**: Expect ISO text. For a locale-specific or custom layout, use `FORMAT(value, pattern [, culture])`.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Security: password and LDAP sign-in are refused on a Shared Tenancy Portal
 - **What changed**: On a Shared Tenancy host, password and LDAP login looked users up across every tenant and then failed with HTTP 500. They now answer 401 ("Use single sign-on") before any lookup.
 - **Who is affected**: Shared Tenancy deployments that tried local or LDAP accounts. Dedicated hosts are unchanged.

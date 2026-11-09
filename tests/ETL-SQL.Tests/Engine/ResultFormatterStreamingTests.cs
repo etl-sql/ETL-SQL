@@ -39,6 +39,22 @@ public class ResultFormatterStreamingTests
         Assert.Contains("Id=\"4\"", xml);
     }
 
+    // FOR JSON and FOR XML used the platform newline, so Windows returned CRLF text and Linux LF.
+    [Fact]
+    public async Task ForJsonAndForXmlUseLfOnEveryHost()
+    {
+        var json = await ResultFormatter.FormatJsonAsync(CreateBatches(1, 2), ForMode.PATH, "Payload",
+            includeNulls: false, withoutArrayWrapper: false);
+        var xml = await ResultFormatter.FormatXmlAsync(CreateBatches(1, 2), ForMode.PATH, "Payload",
+            includeNulls: false, useElements: true);
+
+        foreach (var text in new[] { json, xml })
+        {
+            Assert.Contains('\n', text);
+            Assert.DoesNotContain('\r', text);
+        }
+    }
+
     private static async IAsyncEnumerable<DataTable> CreateBatches(int batchCount, int rowsPerBatch)
     {
         var id = 1;
