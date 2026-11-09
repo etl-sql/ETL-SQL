@@ -8,6 +8,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Services;
 using Moq;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace ETL_SQL.Tests.Integration.Connectors
 {
@@ -18,13 +19,40 @@ namespace ETL_SQL.Tests.Integration.Connectors
     public class FtpIntegrationTests : IDisposable
     {
         private readonly FtpFixture _ftp;
+        private readonly ITestOutputHelper _output;
         private readonly string _tmpDir;
 
-        public FtpIntegrationTests(FtpFixture ftp)
+        public FtpIntegrationTests(FtpFixture ftp, ITestOutputHelper output)
         {
             _ftp = ftp;
+            _output = output;
             _tmpDir = Path.Combine(Path.GetTempPath(), $"ftp_test_{Guid.NewGuid():N}");
             Directory.CreateDirectory(_tmpDir);
+        }
+
+        // The first FTP test is occasionally refused right after the fixture's readiness probe
+        // succeeded (issue #61), and the refusal does not say which port. Each client logs its FTP
+        // conversation to the test output (shown only for a failed test), and a failure adds which
+        // host ports accept and the server's own log.
+        private FtpConnector Logged(FtpConnector connector)
+        {
+            connector.ConfigureClient(client => client.LegacyLogger = (level, message) =>
+            {
+                try { _output.WriteLine($"{DateTimeOffset.UtcNow:HH:mm:ss.fff} {level} {message}"); }
+                catch (InvalidOperationException) { } // Output closed after the test finished.
+            });
+            return connector;
+        }
+
+        private async Task Diagnosed(Func<Task> test)
+        {
+            _output.WriteLine($"Test started {DateTimeOffset.UtcNow:O}, {(DateTimeOffset.UtcNow - _ftp.ReadyAt).TotalMilliseconds:F0} ms after the fixture was ready.");
+            try { await test(); }
+            catch
+            {
+                _output.WriteLine(await _ftp.DescribeAsync());
+                throw;
+            }
         }
 
         public void Dispose()
@@ -50,27 +78,27 @@ namespace ETL_SQL.Tests.Integration.Connectors
             // Docker passive-mode fix: the PASV response advertises the container's internal IP;
             // override it so the data connection always goes to the mapped host address instead.
             c.ConfigureClient(client => client.Config.AddressResolver = () => _ftp.Host);
-            return c;
+            return Logged(c);
         }
 
         private FtpConnector WrongPasswordConnector() =>
-            new FtpConnector(MakeContext(), _ftp.Host, FtpFixture.TestUser, "wrong-password", _ftp.Port);
+            Logged(new FtpConnector(MakeContext(), _ftp.Host, FtpFixture.TestUser, "wrong-password", _ftp.Port));
 
         private string LocalPath(string filename) =>
             Path.Combine(_tmpDir, filename);
 
         [Fact]
-        public async Task ValidCredentials_ListRoot_Succeeds()
+        public Task ValidCredentials_ListRoot_Succeeds() => Diagnosed(async () =>
         {
             await using var connector = ValidConnector();
 
             var entries = await connector.ListFilesAsync("/").ToListAsync();
 
             Assert.NotNull(entries);
-        }
+        });
 
         [Fact]
-        public async Task CreateDataSource_WithPortOption_ConnectsToMappedServer()
+        public Task CreateDataSource_WithPortOption_ConnectsToMappedServer() => Diagnosed(async () =>
         {
             var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -79,15 +107,15 @@ namespace ETL_SQL.Tests.Integration.Connectors
                 ["PORT"] = _ftp.Port.ToString()
             };
 
-            await using var connector = (FtpConnector)new FtpConnector().CreateDataSource(MakeContext(), _ftp.Host, options);
+            await using var connector = Logged((FtpConnector)new FtpConnector().CreateDataSource(MakeContext(), _ftp.Host, options));
 
             var entries = await connector.ListFilesAsync("/").ToListAsync();
 
             Assert.NotNull(entries);
-        }
+        });
 
         [Fact]
-        public async Task UploadDownload_RoundTrip_ContentMatches()
+        public Task UploadDownload_RoundTrip_ContentMatches() => Diagnosed(async () =>
         {
             var remoteName = $"roundtrip_{Guid.NewGuid():N}.txt";
             var localSource = LocalPath("source.txt");
@@ -100,10 +128,10 @@ namespace ETL_SQL.Tests.Integration.Connectors
             await connector.DownloadFileAsync(remoteName, localDestination);
 
             Assert.Equal(File.ReadAllText(localSource), File.ReadAllText(localDestination));
-        }
+        });
 
         [Fact]
-        public async Task WrongPassword_ListRoot_WrapsAsExecutionException()
+        public Task WrongPassword_ListRoot_WrapsAsExecutionException() => Diagnosed(async () =>
         {
             await using var connector = WrongPasswordConnector();
 
@@ -112,6 +140,6 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
             Assert.Contains("FTP", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(FtpFixture.TestPassword, ex.Message, StringComparison.Ordinal);
-        }
+        });
     }
 }
