@@ -83,6 +83,14 @@ process.stdout.write = (...args) => { setTimeout(() => write(...args), 50); retu
   assert.equal(JSON.parse(readFileSync(path.join(fixture, 'summary.json'), 'utf8')).results.length, 5);
   const passed = await runChecks([check('success', 'process.exit(0)')], { outputDirectory: path.join(fixture, 'pass'), report: () => {} });
   assert.equal(passed.passed, true);
+  // A check's pwsh must neither read nor write the shared multicore-JIT startup profile: one corrupt
+  // copy aborted every later pwsh in the MSI preflight (2026-11-08 and -09).
+  process.env.ETLSQL_PREFLIGHT_SENTINEL = 'kept';
+  const jit = await runChecks([check('no-startup-profile',
+    'process.exit(process.env.DOTNET_MultiCoreJitMinNumCpus === "100000" && process.env.ETLSQL_PREFLIGHT_SENTINEL === "kept" ? 0 : 1)')],
+  { outputDirectory: path.join(fixture, 'jit'), report: () => {} });
+  delete process.env.ETLSQL_PREFLIGHT_SENTINEL;
+  assert.equal(jit.passed, true, 'Preflight checks must run with multicore JIT off and the caller environment kept.');
   const messages = [];
   await runChecks([check('streaming', 'console.log("early-output");setTimeout(()=>{}, 500)')], {
     outputDirectory: path.join(fixture, 'streaming'), heartbeatMs: 50, streamLogs: true,

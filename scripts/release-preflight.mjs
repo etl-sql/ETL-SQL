@@ -34,6 +34,16 @@ sourceChecks.push(...releaseAutomationChecks);
 if (process.env.ETLSQL_RELEASE_TAG) sourceChecks.push({ id: 'final-release-metadata', command: process.execPath,
   args: ['scripts/check-release-metadata.mjs', process.env.ETLSQL_RELEASE_TAG] });
 
+// Every pwsh shares one multicore-JIT startup profile (StartupProfileData-NonInteractive in its cache
+// directory). Once that file is corrupt, every later pwsh aborts at startup: on 2026-11-08 and -09 the
+// MSI preflight on ubuntu-26.04 lost every check after the first one hit, with "Stack overflow." and
+// "FileLoadException: The given assembly name was invalid ('System.DiagnostiSystem.Text.Json')".
+// Corrupting the file by hand reproduces that abort. Checks start pwsh in parallel and some kill
+// it on purpose, so their pwsh neither reads nor writes the profile; it costs ~20 ms per start.
+export function checkEnvironment(base = process.env) {
+  return { ...base, DOTNET_MultiCoreJitMinNumCpus: '100000' };
+}
+
 export async function runChecks(checks, { cwd = root, outputDirectory, concurrency = 3, timeoutMs = 60000, heartbeatMs = 15000, streamLogs = false, report = console.log } = {}) {
   if (!outputDirectory || !Number.isInteger(concurrency) || concurrency < 1 || timeoutMs < 1 || heartbeatMs < 1) throw new Error('Invalid preflight options.');
   if (checks.length === 0 || new Set(checks.map(c => c.id)).size !== checks.length || checks.some(c => !/^[a-z0-9-]+$/.test(c.id))) throw new Error('Checks need unique, safe IDs.');
@@ -78,7 +88,7 @@ export async function runChecks(checks, { cwd = root, outputDirectory, concurren
         let child;
         try {
           // Files, not pipes: large output cannot block collection of another failure.
-          child = spawn(check.command, check.args, { cwd, shell: false, windowsHide: true, stdio: ['ignore', fd, fd] });
+          child = spawn(check.command, check.args, { cwd, shell: false, windowsHide: true, stdio: ['ignore', fd, fd], env: checkEnvironment() });
         } catch (error) { finish(null, error.message); return; }
         child.once('error', error => finish(null, error.message));
         child.once('exit', code => finish(code));
