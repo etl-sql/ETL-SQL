@@ -86,11 +86,24 @@ public class PortalBrowserFixture : IAsyncLifetime
             {
                 // Waiting on the selector rather than polling visibility: the form is rendered by
                 // the login script after the response lands, so an immediate check races it.
-                await page.WaitForSelectorAsync("#changeForm", new PageWaitForSelectorOptions
+                try
                 {
-                    State = WaitForSelectorState.Visible,
-                    Timeout = 20_000
-                });
+                    await page.WaitForSelectorAsync("#changeForm", new PageWaitForSelectorOptions
+                    {
+                        State = WaitForSelectorState.Visible,
+                        Timeout = 20_000
+                    });
+                }
+                catch (TimeoutException ex)
+                {
+                    // CI 41744076759 (2026-11-04) timed out here once with no reason. "Signing in…"
+                    // means the login request was still pending; an error message means it was refused.
+                    var button = await page.Locator("#loginBtn").InnerTextAsync(new LocatorInnerTextOptions { Timeout = 2_000 });
+                    var error = await page.Locator("#errorMsg").InnerTextAsync(new LocatorInnerTextOptions { Timeout = 2_000 });
+                    throw new TimeoutException(
+                        $"The first-run password change did not appear within 20 seconds. URL: {page.Url}. "
+                        + $"Sign-in button: '{button}'. Error shown: '{error}'.", ex);
+                }
                 await page.FillAsync("#currentPwd", FirstRunPassword);
                 await page.FillAsync("#newPwd", AdminPassword);
                 await page.FillAsync("#confirmPwd", AdminPassword);
