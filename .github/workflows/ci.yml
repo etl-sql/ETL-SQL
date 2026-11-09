@@ -873,6 +873,17 @@ jobs:
         timeout-minutes: 15
         uses: actions/checkout@v6
 
+      # CI 41860496118 (2026-11-04) ran out of disk extracting the .NET SDK image. Remove
+      # preinstalled toolchains this job never uses, and record free space before and after the
+      # tests so the margin is measured rather than guessed.
+      - name: Free runner disk space
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL
+          df -h /
+
       - name: Set up browser compiler runtime
         uses: actions/setup-node@v7
         with:
@@ -978,6 +989,11 @@ jobs:
         shell: pwsh
         timeout-minutes: 42
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'integration', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/integration/tests -TimeoutSeconds 2400
+
+      - name: Record free disk space
+        if: always()
+        timeout-minutes: 2
+        run: df -h / && docker system df
 
       - name: Retain Docker integration diagnostics
         if: always()
