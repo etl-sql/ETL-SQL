@@ -193,16 +193,19 @@ sample on a shared runner. Keep failing on real slowness.
 The v0.22.0 security review covered `src/` only. Installer, packaging, changelog and version-tool
 reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git history).
 
-- [ ] **MSI reuse misreads run times off UTC** (`scripts/MsiReuse.Helpers.ps1`, `Test-MsiCandidateRun`).
-  PowerShell turns `created_at` into a `DateTime`; `[string]` drops the `Z` and `TryParse` reads it
-  as local time, so on a UTC−6 workstation a fresh run looks six hours in the future and is skipped
-  ("No eligible pre-tag MSI certification"). Hosted `ubuntu-latest` is UTC, so Release is unaffected.
-  Parse the raw string, or use `[datetimeoffset]$Run.created_at` with an explicit UTC kind.
-- [ ] **The candidate supervisor misreads three infrastructure failures as defects** (`scripts/lib/candidate-failure-signatures.mjs`).
-  On `a30d372b5` it cancelled native and DEB three times: CI Docker pulls hit "no space left on
-  device"; MSI's summary job reports "required but ended as 'skipped'" after a payload checkout
-  timeout; and the MSI progress monitor reports "stalled" when the portal runner is lost at an
-  uninstall. Add signatures with evidence, and dispatch native and DEB from the push instead of by hand.
+- [x] **MSI reuse misreads run times off UTC** (2026-11-09): `Test-MsiCandidateRun` keeps the
+  `DateTime` instant `ConvertFrom-Json` produces instead of round-tripping it through `[string]`;
+  reproduced on a UTC−6 host, where a one-minute-old run was rejected.
+- [ ] **The candidate supervisor misread three infrastructure failures as defects** on `a30d372b5`.
+  2026-11-09, by cause: (1) the MSI summary "required but ended as 'skipped'" — a replay of the
+  real jobs gives the right rerun, so the payload job's checkout-timeout log must have been
+  unreadable when polled, and an unreadable log was cached as empty. Unreadable logs are now
+  re-read for 10 minutes, and log signatures also match annotations. (2) Docker "no space left on
+  device" — the Docker job now frees preinstalled toolchains and records free space before and
+  after the tests; no signature until the margin is measured. (3) MSI "stalled" — the Portal
+  runner went silent at "fresh uninstall start", the Restart Manager loss W3 fixed; a stall is now
+  more likely a real hang, so it stays a defect. **Left:** dispatch native and DEB from the push
+  instead of by hand; read the Docker free-space margin after a few runs.
 - [ ] **The workstation driver test runs a stand-in gate** (`scripts/checks/test-workstation-certification-driver.mjs`).
   The real gate failed through the driver twice on 2026-11-04 (absolute `-OutDir`; a silent phase left
   no log, so the checkpoint could not close). Both are fixed with targeted checks; add one end-to-end
