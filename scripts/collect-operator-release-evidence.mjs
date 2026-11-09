@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { collectSubmittedEvidence, collectSubmittedToDirectory, extractSubmittedArchive, verifySubmittedAttachment } from './collect-workstation-release-evidence.mjs';
+import { collectSubmittedEvidence, collectSubmittedToDirectory, extractSubmittedArchive, verifySubmittedAttachment } from './lib/submitted-evidence.mjs';
 import { operatorPolicy, verifyOperatorEvidence } from './operator-release-evidence.mjs';
 import { operatorComparison, previousOperatorRelease } from './operator-release-comparison.mjs';
 

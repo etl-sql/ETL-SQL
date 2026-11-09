@@ -79,7 +79,7 @@ $RepoRoot = Resolve-Path (Join-Path $ScriptRoot "..")
 . (Join-Path $ScriptRoot "lib/DependencyAudit.ps1")
 . (Join-Path $ScriptRoot "Release.Helpers.ps1")
 . (Join-Path $ScriptRoot "lib/PhaseWatchdog.Helpers.ps1")
-# The workstation driver passes an absolute evidence path; Join-Path would re-root it under the repo.
+# A caller may pass an absolute evidence path; Join-Path would re-root it under the repo.
 $ValidationRoot = if ([IO.Path]::IsPathRooted($OutDir)) { [IO.Path]::GetFullPath($OutDir) } else { Join-Path $RepoRoot $OutDir }
 $LatestDir = Join-Path $ValidationRoot "latest"
 $StatePath = Join-Path $LatestDir "state.json"

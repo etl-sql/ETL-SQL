@@ -1,4 +1,4 @@
-// Operator-submitted evidence complements hosted CI, workstation and package certification.
+// Operator-submitted evidence complements hosted CI and package certification.
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';

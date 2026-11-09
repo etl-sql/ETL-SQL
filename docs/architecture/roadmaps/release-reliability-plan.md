@@ -135,11 +135,18 @@ commit reruns only the affected checks.
 
 ### W4. Release tooling tested on real output
 Keep recorded real outputs (CLI launch logs, MSI verbose logs, workflow run JSON, scenario
-evidence) as test data for every collector and validator. Add one end-to-end test that runs the
-real gate through the workstation driver in a tiny scope. **Done when:** every post-tag
+evidence) as test data for every collector and validator. (The end-to-end workstation-driver test
+was dropped with the driver in W4b.) **Done when:** every post-tag
 collector has a real-output test.
 
 ### W4b. Remove the workstation from the release path (owner decided 2026-11-04)
+**Status 2026-11-09: done, unpushed.** The hosted Engine Certification job in `ci.yml` runs the
+EBNF and SLT lanes, 10M-row spill and Smoke/Standard scale; scale timing is report-only
+(`Compare-CertBaseline -PerformanceReportOnly`). Build Verification checks third-party drift and
+Docker Integration Tests runs local/container smoke parity. `release.yml` and both drivers no longer
+need workstation evidence, and the workstation and hosted-local tooling is deleted. The first CI
+run on hosted runners still has to prove the new job and smoke parity.
+
 Today `release.yml` refuses to publish without evidence from a 2-hour run of the pre-release gate
 on the owner's machine. Almost all of that run repeats CI (build, format, tests, dependency
 audit, SBOM, secret scan). Only these checks run nowhere else:

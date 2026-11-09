@@ -42,8 +42,6 @@ jobs:
     outputs:
       source_sha: ${{ steps.candidate.outputs.source_sha }}
       hosted_evidence_artifact_id: ${{ steps.hosted-evidence.outputs.artifact-id }}
-      local_evidence_artifact_id: ${{ steps.local-evidence.outputs.artifact-id }}
-      local_manifest_sha256: ${{ steps.local-selection.outputs.manifest_sha256 }}
       windows_artifact_id: ${{ steps.windows-selection.outputs.artifact_id }}
       windows_run_id: ${{ steps.windows-selection.outputs.run_id }}
       windows_manifest_sha256: ${{ steps.windows-selection.outputs.manifest_sha256 }}
@@ -117,27 +115,6 @@ jobs:
         with:
           name: hosted-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/hosted-release-evidence.json
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Require uploaded independent workstation evidence
-        if: env.DRY_RUN != 'true' # workstation evidence leaves the release path (W4b)
-        timeout-minutes: 12
-        shell: pwsh
-        id: local-selection
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ steps.candidate.outputs.source_sha }}
-        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-workstation-release-evidence.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, 'release-validation/selected-local-evidence') -EvidenceDirectory release-validation/supervisors/workstation -TimeoutSeconds 600
-
-      - name: Retain verified local phase bundle
-        if: env.DRY_RUN != 'true' # workstation evidence leaves the release path (W4b)
-        timeout-minutes: 10
-        id: local-evidence
-        uses: actions/upload-artifact@v7
-        with:
-          name: selected-local-evidence-${{ github.run_id }}-${{ github.run_attempt }}
-          path: release-validation/selected-local-evidence/
           if-no-files-found: error
           retention-days: 30
 
@@ -796,27 +773,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/hosted-release-evidence.json --clobber
-      - name: Download verified local phase evidence
-        if: env.DRY_RUN != 'true' # workstation evidence leaves the release path (W4b)
-        uses: actions/download-artifact@v8
-        with:
-          artifact-ids: ${{ needs.validate.outputs.local_evidence_artifact_id }}
-          path: local-evidence
-          merge-multiple: true
-      - name: Verify and attach local evidence to draft
-        if: env.DRY_RUN != 'true' # workstation evidence leaves the release path (W4b)
-        timeout-minutes: 10
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
-          MANIFEST_SHA256: ${{ needs.validate.outputs.local_manifest_sha256 }}
-        run: |
-          node scripts/workstation-release-evidence.mjs verify local-evidence/bundle "$SOURCE_SHA"
-          test "$(sha256sum local-evidence/bundle/manifest.json | cut -d ' ' -f 1)" = "$MANIFEST_SHA256"
-          test ! -e local-release-evidence.zip
-          ( cd local-evidence && zip -qr ../local-release-evidence.zip bundle selection.json )
-          mv local-release-evidence.zip dist/local-release-evidence.zip
-          gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/local-release-evidence.zip --clobber
       - name: Download verified operator evidence
         if: env.DRY_RUN != 'true' # operator evidence is a human submission (W8)
         uses: actions/download-artifact@v8
@@ -904,27 +860,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
         run: node scripts/collect-hosted-release-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-hosted-evidence.json
-      - name: Recheck independent workstation evidence before publication
-        if: env.DRY_RUN != 'true' # workstation evidence leaves the release path (W4b)
-        timeout-minutes: 15
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
-          MANIFEST_SHA256: ${{ needs.validate.outputs.local_manifest_sha256 }}
-        run: node scripts/collect-workstation-release-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-local-evidence "$MANIFEST_SHA256"
-      - name: Verify draft local evidence attachment
-        if: env.DRY_RUN != 'true' # workstation evidence leaves the release path (W4b)
-        timeout-minutes: 20
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          New-Item -ItemType Directory current-local-attachment | Out-Null
-          gh release download $env:DRAFT_TAG --repo $env:GITHUB_REPOSITORY --pattern local-release-evidence.zip --dir current-local-attachment
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot download the draft local evidence attachment.' }
-          [IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $PWD 'current-local-attachment/local-release-evidence.zip'), (Join-Path $PWD 'current-local-attachment/contents'))
-          node scripts/collect-workstation-release-evidence.mjs verify-attachment current-local-attachment/contents current-local-evidence/selection.json
-          if ($LASTEXITCODE -ne 0) { throw 'Draft local evidence does not match the current verified selection.' }
       - name: Recheck operator evidence before publication
         if: env.DRY_RUN != 'true' # operator evidence is a human submission (W8)
         timeout-minutes: 22

@@ -5,7 +5,6 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { requiredLocalPhases } from '../check-release-evidence.mjs';
 
 const scripts = fileURLToPath(new URL('../', import.meta.url));
 const root = mkdtempSync(path.join(os.tmpdir(), 'release-driver-gates-'));
@@ -31,44 +30,13 @@ try {
   checked('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'core.hooksPath=/dev/null', 'commit', '--no-gpg-sign', '-qm', 'fixture']);
   mkdirSync(path.join(root, 'release-validation/latest'), { recursive: true });
   mkdirSync(path.join(root, 'scripts'));
-  writeFileSync(path.join(root, 'scripts/check-release-evidence.mjs'), readFileSync(path.join(scripts, 'check-release-evidence.mjs')));
   const psSource = readFileSync(path.join(scripts, 'Invoke-Release.ps1'), 'utf8');
   const bashSource = readFileSync(path.join(scripts, 'invoke-release.sh'), 'utf8');
-  const psHarness = `
-$ErrorActionPreference = 'Stop'
-$RepoRoot = $env:FIXTURE_ROOT
-$ScriptRoot = $env:SOURCE_SCRIPTS
-$Force = $env:TEST_FORCE -eq '1'
-$localSha = (& git rev-parse HEAD).Trim()
-$ValidationState = $env:FIXTURE_VALIDATION_STATE
-function Write-Step($m) {}
-function Write-Ok($m) {}
-function Write-WarnLine($m) {}
-function Fail($m) { throw $m }
-function Test-Tool($name) { if (-not (Get-Command $name)) { throw $name } }
-${section(psSource, ". (Join-Path $ScriptRoot 'Release.Helpers.ps1')", '# ---- 1.')}
-${section(psSource, '# ---- 2.', '# ---- 3.')}
-Write-Output 'GATE_ACCEPTED'
-`;
-  writeFileSync(path.join(root, 'gate.ps1'), psHarness);
-  const bashHarness = `set -euo pipefail
-FORCE="$TEST_FORCE"
-SKIP_GATE=0
-LOCAL_SHA="$(git rev-parse HEAD)"
-step() { :; }
-ok() { :; }
-warn() { :; }
-die() { echo "$*" >&2; exit 1; }
-${section(bashSource, 'sha256_hex() {', '# Run a mutating command')}
-${section(bashSource, '# ---- 2.', '# ---- 3.')}
-echo GATE_ACCEPTED
-`;
-  writeFileSync(path.join(root, 'gate.sh'), bashHarness.replace(/\r\n/g, '\n'));
   const head = checked('git', ['rev-parse', 'HEAD']);
-  // Producer helper must agree with the clean-tree calculation used by the POSIX driver.
+  // Test-PreRelease resumes only state recorded for this clean-tree fingerprint.
   const producer = checked('pwsh', ['-NoProfile', '-Command', '. $env:SOURCE_SCRIPTS/Release.Helpers.ps1; Get-ReleaseSourceFingerprint -RepoRoot $env:FIXTURE_ROOT']);
   assert.equal(producer, createHash('sha256').update(head).digest('hex'));
-  const names = requiredLocalPhases;
+  const names = ['Source preflight', 'Dotnet build'];
   const full = { status: 'Passed', configuration: 'Release', evidenceSchemaVersion: 1, sourceFingerprint: producer,
     commitHash: head, generatedAt: new Date().toISOString(),
     scope: { quick: false, forceResume: false, skipNode: false, skipScale: false, includeSlt: true, includeDockerIntegration: true, includeStandardScale: true },
@@ -97,12 +65,13 @@ ${bashSource.slice(bashSource.indexOf('wait_for_run() {')).split('if [ "$DRY_RUN
 wait_for_run nightly-release.yml aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1 Nightly
 `);
   assert.equal(checked(bash, ['nightly-wait.sh']), '123');
-  for (const flag of ['-SkipPreReleaseGate', '-SkipCiWait']) {
+  // v0.22.0 removed the local gate from both drivers; its option must not quietly come back.
+  for (const flag of ['-SkipPreReleaseGate', '-SkipCiWait', '-ValidationState']) {
     const rejected = execute('pwsh', ['-NoProfile', '-File', path.join(scripts, 'Invoke-Release.ps1'), '-Version', '0.22.0', flag]);
     assert.notEqual(rejected.status, 0);
     assert.match(rejected.stderr, /parameter cannot be found/);
   }
-  for (const flag of ['--skip-prerelease-gate', '--skip-ci-wait']) {
+  for (const flag of ['--skip-prerelease-gate', '--skip-ci-wait', '--validation-state']) {
     const rejected = execute(bash, [path.join(scripts, 'invoke-release.sh').replaceAll('\\', '/'), '--version', '0.22.0', flag]);
     assert.notEqual(rejected.status, 0);
     assert.match(rejected.stderr, /Unknown argument/);
@@ -161,46 +130,6 @@ throw 'Status failure was accepted.'
     assert.notEqual(failed.status, 0);
     assert.match(failed.stderr, expected);
   }
-  for (const [command, args] of [['pwsh', ['-NoProfile', '-File', 'gate.ps1']], [bash, ['gate.sh']]]) {
-    for (const [label, mutate, force, accepted] of [
-      ['full', () => {}, false, true],
-      ['wrong-commit', s => { s.commitHash = 'b'.repeat(40); }, false, false],
-      ['expired', s => { s.generatedAt = '2020-01-01T00:00:00Z'; }, false, false],
-      ['expired-phase', s => { s.phases[0].completedAt = '2020-01-01T00:00:00Z'; }, false, false],
-      ['quick', s => { s.scope.quick = true; }, false, false],
-      ['standard-scale-omitted', s => { delete s.scope.includeStandardScale; }, false, false],
-      ['shortened-plan', s => { s.plannedPhases = s.plannedPhases.filter(name => name !== 'Coverage gate'); s.phases = s.phases.filter(phase => phase.name !== 'Coverage gate'); }, false, false],
-      ['quick-force', s => { s.scope.quick = true; }, true, false],
-      ['missing-phase', s => s.phases.pop(), false, false],
-      ['forced-resume', s => { s.scope.forceResume = true; }, false, false],
-      ['legacy', s => { delete s.evidenceSchemaVersion; }, false, false],
-      ['stale', s => { s.sourceFingerprint = 'stale'; }, false, false],
-      ['stale-force', s => { s.sourceFingerprint = 'stale'; }, true, false],
-    ]) {
-      const state = structuredClone(full);
-      mutate(state);
-      writeFileSync(path.join(root, 'release-validation/latest/state.json'), JSON.stringify(state));
-      const result = execute(command, args, { env: { ...process.env, TEST_FORCE: force ? '1' : '0' } });
-      assert.equal(result.status === 0, accepted, `${command} ${label}: ${result.stdout} ${result.stderr}`);
-      assert.equal(result.stdout.includes('GATE_ACCEPTED'), accepted);
-    }
-    // Workstation certification owns its validation/latest state beneath a private evidence root.
-    // Its full passed state must be reusable without rerunning the gate at the driver's default path.
-    const customState = path.join(root, 'workstation [候補]', 'validation/latest/state.json');
-    mkdirSync(path.dirname(customState), { recursive: true });
-    writeFileSync(customState, JSON.stringify(full));
-    writeFileSync(path.join(root, 'release-validation/latest/state.json'), JSON.stringify({ ...full, status: 'Failed' }));
-    const environment = { FIXTURE_VALIDATION_STATE: customState, VALIDATION_STATE: customState.replaceAll('\\', '/'), TEST_FORCE: '0' };
-    const custom = execute(command, args, { env: environment });
-    assert.equal(custom.status, 0, custom.stdout + custom.stderr);
-    assert.ok(custom.stdout.includes('GATE_ACCEPTED'));
-    for (const state of [{ ...full, commitHash: 'b'.repeat(40) }, { ...full, status: 'Failed' },
-      { ...full, scope: { ...full.scope, quick: true } }]) {
-      writeFileSync(customState, JSON.stringify(state));
-      assert.notEqual(execute(command, args, { env: environment }).status, 0);
-    }
-    assert.notEqual(execute(command, args, { env: { ...environment, FIXTURE_VALIDATION_STATE: customState + '.missing', VALIDATION_STATE: customState.replaceAll('\\', '/') + '.missing' } }).status, 0);
-  }
   const validationSource = readFileSync(path.join(scripts, 'Test-PreRelease.ps1'), 'utf8');
   writeFileSync(path.join(root, 'resume.ps1'), `
 $ErrorActionPreference = 'Stop'
@@ -225,7 +154,7 @@ Write-Output 'RESUME_ACCEPTED'
     assert.equal(result.status === 0, accepted, `${label}: ${result.stdout} ${result.stderr}`);
     assert.equal(result.stdout.includes('RESUME_ACCEPTED'), accepted);
   }
-  console.log('Both release driver gates and resume guards passed: matching candidates accepted; partial, legacy, forced and stale evidence blocked.');
+  console.log('Release drivers: no local gate option, operator evidence before the tag, failed git status/fetch stop, nightly wait; Test-PreRelease resumes only matching evidence.');
 } finally {
   // Only remove this test's private temporary repository.
   rmSync(root, { recursive: true, force: true });

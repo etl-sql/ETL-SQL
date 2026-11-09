@@ -4,14 +4,15 @@
     watches the GitHub Release workflow to a verified, published result.
 
 .DESCRIPTION
-    Runs the mechanical Phases 3-5 of Docs/Release_Checklist.md AFTER Test-PreRelease.ps1
-    has passed and the version bump + CHANGELOG entry are committed on the release branch. It does NOT
+    Runs the mechanical Phases 3-5 of Docs/Release_Checklist.md after the version bump + CHANGELOG
+    entry are committed on the release branch. Release evidence comes from GitHub Actions; no local
+    Test-PreRelease.ps1 run is required (v0.22.0). It does NOT
     bump versions (use Set-Version.ps1), author the CHANGELOG, or build artifacts locally
     (pre-tag certification builds them; Release promotes their accepted bytes).
 
     Steps:
       1. Pre-flight guards: tools present, clean tree, on the release branch, in sync with origin.
-      2. Pre-release gate: release-validation/latest/state.json is Passed for the current commit.
+      2. (No local pre-release gate since v0.22.0; the Release workflow requires hosted evidence.)
       3. Version consistency across the six version sources.
       4. Resolve release notes (-NotesFile, docs/releases/vX.Y.Z.md, release-notes-vX.Y.Z.md, or the CHANGELOG section).
       5. Tag identity guard: existing local/remote tags must resolve to the candidate commit.
@@ -47,7 +48,6 @@ param(
     [string]$Version,
 
     [string]$NotesFile,
-    [string]$ValidationState,
     [string]$Remote = "origin",
     [string]$Branch = "main",
 
@@ -101,11 +101,6 @@ function Invoke-Native {
 
 . (Join-Path $ScriptRoot 'Release.Helpers.ps1')
 
-# Use the same content fingerprint as validation and resume.
-function Get-SourceFingerprint {
-    return Get-ReleaseSourceFingerprint -RepoRoot $RepoRoot
-}
-
 # ---- 1. pre-flight guards -------------------------------------------------
 Write-Step "Pre-flight"
 Test-Tool git
@@ -142,31 +137,6 @@ Write-Ok "release commit $($localSha.Substring(0,8))"
 Test-Tool node
 & node (Join-Path $ScriptRoot 'check-release-metadata.mjs') $Tag
 if ($LASTEXITCODE -ne 0) { Fail 'Finalize release metadata before tagging.' }
-
-# ---- 2. pre-release validation gate --------------------------------------
-Write-Step "Pre-release validation gate"
-$statePath = Join-Path $RepoRoot "release-validation/latest/state.json"
-if ($ValidationState) { $statePath = [IO.Path]::GetFullPath($ValidationState, $RepoRoot) }
-if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
-    Fail "No pre-release state at $statePath. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale first."
-}
-else {
-    Test-Tool node
-    & node (Join-Path $ScriptRoot 'check-release-evidence.mjs') $statePath $localSha
-    if ($LASTEXITCODE -ne 0) { Fail 'Local evidence is incomplete. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale without quick/skip/forced-resume options.' }
-    $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
-    if ($state.status -ne "Passed") {
-        Fail "Latest pre-release run status is '$($state.status)', not 'Passed'. Fix and re-run Test-PreRelease.ps1."
-    }
-    $fp = Get-SourceFingerprint
-    if ($state.sourceFingerprint -ne $fp) {
-        $msg = "Pre-release state was recorded for a different source state (fingerprint mismatch). Re-validate this exact commit."
-        Fail $msg
-    }
-    else {
-        Write-Ok "validation Passed for this commit (run $($state.runId))"
-    }
-}
 
 # ---- 3. version consistency ----------------------------------------------
 Write-Step "Version consistency ($Version)"

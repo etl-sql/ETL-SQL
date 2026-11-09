@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { operatorFixture } from './fixtures/operator-bundle.mjs';
 import { verifyOperatorEvidence } from '../operator-release-evidence.mjs';
 import { uploadCommands } from './fixtures/release-upload-rehearsal.mjs';
-import { extractSubmittedArchive } from '../collect-workstation-release-evidence.mjs';
+import { extractSubmittedArchive } from '../lib/submitted-evidence.mjs';
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'operator-reports-'));
 const sha = 'a'.repeat(40), version = '1.2.3', input = path.join(root, 'input'), bundle = path.join(root, 'bundle');

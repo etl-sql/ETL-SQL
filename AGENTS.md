@@ -567,23 +567,20 @@ ETL-SQL strictly follows [Semantic Versioning 2.0.0](https://semver.org/). Agent
 Full procedure: **[release-checklist.md](./docs/releases/release-checklist.md)**. The mechanical sequence:
 
 1. Finish versioning, changelog, release notes, dates and source preflight before freezing the SHA.
-2. Run full hosted CI/CodeQL, native packages, MSI/DEB installed certification and the independent
-   Windows workstation gate on that exact candidate. Independent hosts may run in parallel. The
-   workstation driver runs `Test-PreRelease.ps1` with SLT, Docker integration and Standard scale;
-   do not run that full gate again to populate a different state directory. Complete the checklist's
-   deployment/operator evidence too.
-3. Review retained results and hashes. Use failed-job-only retries or workstation `-Resume` for
-   unchanged inputs. Source changes require a new candidate. `Master-Release.ps1` remains a local
+2. Run full hosted CI/CodeQL (including Engine Certification), native packages and MSI/DEB
+   installed certification on that exact candidate. Independent hosts may run in parallel.
+   Complete the checklist's deployment/operator evidence too.
+3. Review retained results and hashes. Use failed-job-only retries for unchanged inputs. Source changes require a new candidate. `Master-Release.ps1` remains a local
    packaging/diagnostic tool; it is not an additional publication build.
 4. Tag and publish **manually** only after all applicable evidence is accepted. The tag-triggered
    `.github/workflows/release.yml` verifies and promotes certified packages and generates consolidated
    checksums, SBOM and provenance. It does not rebuild macOS packages.
 
 Regular CI is impact-selected. Explicit full certification includes Docker integration and the
-cross-platform enterprise/browser lanes; SLT and the independent workstation run remain separate
-requirements. Green regular CI alone cannot authorize publication. Release drivers accept the
-workstation's original state with `-ValidationState` / `--validation-state` and enforce the same
-full-scope, freshness, candidate and source-fingerprint checks.
+cross-platform enterprise/browser lanes. Since v0.22.0 the EBNF, SLT, spill and scale checks run in
+the hosted Engine Certification job, so no workstation run is part of the release. Green regular CI
+alone cannot authorize publication. The local pre-release gate (`Test-PreRelease`) stays an
+optional developer tool; release drivers no longer read its state.
 
 Hosted PR native packages skip ReadyToRun precompilation while retaining self-contained bundles
 and the selected installed/CLI/webview checks. Local, nightly, release-branch push and full manual

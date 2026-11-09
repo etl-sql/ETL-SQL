@@ -63,11 +63,13 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   Restart Manager log check stay. **Left:** 4 nightly passes in a row on the fresh-only lane;
   upgrade certification returns from v0.23.0, upgrading from v0.22.0.
 - [ ] **W4 Release tooling tested on real output.** **Left:** recorded real outputs for every
-  post-tag collector and validator; one end-to-end real-gate run through the driver in a tiny scope.
-- [ ] **W4b Remove the workstation from the release path** (owner, 2026-11-04). **Left:** move spill
-  allocated bytes, scale rows/checksums and the grammar lane into CI or nightly; timing report-only;
-  drop the workstation requirement from `release.yml`, drivers and supervisor; delete the
-  workstation driver and resume tooling.
+  post-tag collector and validator.
+- [ ] **W4b Remove the workstation from the release path** (owner, 2026-11-04). Done 2026-11-09,
+  unpushed: the hosted Engine Certification job runs EBNF, SLT, 10M spill and Smoke/Standard scale
+  (timing report-only); Build Verification checks third-party drift; Docker runs smoke parity.
+  `release.yml` and both drivers no longer need workstation evidence; the workstation and
+  hosted-local tooling is deleted. **Left:** the first CI run proves Engine Certification and
+  smoke parity on hosted runners.
 - [ ] **W4c GitHub is the source of truth.** **Left:** a `workflow_dispatch` "Release" that tags the
   certified commit from Actions; pin `@vscode/vsce`; make the Marketplace job skip versions already
   published.
@@ -206,10 +208,6 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   runner went silent at "fresh uninstall start", the Restart Manager loss W3 fixed; a stall is now
   more likely a real hang, so it stays a defect. **Left:** dispatch native and DEB from the push
   instead of by hand; read the Docker free-space margin after a few runs.
-- [ ] **The workstation driver test runs a stand-in gate** (`scripts/checks/test-workstation-certification-driver.mjs`).
-  The real gate failed through the driver twice on 2026-11-04 (absolute `-OutDir`; a silent phase left
-  no log, so the checkpoint could not close). Both are fixed with targeted checks; add one end-to-end
-  run of the real gate in a tiny scope through the driver.
 - [ ] **Finish the review.** About 376 tracked script files and 1,856 test files remain unreviewed
   beyond the installer, packaging, changelog and version tools. **Left:** the rest of `scripts/`
   and `tests/`; native installed-MSI certification of the fixed installer paths.

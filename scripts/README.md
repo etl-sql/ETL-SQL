@@ -76,11 +76,9 @@ toolchain and package hashes. It pins the selection before promotion and recheck
 actual draft files before publication. Missing certification blocks Release without a Windows rebuild.
 See the [release checklist](../docs/releases/release-checklist.md) for dispatch and recovery.
 
-`Invoke-Release.ps1 -ValidationState <path>` / `invoke-release.sh --validation-state <path>` reuse
-the independent workstation run's existing `validation/latest/state.json`. They enforce the same
-candidate, fingerprint, freshness and full-phase checks as the default state path. This avoids
-running the local gate again solely to satisfy the release driver's default directory. Both drivers
-resolve authored release notes from `docs/releases/` when `-NotesFile` / `--notes-file` is omitted.
+`Invoke-Release.ps1` / `invoke-release.sh` do not require a local pre-release run (since v0.22.0);
+the Release workflow requires hosted evidence instead. Both drivers resolve authored release notes
+from `docs/releases/` when `-NotesFile` / `--notes-file` is omitted.
 
 macOS promotion uses the same native acceptance verifier through `collect-certified-macos.mjs`.
 Both architecture artifacts must come from a successful exact-candidate manual native-package run
@@ -194,21 +192,15 @@ must not be combined into passing release evidence.
 Each profile uploads candidate identity, the Portal summary and supervisor result/heartbeat/stderr
 before its full evidence bundle. The focused upload has a five-minute deadline, the full upload
 20 minutes, and the profile job 65 minutes. Both artifacts retain their original run attempt.
-Full local/operator and package certification requirements remain.
+Operator and package certification requirements remain.
 
-Run `Invoke-WorkstationCertification.ps1 -EvidenceDirectory <new-directory>` manually on the Windows
-x64 workstation for the full local phase gate. It requires no GitHub runner or workflow connection.
-After inspecting a failure, use the same command with `-Resume` and the original evidence directory.
-Resume verifies the same clean candidate, host, toolchain, Docker images, cached outputs and original
-state/log/artifact hashes. It keeps every attempt's state, result, process logs and failed artifact
-payloads, and preserves reused
-phase timestamps. Missing, changed, active or older-than-seven-day checkpoints stop before testing;
-they never trigger an automatic full rerun. A source fix requires a new candidate and directory.
-After success, uploading its verified ZIP to a separate draft evidence release is an independent
-operator step. Release uses `collect-workstation-release-evidence.mjs` to verify that uploaded bundle
-and checks the product draft's evidence ZIP before publication. CI and package certifications remain
-separate. Commands and evidence rules are in the
-[release checklist](../docs/releases/release-checklist.md#independent-windows-workstation-certification).
+Since v0.22.0 no workstation run is part of the release. The checks that used to run only there
+(EBNF, SLT, 10M-row spill, Smoke and Standard scale) run in the hosted Engine Certification CI job.
+Scale timings are reported, not gated, because hosted runner hardware varies; row counts, checksums
+and scenario failures still fail the job. The third-party inventory drift check runs in Build
+Verification and the local/container smoke parity check in Docker Integration Tests.
+`lib/submitted-evidence.mjs` holds the shared draft-asset collection and safe ZIP extraction used
+by the operator evidence and Windows payload collectors.
 
 ## Portal test processes
 
@@ -317,7 +309,6 @@ than the operator front door.
 | **[`Test-DeploymentProfileCertification.ps1`](./Test-DeploymentProfileCertification.ps1)** | PowerShell | Cross-platform | Composes Solo, Team, Enterprise, SaaS, transition, and upgrade proof from focused suites; fails closed and writes commit-bound JSON/Markdown evidence with phase logs. |
 | **[`Test-ProviderNeutralFaultCertification.ps1`](./Test-ProviderNeutralFaultCertification.ps1)** | PowerShell | Cross-platform | Repeats the provider-neutral failure matrix through local, Docker, and cloud adapters and writes invariant/checkpoint evidence for each supported profile. |
 | **[`Test-ProductionCanaryCertification.ps1`](./Test-ProductionCanaryCertification.ps1)** | PowerShell | Cross-platform | Certifies deterministic canary journey/fault contracts, exact region/domain coverage, isolation, alert attribution and credential lifecycle. Rejects source drift during the run. Live hosted behavior needs separate operator evidence. |
-| **[`Invoke-WorkstationCertification.ps1`](./Invoke-WorkstationCertification.ps1)** | PowerShell + Node.js 22 | Independent Windows x64 workstation | Runs every mandatory local phase and prepares a verified portable ZIP. Uploading evidence is a separate operator step. See [workstation certification](../docs/releases/release-checklist.md#independent-windows-workstation-certification). |
 | **[`Measure-LeanWorkerProfile.ps1`](./Measure-LeanWorkerProfile.ps1)** | PowerShell | Cross-platform; Docker optional | Compares the unified CLI with the non-shipping engine-worker fixture across published size, dependency closure, startup latency/working set, loaded assemblies, sandbox lifetime, and startup cost sensitivity. `-TrimExperiment` records a rejected trim contract as evidence; it never authorizes publication. |
 | **[`Measure-StudioPerformance.ps1`](./Measure-StudioPerformance.ps1)** | PowerShell | Cross-platform | Measures the canonical Studio browser fixture against OS-specific startup, JavaScript heap, keystroke, 250-row aggregation, and canvas-redraw budgets and writes JSON evidence. |
 | **[`typecheck-browser.mjs`](./typecheck-browser.mjs)** | Node.js | Cross-platform | The browser type gate. Runs `tsc --checkJs` over the canonical browser sources and fails on any finding not in `browser-typecheck-baseline.txt`, and on any baseline entry that no longer reproduces. `--summary` prints what is left by file and code; `--update` rewrites the baseline. Needs `npm ci --prefix scripts/typecheck` once. |

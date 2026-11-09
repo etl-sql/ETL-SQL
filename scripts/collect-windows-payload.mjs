@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream, openSync, closeSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { extractSubmittedArchive } from './collect-workstation-release-evidence.mjs';
+import { extractSubmittedArchive } from './lib/submitted-evidence.mjs';
 import { verifyWindowsPayload } from './windows-payload.mjs';
 
 function complete(pages, key) {

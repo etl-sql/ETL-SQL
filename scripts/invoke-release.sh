@@ -2,8 +2,9 @@
 #
 # Mechanical release driver for ETL-SQL (POSIX/bash port of Invoke-Release.ps1).
 #
-# Runs the mechanical Phases 3-5 of Docs/Release_Checklist.md AFTER Test-PreRelease.ps1 has
-# passed and the version bump + CHANGELOG entry are committed on the release branch. It does
+# Runs the mechanical Phases 3-5 of Docs/Release_Checklist.md after the version bump + CHANGELOG
+# entry are committed on the release branch. Release evidence comes from GitHub Actions; no local
+# Test-PreRelease.ps1 run is required (v0.22.0). It does
 # NOT bump versions, author the CHANGELOG, or build artifacts locally (the Release workflow
 # promotes the accepted pre-tag certification bytes).
 #
@@ -13,7 +14,6 @@
 # Options:
 #   --version X.Y.Z            (required) release version, no leading 'v'
 #   --notes-file PATH          curated release notes (default: docs/releases/vX.Y.Z.md, release-notes-vX.Y.Z.md, or CHANGELOG)
-#   --validation-state PATH    passed state from the independent workstation gate
 #   --remote NAME              git remote (default: origin)
 #   --branch NAME              release branch (default: main)
 #   --dry-run                  print mutating actions without performing them
@@ -29,7 +29,6 @@ set -euo pipefail
 
 VERSION=""
 NOTES_FILE=""
-VALIDATION_STATE=""
 REMOTE="origin"
 BRANCH="main"
 DRY_RUN=0
@@ -44,7 +43,6 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --version) VERSION="$2"; shift 2 ;;
     --notes-file) NOTES_FILE="$2"; shift 2 ;;
-    --validation-state) VALIDATION_STATE="$2"; shift 2 ;;
     --remote) REMOTE="$2"; shift 2 ;;
     --branch) BRANCH="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -74,12 +72,6 @@ need() { command -v "$1" >/dev/null 2>&1 || die "Required tool '$1' is not on PA
 need git; need gh
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
-
-sha256_hex() {
-  if command -v sha256sum >/dev/null 2>&1; then sha256sum | awk '{print $1}'
-  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 | awk '{print $1}'
-  else die "Need sha256sum or shasum for the pre-release gate."; fi
-}
 
 # Run a mutating command, or just describe it under --dry-run.
 mut() {
@@ -111,34 +103,6 @@ fi
 ok "release commit ${LOCAL_SHA:0:8}"
 command -v node >/dev/null 2>&1 || die "Node is required to validate release metadata."
 node scripts/check-release-metadata.mjs "$TAG" || die "Finalize release metadata before tagging."
-
-# ---- 2. pre-release gate --------------------------------------------------
-step "Pre-release validation gate"
-STATE="${VALIDATION_STATE:-release-validation/latest/state.json}"
-if [ ! -f "$STATE" ]; then
-  die "No pre-release state at $STATE. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale first."
-else
-  command -v node >/dev/null 2>&1 || die "Node is required to validate local release evidence."
-  node scripts/check-release-evidence.mjs "$STATE" "$LOCAL_SHA" || die "Local evidence is incomplete. Run Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale without quick/skip/forced-resume options."
-  if command -v jq >/dev/null 2>&1; then
-    STATUS="$(jq -r '.status' "$STATE")"
-    SAVED_FP="$(jq -r '.sourceFingerprint' "$STATE")"
-  else
-    STATUS="$(grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' "$STATE" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
-    SAVED_FP="$(grep -o '"sourceFingerprint"[[:space:]]*:[[:space:]]*"[^"]*"' "$STATE" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
-  fi
-  [ "$STATUS" = "Passed" ] || die "Latest pre-release status is '$STATUS', not 'Passed'. Re-run Test-PreRelease.ps1."
-  HEAD_LINE="$(git rev-parse HEAD)"
-  STATUS_LINE="$(git status --short)"
-  [ -z "$STATUS_LINE" ] || die "Working tree changed since pre-flight. Re-validate before releasing."
-  # Get-ReleaseSourceFingerprint hashes only HEAD for a clean tree (no trailing newline).
-  CUR_FP="$(printf '%s' "$HEAD_LINE" | sha256_hex)"
-  if [ "$SAVED_FP" != "$CUR_FP" ]; then
-    die "Pre-release state was recorded for a different source state. Re-validate this exact commit."
-  else
-    ok "validation Passed for this commit"
-  fi
-fi
 
 # ---- 3. version consistency ----------------------------------------------
 step "Version consistency ($VERSION)"

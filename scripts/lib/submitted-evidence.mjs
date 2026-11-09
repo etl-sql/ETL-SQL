@@ -1,13 +1,10 @@
-// Ingest an independently produced Windows check; never run that check in GitHub Actions.
+// Collect and verify evidence an operator submitted as a draft-release asset for one candidate SHA.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, closeSync, createReadStream, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { verifyWorkstationEvidence } from './workstation-release-evidence.mjs';
 
-export const workstationAssetName = 'windows-workstation-evidence.zip';
 const releaseIdentity = row => Object.fromEntries(['id', 'tag_name', 'target_commitish', 'draft', 'created_at'].map(key => [key, row[key]]));
 const assetIdentity = row => Object.fromEntries(['id', 'name', 'state', 'size', 'digest', 'created_at', 'updated_at'].map(key => [key, row[key]]));
 const positiveId = value => Number.isSafeInteger(value) && value > 0;
@@ -76,10 +73,6 @@ export async function collectSubmittedEvidence(repository, sha, protocol, { quer
     assetName: asset.name, assetDigest: asset.digest, collectedAt: new Date(now).toISOString(), ...(originChecks ? { originChecks } : {}) };
 }
 
-const workstationProtocol = { tagPrefix: 'workstation-check', assetName: workstationAssetName,
-  scope: 'manual-windows-full-local-phases', verify: verifyWorkstationEvidence };
-export const collectWorkstationEvidence = (repository, sha, options) => collectSubmittedEvidence(repository, sha, workstationProtocol, options);
-
 export function verifySubmittedAttachment(directory, expected, protocol, { now = Date.now() } = {}) {
   if (expected?.schemaVersion !== 1 || expected.scope !== protocol.scope ||
       expected.fullReleaseCertification !== false || !positiveId(expected.releaseId) || !positiveId(expected.assetId) ||
@@ -99,20 +92,18 @@ export function verifySubmittedAttachment(directory, expected, protocol, { now =
   return true;
 }
 
-export const verifyWorkstationAttachment = (directory, expected, options) => verifySubmittedAttachment(directory, expected, workstationProtocol, options);
-
 function command(executable, args, options = {}) {
   const result = spawnSync(executable, args, { encoding: 'utf8', windowsHide: true, timeout: 60000, maxBuffer: 32 * 1024 * 1024, ...options });
   if (result.error || result.status !== 0) throw new Error(`Cannot complete submitted evidence command: ${executable}.`);
   return result.stdout;
 }
 
-export function extractWorkstationArchive(archive, directory, { maximumBytes = Number.MAX_SAFE_INTEGER, maximumEntries = Number.MAX_SAFE_INTEGER, allowSelection = false, timeoutMs = 60000 } = {}) {
+export function extractSubmittedArchive(archive, directory, { maximumBytes = Number.MAX_SAFE_INTEGER, maximumEntries = Number.MAX_SAFE_INTEGER, allowSelection = false, timeoutMs = 60000 } = {}) {
   if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1 || !Number.isSafeInteger(maximumEntries) || maximumEntries < 1 ||
       !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300000) throw new Error('Invalid evidence archive limits.');
   command('pwsh', ['-NoProfile', '-NonInteractive', '-Command', `
 $ErrorActionPreference='Stop'
-$zip=[IO.Compression.ZipFile]::OpenRead($env:ETLSQL_WORKSTATION_ZIP)
+$zip=[IO.Compression.ZipFile]::OpenRead($env:ETLSQL_EVIDENCE_ZIP)
 try {
   if($zip.Entries.Count -gt [long]$env:ETLSQL_EVIDENCE_MAX_ENTRIES) { throw 'Evidence ZIP has too many entries.' }
   $totalBytes=0L
@@ -122,9 +113,9 @@ try {
     if($totalBytes -gt [long]$env:ETLSQL_EVIDENCE_MAX_BYTES) { throw 'Evidence ZIP payload exceeds its limit.' }
     if(($entry.FullName -cnotmatch '^bundle/' -and -not ($env:ETLSQL_EVIDENCE_ALLOW_SELECTION -eq 'true' -and $entry.FullName -ceq 'selection.json')) -or $entry.FullName.Contains('\\') -or $entry.FullName.Contains(':') -or $entry.FullName.Contains([char]0) -or
        @($entry.FullName.Split('/') | Where-Object {$_ -eq '..' -or $_ -eq '.'}).Count -gt 0 -or
-       (($entry.ExternalAttributes -shr 16) -band 0xF000) -eq 0xA000) { throw 'Unsafe workstation ZIP entry.' }
+       (($entry.ExternalAttributes -shr 16) -band 0xF000) -eq 0xA000) { throw 'Unsafe evidence ZIP entry.' }
   }
-  $output=[IO.Path]::GetFullPath($env:ETLSQL_WORKSTATION_OUTPUT)
+  $output=[IO.Path]::GetFullPath($env:ETLSQL_EVIDENCE_OUTPUT)
   if(Test-Path -LiteralPath $output) {
     $existing=Get-Item -LiteralPath $output -Force
     if(-not $existing.PSIsContainer -or ($existing.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
@@ -160,10 +151,9 @@ try {
     } finally {$source.Dispose()}
   }
 } finally {$zip.Dispose()}
-`], { timeout: timeoutMs, env: { ...process.env, ETLSQL_WORKSTATION_ZIP: path.resolve(archive), ETLSQL_WORKSTATION_OUTPUT: path.resolve(directory),
+`], { timeout: timeoutMs, env: { ...process.env, ETLSQL_EVIDENCE_ZIP: path.resolve(archive), ETLSQL_EVIDENCE_OUTPUT: path.resolve(directory),
     ETLSQL_EVIDENCE_MAX_BYTES: String(maximumBytes), ETLSQL_EVIDENCE_MAX_ENTRIES: String(maximumEntries), ETLSQL_EVIDENCE_ALLOW_SELECTION: String(allowSelection) } });
 }
-export const extractSubmittedArchive = extractWorkstationArchive;
 
 async function fileHash(file) {
   const hash = createHash('sha256');
@@ -187,24 +177,10 @@ export async function collectSubmittedToDirectory(repository, sha, directory, pr
       } finally { closeSync(descriptor); }
       const archiveSha256 = await fileHash(archive);
       if (`sha256:${archiveSha256}` !== asset.digest) throw new Error('Manual evidence download digest mismatch.');
-      extractWorkstationArchive(archive, directory, protocol.archiveLimits);
+      extractSubmittedArchive(archive, directory, protocol.archiveLimits);
       return { directory: path.join(directory, 'bundle'), archiveSha256 };
     } });
   writeFileSync(path.join(directory, 'selection.json'), JSON.stringify(receipt, null, 2), { flag: 'wx' });
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `manifest_sha256=${receipt.manifestSha256}\n`);
   return receipt;
-}
-
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try {
-    if (process.argv[2] === 'verify-attachment' && process.argv.length === 5) {
-      verifyWorkstationAttachment(process.argv[3], JSON.parse(readFileSync(process.argv[4], 'utf8')));
-      console.log('Draft workstation evidence matches its independently verified selection.');
-    } else {
-      if (![5, 6].includes(process.argv.length)) throw new Error('Usage: collect-workstation-release-evidence.mjs <owner/repo> <sha> <new-directory> [manifest-sha256] | verify-attachment <unpacked-directory> <selection.json>');
-      const [, , repository, sha, directory, expectedManifestSha256] = process.argv;
-      const receipt = await collectSubmittedToDirectory(repository, sha, directory, workstationProtocol, expectedManifestSha256);
-      console.log(`Verified independent Windows evidence: asset ${receipt.assetId}, manifest ${receipt.manifestSha256}.`);
-    }
-  } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

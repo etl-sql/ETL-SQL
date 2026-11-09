@@ -653,7 +653,6 @@ ${selectionCommands}
   for (const [name, script, args, evidence, seconds, minutes] of [
     ['Require final release metadata', 'check-release-metadata.mjs', ['v0.22.0'], 'metadata', 120, 4],
     ['Require exact-candidate CI and CodeQL evidence', 'collect-hosted-release-evidence.mjs', ['owner/repository', candidate, 'release-validation/hosted-release-evidence.json'], 'hosted', 600, 12],
-    ['Require uploaded independent workstation evidence', 'collect-workstation-release-evidence.mjs', ['owner/repository', candidate, 'release-validation/selected-local-evidence'], 'workstation', 600, 12],
     ['Require certified pre-tag Windows packages', 'collect-certified-windows.mjs', ['owner/repository', candidate, '0.22.0', 'release-validation/selected-windows'], 'windows', 780, 15],
   ]) {
     const step = validationStep(name);

@@ -26,13 +26,13 @@ A merge commit created before tagging is a new candidate and needs its own certi
 | Order | Work | Reuse / completion rule |
 | :--- | :--- | :--- |
 | Before candidate cut | Finish metadata, source preflight and targeted defect checks | Resolve cheap failures together before starting builds. A targeted PR is not release certification. |
-| At candidate cut | Start full hosted CI, CodeQL, native packages, MSI/DEB installed certification and independent workstation certification | Start independent hosts together. Never run two full local gates against the same mutable output directories. |
+| At candidate cut | Start full hosted CI, CodeQL, native packages, MSI/DEB installed certification (full CI includes Engine Certification) | Start independent hosts together. |
 | While those run | Complete deployment profiles/transitions, canary contracts and applicable operator evidence | Index each receipt once. Review the required/conditional ledger below; do not launch another copy of a lane already running. |
-| Before tag | Review every required receipt, candidate identity, package hash and uncovered claim | Full hosted CI includes enterprise Windows/Linux, Docker integration, HA harness contracts and browser shards. Reuse those artifacts for their stated scope. The independent Windows gate is a separate required execution. |
+| Before tag | Review every required receipt, candidate identity, package hash and uncovered claim | Full hosted CI includes enterprise Windows/Linux, Docker integration, HA harness contracts and browser shards. Engine Certification adds EBNF, SLT, 10M-row spill and Smoke/Standard scale. Reuse those artifacts for their stated scope. |
 | After tag | Promote accepted artifacts, verify draft bytes, attest, then publish | Windows/macOS ZIPs and VSIXs come from manual native certification. MSI and DEB reuse installed certification. There is no second macOS build. |
-| On failure | Inspect the first failure and retained logs; retry only failed work on unchanged inputs | `gh run rerun <run-id> --failed` preserves successful jobs. Use workstation `-Resume` for its unchanged checkpoint. A source fix needs a new candidate. |
+| On failure | Inspect the first failure and retained logs; retry only failed work on unchanged inputs | `gh run rerun <run-id> --failed` preserves successful jobs. A source fix needs a new candidate. |
 
-Planning allowance: start the roughly two-hour workstation path and hosted/native paths together,
+Planning allowance: start the hosted and native paths together,
 allow up to one hour for evidence review and promotion, and reserve the remaining hour for one
 diagnosed recovery. These are scheduling budgets, not measured acceptance or permission to omit
 tests. Claims requiring a long controlled-host soak need their own capacity plan. Record queue,
@@ -59,28 +59,20 @@ those rehearsals do not need to be repeated for each release and do not certify 
 > `scripts/Test-PreRelease.ps1`
 > (POSIX: `scripts/test-pre-release.sh`). Version bumping is `scripts/Set-Version.ps1`. Cross-platform
 > packaging is `scripts/Master-Release.ps1`, which calls `scripts/publish-release.ps1`
-> (checksums + SBOM) and the current host's native package builder. The mechanical Phases 3–5 below (gate check →
-> version consistency → notes → push/CI → tag → watch `release.yml` → verify published assets)
+> (checksums + SBOM) and the current host's native package builder. The mechanical Phases 3–5 below (version
+> consistency → notes → push/CI → tag → watch `release.yml` → verify published assets)
 > are driven by `scripts/Invoke-Release.ps1` (POSIX: `scripts/invoke-release.sh`); run it with
 > `-DryRun` first. Existing local/remote tags must resolve to the exact candidate; matching tags
 > allow a partial release to resume without `-Force`. Conflicting tags or failed lookups block it.
 > A branch with the same name is preserved; release operations address the tag by its full ref.
 >
-> `Test-PreRelease.ps1` does not yet execute or validate every certification listed below, and
-> both release drivers check saved scope and planned phase results as well as the source fingerprint.
-> Evidence must name the exact candidate commit, describe its clean checkout and have a result
-> timestamp within the past seven days. Future or missing timestamps fail the gate.
-> Every phase also needs its original completion timestamp within that window. Resume preserves
-> completion times and reruns expired phases or older records without timestamps.
-> They reject legacy states without scope, `-Quick`, skipped Node/scale checks, omitted SLT/Docker
-> lanes, forced-resume evidence and incomplete phase results. Standard scale and every mandatory
-> phase are required independently of the saved plan, so a shortened plan cannot pass. Run
-> `Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale` in Release configuration. A normal
-> resume cannot reuse a legacy or forced-resume state; start a fresh run. Release drivers provide
-> no local-gate or CI-wait bypass. Source fingerprints cannot be overridden.
-> CI/CodeQL jobs and the independently uploaded workstation phase bundle are enforced by Release. The
-> operator submission is also enforced, alongside certified package promotion. Complete every applicable checkbox before tagging;
-> a green local gate alone is necessary but not sufficient.
+> Since v0.22.0 the local pre-release gate (`Test-PreRelease.ps1`) is an optional developer tool.
+> Release drivers no longer read its state, and no workstation run is part of the release. The
+> checks that used to run only there (EBNF, SLT, 10M-row spill, Smoke and Standard scale) run in
+> the hosted **Engine Certification** CI job; third-party inventory drift runs in Build Verification
+> and local/container smoke parity in Docker Integration Tests. Release drivers provide no CI-wait
+> bypass. CI/CodeQL jobs, the operator submission and certified package promotion are enforced by
+> Release. Complete every applicable checkbox before tagging.
 
 Release now requires the DEB installed-upgrade workflow and promotes its retained package by
 artifact ID. Candidate SHA, version, input hashes, successful receipt and package bytes must match;
@@ -606,18 +598,16 @@ treats a remaining draft as incomplete, and allows 120 minutes for release compl
 
 GitHub documents the retry controls in [Re-running workflows and jobs](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
 
-The local gate is one required part of the release decision. Full hosted CI covers Docker
-integration and cross-platform enterprise/browser checks; SLT and the independent workstation
-execution remain required separately. The workstation driver runs the local gate itself. Its
-passing full run satisfies that local-gate row: do not run the same full gate again just to tick
-another checkbox. A green local gate does not replace the other certifications below.
+Full hosted CI covers Docker integration, cross-platform enterprise/browser checks and, in the
+Engine Certification job, EBNF, SLT, spill and Smoke/Standard scale. Scale timings there are
+reported, not gated, because hosted runner hardware varies; row counts, checksums and failed
+scenarios still fail the job. The local gate below is optional: use it to diagnose a failure or
+check a change before pushing. A green local gate does not replace any certification below.
 
 ### Two-segment local validation on a memory-constrained host
 
-This direct-gate technique is for resource diagnostics. It does not produce the independent
-workstation driver's required invocation/process bundle and cannot replace that execution.
-For release certification, reserve a workstation with sufficient memory and run the independent
-driver once. Do not complete this diagnostic sequence and then treat another full run as routine.
+This direct-gate technique is for resource diagnostics on a developer machine. It is not release
+evidence.
 
 Use this when Docker Desktop's VM would compete with the engine, browser or scale lanes for RAM.
 Keep one clean candidate commit, configuration, platform list and output directory throughout.
@@ -651,9 +641,7 @@ Native Linux/macOS packaging and cross-platform certifications still require the
       ```powershell
       .\scripts\Test-PreRelease.ps1 -Explain -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
-- [ ] Run the full local gate **once**, through the independent Windows workstation driver below.
-      The underlying command is shown for inspection and targeted local diagnostics; it is not
-      an additional full run after workstation certification:
+- [ ] Optionally run the full local gate to diagnose a failure or check a change before pushing:
       ```powershell
       .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
@@ -665,39 +653,6 @@ Native Linux/macOS packaging and cross-platform certifications still require the
       - **Specific Lane**: `.\scripts\test-lane.ps1 -Lane <smoke|fast|ebnf|portal|browser|slt>`
       - **Direct Docker/Parity**: `.\scripts\Invoke-SmokeParity.ps1`
       - **Direct Packaging / MSI**: `.\scripts\build-msi.ps1` or `.\scripts\publish-release.ps1`
-- [ ] Recover a workstation failure using its original evidence directory:
-      ```powershell
-      # Unchanged candidate and cached inputs only:
-      .\scripts\Invoke-WorkstationCertification.ps1 -EvidenceDirectory $evidence -Resume
-      ```
-      Inspect the original failure first. Source changes require a new clean candidate and evidence
-      directory. A forced direct-gate resume is diagnostic-only and cannot satisfy publication.
-
-Choose one launch method for the workstation run below. A detached process or worktree changes
-where it runs; neither is an additional certification requirement.
-
-- **Detached process** to avoid terminal interruption (PowerShell on Windows):
-      ```powershell
-      New-Item -ItemType Directory -Force -Path release-validation | Out-Null
-      $stamp = Get-Date -Format yyyyMMdd-HHmmss
-      $evidence = "release-validation\workstation-$stamp"
-      $out = "release-validation\pre-release-$stamp.out.log"
-      $err = "release-validation\pre-release-$stamp.err.log"
-      Start-Process pwsh `
-        -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File .\scripts\Invoke-WorkstationCertification.ps1 -EvidenceDirectory $evidence" `
-        -WindowStyle Hidden `
-        -RedirectStandardOutput $out `
-        -RedirectStandardError $err
-      Get-Content $out -Wait
-      ```
-- **Detached worktree** at the exact release commit:
-      ```powershell
-      git worktree add --detach .worktrees\release-gate-x.y.z <release-commit-hash>
-      Set-Location .worktrees\release-gate-x.y.z
-      # Prepare this checkout's pinned tools and browser assets before starting.
-      $evidence = "release-validation\workstation-$(Get-Date -Format yyyyMMddHHmmss)"
-      .\scripts\Invoke-WorkstationCertification.ps1 -EvidenceDirectory $evidence
-      ```
 - [ ] **A hung phase now fails instead of stalling the run.** Every phase is guarded by a watchdog
       (`scripts/lib/Watch-PhaseTimeout.ps1`) that kills its process subtree and records why when the
       phase produces no output for `-PhaseStallMinutes` (default 20) or exceeds `-PhaseTimeoutMinutes`
@@ -743,78 +698,19 @@ where it runs; neither is an additional certification requirement.
 - [ ] Final report shows **Status: Passed** — `release-validation/latest/state.json` and the run's
       `pre-release-report.md`.
 
-### Independent Windows workstation certification
+### Engine Certification (hosted)
 
-Run this check manually on the Windows x64 workstation. No GitHub runner registration or workflow
-dispatch is needed. Prepare Node 22, .NET 10, PowerShell 7, Git, the pinned browser compiler and a
-working Linux-container Docker engine first. Use a clean candidate checkout and leave its source
-unchanged until the run finishes:
+The **Engine Certification** job in `ci.yml` runs on every full CI and Release Certification run,
+and on pushes that change the engine. It builds Release, then runs the EBNF and SLT lanes, the
+10M-row spill allocation profile, and Smoke and Standard scale certification. Each scale tier is
+compared with `certification-results/baseline-<tier>.json` using
+`Compare-CertBaseline.ps1 -PerformanceReportOnly`: timing misses are warnings, while row counts,
+checksums and failed scenarios fail the job. Its artifact `engine-certification-<run>-<attempt>`
+keeps the logs, results and comparison reports. Release requires the job through
+`scripts/hosted-release-policy.json`.
 
-```powershell
-$candidateSha = (git rev-parse HEAD).Trim()
-$evidence = "release-validation/workstation-$candidateSha-$(Get-Date -Format yyyyMMddHHmmss)"
-.\scripts\Invoke-WorkstationCertification.ps1 -EvidenceDirectory $evidence
-```
-
-The command runs every mandatory local phase in Release configuration, including SLT, Docker
-integration and Standard scale. It records invocation and process results, streams diagnostics
-through the supervisor, and bounds execution to 400 minutes. Failure retains original logs and
-cannot produce a passing bundle. The first directory must be new. After inspecting the failed
-phase, explicitly resume unchanged inputs:
-
-```powershell
-.\scripts\Invoke-WorkstationCertification.ps1 -EvidenceDirectory $evidence -Resume
-```
-
-Resume requires the same clean candidate, workstation, toolchain, Docker images and cached build
-outputs. It verifies the original state, logs and artifacts before testing, retains each failed
-attempt's state, process logs and failed artifact payloads separately, and preserves successful
-phase timestamps. Do not build or alter the cached
-outputs between attempts. Missing, changed, active, stale or future-dated checkpoints stop before
-work; no automatic full rerun occurs. Source fixes require a new candidate and evidence directory.
-Historical controlled-host checkpoints do not authorize manual evidence or reuse across execution modes.
-
-Success produces `windows-workstation-evidence.zip`. Its portable state records the manual
-execution window and Windows x64 host, exact clean candidate, all required phase results, original
-completion timestamps, original attempt windows and payload hashes. It rejects stale, skipped, partial, changed or wrong-SHA
-evidence. Raw diagnostic dumps stay local; review logs before sharing.
-
-The release driver can read that run's existing state directly. Do not rerun the full gate merely
-to populate `release-validation/latest/`. Preview with the explicit state path and authored notes:
-
-```powershell
-.\scripts\Invoke-Release.ps1 -Version x.y.z -Branch release/vx.y.z `
-    -ValidationState "$evidence/validation/latest/state.json" -NotesFile docs/releases/vx.y.z.md -DryRun
-```
-
-The Bash option is `--validation-state`. Both entry points apply the same full-scope, freshness,
-candidate and fingerprint checks to the supplied state. This option selects evidence; it cannot
-bypass a failed or incomplete gate. The default state path remains available for direct local runs.
-
-Uploading is a separate operator step after the check finishes. Create a separate **draft** evidence
-release. This does not publish a product release or connect the workstation as a runner:
-
-```powershell
-$evidenceTag = "workstation-check-$candidateSha"
-gh release create $evidenceTag --draft --target $candidateSha --title "Independent Windows check $candidateSha" --notes "Manual workstation check. Local phases only; package and operator evidence are separate."
-gh release upload $evidenceTag "$evidence/windows-workstation-evidence.zip"
-```
-
-Keep the evidence release in draft form and do not replace its asset. Duplicate create/upload fails
-visibly; inspect the existing draft instead of overwriting it. GitHub CLI authentication is needed
-only for this transport step. It is not needed to execute the local check.
-
-Release requires this separate draft's asset before publication. The collector checks its exact
-candidate target, complete asset inventory, uploaded asset ID and SHA-256 digest, seven-day
-freshness, full Windows phase scope and retained payload hashes. It pins the bundle manifest,
-attaches a verified copy as `local-release-evidence.zip` to the product draft, then recollects the
-source and compares the actual product attachment before publication. GitHub verifies uploaded
-evidence; it neither starts nor controls the workstation run. The upload records the operator's
-submitted evidence, not a GitHub-hosted execution attestation.
-
-This covers local phases only. CI/CodeQL, installed-package certification, deployment transitions,
-HA, recovery and conditionally applicable suites retain their separate requirements. The first
-successful full workstation run and real upload/publication acceptance remain outstanding.
+This replaced the independent Windows workstation run in v0.22.0. Timing claims on fixed hardware
+still need the periodic performance certification below.
 
 ### Operator report and review gate
 
@@ -841,16 +737,8 @@ in top-level and nested certifications. Rerun older producers whose reports omit
 
 #### Required for every release candidate
 
-- [ ] **Full local pre-release gate:** the independent workstation execution above passed with
-      SLT, Docker integration, and Standard scale—not
-      `-Quick`, and not a default run with those switches omitted:
-      ```powershell
-      .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
-      ```
-      Evidence: the workstation run's retained validation state, logs and portable bundle.
-      This row reviews that existing run; it does not request a second full execution.
-      Publication requires the independent workstation bundle above. Upload its verified ZIP
-      separately after the manual check completes. Incomplete evidence cannot replace it.
+- [ ] **Engine Certification:** the hosted job above passed on the exact candidate.
+      Evidence: its `engine-certification-<run>-<attempt>` artifact. Review any timing warnings.
 
 - [ ] **Deployment profiles:** all Solo, Team, Enterprise, and Managed Dedicated profile lanes pass:
       ```powershell
