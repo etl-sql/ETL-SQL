@@ -29,6 +29,7 @@ releaseAutomationChecks.push({ id: 'test-release-draft-manifest', command: proce
 releaseAutomationChecks.push({ id: 'test-msi-progress', command: process.execPath, args: ['scripts/checks/test-msi-progress.mjs'] });
 releaseAutomationChecks.push({ id: 'test-candidate-supervisor', command: process.execPath, args: ['scripts/checks/test-candidate-supervisor.mjs'] });
 releaseAutomationChecks.push({ id: 'test-test-retry', command: process.execPath, args: ['scripts/checks/test-test-retry.mjs'] });
+releaseAutomationChecks.push({ id: 'test-actionlint-download', command: process.execPath, args: ['scripts/checks/test-actionlint-download.mjs'] });
 sourceChecks.push(...releaseAutomationChecks);
 // Ordinary branch work may keep draft notes. Tag publication must use finalized metadata.
 if (process.env.ETLSQL_RELEASE_TAG) sourceChecks.push({ id: 'final-release-metadata', command: process.execPath,

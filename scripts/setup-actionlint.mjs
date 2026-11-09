@@ -10,6 +10,29 @@ const platform = `${process.platform}-${process.arch}`;
 const directory = path.join(root, 'scratch', 'actionlint', lock.version, platform);
 export const executable = path.join(directory, process.platform === 'win32' ? 'actionlint.exe' : 'actionlint');
 
+// One stalled download once failed Source preflight (CI 42476400399, 2026-11-08: "The operation was
+// aborted due to timeout"). Retry with a shorter per-attempt limit; three attempts and their pauses
+// stay inside the workflow step's 2-minute limit. A truncated body fails its checksum and is retried.
+export async function download(url, sha256, { fetchImpl = fetch, attempts = 3, timeoutMs = 25000, pauseMs = 3000, report = console.error } = {}) {
+  const failures = [];
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const response = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (createHash('sha256').update(bytes).digest('hex') !== sha256) throw new Error('archive checksum mismatch');
+      return bytes;
+    } catch (error) {
+      failures.push(`attempt ${attempt}: ${error?.message ?? error}`);
+      if (attempt < attempts) {
+        report(`actionlint download ${failures.at(-1)}; retrying.`);
+        await new Promise(resolve => setTimeout(resolve, pauseMs * attempt));
+      }
+    }
+  }
+  throw new Error(`actionlint download failed (${failures.join('; ')}).`);
+}
+
 export async function setup() {
   const entry = lock.archives[platform];
   if (!entry) throw new Error(`Unsupported actionlint platform: ${platform}`);
@@ -25,10 +48,7 @@ export async function setup() {
     if (error?.code !== 'ENOENT') throw error;
   }
   if (cached === null) {
-    const response = await fetch(`https://github.com/rhysd/actionlint/releases/download/v${lock.version}/${name}`, { signal: AbortSignal.timeout(60000) });
-    if (!response.ok) throw new Error(`actionlint download failed: HTTP ${response.status}`);
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (digest(bytes) !== entry[1]) throw new Error('actionlint archive checksum mismatch.');
+    const bytes = await download(`https://github.com/rhysd/actionlint/releases/download/v${lock.version}/${name}`, entry[1]);
     writeFileSync(archive, bytes);
     cached = bytes;
   }
