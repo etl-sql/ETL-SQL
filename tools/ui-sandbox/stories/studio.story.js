@@ -32,6 +32,29 @@ function sampleSnapshot() {
   return { source: '&orders', columns, rowCount: rows.length, rows };
 }
 
+/**
+ * Studio re-samples `&orders` whenever its query changes, and a filter rewrites that query. The
+ * shared mock knows nothing of this story's columns, so it would answer with untyped placeholder
+ * rows (`total_amount-1`) that replace the sample mid-journey and turn numeric and categorical
+ * filter cards into text ones (CI 42660977082, 2026-11-09). Answer with the story's own rows for
+ * every column the story knows, and keep the mock's values only for columns it projected anew,
+ * such as an alias.
+ */
+const isOrdersSample = (url, body) => String(url).endsWith('/api/designer/data-sample')
+  && body?.sourceKind === 'dataset' && String(body.dataset || '').replace(/^&/, '').toLowerCase() === 'orders';
+
+async function withStoryRows(response) {
+  if (!response?.ok) return response;
+  const sample = await response.json();
+  const story = sampleSnapshot();
+  const known = new Set(story.columns.map(column => column.name));
+  const names = (sample.columns || []).map(column => (typeof column === 'string' ? column : column?.name));
+  const rows = story.rows.map((storyRow, index) => Object.fromEntries(names.map(name =>
+    [name, known.has(name) ? storyRow[name] : sample.rows?.[index % Math.max(sample.rows?.length || 0, 1)]?.[name] ?? null])));
+  const data = { ...sample, rows, rowCount: rows.length };
+  return { ...response, json: async () => data, text: async () => JSON.stringify(data) };
+}
+
 const SAMPLE_DOCS = [
   {
     id: 'doc-report',
@@ -252,7 +275,8 @@ export default {
       const scripted = window.__STUDIO_API_RESPONSE__?.({ url: String(url), body });
       if (scripted === 'disconnect') throw new TypeError('Failed to fetch');
       if (scripted) return scripted;
-      return api(url, init);
+      const response = await api(url, init);
+      return isOrdersSample(url, body) ? withStoryRows(response) : response;
     };
 
     const documents = JSON.parse(JSON.stringify(SAMPLE_DOCS));

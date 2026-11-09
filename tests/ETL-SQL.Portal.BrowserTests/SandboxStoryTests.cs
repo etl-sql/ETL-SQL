@@ -6305,12 +6305,20 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await setup.Locator("[data-filter-dialog-field]").SelectOptionAsync("total_amount");
         await setup.Locator("[data-filter-dialog-apply]").ClickAsync();
 
+        const string datasetSamples = """
+            () => window.__STUDIO_API_REQUESTS__.filter(request =>
+                request.url.endsWith('/api/designer/data-sample') && request.body?.sourceKind === 'dataset').length
+            """;
+        var samplesBefore = await page.EvaluateAsync<int>(datasetSamples);
         await filterSidebar.Locator("[data-new-filter]").ClickAsync();
         await setup.Locator("[data-filter-dialog-field]").SelectOptionAsync("order_date");
         await setup.Locator("[data-filter-dialog-apply]").ClickAsync();
 
-        // Each card's controls render after Apply returns; a one-shot IsVisibleAsync read the numeric
-        // card before its inputs existed (CI 42515342837, 2026-11-08). Expect waits for them.
+        // A filter rewrites the dataset query, and Studio re-samples it 400 ms later. This test failed
+        // whenever that sample landed mid-assertion and replaced the rows (CI 42515342837 and
+        // 42660977082). Wait for the re-sample so the cards are always checked against the data the
+        // pane keeps, not a race against it.
+        await page.WaitForFunctionAsync($"before => ({datasetSamples})() > before", samplesBefore);
         await Expect(filterSidebar.Locator(".etlsql-filter-card")).ToHaveCountAsync(3);
         await Expect(filterSidebar.Locator("[data-date-preset='order_date']")).ToBeVisibleAsync();
         await Expect(filterSidebar.Locator("[data-filter-date-min='order_date']")).ToBeVisibleAsync();
