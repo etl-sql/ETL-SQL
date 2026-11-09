@@ -42,7 +42,8 @@
         "Studio Performance Budgets (macos)",
         "Enterprise Certification (windows)",
         "Enterprise Certification (linux)",
-        "Docker Integration Tests"
+        "Docker Integration Tests",
+        "Engine Certification"
       ]
     },
     {

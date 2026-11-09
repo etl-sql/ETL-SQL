@@ -10,6 +10,7 @@
     "studio-performance-budgets",
     "enterprise-certification",
     "docker-integration-tests",
+    "engine-certification",
     "msi-upgrade"
   ],
   "always": ["source-preflight"],

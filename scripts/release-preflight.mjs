@@ -14,6 +14,7 @@ export const sourceChecks = [
   ['flaky-delays', 'check-flaky-test-delays.mjs'],
   ['shell-line-endings', 'check-shell-line-endings.js'],
   ['comment-policy', 'check-ai-slop-comments.mjs'],
+  ['secret-scan', 'scan-secrets.js'],
 ].map(([id, script, ...args]) => ({ id, command: process.execPath, args: [`scripts/${script}`, ...args] }));
 sourceChecks.push({ id: 'test-inventory', command: 'pwsh', args: ['-NoProfile', '-File', 'scripts/Get-TestLaneInventory.ps1', '-FailOnIssues'] });
 sourceChecks.push({ id: 'release-versions', command: 'pwsh', args: ['-NoProfile', '-File', 'scripts/Test-ReleaseVersions.ps1'] });

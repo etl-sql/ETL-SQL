@@ -140,6 +140,11 @@ jobs:
         timeout-minutes: 12
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('restore', 'ETL-SQL.slnx') -EvidenceDirectory release-validation/build/restore -TimeoutSeconds 600
 
+      # Needs the restored package cache: license data comes from each package's nuspec.
+      - name: Check third-party inventory drift
+        timeout-minutes: 5
+        run: node scripts/generate-third-party-inventory.js --check
+
       - name: Audit NuGet packages for known vulnerabilities
         timeout-minutes: 15
         shell: pwsh
@@ -796,6 +801,92 @@ jobs:
           path: artifacts/studio-performance/${{ matrix.platform }}.json
           if-no-files-found: error
 
+  # The engine checks that ran only on the owner's workstation before v0.22.0 (release reliability
+  # W4b). Row counts, checksums, failed scenarios and spill allocation gate; timing against the
+  # workstation baseline is report-only here because Compare-CertBaseline suppresses performance
+  # failures when the hardware differs.
+  engine-certification:
+    needs: source-preflight
+    if: contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'engine-certification')
+    name: Engine Certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        timeout-minutes: 15
+        uses: actions/checkout@v6
+
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        timeout-minutes: 8
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        timeout-minutes: 8
+        run: node scripts/sync-assets.js
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore dependencies
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('restore', 'ETL-SQL.slnx') -EvidenceDirectory release-validation/engine-certification/restore -TimeoutSeconds 660
+
+      - name: Build
+        shell: pwsh
+        timeout-minutes: 17
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'ETL-SQL.slnx', '--no-restore', '--configuration', 'Release') -EvidenceDirectory release-validation/engine-certification/build -TimeoutSeconds 960
+
+      - name: EBNF conformance lane
+        shell: pwsh
+        timeout-minutes: 8
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'ebnf', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/engine-certification/ebnf -TimeoutSeconds 420
+
+      - name: SLT lane
+        shell: pwsh
+        timeout-minutes: 10
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'slt', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/engine-certification/slt -TimeoutSeconds 540
+
+      - name: Spill allocation budget (10M rows)
+        shell: pwsh
+        timeout-minutes: 8
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-SpillAllocProfile.ps1 -ScriptArguments @('-Rows', '10000000', '-SkipBuild', '-OutDir', 'release-validation/engine-certification/spill-allocation') -EvidenceDirectory release-validation/engine-certification/spill-process -TimeoutSeconds 420
+
+      - name: Scale certification (smoke)
+        shell: pwsh
+        timeout-minutes: 12
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ScaleCertification.ps1 -ScriptArguments @('-Tier', 'Smoke', '-SkipBuild', '-OutDir', 'release-validation/engine-certification/scale-smoke') -EvidenceDirectory release-validation/engine-certification/scale-smoke-process -TimeoutSeconds 660
+
+      - name: Scale correctness against baseline (smoke)
+        shell: pwsh
+        timeout-minutes: 3
+        run: ./scripts/Compare-CertBaseline.ps1 -NewReport release-validation/engine-certification/scale-smoke/cert-report.json -Baseline certification-results/baseline-smoke.json -PerformanceReportOnly -MarkdownReport release-validation/engine-certification/baseline-smoke.md
+
+      - name: Scale certification (standard)
+        shell: pwsh
+        timeout-minutes: 20
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ScaleCertification.ps1 -ScriptArguments @('-Tier', 'Standard', '-SkipBuild', '-OutDir', 'release-validation/engine-certification/scale-standard') -EvidenceDirectory release-validation/engine-certification/scale-standard-process -TimeoutSeconds 1140
+
+      - name: Scale correctness against baseline (standard)
+        shell: pwsh
+        timeout-minutes: 3
+        run: ./scripts/Compare-CertBaseline.ps1 -NewReport release-validation/engine-certification/scale-standard/cert-report.json -Baseline certification-results/baseline-standard.json -PerformanceReportOnly -MarkdownReport release-validation/engine-certification/baseline-standard.md
+
+      - name: Retain engine certification evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: engine-certification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/engine-certification/
+          if-no-files-found: warn
+
   enterprise-certification:
     needs: source-preflight
     name: Enterprise Certification (${{ matrix.platform }})
@@ -989,6 +1080,11 @@ jobs:
         shell: pwsh
         timeout-minutes: 42
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'integration', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/integration/tests -TimeoutSeconds 2400
+
+      - name: Local and container smoke parity
+        shell: pwsh
+        timeout-minutes: 20
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Invoke-SmokeParity.ps1 -ScriptArguments @('-ResultsDirectory', 'release-validation/integration/smoke-parity') -EvidenceDirectory release-validation/integration/smoke-parity-process -TimeoutSeconds 1140
 
       - name: Record free disk space
         if: always()
