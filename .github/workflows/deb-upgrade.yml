@@ -110,6 +110,7 @@ jobs:
           # Empty until a public release exists to upgrade from; then only the fresh install is certified.
           $previous = Select-UpgradeBaseline -CurrentVersion $version -Releases $releases
           $previousSha256 = ''
+          New-Item -ItemType Directory -Force candidate | Out-Null
           if ($previous) {
             New-Item -ItemType Directory -Force candidate/previous | Out-Null
             gh release download $previous --dir candidate/previous --pattern '*_amd64.deb'
