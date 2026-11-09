@@ -49,14 +49,16 @@ async function readJson(url: string, fallback: string, signal: AbortSignal): Pro
  * `getAttribute('nonce')` is empty once CSP is active, and the property still answers. Its fetch
  * adds the session token to Portal API calls. The frame is its own window, so it loads the feedback
  * module itself: the runtime's saved-view prompt, confirmations and toasts all go through it.
+ * The runtime's own modules import `./report-runtime.js`, so the frame loads it at that exact URL. A
+ * query string would make it a second module, and the report would boot and render twice.
  */
 export function buildReportFrameDocument(root: Document, id: number, preview: boolean, initialPage: string | null = null): string {
     const nonce = root.querySelector<HTMLScriptElement>('script[nonce]')?.nonce ?? '';
     const token = (auth.getToken() || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const dark = root.body.classList.contains('theme-dark');
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<link rel="stylesheet" href="/css/report-runtime.css?v=0.18.0">
-<script nonce="${nonce}" src="/js/feedback.js?v=0.18.0"></script>
+<link rel="stylesheet" href="/css/report-runtime.css?v=0.22.0">
+<script nonce="${nonce}" src="/js/feedback.js?v=0.22.0"></script>
 <script nonce="${nonce}">
   window.__IS_WEB__ = true; window.__IS_PREVIEW__ = ${preview}; window.__API_BASE__ = '/api/reports/${Number(id)}';
   ${initialPage ? `window.__INITIAL_PAGE__ = ${JSON.stringify(initialPage).replace(/</g, '\\u003c')};` : ''}
@@ -69,7 +71,7 @@ export function buildReportFrameDocument(root: Document, id: number, preview: bo
     return _f(input, {...init, headers:h});
   };
 </script></head><body style="margin:0" class="${dark ? 'theme-dark' : ''}"><div id="root"></div>
-<script nonce="${nonce}" type="module" src="/js/report-runtime.js?v=0.18.0"></script></body></html>`;
+<script nonce="${nonce}" type="module" src="/js/report-runtime.js"></script></body></html>`;
 }
 
 export function createReportViewer(options: ReportViewerOptions) {

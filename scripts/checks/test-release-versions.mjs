@@ -98,6 +98,13 @@ try {
   assert.equal(staleBracketedPage.status, 1);
   assert.ok(staleBracketedPage.stdout.includes('dashboard[2].html'), staleBracketedPage.stdout);
   rmSync(path.join(checkerRoot, 'src/ETL-SQL.Portal/wwwroot/dashboard[2].html'));
+  // The report frame document is built in TypeScript; a stale stamp there must fail too.
+  writeChecker('src/ETL-SQL.Portal/BrowserSources/frame/viewer.ts', 'const css = "/css/runtime.css?v=1.1.0";');
+  const staleSource = run();
+  assert.equal(staleSource.status, 1);
+  assert.ok(staleSource.stdout.includes('BrowserSources') && staleSource.stdout.includes('1.1.0'), staleSource.stdout);
+  writeChecker('src/ETL-SQL.Portal/BrowserSources/frame/viewer.ts', 'const css = "/css/runtime.css?v=1.2.3";');
+  assert.equal(run().status, 0);
   lock.packages[''].version = '1.2.2';
   writeChecker('src/etl-sql-vscode/package-lock.json', JSON.stringify(lock));
   writeChecker('src/etl-sql-vscode/package.json', JSON.stringify({ version: '1.2.1' }));
@@ -127,6 +134,7 @@ try {
     } }, null, 2),
     'src/ETL-SQL.Portal/wwwroot/index.html': '<script src="/js/app.js?v=1.2.3"></script>\n',
     'src/ETL-SQL.Portal/wwwroot/dashboard[2].html': '<script src="/js/app.js?v=1.2.3"></script>\n',
+    'src/ETL-SQL.Portal/BrowserSources/frame/viewer.ts': 'const css = "/css/runtime.css?v=1.2.3";\n',
     'unrelated.txt': 'Preserve unrelated bytes.\n',
   };
   const bash = process.platform === 'win32' ? path.join(process.env.ProgramFiles ?? 'C:/Program Files', 'Git/bin/bash.exe') : 'bash';
@@ -167,11 +175,12 @@ try {
       assert.equal(updatedLock.packages['node_modules/fixture'].version, '9.8.7');
       assert.ok(readFileSync(path.join(bumpRoot, 'src/ETL-SQL.Portal/wwwroot/index.html'), 'utf8').includes(`?v=${version}`));
       assert.ok(readFileSync(path.join(bumpRoot, 'src/ETL-SQL.Portal/wwwroot/dashboard[2].html'), 'utf8').includes(`?v=${version}`));
+      assert.ok(readFileSync(path.join(bumpRoot, 'src/ETL-SQL.Portal/BrowserSources/frame/viewer.ts'), 'utf8').includes(`?v=${version}`));
       assert.deepEqual(readFileSync(path.join(bumpRoot, 'unrelated.txt')), beforeBump['unrelated.txt']);
       assert.deepEqual(neighboringSnapshot(), beforeNeighbor, 'Version bump must not change a wildcard-matching neighboring checkout.');
     }
   }
-  console.log(`Public version bump: ${commands.length} shells reject invalid stable versions without writes, update bracketed checkout/page paths, preserve dependency versions and leave the neighboring checkout byte-identical.`);
+  console.log(`Public version bump: ${commands.length} shells reject invalid stable versions without writes, update bracketed checkout/page paths and TypeScript stamps, preserve dependency versions and leave the neighboring checkout byte-identical.`);
 
   // Execute the public command from outside a private candidate checkout. Its own location,
   // not the caller's working directory, must own every metadata read and write.

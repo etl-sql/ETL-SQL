@@ -54,6 +54,19 @@ try {
     }
 } catch { $findings.Add("Portal pages: $($_.Exception.Message)") }
 
+# The report frame document is built in TypeScript, so its cache URLs are checked in source.
+try {
+    $browserSources = Join-Path $Root 'src/ETL-SQL.Portal/BrowserSources'
+    if (Test-Path -LiteralPath $browserSources) {
+        foreach ($source in Get-ChildItem -LiteralPath $browserSources -Filter '*.ts' -File -Recurse) {
+            $name = [IO.Path]::GetRelativePath($browserSources, $source.FullName)
+            foreach ($match in [regex]::Matches((Get-Content -LiteralPath $source.FullName -Raw), '\?v=([0-9][^\s"''<>`]*)')) {
+                Test-VersionValue "Portal/BrowserSources/$name cache version" $match.Groups[1].Value
+            }
+        }
+    }
+} catch { $findings.Add("Portal sources: $($_.Exception.Message)") }
+
 foreach ($finding in $findings) { Write-Output "FAIL $finding" }
 if ($findings.Count -gt 0) { exit 1 }
-Write-Output "Release source versions agree: $expected (.NET, VS Code manifest/lock and Portal cache URLs)."
+Write-Output "Release source versions agree: $expected (.NET, VS Code manifest/lock and Portal cache URLs in pages and sources)."

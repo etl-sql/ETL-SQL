@@ -212,6 +212,12 @@ for page in "$ROOT"/src/ETL-SQL.Portal/wwwroot/*.html; do
         "(\?v=)[0-9]+\.[0-9]+\.[0-9]+" \
         "\1${VERSION}"
 done
+# The Portal builds its report frame document in TypeScript, so its stamps live in source too.
+if [ -d "$ROOT/src/ETL-SQL.Portal/BrowserSources" ]; then
+    while IFS= read -r source; do
+        update_file "${source#"$ROOT"/}" "(\?v=)[0-9]+\.[0-9]+\.[0-9]+" "\1${VERSION}"
+    done < <(grep -rlE --include='*.ts' '\?v=[0-9]+\.[0-9]+\.[0-9]+' "$ROOT/src/ETL-SQL.Portal/BrowserSources" || true)
+fi
 
 echo ""
 echo "Done."

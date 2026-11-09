@@ -197,8 +197,13 @@ public sealed class PortalReaderJourneyTests(PortalJourneyFixture fixture)
         // A saved view, reopened from a fresh page, is still that reader's rows.
         await SaveViewAsync(southFrame, "Larger sales");
         await southPage.GotoWithDiagnosticsAsync("/index.html");
+        // The report boots once. A second copy of the runtime re-renders the header a moment later
+        // and closes the Views menu the reader just opened.
+        var manifestLoads = 0;
+        southPage.Request += (_, request) => { if (request.Url.EndsWith($"/api/reports/{reportId}/manifest", StringComparison.Ordinal)) Interlocked.Increment(ref manifestLoads); };
         await (await FindInFolderAsync(southPage, folderId, reportId)).ClickAsync();
         southFrame = await FrameAsync(southPage);
+        Assert.Equal(1, Volatile.Read(ref manifestLoads));
         await southFrame.Locator("#etlsql-views-menu-button").ClickAsync();
         await southFrame.Locator(".saved-view-menu-item", new() { HasText = "Larger sales" }).ClickAsync();
         await WaitForSaleIdsAsync(southFrame, [3]);

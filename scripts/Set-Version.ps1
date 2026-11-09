@@ -183,6 +183,13 @@ foreach ($page in Get-ChildItem -LiteralPath (Join-Path $Root "src/ETL-SQL.Porta
         '(\?v=)\d+\.\d+\.\d+' `
         "`${1}$Version"
 }
+# The Portal builds its report frame document in TypeScript, so its stamps live in source too.
+$browserSources = Join-Path $Root "src/ETL-SQL.Portal/BrowserSources"
+if (Test-Path -LiteralPath $browserSources) {
+    foreach ($source in Get-ChildItem -LiteralPath $browserSources -Filter *.ts -File -Recurse) {
+        Update-File ([IO.Path]::GetRelativePath($Root, $source.FullName)) '(\?v=)\d+\.\d+\.\d+' "`${1}$Version"
+    }
+}
 
 Write-Host ""
 Write-Host "Done." -ForegroundColor Cyan
