@@ -23,8 +23,8 @@
              InstallValidate or InstallInitialize (error 2613), so the installed configuration is
              read by an immediate action (ReadSettings) rather than copied by a deferred one. -->
         <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
-        <!-- The previous appsettings.json can hold secrets (v0.20.x kept them there): keep the
-             property out of the verbose log (the actions that carry it set HideTarget). -->
+        <!-- The installed appsettings.json can hold an operator's secrets: keep the property out
+             of the verbose log (the actions that carry it set HideTarget). -->
         <Property Id="PREVIOUS_SETTINGS" Hidden="yes" />
         <MediaTemplate EmbedCab="yes" />
         <!-- Publish the resolved folder in Add/Remove Programs so upgrade certification and

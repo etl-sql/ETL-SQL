@@ -1,4 +1,6 @@
-# Records and verifies the exact installer pair used by isolated certification jobs.
+# Records and verifies the exact installers used by isolated certification jobs: the candidate, and
+# the previous release it upgrades from. The first public release has no previous release and is
+# certified as a fresh install, so its record holds the candidate alone.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [ValidateSet('Create', 'Verify', 'VerifyPublished')] [string]$Mode,
@@ -11,8 +13,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $manifestPath = Join-Path $Directory 'candidate.json'
-$names = @('previous.msi', 'current.msi')
+$allowed = @('previous.msi', 'current.msi')
 if ($Mode -eq 'Create') {
+    $names = @($allowed | Where-Object { $_ -ceq 'current.msi' -or (Test-Path -LiteralPath (Join-Path $Directory $_) -PathType Leaf) })
     $files = @($names | ForEach-Object {
         @{ name = $_; sha256 = (Get-FileHash -LiteralPath (Join-Path $Directory $_) -Algorithm SHA256).Hash }
     })
@@ -35,7 +38,10 @@ if ($Mode -eq 'Create') {
         if ($manifest.windowsPayload.sourceSha -cne $SourceSha -or $manifest.windowsPayload.version -cnotmatch '^\d+\.\d+\.\d+$' -or
             $manifest.windowsPayload.manifestSha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'Invalid Windows payload identity.' }
     }
-    if (@($manifest.files).Count -ne 2) { throw 'MSI candidate must contain exactly two installer records.' }
+    $names = @($manifest.files | ForEach-Object { [string]$_.name })
+    if ($names.Count -notin 1, 2 -or $names -cnotcontains 'current.msi' -or @($names | Where-Object { $_ -cnotin $allowed }).Count) {
+        throw 'MSI candidate must record current.msi and, for an upgrade, previous.msi.'
+    }
     foreach ($name in $names) {
         $entries = @($manifest.files | Where-Object { $_.name -ceq $name })
         if ($entries.Count -ne 1) { throw "Missing or duplicate MSI record: $name" }

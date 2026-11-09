@@ -115,6 +115,15 @@ result = await rehearse(options, deps(fakeGitHub(), (command, args, env) => args
 assert.equal(result.failedStep, 'Certified macOS packages (osx-arm64)');
 assert.match(result.steps.find(step => !step.ok).detail, /incomplete or mismatched/);
 await assert.rejects(rehearse({ ...options, branch: 'release/v0.23.0' }, deps(fakeGitHub())), /VersionPrefix/);
+// Before the first public release there is no upgrade baseline: the finders get an empty tag.
+const freshArgs = [];
+result = await rehearse({ ...options, previousTag: '' }, deps(fakeGitHub(), (command, args, env) => { freshArgs.push(args); return selecting(command, args, env); }));
+assert.equal(result.ok, true, JSON.stringify(result));
+assert.ok(freshArgs.some(args => args.includes('-PreviousTag') && args[args.indexOf('-PreviousTag') + 1] === ''));
+assert.ok(freshArgs.some(args => args[0] === 'scripts/find-certified-deb.mjs' && args[4] === ''));
+for (const previousTag of [undefined, 'v0.22', 'latest']) {
+  await assert.rejects(rehearse({ ...options, previousTag }, deps(fakeGitHub())), /previous tag/);
+}
 
 // Phases, one per job: start only starts; a first wait hands over unfinished runs; collect needs them done.
 github = fakeGitHub({ stuck: true });

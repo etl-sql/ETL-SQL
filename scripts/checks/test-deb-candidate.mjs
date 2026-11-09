@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { verifyDeb, verifyLinuxPackages, debScope } from '../check-deb-candidate.mjs';
+import { verifyDeb, verifyLinuxPackages, debScope, debFreshScope } from '../check-deb-candidate.mjs';
 
 const bytes = Buffer.from('candidate package fixture');
 const packages = { deb: bytes, zip: Buffer.from('candidate zip'), vsix: Buffer.from('candidate vsix') };
@@ -34,6 +34,17 @@ for (const mutate of [
 ]) {
   const changed = structuredClone(receipt); mutate(changed);
   assert.throws(() => verifyDeb(candidate, changed, bytes, expected));
+}
+// With no public release to upgrade from, the receipt certifies the fresh install only, and says so.
+const fresh = { ...candidate, previousTag: '', previousSha256: '' };
+const freshReceipt = { ...receipt, ...fresh, scope: debFreshScope };
+verifyDeb(fresh, freshReceipt, bytes, expected);
+assert.throws(() => verifyDeb(fresh, { ...freshReceipt, scope: debScope }, bytes, expected), /incomplete/);
+assert.throws(() => verifyDeb(candidate, { ...receipt, scope: debFreshScope }, bytes, expected), /incomplete/);
+assert.throws(() => verifyDeb({ ...fresh, previousSha256: 'b'.repeat(64) }, { ...freshReceipt, previousSha256: 'b'.repeat(64) }, bytes, expected), /hash/);
+assert.throws(() => verifyDeb({ ...candidate, previousSha256: '' }, { ...receipt, previousSha256: '' }, bytes, expected), /hash/);
+for (const previousTag of [undefined, null, 'v0.22', 'latest']) {
+  assert.throws(() => verifyDeb({ ...fresh, previousTag }, { ...freshReceipt, previousTag }, bytes, expected), /identity/);
 }
 assert.throws(() => verifyDeb(candidate, receipt, Buffer.from('rebuilt package'), expected), /bytes/);
 assert.throws(() => verifyDeb(candidate, receipt, bytes, { ...expected, sha: 'c'.repeat(40) }), /identity/);

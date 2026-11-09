@@ -38,6 +38,36 @@ public sealed class ReleasePolicyHelperTests
     }
 
     [Theory]
+    [InlineData("0.21.0")]
+    [InlineData("0.22.0")]
+    public async Task UpgradeBaseline_IsNoneUpToTheFirstPublicRelease(string candidate)
+    {
+        var result = await RunHelper(Releases + $"\n'[' + (Select-UpgradeBaseline -CurrentVersion '{candidate}' -Releases $releases) + ']'");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Equal("[]", result.Output.Trim());
+    }
+
+    [Theory]
+    [InlineData("0.23.0", "v0.22.0")]
+    [InlineData("2.0.0", "v1.0.1")]
+    public async Task UpgradeBaseline_IsTheLatestPublicReleaseBelowTheCandidate(string candidate, string expected)
+    {
+        var result = await RunHelper(Releases + $"\n@{{tag_name='v0.22.0'; draft=$false; prerelease=$false}} | ForEach-Object {{ $releases += $_ }}\nSelect-UpgradeBaseline -CurrentVersion '{candidate}' -Releases $releases");
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Equal(expected, result.Output.Trim());
+    }
+
+    [Fact]
+    public async Task UpgradeBaseline_FailsAfterTheFirstPublicReleaseWhenNoneIsListed()
+    {
+        // Only v0.19.0 and v0.20.0 precede 0.23.0 here: neither was public, and a missing baseline
+        // must fail rather than quietly certify a fresh install.
+        var result = await RunHelper(Releases + "\nSelect-UpgradeBaseline -CurrentVersion '0.23.0' -Releases $releases");
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("No public release", result.Output);
+    }
+
+    [Theory]
     [InlineData("v0.19.1", "false")]
     [InlineData("v1.0.2", "false")]
     [InlineData("v2.0.0", "true")]

@@ -44,16 +44,28 @@ try {
     Assert-Rejected { & $helper -Mode Verify -Directory $fixture -SourceSha $sourceSha } 'Invalid Windows payload'
     Set-Content -LiteralPath $manifestPath -Value $original
     $manifest = $original | ConvertFrom-Json
-    $manifest.files[1].name = $manifest.files[0].name
+    $manifest.files[0].name = $manifest.files[1].name
     $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath
     Assert-Rejected { & $helper -Mode Verify -Directory $fixture -SourceSha $sourceSha } 'MSI record'
+    foreach ($names in @(@('previous.msi', 'previous.msi'), @('previous.msi'), @('current.msi', 'other.msi'))) {
+        $manifest = $original | ConvertFrom-Json
+        $manifest.files = @($names | ForEach-Object { @{ name = $_; sha256 = 'A' * 64 } })
+        $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath
+        Assert-Rejected { & $helper -Mode Verify -Directory $fixture -SourceSha $sourceSha } 'must record current.msi'
+    }
     Set-Content -LiteralPath $manifestPath -Value $original
     Remove-Item -LiteralPath $previous
     Assert-Rejected { & $helper -Mode Verify -Directory $fixture -SourceSha $sourceSha } 'does not exist'
     & $helper -Mode VerifyPublished -Directory $fixture -SourceSha $sourceSha -PublishedMsi $published
     Assert-Rejected { & $helper -Mode VerifyPublished -Directory $fixture -SourceSha ('b' * 40) -PublishedMsi $published } 'source SHA mismatch'
     Assert-Rejected { & $helper -Mode VerifyPublished -Directory $fixture -SourceSha $sourceSha } 'PublishedMsi is required'
-    Write-Host 'MSI candidate checks passed: retry, SHA, tampering, duplicate record, missing file, published bytes.'
+    # With no previous release (before the first public release) the record holds the candidate alone.
+    & $helper -Mode Create -Directory $fixture -SourceSha $sourceSha
+    $fresh = @((Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json).files)
+    if ($fresh.Count -ne 1 -or $fresh[0].name -cne 'current.msi') { throw 'A fresh-install candidate must record current.msi alone.' }
+    & $helper -Mode Verify -Directory $fixture -SourceSha $sourceSha
+    & $helper -Mode VerifyPublished -Directory $fixture -SourceSha $sourceSha -PublishedMsi $published
+    Write-Host 'MSI candidate checks passed: retry, SHA, tampering, duplicate/missing/unknown record, missing file, published bytes, fresh-install record.'
 } finally {
     foreach ($file in @($current, $previous, $manifestPath, $published)) {
         if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file }

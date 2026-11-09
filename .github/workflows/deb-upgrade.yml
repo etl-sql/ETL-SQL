@@ -107,13 +107,18 @@ jobs:
           $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
           if ($LASTEXITCODE -ne 0) { throw 'Release enumeration failed.' }
           $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ } | ForEach-Object { $_ })
-          $previous = Select-PreviousStableRelease -CurrentVersion $version -Releases $releases
-          New-Item -ItemType Directory -Force candidate/previous | Out-Null
-          gh release download $previous --dir candidate/previous --pattern '*_amd64.deb'
-          if ($LASTEXITCODE -ne 0) { throw 'Previous DEB download failed.' }
-          $files = @(Get-ChildItem candidate/previous -Filter '*.deb')
-          if ($files.Count -ne 1) { throw 'Expected exactly one previous DEB.' }
-          Move-Item -LiteralPath $files[0].FullName -Destination candidate/previous.deb
+          # Empty until a public release exists to upgrade from; then only the fresh install is certified.
+          $previous = Select-UpgradeBaseline -CurrentVersion $version -Releases $releases
+          $previousSha256 = ''
+          if ($previous) {
+            New-Item -ItemType Directory -Force candidate/previous | Out-Null
+            gh release download $previous --dir candidate/previous --pattern '*_amd64.deb'
+            if ($LASTEXITCODE -ne 0) { throw 'Previous DEB download failed.' }
+            $files = @(Get-ChildItem candidate/previous -Filter '*.deb')
+            if ($files.Count -ne 1) { throw 'Expected exactly one previous DEB.' }
+            Move-Item -LiteralPath $files[0].FullName -Destination candidate/previous.deb
+            $previousSha256 = (Get-FileHash candidate/previous.deb -Algorithm SHA256).Hash
+          }
           bash -euo pipefail scripts/build-linux-packages.sh $version release/linux-x64/bin
           if ($LASTEXITCODE -ne 0) { throw 'DEB build failed.' }
           Move-Item "etl-sql_${version}_amd64.deb" candidate/current.deb
@@ -126,7 +131,7 @@ jobs:
           @{
             schemaVersion = 1; sourceSha = $sha; version = $version; previousTag = $previous
             currentSha256 = (Get-FileHash candidate/current.deb -Algorithm SHA256).Hash
-            previousSha256 = (Get-FileHash candidate/previous.deb -Algorithm SHA256).Hash
+            previousSha256 = $previousSha256
             linuxZipSha256 = (Get-FileHash candidate/current.zip -Algorithm SHA256).Hash
             linuxVsixSha256 = (Get-FileHash candidate/current.vsix -Algorithm SHA256).Hash
           } | ConvertTo-Json | Set-Content candidate/candidate.json
@@ -180,7 +185,9 @@ jobs:
         run: |
           $receipt = Get-Content candidate/candidate.json -Raw | ConvertFrom-Json
           if ($receipt.schemaVersion -ne 1 -or $receipt.sourceSha -cne $env:CANDIDATE_SHA) { throw 'Candidate identity mismatch.' }
-          foreach ($name in @('current', 'previous')) {
+          $names = if ($receipt.previousTag) { @('current', 'previous') } else { @('current') }
+          if (-not $receipt.previousTag -and ($receipt.previousSha256 -or (Test-Path candidate/previous.deb))) { throw 'Candidate records no previous release but carries a previous DEB.' }
+          foreach ($name in $names) {
             if ((Get-FileHash "candidate/$name.deb" -Algorithm SHA256).Hash -cne $receipt."${name}Sha256") { throw "Candidate hash mismatch: $name" }
           }
           foreach ($extension in @('zip', 'vsix')) {
@@ -203,8 +210,10 @@ jobs:
           (while sleep 30; do echo "DEB certification still running: $(date -u +%FT%TZ)"; done) &
           heartbeat=$!
           trap 'kill "$heartbeat" 2>/dev/null || true' EXIT
+          previous=
+          if [ -f candidate/previous.deb ]; then previous=candidate/previous.deb; fi
           sudo env NODE="$(command -v node)" timeout --signal=TERM --kill-after=30s 20m \
-            bash scripts/test-deb-upgrade.sh candidate/previous.deb candidate/current.deb "$PWD" \
+            bash scripts/test-deb-upgrade.sh "$previous" candidate/current.deb "$PWD" \
             "$PWD/release-validation/deb/installed" 2>&1 | tee release-validation/deb/console.log
       - name: Record successful certification
         timeout-minutes: 2
@@ -214,7 +223,8 @@ jobs:
         run: |
           $receipt = Get-Content candidate/candidate.json -Raw | ConvertFrom-Json
           $receipt | Add-Member status Passed
-          $receipt | Add-Member scope 'DEB fresh install, installed upgrade, rollback and purge'
+          $scope = if ($receipt.previousTag) { 'DEB fresh install, installed upgrade, rollback and purge' } else { 'DEB fresh install and purge' }
+          $receipt | Add-Member scope $scope
           $receipt | Add-Member runId $env:GITHUB_RUN_ID
           $receipt | Add-Member runAttempt $env:GITHUB_RUN_ATTEMPT
           $receipt | Add-Member artifactId $env:CANDIDATE_ARTIFACT_ID

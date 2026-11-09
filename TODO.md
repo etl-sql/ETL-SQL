@@ -37,8 +37,9 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   (nightly 42537668606 on `b0e05b498`: all four certification runs and the collectors), but the dry
   run was skipped. It had no `if:`, so it inherited `success()`, which is false when the optional
   second wait is skipped; it has never run. Fixed with an explicit condition and a check in
-  `test-nightly-release.mjs`.
-  **Left:** prove the dry run on a real run; operator evidence once W8 settles its scope.
+  `test-nightly-release.mjs`. With the fix the dry run started for the first time (nightly
+  42549624431 on `13501a3da`, wait-more skipped).
+  **Left:** the dry run passing on a real run; operator evidence once W8 settles its scope.
 - [ ] **W2 Reuse evidence when inputs did not change.** Owner approved the policy 2026-11-04.
   **Left:** one-page design note (what is an input, who checks the fingerprint, cost of a wrong
   reuse) for owner sign-off, then lanes declare inputs and drivers/supervisor accept reuse.
@@ -56,7 +57,11 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   `DisableAutomaticApplicationShutdown=1` on hosted runners and fails any step whose log shows a
   Restart Manager shutdown (plan, section 10). First pass with the policy 2026-11-08: nightly
   42537668606 on `b0e05b498` (MSI 42537714849, Portal and Workstation profiles both passed, no
-  shutdown). **Left:** 4 more nightly passes in a row.
+  shutdown). Owner 2026-11-08: no support for releases before v0.22.0, so v0.22.0 certifies the
+  fresh install only (MSI and DEB; `Select-UpgradeBaseline`) and the v0.21.0 upgrade, its
+  command-line override and the machine policy are gone. The current MSI's own property and the
+  Restart Manager log check stay. **Left:** 4 nightly passes in a row on the fresh-only lane;
+  upgrade certification returns from v0.23.0, upgrading from v0.22.0.
 - [ ] **W4 Release tooling tested on real output.** **Left:** recorded real outputs for every
   post-tag collector and validator; one end-to-end real-gate run through the driver in a tiny scope.
 - [ ] **W4b Remove the workstation from the release path** (owner, 2026-11-04). **Left:** move spill

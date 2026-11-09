@@ -207,7 +207,7 @@ jobs:
           ref: ${{ env.CERTIFICATION_SHA }}
           fetch-depth: 0
 
-      - name: Resolve current version and previous release
+      - name: Resolve current version and the release it upgrades from
         timeout-minutes: 3
         id: versions
         shell: pwsh
@@ -222,13 +222,15 @@ jobs:
           $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate prior GitHub releases.' }
           $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ })
-          $previousTag = Select-PreviousStableRelease -CurrentVersion $currentVersion -Releases $releases
+          # '' for the first public release, which is certified as a fresh install.
+          $previousTag = Select-UpgradeBaseline -CurrentVersion $currentVersion -Releases $releases
 
           "current_version=$currentVersion" >> $env:GITHUB_OUTPUT
           "previous_tag=$previousTag" >> $env:GITHUB_OUTPUT
 
       - name: Restore cached previous MSI
         id: previous-cache
+        if: steps.versions.outputs.previous_tag != ''
         uses: actions/cache@v6
         with:
           path: .upgrade-cache
@@ -236,7 +238,7 @@ jobs:
 
       - name: Download previous MSI
         timeout-minutes: 5
-        if: steps.previous-cache.outputs.cache-hit != 'true'
+        if: steps.versions.outputs.previous_tag != '' && steps.previous-cache.outputs.cache-hit != 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -298,11 +300,16 @@ jobs:
         shell: pwsh
         env:
           CURRENT_VERSION: ${{ steps.versions.outputs.current_version }}
+          PREVIOUS_TAG: ${{ steps.versions.outputs.previous_tag }}
         run: |
-          $previous = @(Get-ChildItem .upgrade-cache -Filter '*-x64-Setup.msi')
-          if ($previous.Count -ne 1) { throw 'Previous MSI cache must contain exactly one MSI.' }
           $current = "src/ETL-SQL.Installer/ETL-SQL-v$env:CURRENT_VERSION.msi"
-          .\scripts\Test-MsiUpgrade.ps1 -PreviousMsi $previous[0].FullName -CurrentMsi $current -StaticChecksOnly
+          if ($env:PREVIOUS_TAG) {
+            $previous = @(Get-ChildItem .upgrade-cache -Filter '*-x64-Setup.msi')
+            if ($previous.Count -ne 1) { throw 'Previous MSI cache must contain exactly one MSI.' }
+            .\scripts\Test-MsiUpgrade.ps1 -PreviousMsi $previous[0].FullName -CurrentMsi $current -StaticChecksOnly
+          } else {
+            .\scripts\Test-MsiUpgrade.ps1 -CurrentMsi $current -StaticChecksOnly
+          }
 
       - name: Preserve certification inputs
         timeout-minutes: 3
@@ -310,9 +317,10 @@ jobs:
         env:
           CURRENT_VERSION: ${{ steps.versions.outputs.current_version }}
           WINDOWS_PAYLOAD_HASH: ${{ needs.publish-windows-payload.outputs.manifest_sha256 }}
+          PREVIOUS_TAG: ${{ steps.versions.outputs.previous_tag }}
         run: |
           New-Item -ItemType Directory -Force candidate | Out-Null
-          Copy-Item .upgrade-cache/*-x64-Setup.msi candidate/previous.msi
+          if ($env:PREVIOUS_TAG) { Copy-Item .upgrade-cache/*-x64-Setup.msi candidate/previous.msi }
           Copy-Item "src/ETL-SQL.Installer/ETL-SQL-v$env:CURRENT_VERSION.msi" candidate/current.msi
           ./scripts/MsiCandidate.ps1 -Mode Create -Directory candidate -SourceSha $env:CERTIFICATION_SHA -WindowsPayloadHash $env:WINDOWS_PAYLOAD_HASH -Version $env:CURRENT_VERSION
 
@@ -388,7 +396,10 @@ jobs:
           . ./scripts/MsiCheckpoint.Helpers.ps1
           $null = Write-MsiDurableCheckpoint -Stage 'supervisor starting'
           Write-Host '::notice title=MSI checkpoint::{"stage":"supervisor starting"}'
-          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath $script -ScriptArguments @('-PreviousMsi', 'candidate/previous.msi', '-CurrentMsi', 'candidate/current.msi') -EvidenceDirectory "release-validation/msi-supervisor/$env:PROFILE" -TimeoutSeconds 1200 -ForwardMsiCheckpoints
+          # The first public release has no previous.msi and is certified as a fresh install.
+          $arguments = @('-CurrentMsi', 'candidate/current.msi')
+          if (Test-Path -LiteralPath candidate/previous.msi) { $arguments = @('-PreviousMsi', 'candidate/previous.msi') + $arguments }
+          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath $script -ScriptArguments $arguments -EvidenceDirectory "release-validation/msi-supervisor/$env:PROFILE" -TimeoutSeconds 1200 -ForwardMsiCheckpoints
 
       - name: Upload profile diagnostics first
         if: always()

@@ -46,7 +46,7 @@ $id = Get-MsiReusableArtifact -Receipt (New-Receipt) -Run (New-Run) -Artifacts $
 if ($id -cne '456') { throw 'Original build artifact was not retained across retry.' }
 foreach ($change in @(
     @{ schemaVersion = 2 }, @{ sourceSha = ('b' * 40) }, @{ repository = 'fork/etl-sql' },
-    @{ runId = '999' }, @{ runAttempt = '1' }, @{ previousTag = 'v1.2.1' },
+    @{ runId = '999' }, @{ runAttempt = '1' }, @{ previousTag = 'v1.2.1' }, @{ previousTag = '' },
     @{ workstation = 'skipped' }, @{ portal = 'failure' }, @{ artifactId = '999' }
 )) {
     $receipt = New-Receipt
@@ -57,4 +57,13 @@ Assert-ReceiptRejected (New-Receipt) @()
 Assert-ReceiptRejected (New-Receipt) @($artifacts[0], $artifacts[0])
 Assert-ReceiptRejected (New-Receipt) @(@{ id = 456; name = 'msi-inputs-123-1'; expired = $true })
 Assert-ReceiptRejected (New-Receipt) @(@{ id = 456; name = 'msi-inputs-999-1'; expired = $false })
-Write-Host 'MSI reuse policy passed: exact commit, trusted source, freshness, successful profiles, predecessor and retained artifact.'
+# The first public release is certified as a fresh install: its receipt names no predecessor, and
+# neither a fresh-install receipt nor an upgrade receipt may stand in for the other.
+$fresh = New-Receipt
+$fresh.previousTag = ''
+$id = Get-MsiReusableArtifact -Receipt $fresh -Run (New-Run) -Artifacts $artifacts -SourceSha $sha -Repository $repo -PreviousTag ''
+if ($id -cne '456') { throw 'Fresh-install certification was not reusable.' }
+$rejected = $false
+try { Get-MsiReusableArtifact -Receipt (New-Receipt) -Run (New-Run) -Artifacts $artifacts -SourceSha $sha -Repository $repo -PreviousTag '' | Out-Null } catch { $rejected = $true }
+if (-not $rejected) { throw 'An upgrade receipt was accepted where a fresh install was required.' }
+Write-Host 'MSI reuse policy passed: exact commit, trusted source, freshness, successful profiles, predecessor (or none for a fresh install) and retained artifact.'

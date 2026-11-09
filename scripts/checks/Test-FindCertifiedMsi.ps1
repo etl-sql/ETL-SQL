@@ -48,28 +48,29 @@ function gh {
     if ($dirIndex -lt 0) { throw 'Missing receipt destination.' }
     @{
         schemaVersion = 1; sourceSha = $sha; repository = 'example/etl-sql'; runId = '123'
-        runAttempt = '2'; artifactId = '456'; previousTag = 'v1.2.2'; workstation = 'success'
+        runAttempt = '2'; artifactId = '456'; previousTag = $(if ($global:MsiDiscoveryScenario -eq 'fresh') { '' } else { 'v1.2.2' }); workstation = 'success'
         portal = $(if ($global:MsiDiscoveryScenario -eq 'incomplete') { 'skipped' } else { 'success' })
     } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $args[$dirIndex + 1] 'certification.json')
 }
 
 try {
-    foreach ($global:MsiDiscoveryScenario in @('valid', 'nightly', 'empty-runs', 'wrong-sha', 'no-receipt', 'pending', 'failed', 'expired', 'incomplete', 'api-failure', 'incomplete-runs', 'incomplete-artifacts', 'concurrent-retry')) {
+    foreach ($global:MsiDiscoveryScenario in @('valid', 'nightly', 'fresh', 'empty-runs', 'wrong-sha', 'no-receipt', 'pending', 'failed', 'expired', 'incomplete', 'api-failure', 'incomplete-runs', 'incomplete-artifacts', 'concurrent-retry')) {
         Set-Content -LiteralPath $env:GITHUB_OUTPUT -Value ''
         $rejected = $false
         try {
-            & $selector -SourceSha $sha -Repository 'example/etl-sql' -PreviousTag 'v1.2.2' -OutputDirectory $fixture
+            $previousTag = if ($global:MsiDiscoveryScenario -eq 'fresh') { '' } else { 'v1.2.2' }
+            & $selector -SourceSha $sha -Repository 'example/etl-sql' -PreviousTag $previousTag -OutputDirectory $fixture
         } catch { $rejected = $true }
         $shouldReject = $global:MsiDiscoveryScenario -in @('pending', 'failed', 'expired', 'incomplete', 'api-failure', 'incomplete-runs', 'incomplete-artifacts', 'concurrent-retry')
         if ($rejected -ne $shouldReject) { throw "Wrong discovery outcome: $global:MsiDiscoveryScenario" }
         $output = Get-Content -LiteralPath $env:GITHUB_OUTPUT -Raw
-        if ($global:MsiDiscoveryScenario -in @('valid', 'nightly')) {
+        if ($global:MsiDiscoveryScenario -in @('valid', 'nightly', 'fresh')) {
             foreach ($line in @('artifact_id=456', 'run_id=123', 'receipt_id=789')) {
                 if ($output -notmatch [regex]::Escape($line)) { throw "Missing selection output: $line" }
             }
         } elseif (-not [string]::IsNullOrWhiteSpace($output)) { throw 'Rejected/absent evidence produced selection outputs.' }
     }
-    Write-Host 'MSI discovery passed: pagination, retained retry inputs, fallback, pending/failed runs, expired/incomplete evidence and API errors.'
+    Write-Host 'MSI discovery passed: pagination, retained retry inputs, fresh-install receipts, fallback, pending/failed runs, expired/incomplete evidence and API errors.'
 } finally {
     $env:GITHUB_OUTPUT = $savedOutput
     $resolved = [IO.Path]::GetFullPath($fixture)

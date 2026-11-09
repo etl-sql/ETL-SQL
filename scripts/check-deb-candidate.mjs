@@ -4,18 +4,23 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const debScope = 'DEB fresh install, installed upgrade, rollback and purge';
+// Before the first public release there is nothing to upgrade from: previousTag and previousSha256
+// are empty and only the fresh install is certified.
+export const debFreshScope = 'DEB fresh install and purge';
 export function verifyDebReceipt(candidate, receipt, { sha, version, artifactId, now = Date.now() }) {
   if (!/^[a-f0-9]{40}$/.test(sha ?? '') || !/^\d+\.\d+\.\d+$/.test(version ?? '') ||
       !/^[1-9][0-9]*$/.test(String(artifactId ?? ''))) throw new Error('Invalid expected DEB identity.');
   if (candidate?.schemaVersion !== 1 || candidate.sourceSha !== sha || candidate.version !== version ||
-      !/^v\d+\.\d+\.\d+$/.test(candidate.previousTag ?? '')) throw new Error('DEB candidate identity mismatch.');
+      typeof candidate.previousTag !== 'string' || !/^(v\d+\.\d+\.\d+)?$/.test(candidate.previousTag)) throw new Error('DEB candidate identity mismatch.');
+  const upgrade = candidate.previousTag !== '';
   for (const key of ['currentSha256', 'previousSha256', 'linuxZipSha256', 'linuxVsixSha256']) {
-    if (!/^[a-f0-9]{64}$/i.test(candidate[key] ?? '')) throw new Error('Invalid DEB input hash.');
+    const valid = key === 'previousSha256' && !upgrade ? candidate[key] === '' : /^[a-f0-9]{64}$/i.test(candidate[key] ?? '');
+    if (!valid) throw new Error('Invalid DEB input hash.');
   }
   for (const key of ['schemaVersion', 'sourceSha', 'version', 'previousTag', 'currentSha256', 'previousSha256', 'linuxZipSha256', 'linuxVsixSha256']) {
     if (receipt?.[key] !== candidate[key]) throw new Error(`DEB receipt input mismatch: ${key}`);
   }
-  if (receipt.status !== 'Passed' || receipt.scope !== debScope || String(receipt.artifactId) !== String(artifactId) ||
+  if (receipt.status !== 'Passed' || receipt.scope !== (upgrade ? debScope : debFreshScope) || String(receipt.artifactId) !== String(artifactId) ||
       !/^[1-9][0-9]*$/.test(String(receipt.runId)) || !/^[1-9][0-9]*$/.test(String(receipt.runAttempt))) {
     throw new Error('DEB certification receipt is incomplete.');
   }

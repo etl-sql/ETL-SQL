@@ -170,6 +170,30 @@ function Select-PreviousStableRelease {
     return $previous.TagName
 }
 
+# v0.22.0 is the first public release. No user runs anything older, so nothing older is a release
+# an upgrade must start from.
+$script:FirstPublicRelease = [version]'0.22.0'
+
+# The release an installed upgrade is certified from, or '' when the candidate is the first public
+# release and is certified as a fresh install only. Any later candidate must have a public release
+# before it: a missing one fails, so an incomplete release listing cannot skip the upgrade.
+function Select-UpgradeBaseline {
+    param(
+        [Parameter(Mandatory)][string]$CurrentVersion,
+        [AllowEmptyCollection()][object[]]$Releases = @()
+    )
+
+    $current = ConvertTo-StableReleaseVersion -Tag $CurrentVersion
+    if ($null -eq $current) { throw "Invalid stable release version '$CurrentVersion'." }
+    if ($current -le $script:FirstPublicRelease) { return '' }
+    $previous = Get-PublishedStableReleases -Releases $Releases |
+        Where-Object { $_.Version -lt $current -and $_.Version -ge $script:FirstPublicRelease } |
+        Sort-Object Version -Descending |
+        Select-Object -First 1
+    if ($null -eq $previous) { throw "No public release (v$script:FirstPublicRelease or later) found before $CurrentVersion to upgrade from." }
+    return $previous.TagName
+}
+
 function Get-ReleaseLatestValue {
     param(
         [Parameter(Mandatory)][string]$CandidateTag,

@@ -1,7 +1,8 @@
 <#
 .SYNOPSIS
     Certifies the MSI's Portal profile: a fresh install, an in-place upgrade from the previous
-    release, and rollback to it.
+    release, and rollback to it. The first public release has no previous release, so without
+    -PreviousMsi only the fresh install is certified.
 
 .DESCRIPTION
     Test-MsiUpgrade.ps1 certifies the workstation-only profile. This installs the ENTERPRISE profile,
@@ -16,17 +17,21 @@
          operator's own setting, serves the candidate's assets, and a cached browser refetches what
          changed (no stale 304).
       3. Rollback: uninstall the candidate (data kept), install the previous release, restore the
-         backup. v0.21.0 renames the database schema, so a previous release needs its backup.
+         backup, because the MSI refuses a downgrade and a newer schema need not open in an older
+         release.
 
     Every check is reported; the script exits non-zero when any failed. Mutates the machine:
     elevated, on a disposable runner with no ETL-SQL installed. Node 22 must be on PATH.
 
 .EXAMPLE
-    .\scripts\Test-MsiPortalUpgrade.ps1 -PreviousMsi .\ETL-SQL-v0.20.0-x64-Setup.msi -CurrentMsi .\ETL-SQL-v0.21.0.msi
+    .\scripts\Test-MsiPortalUpgrade.ps1 -PreviousMsi .\ETL-SQL-v0.22.0-x64-Setup.msi -CurrentMsi .\ETL-SQL-v0.23.0.msi
+
+.EXAMPLE
+    .\scripts\Test-MsiPortalUpgrade.ps1 -CurrentMsi .\ETL-SQL-v0.22.0.msi
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [string]$PreviousMsi,
+    [string]$PreviousMsi,
     [Parameter(Mandatory)] [string]$CurrentMsi,
     [string]$OutDir = './release-validation/msi-portal-upgrade',
     [ValidateSet('All', 'UpgradeRollback')] [string]$DiagnosticScenario = 'All'
@@ -47,13 +52,22 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 if (@(Get-EtlSqlUninstallEntries).Count -ne 0) { throw 'ETL-SQL is already installed. Use a clean runner.' }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$previousPath = (Resolve-Path -LiteralPath $PreviousMsi).Path
+$upgrade = -not [string]::IsNullOrWhiteSpace($PreviousMsi)
+if (-not $upgrade -and $DiagnosticScenario -cne 'All') { throw 'The UpgradeRollback diagnostic needs -PreviousMsi.' }
 $currentPath = (Resolve-Path -LiteralPath $CurrentMsi).Path
-$contract = Test-MsiUpgradeContract -PreviousMsi $previousPath -CurrentMsi $currentPath
+if ($upgrade) {
+    $previousPath = (Resolve-Path -LiteralPath $PreviousMsi).Path
+    $contract = Test-MsiUpgradeContract -PreviousMsi $previousPath -CurrentMsi $currentPath
+    $previousVersion = $previousVersion
+    $currentVersion = $currentVersion
+} else {
+    $previousVersion = $null
+    $currentVersion = Get-MsiProperty $currentPath 'ProductVersion'
+}
 $out = [IO.Path]::GetFullPath($OutDir)
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $summary = Join-Path $out 'summary.txt'
-Set-Content -LiteralPath $summary -Value "previous $($contract.PreviousVersion) current $($contract.CurrentVersion)"
+Set-Content -LiteralPath $summary -Value $(if ($upgrade) { "previous $previousVersion current $currentVersion" } else { "fresh install only: current $currentVersion (no previous release)" })
 if ($DiagnosticScenario -cne 'All') { Add-Content -LiteralPath $summary -Value "DIAGNOSTIC ONLY: $DiagnosticScenario; not full certification." }
 $privateBackupRoot = Join-Path ([IO.Path]::GetTempPath()) ('etlsql-msi-backup-' + [guid]::NewGuid().ToString('N'))
 if ($privateBackupRoot.StartsWith($out.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Backup scratch must be outside uploaded evidence.' }
@@ -230,43 +244,25 @@ function Invoke-Assets([string[]]$Arguments) {
 }
 
 # Restart Manager must not shut down the hosted runner's provjobd, which holds newly installed files
-# for about a minute; that loses the runner. The current MSI authors this property. The previous
-# release's MSI (v0.21.0) does not and cannot be rebuilt, and it lost the runner when its rollback
-# install followed the upgrade by 30 s (MSI 42488712716, 2026-11-08). Passing the property on every
-# msiexec call covers both; the command-line form lost 0 of 6 runners in diagnostic round 9.
-$restartManager = 'MSIRESTARTMANAGERCONTROL=Disable'
-
-# The command line does not reach the upgrade's RemoveExistingProducts: it runs the v0.21.0
-# uninstall as a nested session that opened Restart Manager and shut applications down
-# (02-upgrade.log of MSI 42478004428). Two of the three runner losses after the property was
-# authored died in that step (42486129217, 42502798421). The machine policy turns Restart Manager
-# off for every Windows Installer session, nested ones included. Hosted runners only: it changes
-# machine policy, and the runner is discarded after the job. The key is created only when missing
-# because New-Item -Force would erase the runner's other Installer policy values.
-$restartManagerOffByPolicy = $env:GITHUB_ACTIONS -ceq 'true'
-if ($restartManagerOffByPolicy) {
-    $installerPolicy = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Installer'
-    if (-not (Test-Path -LiteralPath $installerPolicy)) { New-Item -Path $installerPolicy | Out-Null }
-    New-ItemProperty -LiteralPath $installerPolicy -Name 'DisableAutomaticApplicationShutdown' -PropertyType DWord -Value 1 -Force | Out-Null
-}
-
-# Proof the policy held: no session in the log, nested or not, may attempt a shutdown.
+# for about a minute; that loses the runner. The MSI authors MSIRESTARTMANAGERCONTROL=Disable, and so
+# does every release an upgrade starts from. Proof it held: no session in the log, nested ones
+# included, may attempt a shutdown. Hosted runners only, where a lost runner is the failure.
 function Assert-NoRestartManagerShutdown([string]$Log) {
-    if (-not $restartManagerOffByPolicy) { return }
+    if ($env:GITHUB_ACTIONS -cne 'true') { return }
     $text = [IO.File]::ReadAllText((Join-Path $out $Log), [Text.Encoding]::Unicode)
     if ($text.Contains('RESTART MANAGER: Will attempt to shut down')) {
-        throw "Restart Manager attempted to shut down applications during $Log despite the machine policy."
+        throw "Restart Manager attempted to shut down applications during $Log."
     }
 }
 
 function Install-Msi([string]$Msi, [string]$Log) {
-    Invoke-MsiExec @('/i', $Msi, 'DEPLOY_PROFILE=ENTERPRISE', $restartManager) (Join-Path $out $Log) "Install $Log"
+    Invoke-MsiExec @('/i', $Msi, 'DEPLOY_PROFILE=ENTERPRISE') (Join-Path $out $Log) "Install $Log"
     Assert-NoRestartManagerShutdown $Log
 }
 
 function Uninstall-All([string]$Log) {
     foreach ($entry in @(Get-EtlSqlUninstallEntries)) {
-        Invoke-MsiExec @('/x', $entry.PSChildName, $restartManager) (Join-Path $out $Log) "Uninstall $Log"
+        Invoke-MsiExec @('/x', $entry.PSChildName) (Join-Path $out $Log) "Uninstall $Log"
         Assert-NoRestartManagerShutdown $Log
     }
 }
@@ -281,11 +277,11 @@ $services = 'ETL-SQL-Orchestrator', 'ETL-SQL-Portal'
 try {
     if ($DiagnosticScenario -ceq 'All') {
         # 0. Fresh install of the candidate, with no operator configuration at all.
-        Write-Line "== fresh install of $($contract.CurrentVersion)"
+        Write-Line "== fresh install of $($currentVersion)"
         Test-Step 'fresh: msiexec install' { Install-Msi $currentPath '00-fresh.log' }
         Test-Step 'fresh: Portal healthy' { Wait-Portal 'fresh' }
         foreach ($service in $services) {
-            Test-Step "fresh: $service runs the installed executable" { Assert-ServiceRunsVersion $service $contract.CurrentVersion }
+            Test-Step "fresh: $service runs the installed executable" { Assert-ServiceRunsVersion $service $currentVersion }
         }
         Test-Step 'fresh: one-time sign-in for Administrators and SYSTEM only' {
             $signIn = Join-Path $installDir 'first-run-password.txt'
@@ -296,7 +292,7 @@ try {
         Test-Step 'fresh: secrets only in the Administrators and SYSTEM file' { Assert-SecretsProtected }
         Test-Step 'fresh: served assets match the candidate' { Invoke-Assets @('--inventory-root', $repoRoot, '--out', (Join-Path $out 'fresh-assets.json')) }
         # `admin backup` runs as the operator, not LocalSystem, so it must be told where the service's
-        # job history is. Before v0.21.0 it silently backed up no Orchestrator database.
+        # job history is.
         Test-Step 'fresh: admin backup includes the job history the service writes' {
             Write-ResourceSnapshot 'fresh backup start'
             $jobHistory = Join-Path $systemData 'etlsql.db'
@@ -337,77 +333,80 @@ try {
         $null = Write-MsiDurableCheckpoint -Stage 'fresh cleanup complete'
     }
 
-    # 1. The previous release, configured as its documentation says.
-    Write-Line "== install previous $($contract.PreviousVersion)"
-    Test-Step 'previous: msiexec install' { Install-Msi $previousPath '01-previous.log' }
-    $cfgPath = Join-Path $installDir 'appsettings.json'
-    $cfg = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
-    $random = { $bytes = [byte[]]::new(32); [Security.Cryptography.RandomNumberGenerator]::Fill($bytes); [Convert]::ToBase64String($bytes) }
-    $cfg.Portal.FirstRun | Add-Member NoteProperty AdminPassword ('Upgrade-' + (& $random).Substring(0, 12).Replace('/', 'x') + '9!') -Force
-    $cfg.Portal.Dataset.AtRestKey = & $random
-    $signing = & $random
-    $cfg.Orchestrator | Add-Member NoteProperty IdentitySigningSecret $signing -Force
-    $cfg.Portal.Orchestrator | Add-Member NoteProperty IdentitySigningSecret $signing -Force
-    $cfg | Add-Member NoteProperty UpgradeSentinel ([pscustomobject]@{ Value = 'kept' }) -Force
-    ($cfg | ConvertTo-Json -Depth 64) | Set-Content -LiteralPath $cfgPath -Encoding UTF8
-    Set-ServicesState Stopped
-    Set-ServicesState Running
-    Test-Step 'previous: Portal healthy' { Wait-Portal 'previous' }
-    $baseline = Initialize-PreviousPortalUpgradeBaseline
-    $secret = $baseline['Portal:Jwt:Secret']; $apiKey = $baseline['Orchestrator:ApiKey']
-    $atRest = $baseline['Portal:Dataset:AtRestKey']; $signing = $baseline['Orchestrator:IdentitySigningSecret']
-    $cachePrevious = Join-Path $out 'cache-previous.json'
-    Test-Step 'previous: served assets recorded as a browser cache' { Invoke-Assets @('--record', $cachePrevious, '--out', (Join-Path $out 'previous-assets.json')) }
-    $backup = Join-Path $privateBackupRoot 'pre-upgrade-backup'
-    Set-ServicesState Stopped
-    New-Item -ItemType Directory -Force -Path $backup | Out-Null
-    $saved = @(Get-DatabaseFiles | ForEach-Object {
-        $target = Join-Path $backup ("{0}__{1}" -f ($_.DirectoryName -eq $installDir ? 'install' : 'system'), $_.Name)
-        Copy-Item -LiteralPath $_.FullName -Destination $target; $target })
-    Copy-Item -LiteralPath $cfgPath -Destination (Join-Path $backup 'appsettings.json')
-    Write-Line "NOTE previous: backed up $($saved.Count) database file(s) and the configuration"
-    Set-ServicesState Running
+    # The first public release has no previous release to upgrade from or roll back to.
+    if ($upgrade) {
+        # 1. The previous release, configured as its documentation says.
+        Write-Line "== install previous $($previousVersion)"
+        Test-Step 'previous: msiexec install' { Install-Msi $previousPath '01-previous.log' }
+        $cfgPath = Join-Path $installDir 'appsettings.json'
+        $cfg = Get-Content -LiteralPath $cfgPath -Raw | ConvertFrom-Json
+        $random = { $bytes = [byte[]]::new(32); [Security.Cryptography.RandomNumberGenerator]::Fill($bytes); [Convert]::ToBase64String($bytes) }
+        $cfg.Portal.FirstRun | Add-Member NoteProperty AdminPassword ('Upgrade-' + (& $random).Substring(0, 12).Replace('/', 'x') + '9!') -Force
+        $cfg.Portal.Dataset.AtRestKey = & $random
+        $signing = & $random
+        $cfg.Orchestrator | Add-Member NoteProperty IdentitySigningSecret $signing -Force
+        $cfg.Portal.Orchestrator | Add-Member NoteProperty IdentitySigningSecret $signing -Force
+        $cfg | Add-Member NoteProperty UpgradeSentinel ([pscustomobject]@{ Value = 'kept' }) -Force
+        ($cfg | ConvertTo-Json -Depth 64) | Set-Content -LiteralPath $cfgPath -Encoding UTF8
+        Set-ServicesState Stopped
+        Set-ServicesState Running
+        Test-Step 'previous: Portal healthy' { Wait-Portal 'previous' }
+        $baseline = Initialize-PreviousPortalUpgradeBaseline
+        $secret = $baseline['Portal:Jwt:Secret']; $apiKey = $baseline['Orchestrator:ApiKey']
+        $atRest = $baseline['Portal:Dataset:AtRestKey']; $signing = $baseline['Orchestrator:IdentitySigningSecret']
+        $cachePrevious = Join-Path $out 'cache-previous.json'
+        Test-Step 'previous: served assets recorded as a browser cache' { Invoke-Assets @('--record', $cachePrevious, '--out', (Join-Path $out 'previous-assets.json')) }
+        $backup = Join-Path $privateBackupRoot 'pre-upgrade-backup'
+        Set-ServicesState Stopped
+        New-Item -ItemType Directory -Force -Path $backup | Out-Null
+        $saved = @(Get-DatabaseFiles | ForEach-Object {
+            $target = Join-Path $backup ("{0}__{1}" -f ($_.DirectoryName -eq $installDir ? 'install' : 'system'), $_.Name)
+            Copy-Item -LiteralPath $_.FullName -Destination $target; $target })
+        Copy-Item -LiteralPath $cfgPath -Destination (Join-Path $backup 'appsettings.json')
+        Write-Line "NOTE previous: backed up $($saved.Count) database file(s) and the configuration"
+        Set-ServicesState Running
 
-    # 2. Upgrade in place.
-    Write-Line "== upgrade to $($contract.CurrentVersion)"
-    Test-Step 'upgrade: msiexec install' { Install-Msi $currentPath '02-upgrade.log' }
-    Test-Step 'upgrade: one installed product' { [void](Assert-EntryCount 1 'Upgrade') }
-    Test-Step 'upgrade: Portal healthy' { Wait-Portal 'upgrade' }
-    foreach ($service in $services) {
-        Test-Step "upgrade: $service runs the upgraded executable" { Assert-ServiceRunsVersion $service $contract.CurrentVersion }
-    }
-    Test-Step 'upgrade: Portal JWT secret preserved' { Assert-Setting 'Portal:Jwt:Secret' $secret }
-    Test-Step 'upgrade: Orchestrator API key preserved' { Assert-Setting 'Orchestrator:ApiKey' $apiKey }
-    Test-Step 'upgrade: dataset at-rest key preserved' { Assert-Setting 'Portal:Dataset:AtRestKey' $atRest }
-    Test-Step 'upgrade: identity signing secret preserved' { Assert-Setting 'Orchestrator:IdentitySigningSecret' $signing }
-    Test-Step 'upgrade: operator setting preserved' { Assert-Setting 'UpgradeSentinel:Value' 'kept' }
-    Test-Step 'upgrade: secrets moved to the Administrators and SYSTEM file' { Assert-SecretsProtected }
-    Test-Step 'upgrade: no one-time sign-in for an existing Portal' { -not (Test-Path -LiteralPath (Join-Path $installDir 'first-run-password.txt')) }
-    Test-Step 'upgrade: no configuration backup left behind' { -not (Test-Path -LiteralPath (Join-Path $installDir 'appsettings.pre-upgrade.json')) }
-    $cacheCurrent = Join-Path $out 'cache-current.json'
-    Test-Step 'upgrade: served assets match the candidate; cached browser refetches changes' {
-        Invoke-Assets @('--inventory-root', $repoRoot, '--revalidate', $cachePrevious, '--record', $cacheCurrent, '--out', (Join-Path $out 'upgrade-assets.json'))
-    }
+        # 2. Upgrade in place.
+        Write-Line "== upgrade to $($currentVersion)"
+        Test-Step 'upgrade: msiexec install' { Install-Msi $currentPath '02-upgrade.log' }
+        Test-Step 'upgrade: one installed product' { [void](Assert-EntryCount 1 'Upgrade') }
+        Test-Step 'upgrade: Portal healthy' { Wait-Portal 'upgrade' }
+        foreach ($service in $services) {
+            Test-Step "upgrade: $service runs the upgraded executable" { Assert-ServiceRunsVersion $service $currentVersion }
+        }
+        Test-Step 'upgrade: Portal JWT secret preserved' { Assert-Setting 'Portal:Jwt:Secret' $secret }
+        Test-Step 'upgrade: Orchestrator API key preserved' { Assert-Setting 'Orchestrator:ApiKey' $apiKey }
+        Test-Step 'upgrade: dataset at-rest key preserved' { Assert-Setting 'Portal:Dataset:AtRestKey' $atRest }
+        Test-Step 'upgrade: identity signing secret preserved' { Assert-Setting 'Orchestrator:IdentitySigningSecret' $signing }
+        Test-Step 'upgrade: operator setting preserved' { Assert-Setting 'UpgradeSentinel:Value' 'kept' }
+        Test-Step 'upgrade: secrets moved to the Administrators and SYSTEM file' { Assert-SecretsProtected }
+        Test-Step 'upgrade: no one-time sign-in for an existing Portal' { -not (Test-Path -LiteralPath (Join-Path $installDir 'first-run-password.txt')) }
+        Test-Step 'upgrade: no configuration backup left behind' { -not (Test-Path -LiteralPath (Join-Path $installDir 'appsettings.pre-upgrade.json')) }
+        $cacheCurrent = Join-Path $out 'cache-current.json'
+        Test-Step 'upgrade: served assets match the candidate; cached browser refetches changes' {
+            Invoke-Assets @('--inventory-root', $repoRoot, '--revalidate', $cachePrevious, '--record', $cacheCurrent, '--out', (Join-Path $out 'upgrade-assets.json'))
+        }
 
-    # 3. Roll back: the MSI refuses a downgrade, so uninstall the candidate (its data is kept),
-    #    install the previous release, and restore the pre-upgrade backup.
-    Write-Line "== roll back to $($contract.PreviousVersion)"
-    Test-Step 'rollback: uninstall the candidate' { Uninstall-All '03-rollback-uninstall.log' }
-    Test-Step 'rollback: msiexec install previous' { Install-Msi $previousPath '03-rollback-install.log' }
-    Set-ServicesState Stopped
-    Get-DatabaseFiles | Remove-Item -Force
-    foreach ($file in Get-ChildItem -LiteralPath $backup -File -Filter '*__*') {
-        $scope, $name = $file.Name -split '__', 2
-        $dir = $scope -eq 'install' ? $installDir : $systemData
-        New-Item -ItemType Directory -Force -Path $dir | Out-Null
-        Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $dir $name)
-    }
-    Copy-Item -LiteralPath (Join-Path $backup 'appsettings.json') -Destination $cfgPath -Force
-    Set-ServicesState Running
-    Test-Step 'rollback: Portal healthy on the restored database' { Wait-Portal 'rollback' }
-    Test-Step 'rollback: ETL-SQL-Portal runs the previous executable' { Assert-ServiceRunsVersion 'ETL-SQL-Portal' $contract.PreviousVersion }
-    Test-Step 'rollback: served assets are the previous release''s; cached browser refetches changes' {
-        Invoke-Assets @('--revalidate', $cacheCurrent, '--out', (Join-Path $out 'rollback-assets.json'))
+        # 3. Roll back: the MSI refuses a downgrade, so uninstall the candidate (its data is kept),
+        #    install the previous release, and restore the pre-upgrade backup.
+        Write-Line "== roll back to $($previousVersion)"
+        Test-Step 'rollback: uninstall the candidate' { Uninstall-All '03-rollback-uninstall.log' }
+        Test-Step 'rollback: msiexec install previous' { Install-Msi $previousPath '03-rollback-install.log' }
+        Set-ServicesState Stopped
+        Get-DatabaseFiles | Remove-Item -Force
+        foreach ($file in Get-ChildItem -LiteralPath $backup -File -Filter '*__*') {
+            $scope, $name = $file.Name -split '__', 2
+            $dir = $scope -eq 'install' ? $installDir : $systemData
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $dir $name)
+        }
+        Copy-Item -LiteralPath (Join-Path $backup 'appsettings.json') -Destination $cfgPath -Force
+        Set-ServicesState Running
+        Test-Step 'rollback: Portal healthy on the restored database' { Wait-Portal 'rollback' }
+        Test-Step 'rollback: ETL-SQL-Portal runs the previous executable' { Assert-ServiceRunsVersion 'ETL-SQL-Portal' $previousVersion }
+        Test-Step 'rollback: served assets are the previous release''s; cached browser refetches changes' {
+            Invoke-Assets @('--revalidate', $cacheCurrent, '--out', (Join-Path $out 'rollback-assets.json'))
+        }
     }
 } catch {
     Write-Line "ABORT — $($_.Exception.Message)"

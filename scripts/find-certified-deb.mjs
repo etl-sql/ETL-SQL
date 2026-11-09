@@ -12,7 +12,7 @@ function gh(args) {
 
 export async function findCertifiedDeb({ repository, sha, version, previousTag, now = Date.now(), query, readReceipt }) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !/^[a-f0-9]{40}$/.test(sha) ||
-      !/^\d+\.\d+\.\d+$/.test(version) || !/^v\d+\.\d+\.\d+$/.test(previousTag)) throw new Error('Invalid DEB discovery identity.');
+      !/^\d+\.\d+\.\d+$/.test(version) || typeof previousTag !== 'string' || !/^(v\d+\.\d+\.\d+)?$/.test(previousTag)) throw new Error('Invalid DEB discovery identity.');
   const pages = await query(`repos/${repository}/actions/runs?head_sha=${sha}&per_page=100`);
   if (!Array.isArray(pages) || !pages.length || pages.some(page => !Array.isArray(page.workflow_runs))) throw new Error('Invalid workflow run pages.');
   const runs = pages.flatMap(page => page.workflow_runs).sort((a, b) => b.id - a.id);

@@ -55,7 +55,7 @@ export async function rehearse({ repository, sha, branch, directory, version, pr
 }) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? '') || !/^[a-f0-9]{40}$/.test(sha ?? '') ||
       !/^release\/v\d+\.\d+\.\d+$/.test(branch ?? '') || branch !== `release/v${version}` ||
-      !/^v\d+\.\d+\.\d+$/.test(previousTag ?? '') || !Number.isFinite(Date.parse(startedAt)) ||
+      typeof previousTag !== 'string' || !/^(v\d+\.\d+\.\d+)?$/.test(previousTag) || !Number.isFinite(Date.parse(startedAt)) ||
       ![...phases, 'all'].includes(phase)) {
     throw new Error('Expected repository, exact SHA, release/vX.Y.Z branch matching VersionPrefix, previous tag, start time and phase.');
   }
@@ -185,8 +185,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const version = /<VersionPrefix>([^<]+)<\/VersionPrefix>/.exec(readFileSync('Directory.Build.props', 'utf8'))?.[1];
     const previous = run('pwsh', ['-NoProfile', '-Command', '. ./scripts/Release.Helpers.ps1; ' +
       `$r = @(gh api --paginate --slurp "repos/${repository}/releases?per_page=100" | ConvertFrom-Json | ForEach-Object { $_ } | ForEach-Object { $_ }); ` +
-      `Select-PreviousStableRelease -CurrentVersion '${version}' -Releases $r`]);
-    if (previous.status !== 0) throw new Error(`Cannot resolve the previous stable release: ${previous.stderr}`);
+      `Select-UpgradeBaseline -CurrentVersion '${version}' -Releases $r`]);
+    if (previous.status !== 0) throw new Error(`Cannot resolve the upgrade baseline: ${previous.stderr}`);
     const startedAt = JSON.parse(gh(['api', `repos/${repository}/actions/runs/${process.env.GITHUB_RUN_ID}`])).created_at;
     const result = await rehearse({ repository, sha, branch, directory, version, previousTag: previous.stdout.trim(), startedAt },
       { gh, phase, execute: (command, args, env) => run(command, args, env) });

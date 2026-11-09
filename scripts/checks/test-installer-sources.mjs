@@ -63,17 +63,14 @@ try {
     rmSync(path.join(root, retired));
   }
   assert.equal(run().status, 0);
-  // The Portal certification runs the previous release's MSI, which lacks the authored property, so
-  // every msiexec call there must pass it on the command line.
+  // Every release an upgrade starts from authors the property above, so the Portal certification
+  // relies on it rather than on overrides, and fails any install or uninstall whose log shows
+  // Restart Manager trying to shut software down.
   const certification = readFileSync(new URL('../Test-MsiPortalUpgrade.ps1', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
-  assert.match(certification, /^\$restartManager = 'MSIRESTARTMANAGERCONTROL=Disable'$/m);
-  const calls = certification.match(/Invoke-MsiExec @\([^)]*\)/g);
-  assert.equal(calls.length, 2);
-  for (const call of calls) assert.match(call, /, \$restartManager\)$/, call);
-  // The upgrade's nested v0.21.0 uninstall ignores the command line; only machine policy reaches it.
-  assert.match(certification, /-Name 'DisableAutomaticApplicationShutdown' -PropertyType DWord -Value 1 /);
+  assert.equal(certification.match(/Invoke-MsiExec @\([^)]*\)/g)?.length, 2);
   assert.equal(certification.match(/^\s+Assert-NoRestartManagerShutdown \$Log$/gm)?.length, 2);
-  console.log('Installer source checks: static validation, retired-helper rejection and Restart Manager disabled for every certification msiexec call passed.');
+  assert.doesNotMatch(certification, /DisableAutomaticApplicationShutdown|MSIRESTARTMANAGERCONTROL=Disable'/);
+  console.log('Installer source checks: static validation, retired-helper rejection and a Restart Manager shutdown check after every certification msiexec call passed.');
 } finally {
   // Only remove the private fixture created above.
   rmSync(root, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { findCertifiedDeb } from '../find-certified-deb.mjs';
-import { debScope } from '../check-deb-candidate.mjs';
+import { debScope, debFreshScope } from '../check-deb-candidate.mjs';
 
 const now = Date.now();
 const sha = 'a'.repeat(40);
@@ -13,8 +13,8 @@ const receipt = { schemaVersion: 1, sourceSha: sha, version: '0.22.0', previousT
 const artifacts = [{ id: 200, name: 'deb-candidate-100-1', expired: false }, { id: 201, name: 'deb-installed-100-2', expired: false }];
 const job = { id: 300, run_id: 100, head_sha: sha, name: 'deb / DEB fresh install, upgrade and rollback',
   status: 'completed', conclusion: 'success', started_at: new Date(now - 2000).toISOString(), completed_at: new Date(now - 500).toISOString() };
-async function find({ runs = [run], saved = receipt, files = artifacts, current = run, count = files.length, installed = job } = {}) {
-  return findCertifiedDeb({ repository: 'owner/repo', sha, version: '0.22.0', previousTag: 'v0.21.0', now,
+async function find({ runs = [run], saved = receipt, files = artifacts, current = run, count = files.length, installed = job, previousTag = 'v0.21.0' } = {}) {
+  return findCertifiedDeb({ repository: 'owner/repo', sha, version: '0.22.0', previousTag, now,
     query: endpoint => {
       if (endpoint.includes('/artifacts?')) return [{ total_count: count, artifacts: structuredClone(files) }];
       if (endpoint.includes('/jobs?')) return [{ total_count: 1, jobs: [structuredClone(installed)] }];
@@ -34,6 +34,13 @@ for (const change of [
 await assert.rejects(find({ runs: [{ ...run, id: 101, conclusion: 'failure' }, run] }), /finish or retry/);
 await assert.rejects(find({ runs: [{ ...run, status: 'in_progress' }] }), /finish or retry/);
 await assert.rejects(find({ saved: { ...receipt, previousTag: 'v0.20.0' } }), /predecessor/);
+// Before the first public release: a fresh-only receipt is reused, but never for an upgrade, and
+// an upgrade receipt never stands in for a fresh-only expectation.
+const fresh = { ...receipt, previousTag: '', previousSha256: '', scope: debFreshScope };
+assert.deepEqual(await find({ saved: fresh, previousTag: '' }), await find());
+await assert.rejects(find({ saved: fresh }), /predecessor/);
+await assert.rejects(find({ previousTag: '' }), /predecessor/);
+await assert.rejects(find({ previousTag: null }), /identity/);
 await assert.rejects(find({ saved: { ...receipt, runAttempt: '1' } }), /run/);
 await assert.rejects(find({ files: [{ ...artifacts[0], expired: true }, artifacts[1]] }), /expired/);
 await assert.rejects(find({ files: [artifacts[1]] }), /missing/);

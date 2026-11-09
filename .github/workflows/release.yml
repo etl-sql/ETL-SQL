@@ -275,9 +275,9 @@ jobs:
           . ./scripts/Release.Helpers.ps1
           [xml]$props = Get-Content Directory.Build.props
           $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve previous stable release.' }
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot list releases to find the upgrade baseline.' }
           $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ })
-          $previousTag = Select-PreviousStableRelease -CurrentVersion ([string]$props.Project.PropertyGroup.VersionPrefix) -Releases $releases
+          $previousTag = Select-UpgradeBaseline -CurrentVersion ([string]$props.Project.PropertyGroup.VersionPrefix) -Releases $releases
           ./scripts/Find-CertifiedMsi.ps1 -SourceSha $env:SOURCE_SHA -Repository $env:GITHUB_REPOSITORY -PreviousTag $previousTag -OutputDirectory msi-selection
 
   certify-msi:
@@ -379,9 +379,9 @@ jobs:
           [xml]$props = Get-Content Directory.Build.props
           $version = [string]$props.Project.PropertyGroup.VersionPrefix
           $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve previous stable release.' }
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot list releases to find the upgrade baseline.' }
           $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ } | ForEach-Object { $_ })
-          $previous = Select-PreviousStableRelease -CurrentVersion $version -Releases $releases
+          $previous = Select-UpgradeBaseline -CurrentVersion $version -Releases $releases
           node scripts/find-certified-deb.mjs $env:GITHUB_REPOSITORY $env:SOURCE_SHA $version $previous deb-selection
 
   certify-deb:

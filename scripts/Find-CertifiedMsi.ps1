@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory)] [ValidatePattern('^[a-f0-9]{40}$')] [string]$SourceSha,
     [Parameter(Mandatory)] [ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')] [string]$Repository,
-    [Parameter(Mandatory)] [string]$PreviousTag,
+    # '' for the first public release, which is certified as a fresh install with no previous release.
+    [Parameter(Mandatory)] [AllowEmptyString()] [ValidatePattern('^(v\d+\.\d+\.\d+)?$')] [string]$PreviousTag,
     [Parameter(Mandatory)] [string]$OutputDirectory
 )
 $ErrorActionPreference = 'Stop'
