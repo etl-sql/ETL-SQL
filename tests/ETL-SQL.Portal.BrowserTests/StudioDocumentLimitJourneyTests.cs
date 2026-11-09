@@ -74,6 +74,10 @@ public sealed class StudioDocumentLimitJourneyTests(StudioAuthoringFixture fixtu
         var page = session.Page;
         var calls = 0;
         string? retriedBody = null;
+        // Studio retries by itself once Retry-After passes, and a successful retry clears the stale
+        // message. The test once took longer than the 2 s window to look (CI 41710847926), so every
+        // analysis after the refusal is held until the test has seen the stale state and typed.
+        var retryAllowed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await page.RouteAsync("**/api/designer/analyze", async route =>
         {
             if (Interlocked.Increment(ref calls) == 1)
@@ -87,7 +91,11 @@ public sealed class StudioDocumentLimitJourneyTests(StudioAuthoringFixture fixtu
             else
             {
                 retriedBody = route.Request.PostData;
-                await route.ContinueAsync();
+                await retryAllowed.Task;
+                // Typing aborts a held retry and sends one for the current text; the aborted one
+                // can no longer be continued.
+                try { await route.ContinueAsync(); }
+                catch (PlaywrightException) { }
             }
         });
         const string script = "-- keep this buffer during rate limiting\nSELECT 73;";
@@ -98,6 +106,7 @@ public sealed class StudioDocumentLimitJourneyTests(StudioAuthoringFixture fixtu
         await Expect(page.Locator(".cm-lintRange-error").First).ToBeVisibleAsync();
         var currentScript = script + "\n-- typed during permitted retry";
         await StudioExecutionScopeJourneyTests.ReplaceAsync(page, currentScript);
+        retryAllowed.SetResult();
         await Expect(page.Locator(".etlsql-script-results")).Not.ToContainTextAsync("Previous diagnostics are stale",
             new LocatorAssertionsToContainTextOptions { Timeout = 10_000 });
         Assert.True(calls >= 2);
