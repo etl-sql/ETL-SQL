@@ -18,14 +18,14 @@
 .EXAMPLE
     # Full certification. Elevated, mutates the machine — intended for a disposable runner.
     .\scripts\Test-MsiUpgrade.ps1 `
-      -PreviousMsi .\ETL-SQL-v0.17.0-x64-Setup.msi `
-      -CurrentMsi .\ETL-SQL-v0.18.0-x64-Setup.msi
+      -PreviousMsi .\ETL-SQL-v0.22.0-x64-Setup.msi `
+      -CurrentMsi .\ETL-SQL-v0.23.0-x64-Setup.msi
 
 .EXAMPLE
     # Contract only. No elevation, installs nothing, safe on your own workstation.
     .\scripts\Test-MsiUpgrade.ps1 `
-      -PreviousMsi .\ETL-SQL-v0.17.0-x64-Setup.msi `
-      -CurrentMsi .\ETL-SQL-v0.18.0-x64-Setup.msi `
+      -PreviousMsi .\ETL-SQL-v0.22.0-x64-Setup.msi `
+      -CurrentMsi .\ETL-SQL-v0.23.0-x64-Setup.msi `
       -StaticChecksOnly
 #>
 [CmdletBinding()]

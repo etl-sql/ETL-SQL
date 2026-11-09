@@ -64,7 +64,7 @@ public class FileOperationStatementHandler(
                 return;
             }
 
-            bool remoteOverwrite = true; // Default to true for backward compatibility with underscore functions
+            bool remoteOverwrite = true; // OVERWRITE defaults to ON, as it does for local files.
             if (stmt.Overwrite != null)
             {
                 var ovrVal = await context.EvaluateValue(stmt.Overwrite, new Row());

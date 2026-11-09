@@ -3,7 +3,7 @@
     Compares a spill-allocation profile report against its checked-in budget and fails on regression.
 
 .DESCRIPTION
-    v0.15.0 Phase 1 regression budgets for the Gate F #temp round trip. A budget is a blessed
+    Regression budgets for the Gate F #temp round trip. A budget is a blessed
     profile report (same JSON schema, produced by scripts/Test-SpillAllocProfile.ps1) captured on
     the certification workstation. The comparison fails on:
 

@@ -215,7 +215,7 @@ if ($LASTEXITCODE -ne 0) {
 $snapshot = $rawJson | ConvertFrom-Json
 $report = [ordered]@{
     schemaVersion = 1
-    phase = 'v0.15.0 Phase 6'
+    phase = 'High availability soak'
     runId = $metadata.runId
     topologyMetadataPath = Get-RelativeLabel $metadataPath
     capturedAt = $snapshot.capturedAt

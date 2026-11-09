@@ -89,7 +89,7 @@ export interface ScriptConnectionsMessage {
 export interface VariablesMessage {
     type: 'variables';
     variables?: Variable[];
-    data?: Variable[]; // For backwards compatibility with some engine versions
+    data?: Variable[]; // The engine's --json stream uses `data`; the extension sends `variables`.
 }
 
 export interface TablesResponse {

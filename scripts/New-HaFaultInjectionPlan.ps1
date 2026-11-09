@@ -112,7 +112,7 @@ $faults = foreach ($fault in @($matrix.faults)) {
 
 $plan = [ordered]@{
     schemaVersion = 1
-    phase = 'v0.15.0 Phase 6'
+    phase = 'High availability soak'
     generatedAt = (Get-Date).ToUniversalTime().ToString('o')
     runId = $metadata.runId
     mode = $Mode

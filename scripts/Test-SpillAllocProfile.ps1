@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Runs the v0.15.0 Phase 1 spill allocation/GC/I-O profile of the Gate F #temp round trip.
+    Runs the spill allocation/GC/I-O profile of the Gate F #temp round trip.
 
 .DESCRIPTION
     Executes tests/ETL-SQL.Tests/Scale/SpillAllocationProfilingTests in an isolated Release host at
@@ -79,7 +79,7 @@ $report.topAllocations | Select-Object -First 10 | ForEach-Object {
 }
 Write-Host "`nReport: $result" -ForegroundColor Green
 
-# ── Regression budget (v0.15.0 Phase 1) ─────────────────────────────────────
+# ── Regression budget ─────────────────────────────────────────────────────
 $budgetPath = Join-Path $repoRoot ("certification-results\spill-alloc-budgets\budget-{0}rows.json" -f $Rows)
 if ($UpdateBudget) {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $budgetPath) | Out-Null

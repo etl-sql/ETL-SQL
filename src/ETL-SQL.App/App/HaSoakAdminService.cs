@@ -143,7 +143,7 @@ namespace ETL_SQL.App
             var metadata = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["generatedAt"] = DateTime.UtcNow.ToString("o"),
                 ["commit"] = GetGitCommit(),
                 ["runId"] = runId,
@@ -281,7 +281,7 @@ namespace ETL_SQL.App
             var runbook = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["generatedAt"] = DateTime.UtcNow.ToString("o"),
                 ["runId"] = runId,
                 ["mode"] = mode,
@@ -324,7 +324,7 @@ namespace ETL_SQL.App
             var plan = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["generatedAt"] = DateTime.UtcNow.ToString("o"),
                 ["runId"] = runId,
                 ["topologyMetadataPath"] = RelativeLabel(metadataPath),
@@ -411,7 +411,7 @@ namespace ETL_SQL.App
             var plan = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["generatedAt"] = DateTime.UtcNow.ToString("o"),
                 ["runId"] = metadata["runId"]!.DeepClone(),
                 ["mode"] = mode,
@@ -466,7 +466,7 @@ namespace ETL_SQL.App
             var report = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["runId"] = runId,
                 ["mode"] = mode,
                 ["status"] = passed ? "Passed" : "Failed",
@@ -675,7 +675,7 @@ namespace ETL_SQL.App
             var plan = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["generatedAt"] = DateTime.UtcNow.ToString("o"),
                 ["runId"] = metadata["runId"]!.DeepClone(),
                 ["mode"] = ctx.HaSoakMode ?? "CiSmoke",
@@ -728,7 +728,7 @@ namespace ETL_SQL.App
             var report = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["runId"] = runId,
                 ["mode"] = mode,
                 ["status"] = passed ? "Passed" : "Failed",
@@ -964,7 +964,7 @@ namespace ETL_SQL.App
             var metrics = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["runId"] = metadata["runId"]!.DeepClone(),
                 ["capturedAt"] = DateTime.UtcNow.ToString("o"),
                 ["topologyMetadataPath"] = RelativeLabel(Path.Combine(runRoot, "topology-metadata.json")),
@@ -1022,7 +1022,7 @@ namespace ETL_SQL.App
             WriteJson(summaryPath, new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["runId"] = metadata["runId"]!.DeepClone(),
                 ["capturedAt"] = DateTime.UtcNow.ToString("o"),
                 ["diagnosticsRoot"] = RelativeLabel(outputRoot),
@@ -1070,7 +1070,7 @@ namespace ETL_SQL.App
             var summary = new JsonObject
             {
                 ["schemaVersion"] = 1,
-                ["phase"] = "v0.15.0 Phase 6",
+                ["phase"] = "High availability soak",
                 ["generatedAt"] = DateTime.UtcNow.ToString("o"),
                 ["runId"] = runId,
                 ["requiredGate"] = requiredGate,

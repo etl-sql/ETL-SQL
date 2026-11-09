@@ -462,7 +462,7 @@ try {
     }
 
     if ($Scenario -eq 'All' -or $Scenario -eq 'AllocProfile') {
-        # v0.15.0 Phase 1: the 1B certification also captures the allocation/GC profile of the
+        # The 1B certification also captures the allocation/GC profile of the
         # #temp round trip and compares it against the checked-in budget for this row count
         # (certification-results/spill-alloc-budgets). Missing budget warns without failing;
         # establish one with Test-SpillAllocProfile.ps1 -Rows <n> -UpdateBudget.
@@ -488,7 +488,7 @@ try {
     }
 
     if ($Scenario -eq 'ExternalSort') {
-        # v0.15.0 Phase 4 candidate: external sort is intentionally opt-in until an operator-run
+        # External sort is intentionally opt-in until an operator-run
         # artifact passes and the public matrix moves it from Candidate to Certified.
         $result = Join-Path $outRoot 'external-sort.json'
         $resultKey = Join-Path $outRoot 'external-sort.key'
@@ -516,7 +516,7 @@ try {
     }
 
     if ($Scenario -eq 'ExternalJoin') {
-        # v0.15.0 Phase 4 candidate: external equi-join is opt-in until an operator-run artifact
+        # External equi-join is opt-in until an operator-run artifact
         # passes and the public matrix moves it from Candidate to Certified.
         $result = Join-Path $outRoot 'external-join.json'
         $resultKey = Join-Path $outRoot 'external-join.key'
@@ -545,7 +545,7 @@ try {
     }
 
     if ($Scenario -eq 'HighCardinalityGrouping') {
-        # v0.15.0 Phase 4 candidate: high-cardinality grouping is opt-in until an operator-run
+        # High-cardinality grouping is opt-in until an operator-run
         # artifact passes and the public matrix moves it from Candidate to Certified.
         $result = Join-Path $outRoot 'high-cardinality-grouping.json'
         $resultKey = Join-Path $outRoot 'high-cardinality-grouping.key'
@@ -574,7 +574,7 @@ try {
     }
 
     if ($Scenario -eq 'EligibleWindowRowNumber') {
-        # v0.15.0 Phase 4 candidate: ROW_NUMBER window is opt-in until an operator-run
+        # ROW_NUMBER window is opt-in until an operator-run
         # artifact passes and the public matrix moves it from Candidate to Certified.
         $result = Join-Path $outRoot 'eligible-window-row-number.json'
         $resultKey = Join-Path $outRoot 'eligible-window-row-number.key'

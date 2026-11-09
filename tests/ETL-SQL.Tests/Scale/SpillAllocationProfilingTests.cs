@@ -17,7 +17,7 @@ using Xunit.Abstractions;
 namespace ETL_SQL.Tests.Scale
 {
     /// <summary>
-    /// v0.15.0 Phase 1 profiling harness for the Gate F <c>#temp</c> spill round trip
+    /// Profiling harness for the Gate F <c>#temp</c> spill round trip
     /// (<c>SELECT ... INTO #result</c> over a streaming source with forced spill, then a COUNT
     /// readback — the same shape as the certified TempTableSpill scenario).
     ///
