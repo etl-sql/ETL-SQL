@@ -44,8 +44,12 @@ if (-not $imageId) {
 
 Write-Host "==> Verifying default user..."
 $user = & docker inspect --format '{{.Config.User}}' $tag
-if ([string]::IsNullOrWhiteSpace($user) -or $user -eq "root" -or $user -eq "0" -or $user -eq "0:0") {
-    Write-Error "Configured user is blank or root ($user). The sandbox worker must run as a numeric non-root user by default."
+# Numeric uid[:gid], neither 0: a name could map to root, and "0:1000" or "1000:0" is still root
+# or the root group.
+$userMatch = [regex]::Match(([string]$user).Trim(),'^(\d+)(?::(\d+))?$')
+if (-not $userMatch.Success -or [int64]$userMatch.Groups[1].Value -eq 0 -or
+    ($userMatch.Groups[2].Success -and [int64]$userMatch.Groups[2].Value -eq 0)) {
+    Write-Error "Configured user is '$user'. The sandbox worker must run as a numeric non-root uid (and non-root gid) by default."
     exit 1
 }
 Write-Host "    User is configured securely: $user"
