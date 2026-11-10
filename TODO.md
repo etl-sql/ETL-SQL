@@ -69,7 +69,11 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   fresh install only (MSI and DEB; `Select-UpgradeBaseline`) and the v0.21.0 upgrade, its
   command-line override and the machine policy are gone. The current MSI's own property and the
   Restart Manager log check stay. **Left:** 4 nightly passes in a row on the fresh-only lane;
-  upgrade certification returns from v0.23.0, upgrading from v0.22.0.
+  upgrade certification returns from v0.23.0, upgrading from v0.22.0. Counting rule (owner
+  2026-11-10): only nightly runs whose MSI certification actually ran count, pass or fail. A run
+  that stopped before the installer ran (for example push MSI 42860306105 on `5a5980175`, which
+  failed source preflight on misplaced test files) neither counts nor resets the streak. Streak so
+  far: 2 (nightly 42687964349 on `cd6870b93`, 42839633435 on `048dfa99c`).
 - [ ] **W4 Release tooling tested on real output.** 2026-11-10: `test-real-release-output.mjs`
   replays the GitHub responses recorded for dry run 42699535102 (`cd6870b93`). The hosted CI/CodeQL
   collector reproduces the kept evidence file byte for byte. The DEB and MSI finders pick the same
