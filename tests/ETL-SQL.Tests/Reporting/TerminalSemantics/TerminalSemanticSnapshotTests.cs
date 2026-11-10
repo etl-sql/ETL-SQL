@@ -36,6 +36,10 @@ public class TerminalSemanticSnapshotTests
         var renderable = TerminalRenderer.RenderPage(page, manifest);
         Assert.NotNull(renderable);
 
+        // Deterministic means a second, independent compile and render prints the same thing.
+        var (_, again, _) = await TerminalSnapshotHarness.CompileFixtureAsync(fixtureFileName);
+        var rerendered = TerminalRenderer.RenderPage(again.Pages.First(), again);
+
         var widths = new[] { 40, 80, 120 };
         foreach (var width in widths)
         {
@@ -44,6 +48,9 @@ public class TerminalSemanticSnapshotTests
             Assert.True(snapshot.NormalizedText.Length > 0);
             Assert.True(snapshot.LineCount > 0);
             Assert.NotEmpty(snapshot.ChecksumSha256);
+            var repeat = TerminalSnapshotHarness.CaptureSnapshot(rerendered, width);
+            Assert.True(snapshot.ChecksumSha256 == repeat.ChecksumSha256,
+                $"{fixtureFileName} at width {width} rendered differently on a second run:\n{snapshot.NormalizedText}\n---\n{repeat.NormalizedText}");
         }
     }
 

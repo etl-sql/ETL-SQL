@@ -815,8 +815,11 @@ public class HtmlVisualStaticFallbackTests
 
         var bytes = await new PdfExporter().ExportAsync(new ReportManifest { Title = "HTML fallback", Visuals = [visual] });
 
-        Assert.True(bytes.Length > 100);
         Assert.Equal("%PDF", Encoding.ASCII.GetString(bytes, 0, 4));
+        var text = string.Join(" ", PdfText.Pages(bytes));
+        Assert.Matches(@"Node db- ?01: critical", text);
+        Assert.DoesNotContain("Restart", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("alert", text, StringComparison.Ordinal);
     }
 
     [Fact]
