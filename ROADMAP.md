@@ -187,6 +187,115 @@ points at it.
 install and an upgrade from v0.22.0 keep their secrets and settings; the Portal-profile certification
 (fresh, upgrade, rollback via `admin restore`) passes on its first attempt on five nightly runs.
 
+### SQL Engine & Grammar Conformance — SLT Harness, Fail-Closed Evaluation, EBNF, and Fuzzer Coverage
+
+**Status:** Incremental  
+**Horizon:** Next (v0.23.0)  
+**Scheduling:** Backlog for prioritization after v0.22.0 ships.  
+**Authoritative design:** [Engine Architecture](docs/architecture/engine.md),
+[Parser/Lexer Architecture](docs/architecture/parser-lexer.md),
+[Language Syntax Standards](docs/architecture/standards/language-syntax-standards.md), and
+[Canonical EBNF Grammar](docs/grammar.ebnf).
+
+**Implemented baseline:** Three complementary suites cover SQL parsing and execution:
+1. `tests/ETL-SQL.SqlLogicTests` runs 33 custom `.test` files and 14 SQLite SLT corpus files in the
+   opt-in `SLT` lane (`ETL_SQL_RUN_SLT=1`).
+2. `EngineCorpusTests` runs 5 `.etest` files (`tests/engine_corpus/*.etest`) in the default test
+   lane against the full DI service provider.
+3. `EbnfConformanceTests`, `GrammarParserConformanceTests`, and `ParserFuzzTests` (`Category=Fuzz`)
+   validate `docs/grammar.ebnf`, `DefaultGrammar`, AST `ToSql()` round-trips, and NoREC predicate
+   parity.
+
+**Problem and intended outcome:** The v0.22.0 SLT and EBNF review (2026-11-10) identified harness
+defects that mask passing-when-broken tests, engine evaluation paths that silently return `NULL` or
+wrong values instead of throwing an error, and blind spots in EBNF and fuzzer generation:
+- **SLT harness bugs (`SltRunner.cs`):** `statement error` throws `"Expected failure, but statement
+  succeeded"` inside its own `try` block, and the surrounding `catch (Exception ex)` only rethrows
+  when `record.ExpectSuccess` is `true`—making every `statement error` in the SLT suite a no-op.
+  `FormatSltValue` catches failed numeric conversions on `I`/`R` columns and returns `"0"`/`"0.000"`,
+  maps `NaN`/`±Infinity` to `"NULL"`, and formats `bool` as `"1"`/`"0"` before checking the column
+  type specifier. `SltRunner.CreateFreshSession` manually registers only 26 of 67 statement handlers.
+- **Engine silent fallbacks (`ExpressionEvaluator.cs`, `BinaryOperatorFactory.cs`, `EvaluationUtils.cs`):**
+  - Unresolved column identifiers in `EvaluateIdentifier` return `null` when a row context is present
+    (`SELECT bogus_col FROM t`) or return the identifier's own name as a string when `context` is
+    `null` (`SELECT bogus_ident`), instead of throwing an unknown-identifier error.
+  - Failed arithmetic coercion (`'abc' - 5`, `'abc' * 5`, `'abc' / 5`) and `decimal` / shift
+    `OverflowException` in `BinaryOperatorFactory` catch and return `null` instead of throwing.
+  - `EvaluationUtils.IsSoftEqual` truncates `DateTime` comparisons to whole seconds while
+    `CompareConstants` keeps sub-second ticks, violating trichotomy (`a = b` and `a < b` can both be
+    true for timestamps within the same second); failed numeric-to-string comparisons silently fall
+    back to lexicographical string ordering.
+  - `POSITION(substr IN str)` returns `0` instead of `NULL` on `NULL` arguments; `EXTRACT` returns
+    `null` on invalid date strings or unrecognized field names; `Evaluator` batch execution (`GO`)
+    catches and logs batch exceptions without failing the script.
+- **SLT, EBNF, and fuzzer coverage holes:**
+  - Across all 33 custom `.test` files, only `alter_table.test` contains `statement error` records
+    (3 total). `select5.test` stops at an unconditional `halt` on line 456 (skipping 932 of 999 join
+    queries), and `slt_lang_aggfunc.test` plus 214 `tests/slt_data/index/**` files are excluded.
+  - Shipped SQL clauses (`USING SAMPLE`, `MATCH_RECOGNIZE`, `GROUP BY ALL`, named `WINDOW w AS (...)`,
+    `IS [NOT] DISTINCT FROM`, DML `OUTPUT INSERTED.*/DELETED.*`, and `WITH cte AS (...)` on DML) have
+    zero SLT `.test` queries.
+  - `EbnfConformanceTests` stubs `select_statement` to `"SELECT 1 "` and `expression` to 5 literals,
+    so `select_body` (`join_clause`, `table_operator` `PIVOT`/`UNPIVOT`, `GROUP BY`, `HAVING`,
+    `WINDOW`, `QUALIFY`, `USING SAMPLE`, `MATCH_RECOGNIZE`) is never expanded during rule generation.
+    `docs/grammar.ebnf` is missing `ALTER TABLE ... DROP COLUMN`, `ALTER TABLE ... RENAME [COLUMN] ... TO ...`,
+    and `REPLACE INTO` / `INSERT OR REPLACE INTO`.
+  - `GrammarParserConformanceTests.Grammar_Rejects_WhatTheParserRejects` is tautological because
+    `DefaultGrammar.Build()` delegates final acceptance to `new Parser(tokens).Parse()`.
+  - `GrammarWalkGenerator` uses 8 small hardcoded templates for 90% of iterations (never generating
+    `JOIN`, subqueries, CTEs, set operations, `DISTINCT`, `TOP`, `OFFSET`, `QUALIFY`, or `GROUPING SETS`,
+    while branch 6 still emits retired `SHOW VARIABLES;` syntax), marks grammar/parser mismatch
+    buckets `isBug: false`, and swallows `ExecutionException` inside `VerifyNoRECParity` unless
+    `ETLSQL_FUZZ_STRICT_EXEC=1` is set.
+
+The outcome is a fail-closed SQL engine and test harness where invalid identifiers, bad type
+coercions, arithmetic overflows, and unexpected successes fail loudly, backed by expanded SLT, EBNF,
+and NoREC coverage.
+
+**Why next:** Identified during the v0.22.0 SQL SLT/EBNF review (2026-11-10) and held for v0.23.0 so
+the active v0.22.0 release candidate is not disturbed.
+
+**Boundaries:** Preserve existing valid ETL-SQL dialect semantics, `decimal` runtime storage for
+integer types, and opt-in lane separation for long-running SLT/Fuzz suites. Any intentional
+compatibility change to identifier resolution or arithmetic coercion must update affected scripts and
+document the break in `CHANGELOG.md`.
+
+**Dependencies:** `SltRunner`, `EngineCorpusTests`, `ExpressionEvaluator`, `BinaryOperatorFactory`,
+`EvaluationUtils`, `docs/grammar.ebnf`, `EbnfConformanceTests`, `DefaultGrammar`, and
+`ParserFuzzTests`.
+
+**Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
+Select individual IDs into `TODO.md` when scheduling.
+
+#### SLT harness integrity
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SQ01 | **Fix `statement error` handling in `SltRunner`.** Track whether evaluation threw outside the `try`/`catch` block (matching `EngineCorpusTests`), fail when a `statement error` record succeeds, and support optional expected error-message substring matching. Audit and fix any existing `.test` records (such as `REINDEX` in `slt_lang_reindex.test`) exposed by enabling the check. | — | S |
+| SQ02 | **Stop masking type/domain errors in `SltRunner.FormatSltValue` and wire full DI handlers.** Fail the query when an `I` or `R` column receives a non-numeric string instead of returning `"0"`/`"0.000"`, distinguish `NaN`/`±Infinity` from `NULL`, respect `typeChar` for booleans and text decimals, and resolve all statement handlers from DI (or share the `EngineCorpusTests` session factory). | SQ01 | S |
+
+#### Fail-closed SQL expression, arithmetic, and comparison semantics
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SQ03 | **Fail closed on unresolved identifiers in `ExpressionEvaluator.EvaluateIdentifier`.** Throw an `ExecutionException` on unknown column names in row context and unknown bare identifiers in scalar context (preserving only explicit grammar constructs like `EXTRACT`/`DATEADD` datepart tokens at parse/bind time). | — | M |
+| SQ04 | **Fail closed on invalid arithmetic coercion and overflow in `BinaryOperatorFactory`.** Throw an `ExecutionException` when `-`, `*`, `/`, `%`, `<<`, or `>>` receives non-numeric text or overflows `decimal`/`long`, instead of returning `null`. | — | S |
+| SQ05 | **Restore `DateTime` comparison trichotomy and strict numeric/date ordering in `EvaluationUtils`.** Align `IsSoftEqual` and `CompareConstants` on full `DateTime` tick precision, and fail or define explicit type precedence when comparing numeric values against non-numeric strings. | — | S |
+| SQ06 | **Fix `POSITION`, `EXTRACT`, and `GO` batch error propagation.** Return `NULL` from `POSITION` when either input is `NULL`; throw on unrecognized `EXTRACT` fields or unparseable date inputs; propagate unhandled exceptions across `GO` batches unless explicitly guarded by `TRY/CATCH`. | — | S |
+
+#### SLT corpus, EBNF grammar, and fuzzer/NoREC expansion
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SQ07 | **Add SLT positive and `statement error` coverage for unexercised SQL clauses.** Add `.test` coverage (including negative `statement error` cases) for `USING SAMPLE`, `MATCH_RECOGNIZE`, `GROUP BY ALL`, named `WINDOW w AS (...)`, `IS [NOT] DISTINCT FROM`, DML `OUTPUT INSERTED.*/DELETED.*`, and `WITH cte AS (...)` on `INSERT`/`UPDATE`/`DELETE`/`MERGE`. Remove the unconditional `halt` in `select5.test` (or gate remaining queries) and triage `slt_lang_aggfunc.test` and `tests/slt_data/index/**`. | SQ01, SQ02 | M |
+| SQ08 | **Reconcile `docs/grammar.ebnf` drift and expand `select_body` / `expression` in `EbnfConformanceTests`.** Add `ALTER TABLE ... DROP COLUMN`, `ALTER TABLE ... RENAME [COLUMN] ... TO ...`, and `REPLACE INTO` / `INSERT OR REPLACE INTO` to `docs/grammar.ebnf`; expand `select_body` (`join_clause`, `PIVOT`/`UNPIVOT`, `GROUP BY`, `HAVING`, `WINDOW`, `QUALIFY`, `USING SAMPLE`, `MATCH_RECOGNIZE`) and `expression` branches in `EbnfConformanceTests`; test `DefaultGrammar` state transitions with `requireParserAcceptance: false`. | — | M |
+| SQ09 | **Expand `GrammarWalkGenerator` and tighten `ParserFuzzTests` / NoREC checks.** Remove retired `SHOW VARIABLES;`/`SHOW CONNECTIONS;` from `GrammarWalkGenerator`; generate `JOIN`s, subqueries, CTEs, set operations, `DISTINCT`, `QUALIFY`, and `GROUPING SETS`; promote grammar/parser mismatch buckets to `isBug: true` once `DefaultGrammar` drift is closed; and fail on unexpected `ExecutionException` in `VerifyNoRECParity`. | SQ08 | M |
+
+**Acceptance evidence:** `statement error` tests fail when the target statement succeeds; unresolved
+columns, non-numeric arithmetic, and overflows throw `ExecutionException`; `DateTime` equality and
+ordering satisfy trichotomy; `EbnfConformanceTests` exercises all `select_body` clauses with zero
+drift against `Parser`; and `SltTests`, `EngineCorpusTests`, and `ParserFuzzTests` pass cleanly.
+
 ## Later Reporting and Presentation Work
 
 ### Reporting & Presentation — Grammar-of-Graphics Semantic Extensions
