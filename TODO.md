@@ -228,7 +228,7 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   `Test-EnterpriseHardeningCertification`, `Measure-StudioPerformance`, `Test-SpillAllocProfile`,
   `Test-HaSoakContracts`, `sync-assets`, `Publish-WindowsPayload`, `Build-WindowsNativePackages`,
   `build-msi` and `MsiImpact.Helpers` have no defects, and a sweep of
-  `scripts/` for empty catches, `|| true` and dynamic code found only cleanup and polls. Eight
+  `scripts/` for empty catches, `|| true` and dynamic code found only cleanup and polls. Nine
   defects, fixed:
   (1) `Test-AllSamples.ps1 -ReleaseMode` skipped the Docker, PostgreSQL, Portal and Orchestrator
   samples when their containers did not start, so the release sample gate passed without them;
@@ -266,7 +266,17 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   Developer Mode (this workstation included). They are now `[SymlinkFact]`, which probes once and
   shows a visible skip; all six pass on Linux. The `StmtFileSystem` link test falls back to a
   junction, so it now asserts the link was made. The three `IsolationVerifier` tests passed when
-  `pwsh` could not start; `pwsh` is required here, so that now fails them. **Left:** the rest
+  `pwsh` could not start; `pwsh` is required here, so that now fails them. (9)
+  `Test-SandboxWorkerImage.ps1` rejected only `root`, `0` and `0:0` as the worker's user, so
+  `0:1000`, `1000:0` or a named user passed; it now requires a numeric uid and gid, neither 0.
+  Guards added: the dataset secret scan must read both persisted datasets and the export, the
+  report help lint must find examples, and `verify-source-only-preparation` fails an inventory
+  with no outputs. Also reviewed, no defects: `candidate-supervisor` and its failure signatures,
+  `collect-hosted-release-evidence`, `find-certified-deb`, `Find-CertifiedMsi`,
+  `enable-hardened-sandbox-lane` (CI exports the pinned image; the hardened tests ran, 0 skipped),
+  `collect-operator-release-evidence`, the Windows/macOS package wrappers, `ReleasePublish.Helpers`,
+  `check-windows-package-origin`, `Test-BrowserShard`, `report-browser-shard-recovery`,
+  `MsiCheckpoint.Helpers`. **Left:** the rest
   of `scripts/` and `tests/`; the Portal and Orchestrator samples in GitHub; native installed-MSI
   certification of the fixed installer paths.
 
