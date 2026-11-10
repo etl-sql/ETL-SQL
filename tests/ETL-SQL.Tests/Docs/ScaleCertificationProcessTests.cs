@@ -96,16 +96,21 @@ public sealed class ScaleCertificationProcessTests
     [InlineData("missing-capture", false)]
     [InlineData("unrecorded-v1", false)]
     [InlineData("precision", false)]
+    [InlineData("other-host-report-only", true)]
+    [InlineData("missing-report-only", false)]
+    [InlineData("invalid-report-only", false)]
     public async Task BaselineComparison_RequiresMatchingObservedGcConfiguration(string mode, bool accepted)
     {
+        var reportOnly = mode.EndsWith("-report-only", StringComparison.Ordinal) ? "-PerformanceReportOnly" : "";
         var result = await ReleasePolicyHelperTests.RunHelper($$"""
             $baselineGc = @{server=$true; concurrent=$true; heapCount=24; dynamicAdaptationMode=1;
                 heapHardLimitBytes=0; heapHardLimitPercent=0; conserveMemory=0; retainVirtualMemory=$false;
                 processorCount=24; latencyMode='Interactive'}
             $currentGc = $baselineGc.Clone()
             if ('{{mode}}' -eq 'different') { $currentGc.dynamicAdaptationMode=0 }
-            if ('{{mode}}' -eq 'missing') { $currentGc.Remove('heapCount') }
-            if ('{{mode}}' -eq 'invalid') { $currentGc.heapCount=-1 }
+            if ('{{mode}}' -eq 'other-host-report-only') { $currentGc.heapCount=4; $currentGc.processorCount=4 }
+            if ('{{mode}}' -in @('missing','missing-report-only')) { $currentGc.Remove('heapCount') }
+            if ('{{mode}}' -in @('invalid','invalid-report-only')) { $currentGc.heapCount=-1 }
             if ('{{mode}}' -eq 'string') { $currentGc.server='true' }
             if ('{{mode}}' -eq 'precision') {
                 $baselineGc.heapHardLimitBytes=9007199254740992L
@@ -121,13 +126,17 @@ public sealed class ScaleCertificationProcessTests
             if ('{{mode}}' -eq 'unrecorded-v1') { $config.scenarioWarmUp='own-path-untimed-v1' }
             if ('{{mode}}' -eq 'missing-capture') { $config.Remove('gcConfigurationCapture') }
             Assert-ScaleCaptureCompatibility -BaselineReport @{config=$config; gcConfiguration=$baselineGc} `
-                -CurrentReport @{config=$config; gcConfiguration=$currentGc}
+                -CurrentReport @{config=$config; gcConfiguration=$currentGc} {{reportOnly}} 3>&1
             'GC profiles accepted'
             """, helperName: "ScaleCertification.Helpers.ps1");
-        Assert.Equal(accepted, result.ExitCode == 0);
+        Assert.True(accepted == (result.ExitCode == 0), result.Output);
         var expected = accepted ? "GC profiles accepted"
             : mode is "missing-warm-up" or "unrecorded-v1" ? "warm-up" : "GC configuration";
         Assert.Contains(expected, result.Output);
+        if (mode == "other-host-report-only")
+        {
+            Assert.Contains("GC configurations differ", result.Output);
+        }
     }
 
     [Theory]

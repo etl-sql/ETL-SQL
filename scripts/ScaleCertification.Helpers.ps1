@@ -167,7 +167,9 @@ function Complete-ScaleCapturedProcess {
 }
 
 function Assert-ScaleCaptureCompatibility {
-    param([Parameter(Mandatory)][object]$BaselineReport, [Parameter(Mandatory)][object]$CurrentReport)
+    param([Parameter(Mandatory)][object]$BaselineReport, [Parameter(Mandatory)][object]$CurrentReport,
+        # A different machine still yields valid row and checksum evidence; only timing needs the same GC profile.
+        [switch]$PerformanceReportOnly)
 
     $baselineMethod = $BaselineReport.config.outputCapture
     $currentMethod = $CurrentReport.config.outputCapture
@@ -214,10 +216,16 @@ function Assert-ScaleCaptureCompatibility {
     $currentGcCapture = $CurrentReport.config.gcConfigurationCapture
     if ($baselineGcCapture -or $currentGcCapture -or $baselineWarmUp -ceq 'own-path-scaled-untimed-v2') {
         if ($baselineGcCapture -cne 'runtime-observed-v1' -or $currentGcCapture -cne 'runtime-observed-v1' -or
-            $null -eq $BaselineReport.gcConfiguration -or $null -eq $CurrentReport.gcConfiguration -or
-            (Get-ScaleGcConfigurationKey $BaselineReport.gcConfiguration) -cne
-            (Get-ScaleGcConfigurationKey $CurrentReport.gcConfiguration)) {
+            $null -eq $BaselineReport.gcConfiguration -or $null -eq $CurrentReport.gcConfiguration) {
             throw 'Observed GC configurations differ or are incomplete. Calibrate matching GC profiles before regression decisions.'
+        }
+        $baselineGcKey = Get-ScaleGcConfigurationKey $BaselineReport.gcConfiguration
+        $currentGcKey = Get-ScaleGcConfigurationKey $CurrentReport.gcConfiguration
+        if ($baselineGcKey -cne $currentGcKey) {
+            if (-not $PerformanceReportOnly) {
+                throw 'Observed GC configurations differ or are incomplete. Calibrate matching GC profiles before regression decisions.'
+            }
+            Write-Warning "Observed GC configurations differ (baseline $baselineGcKey, current $currentGcKey). Timings are not comparable; correctness is still compared."
         }
     }
     $baselineIsolation = $BaselineReport.config.processIsolation

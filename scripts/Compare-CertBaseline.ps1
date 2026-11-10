@@ -434,7 +434,7 @@ if (-not (Test-Path $Baseline)) {
 }
 
 $base = Get-Content $Baseline -Raw | ConvertFrom-Json
-Assert-ScaleCaptureCompatibility -BaselineReport $base -CurrentReport $new
+Assert-ScaleCaptureCompatibility -BaselineReport $base -CurrentReport $new -PerformanceReportOnly:$PerformanceReportOnly
 
 if ((Get-PropValue $base @('tier')) -ne $tier) {
     Write-Warning "Baseline tier '$(Get-PropValue $base @('tier'))' does not match new report tier '$tier' - skipping comparison."
