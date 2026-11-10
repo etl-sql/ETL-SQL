@@ -4,7 +4,9 @@ param(
     [Parameter(Mandatory)] [ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')] [string]$Repository,
     # '' for the first public release, which is certified as a fresh install with no previous release.
     [Parameter(Mandatory)] [AllowEmptyString()] [ValidatePattern('^(v\d+\.\d+\.\d+)?$')] [string]$PreviousTag,
-    [Parameter(Mandatory)] [string]$OutputDirectory
+    [Parameter(Mandatory)] [string]$OutputDirectory,
+    # The seven-day window is measured from here; a recorded replay passes the time it was recorded.
+    [datetimeoffset]$Now = [datetimeoffset]::UtcNow
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'MsiReuse.Helpers.ps1')
@@ -35,8 +37,8 @@ function Read-CompleteInventory($Pages, [string]$Property) {
 $pages = Read-GitHubPages "repos/$Repository/actions/runs?head_sha=$SourceSha&per_page=100"
 $runs = @(Read-CompleteInventory -Pages $pages -Property workflow_runs | Sort-Object id -Descending)
 foreach ($run in $runs) {
-    if (-not (Test-MsiCandidateRun -Run $run -SourceSha $SourceSha -Repository $Repository)) { continue }
-    if (-not (Test-MsiReusableRun -Run $run -SourceSha $SourceSha -Repository $Repository)) {
+    if (-not (Test-MsiCandidateRun -Run $run -SourceSha $SourceSha -Repository $Repository -Now $Now)) { continue }
+    if (-not (Test-MsiReusableRun -Run $run -SourceSha $SourceSha -Repository $Repository -Now $Now)) {
         throw "Candidate MSI run $($run.id) is $($run.status)/$($run.conclusion). Complete or retry that run before release; no duplicate build was started."
     }
     $artifactPages = Read-GitHubPages "repos/$Repository/actions/runs/$($run.id)/artifacts?per_page=100"
@@ -56,7 +58,7 @@ foreach ($run in $runs) {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot recheck MSI certification run.' }
     $current = $currentJson | ConvertFrom-Json
     if ([string]$current.id -cne [string]$run.id -or $current.run_attempt -ne $run.run_attempt -or
-        -not (Test-MsiReusableRun -Run $current -SourceSha $SourceSha -Repository $Repository)) {
+        -not (Test-MsiReusableRun -Run $current -SourceSha $SourceSha -Repository $Repository -Now $Now)) {
         throw 'MSI certification changed during selection.'
     }
     "artifact_id=$artifactId" >> $env:GITHUB_OUTPUT

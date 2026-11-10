@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "scope": "certified-windows-native-packages",
+  "repository": "etl-sql/ETL-SQL",
+  "sourceSha": "cd6870b930f4dbdaecf5aab3f224070ab7afe803",
+  "version": "0.22.0",
+  "runId": 42688181429,
+  "runAttempt": 1,
+  "jobId": 129402750802,
+  "executionAttempt": 1,
+  "artifactId": 13707099748,
+  "artifactName": "native-package-win-x64-1",
+  "artifactDigest": "sha256:c35fb5cc75267282eaf5bb031694666c70fa251e258130f9dd9d8579cda5f32b",
+  "manifestSha256": "2b8e718d0cdfb8e9e31bae2a222242b179399cef80ed5a7006e64f0b10f1a62f",
+  "evidenceSha256": "f5f868a4afe3aa089027996403065eadfa90c594c3b891336a9e23ea19638def",
+  "collectedAt": "2026-11-09T21:08:45.924Z",
+  "windowsPayloadSha256": "99aff7ab85a35c3dc7da9b25242ffac78850b2daa890162ae3c353141d82bac8"
+}

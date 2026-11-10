@@ -70,8 +70,15 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   command-line override and the machine policy are gone. The current MSI's own property and the
   Restart Manager log check stay. **Left:** 4 nightly passes in a row on the fresh-only lane;
   upgrade certification returns from v0.23.0, upgrading from v0.22.0.
-- [ ] **W4 Release tooling tested on real output.** **Left:** recorded real outputs for every
-  post-tag collector and validator.
+- [ ] **W4 Release tooling tested on real output.** 2026-11-10: `test-real-release-output.mjs`
+  replays the GitHub responses recorded for dry run 42699535102 (`cd6870b93`). The hosted CI/CodeQL
+  collector reproduces the kept evidence file byte for byte. The DEB and MSI finders pick the same
+  runs and artifacts the dry run logged. The real MSI inputs and native Windows selection pass the
+  shared-payload check and match the draft's MSI hash. Fixtures are in
+  `scripts/checks/fixtures/real-release/`, with commit author details removed. `Find-CertifiedMsi.ps1`
+  takes `-Now` so a recording keeps its seven-day window. **Left:** the native Windows and macOS
+  collectors and the draft-manifest check hash about 1 GB of packages per platform, too much for the
+  repository; and the operator collector, which needs the first real v0.22.0 submission.
 - [x] **W4b Remove the workstation from the release path** (owner, 2026-11-04). Done 2026-11-09
   (`7fea0343a`): the hosted Engine Certification job runs EBNF, SLT, 10M spill and Smoke/Standard
   scale; Build Verification checks third-party drift; Docker runs smoke parity; `release.yml` and

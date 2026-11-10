@@ -138,7 +138,10 @@ commit reruns only the affected checks.
 Keep recorded real outputs (CLI launch logs, MSI verbose logs, workflow run JSON, scenario
 evidence) as test data for every collector and validator. (The end-to-end workstation-driver test
 was dropped with the driver in W4b.) **Done when:** every post-tag
-collector has a real-output test.
+collector has a real-output test. Status 2026-11-10: hosted, DEB and MSI selection and the Windows
+package-origin check replay real recordings from dry run 42699535102
+(`scripts/checks/test-real-release-output.mjs`); the native, draft-manifest and operator collectors
+remain (package bytes too large to keep; no real operator submission yet).
 
 ### W4b. Remove the workstation from the release path (owner decided 2026-11-04)
 **Status 2026-11-09: done, unpushed.** The hosted Engine Certification job in `ci.yml` runs the
