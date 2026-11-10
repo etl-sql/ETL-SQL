@@ -72,7 +72,11 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   invariant output (ISO dates, LF, `07cc7bd90`), and EBNF and SLT then passed (CI 42725899666) and
   now run under `de_DE.UTF-8` (`265e745cc`). The spill step failed there on 77 gen2 GCs against a
   workstation limit of 74 while allocation passed; GC counts, pause and peak working set now only
-  warn in hosted CI (allocation and spill evidence still fail). **Left:** a green hosted run of
+  warn in hosted CI (allocation and spill evidence still fail). The next run (CI 42732273546)
+  failed EBNF although all 16 tests passed: the lane looked for the English "Passed:" summary and
+  dotnet printed German; lanes now also accept the TRX counters. `Test-ScaleCertification.ps1` and
+  `Test-DeploymentProfileCertification.ps1` still read the English summary (they do not run under
+  de_DE in CI, but fail on a German-language machine). **Left:** a green hosted run of
   the whole job, including the scale steps, which have not run on a hosted runner yet. Still
   locale-dependent: chart labels and variable text in report snapshots
   (`samples/**/*.snapshot.json` hold en-US dates), string concatenation of dates, and text-to-date

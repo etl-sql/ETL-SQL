@@ -138,6 +138,8 @@ function Invoke-DotNetTest {
         if ($retry.Cleared) { return }
         Write-Warning "$Lane lane $Project not retried or still failing: $($retry.Reason)"
     }
+    # The console summary is localized; the TRX is not.
+    if (-not $testsExecuted) { $testsExecuted = Test-ReleaseTrxExecuted -Path $trxPath }
     if ($testExit -eq 0 -and -not $testsExecuted) {
         throw "Test lane '$Lane' produced no passed test summary for '$Project' with filter '$Filter'."
     }

@@ -285,6 +285,27 @@ public sealed class ReleasePolicyHelperTests
         Assert.Equal(expected.ToString(), result.Output.Trim());
     }
 
+    // A localized console ("Bestanden! ... erfolgreich: 16") has no English summary to match, so a
+    // lane also accepts a TRX that records passed tests (CI 42732273546).
+    [Theory]
+    [InlineData(16, true)]
+    [InlineData(0, false)]
+    public async Task TrxEvidence_ShowsExecutedTestsInAnyDisplayLanguage(int passed, bool expected)
+    {
+        Assert.Equal("False", (await RunHelper(
+            "Test-ReleaseTestOutputExecuted -Output 'Bestanden!   : Fehler:     0, erfolgreich:    16, übersprungen:     0, gesamt:    16'")).Output.Trim());
+        var result = await RunHelper($$"""
+            $path = [IO.Path]::GetTempFileName()
+            try {
+                '<TestRun><ResultSummary><Counters total="16" executed="16" passed="{{passed}}" /></ResultSummary></TestRun>' | Set-Content -LiteralPath $path
+                Test-ReleaseTrxExecuted -Path $path
+                Test-ReleaseTrxExecuted -Path ($path + '.missing')
+            } finally { Remove-Item -LiteralPath $path -Force }
+            """);
+        Assert.True(result.ExitCode == 0, result.Output);
+        Assert.Equal($"{expected}{Environment.NewLine}False", result.Output.Trim());
+    }
+
     [Theory]
     [InlineData(12, 12, 12, true)]
     [InlineData(0, 0, 0, false)]

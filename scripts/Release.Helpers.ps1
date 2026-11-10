@@ -38,6 +38,19 @@ function Test-ReleaseTestOutputExecuted {
     return $Output -match 'Passed:\s*[1-9][0-9]*\b'
 }
 
+# The TRX counters, unlike the console summary, are the same in every display language. Under a
+# German culture dotnet prints "Bestanden! ... erfolgreich: 16", so the console check alone failed
+# a passing lane (CI 42732273546).
+function Test-ReleaseTrxExecuted {
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    try {
+        [xml]$result = Get-Content -LiteralPath $Path -Raw
+        return [int]$result.TestRun.ResultSummary.Counters.passed -gt 0
+    } catch { return $false }
+}
+
 function Test-ReleaseTrxComplete {
     param([Parameter(Mandatory)][string]$Path)
 
