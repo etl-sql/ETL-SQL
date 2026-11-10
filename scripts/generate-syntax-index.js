@@ -77,7 +77,7 @@ function renderRows(tokens, family, notePrefix) {
 function renderGeneratedSection(data) {
   const CATEGORIES = {
     "Settings & Engine Configuration": [
-        "WEEK_START_DAY", "SCRIPT_HASH_POLICY", "CASE_SENSITIVE", "PROFILING", "PROFILE",
+        "WEEK_START_DAY", "DATEFORMAT", "SCRIPT_HASH_POLICY", "CASE_SENSITIVE", "PROFILING", "PROFILE",
         "WHAT_IF", "ALLOW_FILE_OPERATIONS", "ALLOW_RECURSIVE_LAYERS", "TELEMETRY",
         "INTERACTIVE_MODE", "LINT", "VERSION", "CONFIG", "MAX_RECURSIVE_DEPTH",
         "MAX_IN_MEMORY_BATCHES", "FOREACH_PAGE_SIZE", "MAX_MESSAGES", "MAX_FILE_OPERATIONS",

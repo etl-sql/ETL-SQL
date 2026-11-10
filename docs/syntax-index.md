@@ -765,6 +765,7 @@ Options configured via `SET <Option> = <Value>` or `SET <Option> ON|OFF`.
 | `TEMP_TABLE_SPILL_THRESHOLD` | Performance | 1,000,000 | [SET TEMP_TABLE_SPILL_THRESHOLD](reference/set-commands/set-temp-table-spill-threshold.md) |
 | `MAX_PARALLEL_DEGREE` | Performance | CPU Count | [SET MAX_PARALLEL_DEGREE](reference/set-commands/set-max-parallel-degree.md) |
 | `WEEK_START_DAY` | Localization | Monday | [SET WEEK_START_DAY](reference/set-commands/set-week-start-day.md) |
+| `DATEFORMAT` | Localization | MDY (`Engine:DateFormat`) | [SET DATEFORMAT](reference/set-commands/set-dateformat.md) |
 | `REPORT TIME_ZONE` | Report | `UTC` | [SET REPORT](reference/set-commands/set-report.md) |
 | `REPORT LOCALE` | Report | invariant | [SET REPORT](reference/set-commands/set-report.md) |
 | `REPORT NULL_LABEL` | Report | `-` | [SET REPORT](reference/set-commands/set-report.md) |
@@ -1706,6 +1707,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `ALLOW_RECURSIVE_LAYERS` | Settings & Engine Configuration | Canonical language token |
 | `CASE_SENSITIVE` | Settings & Engine Configuration | Canonical language token |
 | `CONFIG` | Settings & Engine Configuration | Canonical language token |
+| `DATEFORMAT` | Settings & Engine Configuration | Canonical language token |
 | `EXTERNAL_HASH_PARTITIONS` | Settings & Engine Configuration | Canonical language token |
 | `EXTERNAL_SORT_CHUNK_SIZE` | Settings & Engine Configuration | Canonical language token |
 | `FOREACH_PAGE_SIZE` | Settings & Engine Configuration | Canonical language token |
@@ -2110,7 +2112,6 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `DATA_BARS` | General | Canonical language token |
 | `DATA_QUALITY_DRY_RUN` | General | Canonical language token |
 | `DATA_SOURCE` | General | Canonical language token |
-| `DATEFORMAT` | General | Canonical language token |
 | `DEFAULT_EXPAND` | General | Canonical language token |
 | `DEFAULT_SORT` | General | Canonical language token |
 | `DELETE_EXTRA` | General | Canonical language token |
