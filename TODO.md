@@ -71,7 +71,9 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   hosted-local tooling is deleted. Smoke parity passed on its first hosted run (CI 42705343857).
   Engine Certification failed there: 3 SQL logic files showed the engine's text depended on the
   host (date casts followed the locale, FOR JSON/XML used the platform newline). Owner chose
-  invariant output (ISO dates, LF); fixed with a culture regression test. **Left:** a green hosted
+  invariant output (ISO dates, LF); fixed with a culture regression test. The SLT runner formats
+  values the same invariant way, and the EBNF and SLT lanes run under `de_DE.UTF-8` (both pass there
+  locally in WSL; a policy check keeps the pin). **Left:** a green hosted
   run of Engine Certification. Still locale-dependent and out of this fix: chart category labels
   and variable text in report snapshots (`samples/**/*.snapshot.json` hold en-US dates), string
   concatenation of dates, and text-to-date casts (`DateTime.Parse` with no culture).

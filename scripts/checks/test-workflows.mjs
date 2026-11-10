@@ -23,6 +23,14 @@ assert.doesNotMatch(consumerJob, /'build-and-test'/);
 assert.match(consumerJob, /name: Browser and Consumer Contracts/);
 for (const command of ['verify-source-only-preparation.mjs', 'browser-asset-ownership.mjs', 'typecheck-browser.mjs',
   'lint-browser.mjs', 'check-consumer-contracts.mjs', 'Test-HaSoakContracts.ps1']) assert.ok(consumerJob.includes(command));
+// Engine text once followed the host locale (CI 42705343857). The grammar and SQL logic lanes run
+// under a comma-decimal, day-first culture so that dependence fails in CI.
+const engineCertification = ciSource.split(/^  engine-certification:\r?\n/m)[1].split(/^  [\w-]+:\r?\n/m)[0];
+for (const lane of ['EBNF conformance lane', 'SLT lane']) {
+  const step = engineCertification.split(/^      - /m).find(block => block.split(/\r?\n/)[0] === `name: ${lane}`);
+  assert.ok(step, `Engine Certification lacks ${lane}.`);
+  for (const variable of ['LANG', 'LC_ALL']) assert.match(step, new RegExp(`^          ${variable}: de_DE\\.UTF-8\\r?$`, 'm'), `${lane} must run under de_DE (${variable}).`);
+}
 // Upload artifacts are immutable within a run. Failed-only retries must preserve old evidence
 // and create distinct names, including separate matrix executions.
 const ciSections = ciSource.split(/^  ([\w-]+):\r?$/m);

@@ -844,14 +844,23 @@ jobs:
         timeout-minutes: 17
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'ETL-SQL.slnx', '--no-restore', '--configuration', 'Release') -EvidenceDirectory release-validation/engine-certification/build -TimeoutSeconds 960
 
+      # The grammar and SQL logic lanes run under a comma-decimal, day-first culture. Windows CI is
+      # en-US and other Linux jobs are invariant, so engine text that follows the host locale
+      # (CI 42705343857) fails here instead of on a developer's machine.
       - name: EBNF conformance lane
         shell: pwsh
         timeout-minutes: 8
+        env:
+          LANG: de_DE.UTF-8
+          LC_ALL: de_DE.UTF-8
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'ebnf', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/engine-certification/ebnf -TimeoutSeconds 420
 
       - name: SLT lane
         shell: pwsh
         timeout-minutes: 10
+        env:
+          LANG: de_DE.UTF-8
+          LC_ALL: de_DE.UTF-8
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'slt', '-Configuration', 'Release', '-NoRestore', '-NoBuild') -EvidenceDirectory release-validation/engine-certification/slt -TimeoutSeconds 540
 
       - name: Spill allocation budget (10M rows)

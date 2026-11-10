@@ -702,7 +702,9 @@ Native Linux/macOS packaging and cross-platform certifications still require the
 
 The **Engine Certification** job in `ci.yml` runs on every full CI and Release Certification run,
 and on pushes that change the engine. It builds Release, then runs the EBNF and SLT lanes, the
-10M-row spill allocation profile, and Smoke and Standard scale certification. Each scale tier is
+10M-row spill allocation profile, and Smoke and Standard scale certification. The EBNF and SLT
+lanes run under the `de_DE.UTF-8` culture (comma decimal, day-first dates); Windows CI is en-US and
+other Linux jobs are invariant, so engine text that follows the host locale fails here. Each scale tier is
 compared with `certification-results/baseline-<tier>.json` using
 `Compare-CertBaseline.ps1 -PerformanceReportOnly`: timing misses are warnings, while row counts,
 checksums and failed scenarios fail the job. Its artifact `engine-certification-<run>-<attempt>`

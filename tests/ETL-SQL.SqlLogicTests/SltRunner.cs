@@ -368,12 +368,12 @@ SET TELEMETRY = OFF;";
                     else if (value is long l) d = l;
                     else if (value is short s) d = s;
                     else if (value is byte b) d = b;
-                    else d = double.Parse(value.ToString() ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+                    else d = double.Parse(ETL_SQL.Core.Data.TypeConverter.ToInvariantText(value) ?? "0", System.Globalization.CultureInfo.InvariantCulture);
 
                     if (double.IsNaN(d) || double.IsInfinity(d))
                         return "NULL";
 
-                    return ((long)Math.Truncate(d)).ToString();
+                    return ((long)Math.Truncate(d)).ToString(System.Globalization.CultureInfo.InvariantCulture);
                 }
                 catch
                 {
@@ -392,7 +392,7 @@ SET TELEMETRY = OFF;";
                     else if (value is long l) d = l;
                     else if (value is short s) d = s;
                     else if (value is byte b) d = b;
-                    else d = double.Parse(value.ToString() ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+                    else d = double.Parse(ETL_SQL.Core.Data.TypeConverter.ToInvariantText(value) ?? "0", System.Globalization.CultureInfo.InvariantCulture);
 
                     if (double.IsNaN(d)) return "NaN";
                     if (double.IsPositiveInfinity(d)) return "Inf";
@@ -408,10 +408,11 @@ SET TELEMETRY = OFF;";
             else
             {
                 if (value is decimal dec && dec == Math.Truncate(dec) && dec >= long.MinValue && dec <= long.MaxValue)
-                    return ((long)dec).ToString();
+                    return ((long)dec).ToString(System.Globalization.CultureInfo.InvariantCulture);
                 if (value is double d && d == Math.Truncate(d) && d >= long.MinValue && d <= long.MaxValue)
-                    return ((long)d).ToString();
-                return value.ToString() ?? "NULL";
+                    return ((long)d).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                // The engine's invariant text, so a raw date or number reads the same on every host.
+                return ETL_SQL.Core.Data.TypeConverter.ToInvariantText(value) ?? "NULL";
             }
         }
 
