@@ -101,8 +101,9 @@ public class RepresentativeVisualConformanceTests
         Assert.True(PdfExporter.UsesNativePlotPlanRendering(visual));
         var bytes = await new PdfExporter().ExportAsync(manifest);
 
-        Assert.True(bytes.Length > 100);
         Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, bytes[..4]);
+        // Drawn as the chart image, not the table the exporter falls back to when rendering fails.
+        Assert.Equal(1, PdfText.ImagesPerPage(bytes).Sum());
     }
 
     [Fact]

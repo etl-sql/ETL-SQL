@@ -53,8 +53,11 @@ namespace ETL_SQL.Tests
 
             var bytes = await new PdfExporter().ExportAsync(manifest);
 
-            Assert.True(bytes.Length > 100);
             Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, bytes[..4]);
+            // The chart is drawn as an image. When SVG rendering fails the exporter prints the rows
+            // as a table instead, which is still a valid PDF.
+            Assert.Equal(1, PdfText.ImagesPerPage(bytes).Sum());
+            Assert.DoesNotContain("Category", string.Join(" ", PdfText.Pages(bytes)), System.StringComparison.Ordinal);
         }
 
         [Fact]

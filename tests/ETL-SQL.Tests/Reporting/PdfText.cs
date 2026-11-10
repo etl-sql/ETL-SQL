@@ -24,6 +24,20 @@ internal static class PdfText
         return Enumerable.Range(0, document.PageCount).Select(index => Page(document.Pages[index])).ToList();
     }
 
+    /// <summary>Raster images placed on each page (image XObjects in the page resources).</summary>
+    public static List<int> ImagesPerPage(byte[] pdf)
+    {
+        using var document = Open(pdf);
+        return Enumerable.Range(0, document.PageCount).Select(index =>
+        {
+            var xObjects = document.Pages[index].Resources?.Elements.GetDictionary("/XObject");
+            if (xObjects is null) return 0;
+            return xObjects.Elements.Keys.Count(key =>
+                (xObjects.Elements.GetReference(key)?.Value as PdfDictionary ?? xObjects.Elements.GetDictionary(key))
+                    ?.Elements.GetName("/Subtype") == "/Image");
+        }).ToList();
+    }
+
     public static string Page(PdfPage page)
     {
         var raw = new List<byte>();

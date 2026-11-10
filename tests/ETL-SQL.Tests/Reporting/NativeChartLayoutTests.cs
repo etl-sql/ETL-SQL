@@ -117,8 +117,9 @@ public sealed class NativeChartLayoutTests
         Assert.Contains("\"layout\"", browserJson, StringComparison.Ordinal);
 
         var pdf = await new PdfExporter().ExportAsync(refreshed);
-        Assert.True(pdf.Length > 100);
         Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(pdf, 0, 4));
+        // Drawn as the chart image, not the table the exporter falls back to when rendering fails.
+        Assert.True(PdfText.ImagesPerPage(pdf).Sum() >= 1, "The refreshed chart exported without a chart image.");
     }
 
     [Fact]
