@@ -38,6 +38,7 @@ $testArgs = @(
     "--logger", "console;verbosity=normal"
 )
 
+$startedUtc = [DateTime]::UtcNow.AddSeconds(-2)
 & dotnet @testArgs
 $exitCode = $LASTEXITCODE
 
@@ -46,5 +47,13 @@ if ($exitCode -ne 0) {
     exit $exitCode
 }
 
-Write-Host "Report Layout Regression Evidence successfully retained in $EvidencePath." -ForegroundColor Green
+# A filter that matches nothing, or tests that stop reading ETL_SQL_EVIDENCE_DIR, still exit 0.
+$written = @(Get-ChildItem -LiteralPath $EvidencePath -Filter '*.pdf' -File |
+    Where-Object { $_.LastWriteTimeUtc -ge $startedUtc })
+if ($written.Count -eq 0) {
+    Write-Host "The layout evidence run wrote no PDFs to $EvidencePath." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "Report Layout Regression Evidence: $($written.Count) PDF(s) retained in $EvidencePath." -ForegroundColor Green
 exit 0
