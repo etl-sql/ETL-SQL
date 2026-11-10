@@ -122,7 +122,8 @@ Each lane declares its input paths. Its result is reused when the fingerprint of
 unchanged since a passing run. Release drivers and the supervisor accept reused evidence.
 (Owner approved this policy on 2026-11-04.) This loosens today's exact-commit guards, so write a
 one-page design note first (what counts as an input, who checks the fingerprint, what a wrong
-reuse costs) and get owner sign-off before coding. **Done when:** a docs-only or release-script-only
+reuse costs) and get owner sign-off before coding. Design note:
+[evidence-reuse-design.md](evidence-reuse-design.md) (2026-11-10). **Done when:** a docs-only or release-script-only
 commit reruns only the affected checks.
 
 ### W3. Installer root causes

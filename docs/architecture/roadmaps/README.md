@@ -11,6 +11,7 @@
 | [ETL-SQL Deployment Profile and Portability Strategy](deployment-profile-strategy.md) | **Status:** Active product strategy; certification implementation is candidate work |
 | [ETL-SQL Engine Architecture Separation Plan](engine-upgrade-strategy.md) | **Status:** Historical roadmap — not current implementation guidance |
 | [ETL-SQL Enterprise Platform Strategy](enterprise-platform-strategy.md) | **Status:** Active product strategy |
+| [Evidence Reuse Design](evidence-reuse-design.md) | **Status:** For owner sign-off (W2). When release evidence from an earlier commit counts for the candidate |
 | [Fuzzy Matching Strategy](fuzzy-matching-strategy.md) | **Status:** Phases 1–4 shipped; Phase 5 deferred |
 | [Portal Governance Dashboard Strategy](governance-dashboard-strategy.md) | **Status:** Candidate roadmap work |
 | [Large Dataset Handling](large-datasets.md) | **Status:** Implemented for ETL-SQL 0.7.0 |
