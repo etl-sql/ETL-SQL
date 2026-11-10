@@ -32,10 +32,10 @@ FROM @TaxedSales;
 SELECT * FROM @Summary;
 
 -- 5. Query Lineage Metadata (Virtual Table)
--- The 'Lineage' virtual table is provided by the engine.
-SELECT 
-    SourceTable,
-    TargetTable,
-    Operation,
-    Columns
-FROM Lineage;
+-- eng.lineage is provided by the engine.
+SELECT
+    source_tables,
+    target_table,
+    target_column,
+    operation
+FROM eng.lineage;

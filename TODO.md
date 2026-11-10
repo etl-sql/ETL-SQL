@@ -347,7 +347,12 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   before fixing. (20) OR01: the Portal New Job dialog saved bundle jobs as `bundle://<name>/latest`,
   which nothing resolves (`BundleUri` reads only `orch://`), so they failed at run time and a
   browser test pinned the broken URI. Owner decision: remove the bundle target for v0.22.0; the
-  `orch://` picker stays OR01 in v0.23.0. **Left:** the rest
+  `orch://` picker stays OR01 in v0.23.0. (21) The unknown-column check failed two samples in CI
+  (`protected_data_audit.rptsql`, `diagnostics_ssh_sink.etlsql`): they still used PascalCase
+  names from before the snake_case migration, so those columns had always read as NULL. A sweep
+  of `samples/` found five more doing the same against `eng.*` tables (which the check does not
+  cover), so their filters matched nothing: `register_schedule`, `Job_Scheduling`,
+  `Bulk_Insert_Mapping`, `Lineage_Tag_Import`, `20-Lineage`. All fixed. **Left:** the rest
   of `scripts/` and `tests/`; the Portal and Orchestrator samples in GitHub; native installed-MSI
   certification of the fixed installer paths.
 

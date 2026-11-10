@@ -5,5 +5,5 @@ CREATE OR ALTER SCHEDULE CustomerQualityDaily ON '15 2 * * *' AT TIME ZONE 'UTC'
 CREATE OR ALTER JOB CustomerQuality FOR SCRIPT 'samples/quality-loop/customer_quality.etlsql';
 ALTER JOB CustomerQuality ADD SCHEDULE CustomerQualityDaily;
 
-SELECT * FROM eng.jobs WHERE JobName = 'CustomerQuality';
+SELECT * FROM eng.jobs WHERE name = 'CustomerQuality';
 

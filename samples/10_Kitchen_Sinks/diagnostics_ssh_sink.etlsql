@@ -27,7 +27,7 @@ SET PROFILING OFF;
 
 SELECT * FROM eng.profile;
 SELECT * INTO #prof_results FROM eng.profile;
-SELECT * FROM #prof_results ORDER BY DurationMs DESC;
+SELECT * FROM #prof_results ORDER BY duration_ms DESC;
 
 -- 3. EXPLAIN
 PRINT 'Testing EXPLAIN...';
@@ -62,9 +62,9 @@ SELECT
 INTO #Tagged;
 
 -- Tag introspection queries
-SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = '#Tagged';
-SELECT TagName, TagValue FROM eng.tags WHERE TargetTable = '#Tagged' AND TargetColumn = 'UserId';
-SELECT TagValue FROM eng.tags WHERE TargetTable = '#Tagged' AND TargetColumn = 'UserId' AND TagName = 'd';
+SELECT tag_name, tag_value FROM eng.tags WHERE target_table = '#Tagged';
+SELECT tag_name, tag_value FROM eng.tags WHERE target_table = '#Tagged' AND target_column = 'UserId';
+SELECT tag_value FROM eng.tags WHERE target_table = '#Tagged' AND target_column = 'UserId' AND tag_name = 'd';
 
 -- GET_TAGS / GET_TAG_VALUE as expressions
 DECLARE @tags = GET_TAGS('#Tagged', 'UserId');
@@ -76,14 +76,14 @@ PRINT 'Description of UserId:', @desc;
 PRINT 'Testing eng.lineage...';
 
 -- Console / messages view
-SELECT * FROM eng.lineage WHERE TargetTable = '#Tagged';
+SELECT * FROM eng.lineage WHERE target_table = '#Tagged';
 
 -- Column-specific trace
 SELECT * FROM eng.lineage
-WHERE TargetTable = '#Tagged' AND TargetColumn = 'UserId';
+WHERE target_table = '#Tagged' AND target_column = 'UserId';
 
 -- Queryable source
-SELECT Operation, TargetTable, SourceTables
+SELECT Operation, target_table, source_tables
 INTO #lin_check
 FROM LINEAGE(#Tagged);
 SELECT * FROM #lin_check;

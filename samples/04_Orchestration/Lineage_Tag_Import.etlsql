@@ -30,9 +30,9 @@ INSERT INTO Orders VALUES (1, 100, '2024-01-01'), (2, 250, '2024-01-02');
 SELECT Amount AS Revenue, OrderDate INTO #daily FROM Orders;
 
 PRINT 'Inherited tags on the derived #daily.Revenue column:';
-SELECT TagName, TagValue
+SELECT tag_name, tag_value
 FROM eng.tags
-WHERE TargetTable = '#daily' AND TargetColumn = 'Revenue';
+WHERE target_table = '#daily' AND target_column = 'Revenue';
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- 3. INSERT LINEAGE ... FROM — re-import a previously exported OpenLineage doc.
@@ -44,6 +44,6 @@ EXPORT LINEAGE AS OPENLINEAGE TO 'output/daily_lineage.json';
 INSERT LINEAGE FOR TABLE #daily FROM 'output/daily_lineage.json';
 
 PRINT 'Lineage for #daily after import:';
-SELECT * FROM eng.lineage WHERE TargetTable = '#daily';
+SELECT * FROM eng.lineage WHERE target_table = '#daily';
 
 PRINT 'Done. See samples/04_Orchestration/output/ for the OpenLineage export.';
