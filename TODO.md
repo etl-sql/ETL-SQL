@@ -224,8 +224,8 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   `verify-browser-shards`, `check-release-tag`, `check-release-metadata`, `publish-release`,
   `collect-certified-windows`/`-macos`, the Windows and macOS package manifests, `windows-payload`,
   `report-package-upload-recovery`, `test-deb-upgrade`, `build-linux-packages`, `Test-MsiUpgrade`,
-  `Test-MsiPortalUpgrade`, `Merge-EngineCoverage` and `test-smoke` have no defects, and a sweep of
-  `scripts/` for empty catches, `|| true` and dynamic code found only cleanup and polls. Five
+  `Test-MsiPortalUpgrade`, `Merge-EngineCoverage`, `test-smoke` and `test-vsix-acceptance` have no defects, and a sweep of
+  `scripts/` for empty catches, `|| true` and dynamic code found only cleanup and polls. Six
   defects, fixed:
   (1) `Test-AllSamples.ps1 -ReleaseMode` skipped the Docker, PostgreSQL, Portal and Orchestrator
   samples when their containers did not start, so the release sample gate passed without them;
@@ -246,7 +246,9 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   (5) `Invoke-SmokeParity.ps1`, the only CI run of the Portal acceptance profile, failed only when
   the local and container outcomes differed and ignored the profile's exit code, so a Portal
   regression that failed a check on both targets passed the Docker job. A check failed on both
-  targets, or a non-zero acceptance exit, now fails it. Noted, not fixed: `Compare-CertBaseline`
+  targets, or a non-zero acceptance exit, now fails it. (6) `verify-packaged-browser-assets`
+  passed a package when no inventory output belonged to a published host (0 files checked, for
+  example after a host directory rename); that is now a problem. Noted, not fixed: `Compare-CertBaseline`
   does not flag a baseline scenario missing from the new report, but no release path filters
   scenarios. **Left:** the rest
   of `scripts/` and `tests/`; the Portal and Orchestrator samples in GitHub; native installed-MSI

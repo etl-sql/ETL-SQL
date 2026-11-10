@@ -51,6 +51,8 @@ export function packagedAssetProblems(published, { root = defaultRoot } = {}) {
         else if (createHash('sha256').update(fs.readFileSync(file)).digest('hex') !== output.sha256)
             problems.push(`Differs from the prepared file: wwwroot/${relative} (${output.path})`);
     }
+    // Zero host outputs checks nothing; a renamed host directory must not read as a match.
+    if (checked === 0) problems.push(`The inventory names no browser output for the published hosts (${hostRoots.join(', ')}).`);
     for (const relative of filesUnder(webRoot))
         if (developmentOnly.test(relative)) problems.push(`Development file in the package: wwwroot/${relative}`);
     return { checked, problems };
