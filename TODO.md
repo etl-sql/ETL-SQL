@@ -299,7 +299,26 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   succeeds, so this only matters if the SDK bug returns). Also reviewed, no defects:
   `check-workflows`, `TestLane.Helpers` and both callers, `Test-InstallerSources`,
   `Test-ReleaseVersions` (build-script default versions are overridden by the workflows, and the
-  MSI payload check compares the version). **Left:** the rest
+  MSI payload check compares the version). Local-gate scripts, 2026-11-10: (12)
+  `check-flaky-test-delays` globbed `tests/` from the caller's directory, so run from anywhere
+  but the repo root it scanned nothing and printed OK; it now resolves from the root and fails on
+  zero files. `Test-PhaseWatchdog` case 3 checked that the watchdog stands down on its own after
+  the harness had already killed it; disabling the stand-down now turns it red. (13)
+  `Compile-Changelog` did not count `deploy/` (systemd units, environment installers) as feature
+  surface. (14) `audit-docs` skipped directory links and any relative link starting with `http`
+  (none was hiding a broken link). (15) The report layout evidence tests asserted only that the
+  PDF was over 100 bytes: the page size/orientation theory ignored its parameters, so the
+  Letter/A4 portrait/landscape evidence was four copies of one default page, and the cancellation
+  and authorization cases did neither. They now read page geometry, bands and table rows back
+  out of the PDF (ignoring Landscape turns two red); cancellation is covered by
+  `AsyncPdfExportTests`, and the exporter has no authorization step, so those two were removed.
+  `Test-ReportLayoutEvidence` fails when no PDF was written. `PdfExportTests`' filter/format test
+  now checks the filter line and two-place rounding. Noted, not fixed:
+  `PdfExporter_RendersChart_ViaNativeSvg` still checks only for a valid PDF. Also reviewed, no
+  defects: `check-shell-line-endings` (the extension-less hooks are LF by `.gitattributes`),
+  `check-built-browser-assets` (every gate caller uses the strict `--project` mode),
+  `Get-TestLaneInventory`, `audit-syntax-index`, `check-ai-slop-comments`, `build-vsix` and
+  `package-vsix`, `Test-PreRelease`. **Left:** the rest
   of `scripts/` and `tests/`; the Portal and Orchestrator samples in GitHub; native installed-MSI
   certification of the fixed installer paths.
 
