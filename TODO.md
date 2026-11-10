@@ -265,7 +265,8 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   passed on a machine that cannot create symlinks, which is any Windows host without admin or
   Developer Mode (this workstation included). They are now `[SymlinkFact]`, which probes once and
   shows a visible skip; all six pass on Linux. The `StmtFileSystem` link test falls back to a
-  junction, so it now asserts the link was made. **Left:** the rest
+  junction, so it now asserts the link was made. The three `IsolationVerifier` tests passed when
+  `pwsh` could not start; `pwsh` is required here, so that now fails them. **Left:** the rest
   of `scripts/` and `tests/`; the Portal and Orchestrator samples in GitHub; native installed-MSI
   certification of the fixed installer paths.
 
