@@ -228,7 +228,7 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   `Test-EnterpriseHardeningCertification`, `Measure-StudioPerformance`, `Test-SpillAllocProfile`,
   `Test-HaSoakContracts`, `sync-assets`, `Publish-WindowsPayload`, `Build-WindowsNativePackages`,
   `build-msi` and `MsiImpact.Helpers` have no defects, and a sweep of
-  `scripts/` for empty catches, `|| true` and dynamic code found only cleanup and polls. Six
+  `scripts/` for empty catches, `|| true` and dynamic code found only cleanup and polls. Seven
   defects, fixed:
   (1) `Test-AllSamples.ps1 -ReleaseMode` skipped the Docker, PostgreSQL, Portal and Orchestrator
   samples when their containers did not start, so the release sample gate passed without them;
@@ -253,7 +253,14 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   passed a package when no inventory output belonged to a published host (0 files checked, for
   example after a host directory rename); that is now a problem. Noted, not fixed: `Compare-CertBaseline`
   does not flag a baseline scenario missing from the new report, but no release path filters
-  scenarios. **Left:** the rest
+  scenarios. `tests/` so far: no `Skip` attributes, no `Assert.True(true)`, no caught assertion
+  exceptions, and the only skip in any CI test run was a Unix-only fact. (7) Four Unix-only
+  security and format checks never ran in CI: Engine Coverage runs on Windows, where the
+  sandbox-workspace mode test skipped and the keys-archive owner-only mode, `ETLSQLM3` format and
+  XDG outbox tests returned early and reported a pass. All four are now `[UnixFact]` (visible skip
+  on Windows) in `Category=Integration`, which the Linux Docker integration lane runs (all four
+  pass on Linux). The two EBNF generation tests passed when `docs/grammar.ebnf` was missing; a
+  missing grammar now fails them. **Left:** the rest
   of `scripts/` and `tests/`; the Portal and Orchestrator samples in GitHub; native installed-MSI
   certification of the fixed installer paths.
 

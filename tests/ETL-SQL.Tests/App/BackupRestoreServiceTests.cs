@@ -292,15 +292,15 @@ namespace ETL_SQL.Tests.CliCommands
             Assert.Equal(1, await BackupRestoreService.RestoreAsync(ctx, NullLogger.Instance));
         }
 
-        [Fact]
+        // Owner-only file permissions are a Unix concept; on Windows ACL inheritance covers it.
+        [UnixFact]
+        [Trait("Category", "Integration")]
+        [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
         public async Task Backup_WritesKeysArchiveWithOwnerOnlyPermissionsOnUnix()
         {
             var outDir = Path.Combine(_root, "out");
             await BackupRestoreService.BackupCoreAsync(Config(), _source, outDir, NullLogger.Instance);
             var (_, keysZip) = FindArchives(outDir);
-
-            // Owner-only file permissions are a Unix concept; on Windows ACL inheritance covers it.
-            if (OperatingSystem.IsWindows()) return;
 
             var mode = File.GetUnixFileMode(keysZip);
             Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, mode);

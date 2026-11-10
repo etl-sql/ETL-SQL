@@ -36,7 +36,7 @@ public class EbnfConformanceTests
     [Fact]
     public void GeneratedValidSequences_ParseWithoutExceptions()
     {
-        if (!File.Exists(GrammarPath)) return;
+        Assert.True(File.Exists(GrammarPath), $"The grammar is missing at {Path.GetFullPath(GrammarPath)}; nothing would be checked.");
 
         var grammarText = File.ReadAllText(GrammarPath);
         var rules = EbnfParser.Parse(grammarText);
@@ -123,7 +123,7 @@ public class EbnfConformanceTests
     [Fact]
     public void GeneratedInvalidSequences_AreRejected()
     {
-        if (!File.Exists(GrammarPath)) return;
+        Assert.True(File.Exists(GrammarPath), $"The grammar is missing at {Path.GetFullPath(GrammarPath)}; nothing would be checked.");
 
         var grammarText = File.ReadAllText(GrammarPath);
         var rules = EbnfParser.Parse(grammarText);

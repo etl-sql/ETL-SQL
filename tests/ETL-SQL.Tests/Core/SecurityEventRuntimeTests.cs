@@ -181,12 +181,11 @@ public sealed class SecurityEventRuntimeTests
         }
     }
 
-    [Fact]
+    // Windows always has the folder; the lookup only comes back empty on Unix.
+    [UnixFact]
+    [Trait("Category", "Integration")]
     public void StandaloneOutboxPath_ResolvesBeforeTheDataDirectoryExists()
     {
-        // Windows always has the folder; the lookup only comes back empty on Unix.
-        if (OperatingSystem.IsWindows()) return;
-
         var variable = SecurityEventOutboxPaths.StandaloneOverrideEnvironmentVariable;
         var previousOverride = Environment.GetEnvironmentVariable(variable);
         var previousData = Environment.GetEnvironmentVariable("XDG_DATA_HOME");

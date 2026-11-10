@@ -4,16 +4,6 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration;
 
-/// <summary>A fact about Unix file modes, which have no meaning on Windows.</summary>
-public sealed class UnixFactAttribute : FactAttribute
-{
-    public UnixFactAttribute()
-    {
-        if (OperatingSystem.IsWindows())
-            Skip = "Unix file modes do not apply on Windows; ACL inheritance scopes the workspace root.";
-    }
-}
-
 public sealed class SandboxWorkspaceProviderTests
 {
     [Fact]
@@ -54,6 +44,7 @@ public sealed class SandboxWorkspaceProviderTests
     }
 
     [UnixFact]
+    [Trait("Category", "Integration")]
     [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
     public async Task WritableLeavesAcceptAnUnprivilegedSandboxUidWhileEnclosingRootsStayPrivate()
     {

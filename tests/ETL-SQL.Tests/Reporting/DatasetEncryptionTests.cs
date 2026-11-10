@@ -47,11 +47,11 @@ namespace ETL_SQL.Tests.Reporting
                 () => MachineBoundCrypto.Unprotect(protected_));
         }
 
-        [Fact]
+        // Windows in-memory payloads use DPAPI, so the current-format header is Unix-only.
+        [UnixFact]
+        [Trait("Category", "Integration")]
         public void MachineBoundCrypto_UsesTheCurrentFormat()
         {
-            if (OperatingSystem.IsWindows()) return; // Windows in-memory payloads use DPAPI.
-
             var protected_ = MachineBoundCrypto.Protect("new payload"u8.ToArray());
             Assert.Equal("ETLSQLM3", System.Text.Encoding.ASCII.GetString(protected_, 0, 8));
             Assert.Throws<System.Security.Cryptography.CryptographicException>(
