@@ -1,5 +1,5 @@
 # GO
-Batch separator. Divides a script into independent batches that each run in isolation — if one batch fails, subsequent batches still execute.
+Batch separator. Divides a script into batches that run in order. If a batch fails, the script stops and later batches do not run.
 
 ## Syntax
 ```sql
@@ -8,9 +8,11 @@ GO <count>    -- repeat the preceding batch <count> times
 ```
 
 ## Behavior
-- Each batch is executed as a self-contained unit.
-- A runtime error in one batch is logged and skipped; the next batch runs normally.
-- Without `GO`, an error stops the entire script (fail-fast).
+- Batches run in order.
+- A runtime error that is not caught by `TRY…CATCH` inside the batch is logged as
+  `Batch <n> failed`, stops the script, and fails the run (non-zero exit code), like
+  `sqlcmd -b`. Before v0.22.0 the error was logged and the next batch ran.
+- To keep going after an error, handle it with `TRY…CATCH` inside the batch.
 - Variables declared in an earlier batch remain in scope for later batches (session-scoped).
 - Temp tables (`#table`) created in an earlier batch are accessible in later batches.
 
@@ -32,7 +34,7 @@ SELECT region, SUM(revenue) AS total
   GROUP BY region;
 GO
 
--- Batch 2: Report; runs even if batch 1 fails on a real data source
+-- Batch 2: Report; runs only if batch 1 succeeded
 SELECT * FROM #summary ORDER BY total DESC;
 GO
 

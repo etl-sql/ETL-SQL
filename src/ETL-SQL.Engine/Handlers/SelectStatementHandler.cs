@@ -45,6 +45,9 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             statement = WatermarkManager.InjectWatermarkFilter(selInitial, wmConfig, currentWm);
         }
 
+        if (statement is SelectStatement selBind)
+            await SelectColumnBinder.ValidateAsync(selBind, context);
+
         // 1. Handle Pushdown (Optimization: Push simple queries to DB)
         // GROUP BY ALL / ORDER BY ALL / star modifiers are resolved locally in EvaluateSelect;
         // skip the early raw-statement pushdown for them.
@@ -650,6 +653,10 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             stmt = stmt with { OrderBy = ob, OrderByAll = false };
         }
 
+        // ORDER BY on a grouping key the SELECT list does not return: aggregation emits only the
+        // listed columns, so carry the key as a hidden column, sort on it, then drop it.
+        var hiddenSortColumns = AddHiddenGroupSortColumns(ref stmt, ref finalColumns, ref colNames);
+
         // 4. Strategy Selection
         bool hasAgg = finalColumns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || stmt.GroupBy != null;
         bool hasWindow = finalColumns.Any(c => windowEngine.IsWindowFunction(c.Expression));
@@ -679,7 +686,61 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         }
 
         if (stmt.Sample != null) output = ApplySample(output, stmt.Sample);
-        await foreach (var batch in output) yield return batch;
+        await foreach (var batch in output)
+        {
+            if (hiddenSortColumns.Count > 0) batch.RemoveColumns(hiddenSortColumns);
+            yield return batch;
+        }
+    }
+
+    private const string HiddenSortColumnPrefix = "__group_sort_";
+
+    /// <summary>
+    /// Rewrites ORDER BY items of a grouped query that name something other than an output column
+    /// (a grouping key that is not selected, or selected under an alias) to hidden output columns.
+    /// Returns the hidden column names for the caller to drop after sorting.
+    /// </summary>
+    private static List<string> AddHiddenGroupSortColumns(ref SelectStatement stmt, ref List<SelectColumn> finalColumns, ref List<string> colNames)
+    {
+        var hidden = new List<string>();
+        if (stmt.GroupBy is not { Count: > 0 } || stmt.OrderBy is not { Count: > 0 }
+            || stmt.IntoTable != null || stmt.IsDistinct || stmt.GroupingSet != null)
+            return hidden;
+
+        var outputNames = new HashSet<string>(colNames, StringComparer.OrdinalIgnoreCase);
+        foreach (var column in finalColumns)
+            if (!string.IsNullOrEmpty(column.Alias)) outputNames.Add(column.Alias);
+
+        List<OrderByClause>? orderBy = null;
+        List<SelectColumn>? columns = null;
+        List<string>? names = null;
+        for (int i = 0; i < stmt.OrderBy.Count; i++)
+        {
+            // Only plain grouping-key names: AST records compare source positions, so other
+            // expressions cannot be matched to a GROUP BY item by equality.
+            if (stmt.OrderBy[i].Expression is not IdentifierExpression expression
+                || outputNames.Contains(expression.Name)
+                || !stmt.GroupBy.Any(g => g is IdentifierExpression key
+                    && key.Name.Equals(expression.Name, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            var name = HiddenSortColumnPrefix + i;
+            orderBy ??= new List<OrderByClause>(stmt.OrderBy);
+            columns ??= new List<SelectColumn>(finalColumns);
+            names ??= new List<string>(colNames);
+            orderBy[i] = new OrderByClause(new IdentifierExpression(name), stmt.OrderBy[i].Descending);
+            columns.Add(new SelectColumn(expression, name));
+            names.Add(name);
+            hidden.Add(name);
+        }
+
+        if (orderBy != null)
+        {
+            stmt = stmt with { OrderBy = orderBy };
+            finalColumns = columns!;
+            colNames = names!;
+        }
+        return hidden;
     }
 
     private static async Task<long?> TryNativeSelectInto(

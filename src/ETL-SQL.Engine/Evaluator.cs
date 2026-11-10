@@ -1257,7 +1257,10 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
                 catch (GotoException) { throw; }
                 catch (Exception ex) when (hasBatches)
                 {
+                    // A failed batch stops the script (like sqlcmd -b). Logging and moving on let a
+                    // scheduled script report success after a batch had failed.
                     Log($"Batch {batchNum} failed: {ex.Message}", ConsoleColor.Red);
+                    throw;
                 }
             }
 
