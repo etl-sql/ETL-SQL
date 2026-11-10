@@ -31,14 +31,18 @@ const version = (() => {
 })();
 
 const bundledAssets = [
-  {
-    component: 'Tabulator',
-    version: '5.5.0',
-    license: 'MIT',
-    project: 'https://tabulator.info/'
-  },
+  readTabulatorAsset(),
   ...readCodeMirrorLockAssets()
 ];
+
+// The version comes from the shipped file's own banner. A hard-coded 5.5.0 outlived the upgrade
+// to 6.4.0, so the published SBOM named a version the release did not contain.
+function readTabulatorAsset() {
+  const file = path.join(repoRoot, 'src', 'ETL-SQL.ReportRuntime', 'Resources', 'Shared', 'tabulator.min.js');
+  const banner = fs.readFileSync(file, 'utf8').slice(0, 512).match(/^\/\*!\s*Tabulator v(\d+\.\d+\.\d+)\b/);
+  if (!banner) throw new Error(`Could not read the Tabulator version banner from ${path.relative(repoRoot, file)}`);
+  return { component: 'Tabulator', version: banner[1], license: 'MIT', project: 'https://tabulator.info/' };
+}
 
 const npmLicenseFallbacks = {
   '@eslint/js': 'MIT',

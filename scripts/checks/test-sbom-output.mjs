@@ -21,8 +21,14 @@ try {
   write('Directory.Build.props', '<Project><PropertyGroup><VersionPrefix>0.22.0</VersionPrefix></PropertyGroup></Project>');
   write('scripts/codemirror/package-lock.json', JSON.stringify({ packages: { '': { dependencies: {} } } }));
   write('release/sentinel', 'prior output');
+  const tabulator = 'src/ETL-SQL.ReportRuntime/Resources/Shared/tabulator.min.js';
+  write(tabulator, '!function(){}();');
+  execute([], false);
+  write(tabulator, '/*! Tabulator v9.8.7 (c) test. Released under the MIT License. */ !function(){}();');
   execute([], true);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'release/sbom.json'), 'utf8')).metadata.component.version, '0.22.0');
+  const sbom = JSON.parse(fs.readFileSync(path.join(root, 'release/sbom.json'), 'utf8'));
+  assert.equal(sbom.metadata.component.version, '0.22.0');
+  assert.deepEqual(sbom.components.filter(c => c.name === 'Tabulator').map(c => c.version), ['9.8.7'], 'the shipped file names the version');
   const accepted = fs.readFileSync(path.join(root, 'release/sbom.json'));
   execute(['--output-dir', 'artifacts/Unicode é [literal]'], true);
   assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'artifacts/Unicode é [literal]/sbom.json'), 'utf8')).metadata.component.version, '0.22.0');
