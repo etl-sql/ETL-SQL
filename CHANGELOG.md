@@ -18,6 +18,24 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   reference read an unknown column named `action` and every audit row recorded `NULL` instead of
   `INSERT`, `UPDATE` or `DELETE`. The self-checking scripts in `tests/Integration`, which would
   have caught it, now run with the engine tests.
+- Fail a `SELECT` that names an unknown column when every table it reads is a temp table with
+  known columns. A misspelt column used to return `NULL` on every row and the script succeeded.
+  The error names the column and lists the columns that exist. Other sources (files, connections,
+  subqueries, CTEs) still read an unknown name as `NULL`; v0.23.0 makes that fail too.
+- Sort grouped results by a grouping key that the `SELECT` list does not return, as in
+  `SELECT COUNT(*) FROM t GROUP BY g ORDER BY g`. The key was missing from the aggregated rows,
+  so the groups came back in arrival order.
+- Keep number-like codes apart in `GROUP BY`, `DISTINCT`, set operations and join keys. Any
+  string that parsed as a number keyed as that number, so `'00123'`, `'0123'` and `'123'` became
+  one group returned as `123`, and `'1,000'` matched `1000`. Only plain number text such as
+  `'123'` or `'-4.5'` still keys as a number, so text `'1'` still joins to `1`.
+- Stop the script when a `GO` batch fails. The error was logged and the next batch ran, so the
+  run ended with exit code 0. Use `TRY…CATCH` inside a batch to carry on after an error.
+  **Behaviour change.**
+- Remove the Packaged Bundle target from the Portal's New Job dialog. It saved the job as
+  `bundle://<name>/latest`, which the Orchestrator cannot resolve, so every job created that way
+  failed when it ran. Create bundle jobs with an `orch://<bundle>[@<version>]/<entry>.etlsql`
+  path from a script, the CLI or the API; the dialog will offer bundles again in v0.23.0.
 - Return the same text on every host from string casts, `TO_STR`, `FOR JSON` and `FOR XML`.
   Casting a date to a string followed the server's locale (`1/8/2024 12:00:00 AM` on Windows
   en-US, `01/08/2024 00:00:00` on Linux) and the documents used the platform newline, so the SQL

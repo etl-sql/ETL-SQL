@@ -323,7 +323,31 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   defects: `check-shell-line-endings` (the extension-less hooks are LF by `.gitattributes`),
   `check-built-browser-assets` (every gate caller uses the strict `--project` mode),
   `Get-TestLaneInventory`, `audit-syntax-index`, `check-ai-slop-comments`, `build-vsix` and
-  `package-vsix`, `Test-PreRelease`. **Left:** the rest
+  `package-vsix`, `Test-PreRelease`. (16) The three self-checking scripts in `tests/Integration`
+  had no runner; `OutputClauseTests.etlsql` was red because `MERGE ... OUTPUT $action` was always
+  `NULL` (the lexer dropped the `$`). Fixed, and `IntegrationScriptTests` now runs every script in
+  that folder. (17) SQ03 (Gemini's SQL conformance review): an unknown column reads as `NULL`
+  instead of failing. Owner decision 2026-11-10: narrow fix in v0.22.0, full fix first in v0.23.0.
+  v0.22.0 rejects an unknown column before a `SELECT` runs when every source is an existing temp
+  table with known columns (`SelectColumnBinder`). Making the evaluator itself fail closed broke 7
+  of 10,366 engine tests that rely on missing = `NULL` (outer-join rows are emitted without the
+  other side's columns, so that has to change first), and two hardening tests codify the `NULL`.
+  The lexer also skips unknown characters silently; same v0.23.0 item. (18) `GROUP BY g ORDER BY
+  g` with `g` not selected sorted every key as `NULL` (arrival order); the key is now carried as
+  a hidden column. (19) Triage of Gemini's NULL/engine review in ROADMAP (SQ06, SQ10–SQ14, TR01–
+  TR02), checked by CLI probe on 2026-11-10. Taken into v0.22.0 by owner decision: `CompoundKey`
+  keyed any number-like string as a number, so `GROUP BY`/`DISTINCT` merged `'00123'`, `'0123'`
+  and `'123'` (now only plain number text converts); a failed `GO` batch was logged and skipped,
+  so the run exited 0 (now stops the script, like `sqlcmd -b`; `go.md` had said the opposite of
+  `execution-blocks.md`). Confirmed but held for v0.23.0: TRANSFORM ignores `SET WHAT_IF ON`
+  (TR02); `STRING_AGG` gives `'a,,b'`; `REPLACE`/`CHARINDEX`/`POSITION` on NULL (SQ06/SQ14);
+  `FIRST_VALUE` ignores a `ROWS` frame (SQ12). Did not reproduce on temp tables: WHERE pushdown
+  with a shared column name, SEMI/ANTI NULL keys and residual `ON` terms, composite sort-merge
+  join at 3,000 rows, running `SUM() OVER (ORDER BY)`; recheck on the paths the review names
+  before fixing. (20) OR01: the Portal New Job dialog saved bundle jobs as `bundle://<name>/latest`,
+  which nothing resolves (`BundleUri` reads only `orch://`), so they failed at run time and a
+  browser test pinned the broken URI. Owner decision: remove the bundle target for v0.22.0; the
+  `orch://` picker stays OR01 in v0.23.0. **Left:** the rest
   of `scripts/` and `tests/`; the Portal and Orchestrator samples in GitHub; native installed-MSI
   certification of the fixed installer paths.
 
