@@ -509,8 +509,8 @@ namespace ETL_SQL.Tests.Statements.Statements
             {
                 await File.WriteAllTextAsync(Path.Combine(siblingDir, "linked.txt"), "sibling content");
                 string linkDir = Path.Combine(srcDir, "link");
-                if (!TryCreateDirectoryLink(linkDir, siblingDir))
-                    return; // No way to create a directory link on this host.
+                // A junction needs no privilege on Windows, so a link is always possible here.
+                Assert.True(TryCreateDirectoryLink(linkDir, siblingDir), "Could not create a directory link or junction.");
 
                 var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
                 await ExecuteAsync(

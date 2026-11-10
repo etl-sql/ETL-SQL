@@ -228,7 +228,7 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   `Test-EnterpriseHardeningCertification`, `Measure-StudioPerformance`, `Test-SpillAllocProfile`,
   `Test-HaSoakContracts`, `sync-assets`, `Publish-WindowsPayload`, `Build-WindowsNativePackages`,
   `build-msi` and `MsiImpact.Helpers` have no defects, and a sweep of
-  `scripts/` for empty catches, `|| true` and dynamic code found only cleanup and polls. Seven
+  `scripts/` for empty catches, `|| true` and dynamic code found only cleanup and polls. Eight
   defects, fixed:
   (1) `Test-AllSamples.ps1 -ReleaseMode` skipped the Docker, PostgreSQL, Portal and Orchestrator
   samples when their containers did not start, so the release sample gate passed without them;
@@ -260,7 +260,12 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   XDG outbox tests returned early and reported a pass. All four are now `[UnixFact]` (visible skip
   on Windows) in `Category=Integration`, which the Linux Docker integration lane runs (all four
   pass on Linux). The two EBNF generation tests passed when `docs/grammar.ebnf` was missing; a
-  missing grammar now fails them. **Left:** the rest
+  missing grammar now fails them. (8) Six symlink-escape security tests (`SecurityHardening` x3,
+  `EvaluatorLifecycle`, `WorkstationEditor`, `FileSystemArtifactStorage`) returned early and
+  passed on a machine that cannot create symlinks, which is any Windows host without admin or
+  Developer Mode (this workstation included). They are now `[SymlinkFact]`, which probes once and
+  shows a visible skip; all six pass on Linux. The `StmtFileSystem` link test falls back to a
+  junction, so it now asserts the link was made. **Left:** the rest
   of `scripts/` and `tests/`; the Portal and Orchestrator samples in GitHub; native installed-MSI
   certification of the fixed installer paths.
 

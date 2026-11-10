@@ -62,7 +62,7 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Throws<SecurityException>(() => _security.ValidatePath(root));
         }
 
-        [Fact]
+        [SymlinkFact]
         public void ValidatePath_ShouldDetectSymlinkEscapes()
         {
             // Only runs if we can create a symlink (might require admin on Windows)
@@ -76,15 +76,7 @@ namespace ETL_SQL.Tests.Hardening
                     ? @"C:\Windows"
                     : "/etc";
 
-                // Attempt to create symlink (might fail if no permission, we skip if so)
-                try
-                {
-                    Directory.CreateSymbolicLink(linkPath, targetPath);
-                }
-                catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException)
-                {
-                    return; // Skip test on restricted environments
-                }
+                Directory.CreateSymbolicLink(linkPath, targetPath);
 
                 // Act & Assert
                 // Even though the link itself is in a 'safe' temp dir, it points to a blocked system dir.
@@ -149,7 +141,7 @@ namespace ETL_SQL.Tests.Hardening
             _security.ValidatePath(near);
         }
 
-        [Fact]
+        [SymlinkFact]
         public void ValidatePath_ResolvesADanglingSymlinkToItsTarget()
         {
             string zone = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -160,14 +152,7 @@ namespace ETL_SQL.Tests.Hardening
                 string target = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
                     ? $@"C:\Windows\etl-sql-dangling-{Guid.NewGuid():N}.csv"
                     : $"/etc/etl-sql-dangling-{Guid.NewGuid():N}.csv";
-                try
-                {
-                    File.CreateSymbolicLink(linkPath, target);
-                }
-                catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException)
-                {
-                    return; // Symlink creation needs a privilege this environment does not have.
-                }
+                File.CreateSymbolicLink(linkPath, target);
 
                 // The target does not exist: the link dangles, and a write through it would create it.
                 Assert.Equal(Path.GetFullPath(target), SecurityService.ResolvePathSymlinks(linkPath), ignoreCase: true);
@@ -181,7 +166,7 @@ namespace ETL_SQL.Tests.Hardening
             }
         }
 
-        [Fact]
+        [SymlinkFact]
         public void SafeZoneOverride_DoesNotFollowASymlinkOutOfTheZone()
         {
             string root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
@@ -192,14 +177,7 @@ namespace ETL_SQL.Tests.Hardening
             try
             {
                 string escape = Path.Combine(zone, "escape");
-                try
-                {
-                    Directory.CreateSymbolicLink(escape, outside);
-                }
-                catch (Exception ex) when (ex is UnauthorizedAccessException || ex is IOException)
-                {
-                    return; // Symlink creation needs a privilege this environment does not have.
-                }
+                Directory.CreateSymbolicLink(escape, outside);
 
                 _security.ApprovedSafeZones.Add(zone);
                 var over = _security.MaxFileOperations + 1;

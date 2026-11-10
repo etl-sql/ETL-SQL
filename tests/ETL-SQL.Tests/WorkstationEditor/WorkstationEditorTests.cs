@@ -395,7 +395,7 @@ public sealed class WorkstationEditorTests
         Assert.Contains("unsaved", await response.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    [SymlinkFact]
     public async Task Workspace_RejectsDirectorySymlinkEscape()
     {
         using var temp = new TempWorkspace();
@@ -404,8 +404,7 @@ public sealed class WorkstationEditorTests
         try
         {
             var link = Path.Combine(temp.Root, "linked");
-            if (!TryCreateDirectorySymlink(link, outside))
-                return;
+            Directory.CreateSymbolicLink(link, outside);
 
             var workspace = new WorkstationWorkspace(temp.Root, readOnly: false);
 
@@ -830,22 +829,6 @@ public sealed class WorkstationEditorTests
         Assert.Empty(result!.Diagnostics);
         Assert.Contains("CREATE CONNECTION", result.Script);
         Assert.Contains("\nSELECT", result.Script);
-    }
-
-    private static bool TryCreateDirectorySymlink(string linkPath, string targetPath)
-    {
-        try
-        {
-            Directory.CreateSymbolicLink(linkPath, targetPath);
-            return true;
-        }
-        catch (Exception ex) when (
-            ex is IOException ||
-            ex is UnauthorizedAccessException ||
-            ex is PlatformNotSupportedException)
-        {
-            return false;
-        }
     }
 
     [Fact]

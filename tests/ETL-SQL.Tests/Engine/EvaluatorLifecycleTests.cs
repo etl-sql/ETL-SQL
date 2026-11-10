@@ -30,10 +30,9 @@ namespace ETL_SQL.Tests.Security
             _security.IsTestMode = true;
         }
 
-        [Fact]
+        [SymlinkFact]
         public void ValidatePath_ShouldResolveSymlinks()
         {
-            // This test requires OS support for symlinks, so we mock/simulate or check environment
             var tempDir = Path.Combine(Path.GetTempPath(), "ETL-SQL-Symlink-Test-" + Guid.NewGuid());
             Directory.CreateDirectory(tempDir);
             var safeZone = Path.Combine(tempDir, "Safe");
@@ -45,18 +44,8 @@ namespace ETL_SQL.Tests.Security
 
             var symlinkPath = Path.Combine(safeZone, "LinkToSecret");
 
-            try
-            {
-                // Create a symlink: LinkToSecret -> Secret (Cross-platform .NET API)
-                Directory.CreateSymbolicLink(symlinkPath, targetDir);
-            }
-            catch (IOException ex) when (ex.Message.Contains("privilege"))
-            {
-                // Skip if test doesn't have privileges to create symlinks (common on Windows)
-                _logger.Object.Warning("Skipping symlink test: No privilege to create symlinks on this machine.");
-                return;
-            }
-            catch (UnauthorizedAccessException) { return; }
+            // Create a symlink: LinkToSecret -> Secret. SymlinkFact skips machines that cannot.
+            Directory.CreateSymbolicLink(symlinkPath, targetDir);
 
             var filePathViaLink = Path.Combine(symlinkPath, "data.txt");
 
