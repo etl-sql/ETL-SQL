@@ -462,8 +462,12 @@ for ($sampleIndex = 1; $sampleIndex -le $Samples; $sampleIndex++) {
     foreach ($plan in $capturePlans) {
         $sampleRawLog = Join-Path $OutDir "raw-output-sample$sampleIndex-$($plan.Name).txt"
         $errLog = "$sampleRawLog.err"
+        # The console summary is localized ("Bestanden!" under German), the TRX counters are not.
+        $sampleTrxName = "results-sample$sampleIndex-$($plan.Name).trx"
+        $sampleTrx = Join-Path $OutDir $sampleTrxName
         Remove-Item $sampleRawLog -ErrorAction SilentlyContinue
         Remove-Item $errLog -ErrorAction SilentlyContinue
+        Remove-Item $sampleTrx -ErrorAction SilentlyContinue
 
         # Clean orphaned non-persistent spill from any prior killed run so it doesn't bloat disk or
         # inflate the live spill gauge. (Killed runs don't clean their own %TEMP%\ETL-SQL-Spill\<guid>.)
@@ -477,7 +481,9 @@ for ($sampleIndex = 1; $sampleIndex -le $Samples; $sampleIndex++) {
         $env:CERT_PROGRESS_FILE = $progressFile
 
         Write-Host "Live status $($plan.Name), sample $sampleIndex/$Samples (full output -> $sampleRawLog):" -ForegroundColor Gray
-        $capture = Start-ScaleCapturedProcess -FileName 'dotnet' -Arguments ($dotnetArgs + @('--filter', $plan.Filter)) `
+        $sampleArgs = $dotnetArgs + @('--filter', $plan.Filter, '--logger', "trx;LogFileName=$sampleTrxName",
+            '--results-directory', [IO.Path]::GetFullPath($OutDir))
+        $capture = Start-ScaleCapturedProcess -FileName 'dotnet' -Arguments $sampleArgs `
             -StandardOutputPath $sampleRawLog -StandardErrorPath $errLog -ChildEnvironment $captureEnvironment
         $proc = $capture.Process
         $runStart = Get-Date
@@ -551,7 +557,7 @@ for ($sampleIndex = 1; $sampleIndex -le $Samples; $sampleIndex++) {
             if ($testExitCode -eq 0) { $testExitCode = $childExitCode }
             if ($sampleExitCode -eq 0) { $sampleExitCode = $childExitCode }
         }
-        if (-not (Test-ReleaseTestOutputExecuted -Output (Get-Content -LiteralPath $sampleRawLog -Raw))) {
+        if (-not (Test-ReleaseTestExecuted -Output (Get-Content -LiteralPath $sampleRawLog -Raw) -TrxPath $sampleTrx)) {
             Write-Warning "Sample $sampleIndex has no executed passing test result."
             $testExitCode = 1
             $sampleExitCode = 1

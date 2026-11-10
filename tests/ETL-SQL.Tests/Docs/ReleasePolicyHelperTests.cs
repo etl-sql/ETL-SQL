@@ -300,10 +300,15 @@ public sealed class ReleasePolicyHelperTests
                 '<TestRun><ResultSummary><Counters total="16" executed="16" passed="{{passed}}" /></ResultSummary></TestRun>' | Set-Content -LiteralPath $path
                 Test-ReleaseTrxExecuted -Path $path
                 Test-ReleaseTrxExecuted -Path ($path + '.missing')
+                $german = 'Bestanden!   : Fehler:     0, erfolgreich:    16'
+                Test-ReleaseTestExecuted -Output $german -TrxPath $path
+                Test-ReleaseTestExecuted -Output $german
+                Test-ReleaseTestExecuted -Output 'Passed! - Failed: 0, Passed: 16' -TrxPath ($path + '.missing')
             } finally { Remove-Item -LiteralPath $path -Force }
             """);
         Assert.True(result.ExitCode == 0, result.Output);
-        Assert.Equal($"{expected}{Environment.NewLine}False", result.Output.Trim());
+        var nl = Environment.NewLine;
+        Assert.Equal($"{expected}{nl}False{nl}{expected}{nl}False{nl}True", result.Output.Trim());
     }
 
     [Theory]

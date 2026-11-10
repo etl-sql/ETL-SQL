@@ -51,6 +51,13 @@ function Test-ReleaseTrxExecuted {
     } catch { return $false }
 }
 
+function Test-ReleaseTestExecuted {
+    param([AllowEmptyString()][string]$Output, [string]$TrxPath)
+
+    if (Test-ReleaseTestOutputExecuted -Output $Output) { return $true }
+    return [bool]$TrxPath -and (Test-ReleaseTrxExecuted -Path $TrxPath)
+}
+
 function Test-ReleaseTrxComplete {
     param([Parameter(Mandatory)][string]$Path)
 

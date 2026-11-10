@@ -223,11 +223,6 @@ try {
                     $output += 'Required TRX evidence is missing, invalid, incomplete or does not cover the planned test filter.'
                 }
             }
-            if (-not $phase.faultProfile -and $exitCode -eq 0 -and
-                -not (Test-ReleaseTestOutputExecuted -Output ($output -join "`n"))) {
-                $exitCode = 1
-                $output += "Certification phase '$($phase.name)' produced no passed test summary."
-            }
             $output | Set-Content -LiteralPath $logPath -Encoding utf8
             $results.Add([ordered]@{
                 lane = $phase.lane
