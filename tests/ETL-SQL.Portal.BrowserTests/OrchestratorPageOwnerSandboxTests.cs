@@ -107,7 +107,7 @@ public sealed class OrchestratorPageOwnerSandboxTests(SandboxStoryFixture fixtur
     }
 
     [Fact]
-    public async Task CreatingAJobOffersTheServersScriptsAndBundlesAndSendsTheDraftOnce()
+    public async Task CreatingAJobOffersTheServersScriptsAndSendsTheDraftOnce()
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
@@ -115,9 +115,6 @@ public sealed class OrchestratorPageOwnerSandboxTests(SandboxStoryFixture fixtur
         await page.Locator("#newJobBtn").ClickAsync();
         await Expect(page.Locator("#cj-script-select option")).ToHaveCountAsync(3);
         await Expect(page.Locator("#cj-shared-schedule-select option")).ToHaveCountAsync(3);
-        // Two published versions of one bundle are one choice, labelled with the newest.
-        await Expect(page.Locator("#cj-bundle-select option")).ToHaveCountAsync(2);
-        await Expect(page.Locator("#cj-bundle-select option").Nth(1)).ToHaveTextAsync("sales_bundle (latest: v2)");
         await page.Locator("#cj-saveBtn").ClickAsync();
         await Expect(page.Locator("#cj-error")).ToHaveTextAsync("Job identifier is required.");
 
@@ -148,7 +145,7 @@ public sealed class OrchestratorPageOwnerSandboxTests(SandboxStoryFixture fixtur
         await page.Locator("#newJobBtn").ClickAsync();
         await Expect(page.Locator("#cj-error")).ToContainTextAsync("Server scripts could not be loaded: Script unavailable.");
         await Expect(page.Locator("#cj-script-select")).ToBeDisabledAsync();
-        await Expect(page.Locator("#cj-bundle-select")).ToBeEnabledAsync();
+        await Expect(page.Locator("#cj-shared-schedule-select")).ToBeEnabledAsync();
 
         await page.Locator("#cj-name").FillAsync("daily_sales");
         await page.Locator("#cj-script-path").FillAsync("etl/typed.etlsql");
@@ -205,14 +202,12 @@ public sealed class OrchestratorPageOwnerSandboxTests(SandboxStoryFixture fixtur
         await Expect(page.Locator("#cj-interval")).ToHaveValueAsync("1");
         await Expect(page.Locator("#cj-at-time")).ToHaveValueAsync("");
         await page.Locator("#cj-sched-mode-shared").CheckAsync();
-        await page.Locator("#cj-target-kind").SelectOptionAsync("Bundle");
         await page.Locator("#cj-cancelBtn").ClickAsync();
         await page.Locator("#newJobBtn").ClickAsync();
         await Expect(page.Locator("#cj-sched-mode-inline")).ToBeCheckedAsync();
         await Expect(page.Locator("#cj-inline-sched-wrap")).ToBeVisibleAsync();
         await Expect(page.Locator("#cj-shared-sched-wrap")).ToBeHiddenAsync();
         await Expect(page.Locator("#cj-script-target-row")).ToBeVisibleAsync();
-        await Expect(page.Locator("#cj-bundle-target-row")).ToBeHiddenAsync();
         Assert.Empty(session.PageErrors);
     }
 
@@ -305,21 +300,18 @@ public sealed class OrchestratorPageOwnerSandboxTests(SandboxStoryFixture fixtur
     }
 
     [Fact]
-    public async Task ABundleJobIsCreatedAsAScriptTargetAtItsBundleUri()
+    public async Task TheNewJobDialogDoesNotOfferABundleTarget()
     {
+        // The dialog used to save bundle://<name>/latest, which no part of the service resolves, so
+        // every bundle job it created failed at run time. Bundles return with orch:// URIs (OR01).
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await OpenAsync(page);
         await page.Locator("#newJobBtn").ClickAsync();
-        await page.Locator("#cj-name").FillAsync("bundled_sales");
-        await page.Locator("#cj-target-kind").SelectOptionAsync("Bundle");
-        await Expect(page.Locator("#cj-bundle-target-row")).ToBeVisibleAsync();
-        await page.Locator("#cj-bundle-select").SelectOptionAsync("bundle://sales_bundle/latest");
-        await page.Locator("#cj-saveBtn").ClickAsync();
-        await WaitForMessageAsync(page, "Job 'bundled_sales' created.");
-        // The service accepts SCRIPT or REPORT; a bundle is a script target addressed by its URI.
-        Assert.Equal("Script|bundle://sales_bundle/latest", await page.EvaluateAsync<string>(
-            "() => { const body = window.__orchestratorMock.calls.find(call => call.method === 'POST' && call.path === '/api/orchestrator/jobs').body; return body.jobType + '|' + body.targetPath; }"));
+        await Expect(page.Locator("#cj-script-select option")).ToHaveCountAsync(3);
+        await Expect(page.Locator("#createJobModal")).Not.ToContainTextAsync("bundle", new() { IgnoreCase = true });
+        Assert.Equal(0, await page.EvaluateAsync<int>(
+            "() => window.__orchestratorMock.calls.filter(call => call.path === '/api/orchestrator/bundles').length"));
         Assert.Empty(session.PageErrors);
     }
 

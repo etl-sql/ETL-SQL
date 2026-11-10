@@ -6,7 +6,7 @@ import { readCatalogJson, readSchedules } from './orchestrator-catalog-responses
 /**
  * The "New Job" dialog on the Orchestrator page.
  *
- * Its three pickers are read independently, and one that cannot be read says so rather than
+ * Its two pickers are read independently, and one that cannot be read says so rather than
  * presenting an empty list as "nothing to choose". The job is announced only after the service
  * creates it; attaching a shared schedule is a second request, and when that one fails the job
  * still exists, so the outcome reports both facts instead of swallowing the second.
@@ -27,19 +27,6 @@ export function readScriptChoices(value: unknown): Choice[] {
     if (!isObject(value) || !Array.isArray(value.files) || !value.files.every(file => typeof file === 'string' && file.length > 0))
         throw new TypeError('Invalid script list response.');
     return (value.files as string[]).map(file => ({ value: file, label: file }));
-}
-
-export function readBundleChoices(value: unknown): Choice[] {
-    if (!Array.isArray(value)) throw new TypeError('Invalid bundle list response.');
-    // The service lists published versions; the picker offers each bundle once, at its newest version.
-    const newest = new Map<string, number>();
-    for (const bundle of value as unknown[]) {
-        if (!isObject(bundle) || typeof bundle.bundleName !== 'string' || !bundle.bundleName
-            || typeof bundle.version !== 'number' || !Number.isSafeInteger(bundle.version) || bundle.version < 1)
-            throw new TypeError('Invalid bundle list response.');
-        newest.set(bundle.bundleName, Math.max(newest.get(bundle.bundleName) ?? 0, bundle.version));
-    }
-    return Array.from(newest, ([name, version]) => ({ value: `bundle://${name}/latest`, label: `${name} (latest: v${version})` }));
 }
 
 export function createJobDialog(options: CreateJobOptions) {
@@ -87,21 +74,18 @@ export function createJobDialog(options: CreateJobOptions) {
         modal.style.display = 'flex';
         const failures = await Promise.all([
             fill(select('cj-script-select'), '— Select from server —', 'Server scripts', '/api/orchestrator/scripts', readScriptChoices, scope.signal),
-            fill(select('cj-bundle-select'), '— Select published bundle —', 'Published bundles', '/api/orchestrator/bundles', readBundleChoices, scope.signal),
             fill(select('cj-shared-schedule-select'), '— Select shared schedule —', 'Shared schedules', '/api/orchestrator/schedules?limit=1000',
                 value => readSchedules(value).map(item => ({ value: item.name, label: `${item.displayName || item.name} (${item.cron})` })), scope.signal)
         ]);
         if (lifetime.signal.aborted || current !== opening) return;
-        // A typed path or bundle URI still works without its picker, so the dialog stays usable.
+        // A typed path still works without its picker, so the dialog stays usable.
         const unavailable = failures.filter((failure): failure is string => failure !== null);
         if (unavailable.length) error.textContent = unavailable.join(' ');
     }, { signal: lifetime.signal });
 
-    /** Shows the rows that belong to the chosen target kind and schedule mode. */
+    /** Shows the rows that belong to the chosen schedule mode. */
     function layout() {
-        const bundle = select('cj-target-kind').value === 'Bundle', shared = input('cj-sched-mode-shared').checked;
-        box('cj-script-target-row').style.display = bundle ? 'none' : '';
-        box('cj-bundle-target-row').style.display = bundle ? '' : 'none';
+        const shared = input('cj-sched-mode-shared').checked;
         box('cj-inline-sched-wrap').style.display = shared ? 'none' : '';
         box('cj-shared-sched-wrap').style.display = shared ? '' : 'none';
     }
@@ -116,7 +100,7 @@ export function createJobDialog(options: CreateJobOptions) {
         layout();
     }
 
-    for (const id of ['cj-target-kind', 'cj-sched-mode-inline', 'cj-sched-mode-shared'])
+    for (const id of ['cj-sched-mode-inline', 'cj-sched-mode-shared'])
         get(id, HTMLElement).addEventListener('change', layout, { signal: lifetime.signal });
     for (const id of ['closeCreateBtn', 'cj-cancelBtn'])
         get(id, HTMLButtonElement).addEventListener('click', close, { signal: lifetime.signal });
@@ -124,17 +108,14 @@ export function createJobDialog(options: CreateJobOptions) {
     save.addEventListener('click', async () => {
         if (saving || lifetime.signal.aborted) return;
         const name = input('cj-name').value.trim();
-        const kind = select('cj-target-kind').value, sandbox = select('cj-sandbox-profile').value;
-        const targetPath = kind === 'Bundle'
-            ? input('cj-bundle-uri').value.trim() || select('cj-bundle-select').value
-            : input('cj-script-path').value.trim() || select('cj-script-select').value;
+        const sandbox = select('cj-sandbox-profile').value;
+        const targetPath = input('cj-script-path').value.trim() || select('cj-script-select').value;
         const shared = input('cj-sched-mode-shared').checked ? select('cj-shared-schedule-select').value : '';
         if (!name) { error.textContent = 'Job identifier is required.'; return; }
-        if (!targetPath) { error.textContent = 'Target path or bundle is required.'; return; }
+        if (!targetPath) { error.textContent = 'Script path is required.'; return; }
         if (input('cj-sched-mode-shared').checked && !shared) { error.textContent = 'Choose the shared schedule to attach.'; return; }
         const body = {
             name, displayName: input('cj-display-name').value.trim() || name, description: input('cj-description').value.trim() || null,
-            // A bundle is a script target addressed by a bundle:// URI; the service knows only SCRIPT and REPORT.
             jobType: 'Script', targetPath,
             // The interval drives a job only while no schedule is attached, so a job created on a
             // shared schedule names none rather than the values left in the hidden inline fields.

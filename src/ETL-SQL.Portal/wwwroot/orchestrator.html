@@ -693,15 +693,8 @@
         <input id="cj-description" type="text" placeholder="Summary of what this pipeline accomplishes...">
       </div>
 
-      <!-- Target Kind: Script vs Bundle -->
+      <!-- A published bundle is not offered as a target until the dialog writes orch:// URIs (ROADMAP OR01). -->
       <div class="form-row">
-        <div class="form-group" style="flex:1">
-          <label for="cj-target-kind">Target Type</label>
-          <select id="cj-target-kind">
-            <option value="Script" selected>Script File (.etlsql)</option>
-            <option value="Bundle">Packaged Bundle (bundle://)</option>
-          </select>
-        </div>
         <div class="form-group" style="flex:1">
           <label for="cj-sandbox-profile">Sandbox Isolation Profile</label>
           <select id="cj-sandbox-profile">
@@ -725,20 +718,6 @@
         <div class="form-group" style="flex:1">
           <label for="cj-script-path">Or server path manually</label>
           <input id="cj-script-path" type="text" placeholder="relative/path/to/script.etlsql">
-        </div>
-      </div>
-
-      <!-- Bundle Target Inputs -->
-      <div id="cj-bundle-target-row" class="form-row" style="display:none">
-        <div class="form-group" style="flex:1">
-          <label for="cj-bundle-select">Published Bundle</label>
-          <select id="cj-bundle-select">
-            <option value="">— Select published bundle —</option>
-          </select>
-        </div>
-        <div class="form-group" style="flex:1">
-          <label for="cj-bundle-uri">Or bundle URI</label>
-          <input id="cj-bundle-uri" type="text" placeholder="bundle://bundle_name/version">
         </div>
       </div>
 
