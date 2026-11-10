@@ -23,6 +23,15 @@ format, compile changelog fragments or commit evidence into that candidate after
 Tagging the frozen release branch is supported; merging it into `main` can follow publication.
 A merge commit created before tagging is a new candidate and needs its own certification.
 
+**Evidence reuse (since v0.22.0).** A new candidate does not rerun hosted CI jobs its changes
+cannot affect. The release collectors take those jobs from the newest full certification run of an
+ancestor commit on the same branch, within the 7-day window. The CI impact map
+(`scripts/ci-impact.json`) decides which lanes the changed paths affect; an unknown path affects
+all of them. The candidate's own push must pass every affected lane. CodeQL, native packages, MSI
+and DEB always come from the exact candidate, so released binaries match the tag. Each reuse is
+recorded under `reusedFor` in `hosted-release-evidence.json`. Design and guards:
+[evidence reuse](../architecture/roadmaps/evidence-reuse-design.md).
+
 | Order | Work | Reuse / completion rule |
 | :--- | :--- | :--- |
 | Before candidate cut | Finish metadata, source preflight and targeted defect checks | Resolve cheap failures together before starting builds. A targeted PR is not release certification. |
@@ -30,7 +39,7 @@ A merge commit created before tagging is a new candidate and needs its own certi
 | While those run | Complete deployment profiles/transitions, canary contracts and applicable operator evidence | Index each receipt once. Review the required/conditional ledger below; do not launch another copy of a lane already running. |
 | Before tag | Review every required receipt, candidate identity, package hash and uncovered claim | Full hosted CI includes enterprise Windows/Linux, Docker integration, HA harness contracts and browser shards. Engine Certification adds EBNF, SLT, 10M-row spill and Smoke/Standard scale. Reuse those artifacts for their stated scope. |
 | After tag | Promote accepted artifacts, verify draft bytes, attest, then publish | Windows/macOS ZIPs and VSIXs come from manual native certification. MSI and DEB reuse installed certification. There is no second macOS build. |
-| On failure | Inspect the first failure and retained logs; retry only failed work on unchanged inputs | `gh run rerun <run-id> --failed` preserves successful jobs. A source fix needs a new candidate. |
+| On failure | Inspect the first failure and retained logs; retry only failed work on unchanged inputs | `gh run rerun <run-id> --failed` preserves successful jobs. A source fix needs a new candidate. Its hosted CI jobs that the fix cannot affect reuse an earlier full run on the same branch (see below). Packages are always rebuilt. |
 
 Planning allowance: start the hosted and native paths together,
 allow up to one hour for evidence review and promotion, and reserve the remaining hour for one

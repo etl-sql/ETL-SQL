@@ -46,8 +46,11 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   Design note written 2026-11-10:
   [evidence-reuse-design.md](docs/architecture/roadmaps/evidence-reuse-design.md) (inputs come from
   the CI impact map; the collectors check; every reuse is recorded in the evidence JSON).
-  **Left:** owner sign-off, including whether package bytes may come from an earlier commit; then
-  the collectors, supervisor and drivers accept reuse.
+  Owner signed it off 2026-11-10: CI lanes are reused and packages are always rebuilt, so binaries
+  match the tag. Built 2026-11-10: the hosted collector takes unaffected jobs from the newest full
+  run of an ancestor on the branch and records each reuse (`reusedFor`). Release, Tag Release,
+  the nightly and the drivers all use that collector, so they all accept it. Release tooling now
+  has its own impact rule (Source preflight only). **Left:** the first real reuse on a recommit.
 - [ ] **W3 MSI Portal runner loss.** Cause found 2026-11-07: Windows Restart Manager shut down the
   runner host's `provjobd`, which reads newly installed files for about a minute, when an
   uninstall followed an install. A quick uninstall lost 4 of 6 runners by default and 0 of 6 with

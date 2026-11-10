@@ -1,6 +1,9 @@
 # Evidence reuse when inputs did not change (W2 design note)
 
-**Status:** for owner sign-off. Nothing is coded until it is signed off.
+**Status:** signed off by the owner 2026-11-10, with Option 1 for packages (reuse CI lanes,
+rebuild packages). Hosted CI reuse is built (2026-11-10) in
+`scripts/collect-hosted-release-evidence.mjs`, with the job-to-lane map in
+`scripts/hosted-release-policy.json` and tests in `scripts/checks/test-hosted-release-evidence.mjs`.
 **Policy approved 2026-11-04:** a lane that passed on an earlier candidate is not rerun when the
 change cannot affect it.
 
@@ -65,7 +68,7 @@ A wrong reuse ships a change no lane ran against. The ways that can happen, and 
 The nightly runs everything on the branch HEAD. A wrong reuse is caught the next night at the
 latest, before the release button is pressed.
 
-## Decision needed: package bytes from an earlier commit
+## Decision: package bytes from an earlier commit (owner chose Option 1)
 
 .NET stamps the commit into each binary's version (`0.22.0+<sha>`). If MSI, ZIP and VSIX bytes are
 reused from A, the release tagged at B ships binaries that report A's commit. The provenance

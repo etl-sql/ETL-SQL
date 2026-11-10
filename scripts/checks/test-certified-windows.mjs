@@ -129,7 +129,7 @@ try {
   for (const mode of ['valid', 'changed-package', 'changed-selection', 'changed-payload', 'missing-manifest', 'download-failure']) {
     const executionRoot = path.join(root, `draft-command-${mode}`);
     mkdirSync(path.join(executionRoot, 'scripts'), { recursive: true });
-    for (const name of ['collect-certified-windows.mjs', 'collect-hosted-release-evidence.mjs', 'hosted-release-policy.json', 'windows-release-packages.mjs', 'release-package-manifest.mjs', 'check-windows-package-origin.mjs']) {
+    for (const name of ['collect-certified-windows.mjs', 'collect-hosted-release-evidence.mjs', 'hosted-release-policy.json', 'select-ci-lanes.mjs', 'ci-impact.json', 'windows-release-packages.mjs', 'release-package-manifest.mjs', 'check-windows-package-origin.mjs']) {
       copyFileSync(new URL(`../${name}`, import.meta.url), path.join(executionRoot, 'scripts', name));
     }
     const retained = path.join(executionRoot, 'retained'); cpSync(path.join(root, 'input-0/release'), retained, { recursive: true });

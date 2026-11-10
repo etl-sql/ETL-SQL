@@ -129,7 +129,7 @@ try {
     console.log(`Certified ${platform}: original successful artifact, carried retries, API/evidence/package rejection and draft identity pass.`);
   }
   mkdirSync(path.join(root, 'scripts'));
-  for (const name of ['collect-certified-macos.mjs', 'collect-certified-windows.mjs', 'collect-hosted-release-evidence.mjs',
+  for (const name of ['collect-certified-macos.mjs', 'collect-certified-windows.mjs', 'collect-hosted-release-evidence.mjs', 'select-ci-lanes.mjs', 'ci-impact.json',
     'hosted-release-policy.json', 'windows-release-packages.mjs', 'macos-release-packages.mjs', 'release-package-manifest.mjs']) {
     copyFileSync(new URL(`../${name}`, import.meta.url), path.join(root, 'scripts', name));
   }

@@ -21,6 +21,32 @@
         "jobPrefix": "Full CI / ",
         "releaseBranchesOnly": true
       },
+      "reuse": {
+        "lanes": {
+          "Source preflight": "source-preflight",
+          "Build & Test": "build-and-test",
+          "Build Verification": "build-and-test",
+          "Portal Smoke & Security": "build-and-test",
+          "Engine Coverage (1/3)": "build-and-test",
+          "Engine Coverage (2/3)": "build-and-test",
+          "Engine Coverage (3/3)": "build-and-test",
+          "Browser and Consumer Contracts": "browser-consumer-contracts",
+          "Build VS Code Extension": "build-vscode",
+          "Sample Scripts (windows)": "sample-scripts",
+          "Sample Scripts (linux)": "sample-scripts",
+          "Portal Browser Journey (1/3)": "portal-browser-journey",
+          "Portal Browser Journey (2/3)": "portal-browser-journey",
+          "Portal Browser Journey (3/3)": "portal-browser-journey",
+          "Portal Browser Journey": "portal-browser-journey",
+          "Studio Performance Budgets (windows)": "studio-performance-budgets",
+          "Studio Performance Budgets (linux)": "studio-performance-budgets",
+          "Studio Performance Budgets (macos)": "studio-performance-budgets",
+          "Enterprise Certification (windows)": "enterprise-certification",
+          "Enterprise Certification (linux)": "enterprise-certification",
+          "Docker Integration Tests": "docker-integration-tests",
+          "Engine Certification": "engine-certification"
+        }
+      },
       "jobs": [
         "Source preflight",
         "Build & Test",

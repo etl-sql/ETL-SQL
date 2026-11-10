@@ -22,6 +22,12 @@
       "nativePackages": false
     },
     {
+      "name": "Release evidence collectors and release workflow checks",
+      "pattern": "^scripts/(?:collect-[\\w-]+\\.mjs|checks/test-(?:release|hosted|operator|collected|certified)[\\w-]*\\.mjs)$",
+      "lanes": [],
+      "nativePackages": false
+    },
+    {
       "name": "VS Code extension source and tests",
       "pattern": "^src/etl-sql-vscode/(?:src|test|tests)/",
       "lanes": ["build-vscode"],

@@ -194,4 +194,98 @@ await assert.rejects(collectHostedEvidence(repository, sha, { now, policy: night
   return structuredClone(nightlyFixture[endpoint]);
 } }), /Nightly API unavailable/);
 console.log('Nightly CI reuse accepts complete exact-candidate retry evidence after a green targeted push; failed explicit/regular/nightly runs, incomplete snapshots and changed attempts block reuse.');
+// Evidence reuse (docs/architecture/roadmaps/evidence-reuse-design.md). Candidate B's push ran only the
+// lanes its change selected; ancestor A has a full certification run. Jobs whose lanes the A..B
+// change cannot affect come from A; the rest must pass on B.
+{
+  const A = 'c'.repeat(40), B = 'd'.repeat(40), branch = 'release/v0.22.0';
+  const reusePolicy = { schemaVersion: 1, maximumAgeHours: 168, workflows: [{
+    file: 'release-certification.yml', events: ['workflow_dispatch'], jobPrefix: 'Full CI / ',
+    fallback: { file: 'ci.yml', events: ['push'], jobPrefix: '' },
+    jobs: ['Source preflight', 'Build & Test', 'Pinned'],
+    reuse: { lanes: { 'Source preflight': 'source-preflight', 'Build & Test': 'build-and-test', Pinned: null } },
+  }] };
+  const since = new Date(now - 168 * 3600000).toISOString();
+  const listing = file => `${prefix}/workflows/${file}/runs?branch=${encodeURIComponent(branch)}&status=success&created=%3E%3D${since}&per_page=100`;
+  const bySha = (file, value) => `${prefix}/workflows/${file}/runs?head_sha=${value}&per_page=100`;
+  const workflowRun = (id, value, file, event) => ({ id, head_sha: value, repository: { full_name: repository },
+    head_repository: { full_name: repository }, path: `.github/workflows/${file}`, event, head_branch: branch,
+    created_at: '2026-10-20T09:00:00Z', run_attempt: 1, status: 'completed', conclusion: 'success' });
+  const runJob = (id, runId, value, name, conclusion = 'success') => ({ id, name, run_id: runId, head_sha: value,
+    status: 'completed', conclusion, completed_at: '2026-10-20T10:00:00Z' });
+  const candidateRun = workflowRun(300, B, 'ci.yml', 'push');
+  const ancestorRun = workflowRun(200, A, 'release-certification.yml', 'workflow_dispatch');
+  const base = () => ({
+    [bySha('release-certification.yml', B)]: [{ total_count: 0, workflow_runs: [] }],
+    [bySha('ci.yml', B)]: [{ total_count: 1, workflow_runs: [candidateRun] }],
+    [`${prefix}/runs/300/attempts/1/jobs?per_page=100`]: [{ total_count: 3, jobs: [
+      runJob(31, 300, B, 'Source preflight'), runJob(32, 300, B, 'Build & Test', 'skipped'), runJob(33, 300, B, 'Pinned')] }],
+    [`${prefix}/runs/300`]: [structuredClone(candidateRun)],
+    [listing('release-certification.yml')]: [{ total_count: 1, workflow_runs: [ancestorRun] }],
+    [listing('ci.yml')]: [{ total_count: 1, workflow_runs: [candidateRun] }],
+    [bySha('release-certification.yml', A)]: [{ total_count: 1, workflow_runs: [ancestorRun] }],
+    [`${prefix}/runs/200/attempts/1/jobs?per_page=100`]: [{ total_count: 3, jobs: [
+      runJob(21, 200, A, 'Full CI / Source preflight'), runJob(22, 200, A, 'Full CI / Build & Test'), runJob(23, 200, A, 'Full CI / Pinned')] }],
+    [`${prefix}/runs/200`]: [structuredClone(ancestorRun)],
+  });
+  const reuse = (data, { paths = ['TODO.md'], ancestor = true, fallbackReason } = {}) => collectHostedEvidence(repository, B, {
+    now, policy: reusePolicy,
+    history: { isAncestor: (from, to) => ancestor && from === A && to === B, changedPaths: () => ({ paths, fallbackReason }) },
+    query: endpoint => {
+      if (!(endpoint in data)) throw new Error(`Missing fixture endpoint: ${endpoint}`);
+      return structuredClone(data[endpoint]);
+    } });
+
+  // A docs-only change reuses the build lane from A; the always-required and preflight jobs come from B.
+  const reused = await reuse(base());
+  assert.deepEqual(reused.workflows.map(item => [item.id, item.jobs.map(entry => entry.name)]),
+    [[300, ['Source preflight', 'Pinned']], [200, ['Build & Test']]]);
+  assert.deepEqual(reused.workflows[1].reusedFor, { candidateSha: B, sourceSha: A, changedPaths: ['TODO.md'],
+    rules: [{ path: 'TODO.md', rule: 'Planning and release documentation', lanes: [], nativePackages: false }],
+    lanes: ['source-preflight'], jobs: ['Build & Test'] });
+  assert.equal(reused.workflows[0].reusedFor, undefined);
+  // Release tooling reruns only Source preflight, as the impact map says.
+  assert.deepEqual((await reuse(base(), { paths: ['scripts/collect-hosted-release-evidence.mjs'] })).workflows[1].reusedFor.jobs, ['Build & Test']);
+
+  // A change the build lane can see, an unknown path or a failed comparison needs that lane on B.
+  for (const options of [{ paths: ['src/ETL-SQL.Core/Engine.cs'] }, { paths: ['docs/reference/functions/cast.md'] },
+    { paths: [], fallbackReason: 'Git comparison unavailable; selecting all lanes.' }]) {
+    await assert.rejects(reuse(base(), options), error => error.code === 'INCOMPLETE_COVERAGE' && /affect lane build-and-test/.test(error.message), JSON.stringify(options));
+  }
+  // A job with no lane is never reused.
+  const pinnedSkipped = base();
+  pinnedSkipped[`${prefix}/runs/300/attempts/1/jobs?per_page=100`][0].jobs[2].conclusion = 'skipped';
+  await assert.rejects(reuse(pinnedSkipped), /Pinned; the changes since c{40} affect lane \(always\)/);
+
+  // No usable ancestor: not an ancestor, another branch, a failed ancestor run, or an ancestor whose
+  // own evidence would need reuse (evidence never chains). The original gap is reported.
+  const elsewhere = base();
+  elsewhere[listing('release-certification.yml')][0].workflow_runs[0] = { ...ancestorRun, head_branch: 'release/v0.21.0' };
+  const failedAncestor = base();
+  failedAncestor[`${prefix}/runs/200/attempts/1/jobs?per_page=100`][0].jobs[1].conclusion = 'failure';
+  const chained = base();
+  chained[bySha('release-certification.yml', A)] = [{ total_count: 0, workflow_runs: [] }];
+  chained[bySha('ci.yml', A)] = [{ total_count: 1, workflow_runs: [workflowRun(250, A, 'ci.yml', 'push')] }];
+  chained[`${prefix}/runs/250/attempts/1/jobs?per_page=100`] = [{ total_count: 3, jobs: [
+    runJob(41, 250, A, 'Source preflight'), runJob(42, 250, A, 'Build & Test', 'skipped'), runJob(43, 250, A, 'Pinned')] }];
+  chained[`${prefix}/runs/250`] = [workflowRun(250, A, 'ci.yml', 'push')];
+  for (const [label, data, options] of [['not an ancestor', base(), { ancestor: false }], ['another branch', elsewhere],
+    ['failed ancestor', failedAncestor], ['chained reuse', chained]]) {
+    await assert.rejects(reuse(data, options), error => error.code === 'INCOMPLETE_COVERAGE' && /Required job did not run: ci\.yml \/ Build & Test$/.test(error.message), label);
+  }
+  // The candidate's own failed run is never covered by an earlier pass.
+  const failedCandidate = base();
+  failedCandidate[bySha('ci.yml', B)][0].workflow_runs[0] = { ...candidateRun, conclusion: 'failure' };
+  await assert.rejects(reuse(failedCandidate), /300 is completed\/failure/);
+  // A policy entry without a lane map never reuses.
+  const noMap = structuredClone(reusePolicy); delete noMap.workflows[0].reuse;
+  await assert.rejects(collectHostedEvidence(repository, B, { now, policy: noMap,
+    history: { isAncestor: () => true, changedPaths: () => ({ paths: ['TODO.md'] }) },
+    query: endpoint => structuredClone(base()[endpoint]) }), error => error.code === 'INCOMPLETE_COVERAGE');
+  // Every required release job has a lane entry in the real policy; CodeQL is never reused.
+  const real = hostedPolicy.workflows.find(workflow => workflow.file === 'release-certification.yml');
+  assert.deepEqual(Object.keys(real.reuse.lanes).sort(), [...real.jobs].sort());
+  assert.equal(hostedPolicy.workflows.find(workflow => workflow.file === 'codeql.yml').reuse, undefined);
+  console.log('Evidence reuse: docs and release-tooling changes reuse unaffected lanes from a full ancestor run; affected, unknown and always-required jobs, other branches, failed or chained ancestors and a failed candidate run do not.');
+}
 console.log('Hosted release gate: exact candidate, retry reuse, failure history, stale/fork/PR/skipped/missing evidence, pagination and concurrent retry rejection passed.');

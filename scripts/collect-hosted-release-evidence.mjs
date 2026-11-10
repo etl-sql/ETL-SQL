@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { changedPaths, selectLanes } from './select-ci-lanes.mjs';
 
 export const hostedPolicy = JSON.parse(readFileSync(new URL('./hosted-release-policy.json', import.meta.url), 'utf8'));
 
@@ -36,7 +37,7 @@ function missingCoverage(message, workflow) {
 }
 
 async function collectRequiredEvidence(repository, sha, {
-  query = ghApi, now = Date.now(), policy = hostedPolicy, branch,
+  query = ghApi, now = Date.now(), policy = hostedPolicy, branch, partial = false,
 } = {}) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !/^[a-f0-9]{40}$/.test(sha)) {
     throw new Error('Supply a repository and exact lowercase candidate SHA.');
@@ -117,8 +118,8 @@ async function collectRequiredEvidence(repository, sha, {
         refreshed.path !== run.path || !sameRepository(refreshed, repository)) {
       throw new Error('Run changed during evidence collection; inspect and collect again.');
     }
-    if (omittedCoverage) throw omittedCoverage;
-    if (jobs.some(job => job.conclusion !== 'success')) throw new Error(`${requirement.file} contains a skipped job.`);
+    if (omittedCoverage && !partial) throw omittedCoverage;
+    if (!partial && jobs.some(job => job.conclusion !== 'success')) throw new Error(`${requirement.file} contains a skipped job.`);
     workflows.push({ workflow: requirement.file, id: run.id, attempt: run.run_attempt, event: run.event,
       branch: run.head_branch, createdAt: run.created_at, url: run.html_url, jobs: retained, history });
   }
@@ -126,14 +127,79 @@ async function collectRequiredEvidence(repository, sha, {
     repository, sourceSha: sha, collectedAt: new Date(now).toISOString(), workflows };
 }
 
+// Ancestry that Git cannot prove (a shallow clone, a missing object) means no reuse.
+export const gitHistory = {
+  isAncestor: (ancestor, sha) => {
+    const result = spawnSync('git', ['merge-base', '--is-ancestor', ancestor, sha], { windowsHide: true, timeout: 30000 });
+    return !result.error && result.status === 0;
+  },
+  changedPaths: (base, head) => changedPaths({ base, head }),
+};
+
+// Evidence reuse (docs/architecture/roadmaps/evidence-reuse-design.md, signed off 2026-11-10).
+// The candidate's own run must pass every job whose lane the changes since an earlier full run can
+// affect. The rest comes from that earlier run: an ancestor on the same branch, inside the window,
+// collected without reuse, so evidence never chains. Unknown paths select every lane.
+async function collectReusedEvidence(repository, sha, configured, { query, now, policy, branch, history }) {
+  const lanesByJob = configured.reuse?.lanes;
+  if (!lanesByJob || configured.fallback?.file !== 'ci.yml') return null;
+  for (const name of configured.jobs) {
+    if (!(name in lanesByJob) || (lanesByJob[name] !== null && typeof lanesByJob[name] !== 'string')) throw new Error(`Invalid reuse lane for ${configured.file} / ${name}.`);
+  }
+  const primary = { ...configured, fallback: undefined, nightlyFallback: undefined, reuse: undefined };
+  const own = { ...primary, ...configured.fallback };
+  let candidate;
+  try {
+    candidate = (await collectRequiredEvidence(repository, sha, { query, now, branch, partial: true,
+      policy: { ...policy, workflows: [own] } })).workflows[0];
+  } catch (error) {
+    if (error.code === 'MISSING_WORKFLOW_EVIDENCE') return null;
+    throw error;
+  }
+  const since = new Date(now - policy.maximumAgeHours * 3600000).toISOString();
+  const earlier = [];
+  for (const source of [primary, own, ...(configured.nightlyFallback ? [{ ...primary, ...configured.nightlyFallback }] : [])]) {
+    const endpoint = `repos/${repository}/actions/workflows/${source.file}/runs?branch=${encodeURIComponent(candidate.branch)}&status=success&created=%3E%3D${since}&per_page=100`;
+    for (const run of paged(await query(endpoint), 'workflow_runs')) {
+      if (/^[a-f0-9]{40}$/.test(run.head_sha) && run.head_sha !== sha && run.head_branch === candidate.branch &&
+          sameRepository(run, repository) && !earlier.some(item => item.sha === run.head_sha)) earlier.push({ sha: run.head_sha, id: run.id });
+    }
+  }
+  for (const { sha: ancestor } of earlier.sort((a, b) => b.id - a.id)) {
+    if (!history.isAncestor(ancestor, sha)) continue;
+    let base;
+    try {
+      base = await collectHostedEvidence(repository, ancestor, { query, now, branch: candidate.branch, history,
+        policy: { ...policy, workflows: [{ ...configured, reuse: undefined }] } });
+    } catch { continue; }
+    const changes = history.changedPaths(ancestor, sha);
+    const affected = selectLanes(changes.paths, { fallbackReason: changes.fallbackReason });
+    const reused = [];
+    for (const name of configured.jobs) {
+      const lane = lanesByJob[name];
+      if (lane !== null && !affected.lanes.includes(lane)) { reused.push(name); continue; }
+      if (!candidate.jobs.some(job => job.name === name)) {
+        throw missingCoverage(`Required job did not run: ${own.file} / ${name}; the changes since ${ancestor} affect lane ${lane ?? '(always)'}.`, own.file);
+      }
+    }
+    const baseRun = base.workflows[0];
+    return [
+      { ...candidate, jobs: candidate.jobs.filter(job => !reused.includes(job.name)) },
+      { ...baseRun, jobs: baseRun.jobs.filter(job => reused.includes(job.name)),
+        reusedFor: { candidateSha: sha, sourceSha: ancestor, changedPaths: changes.paths, rules: affected.reasons, lanes: affected.lanes, jobs: reused } },
+    ];
+  }
+  return null;
+}
+
 export async function collectHostedEvidence(repository, sha, {
-  query = ghApi, now = Date.now(), policy = hostedPolicy, branch,
+  query = ghApi, now = Date.now(), policy = hostedPolicy, branch, history = gitHistory,
 } = {}) {
   if (policy.schemaVersion !== 1 || !Number.isFinite(policy.maximumAgeHours) || policy.maximumAgeHours <= 0 ||
       !Array.isArray(policy.workflows) || !policy.workflows.length) throw new Error('Invalid hosted evidence policy.');
   const workflows = [];
   for (const configured of policy.workflows) {
-    const primary = { ...configured, fallback: undefined, nightlyFallback: undefined };
+    const primary = { ...configured, fallback: undefined, nightlyFallback: undefined, reuse: undefined };
     const sources = [primary,
       ...(configured.fallback ? [{ ...primary, ...configured.fallback }] : []),
       ...(configured.nightlyFallback ? [{ ...primary, ...configured.nightlyFallback }] : [])];
@@ -156,7 +222,12 @@ export async function collectHostedEvidence(repository, sha, {
         throw error;
       }
     }
-    if (!selected) throw incomplete ?? missing;
+    if (!selected) {
+      const reused = await collectReusedEvidence(repository, sha, configured, { query, now, policy, branch, history });
+      if (!reused) throw incomplete ?? missing;
+      workflows.push(...reused);
+      continue;
+    }
     workflows.push(...selected.workflows);
   }
   return { schemaVersion: 1, scope: 'hosted-ci-and-codeql', fullReleaseCertification: false,
