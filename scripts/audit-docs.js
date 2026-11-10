@@ -155,7 +155,7 @@ function checkBrokenLinks(mdFiles) {
 
     for (const rawLink of extractLinks(content)) {
       // Only check local links (skip http/https/mailto and empty)
-      if (!rawLink || rawLink.startsWith('http') || rawLink.startsWith('mailto:') ||
+      if (!rawLink || /^https?:\/\//i.test(rawLink) || rawLink.startsWith('mailto:') ||
           rawLink.startsWith('conversation://')) continue;
 
       const [href, anchor] = rawLink.split('#');
@@ -172,9 +172,7 @@ function checkBrokenLinks(mdFiles) {
         continue;
       }
 
-      // Ignore non-markdown and non-file references
-      if (!href.endsWith('.md') && !href.includes('.')) continue;
-
+      // Directory links (no extension) are checked for existence like files.
       const target = path.resolve(dir, href);
       // Windows resolves incorrect casing that fails on Linux hosts and published documentation.
       if (!existsWithExactCase(target)) {

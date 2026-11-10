@@ -19,7 +19,9 @@ try {
   };
   const valid = audit('guides/topic.md#details');
   assert.equal(valid.status, 0, valid.stdout + valid.stderr);
-  for (const href of ['guides/Topic.md', 'Guides/topic.md', 'guides/missing.md', 'guides/topic.md#missing']) {
+  // A directory link has no dot, and a relative file can start with "http"; neither may skip the check.
+  for (const href of ['guides/Topic.md', 'Guides/topic.md', 'guides/missing.md', 'guides/topic.md#missing',
+    'missing-folder/', 'http-sink.md']) {
     const invalid = audit(href);
     assert.equal(invalid.status, 1, `${href}\n${invalid.stdout}${invalid.stderr}`);
     assert.match(invalid.stdout, /broken (link|anchor)/);
