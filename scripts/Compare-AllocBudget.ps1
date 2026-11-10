@@ -22,6 +22,13 @@
     run is meaningfully better than budget the script suggests re-blessing
     (Test-SpillAllocProfile.ps1 -UpdateBudget).
 
+.PARAMETER MachineMetricsReportOnly
+    Report GC counts, GC pause and peak working set as warnings instead of failing. They depend on
+    the host (cores, memory, GC heap count), and the budget comes from one workstation, so hosted
+    CI gates only what the host does not change: spill evidence and allocated bytes per row. The
+    first hosted run (CI 42725899666) did 77 gen2 collections against a workstation limit of 74
+    while allocation passed.
+
 .PARAMETER Report
     Path to the new profile report JSON.
 
@@ -37,7 +44,8 @@ param(
     [double]$AllocTolerancePct = 10,
     [double]$GcCountTolerancePct = 30,
     [double]$PauseTolerancePct = 35,
-    [double]$PeakTolerancePct = 15
+    [double]$PeakTolerancePct = 15,
+    [switch]$MachineMetricsReportOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -58,10 +66,14 @@ if (-not (Test-Path $Budget)) {
 $base = Get-Content $Budget -Raw | ConvertFrom-Json
 
 $regressions = New-Object System.Collections.Generic.List[object]
+$machineWarnings = New-Object System.Collections.Generic.List[object]
 function Add-Regression([string]$kind, $budgetValue, $currentValue) {
-    $script:regressions.Add([pscustomobject]@{
-        Kind = $kind; Budget = $budgetValue; Current = $currentValue
-    })
+    $row = [pscustomobject]@{ Kind = $kind; Budget = $budgetValue; Current = $currentValue }
+    # Call Add directly: assigning an if-expression would unroll an empty list to $null.
+    if ($MachineMetricsReportOnly -and $kind -in @('GC_GEN2_COLLECTIONS', 'GC_PAUSE_MS', 'PEAK_WORKING_SET_MB')) {
+        $script:machineWarnings.Add($row)
+    }
+    else { $script:regressions.Add($row) }
 }
 
 # 1. Same workload + correctness evidence.
@@ -93,6 +105,11 @@ if ($new.gc.pauseMs -gt $pauseLimit) {
 $peakLimit = $base.memory.peakWorkingSetMB * (1 + $PeakTolerancePct / 100)
 if ($new.memory.peakWorkingSetMB -gt $peakLimit) {
     Add-Regression 'PEAK_WORKING_SET_MB' ("{0:N0} (limit {1:N0})" -f $base.memory.peakWorkingSetMB, $peakLimit) ("{0:N0}" -f $new.memory.peakWorkingSetMB)
+}
+
+if ($machineWarnings.Count -gt 0) {
+    Write-Host "`n[WARN] $($machineWarnings.Count) host-dependent metric(s) over the workstation budget (report only):" -ForegroundColor Yellow
+    $machineWarnings | Format-Table Kind, Budget, Current -AutoSize | Out-String | Write-Host
 }
 
 if ($regressions.Count -gt 0) {

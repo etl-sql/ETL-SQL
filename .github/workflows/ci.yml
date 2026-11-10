@@ -866,7 +866,7 @@ jobs:
       - name: Spill allocation budget (10M rows)
         shell: pwsh
         timeout-minutes: 8
-        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-SpillAllocProfile.ps1 -ScriptArguments @('-Rows', '10000000', '-SkipBuild', '-OutDir', 'release-validation/engine-certification/spill-allocation') -EvidenceDirectory release-validation/engine-certification/spill-process -TimeoutSeconds 420
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-SpillAllocProfile.ps1 -ScriptArguments @('-Rows', '10000000', '-SkipBuild', '-MachineMetricsReportOnly', '-OutDir', 'release-validation/engine-certification/spill-allocation') -EvidenceDirectory release-validation/engine-certification/spill-process -TimeoutSeconds 420
 
       - name: Scale certification (smoke)
         shell: pwsh

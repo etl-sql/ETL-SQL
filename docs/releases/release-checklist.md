@@ -707,7 +707,9 @@ lanes run under the `de_DE.UTF-8` culture (comma decimal, day-first dates); Wind
 other Linux jobs are invariant, so engine text that follows the host locale fails here. Each scale tier is
 compared with `certification-results/baseline-<tier>.json` using
 `Compare-CertBaseline.ps1 -PerformanceReportOnly`: timing misses are warnings, while row counts,
-checksums and failed scenarios fail the job. Its artifact `engine-certification-<run>-<attempt>`
+checksums and failed scenarios fail the job. The spill budget gates allocated bytes per row and
+spill evidence; GC counts, GC pause and peak working set depend on the host and only warn there
+(`-MachineMetricsReportOnly`). Its artifact `engine-certification-<run>-<attempt>`
 keeps the logs, results and comparison reports. Release requires the job through
 `scripts/hosted-release-policy.json`.
 
