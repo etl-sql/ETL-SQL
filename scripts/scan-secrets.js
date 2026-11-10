@@ -41,17 +41,36 @@ const ALLOWLIST_PATHS = new Set([
 
 // Unambiguous secret formats — these almost never false-positive in source.
 const HARD_PATTERNS = [
-  { name: 'Private key block', re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/ },
+  { name: 'Private key block', re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY-----/ },
   { name: 'AWS access key id', re: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: 'GitHub token', re: /\bgh[pousr]_[A-Za-z0-9]{36,}\b/ },
+  { name: 'GitHub fine-grained token', re: /\bgithub_pat_[A-Za-z0-9_]{60,}\b/ },
   { name: 'Slack token', re: /\bxox[abprs]-[0-9A-Za-z-]{10,}\b/ },
   { name: 'Google API key', re: /\bAIza[0-9A-Za-z_-]{35}\b/ },
   { name: 'Stripe live key', re: /\b(?:sk|rk)_live_[0-9A-Za-z]{20,}\b/ },
   { name: 'Slack webhook', re: /https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/]+/ },
 ];
 
-// Well-known vendor documentation placeholders that match a pattern but are not real.
+// Well-known vendor documentation placeholders that match a pattern but are not real. Only the
+// matched token is tested: a real key on a line that merely mentions EXAMPLE is still reported.
 const DOC_PLACEHOLDERS = [/EXAMPLE/]; // e.g. AWS's AKIAIOSFODNN7EXAMPLE
+
+/** Findings for one file's text: [{ line, kind, text }]. */
+function secretFindings(text) {
+  const found = [];
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/pragma:\s*allowlist secret/i.test(line)) continue;
+    for (const { name, re } of HARD_PATTERNS) {
+      const match = line.match(re);
+      if (match && !DOC_PLACEHOLDERS.some((placeholder) => placeholder.test(match[0]))) {
+        found.push({ line: i + 1, kind: name, text: line.trim().slice(0, 120) });
+      }
+    }
+  }
+  return found;
+}
 
 function listTrackedFiles() {
   return execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
@@ -61,6 +80,9 @@ function listTrackedFiles() {
     .filter((rel) => !ALLOWLIST_PATHS.has(rel))
     .filter((rel) => !SKIP.some((re) => re.test(rel)));
 }
+
+module.exports = { secretFindings };
+if (require.main !== module) return;
 
 const findings = [];
 for (const rel of listTrackedFiles()) {
@@ -72,15 +94,7 @@ for (const rel of listTrackedFiles()) {
   } catch {
     continue;
   }
-  const lines = text.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/pragma:\s*allowlist secret/i.test(line)) continue;
-    if (DOC_PLACEHOLDERS.some((re) => re.test(line))) continue;
-    for (const { name, re } of HARD_PATTERNS) {
-      if (re.test(line)) findings.push({ rel, line: i + 1, kind: name, text: line.trim().slice(0, 120) });
-    }
-  }
+  for (const finding of secretFindings(text)) findings.push({ rel, ...finding });
 }
 
 if (findings.length === 0) {
