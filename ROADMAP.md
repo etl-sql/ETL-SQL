@@ -388,6 +388,85 @@ resize/reversal and missing-data cases; and unchanged payload, render-time and b
 Update the capability matrix and focused reference for only the accepted form. Finish that increment
 before selecting the next; preserve all existing fixtures for earlier supported forms.
 
+### Reporting & Presentation — Analytical Overlays, Multi-Layer Domain Resolution, and Golden Conformance
+
+**Status:** Incremental  
+**Horizon:** Next (v0.23.0)  
+**Scheduling:** Backlog for prioritization after v0.22.0 ships.  
+**Authoritative design:** [Reporting Semantic Contracts](docs/architecture/reporting-semantic-contracts.md),
+[Native Grammar-of-Graphics Contract](docs/architecture/decisions/grammar-of-graphics-spec-ir.md), and
+[Reporting Architecture](docs/architecture/reporting.md).
+
+**Implemented baseline:** The reporting golden harness (`ReportingGoldenHarness` and
+`ReportingGoldenTests`) pins `PlanHash`, `SvgHash`, `FallbackHash`, and `TerminalHash` across 34
+`.rptsql` conformance scripts in [`tests/fixtures/reporting/goldens/index.json`](tests/fixtures/reporting/goldens/index.json).
+`LINEAR` and `POLYNOMIAL` regressions, `GOAL`, `AVERAGE`, `MOVING_AVG`, `FORECAST`, `REFERENCE_LINE`,
+`REFERENCE_BAND`, `RUNNING_TOTAL`, `PERCENT_OF_TOTAL`, and `ANNOTATIONS (POINT ...)` are parsed and
+lowered into `ChartSpec` layers.
+
+**Problem and intended outcome:** Several analytical overlay and multi-layer combinations produce
+silent no-ops or mathematically distorted output instead of failing closed or resolving accurately,
+and significant parts of the Grammar of Graphics surface lack golden hash fixtures:
+- `EXPONENTIAL`, `LOGARITHMIC`, and `POWER` overlays parse and lower, then hit the default wildcard
+  in `PlotPlanResolver.ResolveOverlay` and silently emit all-null datums with no SVG output and no
+  error.
+- `PlotPlanResolver.ResolveOverlay` coerces `NULL` Y values to `0m` before computing `AVERAGE`,
+  `MOVING_AVG`, `LINEAR`, and `POLYNOMIAL`, skewing means and regression slopes toward zero.
+- On multi-series charts, `ResolveOverlay` regresses across the entire Y column without grouping by
+  series or rejecting ambiguous multi-series trendlines.
+- `PolynomialRegression` raises uncentered `decimal` X values to `row + column`, which can overflow
+  `decimal.MaxValue` on large X values or higher polynomial degrees.
+- When a chart combines stacked layers (`STACK = ZERO` or `NORMALIZE`) with an unstacked `LINE` or
+  `POINT` layer on the same primary Y axis, `PlotPlanResolver.ResolveScales` drops `FieldChannel.Y`
+  from the unstacked layers and can clip them outside the resolved Y domain.
+- `VisualBuilder.BuildResolvedAsync` catches all lowering/resolution/render exceptions into
+  `vm.Error` while `ReportingGoldenHarness.ProduceAsync` does not assert `vm.Error is null`, allowing
+  broken visuals to record `null` plan/SVG hashes during golden regeneration; `SvgChartRenderer.Render`
+  still contains legacy fallback paths when `PlotPlan` is `null`; and `NativeSvgGeometryGoldenTests`
+  / `GrammarOfGraphicsContractTests` pin raw SHA-256 strings without checked-in artifact files.
+
+The outcome is fail-closed overlay and scale semantics (an explicit error is always preferred over an
+incorrect or silent chart), accurate regression math over nullable/large-domain inputs, and golden
+conformance fixtures covering overlays, intervals, interpolations, scales, facets, and null policies.
+
+**Why next:** Identified during the v0.22.0 Grammar of Graphics SLT/golden review (2026-11-10). Held
+out of v0.22.0 to avoid destabilizing the active release candidate.
+
+**Boundaries:** Preserve the existing `ChartSpec`, `PlotPlan`, and four-artifact golden harness
+contracts. Do not add in-engine histogram binning (keep `X_START`/`X_END` SQL-computed) or new
+third-party math libraries.
+
+**Dependencies:** `ReportParser`, `NamedVisualChartLowerer`, `PlotPlanResolver`, `PlotPlanSvgRenderer`,
+and `ReportingGoldenHarness`.
+
+**Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
+Select individual IDs into `TODO.md` when scheduling.
+
+#### Fail-closed overlay semantics and multi-layer domain resolution
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| GG01 | **Decide or implement `EXPONENTIAL`, `LOGARITHMIC`, and `POWER` trendlines.** Either implement exact least-squares fitting in `PlotPlanResolver.ResolveOverlay` with domain guards (rejecting non-positive Y for `EXPONENTIAL`/`POWER` and non-positive X for `LOGARITHMIC`/`POWER`) or reject them at parse/lowering time until implemented. Remove the silent all-null fallback. | — | S |
+| GG02 | **Exclude `NULL` Y pairs from statistical overlays.** Stop coercing `NULL` to `0m` in `PlotPlanResolver.ResolveOverlay` for `AVERAGE`, `MOVING_AVG`, `LINEAR`, and `POLYNOMIAL`. Skip null `(x, y)` pairs in regressions and averages, and define deterministic window behavior for `MOVING_AVG` over gaps. | — | S |
+| GG03 | **Define multi-series trendline ownership.** Either partition overlay computation per series (or bind to an explicit target series) or fail validation when a statistical trendline is authored on a multi-series visual without a target series. | GG02 | S |
+| GG04 | **Center/scale X in `PolynomialRegression` and guard singular/overflow cases.** Normalize X into `[-1, 1]` (or `[0, 1]`) before building the Vandermonde sums so large X domains (e.g., epoch dates or revenue) do not overflow `decimal.MaxValue`, and fail or emit a diagnostic when degree exceeds distinct X points. | GG02 | S |
+| GG05 | **Preserve unstacked `FieldChannel.Y` in mixed stacked/unstacked Y domains.** Include `FieldChannel.Y` alongside `YStart`/`YEnd`/`ErrorLow`/`ErrorHigh`/`ConfidenceLow`/`ConfidenceHigh` in `PlotPlanResolver.ResolveScales` when stacked and unstacked layers share a primary or secondary Y axis; include explicit `AnnotationPoint` coordinates in scale domain resolution. | — | S |
+
+#### Harness fail-fast guarantees and golden SVG hash coverage
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| GG06 | **Fail closed in `ReportingGoldenHarness` and retire legacy `SvgChartRenderer` fallbacks.** Assert `visual.Error is null` in `ReportingGoldenHarness.ProduceAsync` so golden updates never record `null` artifacts for failed visuals; replace legacy `PlotPlan is null` fallback paths in `SvgChartRenderer.Render` with an explicit error for plot-plan-backed visual types; back `NativeSvgGeometryGoldenTests` and `GrammarOfGraphicsContractTests` with diffable artifact snapshots. | — | S |
+| GG07 | **Add golden conformance fixtures for analytical overlays.** Add `.rptsql` fixtures and four-artifact goldens in `index.json` for `LINEAR`, `POLYNOMIAL`, `FORECAST` (with confidence band and anomaly points), `REFERENCE_LINE`, `REFERENCE_BAND`, `RUNNING_TOTAL`, `PERCENT_OF_TOTAL`, and `ANNOTATIONS (POINT ...)`. | GG01, GG02, GG04 | M |
+| GG08 | **Add golden conformance fixtures for error bars, confidence bands, and connected interpolations.** Pin `.plan.json`, `.svg`, `.fallback.json`, and `terminal.txt` goldens for `ERROR_LOW`/`ERROR_HIGH`, `CONFIDENCE_LOW`/`CONFIDENCE_HIGH`, `INTERPOLATION = SMOOTH`/`STEP_BEFORE`/`STEP_AFTER`, and multi-color conditional line transitions. | — | M |
+| GG09 | **Add golden conformance fixtures for `LOG`/`IDENTITY` scales, 2D facets, `INDEPENDENT` resolution, `NULL_POLICY`, and `CUSTOM` polar arcs.** Add `.rptsql` golden fixtures covering `TYPE = LOG`, `TYPE = IDENTITY`, `FACET (ROW = ..., COLUMN = ...)`, `RESOLVE (Y = INDEPENDENT)`, `NULL_POLICY = ZERO`/`CONNECT`/`SKIP`, and a `CUSTOM` `COORDINATE POLAR` `ARC` chart. | — | M |
+| GG10 | **Declarative negative conformance corpus for reporting/GoG.** Add an SLT-style `statement error` script runner (or negative `.rptsql` fixture lane) that verifies expected parse, semantic-validator, and domain errors directly from `.rptsql` test scripts. | GG06 | M |
+
+**Acceptance evidence:** Zero silent null-layer fallbacks in `PlotPlanResolver.ResolveOverlay`;
+verified regression accuracy with `NULL` values and large X domains; unclipped mixed stacked/unstacked
+Y domains; `ReportingGoldenTests` passing with the expanded `index.json` fixtures; and `DocSanityTests`
+passing cleanly.
+
 ### Presentation & Workspaces — Studio Authoring for Mobile Page Layouts
 
 **Status:** Exploring
