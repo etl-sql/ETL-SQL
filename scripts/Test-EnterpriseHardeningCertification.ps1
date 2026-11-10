@@ -170,12 +170,17 @@ $commit = $source.commit
 $engineArtifactsPath = if ($privateBuildRoot) { Join-Path $privateBuildRoot 'engine' } else { '' }
 $portalArtifactsPath = if ($privateBuildRoot) { Join-Path $privateBuildRoot 'portal' } else { '' }
 
+$engineFilter = 'FullyQualifiedName~ConnectorPolicyEnforcementTests|FullyQualifiedName~RestApiTests|FullyQualifiedName~SharePointAndADConnectorTests|FullyQualifiedName~SecretProviderTests|FullyQualifiedName~OrganizationPolicySourceTests|FullyQualifiedName~OrganizationPolicyCacheTests|FullyQualifiedName~OrganizationPolicySchemaTests|FullyQualifiedName~PolicyAuthorityServiceTests|FullyQualifiedName~GovernanceRecoveryTests|FullyQualifiedName~GovernanceEnforcementAuditTests|FullyQualifiedName~EnterpriseEnrollmentTests|FullyQualifiedName~EnterprisePolicyRuntimeTests|FullyQualifiedName~EnterpriseHostCertificationTests|FullyQualifiedName~ExecutionSnapshotPropagationTests|FullyQualifiedName~ProcessJobExecutorChaosTests|FullyQualifiedName~PolicyRefreshBypassTests|FullyQualifiedName~FileSystemPolicyAuthorizerTests|FullyQualifiedName~FileSystemPolicyEnforcementTests|FullyQualifiedName~FileConnectorWriteBoundaryTests|FullyQualifiedName~MutationGuardrailEnforcementTests|FullyQualifiedName~ResourceCeilingEnforcementTests|FullyQualifiedName~ProcessPolicyRulesTests|FullyQualifiedName~StandaloneRegressionTests|FullyQualifiedName~SecurityEventContractTests|FullyQualifiedName~SecurityEventRuntimeTests|FullyQualifiedName~SecurityEventOutboxTests|FullyQualifiedName~SecurityEventTransportTests|FullyQualifiedName~SecurityEventHealthGateTests|FullyQualifiedName~BootstrapSecurityEventSinkTests|FullyQualifiedName~StmtFileSystemTests'
+# Unix-only facts (file modes, XDG paths) skip on Windows, and a skipped result fails this
+# certification. Windows does not select them; the Linux certification runs them.
+if ($Platform -eq 'windows') { $engineFilter = "($engineFilter)&Platform!=Unix" }
+
 $testArgsCommon = @(
     'test',
     'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj',
     '--configuration', $Configuration,
     '--filter',
-    'FullyQualifiedName~ConnectorPolicyEnforcementTests|FullyQualifiedName~RestApiTests|FullyQualifiedName~SharePointAndADConnectorTests|FullyQualifiedName~SecretProviderTests|FullyQualifiedName~OrganizationPolicySourceTests|FullyQualifiedName~OrganizationPolicyCacheTests|FullyQualifiedName~OrganizationPolicySchemaTests|FullyQualifiedName~PolicyAuthorityServiceTests|FullyQualifiedName~GovernanceRecoveryTests|FullyQualifiedName~GovernanceEnforcementAuditTests|FullyQualifiedName~EnterpriseEnrollmentTests|FullyQualifiedName~EnterprisePolicyRuntimeTests|FullyQualifiedName~EnterpriseHostCertificationTests|FullyQualifiedName~ExecutionSnapshotPropagationTests|FullyQualifiedName~ProcessJobExecutorChaosTests|FullyQualifiedName~PolicyRefreshBypassTests|FullyQualifiedName~FileSystemPolicyAuthorizerTests|FullyQualifiedName~FileSystemPolicyEnforcementTests|FullyQualifiedName~FileConnectorWriteBoundaryTests|FullyQualifiedName~MutationGuardrailEnforcementTests|FullyQualifiedName~ResourceCeilingEnforcementTests|FullyQualifiedName~ProcessPolicyRulesTests|FullyQualifiedName~StandaloneRegressionTests|FullyQualifiedName~SecurityEventContractTests|FullyQualifiedName~SecurityEventRuntimeTests|FullyQualifiedName~SecurityEventOutboxTests|FullyQualifiedName~SecurityEventTransportTests|FullyQualifiedName~SecurityEventHealthGateTests|FullyQualifiedName~BootstrapSecurityEventSinkTests|FullyQualifiedName~StmtFileSystemTests',
+    $engineFilter,
     '--logger',
     'trx;LogFileName=enterprise-hardening.trx',
     '--results-directory',

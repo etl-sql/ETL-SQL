@@ -263,7 +263,9 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   sandbox-workspace mode test skipped and the keys-archive owner-only mode, `ETLSQLM3` format and
   XDG outbox tests returned early and reported a pass. All four are now `[UnixFact]` (visible skip
   on Windows) in `Category=Integration`, which the Linux Docker integration lane runs (all four
-  pass on Linux). The two EBNF generation tests passed when `docs/grammar.ebnf` was missing; a
+  pass on Linux). The Windows enterprise certification selects tests by class and refuses skips,
+  so it now excludes `Platform=Unix` (CI 42864811960 failed on the outbox test's new skip; the
+  Linux certification runs it). The two EBNF generation tests passed when `docs/grammar.ebnf` was missing; a
   missing grammar now fails them. (8) Six symlink-escape security tests (`SecurityHardening` x3,
   `EvaluatorLifecycle`, `WorkstationEditor`, `FileSystemArtifactStorage`) returned early and
   passed on a machine that cannot create symlinks, which is any Windows host without admin or

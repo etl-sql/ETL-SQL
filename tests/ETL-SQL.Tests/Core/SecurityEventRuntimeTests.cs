@@ -184,6 +184,7 @@ public sealed class SecurityEventRuntimeTests
     // Windows always has the folder; the lookup only comes back empty on Unix.
     [UnixFact]
     [Trait("Category", "Integration")]
+    [Trait("Platform", "Unix")]
     public void StandaloneOutboxPath_ResolvesBeforeTheDataDirectoryExists()
     {
         var variable = SecurityEventOutboxPaths.StandaloneOverrideEnvironmentVariable;

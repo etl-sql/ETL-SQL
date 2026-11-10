@@ -45,6 +45,7 @@ public sealed class SandboxWorkspaceProviderTests
 
     [UnixFact]
     [Trait("Category", "Integration")]
+    [Trait("Platform", "Unix")]
     [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
     public async Task WritableLeavesAcceptAnUnprivilegedSandboxUidWhileEnclosingRootsStayPrivate()
     {

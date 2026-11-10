@@ -50,6 +50,7 @@ namespace ETL_SQL.Tests.Reporting
         // Windows in-memory payloads use DPAPI, so the current-format header is Unix-only.
         [UnixFact]
         [Trait("Category", "Integration")]
+        [Trait("Platform", "Unix")]
         public void MachineBoundCrypto_UsesTheCurrentFormat()
         {
             var protected_ = MachineBoundCrypto.Protect("new payload"u8.ToArray());

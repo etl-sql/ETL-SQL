@@ -295,6 +295,7 @@ namespace ETL_SQL.Tests.CliCommands
         // Owner-only file permissions are a Unix concept; on Windows ACL inheritance covers it.
         [UnixFact]
         [Trait("Category", "Integration")]
+        [Trait("Platform", "Unix")]
         [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
         public async Task Backup_WritesKeysArchiveWithOwnerOnlyPermissionsOnUnix()
         {
