@@ -1,14 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ETL_SQL.Reporting;
 using PdfSharp.Pdf;
-using PdfSharp.Pdf.IO;
 using Xunit;
 
 namespace ETL_SQL.Tests.Reporting;
@@ -33,7 +29,7 @@ public sealed class PdfLayoutRegressionTests
 
         var pdf = await new PdfExporter().ExportAsync(manifest);
 
-        using var document = Open(pdf);
+        using var document = PdfText.Open(pdf);
         var (actualWidth, actualHeight) = EffectiveSize(document.Pages[0]);
         Assert.True(Math.Abs(actualWidth - width) < 1 && Math.Abs(actualHeight - height) < 1,
             $"{pageSize} {orientation} printed as {actualWidth:0.#} x {actualHeight:0.#} pt; expected {width} x {height}.");
@@ -50,11 +46,11 @@ public sealed class PdfLayoutRegressionTests
 
         var pdf = await new PdfExporter().ExportAsync(manifest);
 
-        using var document = Open(pdf);
+        using var document = PdfText.Open(pdf);
         Assert.True(document.PageCount > 1, "The detail table should run to several pages.");
         for (var index = 0; index < document.PageCount; index++)
         {
-            var text = PageText(document.Pages[index]);
+            var text = PdfText.Page(document.Pages[index]);
             Assert.Contains("Quarterly orders", text, StringComparison.Ordinal);
             Assert.Matches($@"Page ?{index + 1} ?of ?{document.PageCount}", text);
         }
@@ -68,10 +64,9 @@ public sealed class PdfLayoutRegressionTests
 
         var pdf = await new PdfExporter().ExportAsync(manifest);
 
-        using var document = Open(pdf);
+        using var document = PdfText.Open(pdf);
         Assert.True(document.PageCount > 1, $"A 400-row table printed on {document.PageCount} page.");
-        var pages = Enumerable.Range(0, document.PageCount).Select(index => PageText(document.Pages[index])).ToList();
-        // The renderer breaks a run after a hyphen, so the reader can see "SO- 0001".
+        var pages = Enumerable.Range(0, document.PageCount).Select(index => PdfText.Page(document.Pages[index])).ToList();
         Assert.Matches(@"SO- ?0001\b", pages[0]);
         Assert.Matches(@"SO- ?0400\b", pages[^1]);
         RetainEvidence("OversizedContent", pdf);
@@ -91,9 +86,9 @@ public sealed class PdfLayoutRegressionTests
 
         var pdf = await new PdfExporter().ExportAsync(manifest);
 
-        using var document = Open(pdf);
+        using var document = PdfText.Open(pdf);
         Assert.Equal(1, document.PageCount);
-        Assert.Contains("Hello", PageText(document.Pages[0]), StringComparison.Ordinal);
+        Assert.Contains("Hello", PdfText.Page(document.Pages[0]), StringComparison.Ordinal);
         RetainEvidence("Fonts", pdf);
     }
 
@@ -137,44 +132,11 @@ public sealed class PdfLayoutRegressionTests
         PrintLayout = new PrintLayoutOverrideManifest { Band = band },
     };
 
-    private static PdfDocument Open(byte[] pdf) => PdfReader.Open(new MemoryStream(pdf), PdfDocumentOpenMode.Import);
-
     /// <summary>The page as a viewer shows it: a page rotated a quarter turn swaps its sides.</summary>
     private static (double Width, double Height) EffectiveSize(PdfPage page)
     {
         var width = page.Width.Point;
         var height = page.Height.Point;
         return page.Rotate % 180 == 90 ? (height, width) : (width, height);
-    }
-
-    /// <summary>The literal strings drawn on a page (Tj operands), enough to ask whether text was printed.</summary>
-    private static string PageText(PdfPage page)
-    {
-        var raw = new List<byte>();
-        var contents = page.Contents;
-        for (var index = 0; index < contents.Elements.Count; index++)
-        {
-            var stream = contents.Elements.GetDictionary(index)?.Stream;
-            if (stream is null) continue;
-            var bytes = stream.Value;
-            if (bytes.Length > 2 && bytes[0] == 0x78)
-            {
-                using var input = new MemoryStream(bytes);
-                using var inflate = new ZLibStream(input, CompressionMode.Decompress);
-                using var output = new MemoryStream();
-                inflate.CopyTo(output);
-                raw.AddRange(output.ToArray());
-            }
-            else
-            {
-                raw.AddRange(bytes);
-            }
-        }
-
-        var content = Encoding.Latin1.GetString(raw.ToArray());
-        var text = new StringBuilder();
-        foreach (Match match in Regex.Matches(content, @"\((?<text>(?:\\.|[^\\()])*)\)\s*Tj"))
-            text.Append(match.Groups["text"].Value).Append(' ');
-        return Regex.Replace(text.ToString(), @"\s+", " ");
     }
 }
