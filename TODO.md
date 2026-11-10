@@ -276,7 +276,12 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   `enable-hardened-sandbox-lane` (CI exports the pinned image; the hardened tests ran, 0 skipped),
   `collect-operator-release-evidence`, the Windows/macOS package wrappers, `ReleasePublish.Helpers`,
   `check-windows-package-origin`, `Test-BrowserShard`, `report-browser-shard-recovery`,
-  `MsiCheckpoint.Helpers`. **Left:** the rest
+  `MsiCheckpoint.Helpers`, `lint-browser` and `typecheck-browser` (both baselines empty; a root
+  with no files makes ESLint and tsc fail), `test-source-analysis-coverage`,
+  `installed-linux-checks` and its fixture (every check returns explicitly, so it holds under
+  `if`), `test-native-package-permissions`, `generate-third-party-inventory` (CI restores before
+  the drift check, so a missing license cannot match), `browser-asset-ownership`,
+  `prepare-vsix-acceptance`. **Left:** the rest
   of `scripts/` and `tests/`; the Portal and Orchestrator samples in GitHub; native installed-MSI
   certification of the fixed installer paths.
 
