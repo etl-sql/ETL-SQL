@@ -313,7 +313,9 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   out of the PDF (ignoring Landscape turns two red); cancellation is covered by
   `AsyncPdfExportTests`, and the exporter has no authorization step, so those two were removed.
   `Test-ReportLayoutEvidence` fails when no PDF was written. `PdfExportTests`' filter/format test
-  now checks the filter line and two-place rounding. Noted, not fixed:
+  now checks the filter line and two-place rounding, the HTML-visual PDF test checks the fallback
+  text is printed and the HTML is not, and the terminal "deterministic snapshots" test now renders
+  twice and compares (it only checked the output was non-empty). Noted, not fixed:
   `PdfExporter_RendersChart_ViaNativeSvg` still checks only for a valid PDF. Also reviewed, no
   defects: `check-shell-line-endings` (the extension-less hooks are LF by `.gitattributes`),
   `check-built-browser-assets` (every gate caller uses the strict `--project` mode),
