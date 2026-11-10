@@ -64,7 +64,7 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   upgrade certification returns from v0.23.0, upgrading from v0.22.0.
 - [ ] **W4 Release tooling tested on real output.** **Left:** recorded real outputs for every
   post-tag collector and validator.
-- [ ] **W4b Remove the workstation from the release path** (owner, 2026-11-04). Done 2026-11-09
+- [x] **W4b Remove the workstation from the release path** (owner, 2026-11-04). Done 2026-11-09
   (`7fea0343a`): the hosted Engine Certification job runs EBNF, SLT, 10M spill and Smoke/Standard
   scale; Build Verification checks third-party drift; Docker runs smoke parity; `release.yml` and
   both drivers no longer need workstation evidence. First hosted runs: smoke parity and drift
@@ -77,12 +77,13 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   dotnet printed German; lanes now also accept the TRX counters, and so do scale samples (each
   writes a TRX) and deployment phases (the strict TRX check alone). The scale smoke compare then
   refused a 4-core runner's GC profile against the 24-core baseline; report-only compares now warn
-  on it (`9592e995d`). **Left:** a green hosted run of the whole job; the Standard scale tier has
-  not run on a hosted runner yet. The other locale-dependent output is fixed (2026-11-10):
-  concatenation and string functions use the CAST text, casing is invariant, `DATENAME` is English,
-  text dates read the same on every path (owner: slash dates day first everywhere), report cells
-  and parameter text are ISO (owner: midnight dropped), and `FLATFILE` writes invariant text unless
-  `CULTURE`/`DATE_FORMAT` is set. Culture tests run under en-US, de-DE and tr-TR.
+  on it (`9592e995d`). First fully green hosted run: CI 42746255160 on `9592e995d` (EBNF, SLT,
+  spill, Smoke and Standard scale with both baseline compares). The remaining locale-dependent
+  output is fixed (2026-11-10, `1789de92b`): concatenation and string functions use the CAST text,
+  casing is invariant, `DATENAME` is English, text dates read the same on every path (owner: slash
+  dates day first everywhere), report cells and parameter text are ISO (owner: midnight dropped),
+  and `FLATFILE` writes invariant text unless `CULTURE`/`DATE_FORMAT` is set. Culture tests run
+  under en-US, de-DE and tr-TR.
 - [ ] **W4c GitHub is the source of truth.** **Left:** a `workflow_dispatch` "Release" that tags the
   certified commit from Actions; pin `@vscode/vsce`; make the Marketplace job skip versions already
   published.
