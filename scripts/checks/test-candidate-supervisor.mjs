@@ -104,6 +104,28 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
   assert.equal(decide({ runs: [] }, {}).outcome, 'running', 'no runs yet is not a pass');
 }
 
+// 5b. Native run 41843185350 (2026-11-04) was cancelled by hand; its summary job then failed on the
+// cancelled packages and the supervisor filed issue #54 and would cancel other runs. A person's
+// cancellation is not a defect: no report, no cancellation, and the round ends as 'cancelled'.
+{
+  const byHand = ['The run was canceled by @etl-sql.', 'The operation was canceled.'];
+  const native = (status, conclusion) => run(5, 'Native Package Certification', status, conclusion, [
+    job('Native package (win-x64)', 'cancelled', { annotations: byHand }),
+    job('Native package (osx-x64)', 'cancelled', { annotations: byHand }),
+    job('Native Package Certification', status === 'completed' ? 'failure' : null,
+      { annotations: ['Process completed with exit code 1.'] })]);
+  const state = {};
+  const msi = (status, conclusion) => run(6, 'MSI In-Place Upgrade', status, conclusion, [job('MSI certification (portal)', conclusion)]);
+  const during = decide({ runs: [run(1, 'CI', 'completed', 'success', [job('a')]), native('in_progress', null), msi('in_progress', null)] }, state);
+  assert.deepEqual(during, { actions: [], outcome: 'running' });
+  const after = decide({ runs: [run(1, 'CI', 'completed', 'success', [job('a')]), native('completed', 'cancelled'), msi('completed', 'success')] }, state);
+  assert.deepEqual(after, { actions: [], outcome: 'cancelled' });
+  // The supervisor cancels with the workflow token; that is not a person's decision.
+  const bot = decide({ runs: [run(7, 'DEB Installed Upgrade', 'completed', 'cancelled', [
+    job('Build DEB candidate', 'cancelled', { annotations: ['The run was canceled by @github-actions[bot].'] })])] }, {});
+  assert.equal(bot.outcome, 'defect');
+}
+
 // 6. The I/O loop against a fake gh: discovers runs by SHA, fetches logs only for failed jobs,
 // cancels package runs, opens one issue and stops.
 {

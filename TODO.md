@@ -64,67 +64,34 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   upgrade certification returns from v0.23.0, upgrading from v0.22.0.
 - [ ] **W4 Release tooling tested on real output.** **Left:** recorded real outputs for every
   post-tag collector and validator.
-- [ ] **W4b Remove the workstation from the release path** (owner, 2026-11-04). Done 2026-11-09,
-  unpushed: the hosted Engine Certification job runs EBNF, SLT, 10M spill and Smoke/Standard scale
-  (timing report-only); Build Verification checks third-party drift; Docker runs smoke parity.
-  `release.yml` and both drivers no longer need workstation evidence; the workstation and
-  hosted-local tooling is deleted. Smoke parity passed on its first hosted run (CI 42705343857).
-  Engine Certification failed there: 3 SQL logic files showed the engine's text depended on the
-  host (date casts followed the locale, FOR JSON/XML used the platform newline). Owner chose
-  invariant output (ISO dates, LF); fixed with a culture regression test. The SLT runner formats
-  values the same invariant way, and the EBNF and SLT lanes run under `de_DE.UTF-8` (both pass there
-  locally in WSL; a policy check keeps the pin). **Left:** a green hosted
-  run of Engine Certification. Still locale-dependent and out of this fix: chart category labels
-  and variable text in report snapshots (`samples/**/*.snapshot.json` hold en-US dates), string
-  concatenation of dates, and text-to-date casts (`DateTime.Parse` with no culture).
+- [ ] **W4b Remove the workstation from the release path** (owner, 2026-11-04). Done 2026-11-09
+  (`7fea0343a`): the hosted Engine Certification job runs EBNF, SLT, 10M spill and Smoke/Standard
+  scale; Build Verification checks third-party drift; Docker runs smoke parity; `release.yml` and
+  both drivers no longer need workstation evidence. First hosted runs: smoke parity and drift
+  passed (CI 42705343857). SLT failed because engine text followed the host; the owner chose
+  invariant output (ISO dates, LF, `07cc7bd90`), and EBNF and SLT then passed (CI 42725899666) and
+  now run under `de_DE.UTF-8` (`265e745cc`). The spill step failed there on 77 gen2 GCs against a
+  workstation limit of 74 while allocation passed; GC counts, pause and peak working set now only
+  warn in hosted CI (allocation and spill evidence still fail). **Left:** a green hosted run of
+  the whole job, including the scale steps, which have not run on a hosted runner yet. Still
+  locale-dependent: chart labels and variable text in report snapshots
+  (`samples/**/*.snapshot.json` hold en-US dates), string concatenation of dates, and text-to-date
+  casts (`DateTime.Parse` with no culture).
 - [ ] **W4c GitHub is the source of truth.** **Left:** a `workflow_dispatch` "Release" that tags the
   certified commit from Actions; pin `@vscode/vsce`; make the Marketplace job skip versions already
   published.
-- [ ] **W5 Flaky tests fixed at the cause.** Pre-push fixtures no longer inherit `GIT_DIR`
-  (`0603c9205`). 2026-11-09: every intermittent failure in 207 runs (2026-11-03 to -09) is fixed
-  at its cause or instrumented; the table is in
-  [flaky-test stability](docs/releases/flaky-test-stability.md) ("Root causes found"). That
-  includes the workstation-resume timestamp race and the actionlint download that timed out on CI
-  42476400399 (now three attempts within the step limit). The Studio budget and preflight
-  watchdog supervisor signatures are removed. **Left:** flake rate from nightly runs; the three
-  instrumented failures (FolderTree, first sign-in, FTP) when they next fail; each remaining
-  supervisor retry signature gets an issue.
-  Two flakes on `b81a9550e` (2026-11-08, only workflows/scripts/docs changed since the green
-  `c136127e5`), rerun on unchanged inputs: (1) `LedgerBackedSandboxAdmissionControllerTests.
-  LostFenceCancelsExecutionAuthorityAndRequiresReconciliation`, Release Certification
-  42488694536 Engine Coverage (1/3), first recorded failure; (2) `StudioPerformanceBudgetTests.
-  CanonicalStudioFixture_StaysWithinPlatformBudgets`, push CI 42486129266 Portal Browser Journey
-  (1/3). The supervisor's `studio-performance-budget` signature matched only startup, so it filed
-  issue #60 as a defect and cancelled MSI, DEB and native packages; it now matches every Studio
-  millisecond budget (the MiB heap budget stays a defect). A second flake of either
-  moves it out of the gate for a cause fix.
-  Two more on `76ac443a9` (nightly 42502844239, Release Certification 42502883560; push CI on the
-  same SHA was green), issue #61: (1) `ExternalJoinTests.OversizedPartitionsAreRewrittenAsNativeBatches`,
-  Engine Coverage (1/3), `ColumnarRepartitionRows > 0` false with the right row count, first
-  recorded failure, cause not found by reading (the test's budget, spill format and byte guard are
-  all fixed); (2) `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds`, Docker lane, refused
-  in 8 ms: the v0.21.0 FTP readiness flake is back after two fixture fixes. Neither had a
-  signature, so the supervisor cancelled the nightly's MSI, DEB and native runs. Owner decision
-  2026-11-08: the supervisor never cancels runs the nightly started (workflow-token
-  `workflow_dispatch`); it still reports the defect.
-  One more on `5e6b0dbf0` (push CI 42515342837, issue #62, MSI 42515342990 cancelled before its
-  Portal job): `SandboxStoryTests.Studio_FilterPane_RendersCategoricalNumericAndDateControls`
-  read the numeric filter card's inputs with a one-shot `IsVisibleAsync` right after Apply. Its
-  checks now use Playwright's waiting `Expect` like the rest of the file.
-  And on `5a7fd7786` (push CI 42520510947, first recorded failure, MSI 42520510981 cancelled
-  again): `StudioInteractionJourneyTests.ACtrlClickOnTwoBarsShowsBothRegions`. `RunReportAsync`
-  waited for the first `ByRegion` bar to be visible; the forced click on it right after threw
-  "Element is not visible" (`StudioInteractionJourneyTests.cs:569`, from `:97`). A forced click
-  fails that way only when the element has no box, so the bar or its container collapsed between
-  the wait and the click. The chart's fade-in only changes opacity, which does not count. Cause
-  not found: a second render of the report is the leading guess, unproven. Not fixed.
-  **Root cause of "fails differently each time" (2026-11-08):** CI passed 16 of 28 runs since
-  10-25. About 13 different tests or steps caused the failures, most only once, so an all-green gate
-  fails on the long tail, not on one bad test. Owner decision: lanes retry a failed test once alone
-  and record a pass as a flake (`scripts/TestRetry.Helpers.ps1`, policy in
-  `docs/releases/flaky-test-stability.md`); flake rates measured by `flake-hunt.yml` on branch
-  `flake/measure`; race-prone test patterns (one-shot `IsVisibleAsync`/`CountAsync`/text reads
-  after an action, `Force = true` clicks) fixed as a class.
+- [ ] **W5 Flaky tests fixed at the cause.** 2026-11-09: every intermittent failure in 207 runs
+  (2026-11-03 to -09) is fixed at its cause or instrumented. Per-test causes and fixes are in
+  [flaky-test stability](docs/releases/flaky-test-stability.md) ("Root causes found"); the
+  actionlint download now gets three attempts (`2344a86fc`). Owner decisions that stand: a lane
+  retries a failed test once alone and records a pass as a flake (`scripts/TestRetry.Helpers.ps1`,
+  policy in the same doc); the supervisor never cancels runs a nightly started; the Studio budget
+  and preflight-deadline signatures are removed because their causes are fixed. Background: CI
+  passed 16 of 28 runs from 10-25 to 11-08 on a long tail of about 13 different failures, so the
+  race-prone patterns (one-shot reads after an action, forced clicks) were fixed as a class.
+  **Left:** flake rate from nightly runs; the three instrumented failures (FolderTree, first
+  sign-in, FTP) when they next fail; an issue for each remaining flaky signature
+  (`playwright-wait`, `first-run-sign-in-wait`).
 - [ ] **W6 Performance certification redesign** (below the cut line). Deterministic metrics gate;
   timing by same-host interleaved A/B; no waivers.
 - [ ] **W7 Local gate hygiene** (below the cut line). Environment preflight; shrink the pre-push hook.
@@ -213,8 +180,12 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   device" — the Docker job now frees preinstalled toolchains and records free space before and
   after the tests; no signature until the margin is measured. (3) MSI "stalled" — the Portal
   runner went silent at "fresh uninstall start", the Restart Manager loss W3 fixed; a stall is now
-  more likely a real hang, so it stays a defect. **Left:** dispatch native and DEB from the push
-  instead of by hand; read the Docker free-space margin after a few runs.
+  more likely a real hang, so it stays a defect. A fourth misread: a run a person cancelled (native
+  41843185350, issue #54) was filed as a defect; runs whose jobs carry "The run was canceled by @…"
+  are now left alone and end the round as `cancelled`. Issues #54–#67 all have a cause and a fix
+  (pushed) and are ready to close; #68 waits for the spill fix to pass. **Left:** close them;
+  dispatch native and DEB from the push instead of by hand; read the Docker free-space margin after
+  a few runs.
 - [ ] **Finish the review.** About 376 tracked script files and 1,856 test files remain unreviewed
   beyond the installer, packaging, changelog and version tools. **Left:** the rest of `scripts/`
   and `tests/`; native installed-MSI certification of the fixed installer paths.

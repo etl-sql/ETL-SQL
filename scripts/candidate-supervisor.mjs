@@ -13,6 +13,11 @@ import { classifyFailure, maxAttemptFor } from './lib/candidate-failure-signatur
 // The long runs a real defect makes worthless. CI and CodeQL keep running.
 export const cancelOnDefect = ['MSI In-Place Upgrade', 'Native Package Certification', 'DEB Installed Upgrade'];
 const failed = job => job.status === 'completed' && ['failure', 'timed_out', 'cancelled', 'startup_failure'].includes(job.conclusion);
+// GitHub annotates every job of a run a person cancelled. That is a decision, not a defect: native
+// run 41843185350 (2026-11-04) was cancelled by hand and filed as issue #54. The supervisor itself
+// cancels with the workflow token, and those runs are already in state.cancelledRuns.
+const cancelledByPerson = run => run.jobs.some(job =>
+  (job.annotations ?? []).some(message => /^The run was canceled by @(?!github-actions\[bot\])/.test(message)));
 
 // Pure decision step. snapshot.runs: latest attempt of each run for the SHA, each with its jobs;
 // failed jobs carry classification input { log, annotations }. state persists across polls.
@@ -21,10 +26,12 @@ export function decide(snapshot, state) {
   const actions = [];
   state.cancelledRuns ??= new Set();
   state.reported ??= new Set();
+  state.personCancelled ??= new Set();
   const byName = new Map(snapshot.runs.map(run => [run.name, run]));
   let defect = null, exhausted = null;
   for (const run of snapshot.runs) {
     if (state.cancelledRuns.has(run.id)) continue; // we cancelled it; its failures are ours
+    if (state.personCancelled.has(run.id) || cancelledByPerson(run)) { state.personCancelled.add(run.id); continue; }
     const failures = run.jobs.filter(failed).map(job => ({ job, signature: classifyFailure(job) }));
     if (!failures.length) continue;
     const retryable = failures.filter(f => f.signature);
@@ -73,8 +80,9 @@ export function decide(snapshot, state) {
     return { actions, outcome: defect ? 'defect' : 'exhausted' };
   }
   const settled = snapshot.runs.length > 0 && snapshot.runs.every(run => run.status === 'completed' &&
-    (run.conclusion === 'success' || state.cancelledRuns.has(run.id)));
-  return { actions, outcome: settled && !actions.length ? 'passed' : 'running' };
+    (run.conclusion === 'success' || state.cancelledRuns.has(run.id) || state.personCancelled.has(run.id)));
+  if (!settled || actions.length) return { actions, outcome: 'running' };
+  return { actions, outcome: snapshot.runs.some(run => state.personCancelled.has(run.id)) ? 'cancelled' : 'passed' };
 }
 
 function gh(args, { allowFailure = false } = {}) {
@@ -173,6 +181,10 @@ export async function supervise(repository, sha, { query = gh, sleep = ms => new
     if (outcome === 'defect' || outcome === 'exhausted') return outcome;
     // Late-dispatched producers (native packages, DEB) appear within a minute or two of the push.
     if (outcome === 'passed' && now() - start >= settleMs) { log(`All ${snapshot.runs.length} candidate runs passed.`); return 'passed'; }
+    if (outcome === 'cancelled' && now() - start >= settleMs) {
+      log(`A person cancelled ${[...state.personCancelled].join(', ')}; the other candidate runs passed. Not a defect.`);
+      return 'cancelled';
+    }
     if (now() - start >= deadlineMs) { log('Supervisor deadline reached; runs are still in progress.'); return 'deadline'; }
     await sleep(pollMs);
   }
@@ -185,5 +197,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.exit(2);
   }
   const outcome = await supervise(repository, sha);
-  process.exitCode = outcome === 'passed' || outcome === 'deadline' ? 0 : 1;
+  process.exitCode = ['passed', 'deadline', 'cancelled'].includes(outcome) ? 0 : 1;
 }
