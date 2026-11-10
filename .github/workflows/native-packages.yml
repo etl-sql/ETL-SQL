@@ -1,9 +1,16 @@
 name: Native Package Certification
+# A run the release-branch push started is titled "(push)" so the candidate supervisor may cancel it.
+run-name: ${{ inputs.from_push && 'Native Package Certification (push)' || github.event.pull_request.title || 'Native Package Certification' }}
 
 on:
   pull_request:
     branches: [main, 'release/**']
   workflow_dispatch:
+    inputs:
+      from_push:
+        description: 'Set by the release-branch push (candidate-supervisor.yml); leave off for a manual run'
+        type: boolean
+        default: false
 
 permissions:
   contents: read

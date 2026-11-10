@@ -47,7 +47,9 @@ diagnosed recovery. These are scheduling budgets, not measured acceptance or per
 tests. Claims requiring a long controlled-host soak need their own capacity plan. Record queue,
 execution and operator delays separately; report a missed target instead of widening the target.
 
-Dispatch the missing hosted producers on the frozen release branch; first inspect existing exact-SHA
+A push to a release branch starts native package and DEB certification itself when the CI impact
+map says a packaged path changed (titled "(push)"), as MSI does. A docs-only push starts neither.
+Dispatch only the producers still missing for the frozen candidate; first inspect existing exact-SHA
 runs to avoid duplicates. Full CI dispatch is journaled by the shared helper:
 
 ```powershell
@@ -114,8 +116,9 @@ run rejects concurrent retries. Both release drivers wait on the selected nightl
 without dispatching another full certification. CodeQL and the other release requirements still
 need their own evidence. Hosted reuse and timing acceptance remain open.
 
-Windows ZIP/VSIX publication requires the exact candidate's successful manual `native-packages.yml`
-run on a release branch within seven days. Dispatch it before tagging, after freezing the branch:
+Windows ZIP/VSIX publication requires the exact candidate's successful dispatched `native-packages.yml`
+run on a release branch within seven days (the push, the nightly or a person may start it). If the
+frozen candidate has none, dispatch it before tagging:
 
 ```powershell
 gh workflow run native-packages.yml --ref release/vx.y.z

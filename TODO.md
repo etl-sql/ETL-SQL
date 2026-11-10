@@ -202,8 +202,10 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   more likely a real hang, so it stays a defect. A fourth misread: a run a person cancelled (native
   41843185350, issue #54) was filed as a defect; runs whose jobs carry "The run was canceled by @…"
   are now left alone and end the round as `cancelled`. Issues #54–#57 and #59–#68 are closed, each
-  with its cause and fix. **Left:** dispatch native and DEB from the push instead of by hand; read
-  the Docker free-space margin after a few runs.
+  with its cause and fix. Native and DEB now start from the push (2026-11-10, owner: gated by the
+  impact map like MSI): the supervisor workflow dispatches them titled "(push)" when packages are
+  affected and the commit is still the branch HEAD, and those runs stay cancellable on a defect.
+  **Left:** see the first push-started runs; read the Docker free-space margin after a few runs.
 - [ ] **Finish the review.** About 376 tracked script files and 1,856 test files remain unreviewed
   beyond the installer, packaging, changelog and version tools. **Left:** the rest of `scripts/`
   and `tests/`; native installed-MSI certification of the fixed installer paths.

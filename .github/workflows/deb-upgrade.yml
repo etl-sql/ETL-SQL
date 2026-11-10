@@ -1,7 +1,14 @@
 name: DEB Installed Upgrade
+# A run the release-branch push started is titled "(push)" so the candidate supervisor may cancel it.
+run-name: ${{ inputs.from_push && 'DEB Installed Upgrade (push)' || 'DEB Installed Upgrade' }}
 
 on:
   workflow_dispatch:
+    inputs:
+      from_push:
+        description: 'Set by the release-branch push (candidate-supervisor.yml); leave off for a manual run'
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       source_sha:

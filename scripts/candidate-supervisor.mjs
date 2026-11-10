@@ -125,9 +125,10 @@ export function readSnapshot(repository, sha, { query = gh, logCache = new Map()
       }
       Object.assign(job, logCache.get(key));
     }
-    // Only scripts/nightly-rehearsal.mjs dispatches the long package runs with the workflow token;
-    // a person's manual dispatch stays cancellable.
-    const startedByNightly = run.event === 'workflow_dispatch' && run.triggering_actor?.login === 'github-actions[bot]';
+    // Only scripts/nightly-rehearsal.mjs and the push dispatch the long package runs with the workflow
+    // token. The push's runs are titled "... (push)" and, like a person's dispatch, stay cancellable.
+    const startedByNightly = run.event === 'workflow_dispatch' && run.triggering_actor?.login === 'github-actions[bot]' &&
+      !/ \(push\)$/.test(run.display_title ?? '');
     runs.push({ id: run.id, name: run.name, status: run.status, conclusion: run.conclusion,
       attempt: run.run_attempt, url: run.html_url, jobs, startedByNightly });
   }

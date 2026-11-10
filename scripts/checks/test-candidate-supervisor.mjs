@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { decide, supervise, reportBody, readSnapshot } from '../candidate-supervisor.mjs';
 import { classifyFailure, candidateFailureSignatures } from '../lib/candidate-failure-signatures.mjs';
 
@@ -175,7 +179,9 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
   const listed = [
     { id: 31, name: 'MSI In-Place Upgrade', event: 'workflow_dispatch', triggering_actor: { login: 'github-actions[bot]' } },
     { id: 32, name: 'DEB Installed Upgrade', event: 'workflow_dispatch', triggering_actor: { login: 'owner' } },
-    { id: 33, name: 'Native Package Certification', event: 'push', triggering_actor: { login: 'github-actions[bot]' } },
+    { id: 33, name: 'CI', event: 'push', triggering_actor: { login: 'github-actions[bot]' } },
+    { id: 34, name: 'Native Package Certification', display_title: 'Native Package Certification (push)', event: 'workflow_dispatch',
+      triggering_actor: { login: 'github-actions[bot]' } },
   ].map(r => ({ ...r, head_sha: sha, status: 'in_progress', conclusion: null, run_attempt: 1, html_url: `u${r.id}` }));
   const query = args => {
     const route = args.find(a => a.startsWith('repos/')) ?? '';
@@ -184,7 +190,7 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
     throw new Error(`unexpected gh ${args.join(' ')}`);
   };
   const marked = Object.fromEntries(readSnapshot('owner/repo', sha, { query }).runs.map(r => [r.id, r.startedByNightly]));
-  assert.deepEqual(marked, { 31: true, 32: false, 33: false }, 'only a workflow-token dispatch is the nightly\'s');
+  assert.deepEqual(marked, { 31: true, 32: false, 33: false, 34: false }, 'only the nightly\'s workflow-token dispatch is the nightly\'s');
 }
 
 // 7. Real job logs carry terminal colour codes, which gh prints only with --allow-escape-sequences.
@@ -252,6 +258,57 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
   const judged = decide(readSnapshot('owner/repo', sha, { query: silent.query, now: () => Date.parse(t(40)) }), {});
   assert.equal(judged.outcome, 'defect');
   assert.equal(judged.actions.at(-1).job.name, 'Publish Windows payload');
+}
+
+// 9. The release-branch push starts native and DEB certification itself, titled "(push)", only when
+// the CI impact map says packages changed and the pushed commit is still the branch HEAD.
+{
+  const read = name => readFileSync(new URL(`../../${name}`, import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+  const workflow = read('.github/workflows/candidate-supervisor.yml');
+  const step = workflow.split(/^      - /m).find(block => block.startsWith('name: Dispatch native and DEB certification when packages are affected\n'));
+  assert.ok(step, 'candidate-supervisor.yml: missing the package dispatch step');
+  const commands = step.match(/^        run: \|\n((?:          [^\n]*\n|\n)+)/m)[1].replace(/^          /gm, '');
+  for (const name of ['native-packages', 'deb-upgrade']) {
+    const source = read(`.github/workflows/${name}.yml`);
+    assert.match(source, /^  workflow_dispatch:\n    inputs:\n      from_push:\n(?:        .*\n)*?        type: boolean\n        default: false\n/m, name);
+    assert.match(source, /^run-name: \$\{\{ inputs\.from_push && '[^']+ \(push\)' \|\|/m, name);
+    assert.doesNotMatch(source, /^  push:/m, `${name} evidence must stay a dispatched run`);
+  }
+  const bash = process.platform === 'win32' && existsSync('C:/Program Files/Git/bin/bash.exe') ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
+  const root = mkdtempSync(path.join(tmpdir(), 'supervisor-dispatch-'));
+  const sha = 'e'.repeat(40);
+  const execute = ({ before = 'f'.repeat(40), native = true, head = sha }) => {
+    const log = path.join(root, 'calls.log').replaceAll('\\', '/');
+    rmSync(log, { force: true });
+    const mock = `node() {
+  printf 'node %s\\n' "$*" >> "${log}"
+  if [ "$1" = -p ]; then echo "$NATIVE"; fi
+}
+git() { printf 'git %s\\n' "$*" >> "${log}"; printf '%s\\trefs/heads/release/v1.2.3\\n' "$HEAD_SHA"; }
+gh() { printf 'gh %s\\n' "$*" >> "${log}"; }
+`;
+    const result = spawnSync(bash, ['-c', mock + commands], { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 15000,
+      env: { ...process.env, GITHUB_SHA: sha, GITHUB_REF_NAME: 'release/v1.2.3', GITHUB_REPOSITORY: 'owner/repo',
+        BEFORE_SHA: before, NATIVE: String(native), HEAD_SHA: head } });
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    return existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : [];
+  };
+  try {
+    let calls = execute({});
+    assert.equal(calls[0], `node scripts/select-ci-lanes.mjs --head ${sha} --output package-impact.json --base ${'f'.repeat(40)}`);
+    assert.deepEqual(calls.filter(call => call.startsWith('gh ')), [
+      'gh workflow run native-packages.yml --repo owner/repo --ref release/v1.2.3 -f from_push=true',
+      'gh workflow run deb-upgrade.yml --repo owner/repo --ref release/v1.2.3 -f from_push=true']);
+    // A new branch or force push has no usable base, so the selection covers everything.
+    calls = execute({ before: '0'.repeat(40) });
+    assert.equal(calls[0], `node scripts/select-ci-lanes.mjs --head ${sha} --output package-impact.json`);
+    assert.equal(calls.filter(call => call.startsWith('gh ')).length, 2);
+    assert.ok(!execute({ native: false }).some(call => call.startsWith('gh ') || call.startsWith('git ')), 'docs-only push starts nothing');
+    assert.ok(!execute({ head: 'a'.repeat(40) }).some(call => call.startsWith('gh ')), 'a moved branch is left to the newer push');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
 
 console.log('Candidate supervisor: known infrastructure/flaky/dependent failures rerun within their budgets, real defects cancel only the long package runs and open one issue, gate jobs behind a known failure are not defects.');
