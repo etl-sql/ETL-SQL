@@ -224,7 +224,7 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   `verify-browser-shards`, `check-release-tag`, `check-release-metadata`, `publish-release`,
   `collect-certified-windows`/`-macos`, the Windows and macOS package manifests, `windows-payload`
   and `report-package-upload-recovery` have no defects, and a sweep of `scripts/` for empty
-  catches, `|| true` and dynamic code found only cleanup and polls. Three defects, fixed:
+  catches, `|| true` and dynamic code found only cleanup and polls. Four defects, fixed:
   (1) `Test-AllSamples.ps1 -ReleaseMode` skipped the Docker, PostgreSQL, Portal and Orchestrator
   samples when their containers did not start, so the release sample gate passed without them;
   they now fail. (2) `TestRetry.Helpers.ps1` cleared a lane whose test host crashed after a
@@ -233,9 +233,17 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   retry; the browser shards were already covered by their discovered-case check.
   (3) `generate-sbom.js` hard-coded Tabulator 5.5.0 while the release ships 6.4.0, so the
   published SBOM named a version the release did not contain; it now reads the shipped file's
-  banner and fails without one. Noted, not fixed: `Compare-CertBaseline` does not flag a baseline
+  banner and fails without one. (4) The eight PostgreSQL samples ran in no GitHub job (CI has no
+  PostgreSQL; only the local release mode started one), and two of them could not pass on an empty
+  database: `check` and `check_sys_b` sort before `main` and read the tables it creates. Both now
+  run their producer first, the Linux sample job starts PostgreSQL, and
+  `SAMPLES_REQUIRED_SERVICES` makes a required `postgres` or `docker` sample fail instead of
+  skipping. The conversion's archive and generated PGP private key were left untracked beside
+  `main.etlsql`; both are now gitignored. Still uncovered in GitHub: `portal_promotion` and `setup_orchestrator`, which need the
+  candidate's own Portal and Orchestrator running. Noted, not fixed: `Compare-CertBaseline` does not flag a baseline
   scenario missing from the new report, but no release path filters scenarios. **Left:** the rest
-  of `scripts/` and `tests/`; native installed-MSI certification of the fixed installer paths.
+  of `scripts/` and `tests/`; the Portal and Orchestrator samples in GitHub; native installed-MSI
+  certification of the fixed installer paths.
 
 ### 5. JSON connector defects (found 2026-11-03)
 

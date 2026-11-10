@@ -2,6 +2,10 @@
 -- Verification Script: check_sys_b.etlsql
 -- Path: samples/conversion/check_sys_b.etlsql
 
+-- Runs the conversion first, so it also verifies on its own against an empty database.
+RUN SCRIPT 'main.etlsql';
+
+DROP CONNECTION IF EXISTS system_b;
 CREATE CONNECTION system_b AS POSTGRES(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
 
 PRINT 'Verifying System B Ingestion...';

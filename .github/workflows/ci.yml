@@ -586,10 +586,26 @@ jobs:
         timeout-minutes: 27
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-AllSamples.ps1 -ScriptArguments @('-Passes', '2') -EvidenceDirectory release-validation/samples/validation -TimeoutSeconds 1500
 
+      # The PostgreSQL samples ran nowhere in GitHub before this; the Windows runner has no Linux
+      # containers, so they stay skipped there.
+      - name: Start PostgreSQL for the PostgreSQL samples
+        if: runner.os == 'Linux'
+        timeout-minutes: 5
+        run: |
+          docker run -d --name sample-postgres -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16-alpine
+          for attempt in $(seq 1 60); do
+            docker exec sample-postgres pg_isready -U postgres -h 127.0.0.1 && exit 0
+            sleep 2
+          done
+          docker logs sample-postgres
+          exit 1
+
       - name: Validate samples (Linux)
         if: runner.os == 'Linux'
         shell: pwsh
         timeout-minutes: 27
+        env:
+          SAMPLES_REQUIRED_SERVICES: postgres postgresql docker
         run: |
           ./scripts/Invoke-CertificationProcess.ps1 -Command bash -CommandArguments @('./scripts/test-all-samples.sh', '${{ github.event_name == 'pull_request' && '1' || '2' }}') -EvidenceDirectory release-validation/samples/validation -TimeoutSeconds 1500
 

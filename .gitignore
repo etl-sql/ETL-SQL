@@ -222,6 +222,9 @@ release-validation/
 # Sample Output
 samples/output/
 samples/integration/data/
+# The HR conversion's archive and the PGP key pair it generates (a private key) next to main.etlsql.
+samples/09_Conversions/hr_migration.zip
+samples/09_Conversions/keys/
 *.tmp.json
 
 # Ignore large stress test data

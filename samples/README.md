@@ -75,4 +75,4 @@ dotnet run --project src/ETL-SQL.App -- run samples/00_QuickStart/first_dashboar
 Many samples are completely self-contained and run in-memory or with flat files. For scripts interacting with databases:
 - Read connection declarations at the top of the file.
 - Use `SET WHAT_IF ON;` when validating destructive operations (`DELETE`, `TRUNCATE`, `DROP`).
-- Connectors requiring external daemons are tagged with `-- @requires: <service>` (e.g. `docker`, `postgres`, `portal`, `orchestrator`).
+- Connectors requiring external daemons are tagged with `-- @requires: <service>` (e.g. `docker`, `postgres`, `portal`, `orchestrator`). The sample validators skip a sample whose service is unreachable. CI's Linux job starts PostgreSQL (`localhost:5432`, user and password `postgres`) and requires the `postgres` and `docker` samples, so there they fail instead of being skipped. Each sample must pass on its own against an empty database, in any order.

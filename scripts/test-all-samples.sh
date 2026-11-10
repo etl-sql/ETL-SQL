@@ -5,6 +5,9 @@
 # passes (default 1) runs the whole suite that many times. More than one pass proves the samples are
 # re-runnable: sample output is gitignored, so a sample that writes to a persistent store passes on
 # a clean checkout and fails for anyone who runs it twice. Mirrors Test-AllSamples.ps1 -Passes.
+#
+# SAMPLES_REQUIRED_SERVICES (space-separated, e.g. "postgres docker") names services the caller
+# started: a sample that requires one of them fails instead of being skipped when it is unreachable.
 
 set -e
 
@@ -84,6 +87,12 @@ for SCRIPT_FILE in "${SCRIPTS[@]}"; do
     REQUIRES_TAG=$(head -5 "$SCRIPT_FILE" 2>/dev/null | grep -i '@requires:' | head -1 || true)
     if [[ -n "$REQUIRES_TAG" ]]; then
         SERVICE=$(echo "$REQUIRES_TAG" | sed -E 's/.*@requires:[[:space:]]*//' | tr '[:upper:]' '[:lower:]' | tr -d '\r')
+        if ! service_available "$SERVICE" && [[ " ${SAMPLES_REQUIRED_SERVICES:-} " == *" $SERVICE "* ]]; then
+            echo "FAILED $SCRIPT_NAME ($SERVICE is required but unreachable)"
+            FAILED=$((FAILED + 1))
+            FAILED_NAMES+=("$SCRIPT_NAME|-1|$SERVICE is required (SAMPLES_REQUIRED_SERVICES) but was not reachable.")
+            continue
+        fi
         if ! service_available "$SERVICE"; then
             echo "SKIPPED $SCRIPT_NAME ($SERVICE unavailable)"
             SKIPPED=$((SKIPPED + 1))
