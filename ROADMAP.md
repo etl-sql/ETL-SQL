@@ -215,19 +215,63 @@ wrong values instead of throwing an error, and blind spots in EBNF and fuzzer ge
   `FormatSltValue` catches failed numeric conversions on `I`/`R` columns and returns `"0"`/`"0.000"`,
   maps `NaN`/`±Infinity` to `"NULL"`, and formats `bool` as `"1"`/`"0"` before checking the column
   type specifier. `SltRunner.CreateFreshSession` manually registers only 26 of 67 statement handlers.
-- **Engine silent fallbacks (`ExpressionEvaluator.cs`, `BinaryOperatorFactory.cs`, `EvaluationUtils.cs`):**
+- **Engine silent fallbacks and `NULL` / `DBNull.Value` bugs (`ExpressionEvaluator.cs`, `BinaryOperatorFactory.cs`, `EvaluationUtils.cs`, `TypeConverter.cs`, `JoinEngine.cs`, `AggregateEngine.cs`, `WindowEngine.cs`, `PivotEngine.cs`, `CompoundKey.cs`, and `StandardFunctions.*.cs`):**
   - Unresolved column identifiers in `EvaluateIdentifier` return `null` when a row context is present
     (`SELECT bogus_col FROM t`) or return the identifier's own name as a string when `context` is
     `null` (`SELECT bogus_ident`), instead of throwing an unknown-identifier error.
   - Failed arithmetic coercion (`'abc' - 5`, `'abc' * 5`, `'abc' / 5`) and `decimal` / shift
     `OverflowException` in `BinaryOperatorFactory` catch and return `null` instead of throwing.
+  - `TypeConverter.ToInvariantText(DBNull.Value)` returns `""` instead of `null`. Consequently,
+    `5 + DBNull.Value` in `BinaryOperatorFactory.MathOp` concatenates `"5" + ""` into `"5"`,
+    `CAST(DBNull.Value AS VARCHAR)` returns `""`, `CAST(DBNull.Value AS INT)` throws an
+    `ExecutionException`, and `ExpressionEvaluator` syntax functions (`CHARACTER_LENGTH`,
+    `OCTET_LENGTH`, `SUBSTRING`, `EXTRACT`, `OVERLAY`, `TRIM`) plus `RowExpressionCompiler` boolean
+    operators fail or return `0m`/`""` on `DBNull.Value`.
   - `EvaluationUtils.IsSoftEqual` truncates `DateTime` comparisons to whole seconds while
     `CompareConstants` keeps sub-second ticks, violating trichotomy (`a = b` and `a < b` can both be
     true for timestamps within the same second); failed numeric-to-string comparisons silently fall
     back to lexicographical string ordering.
-  - `POSITION(substr IN str)` returns `0` instead of `NULL` on `NULL` arguments; `EXTRACT` returns
-    `null` on invalid date strings or unrecognized field names; `Evaluator` batch execution (`GO`)
-    catches and logs batch exceptions without failing the script.
+  - `POSITION(substr IN str)` returns `0` (or `1` on `DBNull.Value`) instead of `NULL` on `NULL`
+    arguments; `<expr> AT TIME ZONE NULL` returns `<expr>` unchanged instead of `NULL`; `EXTRACT`
+    returns `null` on invalid date strings or unrecognized field names; `Evaluator` batch execution
+    (`GO`) catches and logs batch exceptions without failing the script.
+  - **Joins (`JoinEngine.cs`):** `PerformHashSemiAntiJoin` probes `HashSet<CompoundKey>` without
+    skipping `NULL` keys or re-evaluating `join.Condition`, so `SEMI JOIN` and `ANTI JOIN` match
+    `NULL = NULL` and silently discard non-equality `ON` conjuncts (`ON a.id = b.id AND b.flag = 1`).
+    `ApplyResolvablePredicates` pushes `WHERE` predicates down before joining based on bare column
+    names (`IdentifierExpression.GetSourceColumns` strips table aliases), corrupting joins whenever
+    two tables share a column name. `PerformSortMergeJoin` ($\ge 2,000$ rows) sorts only by
+    `leftKeys[0]` / `rightKeys[0]` while comparing all composite keys.
+  - **Grouping, `DISTINCT`, aggregates, and `HAVING` (`CompoundKey.cs`, `AggregateEngine.cs`):**
+    `CompoundKey.NormalizeValue` parses numeric-looking strings (`'00123'`) into `decimal` (`123m`)
+    and date-looking strings into `DateTime`, and `AggregateEngine` copies the normalized key slot
+    into the output row—mutating string values and collapsing leading-zero codes in `GROUP BY`,
+    `DISTINCT`, and `UNION`/`INTERSECT`/`EXCEPT`. `AggregateEngine` state accumulators check
+    `val != null` instead of `!val.IsNull()`, so `COUNT(col)` counts `DBNull.Value`, `MIN`/`MAX`
+    throw `NullReferenceException` on `DBNull.Value`, and `SafeToDecimal` returns `0m` when
+    `IsTestMode` is active. `STRING_AGG` and `LIST_AGG` turn `NULL` into `""` (`'a,,b'`) and return
+    `""` on empty groups. `HAVING` runs before grouping expressions and `SELECT` aliases are
+    populated in `havingContext`.
+  - **Window functions (`WindowEngine.cs`, `ExternalWindowEngine.cs`):** `FIRST_VALUE`, `LAST_VALUE`,
+    and `NTH_VALUE` read `partitionRows` directly and ignore `window.Frame`. Windowed aggregates with
+    `ORDER BY` and no explicit `ROWS`/`RANGE` clause use the entire partition in `WindowEngine`
+    instead of the ANSI default running frame (`RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`),
+    disagreeing with `ExternalWindowEngine`. `ResolveRangeFrame` (`RANGE BETWEEN <offset> PRECEDING
+    AND <offset> FOLLOWING`) falls back to the entire partition (`0..Count-1`) when a row's
+    `ORDER BY` key is `NULL`.
+  - **`ORDER BY` and `PIVOT`/`UNPIVOT` (`ColumnarSortSelectPlan.cs`, `PivotEngine.cs`):**
+    `ColumnarSortSelectPlan` places `NULL`s FIRST on `ORDER BY ... DESC` while row/stream sort places
+    `NULL`s LAST on `DESC`. `PivotEngine.ApplyPivot` builds group keys with
+    `string.Join("|", ... ?? "NULL")` (colliding `null` with `"NULL"` and `DBNull.Value` with `""`)
+    and `ApplyDuckPivot` synthesizes `col = NULL` filter predicates for `NULL` pivot values.
+  - **Standard library functions (`StandardFunctions.*.cs`, `FuzzyFunctions.cs`):** `REPLACE('abc', NULL, 'x')`
+    throws `ArgumentException` and `REPLACE('abc', 'b', NULL)` returns `'ac'`; `SUBSTRING`, `LEFT`,
+    and `RIGHT` coerce `NULL` start/length arguments to `0` via `Convert.ToInt32(null)`;
+    `CHARINDEX(NULL, 'abc')` and `INSTR('abc', NULL)` return `1m`; `STUFF`, `STR`, `QUOTENAME`,
+    `TRANSLATE`, `PATINDEX`, `STRING_ESCAPE`, `ATAN2`, `LOG`, `ROUND`, `GENERATE_SERIES`, and
+    `HASHBYTES` return non-null results or throw on `NULL`; `SIMILARITY(NULL, NULL)` returns `1.0m`
+    (100% match) and `LEVENSHTEIN(NULL, NULL)` returns `0m`; and `GREATEST`/`LEAST` throw
+    `ArgumentException` when comparing mixed numeric CLR types.
 - **SLT, EBNF, and fuzzer coverage holes:**
   - Across all 33 custom `.test` files, only `alter_table.test` contains `statement error` records
     (3 total). `select5.test` stops at an unconditional `halt` on line 456 (skipping 932 of 999 join
@@ -248,12 +292,12 @@ wrong values instead of throwing an error, and blind spots in EBNF and fuzzer ge
     buckets `isBug: false`, and swallows `ExecutionException` inside `VerifyNoRECParity` unless
     `ETLSQL_FUZZ_STRICT_EXEC=1` is set.
 
-The outcome is a fail-closed SQL engine and test harness where invalid identifiers, bad type
-coercions, arithmetic overflows, and unexpected successes fail loudly, backed by expanded SLT, EBNF,
-and NoREC coverage.
+The outcome is a fail-closed, `NULL`-consistent SQL engine and test harness where invalid
+identifiers, bad type coercions, arithmetic overflows, and unexpected successes fail loudly, backed
+by expanded SLT, EBNF, and NoREC coverage.
 
-**Why next:** Identified during the v0.22.0 SQL SLT/EBNF review (2026-11-10) and held for v0.23.0 so
-the active v0.22.0 release candidate is not disturbed.
+**Why next:** Identified during the v0.22.0 SQL SLT/EBNF and engine `NULL` audit (2026-11-10) and
+held for v0.23.0 so the active v0.22.0 release candidate is not disturbed.
 
 **Boundaries:** Preserve existing valid ETL-SQL dialect semantics, `decimal` runtime storage for
 integer types, and opt-in lane separation for long-running SLT/Fuzz suites. Any intentional
@@ -261,8 +305,9 @@ compatibility change to identifier resolution or arithmetic coercion must update
 document the break in `CHANGELOG.md`.
 
 **Dependencies:** `SltRunner`, `EngineCorpusTests`, `ExpressionEvaluator`, `BinaryOperatorFactory`,
-`EvaluationUtils`, `docs/grammar.ebnf`, `EbnfConformanceTests`, `DefaultGrammar`, and
-`ParserFuzzTests`.
+`EvaluationUtils`, `TypeConverter`, `CompoundKey`, `JoinEngine`, `AggregateEngine`, `WindowEngine`,
+`PivotEngine`, `StandardFunctions`, `docs/grammar.ebnf`, `EbnfConformanceTests`, `DefaultGrammar`,
+and `ParserFuzzTests`.
 
 **Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
 Select individual IDs into `TODO.md` when scheduling.
@@ -281,20 +326,129 @@ Select individual IDs into `TODO.md` when scheduling.
 | SQ03 | **Fail closed on unresolved identifiers in `ExpressionEvaluator.EvaluateIdentifier`.** Throw an `ExecutionException` on unknown column names in row context and unknown bare identifiers in scalar context (preserving only explicit grammar constructs like `EXTRACT`/`DATEADD` datepart tokens at parse/bind time). | — | M |
 | SQ04 | **Fail closed on invalid arithmetic coercion and overflow in `BinaryOperatorFactory`.** Throw an `ExecutionException` when `-`, `*`, `/`, `%`, `<<`, or `>>` receives non-numeric text or overflows `decimal`/`long`, instead of returning `null`. | — | S |
 | SQ05 | **Restore `DateTime` comparison trichotomy and strict numeric/date ordering in `EvaluationUtils`.** Align `IsSoftEqual` and `CompareConstants` on full `DateTime` tick precision, and fail or define explicit type precedence when comparing numeric values against non-numeric strings. | — | S |
-| SQ06 | **Fix `POSITION`, `EXTRACT`, and `GO` batch error propagation.** Return `NULL` from `POSITION` when either input is `NULL`; throw on unrecognized `EXTRACT` fields or unparseable date inputs; propagate unhandled exceptions across `GO` batches unless explicitly guarded by `TRY/CATCH`. | — | S |
+| SQ06 | **Fix `POSITION`, `AT TIME ZONE`, `EXTRACT`, `DBNull.Value` normalization, and `GO` batch error propagation.** Normalize `DBNull.Value` to `null` in `TypeConverter.ToInvariantText`, `EvaluationUtils.CastToType`, `BinaryOperatorFactory`, `ExpressionEvaluator`, and `RowExpressionCompiler`; return `NULL` from `POSITION` and `AT TIME ZONE` when any input is `NULL`; throw on unrecognized `EXTRACT` fields or unparseable dates; and propagate unhandled exceptions across `GO` batches unless guarded by `TRY/CATCH`. | — | M |
+
+#### Joins, grouping, aggregates, windows, sorting, and standard library `NULL` semantics
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SQ10 | **Fix `SEMI JOIN`/`ANTI JOIN` `NULL` matching, alias-aware `WHERE` pushdown, and composite merge join in `JoinEngine`.** Exclude `NULL` keys and evaluate residual `ON` predicates in `PerformHashSemiAntiJoin`; preserve table qualifiers in `ApplyResolvablePredicates` so predicates on right-side tables are never evaluated against the left table before joining; and sort by all composite keys in `PerformSortMergeJoin`. | — | M |
+| SQ11 | **Stop `CompoundKey` string mutation and fix `DBNull.Value`, `STRING_AGG`, and `HAVING` in `AggregateEngine`.** Keep strings typed as strings in `CompoundKey` (preserving leading zeros like `'00123'` and original group values in `AggregateEngine`); use `!val.IsNull()` across all aggregate states (`COUNT`, `MIN`, `MAX`, `SUM`, `AVG`, `VAR`, `STDDEV`, `PERCENTILE_*`) and remove the `IsTestMode` `0m` fallback in `SafeToDecimal`; skip `NULL`s and return `NULL` on empty groups in `STRING_AGG` and `LIST_AGG`; and populate grouping expressions and `SELECT` aliases before evaluating `HAVING`. | — | M |
+| SQ12 | **Fix window frame evaluation (`FIRST_VALUE`, `LAST_VALUE`, `NTH_VALUE`), default running frames, and `NULL` `RANGE` peers in `WindowEngine`.** Evaluate `FIRST_VALUE`, `LAST_VALUE`, and `NTH_VALUE` over `ResolveFrameRows` instead of `partitionRows`; apply the default running frame (`RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`) when `ORDER BY` is present and `Frame` is omitted (matching `ExternalWindowEngine`); and restrict `ResolveRangeFrame` on `NULL` order keys to `NULL` peer rows instead of the whole partition. | — | M |
+| SQ13 | **Align columnar vs. row `ORDER BY ... DESC` null ordering and fix `PIVOT`/`UNPIVOT` key and `NULL` handling.** Make `ColumnarSortSelectPlan` / `ColumnBatchSorting` and row/stream sorting agree on `NULL` ordering for `ASC`/`DESC` and `NULLS FIRST`/`NULLS LAST`; replace stringified `"|"` group keys in `PivotEngine` with `CompoundKey`, handle `NULL` pivot column filters with `IS NULL`, and exclude `NULL` value rows in `UNPIVOT`. | — | M |
+| SQ14 | **Audit and fix `NULL` propagation across Standard Library functions.** Return `NULL` (instead of `""`, `0`, `1`, or throwing) when `NULL`/`DBNull.Value` is passed to `REPLACE`, `SUBSTRING`, `LEFT`, `RIGHT`, `CHARINDEX`, `INSTR`, `STUFF`, `STR`, `QUOTENAME`, `TRANSLATE`, `PATINDEX`, `STRING_ESCAPE`, `LOG`, `ATAN2`, `ROUND`, `DATETIMEFROMPARTS`/`TIMEFROMPARTS`, `DATEPART`, `DATEDIFF`, `EOMONTH`, `GENERATE_SERIES`, `HASHBYTES`, `SIMILARITY`, and `LEVENSHTEIN`; use `EvaluationUtils.CompareConstants` in `GREATEST` and `LEAST` so mixed numeric types compare cleanly. | SQ06 | M |
 
 #### SLT corpus, EBNF grammar, and fuzzer/NoREC expansion
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| SQ07 | **Add SLT positive and `statement error` coverage for unexercised SQL clauses.** Add `.test` coverage (including negative `statement error` cases) for `USING SAMPLE`, `MATCH_RECOGNIZE`, `GROUP BY ALL`, named `WINDOW w AS (...)`, `IS [NOT] DISTINCT FROM`, DML `OUTPUT INSERTED.*/DELETED.*`, and `WITH cte AS (...)` on `INSERT`/`UPDATE`/`DELETE`/`MERGE`. Remove the unconditional `halt` in `select5.test` (or gate remaining queries) and triage `slt_lang_aggfunc.test` and `tests/slt_data/index/**`. | SQ01, SQ02 | M |
+| SQ07 | **Add SLT positive and `statement error` coverage for unexercised SQL clauses and `NULL` edge cases.** Add `.test` coverage (including negative `statement error` cases) for `USING SAMPLE`, `MATCH_RECOGNIZE`, `GROUP BY ALL`, named `WINDOW w AS (...)`, `IS [NOT] DISTINCT FROM`, DML `OUTPUT INSERTED.*/DELETED.*`, `WITH cte AS (...)` on `INSERT`/`UPDATE`/`DELETE`/`MERGE`, and regression queries for `SQ10`–`SQ14`. Remove the unconditional `halt` in `select5.test` (or gate remaining queries) and triage `slt_lang_aggfunc.test` and `tests/slt_data/index/**`. | SQ01, SQ02, SQ10–SQ14 | M |
 | SQ08 | **Reconcile `docs/grammar.ebnf` drift and expand `select_body` / `expression` in `EbnfConformanceTests`.** Add `ALTER TABLE ... DROP COLUMN`, `ALTER TABLE ... RENAME [COLUMN] ... TO ...`, and `REPLACE INTO` / `INSERT OR REPLACE INTO` to `docs/grammar.ebnf`; expand `select_body` (`join_clause`, `PIVOT`/`UNPIVOT`, `GROUP BY`, `HAVING`, `WINDOW`, `QUALIFY`, `USING SAMPLE`, `MATCH_RECOGNIZE`) and `expression` branches in `EbnfConformanceTests`; test `DefaultGrammar` state transitions with `requireParserAcceptance: false`. | — | M |
 | SQ09 | **Expand `GrammarWalkGenerator` and tighten `ParserFuzzTests` / NoREC checks.** Remove retired `SHOW VARIABLES;`/`SHOW CONNECTIONS;` from `GrammarWalkGenerator`; generate `JOIN`s, subqueries, CTEs, set operations, `DISTINCT`, `QUALIFY`, and `GROUPING SETS`; promote grammar/parser mismatch buckets to `isBug: true` once `DefaultGrammar` drift is closed; and fail on unexpected `ExecutionException` in `VerifyNoRECParity`. | SQ08 | M |
 
 **Acceptance evidence:** `statement error` tests fail when the target statement succeeds; unresolved
 columns, non-numeric arithmetic, and overflows throw `ExecutionException`; `DateTime` equality and
-ordering satisfy trichotomy; `EbnfConformanceTests` exercises all `select_body` clauses with zero
-drift against `Parser`; and `SltTests`, `EngineCorpusTests`, and `ParserFuzzTests` pass cleanly.
+ordering satisfy trichotomy; `SEMI`/`ANTI` joins, `WHERE` pushdown, `GROUP BY`/`HAVING`, window frames,
+columnar/row sorting, `PIVOT`/`UNPIVOT`, and standard-library functions preserve ANSI `NULL` and
+`DBNull.Value` semantics; `EbnfConformanceTests` exercises all `select_body` clauses with zero drift
+against `Parser`; and `SltTests`, `EngineCorpusTests`, and `ParserFuzzTests` pass cleanly.
+
+### Data Preparation — `TRANSFORM` Reliability, Schema/Lineage Integration, and Analyst Operations
+
+**Status:** Incremental  
+**Horizon:** Next (v0.23.0)  
+**Scheduling:** Backlog for prioritization after v0.22.0 ships.  
+**Authoritative design:** [TRANSFORM Statement Reference](docs/reference/statements/dml/transform.md),
+[Data Prep Helpers](docs/reference/statements/data-prep.md),
+[Standard Library Functions](docs/reference/functions/README.md), and
+[Engine Architecture](docs/architecture/engine.md).
+
+**Implemented baseline:** `TransformStatementHandler` implements nine `TRANSFORM <target> [FROM <source>] USING <algorithm> (...)`
+operations (`FILL_DATES`, `INTERPOLATE`, `DEDUPLICATE`, `PIVOT`, `TOP_N_OTHERS`, `PERIOD_COMPARISON`,
+`SHARE_OF_TOTAL`, `NORMALIZE`, `ROLLING_AGGREGATE`), alongside `GENERATE CALENDAR` and
+`COMPARE DATASETS`.
+
+**Problem and intended outcome:** The v0.22.0 `TRANSFORM` review (2026-11-10) found silent data
+corruption on `NULL` and duplicate-date inputs, missing Zero-Trust / schema / lineage integration,
+and missing high-value analyst operations:
+1. **Silent `NULL` corruption and date/grain bugs in existing algorithms (`TransformStatementHandler.cs`):**
+   - `NORMALIZE` (`MIN_MAX` and `Z_SCORE`), `PERIOD_COMPARISON`, `SHARE_OF_TOTAL`, and `TOP_N_OTHERS`
+     call `Convert.ToDecimal(GetValue(row[valueCol]))` / `Convert.ToDouble(...)` without checking for
+     `null`, turning SQL `NULL` into `0m` / `0.0`. In `NORMALIZE`, a single `NULL` shifts a positive
+     group's `min` to `0` and corrupts `mean`/`stddev` for every row in the group; in
+     `PERIOD_COMPARISON`, a `NULL` current value outputs `Diff = -prior` and `Pct = -100%` instead of
+     `NULL`.
+   - `INTERPOLATE` and `ROLLING_AGGREGATE` sort via `GetNumericOrderValue`, which returns `0m` for
+     `NULL` and throws on ISO date strings (`'2026-01-01'`) because it does not call `TryGetDate`.
+   - When multiple rows in a group share a calendar date, `FILL_DATES` silently overwrites `byDate[date.Date]`
+     (dropping earlier rows), while `PERIOD_COMPARISON` crashes with an unhandled `ArgumentException`
+     in `ToDictionary` and misses month-end prior dates (`2026-02-28` vs `2026-01-31`).
+   - `TOP_N_OTHERS` emits unaggregated detail rows for the top $N$ categories alongside a single
+     aggregated `'Others'` row, mixing two row grains in one output table.
+   - `SHARE_OF_TOTAL` outputs a `0..1` fraction while `PERIOD_COMPARISON` outputs a `0..100`
+     percentage, contradicting `docs/reference/transform/share_of_total.md`.
+2. **Engine, schema, `WHAT_IF`, and tooling gaps:**
+   - `TransformStatementHandler` never checks `context.IsWhatIf`, truncating and overwriting target
+     tables even under `SET WHAT_IF ON`.
+   - `DataParser.ParseTransform` and `docs/grammar.ebnf` allow omitting `FROM <sourceTable>` for
+     in-place transforms (and `docs/guides/patterns/sample-guide.md` teaches that syntax), but
+     `StageSourceRows` always throws if `SourceTable` is `null` instead of defaulting to `TargetTable`.
+   - Every algorithm calls `output.SetColumns(columns)` with string names only, resetting all output
+     column schema types to `"OBJECT"`.
+   - `BY_GROUP` columns are not validated in 5 of 9 algorithms (`TOP_N_OTHERS`, `PERIOD_COMPARISON`,
+     `SHARE_OF_TOTAL`, `NORMALIZE`, `ROLLING_AGGREGATE`), silently collapsing groups on a column typo;
+     unrecognized option keys in `stmt.Options` are silently ignored across all 9 algorithms; and
+     `BuildGroupKey` conflates `DBNull.Value` with `""`.
+   - `LineageAnalyzer` has no `TransformStatement` handling, and `ScriptScopeService` registers
+     `TRANSFORM` target tables with an empty column list `[]`.
+3. **Analyst "easy button" extensions and missing operations:**
+   - Existing algorithms are single-column (`INTERPOLATE`, `NORMALIZE`), 1-day-only (`FILL_DATES`),
+     and lack duplicate quarantine routing (`DEDUPLICATE`).
+   - High-frequency analyst operations — `UNPIVOT` (`MELT`), `CLEAN` / `STANDARDIZE` (both as a
+     scalar `SELECT` function and a multi-column `TRANSFORM`), `OUTLIERS` (clip/flag/filter), `BIN` /
+     `BUCKETIZE` (producing `Bin_Start`/`Bin_End` for GoG histograms), `IMPUTE`, `SPLIT` / `EXPLODE`,
+     `SCD2`, and `MASK_PII` — are not yet available under `TRANSFORM`.
+
+The outcome is null-safe, schema-preserving, `WHAT_IF`-compliant `TRANSFORM` execution with full
+lineage/LSP visibility, plus shared scalar/table hygiene functions and analyst reshape/bucketing
+algorithms.
+
+**Why next:** Identified during the v0.22.0 `TRANSFORM` review (2026-11-10) and held for v0.23.0 to
+keep the v0.22.0 release candidate frozen.
+
+**Boundaries:** Keep `TRANSFORM` memory-bounded via `OperatorMemoryGrantMB` and `MemoryArbiter`.
+Reuse the same underlying C# evaluation logic when an operation exists in both scalar `SELECT` and
+table-level `TRANSFORM` forms.
+
+**Dependencies:** `TransformStatementHandler`, `DataParser`, `LineageAnalyzer`, `ScriptScopeService`,
+`FunctionRegistry`, and `docs/reference/transform/`.
+
+**Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
+Select individual IDs into `TODO.md` when scheduling.
+
+#### Correctness, `NULL` safety, and engine/tooling integration
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| TR01 | **Fix `NULL` handling and date/grain bugs across the 9 existing `TRANSFORM` algorithms.** Preserve `NULL` inputs as `NULL` outputs (and exclude `NULL` from group `min`/`max`/`mean`/`stddev`/`sum`) in `NORMALIZE`, `PERIOD_COMPARISON`, `SHARE_OF_TOTAL`, and `TOP_N_OTHERS`; use `TryGetDate` and reject/skip `NULL` `ORDER_COL` values in `INTERPOLATE` and `ROLLING_AGGREGATE`; guard `WINDOW_SIZE >= 1`; handle duplicate dates and month-end lookups in `FILL_DATES` and `PERIOD_COMPARISON` without silent data loss or unhandled `ArgumentException`; align `TOP_N_OTHERS` output grain; and reconcile `SHARE_OF_TOTAL` scale with its reference doc. | — | M |
+| TR02 | **Enforce `SET WHAT_IF ON`, option/column validation, in-place `FROM` defaults, and `DBNull` group keys.** Respect `context.IsWhatIf` before truncating/writing target tables; validate `BY_GROUP` columns and reject unknown option keys across all 9 algorithms; support in-place `TRANSFORM #t USING ...` by defaulting `SourceTable ?? TargetTable` (and fix stale syntax in `sample-guide.md`); and distinguish `DBNull.Value`/`null` from `""` in `BuildGroupKey` with stable tie ordering in `DEDUPLICATE`. | — | S |
+| TR03 | **Preserve output `TableSchema` types and wire `TRANSFORM` into `LineageAnalyzer` and `ScriptScopeService`.** Copy source `ColumnMetadata` types (`DECIMAL`, `INT`, `DATE`, `VARCHAR`) and typed computed columns into `output.Schema`; record table/column lineage edges for `TransformStatement` in `LineageAnalyzer`; and populate target column schemas in `ScriptScopeService` for LSP autocomplete. | TR02 | M |
+| TR04 | **Extend existing `TRANSFORM` algorithms for multi-column and flexible-interval workflows.** Support `INTERVAL = 'HOUR' \| 'DAY' \| 'WEEK' \| 'MONTH' \| 'QUARTER' \| 'YEAR'`, explicit `START_DATE`/`END_DATE`, and `GAPS_FILL = 'FORWARD'` in `FILL_DATES`; accept comma-separated `VALUE_COLS` in `INTERPOLATE` and `NORMALIZE`; add `WEEK` and `QUARTER` to `PERIOD_COMPARISON`; and add `REJECT_INTO = #table` / `KEEP = 'UNIQUE_ONLY'` to `DEDUPLICATE`. | TR01, TR02 | M |
+
+#### New analyst `TRANSFORM` algorithms and shared `SELECT` functions
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| TR05 | **Shared scalar `CLEAN_TEXT` / `STANDARDIZE` functions in `SELECT` and multi-column `TRANSFORM ... USING CLEAN`.** Register scalar standard-library functions `CLEAN_TEXT(value [, rules])` and `STANDARDIZE(value, format)` (usable inline in `SELECT`, `WHERE`, `JOIN`, and `GROUP BY` for `TRIM`, `COLLAPSE_WHITESPACE`, `STRIP_CONTROL`, `NULL_IF_EMPTY`, case folding, `PHONE`, `EMAIL`, `POSTAL_CODE`), and wire `TRANSFORM #target [FROM #source] USING CLEAN (COLS = '*' \| 'col1,col2', RULES = '...')` to apply the same engine across multiple or all string columns in one statement. | TR02, TR03 | M |
+| TR06 | **Add `TRANSFORM ... USING UNPIVOT` (`MELT`).** Reshape wide columns (`ID_COLS`, `VALUE_COLS`, `NAME_COL`, `VALUE_COL`, `INCLUDE_NULLS = OFF \| ON`) into normalized key/value rows with preserved schema types and SLT coverage. | TR02, TR03 | S |
+| TR07 | **Add `TRANSFORM ... USING BIN` (`BUCKETIZE`) and `USING OUTLIERS`.** Implement `BIN` (`VALUE_COL`, `BINS`, `METHOD = 'EQUAL_WIDTH' \| 'QUANTILE' \| 'THRESHOLDS'`, `BY_GROUP`) emitting `Bin_Start`, `Bin_End`, and `Bin_Label` columns directly consumable by GoG ranged-rect histograms; implement `OUTLIERS` (`METHOD = 'IQR' \| 'Z_SCORE' \| 'PERCENTILE'`, `ACTION = 'CLIP' \| 'FLAG' \| 'FILTER' \| 'NULL'`, `BY_GROUP`). | TR01, TR03 | M |
+| TR08 | **Add `TRANSFORM ... USING IMPUTE` and `USING SPLIT` (`EXPLODE`).** Implement multi-column missing-value replacement (`IMPUTE` with `METHOD = 'MEAN' \| 'MEDIAN' \| 'MODE' \| 'CONSTANT'`, `BY_GROUP`) and delimited/JSON array splitting (`SPLIT` with `MODE = 'ROWS' \| 'COLUMNS'`). | TR01, TR03 | M |
+| TR09 | **Add `TRANSFORM ... USING MASK_PII` and `USING SCD2`.** Provide declarative column masking (`REDACT_EMAIL`, `MASK_LAST_4`, `HASH_SHA256`, `PERTURB_DATE`) and Type-2 Slowly Changing Dimension merging (`KEY_COLS`, `TRACK_COLS`, `EFFECTIVE_DATE` managing `EffectiveFrom`, `EffectiveTo`, `IsCurrent`). | TR02, TR03 | M |
+
+**Acceptance evidence:** All `TRANSFORM` algorithms preserve `NULL` semantics, column data types,
+`SET WHAT_IF ON` non-mutation, and lineage/LSP scope schemas; `CLEAN_TEXT`/`STANDARDIZE` work both
+in `SELECT` expressions and table-wide `TRANSFORM ... USING CLEAN`; and positive + `statement error`
+SLT tests in `tests/slt_data/transform.test` pass.
 
 ## Later Reporting and Presentation Work
 
@@ -497,13 +651,14 @@ resize/reversal and missing-data cases; and unchanged payload, render-time and b
 Update the capability matrix and focused reference for only the accepted form. Finish that increment
 before selecting the next; preserve all existing fixtures for earlier supported forms.
 
-### Reporting & Presentation — Analytical Overlays, Multi-Layer Domain Resolution, and Golden Conformance
+### Reporting & Presentation — Analytical Overlays, Authoring Parity, and Golden Conformance
 
 **Status:** Incremental  
 **Horizon:** Next (v0.23.0)  
 **Scheduling:** Backlog for prioritization after v0.22.0 ships.  
 **Authoritative design:** [Reporting Semantic Contracts](docs/architecture/reporting-semantic-contracts.md),
-[Native Grammar-of-Graphics Contract](docs/architecture/decisions/grammar-of-graphics-spec-ir.md), and
+[Native Grammar-of-Graphics Contract](docs/architecture/decisions/grammar-of-graphics-spec-ir.md),
+[Native Advanced Chart Authoring](docs/architecture/decisions/native-advanced-chart-authoring.md), and
 [Reporting Architecture](docs/architecture/reporting.md).
 
 **Implemented baseline:** The reporting golden harness (`ReportingGoldenHarness` and
@@ -511,42 +666,80 @@ before selecting the next; preserve all existing fixtures for earlier supported 
 `.rptsql` conformance scripts in [`tests/fixtures/reporting/goldens/index.json`](tests/fixtures/reporting/goldens/index.json).
 `LINEAR` and `POLYNOMIAL` regressions, `GOAL`, `AVERAGE`, `MOVING_AVG`, `FORECAST`, `REFERENCE_LINE`,
 `REFERENCE_BAND`, `RUNNING_TOTAL`, `PERCENT_OF_TOTAL`, and `ANNOTATIONS (POINT ...)` are parsed and
-lowered into `ChartSpec` layers.
+lowered into `ChartSpec` layers on named visuals.
 
-**Problem and intended outcome:** Several analytical overlay and multi-layer combinations produce
-silent no-ops or mathematically distorted output instead of failing closed or resolving accurately,
-and significant parts of the Grammar of Graphics surface lack golden hash fixtures:
-- `EXPONENTIAL`, `LOGARITHMIC`, and `POWER` overlays parse and lower, then hit the default wildcard
-  in `PlotPlanResolver.ResolveOverlay` and silently emit all-null datums with no SVG output and no
-  error.
-- `PlotPlanResolver.ResolveOverlay` coerces `NULL` Y values to `0m` before computing `AVERAGE`,
-  `MOVING_AVG`, `LINEAR`, and `POLYNOMIAL`, skewing means and regression slopes toward zero.
-- On multi-series charts, `ResolveOverlay` regresses across the entire Y column without grouping by
-  series or rejecting ambiguous multi-series trendlines.
-- `PolynomialRegression` raises uncentered `decimal` X values to `row + column`, which can overflow
-  `decimal.MaxValue` on large X values or higher polynomial degrees.
-- When a chart combines stacked layers (`STACK = ZERO` or `NORMALIZE`) with an unstacked `LINE` or
-  `POINT` layer on the same primary Y axis, `PlotPlanResolver.ResolveScales` drops `FieldChannel.Y`
-  from the unstacked layers and can clip them outside the resolved Y domain.
-- `VisualBuilder.BuildResolvedAsync` catches all lowering/resolution/render exceptions into
-  `vm.Error` while `ReportingGoldenHarness.ProduceAsync` does not assert `vm.Error is null`, allowing
-  broken visuals to record `null` plan/SVG hashes during golden regeneration; `SvgChartRenderer.Render`
-  still contains legacy fallback paths when `PlotPlan` is `null`; and `NativeSvgGeometryGoldenTests`
-  / `GrammarOfGraphicsContractTests` pin raw SHA-256 strings without checked-in artifact files.
+**Problem and intended outcome:** Reviewing the Grammar of Graphics implementation and its SLT-style
+golden suite surfaced three categories of gaps where authors either get silent/distorted output or
+hit an immediate feature cliff when moving from named visuals (`BAR`, `LINE`, `COMBO`) to
+`CUSTOM ... CHART`:
+1. **Silent no-ops and distorted overlay/domain math:**
+   - `EXPONENTIAL`, `LOGARITHMIC`, and `POWER` overlays parse and lower, then hit the default wildcard
+     in `PlotPlanResolver.ResolveOverlay` and silently emit all-null datums with no SVG output and no
+     error.
+   - `PlotPlanResolver.ResolveOverlay` coerces `NULL` Y values to `0m` before computing `AVERAGE`,
+     `MOVING_AVG`, `LINEAR`, and `POLYNOMIAL`, skewing means and regression slopes toward zero.
+   - On multi-series charts, `ResolveOverlay` regresses across the entire Y column without grouping by
+     series or rejecting ambiguous multi-series trendlines.
+   - `PolynomialRegression` raises uncentered `decimal` X values to `row + column`, which can overflow
+     `decimal.MaxValue` on large X values or higher polynomial degrees.
+   - When a chart combines stacked layers (`STACK = ZERO` or `NORMALIZE`) with an unstacked `LINE` or
+     `POINT` layer on the same primary Y axis, `PlotPlanResolver.ResolveScales` drops `FieldChannel.Y`
+     from the unstacked layers and can clip them outside the resolved Y domain.
+2. **Core scale, layer, and `CUSTOM ... CHART` authoring bugs and feature cliffs:**
+   - **`ScaleKind.Time` (`TYPE = TEMPORAL`) renders as discrete categories:** `PlotPlanResolver.ResolveScales`
+     sorts temporal values by string `ValueKey`, populates `Categories`, and emits one tick per
+     distinct timestamp (ignoring `MAJOR_TICK_COUNT` and `TICK_INTERVAL`). `PlotPlanSvgRenderer`
+     therefore spaces 1-day and 1-year gaps at equal category intervals, `ResolveLayerData` drops
+     duplicate timestamps via `firstRowByCategory`, and `RenderPoints` skips points when `TIME_UNIT`
+     or `TICK_FORMAT` changes the category display string.
+   - **Horizontal grouped bars in `CUSTOM` overlap:** `PlotPlanSvgRenderer.RenderTransposedCartesian`
+     gates grouped bar dodging on `LayerStyle(l, "series") is not null`, which `NamedVisualChartLowerer`
+     sets but `PlotPlanResolver` does not set when splitting a `CUSTOM` `RECT` layer by `COLOR`
+     (`layer.SeriesKey`), drawing all series bars at the same Y position. `X_OFFSET`/`Y_OFFSET`
+     calculations in `PlotPlanResolver` also use `520px` instead of `CartesianPlotArea` width and
+     double-shift when combined with `COLOR`.
+   - **`COLOR = DATUM('...')` loses multi-layer series and legends:** `AdvancedChartLowerer` collapses
+     `spec.Bindings` by channel (`GroupBy(b => b.Channel).Select(g => g.First())`) and
+     `PlotPlanResolver.ResolveSeries` ignores `BindingSourceKind.Datum`, so constant-series layers
+     render in the same default color without legend entries.
+   - **Multi-grain datasets drop summary layers:** Layers cannot specify a per-layer `WHERE` filter,
+     and `ResolveLayerData` picks the first row per category even when that layer's Y column is
+     `NULL` on that row, turning `UNION ALL` detail+summary layers into gaps.
+   - **Named-to-`CUSTOM` feature cliff:** `ReportParser` rejects `OVERLAYS` on `CUSTOM` visuals;
+     `AdvancedChartSemanticValidator.ValidateConditions` rejects `CONDITIONS` on `LINE` and `AREA`
+     layers unless `X` is `QUANTITATIVE` and `STYLE (INTERPOLATION = ...)` is explicitly set;
+     `AdvancedChartLowerer` silently ignores outer `AXIS_X`/`AXIS_Y` scale options while `SCALES`
+     lacks a `TITLE`/`LABEL` option; `VisualBuilder` silently ignores `SEGMENT_STYLE` on `CUSTOM`
+     while `CONDITIONS` has no `LINE_DASH` channel; and `SCALES`/`ENCODE` lack discrete color maps,
+     `SIZE` `RANGE = (min, max)`, and a data-driven `OPACITY` channel.
+   - **Studio and runtime gaps on `CUSTOM`:** `visual-format-inspector.ts` omits `'CUSTOM'` from
+     `FORMAT_INSPECTOR_CHARTS` and `FORMAT_INSPECTOR_CARTESIAN` (hiding legend, axis, label, and
+     palette controls); `designer-interactions.ts` inspects `v.mappings` instead of `CUSTOM`
+     encodings (breaking Studio cross-filter detection and hover-popover validation); and
+     `VisualBuilder` `DRILL_IN` rewrites `Mappings` without updating `AdvancedChart` encodings.
+3. **Golden harness and coverage gaps:**
+   - `VisualBuilder.BuildResolvedAsync` catches all lowering/resolution/render exceptions into
+     `vm.Error` while `ReportingGoldenHarness.ProduceAsync` does not assert `vm.Error is null`,
+     allowing broken visuals to record `null` plan/SVG hashes during golden regeneration;
+     `SvgChartRenderer.Render` retains legacy fallback paths when `PlotPlan` is `null`; and
+     `NativeSvgGeometryGoldenTests` / `GrammarOfGraphicsContractTests` pin raw SHA-256 strings
+     without checked-in artifact files.
 
-The outcome is fail-closed overlay and scale semantics (an explicit error is always preferred over an
-incorrect or silent chart), accurate regression math over nullable/large-domain inputs, and golden
-conformance fixtures covering overlays, intervals, interpolations, scales, facets, and null policies.
+The outcome is fail-closed overlay and scale semantics, continuous temporal axes, working grouped bars
+and multi-layer legends in `CUSTOM ... CHART`, feature parity with named visuals and Studio, and
+expanded golden conformance fixtures.
 
-**Why next:** Identified during the v0.22.0 Grammar of Graphics SLT/golden review (2026-11-10). Held
-out of v0.22.0 to avoid destabilizing the active release candidate.
+**Why next:** Identified during the v0.22.0 Grammar of Graphics review (2026-11-10). Held out of
+v0.22.0 to avoid destabilizing the active release candidate, and prioritized ahead of the niche
+combinatorial matrix in [Grammar-of-Graphics Semantic Extensions](#reporting--presentation--grammar-of-graphics-semantic-extensions).
 
 **Boundaries:** Preserve the existing `ChartSpec`, `PlotPlan`, and four-artifact golden harness
 contracts. Do not add in-engine histogram binning (keep `X_START`/`X_END` SQL-computed) or new
 third-party math libraries.
 
-**Dependencies:** `ReportParser`, `NamedVisualChartLowerer`, `PlotPlanResolver`, `PlotPlanSvgRenderer`,
-and `ReportingGoldenHarness`.
+**Dependencies:** `ReportParser`, `AdvancedChartSemanticValidator`, `AdvancedChartLowerer`,
+`NamedVisualChartLowerer`, `PlotPlanResolver`, `PlotPlanSvgRenderer`, `VisualBuilder`,
+`ReportingGoldenHarness`, and the Studio designer inspector modules.
 
 **Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
 Select individual IDs into `TODO.md` when scheduling.
@@ -561,6 +754,17 @@ Select individual IDs into `TODO.md` when scheduling.
 | GG04 | **Center/scale X in `PolynomialRegression` and guard singular/overflow cases.** Normalize X into `[-1, 1]` (or `[0, 1]`) before building the Vandermonde sums so large X domains (e.g., epoch dates or revenue) do not overflow `decimal.MaxValue`, and fail or emit a diagnostic when degree exceeds distinct X points. | GG02 | S |
 | GG05 | **Preserve unstacked `FieldChannel.Y` in mixed stacked/unstacked Y domains.** Include `FieldChannel.Y` alongside `YStart`/`YEnd`/`ErrorLow`/`ErrorHigh`/`ConfidenceLow`/`ConfidenceHigh` in `PlotPlanResolver.ResolveScales` when stacked and unstacked layers share a primary or secondary Y axis; include explicit `AnnotationPoint` coordinates in scale domain resolution. | — | S |
 
+#### Core scale, layer, and `CUSTOM ... CHART` authoring parity
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| GG11 | **Fix `ScaleKind.Time` (`TYPE = TEMPORAL`) to resolve and render as a continuous time axis.** Order temporal values chronologically rather than by string key, compute proportional time positions and nice ticks honoring `MIN`/`MAX`/`MAJOR_TICK_COUNT`/`TICK_INTERVAL` without populating discrete `Categories`, keep multiple rows sharing a timestamp in `ResolveLayerData`, and fix `RenderPoints` when `TIME_UNIT` or `TICK_FORMAT` is set. | — | M |
+| GG12 | **Fix horizontal grouped bar dodging (`TRANSPOSED_CARTESIAN`) and `X_OFFSET`/`Y_OFFSET` geometry in `CUSTOM ... CHART`.** Gate grouped dodging in `PlotPlanSvgRenderer.RenderTransposedCartesian` on `layer.SeriesKey is not null` as well as `LayerStyle(l, "series")`, align `PlotPlanResolver` offset bounds with `CartesianPlotArea`, and prevent double-dodging or row deduplication when `X_OFFSET`/`Y_OFFSET` is bound. | — | S |
+| GG13 | **Support `COLOR = DATUM('...')` multi-layer legends and non-null category row selection.** Preserve per-layer `COLOR` `DATUM` bindings in `AdvancedChartLowerer` and `PlotPlanResolver.ResolveSeries` so constant-series layers receive distinct palette colors and legend entries; in `PlotPlanResolver.ResolveLayerData`, select the first row per category where the layer's measure is non-null (or support a per-layer `WHERE` filter) so combined detail+summary tables do not drop summary layers. | — | M |
+| GG14 | **Support analytical overlays and categorical/temporal `LINE`/`AREA` `CONDITIONS` in `CUSTOM ... CHART`.** Allow `OVERLAYS` (or a `CHART`-level equivalent) on `CUSTOM` visuals, relax `AdvancedChartSemanticValidator.ValidateConditions` so `LINE`/`AREA` layers on categorical or temporal X axes can use `CONDITIONS` without requiring quantitative X or an explicit `INTERPOLATION` token, and support `LINE_DASH` / `SEGMENT_STYLE`. | GG01, GG02 | M |
+| GG15 | **Close scale and encoding gaps in `CHART (SCALES ... / ENCODE ...)`.** Support discrete domain-to-color mapping on `NOMINAL`/`ORDINAL` `COLOR` scales, `RANGE = (min, max)` on `SIZE` scales, a data-driven `OPACITY` channel in `ENCODE`, and axis `TITLE`/`LABEL` inside `SCALES(...)`; either lower or explicitly reject outer `AXIS_X`/`AXIS_Y` and named-visual-only `OPTIONS` on `CUSTOM` visuals. | — | M |
+| GG16 | **Studio inspector, cross-filter, hover-popover, and `DRILL_IN` parity for `CUSTOM` visuals.** Include `'CUSTOM'` in `FORMAT_INSPECTOR_CHARTS` and `FORMAT_INSPECTOR_CARTESIAN` in `visual-format-inspector.ts`, derive `selectionKey` and `hoverContextColumn` from `CUSTOM` encodings in `designer-interactions.ts`, and update `VisualBuilder` `DRILL_IN` hierarchy rewriting to rebind `AdvancedChart` encodings. | — | S |
+
 #### Harness fail-fast guarantees and golden SVG hash coverage
 
 | ID | Chunk and finish line | Depends on | Size |
@@ -573,7 +777,9 @@ Select individual IDs into `TODO.md` when scheduling.
 
 **Acceptance evidence:** Zero silent null-layer fallbacks in `PlotPlanResolver.ResolveOverlay`;
 verified regression accuracy with `NULL` values and large X domains; unclipped mixed stacked/unstacked
-Y domains; `ReportingGoldenTests` passing with the expanded `index.json` fixtures; and `DocSanityTests`
+Y domains; proportional continuous `ScaleKind.Time` spacing; dodged horizontal grouped bars and
+multi-layer `DATUM` legends in `CUSTOM ... CHART`; Studio inspector and interaction parity on `CUSTOM`
+visuals; `ReportingGoldenTests` passing with the expanded `index.json` fixtures; and `DocSanityTests`
 passing cleanly.
 
 ### Presentation & Workspaces — Studio Authoring for Mobile Page Layouts
@@ -815,6 +1021,120 @@ the fix needs a tamper-evident hand-off, too much for v0.22.0.
 
 **Acceptance evidence:** A spawn-mode test where a run executes as its caller and is refused an
 object the caller cannot use; and a test where a forged, altered or expired envelope is refused.
+
+### Portal, Orchestrator & Studio — Unified Operations Console, Catalog-Job Cohesion, and SaaS Authoring Boundary
+
+**Status:** Incremental  
+**Horizon:** Next (v0.23.0)  
+**Scheduling:** Backlog for prioritization after v0.22.0 ships.  
+**Authoritative design:** [Portal Architecture](docs/architecture/portal.md),
+[Orchestrator Architecture](docs/architecture/orchestrator.md),
+[Portal UI Architecture](docs/architecture/portal-ui.md),
+[Deployment Profiles](docs/architecture/deployment-profiles.md),
+[ETL-SQL Studio](docs/architecture/decisions/etl-sql-studio.md), and
+[Portal ETL Documents](docs/architecture/decisions/portal-etl-documents.md).
+
+**Implemented baseline:** `ETL-SQL.Portal` proxies authenticated job, schedule, notification,
+bundle, watermark, and per-object ACL management to `ETL-SQL.Orchestrator.Service` through
+`OrchestratorController` and `OrchestratorProxyService` using `X-Orchestrator-Key` plus short-lived
+HMAC-SHA256 `X-Orchestrator-Identity` caller assertions. Portal Studio (`/studio.html`) authors both
+`Report` (`.rptsql`) and `Pipeline` (`.etlsql`) catalog documents and submits saved pipeline
+revisions and schedules to `PIPELINE:{id}` run-slots via `StudioPipelineRunsController`.
+
+**Problem and intended outcome:** Reviewing the end-to-end design across workstation editors (TUI,
+VS Code, Desktop Studio), Portal Studio, and Orchestrator (2026-11-10) identified concrete bugs,
+split-brain state between Portal and Orchestrator, and missing operator controls that make the
+Portal Orchestrator experience feel disconnected from Reporting and Studio:
+1. **Broken bundle URIs, mislabeled job types, and empty dependency graphs in `orchestrator.html`:**
+   - `readBundleChoices` in `orchestrator-create-job.ts` emits `bundle://${name}/latest`, whereas
+     `BundleUri.TryParse` (`BundleUri.cs`) and `PinBundleTargetAsync` (`JobApiEndpoints.cs`) require
+     `orch://<bundle>[@<version>]/<entryPath>`. Selecting a published bundle in the Portal New Job
+     modal fails `BundleUri.TryParse`, writes `RUN SCRIPT 'bundle://.../latest';` as a filesystem
+     path, and fails at runtime.
+   - `orchestrator-job-detail.ts` checks `value.jobType === 1 || (value.targetPath ?? '').startsWith('bundle://')`
+     and labels the job `'Bundle'`, even though `JobTargetKind` `1` is `Report` and bundle URIs use
+     `orch://`. `orchestrator-create-job.ts` also hardcodes `jobType: 'Script'`.
+   - `OrchestratorController.GetJobDependencies` runs `scriptDag.Project(job.Script)` without
+     following `RUN SCRIPT '<targetPath>';` on normalized jobs, rendering an empty Dependency Chain
+     graph with zero table reads/writes or upstream/downstream jobs.
+2. **Split-brain between Studio catalog pipelines (`PIPELINE:{id}`) and Orchestrator jobs:**
+   - Pipelines authored in Portal Studio appear in `orchestrator.html` under raw `PIPELINE:{id}`
+     names with no link to the catalog document, folder, or Studio.
+   - Editing a `PIPELINE:{id}` script inside `orchestrator-job-detail.ts`'s inline CodeMirror editor
+     overwrites `Jobs.Script` in the Orchestrator without updating the Portal catalog document that
+     Studio owns, causing silent drift until the next Studio schedule save overwrites it.
+   - Non-admin Studio authors who click **Run** on a new pipeline before an operator has run it once
+     receive `403 job_not_provisioned`, and even after an admin provisions it the admin owns the
+     slot until `EXECUTE` is manually granted on `PIPELINE:{id}`.
+3. **SaaS / `CatalogOnly` authoring lockdown bypasses:**
+   - When `Portal:Studio:Mode = CatalogOnly`, `ScriptsController` and `ReportsController` block raw
+     server file uploads and path browsing, but `orchestrator.html`'s New Job modal and
+     `OrchestratorController.CreateJob` still allow browsing server filesystem paths
+     (`/api/orchestrator/scripts`) or saving arbitrary inline scripts—bypassing Studio edit leases,
+     `CredentialLeakRule`, and `RequireApprovalToPublish`.
+   - `ReportsController` script mutation routes used by `PortalDataSource` (`EXECUTE portal BEGIN
+     PUBLISH REPORT ... END`) check role/folder permissions without enforcing
+     `StudioCapabilities.ScriptIngress`.
+4. **Split-brain storage when Portal and Orchestrator run on separate hosts:**
+   - While `OrchestratorController` proxies CRUD over HTTP, `OperationsTriageService` (the Triage
+     board), `OrchestratorPollerService` (linked dataset refreshes and subscription triggers), and
+     `SubscriptionsController` (creating `sub_{id}` jobs) open a local SQLite database via
+     `OrchestratorDbLocator.Resolve()` or `PortalTenantJobEvidenceStore`.
+   - Portal Admin (`/admin.html`) manages `SHARED:` connections and `SECRET:` values in Portal's
+     store, while Orchestrator exposes a separate `/api/connections` and `/api/secrets` store.
+5. **Missing operator UI controls and `ORCHESTRATOR` connector parity:**
+   - `orchestrator.html` has no Edit UI for existing job metadata (`PUT /api/orchestrator/jobs/{name}`
+     is only used for inline script text), no Edit or Enable/Disable toggle for existing named
+     Schedules or Notifications, and no Access (`READ`/`EXECUTE`/`OVERRIDE`/`MANAGE`) UI for
+     Schedules or Notifications.
+   - Clicking a run row in the Job Detail History tab does not open the per-statement execution
+     waterfall (`GET /api/job-runs/{historyId}`), and the main job view lacks `Run with Parameters...`
+     (`Variables` overrides), `Kill / Cancel Run`, and multi-node `Nodes` / sandbox-pool visibility.
+   - `OrchestratorDataSource` (`EXECUTE orch BEGIN ... END`) throws `NotSupported` for `DROP JOB`,
+     `KILL JOB`, `CREATE/ALTER/DROP NOTIFICATION`, `ALTER/DROP SCHEDULE`,
+     `ALTER JOB ... ADD/REMOVE NOTIFICATION`, `SHOW JOB STATE`, and `ASSERT JOB`, while local
+     `TRIGGER JOB <name>` without `AT <conn>` logs a message without queueing execution.
+
+The outcome is a unified Portal + Studio + Orchestrator experience where catalog pipelines and
+Orchestrator jobs share identity and governance, `CatalogOnly` SaaS lockdown has no backdoors,
+Portal and Orchestrator operate cleanly across separate hosts over HTTP, and operators can manage
+the full Orchestrator lifecycle from the Portal UI or `EXECUTE orch` scripts.
+
+**Why next:** Identified during the v0.22.0 architecture and UX review (2026-11-10). Held out of
+v0.22.0 to preserve the release freeze and scheduled for v0.23.0 alongside the Studio and SaaS
+tracks.
+
+**Boundaries:** Keep `ETL-SQL.Orchestrator` operable standalone via CLI and `.etlsql` scripts in
+Solo/Team profiles. Do not execute mutating ETL pipelines inside the Portal web process.
+
+**Dependencies:** `OrchestratorController`, `OrchestratorProxyService`, `StudioPipelineRunsController`,
+`JobApiEndpoints`, `OrchestratorDataSource`, and the TypeScript modules under
+`src/ETL-SQL.Portal/BrowserSources/orchestrator*.ts`.
+
+**Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
+Select individual IDs into `TODO.md` when scheduling.
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| OR01 | **Fix Portal New Job bundle URIs (`orch://`) and target kind labeling.** Update `readBundleChoices` (`orchestrator-create-job.ts`) and the New Job modal to emit canonical `orch://<bundle>@<version>/<entryPath>` URIs (with version and entry-script selection) matching `BundleUri.TryParse`; support `JobType = REPORT` in New Job creation; and fix `orchestrator-job-detail.ts` so `jobType === 1` displays `'Report'` while `orch://` targets display `'Bundle'`. | — | S |
+| OR02 | **Unify Studio catalog pipelines (`PIPELINE:{id}`) with Orchestrator jobs.** Enrich `PIPELINE:{id}` rows in the Portal Orchestrator UI with catalog document display names, folder badges, and an **Open in Studio** link; replace raw inline `Jobs.Script` editing on catalog-backed jobs in `orchestrator-job-detail.ts` with Studio navigation so catalog and Orchestrator scripts cannot diverge; and auto-provision (or provide a 1-click provision + author `EXECUTE` grant workflow for) `PIPELINE:{id}` slots so non-admin Studio authors do not hit a dead-end `403 job_not_provisioned`. | — | M |
+| OR03 | **Enforce `CatalogOnly` / SaaS Portal-only authoring across Orchestrator and Report ingress.** When `Portal:Studio:Mode = CatalogOnly` (or external script ingress is disabled), disable raw server-filesystem script browsing (`/api/orchestrator/scripts`) and unreviewed inline script creation in `orchestrator.html` / `OrchestratorController.CreateJob` in favor of selecting a governed catalog `Pipeline` or signed `orch://` bundle; enforce `StudioCapabilities.ScriptIngress` on `ReportsController` script upload and mutation endpoints used by `PortalDataSource`. | OR02 | M |
+| OR04 | **Retire direct SQLite file coupling (`OrchestratorDbLocator`) in Triage, Poller, and Subscriptions.** Route `OperationsTriageService`, `OrchestratorPollerService`, and `SubscriptionsController` through `OrchestratorProxyService` (or a shared remote store contract) instead of opening a local SQLite path via `OrchestratorDbLocator.Resolve()`, and synchronize or federate Portal's `SHARED:` connection catalog and `SECRET:` store with remote Orchestrator workers. | — | M |
+| OR05 | **Fix Dependency Chain graph projection for normalized and bundle jobs.** Update `OrchestratorController.GetJobDependencies` so normalized jobs (`RUN SCRIPT '<targetPath>';`) resolve and parse their referenced script or `orch://` bundle entry and include explicit job dependencies when computing upstream/downstream table and job edges. | OR01 | S |
+| OR06 | **Add Edit dialogs and per-object ACL management for Jobs, Schedules, and Notifications.** Add an Edit Job metadata dialog (`PUT /api/orchestrator/jobs/{name}` with `If-Match` for target, interval, retries, retry delay, timeout, hash policy, and sandbox profile), Edit and Enable/Disable actions on the Schedules and Notifications tabs (`PUT /api/orchestrator/schedules/{name}` and `PUT /api/orchestrator/notifications/{name}`), and mount the Access (`READ`/`EXECUTE`/`OVERRIDE`/`MANAGE` + owner) panel for Schedules and Notifications as well as Jobs. | — | M |
+| OR07 | **Expose statement waterfalls, parameterized triggers, kill/cancel, and node/sandbox fleet health in `orchestrator.html`.** Make run rows in the Job Detail History tab clickable to open the per-statement execution waterfall and output (`GET /api/job-runs/{historyId}`); add `Run with Parameters...` (`Variables` overrides) and `Kill / Cancel Run` (`/kill` and `/cancel`) to the job table and detail drawer; and add a Nodes & Sandboxes view surfacing `NodeHeartbeatService` metrics and `RelationalSandboxAdmissionLedger` pool states. | — | M |
+| OR08 | **Complete `ORCHESTRATOR` connector (`OrchestratorDataSource`) statement parity and local `TRIGGER JOB`.** Implement `DROP JOB`, `KILL JOB`, `CREATE/ALTER/DROP NOTIFICATION`, `ALTER/DROP SCHEDULE`, `ALTER JOB ... ADD/REMOVE NOTIFICATION`, `SHOW JOB STATE`, and `ASSERT JOB` in `OrchestratorDataSource.cs` against the existing `JobApiEndpoints` REST routes; make local `TRIGGER JOB <name>` in `EnableDisableTriggerJobHandlers.cs` enqueue an execution or fail closed when no scheduler is attached instead of logging a no-op message. | — | M |
+| OR09 | **Complete the `/designer` to `/studio/` cutover in Portal.** Once the Studio beginner/authoring completeness gate (`ST03`) passes, redirect `/designer` and `/designer/new` in Portal to `/studio/` so Report and Pipeline authoring share one workbench, draft/approval pipeline, and capability boundary. | ST03 | S |
+
+**Acceptance evidence:** Creating a bundle-backed job from `orchestrator.html` emits a valid
+`orch://` URI that pins and executes cleanly; `PIPELINE:{id}` jobs display their catalog metadata,
+link to `/studio/`, and disallow divergent inline script edits; `CatalogOnly` mode blocks raw
+filesystem and unreviewed inline job/report script injection; Triage, Subscriptions, and linked
+dataset refreshes work over HTTP when Portal and Orchestrator do not share a local SQLite file;
+normalized jobs render their full table/job Dependency Chain; operators can edit Jobs, Schedules,
+Notifications, and their ACLs, trigger with variable overrides, cancel active runs, and inspect
+statement waterfalls for any run from `orchestrator.html`; `EXECUTE orch` supports the full job,
+schedule, and notification statement set; and `DocSanityTests` passes cleanly.
 
 ### SaaS Operations — Shared Lifecycle, Metering, and Hosted Launch Evidence
 
