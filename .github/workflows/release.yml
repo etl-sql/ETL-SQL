@@ -204,6 +204,15 @@ jobs:
     needs: [validate, operator-evidence]
     runs-on: ubuntu-latest
     steps:
+      # The curated notes become the release body. The validate job already required them final.
+      - name: Checkout release notes
+        if: env.DRY_RUN != 'true'
+        timeout-minutes: 5
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+          sparse-checkout: docs/releases
+
       - name: Create or update draft release
         timeout-minutes: 8
         shell: bash
@@ -221,9 +230,9 @@ jobs:
             gh release create "$DRAFT_TAG" --draft --target "$SOURCE_SHA" --title "Dry run of $TAG_NAME (run $GITHUB_RUN_ID)" \
               --notes "Release rehearsal. Never published; deleted at the end of run $GITHUB_RUN_ID." --repo "$GITHUB_REPOSITORY"
           elif gh release view "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$DRAFT_TAG" --draft "${args[@]}"
+            gh release edit "$DRAFT_TAG" --draft --notes-file "docs/releases/$TAG_NAME.md" "${args[@]}"
           else
-            gh release create "$DRAFT_TAG" --draft --generate-notes "${args[@]}"
+            gh release create "$DRAFT_TAG" --draft --notes-file "docs/releases/$TAG_NAME.md" "${args[@]}"
           fi
 
   find-msi:
@@ -981,6 +990,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Cannot publish draft release.' }
 
   # 7. Publish certified VS Code extensions to Visual Studio Marketplace via OIDC Trusted Publishing.
+  # vsce is pinned to the version that packages them (scripts/vsix/package.json). --skip-duplicate
+  # skips a VSIX whose version and platform the Marketplace already has, so a rerun after a partial
+  # failure publishes only what is missing.
   publish-marketplace:
     name: Publish VS Code Extensions to Marketplace
     timeout-minutes: 20
@@ -1015,7 +1027,7 @@ jobs:
           fi
           for vsix in "${vsix_files[@]}"; do
             echo "Publishing $(basename "$vsix") to Visual Studio Marketplace via OIDC..."
-            npx --yes @vscode/vsce@latest publish --oidc --packagePath "$vsix"
+            npx --yes @vscode/vsce@4.0.0 publish --oidc --skip-duplicate --packagePath "$vsix"
           done
 
   # 8. A dry run deletes its own draft. It refuses anything that is not a dry-run draft.

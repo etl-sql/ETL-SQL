@@ -18,7 +18,7 @@ for (const source of [catalog.replaceAll('\r\n', '\n'), catalog.replaceAll('\r\n
 assert.throws(() => syntaxIndex.extractStewardshipTags(catalog.replace('TableColumnScriptScopes, []),', 'TableColumnScriptScopes, [], []),')),
   /Unable to extract/, 'A changed record shape must fail instead of silently dropping an entry.');
 
-assert.equal(releaseAutomationChecks.length, 52);
+assert.equal(releaseAutomationChecks.length, 53);
 // Healthy checks reached 55 s on loaded CI runners; the deadline must stay a hang guard.
 assert.ok(checkTimeoutMs >= 3 * 55000, 'The per-check deadline must leave room for a loaded runner.');
 assert.equal(checksForArguments([]), sourceChecks);

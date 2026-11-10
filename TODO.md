@@ -84,9 +84,13 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   dates month first by default, `SET DATEFORMAT`/`Engine:DateFormat` for DMY), report cells and parameter text are ISO (owner: midnight dropped),
   and `FLATFILE` writes invariant text unless `CULTURE`/`DATE_FORMAT` is set. Culture tests run
   under en-US, de-DE and tr-TR.
-- [ ] **W4c GitHub is the source of truth.** **Left:** a `workflow_dispatch` "Release" that tags the
-  certified commit from Actions; pin `@vscode/vsce`; make the Marketplace job skip versions already
-  published.
+- [ ] **W4c GitHub is the source of truth.** 2026-11-10: the **Tag Release** workflow
+  (`tag-release.yml`) runs every pre-tag gate on the certified release-branch HEAD, then tags it from
+  Actions and dispatches Release on the tag. A rerun reuses a tag already on the candidate. Release
+  uses `docs/releases/vX.Y.Z.md` as the body (this was a local driver step). Marketplace publish is
+  pinned to vsce 4.0.0, the version that packages the VSIXs, with `--skip-duplicate` so a rerun is
+  safe. Contract test: `scripts/checks/test-release-tag-workflow.mjs`. **Left:** the first real run
+  (v0.22.0), which is the done-when check: candidate to Marketplace with one click.
 - [ ] **W5 Flaky tests fixed at the cause.** 2026-11-09: every intermittent failure in 207 runs
   (2026-11-03 to -09) is fixed at its cause or instrumented. Per-test causes and fixes are in
   [flaky-test stability](docs/releases/flaky-test-stability.md) ("Root causes found"); the

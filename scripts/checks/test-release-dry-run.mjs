@@ -74,6 +74,11 @@ try {
   run = execute(prepare, { draft: 'v1.2.3', existing: true, dryRun: 'false' });
   assert.equal(run.status, 0, run.output);
   assert.match(run.calls.at(-1), /^release edit v1\.2\.3 --draft/, 'A real release keeps reusing its draft.');
+  assert.match(run.calls.at(-1), /--notes-file docs\/releases\/v1\.2\.3\.md/, 'A real release body is the curated notes.');
+  run = execute(prepare, { draft: 'v1.2.3', dryRun: 'false' });
+  assert.equal(run.status, 0, run.output);
+  assert.match(run.calls.at(-1), /^release create v1\.2\.3 --draft --notes-file docs\/releases\/v1\.2\.3\.md /);
+  assert.match(step('prepare-release', 'Checkout release notes'), /^        if: env\.DRY_RUN != 'true'$/m);
 
   const remove = uploadCommands('discard-dry-run-draft', 'Delete the draft this run created');
   run = execute(remove, { draft: 'dry-run-v1.2.3-77', existing: true });

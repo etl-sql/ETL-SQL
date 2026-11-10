@@ -175,7 +175,7 @@ What still depends on the owner's machine today, and where it goes:
 |---|---|
 | Workstation gate evidence | Removed (W4b) |
 | Operator deployment evidence, run in a local worktree and uploaded | Hosted jobs for claims we keep; the rest dropped (W8) |
-| Tag created and pushed by `Invoke-Release.ps1` | A "Release" button (`workflow_dispatch`) that tags the certified commit from Actions |
+| Tag created and pushed by `Invoke-Release.ps1` | A "Release" button (`workflow_dispatch`) that tags the certified commit from Actions. Built 2026-11-10 as **Tag Release** (`tag-release.yml`); first real run pending |
 | VS Code Marketplace | Already in GitHub: `release.yml` job `publish-marketplace` publishes the certified VSIX files with OIDC Trusted Publishing (no token). Keep it |
 
 Marketplace job: it has never run, so it is release-only code (lesson 2). Harden it before v0.22.0:

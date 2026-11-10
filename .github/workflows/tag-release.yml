@@ -1,0 +1,185 @@
+name: Tag Release
+
+# The release button. Run it on the release branch with the certified commit. It checks every gate
+# the tag needs, tags that commit from Actions and starts Release on the tag. Nothing runs on a
+# maintainer's machine. Tags are immutable (the v* ruleset blocks update and deletion), so every
+# check runs before the tag is created: a failure here costs a rerun, not a version number.
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: 'Certified release-branch HEAD to tag (full 40-character SHA)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tag-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  # 1. Candidate identity, final metadata, exact-candidate CI and CodeQL, certified Windows packages.
+  verify-candidate:
+    name: Verify certified candidate
+    timeout-minutes: 40
+    runs-on: windows-latest
+    outputs:
+      tag: ${{ steps.candidate.outputs.tag }}
+      version: ${{ steps.candidate.outputs.version }}
+    steps:
+      - name: Checkout
+        timeout-minutes: 9
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Verify candidate is the release branch HEAD
+        id: candidate
+        timeout-minutes: 3
+        shell: pwsh
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          if ($env:GITHUB_REF -notmatch '^refs/heads/release/v\d+\.\d+\.\d+$') { throw 'Run Tag Release on a release branch.' }
+          if ($env:CANDIDATE_SHA -cnotmatch '^[0-9a-f]{40}$' -or $env:CANDIDATE_SHA -cne $env:GITHUB_SHA) {
+            throw 'candidate_sha must equal the release branch HEAD this run was started on. Certify the new HEAD first.'
+          }
+          [xml]$props = Get-Content Directory.Build.props
+          $version = [string]$props.Project.PropertyGroup.VersionPrefix
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "VersionPrefix '$version' is not a release version." }
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Candidate $env:CANDIDATE_SHA on $env:GITHUB_REF_NAME will be tagged v$version."
+
+      - name: Require final release metadata
+        timeout-minutes: 4
+        shell: pwsh
+        env:
+          TAG_NAME: ${{ steps.candidate.outputs.tag }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/check-release-metadata.mjs', $env:TAG_NAME) -EvidenceDirectory release-validation/supervisors/metadata -TimeoutSeconds 120
+
+      - name: Require the version tag to be free or already on the candidate
+        timeout-minutes: 3
+        shell: pwsh
+        env:
+          TAG_NAME: ${{ steps.candidate.outputs.tag }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/check-release-tag.mjs', $env:TAG_NAME, $env:CANDIDATE_SHA, 'origin') -EvidenceDirectory release-validation/supervisors/tag -TimeoutSeconds 120
+
+      - name: Require exact-candidate CI and CodeQL evidence
+        timeout-minutes: 12
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-hosted-release-evidence.mjs', $env:GITHUB_REPOSITORY, $env:CANDIDATE_SHA, 'release-validation/hosted-release-evidence.json') -EvidenceDirectory release-validation/supervisors/hosted -TimeoutSeconds 600
+
+      - name: Require certified pre-tag Windows packages
+        timeout-minutes: 15
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          VERSION: ${{ steps.candidate.outputs.version }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-certified-windows.mjs', $env:GITHUB_REPOSITORY, $env:CANDIDATE_SHA, $env:VERSION, 'release-validation/selected-windows') -EvidenceDirectory release-validation/supervisors/windows -TimeoutSeconds 780
+
+      - name: Upload verification logs
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: tag-release-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/supervisors/
+          if-no-files-found: warn
+          retention-days: 30
+
+  # 2. The operator submission for this exact candidate (still a human submission, W8).
+  verify-operator:
+    name: Verify operator release evidence
+    needs: verify-candidate
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # GitHub requires write access to read unpublished evidence drafts.
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 6
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require candidate operator submission
+        timeout-minutes: 22
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          VERSION: ${{ needs.verify-candidate.outputs.version }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-operator-release-evidence.mjs', $env:GITHUB_REPOSITORY, $env:CANDIDATE_SHA, $env:VERSION, 'selected-operator') -EvidenceDirectory release-validation/supervisors/operator -TimeoutSeconds 1200
+      - name: Retain operator diagnostics
+        if: always()
+        timeout-minutes: 2
+        uses: actions/upload-artifact@v7
+        with:
+          name: tag-release-operator-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/supervisors/operator/
+          if-no-files-found: warn
+          retention-days: 30
+
+  # 3. Tag the candidate and start Release on the tag. A tag pushed with the Actions token does not
+  # fire Release's v* push trigger, so the run is dispatched explicitly. A rerun after a partial
+  # failure reuses a tag that is already on the candidate.
+  tag:
+    name: Tag and start Release
+    needs: [verify-candidate, verify-operator]
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout
+        timeout-minutes: 6
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          fetch-depth: 0
+
+      - name: Create and push the release tag
+        timeout-minutes: 3
+        shell: bash
+        env:
+          TAG_NAME: ${{ needs.verify-candidate.outputs.tag }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          node scripts/check-release-tag.mjs "$TAG_NAME" "$CANDIDATE_SHA" origin
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG_NAME" >/dev/null; then
+            echo "Tag $TAG_NAME is already on $CANDIDATE_SHA; reusing it."
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git tag -a "$TAG_NAME" -m "ETL-SQL $TAG_NAME" "$CANDIDATE_SHA"
+            git push origin "refs/tags/$TAG_NAME"
+          fi
+
+      - name: Start Release on the tag
+        timeout-minutes: 3
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.verify-candidate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG_NAME" -f tag="$TAG_NAME"
+          echo "Release started for $TAG_NAME: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/release.yml"

@@ -66,6 +66,15 @@ those rehearsals do not need to be repeated for each release and do not certify 
 > allow a partial release to resume without `-Force`. Conflicting tags or failed lookups block it.
 > A branch with the same name is preserved; release operations address the tag by its full ref.
 >
+> Since v0.22.0 the tag comes from GitHub, not a workstation. Run the **Tag Release** workflow
+> (`tag-release.yml`) on the release branch with `candidate_sha` set to the certified HEAD. It
+> checks final metadata, the tag (free, or already on the candidate), exact-candidate CI and CodeQL,
+> the certified Windows packages and the operator submission. Then it creates the annotated tag
+> and starts **Release** on it. Tags are immutable, so nothing is tagged until every check passes.
+> A rerun reuses a tag already on the candidate. Release takes its body from
+> `docs/releases/vX.Y.Z.md`. Its Marketplace job publishes with the vsce version that packaged the
+> VSIXs and skips a version and platform the Marketplace already has, so it can be rerun.
+>
 > Since v0.22.0 the local pre-release gate (`Test-PreRelease.ps1`) is an optional developer tool.
 > Release drivers no longer read its state, and no workstation run is part of the release. The
 > checks that used to run only there (EBNF, SLT, 10M-row spill, Smoke and Standard scale) run in
