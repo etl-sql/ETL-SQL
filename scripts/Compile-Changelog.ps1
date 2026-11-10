@@ -100,6 +100,7 @@ function Test-RequiresChangelogCoverage {
         $normalized.StartsWith("samples/") -or
         $normalized.StartsWith("docs/") -or
         $normalized.StartsWith("scripts/") -or
+        $normalized.StartsWith("deploy/") -or
         $normalized.StartsWith(".github/workflows/")
 }
 

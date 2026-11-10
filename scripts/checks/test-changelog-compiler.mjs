@@ -106,10 +106,13 @@ try {
     ['unicode-unstaged', 'src/é.cs', 'unstaged'],
     ['unicode-staged', 'src/é.cs', 'staged'],
     ['unicode-committed', 'src/é.cs', 'committed'],
+    // Shipped install files (systemd units, environment installers) are user-facing too.
+    ['deploy-unit', 'deploy/systemd/etl-sql.service', 'untracked'],
     ...(process.platform === 'win32' ? [] : [['newline-path', 'src/line\nbreak.cs', 'untracked']]),
   ]) {
     const cwd = coverageFixture(name);
     const base = gitAt(cwd, 'rev-parse', 'HEAD');
+    mkdirSync(path.dirname(path.join(cwd, changedPath)), { recursive: true });
     writeFileSync(path.join(cwd, changedPath), '// changed feature\n');
     if (status === 'staged' || status === 'committed') gitAt(cwd, 'add', changedPath);
     if (status === 'committed') gitAt(cwd, '-c', 'user.name=Changelog fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'feature without coverage');
