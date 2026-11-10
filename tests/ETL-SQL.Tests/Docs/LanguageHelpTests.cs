@@ -115,7 +115,9 @@ namespace ETL_SQL.Tests
             linter.AddRule(new VisualMappingCompletenessRule());
             linter.AddRule(new PageVisualReferencedRule());
 
-            foreach (var example in GetParseableReportHelpExamples())
+            var examples = GetParseableReportHelpExamples().ToList();
+            Assert.NotEmpty(examples); // A moved help folder or changed fence would otherwise lint nothing.
+            foreach (var example in examples)
             {
                 var script = new Parser(new Lexer(example.Script).Tokenize(), example.Script).Parse();
                 await linter.AnalyzeAsync(script, new DefaultLintContext());

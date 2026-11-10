@@ -751,7 +751,15 @@ namespace ETL_SQL.Tests.Reporting
                     Assert.DoesNotContain(transport, persisted, StringComparison.Ordinal);
                 }
 
-                foreach (var file in Directory.EnumerateFiles(rootA).Concat(Directory.EnumerateFiles(rootB)))
+                var scanned = Directory.EnumerateFiles(rootA, "*", SearchOption.AllDirectories)
+                    .Concat(Directory.EnumerateFiles(rootB, "*", SearchOption.AllDirectories))
+                    .Select(Path.GetFullPath)
+                    .ToList();
+                // The byte scan proves nothing unless it read the persisted datasets and the export.
+                foreach (var expected in new[] { registryA.Stored("&secret_source").ParquetFilePath, registryB.Stored("&secret_import").ParquetFilePath, exportPath })
+                    Assert.Contains(Path.GetFullPath(expected), scanned, StringComparer.OrdinalIgnoreCase);
+
+                foreach (var file in scanned)
                 {
                     Assert.DoesNotContain(atRestA, Path.GetFileName(file), StringComparison.Ordinal);
                     Assert.DoesNotContain(atRestB, Path.GetFileName(file), StringComparison.Ordinal);
