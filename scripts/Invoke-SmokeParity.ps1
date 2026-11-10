@@ -20,6 +20,10 @@
 .PARAMETER KeepRunning
     Leave the containers up for inspection after the comparison.
 
+.PARAMETER CompareOnly
+    Run nothing: judge the local.json and docker.json already in -ResultsDirectory. Matching
+    outcomes are not enough; a check that failed on both targets still fails the run.
+
 .EXAMPLE
     pwsh -File scripts/Invoke-SmokeParity.ps1
     pwsh -File scripts/Invoke-SmokeParity.ps1 -SkipDocker
@@ -31,6 +35,7 @@ param(
     [switch]$SkipLocal,
     [switch]$SkipDocker,
     [switch]$KeepRunning,
+    [switch]$CompareOnly,
     [string]$ResultsDirectory = "smoke-parity"
 )
 
@@ -39,7 +44,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repoRoot
 
 $acceptance = Join-Path $PSScriptRoot "Invoke-AcceptanceProfile.ps1"
-$resultsDir = Join-Path $repoRoot $ResultsDirectory
+$resultsDir = [System.IO.Path]::Combine($repoRoot, $ResultsDirectory)
 if (-not (Test-Path $resultsDir)) { New-Item -ItemType Directory -Path $resultsDir -Force | Out-Null }
 
 $adminPassword = "Admin@12345!"
@@ -68,6 +73,9 @@ $localProcess = $null
 $containerName = "etlsql-smoke-parity"
 $localResults = Join-Path $resultsDir "local.json"
 $dockerResults = Join-Path $resultsDir "docker.json"
+# The acceptance profile exits non-zero on any failed check, or when it stops before recording one.
+$acceptanceExit = @{}
+if ($CompareOnly) { $SkipLocal = $true; $SkipDocker = $true }
 
 try {
     # ── Local ───────────────────────────────────────────────────────────────────────────────────
@@ -105,6 +113,7 @@ try {
 
         & $acceptance -BaseUrl "http://127.0.0.1:$LocalPort" `
             -ScriptRootPath (Join-Path $root "scripts") -ResultsPath $localResults
+        $acceptanceExit.local = $LASTEXITCODE
     }
 
     # ── Docker ──────────────────────────────────────────────────────────────────────────────────
@@ -144,6 +153,7 @@ try {
 
         & $acceptance -BaseUrl "http://127.0.0.1:$DockerPort" `
             -ScriptRootPath $mount -ResultsPath $dockerResults
+        $acceptanceExit.docker = $LASTEXITCODE
     }
 }
 finally {
@@ -157,9 +167,13 @@ finally {
 }
 
 # ── Comparison ──────────────────────────────────────────────────────────────────────────────────
-if ($SkipLocal -or $SkipDocker) {
+# Two runs that fail the same check agree, but they do not pass: a Portal regression fails both.
+$failedRuns = @($acceptanceExit.Keys | Where-Object { $acceptanceExit[$_] -ne 0 } | Sort-Object |
+        ForEach-Object { "$_ acceptance exited $($acceptanceExit[$_])" })
+if (($SkipLocal -or $SkipDocker) -and -not $CompareOnly) {
     Write-Host ""
     Write-Host "Only one target ran, so this was not a parity check." -ForegroundColor Yellow
+    if ($failedRuns.Count) { $failedRuns | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }; exit 1 }
     exit 0
 }
 
@@ -170,23 +184,31 @@ $localMap = @{}; $local | ForEach-Object { $localMap[$_.check] = $_.outcome }
 $dockerMap = @{}; $docker | ForEach-Object { $dockerMap[$_.check] = $_.outcome }
 
 $differences = @()
+$failedChecks = @()
 foreach ($name in ($localMap.Keys + $dockerMap.Keys | Sort-Object -Unique)) {
     $l = if ($localMap.ContainsKey($name)) { $localMap[$name] } else { "(absent)" }
     $d = if ($dockerMap.ContainsKey($name)) { $dockerMap[$name] } else { "(absent)" }
     if ($l -ne $d) { $differences += "  $name : local=$l  docker=$d" }
+    elseif ($l -eq 'fail') { $failedChecks += "  $name : failed on both targets" }
 }
 
 Write-Host ""
 Write-Host "Parity: $($localMap.Count) local checks vs $($dockerMap.Count) container checks" -ForegroundColor White
 
-if ($differences.Count -eq 0) {
-    Write-Host "Both targets ran the same checks with the same outcomes." -ForegroundColor Green
+if ($differences.Count -eq 0 -and $failedChecks.Count -eq 0 -and $failedRuns.Count -eq 0) {
+    Write-Host "Both targets ran the same checks with the same outcomes, and every check passed or was skipped on both." -ForegroundColor Green
     exit 0
 }
 
-Write-Host "The two targets disagree:" -ForegroundColor Red
-$differences | ForEach-Object { Write-Host $_ -ForegroundColor Red }
-Write-Host ""
-Write-Host "A difference here is a parity failure even if both runs exited zero -- one target" -ForegroundColor Red
-Write-Host "proved less than the other." -ForegroundColor Red
+if ($differences.Count) {
+    Write-Host "The two targets disagree:" -ForegroundColor Red
+    $differences | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+    Write-Host ""
+    Write-Host "A difference here is a parity failure even if both runs exited zero -- one target" -ForegroundColor Red
+    Write-Host "proved less than the other." -ForegroundColor Red
+}
+if ($failedChecks.Count -or $failedRuns.Count) {
+    Write-Host "Acceptance failed:" -ForegroundColor Red
+    $failedChecks + @($failedRuns | ForEach-Object { "  $_" }) | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+}
 exit 1
