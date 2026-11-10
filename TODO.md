@@ -224,7 +224,10 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   `verify-browser-shards`, `check-release-tag`, `check-release-metadata`, `publish-release`,
   `collect-certified-windows`/`-macos`, the Windows and macOS package manifests, `windows-payload`,
   `report-package-upload-recovery`, `test-deb-upgrade`, `build-linux-packages`, `Test-MsiUpgrade`,
-  `Test-MsiPortalUpgrade`, `Merge-EngineCoverage`, `test-smoke` and `test-vsix-acceptance` have no defects, and a sweep of
+  `Test-MsiPortalUpgrade`, `Merge-EngineCoverage`, `test-smoke`, `test-vsix-acceptance`, `check-consumer-contracts`,
+  `Test-EnterpriseHardeningCertification`, `Measure-StudioPerformance`, `Test-SpillAllocProfile`,
+  `Test-HaSoakContracts`, `sync-assets`, `Publish-WindowsPayload`, `Build-WindowsNativePackages`,
+  `build-msi` and `MsiImpact.Helpers` have no defects, and a sweep of
   `scripts/` for empty catches, `|| true` and dynamic code found only cleanup and polls. Six
   defects, fixed:
   (1) `Test-AllSamples.ps1 -ReleaseMode` skipped the Docker, PostgreSQL, Portal and Orchestrator
