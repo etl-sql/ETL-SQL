@@ -25,6 +25,7 @@ Returns the converted value using the requested target type.
 
 - Use `CAST` when invalid data should stop the script.
 - Casting to a string type gives the same text on every server, whatever its locale: dates are ISO `yyyy-MM-dd HH:mm:ss` (`2024-01-08 00:00:00`; fractional seconds only when present, then the offset for a `DATETIMEOFFSET`) and numbers use `.` as the decimal point. Use [`FORMAT`](../string/format.md) for a locale-specific layout.
+- Text cast to a date type reads the same on every server: ISO first (`2024-01-08`, `2024-01-08 09:30:05`), then slash dates day first (`08/01/2024` is 8 January). A slash date whose first number cannot be a month (`01/25/2024`) reads month first. Month names are English only. Every engine path that reads text as a date (`DATEPART`, `DATENAME`, `EXTRACT`, `DATEDIFF`, comparisons) uses the same order.
 - Use [`TRY_CAST`](try_cast.md) when dirty source data should produce `NULL` instead of an error.
 - In engine-context queries, `CAST` uses ETL-SQL conversion behavior. Inside `EXECUTE connection BEGIN ... END`, use the target database's native conversion syntax.
 

@@ -20,6 +20,10 @@ Returns a string with each word capitalized and remaining characters lowercased.
 
 Returns `NULL` when `string` is `NULL`.
 
+## Remarks
+
+- Casing is the same on every server, whatever its locale: `i` and `I` are never the Turkish dotted or dotless forms.
+
 ## Examples
 
 ```sql

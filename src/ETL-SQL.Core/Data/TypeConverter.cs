@@ -26,9 +26,9 @@ public static class TypeConverter
         ["SMALLINT"] = v => Math.Truncate(Convert.ToDecimal(v, CultureInfo.InvariantCulture)),
         ["BIGINT"] = v => Math.Truncate(Convert.ToDecimal(v, CultureInfo.InvariantCulture)),
         ["REAL"] = v => Convert.ToSingle(v, CultureInfo.InvariantCulture),
-        ["DATETIME"] = v => v is DateTime dt ? dt : (v is DateTimeOffset dto ? dto.DateTime : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2 : DateTime.Parse(v.ToString() ?? ""))),
-        ["DATE"] = v => v is DateTime dt ? dt.Date : (v is DateTimeOffset dto ? dto.DateTime.Date : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2.Date : DateTime.Parse(v.ToString() ?? "").Date)),
-        ["TIMESTAMP"] = v => v is DateTime dt ? dt : (v is DateTimeOffset dto ? dto.DateTime : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2 : DateTime.Parse(v.ToString() ?? ""))),
+        ["DATETIME"] = v => v is DateTime dt ? dt : (v is DateTimeOffset dto ? dto.DateTime : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2 : DateTime.Parse(v.ToString() ?? "", CultureInfo.InvariantCulture))),
+        ["DATE"] = v => v is DateTime dt ? dt.Date : (v is DateTimeOffset dto ? dto.DateTime.Date : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2.Date : DateTime.Parse(v.ToString() ?? "", CultureInfo.InvariantCulture).Date)),
+        ["TIMESTAMP"] = v => v is DateTime dt ? dt : (v is DateTimeOffset dto ? dto.DateTime : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2 : DateTime.Parse(v.ToString() ?? "", CultureInfo.InvariantCulture))),
 
         ["TIME"] = v => TimeSpan.Parse(v.ToString() ?? "00:00:00"),
         ["STRING"] = v => ToInvariantText(v),

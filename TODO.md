@@ -78,10 +78,11 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   writes a TRX) and deployment phases (the strict TRX check alone). The scale smoke compare then
   refused a 4-core runner's GC profile against the 24-core baseline; report-only compares now warn
   on it (`9592e995d`). **Left:** a green hosted run of the whole job; the Standard scale tier has
-  not run on a hosted runner yet. Still
-  locale-dependent: chart labels and variable text in report snapshots
-  (`samples/**/*.snapshot.json` hold en-US dates), string concatenation of dates, and text-to-date
-  casts (`DateTime.Parse` with no culture).
+  not run on a hosted runner yet. The other locale-dependent output is fixed (2026-11-10):
+  concatenation and string functions use the CAST text, casing is invariant, `DATENAME` is English,
+  text dates read the same on every path (owner: slash dates day first everywhere), report cells
+  and parameter text are ISO (owner: midnight dropped), and `FLATFILE` writes invariant text unless
+  `CULTURE`/`DATE_FORMAT` is set. Culture tests run under en-US, de-DE and tr-TR.
 - [ ] **W4c GitHub is the source of truth.** **Left:** a `workflow_dispatch` "Release" that tags the
   certified commit from Actions; pin `@vscode/vsce`; make the Marketplace job skip versions already
   published.

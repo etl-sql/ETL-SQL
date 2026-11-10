@@ -240,7 +240,7 @@ public static class ColumnBatchAdapter
             case "TIMESTAMP":
                 return BuildFixed(rows, ordinal, value => value is DateTime date ? date : Convert.ToDateTime(value));
             case "DATETIMEOFFSET":
-                return BuildFixed(rows, ordinal, value => value is DateTimeOffset dto ? dto : (EvaluationUtils.TryToDateTimeOffset(value, out var parsedDto) ? parsedDto : DateTimeOffset.Parse(value.ToString()!)));
+                return BuildFixed(rows, ordinal, value => value is DateTimeOffset dto ? dto : (EvaluationUtils.TryToDateTimeOffset(value, out var parsedDto) ? parsedDto : DateTimeOffset.Parse(value.ToString()!, System.Globalization.CultureInfo.InvariantCulture)));
             case "TIME":
                 return BuildFixed(rows, ordinal, value => value is TimeSpan time ? time : TimeSpan.Parse(value.ToString()!));
             case "GUID":

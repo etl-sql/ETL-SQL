@@ -186,7 +186,7 @@ public static class WatermarkManager
     public static int CompareWatermarkValues(object a, object b)
     {
         if (a is DateTime da && b is DateTime db) return da.CompareTo(db);
-        if (DateTime.TryParse(a.ToString(), out var parsedA) && DateTime.TryParse(b.ToString(), out var parsedB))
+        if (EvaluationUtils.TryToDateTime(a, out var parsedA) && EvaluationUtils.TryToDateTime(b, out var parsedB))
             return parsedA.CompareTo(parsedB);
         if (decimal.TryParse(a.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var decA)
             && decimal.TryParse(b.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var decB))

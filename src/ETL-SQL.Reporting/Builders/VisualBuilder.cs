@@ -1389,16 +1389,11 @@ namespace ETL_SQL.Reporting.Builders
         }
 
         /// <summary>
-        /// Manifest cells carry numbers in invariant form ("1.5", never "1,5") so every server-side
-        /// parse below, the client runtime, and exports read the same value on any host culture.
+        /// Manifest cells carry numbers in invariant form ("1.5", never "1,5") and dates as ISO text,
+        /// so every server-side parse below, the client runtime, and exports read the same value on
+        /// any host culture.
         /// </summary>
-        private static string? ToCellText(object? value) => value switch
-        {
-            null => null,
-            decimal or double or float or int or long or short or byte or sbyte or uint or ulong or ushort
-                => Convert.ToString(value, CultureInfo.InvariantCulture),
-            _ => value.ToString()
-        };
+        private static string? ToCellText(object? value) => ReportValueText.Of(value);
 
         private static bool TryParseNumber(string? text, out decimal value) =>
             decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out value);

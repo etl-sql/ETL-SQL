@@ -62,7 +62,7 @@ public static class EvaluationUtils
 
             if (decimal.TryParse(Convert.ToString(a, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var m1) && decimal.TryParse(Convert.ToString(b, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var m2)) return m1 == m2;
 
-            if (DateTime.TryParse(a?.ToString(), out var dt1) && DateTime.TryParse(b?.ToString(), out var dt2)) return dt1.Year == dt2.Year && dt1.Month == dt2.Month && dt1.Day == dt2.Day && dt1.Hour == dt2.Hour && dt1.Minute == dt2.Minute && dt1.Second == dt2.Second;
+            if (TryToDateTime(a, out var dt1) && TryToDateTime(b, out var dt2)) return dt1.Year == dt2.Year && dt1.Month == dt2.Month && dt1.Day == dt2.Day && dt1.Hour == dt2.Hour && dt1.Minute == dt2.Minute && dt1.Second == dt2.Second;
         }
         catch (Exception ex)
         {
@@ -158,6 +158,13 @@ public static class EvaluationUtils
             return true;
         }
 
+        // Slash dates are day first, as CAST AS DATE reads them; the invariant parse below is month first.
+        if (s.Contains('/') && SafeTryParseDate(s, out var slashDate))
+        {
+            dto = new DateTimeOffset(slashDate);
+            return true;
+        }
+
         if (DateTimeOffset.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dto))
         {
             return true;
@@ -166,6 +173,19 @@ public static class EvaluationUtils
         return false;
     }
 
+    private static readonly string[] DayFirstSlashFormats =
+    [
+        "dd/MM/yyyy", "d/M/yyyy",
+        "dd/MM/yyyy HH:mm:ss", "d/M/yyyy H:mm:ss",
+        "dd/MM/yyyy HH:mm", "d/M/yyyy H:mm",
+        "dd/MM/yyyy HH:mm:ss.FFFFFFF", "d/M/yyyy H:mm:ss.FFFFFFF"
+    ];
+
+    /// <summary>
+    /// Text read as a date, the same on every host: ISO first, slash dates day first
+    /// (<c>08/01/2024</c> is 8 January), then a few unambiguous forms and the invariant culture.
+    /// CAST AS DATE and every engine path that reads text as a date use this order.
+    /// </summary>
     public static bool SafeTryParseDate(string s, out DateTime dt)
     {
         s = s?.Trim() ?? "";
@@ -174,9 +194,9 @@ public static class EvaluationUtils
         // 1. Try ISO first
         if (DateTime.TryParseExact(s, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt)) return true;
 
-        // 2. Try dd/MM/yyyy specifically (PRIORITY)
-        if (DateTime.TryParseExact(s, "dd/MM/yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt)) return true;
-        if (DateTime.TryParseExact(s, "d/M/yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt)) return true;
+        // 2. Slash dates are day first on every host and every path (owner, 2026-11-10); month first
+        //    only when the first number cannot be a month (step 4).
+        if (DateTime.TryParseExact(s, DayFirstSlashFormats, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt)) return true;
 
         // 3. Manual fallback for dd/MM/yyyy
         if (s.Contains("/"))

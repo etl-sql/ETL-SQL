@@ -57,7 +57,7 @@ public static class BinaryOperatorFactory
             // and returning NULL for the other operators.
             if (IsFloatingPoint(a) || IsFloatingPoint(b))
                 return DoubleOp(a, b, op);
-            return op == "+" ? a?.ToString() + b?.ToString() : null;
+            return op == "+" ? TypeConverter.ToInvariantText(a) + TypeConverter.ToInvariantText(b) : null;
         }
         try
         {

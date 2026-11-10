@@ -10,7 +10,7 @@ public static class VariableOverrideValueParser
         if (int.TryParse(raw, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var integer)) return integer;
         if (double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var number)) return number;
         if (bool.TryParse(raw, out var boolean)) return boolean;
-        if (DateTime.TryParse(raw, out var dateTime)) return dateTime;
+        if (ETL_SQL.Core.Data.EvaluationUtils.SafeTryParseDate(raw, out var dateTime)) return dateTime;
         return raw.Trim('\'', '"');
     }
 }

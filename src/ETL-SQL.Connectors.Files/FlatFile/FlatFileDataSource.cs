@@ -45,9 +45,23 @@ namespace ETL_SQL.Connectors.FlatFile
         private readonly List<FixedWidthColumn>? _fixedColumns;
         private readonly bool _trim = true;
         private readonly CultureInfo _culture = CultureInfo.InvariantCulture;
+        private readonly bool _cultureNamed;
         private readonly ILogger? _logger;
         private readonly IExecutionContext? _context; // Optional for backward compatibility, but required for security enforcement
         private bool _hasValidatedAccess = false;
+        /// <summary>
+        /// A cell as the file holds it, the same on every host: DATE_FORMAT for dates when set, then
+        /// the CULTURE option's format when named, otherwise the CAST AS STRING text (ISO dates,
+        /// invariant numbers). The reader parses with the same settings.
+        /// </summary>
+        private string FormatCell(object? value) => value switch
+        {
+            null => "",
+            DateTime date when _dateFormat != null => date.ToString(_dateFormat, _culture),
+            DateTimeOffset offset when _dateFormat != null => offset.ToString(_dateFormat, _culture),
+            IFormattable formattable when _cultureNamed => formattable.ToString(null, _culture),
+            _ => ETL_SQL.Core.Data.TypeConverter.ToInvariantText(value) ?? ""
+        };
         private readonly bool _transactional = false;
 
         private class FixedWidthColumn
@@ -219,7 +233,7 @@ namespace ETL_SQL.Connectors.FlatFile
                 // Culture is already initialized to InvariantCulture
                 if (options.TryGetValue("CULTURE", out var cult))
                 {
-                    try { _culture = new CultureInfo(cult); }
+                    try { _culture = new CultureInfo(cult); _cultureNamed = true; }
                     catch { _logger?.Debug("[FlatFileDataSource] Invalid culture '{Culture}', falling back to Invariant.", cult); }
                 }
 
@@ -985,7 +999,7 @@ namespace ETL_SQL.Connectors.FlatFile
                                 var sb = new System.Text.StringBuilder();
                                 foreach (var col in _fixedColumns)
                                 {
-                                    var raw = row[col.Name]?.ToString() ?? "";
+                                    var raw = FormatCell(row[col.Name]);
 
                                     // A sign constraint is a domain rule, not a width rule, so it is
                                     // checked before overflow: INT(N,+) rejects negatives outright
@@ -1060,7 +1074,7 @@ namespace ETL_SQL.Connectors.FlatFile
                                     if ((cellVal == null || cellVal == DBNull.Value) && _nullAsWriteValue != null)
                                         fieldStr = _nullAsWriteValue;
                                     else
-                                        fieldStr = cellVal?.ToString() ?? "";
+                                        fieldStr = FormatCell(cellVal);
                                     values.Add(FormatField(fieldStr));
                                 }
                                 line = string.Join(_delimiter.ToString(), values);

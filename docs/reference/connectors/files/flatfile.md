@@ -17,9 +17,9 @@ Aliases: `CSV`, `TSV`
 | `TEXT_QUALIFIER` | Quote character: `DOUBLEQUOTE`, `SINGLEQUOTE`, or a literal char | No |
 | `ESCAPE_CHAR` | Character used to escape delimiters within fields (e.g. `'\\'`) | No |
 | `ENCODING` | `UTF8`, `ANSI`, `UTF16`, `LATIN1`, `UNICODE` (default: `UTF8`) | No |
-| `CULTURE` | Locale for date/number parsing (e.g. `en-US`, `de-DE`) | No |
+| `CULTURE` | Locale for reading and writing dates and numbers (e.g. `en-US`, `de-DE`). Without it, files are read and written the same on every host: dates as ISO `yyyy-MM-dd HH:mm:ss`, numbers with `.` | No |
 | `NULL_AS` | How nulls are represented. **No default** — when omitted, blank and other field values pass through unchanged. Single token: `NULL` · `EMPTY` · `BACKSLASH_N`. Multi-value list: `NULL_AS=['NULL','EMPTY']` (see [NULL_AS defaults and multi-value syntax](#null_as-defaults-and-multi-value-syntax)). | No |
-| `DATE_FORMAT` | Custom date parsing pattern (e.g. `'yyyy-MM-dd'`) | No |
+| `DATE_FORMAT` | Custom date pattern for reading and writing (e.g. `'yyyy-MM-dd'`) | No |
 | `START_AT` | 1-based line number to start reading | No |
 | `END_AT` | 1-based line number to stop reading | No |
 | `TRIM` | `ON`/`OFF` — remove leading/trailing whitespace from fields | No |

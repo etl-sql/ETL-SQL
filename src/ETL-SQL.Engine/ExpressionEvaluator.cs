@@ -1226,8 +1226,9 @@ public class ExpressionEvaluator
         if (bin.Operator == TokenType.CONCAT)
         {
             if (leftVal.IsNull() || rightVal.IsNull()) return null;
-            var leftText = leftVal?.ToString() ?? "";
-            var rightText = rightVal?.ToString() ?? "";
+            // Same text as CAST AS STRING, so a date or number concatenates alike on every host.
+            var leftText = TypeConverter.ToInvariantText(leftVal) ?? "";
+            var rightText = TypeConverter.ToInvariantText(rightVal) ?? "";
             _context.SecurityService.ValidateStringSize(
                 (long)leftText.Length + rightText.Length,
                 _context.MaxStringResultSize,
@@ -1409,8 +1410,7 @@ public class ExpressionEvaluator
         if (val == null) return null;
 
         DateTime dt;
-        if (val is DateTime dateTime) dt = dateTime;
-        else if (!DateTime.TryParse(val.ToString(), out dt)) return null;
+        if (!EvaluationUtils.TryToDateTime(val, out dt)) return null;
 
         return ext.Field.ToUpperInvariant() switch
         {

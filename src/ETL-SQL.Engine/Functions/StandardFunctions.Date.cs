@@ -54,14 +54,16 @@ namespace ETL_SQL.Engine.Functions
         {
             if (args.Count < 2 || args[1] == null) return null;
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
-            if (!DateTime.TryParse(args[1]?.ToString(), out var dt)) throw new ExecutionException($"Invalid date format for DATENAME: {args[1]}");
+            if (!EvaluationUtils.TryToDateTime(args[1], out var dt)) throw new ExecutionException($"Invalid date format for DATENAME: {args[1]}");
+            // English names on every host; FORMAT gives names in a chosen culture.
+            var invariant = System.Globalization.CultureInfo.InvariantCulture;
             return part switch
             {
-                "MONTH" or "MM" or "M" => dt.ToString("MMMM"),
-                "WEEKDAY" or "DW" or "W" => dt.ToString("dddd"),
-                "YEAR" or "YY" or "YYYY" => dt.Year.ToString(),
-                "QUARTER" or "QQ" or "Q" => "Q" + ((dt.Month - 1) / 3 + 1),
-                _ => dt.ToString()
+                "MONTH" or "MM" or "M" => dt.ToString("MMMM", invariant),
+                "WEEKDAY" or "DW" or "W" => dt.ToString("dddd", invariant),
+                "YEAR" or "YY" or "YYYY" => dt.Year.ToString(invariant),
+                "QUARTER" or "QQ" or "Q" => "Q" + ((dt.Month - 1) / 3 + 1).ToString(invariant),
+                _ => TypeConverter.ToInvariantText(dt)
             };
         }
 
@@ -69,7 +71,7 @@ namespace ETL_SQL.Engine.Functions
         {
             if (args.Count < 2 || args[1] == null) return null;
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
-            if (!DateTime.TryParse(args[1]?.ToString(), out var dt)) throw new ExecutionException($"Invalid date format for DATEPART: {args[1]}");
+            if (!EvaluationUtils.TryToDateTime(args[1], out var dt)) throw new ExecutionException($"Invalid date format for DATEPART: {args[1]}");
             return part switch
             {
                 "YEAR" or "YY" or "YYYY" => (decimal)dt.Year,

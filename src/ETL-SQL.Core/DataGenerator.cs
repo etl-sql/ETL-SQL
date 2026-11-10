@@ -96,7 +96,7 @@ public class DataGenerator
         decimal step = args.Length > 1 && decimal.TryParse(args[1], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var s) ? s : 1;
         string unit = args.Length > 2 ? args[2].ToUpperInvariant().Trim('\'', '\"') : "";
 
-        if (DateTime.TryParse(startStr, out var startDate))
+        if (ETL_SQL.Core.Data.EvaluationUtils.SafeTryParseDate(startStr, out var startDate))
         {
             return index =>
             {

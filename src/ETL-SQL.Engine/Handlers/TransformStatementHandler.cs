@@ -1083,7 +1083,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             return true;
         }
 
-        return DateTime.TryParse(value?.ToString(), out date);
+        return EvaluationUtils.TryToDateTime(value, out date);
     }
 
     private static object? GetValue(object? val)
