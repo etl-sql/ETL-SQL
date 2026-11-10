@@ -232,7 +232,7 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   `Test-EnterpriseHardeningCertification`, `Measure-StudioPerformance`, `Test-SpillAllocProfile`,
   `Test-HaSoakContracts`, `sync-assets`, `Publish-WindowsPayload`, `Build-WindowsNativePackages`,
   `build-msi` and `MsiImpact.Helpers` have no defects, and a sweep of
-  `scripts/` for empty catches, `|| true` and dynamic code found only cleanup and polls. Nine
+  `scripts/` for empty catches, `|| true` and dynamic code found only cleanup and polls. Eleven
   defects, fixed:
   (1) `Test-AllSamples.ps1 -ReleaseMode` skipped the Docker, PostgreSQL, Portal and Orchestrator
   samples when their containers did not start, so the release sample gate passed without them;
@@ -288,7 +288,16 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   `prepare-vsix-acceptance`, `watch-msi-progress` (progress only; bad data throws instead of
   cancelling), `Prepare-MsiPortalDiagnostic` (a diagnostic dispatch skips the gate job that saves
   the `msi-certified-*` receipt), `build-mac-dmg` (both callers pass the version; `Set-Version`
-  keeps the default current). Every script a workflow calls is now reviewed. **Left:** the rest
+  keeps the default current). Every script a workflow calls is now reviewed. (10) The secret scan
+  (`scan-secrets.js`, release preflight) missed fine-grained `github_pat_` tokens and encrypted
+  PKCS#8 keys, and any line containing `EXAMPLE` skipped every pattern; now covered, with a check
+  that three mutations turn red. (11) The dependency audit's per-project fallback (used when the
+  solution-level `dotnet list package` fails) skipped projects whose own audit also failed and
+  passed on the rest; any unaudited project now fails the phase (today the solution-level audit
+  succeeds, so this only matters if the SDK bug returns). Also reviewed, no defects:
+  `check-workflows`, `TestLane.Helpers` and both callers, `Test-InstallerSources`,
+  `Test-ReleaseVersions` (build-script default versions are overridden by the workflows, and the
+  MSI payload check compares the version). **Left:** the rest
   of `scripts/` and `tests/`; the Portal and Orchestrator samples in GitHub; native installed-MSI
   certification of the fixed installer paths.
 
