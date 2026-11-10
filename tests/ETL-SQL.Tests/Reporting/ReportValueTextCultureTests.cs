@@ -86,6 +86,23 @@ public sealed class ReportValueTextCultureTests
         }
     }
 
+    // Visual queries run while the report is built, after the script has returned; they still read
+    // slash dates in the script's SET DATEFORMAT order.
+    [Fact]
+    public async Task VisualQueriesFollowTheScriptsDateformat()
+    {
+        const string script = """
+            SET DATEFORMAT DMY;
+            CREATE VISUAL Grid AS TABLE (SOURCE = (SELECT CAST('08/01/2024' AS DATE) AS OnDay));
+            """;
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.RedirectOutput = true;
+        evaluator.DisplayExecuteTree = false;
+        await evaluator.Evaluate(new Parser(new Lexer(script).Tokenize(), script).Parse());
+        var manifest = await new ManifestBuilder(evaluator).BuildAsync("report.rptsql");
+        Assert.Equal(["2024-01-08"], manifest.Visuals.Single(visual => visual.Name == "Grid").Rows.Single());
+    }
+
     private static string? Parameter(ReportManifest manifest, string name) =>
         manifest.Parameters.Single(parameter => parameter.Key.TrimStart('@').Equals(name, System.StringComparison.OrdinalIgnoreCase)).Value;
 }

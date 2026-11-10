@@ -22,6 +22,7 @@ Returns `NULL` when `string` is `NULL`.
 
 ## Remarks
 
+- A word is a run of letters and digits, as in Oracle and PostgreSQL: any other character starts a new word, so `INITCAP('o''neil mcdonald-smith')` is `O'Neil Mcdonald-Smith`.
 - Casing is the same on every server, whatever its locale: `i` and `I` are never the Turkish dotted or dotless forms.
 
 ## Examples

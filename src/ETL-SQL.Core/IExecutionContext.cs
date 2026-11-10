@@ -281,6 +281,8 @@ public interface IDataContext
     bool IsResuming { get; set; }
     /// <summary>The start-of-week day used by RELDATE W/WS/WE anchors. Defaults to Monday (ISO 8601).</summary>
     DayOfWeek WeekStartDay { get; set; }
+    /// <summary>How slash dates in text are read (MDY or DMY). Defaults to Engine:DateFormat (MDY). Settable at runtime via SET DATEFORMAT.</summary>
+    ETL_SQL.Core.Data.DateOrder DateOrder { get; set; }
     /// <summary>Hash-mismatch policy for script integrity checks. "Warn" logs and continues; "Block" throws. Defaults to "Warn".</summary>
     string ScriptHashPolicy { get; set; }
     /// <summary>When true, string comparisons are case-sensitive. Defaults to false (SQL Server-style case-insensitive). Settable at runtime via SET CASE_SENSITIVE.</summary>

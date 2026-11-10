@@ -23,9 +23,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Return the same text on every host from concatenation, string functions, casing, `DATENAME`
   and report cells. `'Run ' || @d` gave the locale's date text, `UPPER('i')` gave `İ` on a Turkish
   server, and chart labels read `1/1/2026 12:00:00 AM`. They now use the `CAST ... AS STRING` text,
-  invariant casing and English names; reports carry ISO dates and drop a midnight time. Text read
-  as a date means the same date on every host and every path: ISO first, then slash dates day
-  first, as `CAST` always read them. `FLATFILE` writes the same text on every host (a German host
+  invariant casing and English names, and `INITCAP` capitalizes after an apostrophe (`O'Neil`);
+  reports carry ISO dates and drop a midnight time. Text read as a date means the same date on
+  every host and every path: ISO first, then slash dates month first as in SQL Server and
+  PostgreSQL (`CAST` read them day first). `SET DATEFORMAT DMY` and `Engine:DateFormat` switch to
+  day first. `FLATFILE` writes the same text on every host (a German host
   wrote `"1,5"`) unless `CULTURE` or `DATE_FORMAT` is set. See
   [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 - Run the checks that only the owner's workstation ran (EBNF, SQL logic corpus, 10M-row spill and

@@ -29,6 +29,7 @@
 | [SET SPILL_ENCRYPTION](set-spill-encryption.md) | Controls whether data buffers spilled to local disk during heavy queries are encrypted at rest. |
 | [SET TEMP_TABLE_SPILL_THRESHOLD](set-temp-table-spill-threshold.md) | Sets the row count before a `#temp` table spills its data to disk. |
 | [SET @variable](set-variable.md) | Assigns a value to a declared or implicitly declared session variable. |
+| [SET DATEFORMAT](set-dateformat.md) | Sets how slash dates in text are read: `MDY` (default, 08/01/2026 is 1 August) or `DMY`. |
 | [SET WEEK_START_DAY](set-week-start-day.md) | Sets the first day of the week for RELDATE week-boundary expressions (`W`, `W-1`, `WE`, etc.). |
 | [SET WHAT_IF](set-what-if.md) | Enables or disables dry-run mode. When enabled, side-effecting operations (INSERT, UPDATE, DELETE, MERGE, file writes, SEND EMAIL, Docker) are logg... |
 | [SET WINDOW_SPILL_THRESHOLD](set-window-spill-threshold.md) | Sets the row count before window function operations spill intermediate results to disk. |

@@ -2809,6 +2809,11 @@ public sealed record SetWeekStartDayStatement(string DayName) : Statement
 {
 }
 
+/// <summary>SET DATEFORMAT = 'MDY'|'DMY' — how slash dates in text are read for the rest of the script.</summary>
+public sealed record SetDateFormatStatement(string Order) : Statement
+{
+}
+
 /// <summary>SET SCRIPT_HASH_POLICY = 'Warn'|'Block' — controls behaviour when a script's hash differs from the pinned value.</summary>
 public sealed record SetScriptHashPolicyStatement(string Policy) : Statement
 {

@@ -81,7 +81,7 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   spill, Smoke and Standard scale with both baseline compares). The remaining locale-dependent
   output is fixed (2026-11-10, `1789de92b`): concatenation and string functions use the CAST text,
   casing is invariant, `DATENAME` is English, text dates read the same on every path (owner: slash
-  dates day first everywhere), report cells and parameter text are ISO (owner: midnight dropped),
+  dates month first by default, `SET DATEFORMAT`/`Engine:DateFormat` for DMY), report cells and parameter text are ISO (owner: midnight dropped),
   and `FLATFILE` writes invariant text unless `CULTURE`/`DATE_FORMAT` is set. Culture tests run
   under en-US, de-DE and tr-TR.
 - [ ] **W4c GitHub is the source of truth.** **Left:** a `workflow_dispatch` "Release" that tags the
@@ -212,6 +212,14 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
 ### 6. VS Code extension issues (planned for v0.23.0)
 
 - [ ] **[Security] Migrate `etlsql.ai.apiKey` to SecretStorage:** Currently stored as plain text in `settings.json`, which VS Code Settings Sync copies across machines. Migrate to `vscode.SecretStorage` (`context.secrets`), following the pattern used for Portal authentication tokens in `portalPublishCommand.ts`.
+
+### 7. Engine DATE type (planned for v0.23.0, owner 2026-11-10)
+
+- [ ] **A DATE cast to text keeps `00:00:00`.** `CAST(CAST('2024-01-08' AS DATE) AS STRING)` gives
+  `2024-01-08 00:00:00`; SQL Server and PostgreSQL give `2024-01-08`. The engine holds DATE values
+  as `DateTime`, so it cannot tell a date from a midnight timestamp. Fix needs a date-only runtime
+  value (or a type tag) through comparisons, date arithmetic, spill and Arrow storage, connectors
+  and `TypeConverter.ToInvariantText`. Reports already drop a midnight time (`ReportValueText`).
 
 ---
 

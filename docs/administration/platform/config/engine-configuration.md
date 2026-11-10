@@ -86,6 +86,7 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 
 | Key | Type | Default | Ad-Hoc SET Command | Description |
 | :--- | :--- | :--- | :--- | :--- |
+| `Engine:DateFormat` | string | `MDY` | `SET DATEFORMAT = 'DMY'` | How slash dates in text are read: `MDY` (08/01/2026 is 1 August, as in SQL Server and PostgreSQL) or `DMY` (8 January). ISO text reads the same either way. Any other value stops the engine from starting. |
 | `Engine:StartOfWeek` | string | `Monday` | `SET WEEK_START_DAY = 'day'` | Start day used by date calculations (e.g., `DATEPART(WEEK, ...)`). |
 
 ---

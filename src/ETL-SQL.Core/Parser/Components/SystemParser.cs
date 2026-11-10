@@ -308,6 +308,22 @@ public class SystemParser : ParserComponent
         return new SetWeekStartDayStatement(dayToken.Value) { Line = startToken.Line, Column = startToken.Column };
     }
 
+    /// <summary>
+    /// SET DATEFORMAT = 'MDY'|'DMY', or the SQL Server form SET DATEFORMAT mdy. DATEFORMAT is a
+    /// contextual word here, not a reserved keyword, so columns named DateFormat still parse.
+    /// </summary>
+    public Statement ParseSetDateFormat()
+    {
+        var startToken = _parser.Previous;
+        Match(TokenType.EQUALS);
+        if (_parser.Current.Type != TokenType.STRING_LITERAL && !_parser.IsIdentifier(_parser.Current))
+            throw new SyntaxException("Expected MDY or DMY after SET DATEFORMAT", _parser.Current.Line, _parser.Current.Column);
+        var value = _parser.Current.Value;
+        Advance();
+        Match(TokenType.SEMICOLON);
+        return new SetDateFormatStatement(value) { Line = startToken.Line, Column = startToken.Column };
+    }
+
     public Statement ParseSetScriptHashPolicy()
     {
         var startToken = _parser.Previous;

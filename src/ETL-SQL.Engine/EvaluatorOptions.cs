@@ -76,6 +76,7 @@ public class EvaluatorOptions
 
     // --- Date/Time ---
     public DayOfWeek WeekStartDay { get; set; } = DayOfWeek.Monday;
+    public ETL_SQL.Core.Data.DateOrder DateOrder { get; set; } = ETL_SQL.Core.Data.DateOrder.MonthFirst;
 
     // --- Features ---
     public bool CaseSensitiveComparison { get; set; }

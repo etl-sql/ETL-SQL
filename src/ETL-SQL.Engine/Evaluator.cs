@@ -234,6 +234,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public List<object?>? Parameters { get; set; }
     /// <summary>Start-of-week day for RELDATE W/WS/WE anchors. Settable at runtime via SET WEEK_START_DAY.</summary>
     public DayOfWeek WeekStartDay { get => _options.WeekStartDay; set => _options.WeekStartDay = value; }
+    /// <summary>How slash dates in text are read (MDY or DMY). Settable at runtime via SET DATEFORMAT.</summary>
+    public ETL_SQL.Core.Data.DateOrder DateOrder { get => _options.DateOrder; set => _options.DateOrder = value; }
     /// <summary>Hash-mismatch policy for script integrity checks. Settable at runtime via SET SCRIPT_HASH_POLICY.</summary>
     public string ScriptHashPolicy { get => _options.ScriptHashPolicy; set => _options.ScriptHashPolicy = value; }
     /// <summary>When true, string comparisons are case-sensitive. Defaults to false. Settable at runtime via SET CASE_SENSITIVE.</summary>
@@ -728,6 +730,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         MaxVariablesPerScript = Math.Max(0, config?.GetValue<int>("Engine:MaxVariablesPerScript", 100) ?? 100);
         MaxVisualsPerScript = Math.Max(0, config?.GetValue<int>("Engine:MaxVisualsPerScript", 100) ?? 100);
         WeekStartDay = DefaultThresholds.StartOfWeek(config);
+        DateOrder = DefaultThresholds.DateOrder(config);
         ScriptHashPolicy = DefaultThresholds.ScriptHashPolicy(config);
         IsPersistentSession = DefaultThresholds.PersistenceDefault(config);
         CaseSensitiveComparison = DefaultThresholds.CaseSensitiveComparison(config);
@@ -1064,6 +1067,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 
     public async Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default)
     {
+        // Text dates follow this session's SET DATEFORMAT for everything this script runs.
+        ETL_SQL.Core.Data.DateTextOrder.Bind(this);
         Script? previousScript = null;
 
         if (CurrentRecursiveDepth == 0)

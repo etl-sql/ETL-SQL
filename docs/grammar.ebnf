@@ -271,6 +271,7 @@ set_option_statement = "SET" set_boolean_option [ "=" ] ( "ON" | "OFF" )
                      | "SET" ( "ALLOW_FILE_TYPE_ACCESS" | "ALLOW_FILE_OPERATIONS" | "ALLOW_RECURSIVE_LAYERS" ) "=" expression
                      | "SET" "ALLOW_LARGE_STRING_RESULTS" ( "ON" | "OFF" )
                      | "SET" "WEEK_START_DAY" "=" string_literal
+                     | "SET" "DATEFORMAT" [ "=" ] ( string_literal | identifier )
                      | "SET" "SCRIPT_HASH_POLICY" "=" string_literal
                      | "SET" "TEMPLATE_PATH" "=" string_literal ;
 set_boolean_option = "PROFILE" | "PROFILING" | "WHAT_IF" | "WITH_PROMPT" | "SHOW_SECRETS" | "ALLOW_PLAINTEXT_SECRETS" | "NO_SAVE_SENSITIVE" | "NO_SAVE_CONNECTION" | "CONNECTION_ENCRYPTION" | "PERSIST" | "SPILL_ENCRYPTION" | "SPILL_COMPRESSION" ;

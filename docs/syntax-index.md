@@ -2110,6 +2110,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `DATA_BARS` | General | Canonical language token |
 | `DATA_QUALITY_DRY_RUN` | General | Canonical language token |
 | `DATA_SOURCE` | General | Canonical language token |
+| `DATEFORMAT` | General | Canonical language token |
 | `DEFAULT_EXPAND` | General | Canonical language token |
 | `DEFAULT_SORT` | General | Canonical language token |
 | `DELETE_EXTRA` | General | Canonical language token |

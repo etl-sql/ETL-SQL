@@ -17,6 +17,24 @@ namespace ETL_SQL.Engine.Functions
         /// </summary>
         private static string? Text(object? value) => TypeConverter.ToInvariantText(value);
 
+        /// <summary>
+        /// INITCAP as Oracle and Postgres define it: a word is a run of letters and digits, its first
+        /// character is upper case and the rest lower case (O'Neil, Mcdonald-Smith). Casing is invariant.
+        /// </summary>
+        private static string? InitCap(string? text)
+        {
+            if (text == null) return null;
+            var chars = new char[text.Length];
+            var inWord = false;
+            for (var i = 0; i < text.Length; i++)
+            {
+                var c = text[i];
+                chars[i] = inWord ? char.ToLowerInvariant(c) : char.ToUpperInvariant(c);
+                inWord = char.IsLetterOrDigit(c);
+            }
+            return new string(chars);
+        }
+
         private static void RegisterStringFunctions(IFunctionRegistry registry)
         {
             registry.RegisterWithHelp("UPPER", (args, ctx) => Text(args[0])?.ToUpperInvariant(), "UPPER(str): Returns the string in all-caps.");
@@ -44,7 +62,7 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("REPLACE", (args, ctx) => args.Count >= 3 ? Text(args[0])?.Replace(Text(args[1]) ?? "", Text(args[2]) ?? "") : args[0], "REPLACE(str, old, new): Replaces occurrences of a substring.");
             registry.RegisterWithHelp("REMOVE_HIDDEN_CHARACTERS", RemoveHiddenCharacters, "REMOVE_HIDDEN_CHARACTERS(str[, char1, char2, ...]): Cleans invisible/whitespace characters. With no extra args, replaces whitespace-class characters (tab, newline, carriage return, vertical tab, form feed, NBSP and other Unicode spaces) with a single standard space and strips zero-width characters (zero-width space/joiner, BOM, soft hyphen). Pass one or more literal strings to replace ONLY those with a space (e.g. CHAR(13), CHAR(10)).");
             registry.RegisterWithHelp("REMOVE_HTML_CHARACTERS", RemoveHtmlCharacters, "REMOVE_HTML_CHARACTERS(str): Decodes literal HTML entities (e.g. &nbsp; &mdash; &#8217;), then normalizes typographic/\"smart\" Unicode characters to plain ASCII equivalents (curly quotes -> \" and ', en/em dashes -> -, ellipsis -> ..., bullet -> *, NBSP -> space) and strips zero-width characters. Fixes invisible mismatches that break string comparisons.");
-            registry.RegisterWithHelp("INITCAP", (args, ctx) => Text(args[0]) == null ? null : System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(Text(args[0])!.ToLowerInvariant()), "INITCAP(str): Capitalizes the first letter of each word.");
+            registry.RegisterWithHelp("INITCAP", (args, ctx) => InitCap(Text(args[0])), "INITCAP(str): Capitalizes the first letter of each word.");
             registry.RegisterWithHelp("CLEAN_STRING", CleanString, "CLEAN_STRING(str): Removes control characters, trims whitespace, and collapses multiple whitespace characters into single spaces.");
             registry.RegisterWithHelp("MASK_EMAIL", MaskEmail, "MASK_EMAIL(email): Sanitizes an email address for governance/reporting (e.g. j***n@example.com).");
             registry.RegisterWithHelp("MASK_PHONE", MaskPhone, "MASK_PHONE(phone): Sanitizes a phone number for governance/reporting (e.g. ***-***-1234).");

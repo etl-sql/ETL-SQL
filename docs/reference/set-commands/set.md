@@ -31,6 +31,7 @@ See the [SET Commands index](README.md) for the full list of options with links 
 - **CONNECTION_ENCRYPTION = ON|OFF** — encrypt connection details on save (default OFF).
 
 ### Date & Locale
+- **DATEFORMAT = 'MDY'|'DMY'** — how slash dates in text are read (default MDY, or `Engine:DateFormat`).
 - **WEEK_START_DAY = 'day'** — anchor day for RELDATE week expressions (default Monday).
 
 ### Report Properties

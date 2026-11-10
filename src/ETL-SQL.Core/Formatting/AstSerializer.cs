@@ -337,6 +337,7 @@ public static class AstSerializer
         SetNoSaveConnectionStatement s => $"SET NO_SAVE_CONNECTION {(s.Enabled ? "ON" : "OFF")};",
         SetConnectionEncryptionStatement s => $"SET CONNECTION_ENCRYPTION {(s.Enabled ? "ON" : "OFF")};",
         SetWeekStartDayStatement s => $"SET WEEK_START_DAY = '{s.DayName}';",
+        SetDateFormatStatement s => $"SET DATEFORMAT = '{s.Order.ToUpperInvariant()}';",
         SetScriptHashPolicyStatement s => $"SET SCRIPT_HASH_POLICY = '{s.Policy}';",
         SetPersistStatement s => $"SET PERSIST = {(s.Enabled ? "ON" : "OFF")};",
         SetSpillOptionStatement s => s.ToSql(),

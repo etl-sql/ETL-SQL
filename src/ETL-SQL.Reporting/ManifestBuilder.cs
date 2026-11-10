@@ -55,6 +55,8 @@ namespace ETL_SQL.Reporting
             IReadOnlySet<string>? runPages = null,
             bool deferPaginatedPages = true)
         {
+            // Visual queries read text dates in the script's SET DATEFORMAT order.
+            ETL_SQL.Core.Data.DateTextOrder.Bind(_ctx);
             var manifest = new ReportManifest
             {
                 Source = scriptSource,

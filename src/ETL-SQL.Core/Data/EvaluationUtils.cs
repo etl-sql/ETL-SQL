@@ -158,7 +158,8 @@ public static class EvaluationUtils
             return true;
         }
 
-        // Slash dates are day first, as CAST AS DATE reads them; the invariant parse below is month first.
+        // Slash dates follow the session date order (SET DATEFORMAT, default MDY), as CAST AS DATE
+        // reads them; the invariant parse below would always read them month first.
         if (s.Contains('/') && SafeTryParseDate(s, out var slashDate))
         {
             dto = new DateTimeOffset(slashDate);
@@ -173,38 +174,52 @@ public static class EvaluationUtils
         return false;
     }
 
+    private static readonly string[] MonthFirstSlashFormats =
+    [
+        "M/d/yyyy", "M/d/yyyy H:mm", "M/d/yyyy H:mm:ss", "M/d/yyyy H:mm:ss.FFFFFFF",
+        "M/d/yyyy h:mm tt", "M/d/yyyy h:mm:ss tt"
+    ];
+
     private static readonly string[] DayFirstSlashFormats =
     [
-        "dd/MM/yyyy", "d/M/yyyy",
-        "dd/MM/yyyy HH:mm:ss", "d/M/yyyy H:mm:ss",
-        "dd/MM/yyyy HH:mm", "d/M/yyyy H:mm",
-        "dd/MM/yyyy HH:mm:ss.FFFFFFF", "d/M/yyyy H:mm:ss.FFFFFFF"
+        "d/M/yyyy", "d/M/yyyy H:mm", "d/M/yyyy H:mm:ss", "d/M/yyyy H:mm:ss.FFFFFFF",
+        "d/M/yyyy h:mm tt", "d/M/yyyy h:mm:ss tt"
     ];
 
     /// <summary>
-    /// Text read as a date, the same on every host: ISO first, slash dates day first
-    /// (<c>08/01/2024</c> is 8 January), then a few unambiguous forms and the invariant culture.
-    /// CAST AS DATE and every engine path that reads text as a date use this order.
+    /// Text read as a date, the same on every host: ISO first, then slash dates in the session date
+    /// order (<see cref="DateTextOrder"/>: SET DATEFORMAT, default MDY, so <c>08/01/2024</c> is
+    /// 1 August as in SQL Server and PostgreSQL), then the other order when the first reading is
+    /// impossible (<c>25/01/2024</c>), then a few unambiguous forms and the invariant culture.
+    /// CAST AS DATE and every engine path that reads text as a date use this.
     /// </summary>
-    public static bool SafeTryParseDate(string s, out DateTime dt)
+    public static bool SafeTryParseDate(string s, out DateTime dt) =>
+        SafeTryParseDate(s, DateTextOrder.Current, out dt);
+
+    /// <inheritdoc cref="SafeTryParseDate(string, out DateTime)"/>
+    public static bool SafeTryParseDate(string s, DateOrder order, out DateTime dt)
     {
         s = s?.Trim() ?? "";
         if (string.IsNullOrEmpty(s)) { dt = default; return false; }
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
 
-        // 1. Try ISO first
-        if (DateTime.TryParseExact(s, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt)) return true;
+        if (DateTime.TryParseExact(s, "yyyy-MM-dd", invariant, System.Globalization.DateTimeStyles.None, out dt)) return true;
 
-        // 2. Slash dates are day first on every host and every path (owner, 2026-11-10); month first
-        //    only when the first number cannot be a month (step 4).
-        if (DateTime.TryParseExact(s, DayFirstSlashFormats, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt)) return true;
-
-        // 3. Manual fallback for dd/MM/yyyy
-        if (s.Contains("/"))
+        if (s.Contains('/'))
         {
+            var (preferred, other) = order == DateOrder.DayFirst
+                ? (DayFirstSlashFormats, MonthFirstSlashFormats)
+                : (MonthFirstSlashFormats, DayFirstSlashFormats);
+            if (DateTime.TryParseExact(s, preferred, invariant, System.Globalization.DateTimeStyles.None, out dt)) return true;
+            if (DateTime.TryParseExact(s, other, invariant, System.Globalization.DateTimeStyles.None, out dt)) return true;
+
+            // Two-digit years (8/1/24) are 20xx.
             var parts = s.Split('/');
-            if (parts.Length == 3 && int.TryParse(parts[0], out int d) && int.TryParse(parts[1], out int m) && int.TryParse(parts[2], out int y))
+            if (parts.Length == 3 && int.TryParse(parts[0], out int a) && int.TryParse(parts[1], out int b) && int.TryParse(parts[2], out int y) && y < 100)
             {
-                if (y < 100) y += 2000;
+                y += 2000;
+                var (m, d) = order == DateOrder.DayFirst ? (b, a) : (a, b);
+                if (m > 12) (m, d) = (d, m);
                 if (m >= 1 && m <= 12 && d >= 1 && d <= DateTime.DaysInMonth(y, m))
                 {
                     dt = new DateTime(y, m, d);
@@ -213,11 +228,10 @@ public static class EvaluationUtils
             }
         }
 
-        // 4. Fallback to others
-        string[] otherFormats = { "yyyyMMdd", "MM/dd/yyyy", "M/d/yyyy", "yyyy/MM/dd", "yyyy-MM-dd HH:mm:ss" };
-        if (DateTime.TryParseExact(s, otherFormats, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AllowWhiteSpaces, out dt)) return true;
+        string[] otherFormats = { "yyyyMMdd", "yyyy/MM/dd", "yyyy-MM-dd HH:mm:ss" };
+        if (DateTime.TryParseExact(s, otherFormats, invariant, System.Globalization.DateTimeStyles.AllowWhiteSpaces, out dt)) return true;
 
-        if (DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AllowWhiteSpaces, out dt)) return true;
+        if (DateTime.TryParse(s, invariant, System.Globalization.DateTimeStyles.AllowWhiteSpaces, out dt)) return true;
         return false;
     }
 
