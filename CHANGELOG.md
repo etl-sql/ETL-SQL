@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Record what each row did in `MERGE ... OUTPUT $action`. The lexer dropped the `$`, so the
+  reference read an unknown column named `action` and every audit row recorded `NULL` instead of
+  `INSERT`, `UPDATE` or `DELETE`. The self-checking scripts in `tests/Integration`, which would
+  have caught it, now run with the engine tests.
 - Return the same text on every host from string casts, `TO_STR`, `FOR JSON` and `FOR XML`.
   Casting a date to a string followed the server's locale (`1/8/2024 12:00:00 AM` on Windows
   en-US, `01/08/2024 00:00:00` on Linux) and the documents used the platform newline, so the SQL

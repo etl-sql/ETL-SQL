@@ -398,7 +398,10 @@ public class Lexer
                 continue;
             }
 
-            if (char.IsLetter(CurrentChar) || CurrentChar == '_' || CurrentChar == '#' || CurrentChar == '@' || CurrentChar == '&')
+            if (char.IsLetter(CurrentChar) || CurrentChar == '_' || CurrentChar == '#' || CurrentChar == '@' || CurrentChar == '&'
+                // `$action` (MERGE OUTPUT) is one identifier. The default branch below skips an
+                // unknown character, which used to turn it into `action`, an unknown name.
+                || (CurrentChar == '$' && (char.IsLetter(Peek()) || Peek() == '_')))
             {
                 tokens.Add(ReadIdentifierOrKeyword(startLine, startColumn, startOffset));
                 continue;
@@ -646,7 +649,7 @@ public class Lexer
     private Token ReadIdentifierOrKeyword(int line, int column, int startOffset)
     {
         // Temporary table prefix support, variables, and Report-SQL datasets
-        if (CurrentChar == '#' || CurrentChar == '@' || CurrentChar == '&')
+        if (CurrentChar == '#' || CurrentChar == '@' || CurrentChar == '&' || CurrentChar == '$')
         {
             Advance();
             if (CurrentChar == '@')
