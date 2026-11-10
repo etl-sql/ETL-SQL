@@ -285,7 +285,10 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   `installed-linux-checks` and its fixture (every check returns explicitly, so it holds under
   `if`), `test-native-package-permissions`, `generate-third-party-inventory` (CI restores before
   the drift check, so a missing license cannot match), `browser-asset-ownership`,
-  `prepare-vsix-acceptance`. **Left:** the rest
+  `prepare-vsix-acceptance`, `watch-msi-progress` (progress only; bad data throws instead of
+  cancelling), `Prepare-MsiPortalDiagnostic` (a diagnostic dispatch skips the gate job that saves
+  the `msi-certified-*` receipt), `build-mac-dmg` (both callers pass the version; `Set-Version`
+  keeps the default current). Every script a workflow calls is now reviewed. **Left:** the rest
   of `scripts/` and `tests/`; the Portal and Orchestrator samples in GitHub; native installed-MSI
   certification of the fixed installer paths.
 
