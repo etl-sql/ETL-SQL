@@ -266,6 +266,18 @@ foreach ($script in $etlScripts) {
                 $available = ($LASTEXITCODE -eq 0 -and $osType -eq 'linux')
             }
         }
+        # Release mode needs Docker and starts PostgreSQL, the Orchestrator and the Portal itself. If one
+        # of them is not there, its samples fail instead of passing the run as skipped.
+        if (-not $available -and $ReleaseMode -and $service -in @('docker', 'postgres', 'postgresql', 'portal', 'orchestrator')) {
+            Write-Host "FAILED ($service did not start in release mode)" -ForegroundColor Red
+            $failed++
+            $failedScripts += [PSCustomObject]@{
+                Name     = if ($Passes -gt 1) { "$($script.Name) (pass $pass)" } else { $script.Name }
+                ExitCode = -1
+                Output   = "Release mode requires $service, but its container was not reachable. See the [ReleaseMode] warnings above."
+            }
+            continue
+        }
         if (-not $available) {
             Write-Host "SKIPPED ($service unavailable)" -ForegroundColor Yellow
             $skipped++

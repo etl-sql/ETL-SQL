@@ -1,7 +1,8 @@
 # Retry-once for test lanes. A test that fails and then passes when rerun alone, in the same job and
 # on the same build, is a flake: it is recorded (flaky-tests.json and a job warning) but does not
-# fail the lane. A test that fails twice, more than $MaxRetriedMethods failing methods, or a run
-# that failed without any failed test result (crash, timeout, discovery) stays a failure.
+# fail the lane. A test that fails twice, more than $MaxRetriedMethods failing methods, a run that
+# failed without any failed test result (crash, timeout, discovery), or a run that recorded a
+# run-level error such as a test host crash stays a failure.
 
 $script:MaxRetriedMethods = 3
 
@@ -43,6 +44,22 @@ function Get-TestOutcomesByMethod {
     $outcomes
 }
 
+# The first run-level error of a TRX, or $null. A crashed test host still leaves the results flushed
+# before the crash, so a failed result can sit beside tests that never ran; retrying only that result
+# would pass the lane. The abort message is localized ("Der aktive Testlauf wurde abgebrochen"), so
+# any run-level error counts except the adapter's own "[xUnit.net ...] Test [FAIL]" lines.
+function Get-TestRunError {
+    param([Parameter(Mandatory)] [string]$TrxPath)
+    [xml]$trx = Get-Content -LiteralPath $TrxPath -Raw
+    $ns = [Xml.XmlNamespaceManager]::new($trx.NameTable)
+    $ns.AddNamespace('t', 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010')
+    foreach ($info in $trx.SelectNodes('//t:ResultSummary/t:RunInfos/t:RunInfo[@outcome="Error"]', $ns)) {
+        $text = ([string]$info.SelectSingleNode('t:Text', $ns).InnerText).Trim()
+        if ($text -notmatch '^\[xUnit\.net [\d:.]+\]') { return ($text -split "`r?`n")[0] }
+    }
+    return $null
+}
+
 # Reruns the failed methods of $TrxPath once. Returns @{ Cleared = bool; Methods = [...]; RetryTrx = path;
 # Reason = text }. Cleared is true only when every failed method passed in every case on the rerun.
 function Invoke-FailedTestRetry {
@@ -60,6 +77,8 @@ function Invoke-FailedTestRetry {
     $methods = @(Get-FailedTestMethods -TrxPath $TrxPath)
     $outcome = [ordered]@{ Cleared = $false; Methods = $methods; RetryTrx = $null; Reason = '' }
     if ($methods.Count -eq 0) { $outcome.Reason = 'no failed test result to retry'; return [pscustomobject]$outcome }
+    $runError = Get-TestRunError -TrxPath $TrxPath
+    if ($runError) { $outcome.Reason = "the run itself failed, so not every test ran: $runError"; return [pscustomobject]$outcome }
     if ($methods.Count -gt $script:MaxRetriedMethods) {
         $outcome.Reason = "$($methods.Count) failed methods exceed the retry limit of $script:MaxRetriedMethods"
         return [pscustomobject]$outcome

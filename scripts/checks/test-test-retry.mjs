@@ -12,12 +12,15 @@ const scripts = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const root = mkdtempSync(path.join(os.tmpdir(), 'etlsql-test-retry-'));
 
 // cases: [[method, outcome], ...]; one UnitTest definition per method, one result per case.
-const trx = cases => {
+// runInfos: run-level Error texts, as the TRX logger records adapter output and run aborts.
+const trx = (cases, runInfos = []) => {
   const methods = [...new Set(cases.map(([m]) => m))];
   const id = m => `00000000-0000-0000-0000-${String(methods.indexOf(m)).padStart(12, '0')}`;
   const split = m => [m.slice(0, m.lastIndexOf('.')), m.slice(m.lastIndexOf('.') + 1)];
   return `<?xml version="1.0" encoding="utf-8"?>
-<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010"><Results>${
+<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010"><ResultSummary outcome="Failed"><RunInfos>${
+    runInfos.map(text => `<RunInfo computerName="host" outcome="Error" timestamp="2026-11-10T00:00:00Z"><Text>${text}</Text></RunInfo>`).join('')
+  }</RunInfos></ResultSummary><Results>${
     cases.map(([m, o], i) => `<UnitTestResult testId="${id(m)}" testName="${m} #${i}" outcome="${o}" />`).join('')
   }</Results><TestDefinitions>${
     methods.map(m => `<UnitTest id="${id(m)}" name="${m}"><TestMethod className="${split(m)[0]}, Tests" name="${split(m)[1]}" /></UnitTest>`).join('')
@@ -37,12 +40,12 @@ writeFileSync(path.join(dir, name), process.env.FAKE_RETRY_TRX);
 process.exit(Number(process.env.FAKE_RETRY_EXIT));
 `);
 
-function retry(name, firstCases, retryCases) {
+function retry(name, firstCases, retryCases, firstRunInfos = []) {
   const dir = path.join(root, name);
   const calls = path.join(root, `${name}.calls`);
   rmSync(dir, { recursive: true, force: true });
   spawnSync('pwsh', ['-NoProfile', '-Command', `New-Item -ItemType Directory -Path '${dir}' | Out-Null`]);
-  writeFileSync(path.join(dir, 'shard.trx'), trx(firstCases));
+  writeFileSync(path.join(dir, 'shard.trx'), trx(firstCases, firstRunInfos));
   writeFileSync(calls, '');
   const command = `. '${path.join(scripts, 'TestRetry.Helpers.ps1')}'
     $r = Invoke-FailedTestRetry -TrxPath '${path.join(dir, 'shard.trx')}' -Project p.csproj -Configuration Release -ResultsDirectory '${dir}' -Label 'unit' -Runner '${process.execPath.replaceAll("'", "''")}' -RunnerArgs @('${fake}')
@@ -98,6 +101,19 @@ try {
     assert.equal(result.Cleared, false);
     assert.equal(invocations.length, 0);
   }
+  // 5b. A test host that crashed after a failure was flushed leaves that failure beside tests that never
+  // ran. Retrying only the failure would pass the lane, so a run-level error is never retried. The
+  // texts are the real ones from a probe whose host crashed under a German UI culture (2026-11-10).
+  {
+    const xunitFail = '[xUnit.net 00:00:00.11]     N.C.Flaky [FAIL]';
+    const flake = retry('flake-with-adapter-line', [['N.C.Flaky', 'Failed']], [['N.C.Flaky', 'Passed']], [xunitFail]);
+    assert.equal(flake.result.Cleared, true, 'the adapter echoing a failed test is not a run error');
+    const { result, invocations } = retry('aborted', [['N.C.Steady', 'Passed'], ['N.C.Flaky', 'Failed']], [['N.C.Flaky', 'Passed']],
+      [xunitFail, 'Der aktive Testlauf wurde abgebrochen. Grund: Der Testhostprozess ist abgestürzt. : Process terminated.']);
+    assert.equal(result.Cleared, false);
+    assert.match(result.Reason, /not every test ran: Der aktive Testlauf wurde abgebrochen/);
+    assert.equal(invocations.length, 0);
+  }
   // 6. The browser shard verifier accepts a failed case only with a passing retry TRX for it.
   {
     const dir = path.join(root, 'verify');
@@ -118,7 +134,7 @@ try {
     assert.deepEqual(receipt.flakyMethods, ['N.C.Flaky']);
     assert.equal(receipt.status, 'Passed');
   }
-  console.log('Test retry: a flake is rerun alone once and recorded; repeat failures, theory cases, too many failures and result-less failures stay failures; the browser verifier needs the passing retry.');
+  console.log('Test retry: a flake is rerun alone once and recorded; repeat failures, theory cases, too many failures, result-less failures and crashed runs stay failures; the browser verifier needs the passing retry.');
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

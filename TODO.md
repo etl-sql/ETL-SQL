@@ -214,8 +214,21 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   affected and the commit is still the branch HEAD, and those runs stay cancellable on a defect.
   **Left:** see the first push-started runs; read the Docker free-space margin after a few runs.
 - [ ] **Finish the review.** About 376 tracked script files and 1,856 test files remain unreviewed
-  beyond the installer, packaging, changelog and version tools. **Left:** the rest of `scripts/`
-  and `tests/`; native installed-MSI certification of the fixed installer paths.
+  beyond the installer, packaging, changelog and version tools. 2026-11-10, highest release risk
+  first: `select-ci-lanes`, `release-draft-manifest`, `check-deb-candidate`,
+  `Invoke-CertificationProcess`, `setup-actionlint`, `MsiCandidate`, `nightly-rehearsal`,
+  `dispatch-nightly-release`, `Release.Helpers`, `operator-release-evidence`,
+  `Compare-CertBaseline`, `Test-ScaleCertification` and `test-lane` have no defects, and a sweep of
+  `scripts/` for empty catches, `|| true` and dynamic code found only cleanup and polls. Two
+  defects, fixed: (1) `Test-AllSamples.ps1 -ReleaseMode` skipped the Docker, PostgreSQL, Portal and
+  Orchestrator samples when their containers did not start, so the release sample gate passed
+  without them; they now fail. (2) `TestRetry.Helpers.ps1` cleared a lane whose test host crashed
+  after a failure was flushed: the retry reran only that failure, so the tests after the crash
+  never ran and the lane passed (reproduced on a probe project). A run-level error in the TRX now
+  blocks the retry; the browser shards were already covered by their discovered-case check.
+  Noted, not fixed: `Compare-CertBaseline` does not flag a baseline
+  scenario missing from the new report, but no release path filters scenarios. **Left:** the rest
+  of `scripts/` and `tests/`; native installed-MSI certification of the fixed installer paths.
 
 ### 5. JSON connector defects (found 2026-11-03)
 
