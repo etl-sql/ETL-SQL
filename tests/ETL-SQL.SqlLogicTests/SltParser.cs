@@ -17,6 +17,12 @@ namespace ETL_SQL.SqlLogicTests
         public SltRecordType Type { get; set; }
         public string? Sql { get; set; }
         public bool ExpectSuccess { get; set; } = true;
+
+        /// <summary>
+        /// Text after <c>statement error</c>, when given: the failure's message must contain it
+        /// (ignoring case). Null accepts any failure.
+        /// </summary>
+        public string? ExpectedError { get; set; }
         public string? ExpectedResult { get; set; }
         public string? ColumnTypes { get; set; }
         public string? Label { get; set; }
@@ -66,6 +72,7 @@ namespace ETL_SQL.SqlLogicTests
                 {
                     record = new SltRecord { Type = SltRecordType.Statement, LineNumber = buffer.LineNumber };
                     record.ExpectSuccess = parts.Length > 1 && parts[1].ToLowerInvariant() == "ok";
+                    if (!record.ExpectSuccess && parts.Length > 2) record.ExpectedError = string.Join(' ', parts.Skip(2));
                     buffer.Consume();
                     record.Sql = ReadSql(buffer);
                 }

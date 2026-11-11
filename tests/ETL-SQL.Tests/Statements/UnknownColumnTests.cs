@@ -58,6 +58,31 @@ public sealed class UnknownColumnTests
         await Run(Setup + query);
     }
 
+    [Theory]
+    [InlineData("UPDATE #t SET nmae = 'z';", "nmae")]
+    [InlineData("UPDATE #t SET name = 'z', gg = 1 WHERE id = 1;", "gg")]
+    public async Task UpdateOfAnUnknownColumnFailsTheStatement(string statement, string unknown)
+    {
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() => Run(Setup + statement));
+        Assert.Contains($"Unknown column '{unknown}'", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task UpdateOfKnownColumnsStillRuns()
+    {
+        await Run(Setup + "UPDATE #t SET NAME = 'z', g = g + 1 WHERE id = 1;");
+    }
+
+    [Theory]
+    [InlineData("SELECT id FROM #t WHERE id IN (SELECT id, label FROM #u);")]
+    [InlineData("SELECT id FROM #t WHERE id NOT IN (SELECT 1, 2);")]
+    [InlineData("SELECT id FROM #t WHERE id IN (SELECT * FROM #u);")]
+    public async Task InSubqueryWithMoreThanOneColumnFailsTheStatement(string query)
+    {
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() => Run(Setup + query));
+        Assert.Contains("one column", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task Run(string script)
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

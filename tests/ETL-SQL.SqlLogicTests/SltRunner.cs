@@ -64,6 +64,9 @@ SET TELEMETRY = OFF;";
 
         public string? CurrentFile { get; set; }
 
+        /// <summary>Engine statement handlers this runner could not construct from its own services.</summary>
+        public IReadOnlyList<string> UnavailableHandlers { get; private set; } = Array.Empty<string>();
+
         public long TempTableSpillThresholdRows
         {
             get => _evaluator.TempTableSpillThresholdRows;
@@ -101,16 +104,20 @@ SET TELEMETRY = OFF;";
                 ThrowIfMemoryExceeded();
             LogProgress(record);
 
-            var tokens = new Lexer(record.Sql).Tokenize();
-            var script = new Parser(tokens, record.Sql).Parse();
-
             // A record is query-like if it has an expected result payload (covers plain Query records
             // AND query records wrapped inside skipif/onlyif directives).
             bool isQueryLike = record.Type == SltRecordType.Query || record.ExpectedResult != null;
 
             using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromMinutes(5));
+            // Decided after the try block. Raising "expected failure" inside it sent that exception
+            // to the catch below, which ignores every exception of a record that expects one, so a
+            // `statement error` record passed whatever the engine did.
+            Exception? failure = null;
             try
             {
+                // Inside the try: a statement that does not parse is a failed statement too.
+                var tokens = new Lexer(record.Sql).Tokenize();
+                var script = new Parser(tokens, record.Sql).Parse();
                 await _evaluator.Evaluate(script, cts.Token);
 
                 if (isQueryLike)
@@ -128,11 +135,6 @@ SET TELEMETRY = OFF;";
                     GC.Collect(2, GCCollectionMode.Forced, blocking: true);
                     GC.WaitForPendingFinalizers();
                 }
-
-                if (!record.ExpectSuccess && !isQueryLike)
-                {
-                    throw new Exception($"Line {record.LineNumber}: Expected failure, but statement succeeded.");
-                }
             }
             catch (OperationCanceledException) when (cts.IsCancellationRequested)
             {
@@ -140,6 +142,7 @@ SET TELEMETRY = OFF;";
             }
             catch (Exception ex)
             {
+                failure = ex;
                 if (record.ExpectSuccess)
                 {
                     try
@@ -200,6 +203,12 @@ SET TELEMETRY = OFF;";
                     throw new Exception($"Line {record.LineNumber}: Statement failed: {ex.Message}", ex);
                 }
             }
+
+            if (record.ExpectSuccess) return;
+            if (failure == null)
+                throw new Exception($"Line {record.LineNumber}: Expected failure, but statement succeeded. SQL: {record.Sql}");
+            if (record.ExpectedError != null && !failure.Message.Contains(record.ExpectedError, StringComparison.OrdinalIgnoreCase))
+                throw new Exception($"Line {record.LineNumber}: Expected an error containing '{record.ExpectedError}', got: {failure.Message}", failure);
         }
 
         private void ThrowIfMemoryExceeded()
@@ -347,73 +356,55 @@ SET TELEMETRY = OFF;";
             }
         }
 
-        private static string FormatSltValue(object? value, char typeChar)
+        /// <summary>
+        /// Formats one result value the way the record's column type asks for. A value the type
+        /// cannot hold is a failure, not a zero: `I` and `R` used to turn any text that was not a
+        /// number into "0" or "0.000", so a query that returned the wrong column still matched.
+        /// </summary>
+        internal static string FormatSltValue(object? value, char typeChar)
         {
             if (value == null || value == DBNull.Value) return "NULL";
-            if (value is bool bv) return bv ? "1" : "0";
             if (value is byte[] bytes)
-            {
                 return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant();
-            }
 
-            if (typeChar == 'I')
+            if (typeChar is 'I' or 'R')
             {
-                try
+                double d = value switch
                 {
-                    double d;
-                    if (value is double db) d = db;
-                    else if (value is float fl) d = fl;
-                    else if (value is decimal dec) d = (double)dec;
-                    else if (value is int i) d = i;
-                    else if (value is long l) d = l;
-                    else if (value is short s) d = s;
-                    else if (value is byte b) d = b;
-                    else d = double.Parse(ETL_SQL.Core.Data.TypeConverter.ToInvariantText(value) ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+                    bool flag => flag ? 1 : 0,
+                    double db => db,
+                    float fl => fl,
+                    decimal dec => (double)dec,
+                    int i => i,
+                    long l => l,
+                    short sh => sh,
+                    byte by => by,
+                    _ => ParseNumber(value, typeChar)
+                };
 
-                    if (double.IsNaN(d) || double.IsInfinity(d))
-                        return "NULL";
-
-                    return ((long)Math.Truncate(d)).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                }
-                catch
-                {
-                    return "0";
-                }
+                if (double.IsNaN(d)) return "NaN";
+                if (double.IsPositiveInfinity(d)) return "Inf";
+                if (double.IsNegativeInfinity(d)) return "-Inf";
+                return typeChar == 'I'
+                    ? ((long)Math.Truncate(d)).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    : d.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
             }
-            else if (typeChar == 'R')
-            {
-                try
-                {
-                    double d;
-                    if (value is double db) d = db;
-                    else if (value is float fl) d = fl;
-                    else if (value is decimal dec) d = (double)dec;
-                    else if (value is int i) d = i;
-                    else if (value is long l) d = l;
-                    else if (value is short s) d = s;
-                    else if (value is byte b) d = b;
-                    else d = double.Parse(ETL_SQL.Core.Data.TypeConverter.ToInvariantText(value) ?? "0", System.Globalization.CultureInfo.InvariantCulture);
 
-                    if (double.IsNaN(d)) return "NaN";
-                    if (double.IsPositiveInfinity(d)) return "Inf";
-                    if (double.IsNegativeInfinity(d)) return "-Inf";
+            if (value is bool bv) return bv ? "1" : "0";
+            if (value is decimal whole && whole == Math.Truncate(whole) && whole >= long.MinValue && whole <= long.MaxValue)
+                return ((long)whole).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (value is double wd && wd == Math.Truncate(wd) && wd >= long.MinValue && wd <= long.MaxValue)
+                return ((long)wd).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            // The engine's invariant text, so a raw date or number reads the same on every host.
+            return ETL_SQL.Core.Data.TypeConverter.ToInvariantText(value) ?? "NULL";
+        }
 
-                    return d.ToString("F3", System.Globalization.CultureInfo.InvariantCulture);
-                }
-                catch
-                {
-                    return "0.000";
-                }
-            }
-            else
-            {
-                if (value is decimal dec && dec == Math.Truncate(dec) && dec >= long.MinValue && dec <= long.MaxValue)
-                    return ((long)dec).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                if (value is double d && d == Math.Truncate(d) && d >= long.MinValue && d <= long.MaxValue)
-                    return ((long)d).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                // The engine's invariant text, so a raw date or number reads the same on every host.
-                return ETL_SQL.Core.Data.TypeConverter.ToInvariantText(value) ?? "NULL";
-            }
+        private static double ParseNumber(object value, char typeChar)
+        {
+            var text = ETL_SQL.Core.Data.TypeConverter.ToInvariantText(value);
+            if (double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var number))
+                return number;
+            throw new FormatException($"Column type '{typeChar}' received the non-numeric value '{text}' ({value.GetType().Name}).");
         }
 
         private static string ComputeSltHash(List<string> values)
@@ -467,34 +458,21 @@ SET TELEMETRY = OFF;";
 
             var serviceProvider = services.BuildServiceProvider();
 
-            var handlers = new List<IStatementHandler>
+            // Every handler the engine ships, as the hosts register them. A hand-written list of 26
+            // had drifted from the engine's 67, so a corpus statement of any other kind failed as
+            // "no handler" instead of being tested. A handler whose services this runner does not
+            // provide is named in UnavailableHandlers, which SltRunnerHandlerTests pins.
+            var handlers = new List<IStatementHandler>();
+            var unavailable = new List<string>();
+            foreach (var type in typeof(DeclareStatementHandler).Assembly.GetTypes()
+                .Where(t => typeof(IStatementHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract)
+                .OrderBy(t => t.FullName, StringComparer.Ordinal))
             {
-                new SelectStatementHandler(l),
-                new InsertStatementHandler(l, pushdown.Object),
-                new UpdateStatementHandler(l),
-                new DeleteStatementHandler(l),
-                new SetVariableStatementHandler(l),
-                new DeclareStatementHandler(l),
-                new IfStatementHandler(l),
-                new WhileStatementHandler(l),
-                new ParallelStatementHandler(),
-                new PrintStatementHandler(l),
-                new CreateTableStatementHandler(l),
-                new CreateIndexStatementHandler(l),
-                new DropTableStatementHandler(l),
-                new DropIndexStatementHandler(l),
-                new BlockStatementHandler(),
-                new SetThresholdStatementHandler(),
-                new CreateConnectionStatementHandler(connectors, l),
-                new CreateViewStatementHandler(),
-                new DropViewStatementHandler(l),
-                new ShowViewsStatementHandler(),
-                new MergeStatementHandler(l),
-                new AlterTableStatementHandler(l),
-                new GenerateStatementHandler(l),
-                new TruncateTableStatementHandler(l),
-                new TransformStatementHandler(l)
-            };
+                if (type == typeof(ExecutePushdownStatementHandler)) { handlers.Add(pushdown.Object); continue; }
+                try { handlers.Add((IStatementHandler)ActivatorUtilities.CreateInstance(serviceProvider, type)); }
+                catch (InvalidOperationException) { unavailable.Add(type.Name); }
+            }
+            UnavailableHandlers = unavailable;
 
             var evaluator = new Evaluator(handlers, serviceProvider, registry, tracker.Object, docker.Object, connectors, sessions.Object, security, l, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());
             evaluator.IsPersistentSession = false;

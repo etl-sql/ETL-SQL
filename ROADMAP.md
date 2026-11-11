@@ -209,12 +209,6 @@ install and an upgrade from v0.22.0 keep their secrets and settings; the Portal-
 **Problem and intended outcome:** The v0.22.0 SLT and EBNF review (2026-11-10) identified harness
 defects that mask passing-when-broken tests, engine evaluation paths that silently return `NULL` or
 wrong values instead of throwing an error, and blind spots in EBNF and fuzzer generation:
-- **SLT harness bugs (`SltRunner.cs`):** `statement error` throws `"Expected failure, but statement
-  succeeded"` inside its own `try` block, and the surrounding `catch (Exception ex)` only rethrows
-  when `record.ExpectSuccess` is `true`—making every `statement error` in the SLT suite a no-op.
-  `FormatSltValue` catches failed numeric conversions on `I`/`R` columns and returns `"0"`/`"0.000"`,
-  maps `NaN`/`±Infinity` to `"NULL"`, and formats `bool` as `"1"`/`"0"` before checking the column
-  type specifier. `SltRunner.CreateFreshSession` manually registers only 26 of 67 statement handlers.
 - **Engine silent fallbacks and `NULL` / `DBNull.Value` bugs (`ExpressionEvaluator.cs`, `BinaryOperatorFactory.cs`, `EvaluationUtils.cs`, `TypeConverter.cs`, `JoinEngine.cs`, `AggregateEngine.cs`, `WindowEngine.cs`, `PivotEngine.cs`, `CompoundKey.cs`, and `StandardFunctions.*.cs`):**
   - Unresolved column identifiers in `EvaluateIdentifier` return `null` when a row context is present
     (`SELECT bogus_col FROM t`) or return the identifier's own name as a string when `context` is
@@ -312,13 +306,6 @@ and `ParserFuzzTests`.
 **Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
 Select individual IDs into `TODO.md` when scheduling.
 
-#### SLT harness integrity
-
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| SQ01 | **Fix `statement error` handling in `SltRunner`.** Track whether evaluation threw outside the `try`/`catch` block (matching `EngineCorpusTests`), fail when a `statement error` record succeeds, and support optional expected error-message substring matching. Audit and fix any existing `.test` records (such as `REINDEX` in `slt_lang_reindex.test`) exposed by enabling the check. | — | S |
-| SQ02 | **Stop masking type/domain errors in `SltRunner.FormatSltValue` and wire full DI handlers.** Fail the query when an `I` or `R` column receives a non-numeric string instead of returning `"0"`/`"0.000"`, distinguish `NaN`/`±Infinity` from `NULL`, respect `typeChar` for booleans and text decimals, and resolve all statement handlers from DI (or share the `EngineCorpusTests` session factory). | SQ01 | S |
-
 #### Fail-closed SQL expression, arithmetic, and comparison semantics
 
 | ID | Chunk and finish line | Depends on | Size |
@@ -327,6 +314,8 @@ Select individual IDs into `TODO.md` when scheduling.
 | SQ04 | **Fail closed on invalid arithmetic coercion and overflow in `BinaryOperatorFactory`.** Throw an `ExecutionException` when `-`, `*`, `/`, `%`, `<<`, or `>>` receives non-numeric text or overflows `decimal`/`long`, instead of returning `null`. | — | S |
 | SQ05 | **Restore `DateTime` comparison trichotomy and strict numeric/date ordering in `EvaluationUtils`.** Align `IsSoftEqual` and `CompareConstants` on full `DateTime` tick precision, and fail or define explicit type precedence when comparing numeric values against non-numeric strings. | — | S |
 | SQ06 | **Fix `POSITION`, `AT TIME ZONE`, `EXTRACT`, `DBNull.Value` normalization, and `GO` batch error propagation.** Normalize `DBNull.Value` to `null` in `TypeConverter.ToInvariantText`, `EvaluationUtils.CastToType`, `BinaryOperatorFactory`, `ExpressionEvaluator`, and `RowExpressionCompiler`; return `NULL` from `POSITION` and `AT TIME ZONE` when any input is `NULL`; throw on unrecognized `EXTRACT` fields or unparseable dates; and propagate unhandled exceptions across `GO` batches unless guarded by `TRY/CATCH`. v0.22.0 already stops the script on a failed `GO` batch. | — | M |
+| SQ15 | **Keep an index catalog for in-memory tables.** `CREATE INDEX`, `DROP INDEX` and `REINDEX` on an in-memory table record nothing, so dropping or reindexing an index that does not exist succeeds. Track index names per table, fail `DROP INDEX` without `IF EXISTS` and `REINDEX` on an unknown name, drop a table's indexes with the table, and remove the four `skipif etlsql` guards in `slt_lang_dropindex.test`, `slt_lang_droptable.test` and `slt_lang_reindex.test`. Found 2026-11-11 when `statement error` records started to count. | — | S |
+| SQ16 | **Fail closed on reading a temp table or dataset that does not exist.** `DataSourceManager.ResolveDataSourceAsync` creates an empty in-memory source for any unknown `#name` or `&name`, because reads and writes share the path, so `SELECT * FROM #mistyped` returns no rows and exits 0. Separate read resolution from write-target resolution across its 75 callers and throw `Unknown source` on a read. Found 2026-11-11. | — | M |
 
 #### Joins, grouping, aggregates, windows, sorting, and standard library `NULL` semantics
 

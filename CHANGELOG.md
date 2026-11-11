@@ -14,6 +14,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to
+  the updated rows and the statement succeeded. The error names the column and lists the columns
+  that exist. **Behaviour change.**
+- Fail `IN (SELECT a, b ...)`. `IN` compares against the first column, so the others were
+  ignored without a word. A subquery used with `IN` must return one column.
+- Make the SQL logic corpus count its `statement error` records. The runner raised "expected
+  failure" inside the block that ignored every error of such a record, so all 29 passed whatever
+  the engine did; turning them on found the two defects above. The runner also fails text in a
+  numeric result column instead of reading it as 0, and offers every statement handler the engine
+  ships instead of a hand-kept 26 of 67.
 - Record what each row did in `MERGE ... OUTPUT $action`. The lexer dropped the `$`, so the
   reference read an unknown column named `action` and every audit row recorded `NULL` instead of
   `INSERT`, `UPDATE` or `DELETE`. The self-checking scripts in `tests/Integration`, which would

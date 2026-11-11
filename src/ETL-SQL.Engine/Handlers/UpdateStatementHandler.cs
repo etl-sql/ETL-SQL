@@ -86,6 +86,17 @@ public partial class UpdateStatementHandler(ILogger logger) : IStatementHandler
         {
             _logger.Debug("Strategy: Engine-side Batch UPDATE (Streaming)");
 
+            // A row accepts any column name, so SET on a misspelt column added that column to the
+            // updated rows and the statement succeeded.
+            var knownColumns = new HashSet<string>(await connection.GetColumnsAsync(context.CancellationToken), StringComparer.OrdinalIgnoreCase);
+            if (knownColumns.Count > 0)
+            {
+                var unknown = stmt.Assignments.FirstOrDefault(a =>
+                    !knownColumns.Contains(a.ColumnName) && !DataQualityColumns.IsDataQualityColumn(a.ColumnName));
+                if (unknown != null)
+                    throw new ExecutionException($"Unknown column '{unknown.ColumnName}' in UPDATE of {connName}. Known columns: {string.Join(", ", knownColumns)}.");
+            }
+
             if (context.IsWhatIf)
             {
                 _logger.WriteLine($"WHAT IF: Would update rows in {connName} via engine-side streaming.", ConsoleColor.Yellow);

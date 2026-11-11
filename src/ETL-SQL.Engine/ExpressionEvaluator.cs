@@ -472,6 +472,11 @@ public class ExpressionEvaluator
 
         if (inExp.Right is SubqueryExpression subq)
         {
+            // IN compares against the first projected value, so a second column was silently
+            // ignored. `*` is left alone: its width is not known here.
+            if (subq.Query is SelectStatement { Columns: { Count: > 1 } projected } && !projected.Any(IsStarColumn))
+                throw new ExecutionException($"A subquery used with IN must return one column; this one returns {projected.Count}.");
+
             // Use cached stream evaluation for subqueries in IN clauses
             await foreach (var rowVal in EvaluateStreamSubquery(subq, context))
             {
@@ -808,6 +813,9 @@ public class ExpressionEvaluator
         return result;
     }
 
+    private static bool IsStarColumn(SelectColumn column) =>
+        column.Expression is IdentifierExpression { Name: var name } && (name == "*" || name.EndsWith(".*", StringComparison.Ordinal));
+
     private async IAsyncEnumerable<object?> EvaluateStreamSubquery(SubqueryExpression subq, Row context)
     {
         var query = (SelectStatement)subq.Query;
@@ -889,6 +897,9 @@ public class ExpressionEvaluator
                 foreach (var row in batch.Rows)
                 {
                     rowCount++;
+                    // `SELECT *` has no width until it runs; the explicit lists are checked before.
+                    if (rowCount == 1 && row.Schema?.ColumnCount > 1 && query.Columns.Any(IsStarColumn))
+                        throw new ExecutionException($"A subquery used with IN must return one column; this one returns {row.Schema.ColumnCount}.");
                     var val = row.Schema?.ColumnCount > 0 ? row[0] : null;
 
                     if (spillStore != null)
