@@ -21,6 +21,7 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// double-build factory ran 4/4 clean serially, but the double-build factory in parallel failed 3
 /// of 6. The lane creates five collection Portals concurrently, so this is that shape exactly.</para>
 /// </summary>
+[Trait("Category", "Browser")]
 public class PortalBrowserFactoryConcurrencyTests
 {
     [Fact]

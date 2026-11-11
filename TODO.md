@@ -8,7 +8,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 21 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 19 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -102,17 +102,9 @@ sample on a shared runner.
 
 ### 4. Review of `scripts/`, the installers and `tests/`
 
-**Record:** [v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md) (26 findings, all
+**Record:** [v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md) (28 findings, all
 fixed, and the list of scripts reviewed clean). Add new findings there, not here.
 
-- [ ] **First hosted run of the Portal and Orchestrator samples.** `start-sample-services.sh` has
-  only run locally. Check "Sample Scripts (linux)" on `11852349a`: both samples ran, and the job
-  stays inside its 65-minute cap with the two extra builds.
-- [ ] **Platform early returns in `tests/`.** 17 tests return early off Windows
-  (`InstallerConfigurationScriptTests` x15, `FileSystemPolicyAuthorizerTests`,
-  `InstalledSecretsConfigurationTests`) and `BrowserProcessResourcesTests` returns off Windows or
-  without IPv6. Confirm each runs in a Windows lane and make the skip visible, as `[UnixFact]` and
-  `[SymlinkFact]` do.
 - [ ] **The rest of `scripts/`.** Not yet read, none on a release path: `Test-GateF`,
   `Test-GateFEvidence`, `Invoke-Release`, `Master-Release`, `test-pre-release.sh`, `set-version.sh`,
   the HA soak tools (`New-*`, `Export-*`, `Test-HaSoak*`), `Test-ScaleBaseline`,

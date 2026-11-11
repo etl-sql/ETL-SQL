@@ -171,9 +171,10 @@ $engineArtifactsPath = if ($privateBuildRoot) { Join-Path $privateBuildRoot 'eng
 $portalArtifactsPath = if ($privateBuildRoot) { Join-Path $privateBuildRoot 'portal' } else { '' }
 
 $engineFilter = 'FullyQualifiedName~ConnectorPolicyEnforcementTests|FullyQualifiedName~RestApiTests|FullyQualifiedName~SharePointAndADConnectorTests|FullyQualifiedName~SecretProviderTests|FullyQualifiedName~OrganizationPolicySourceTests|FullyQualifiedName~OrganizationPolicyCacheTests|FullyQualifiedName~OrganizationPolicySchemaTests|FullyQualifiedName~PolicyAuthorityServiceTests|FullyQualifiedName~GovernanceRecoveryTests|FullyQualifiedName~GovernanceEnforcementAuditTests|FullyQualifiedName~EnterpriseEnrollmentTests|FullyQualifiedName~EnterprisePolicyRuntimeTests|FullyQualifiedName~EnterpriseHostCertificationTests|FullyQualifiedName~ExecutionSnapshotPropagationTests|FullyQualifiedName~ProcessJobExecutorChaosTests|FullyQualifiedName~PolicyRefreshBypassTests|FullyQualifiedName~FileSystemPolicyAuthorizerTests|FullyQualifiedName~FileSystemPolicyEnforcementTests|FullyQualifiedName~FileConnectorWriteBoundaryTests|FullyQualifiedName~MutationGuardrailEnforcementTests|FullyQualifiedName~ResourceCeilingEnforcementTests|FullyQualifiedName~ProcessPolicyRulesTests|FullyQualifiedName~StandaloneRegressionTests|FullyQualifiedName~SecurityEventContractTests|FullyQualifiedName~SecurityEventRuntimeTests|FullyQualifiedName~SecurityEventOutboxTests|FullyQualifiedName~SecurityEventTransportTests|FullyQualifiedName~SecurityEventHealthGateTests|FullyQualifiedName~BootstrapSecurityEventSinkTests|FullyQualifiedName~StmtFileSystemTests'
-# Unix-only facts (file modes, XDG paths) skip on Windows, and a skipped result fails this
-# certification. Windows does not select them; the Linux certification runs them.
-if ($Platform -eq 'windows') { $engineFilter = "($engineFilter)&Platform!=Unix" }
+# Unix-only facts (file modes, XDG paths) skip on Windows, Windows-only facts (NTFS path forms)
+# skip elsewhere, and a skipped result fails this certification. Each platform selects only its own.
+$otherPlatform = if ($Platform -eq 'windows') { 'Unix' } else { 'Windows' }
+$engineFilter = "($engineFilter)&Platform!=$otherPlatform"
 
 $testArgsCommon = @(
     'test',

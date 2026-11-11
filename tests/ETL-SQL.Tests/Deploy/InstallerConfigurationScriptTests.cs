@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json.Nodes;
@@ -22,7 +23,8 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
 
     public void Dispose() => Directory.Delete(_install, recursive: true);
 
-    [Theory]
+    [WindowsTheory]
+    [SupportedOSPlatform("windows")]
     [Trait("CompatBreak", "0.22")]
     [InlineData("[]")]
     [InlineData("null")]
@@ -34,7 +36,6 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
     [InlineData("{\"synthetic-invalid-document\":")]
     public void InvalidProtectedDocumentFailsBeforeChangingConfiguration(string document)
     {
-        if (!OperatingSystem.IsWindows()) return;
         Stage();
         var path = Path.Combine(_install, ConfigurationExtensions.InstalledSecretsFileName);
         File.WriteAllText(path, document);
@@ -46,7 +47,8 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_install, "first-run-password.txt")));
     }
 
-    [Theory]
+    [WindowsTheory]
+    [SupportedOSPlatform("windows")]
     [Trait("CompatBreak", "0.22")]
     [InlineData("appsettings.json", "null")]
     [InlineData("appsettings.json", "[{}]")]
@@ -54,7 +56,6 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
     [InlineData("appsettings.pre-upgrade.json", "[{}]")]
     public void InvalidSharedOrSavedDocumentPreservesInstalledSecrets(string name, string document)
     {
-        if (!OperatingSystem.IsWindows()) return;
         Stage();
         Run("");
         var installed = ReadSecrets();
@@ -70,11 +71,11 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
         Assert.True(JsonNode.DeepEquals(installed, JsonNode.Parse(File.ReadAllText(secretsPath))));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     [Trait("CompatBreak", "0.22")]
     public void UpgradePreservesOperatorSecretsOutsideInstallerManagedPaths()
     {
-        if (!OperatingSystem.IsWindows()) return;
         Stage();
         Run("");
         var installed = ReadSecrets();
@@ -90,11 +91,11 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
         Assert.DoesNotContain("CustomPrivate", shared);
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     [Trait("CompatBreak", "0.22")]
     public void FailedFreshSecretWriteDoesNotPublishUnusableSignInCredentials()
     {
-        if (!OperatingSystem.IsWindows()) return;
         Stage();
         var secretsPath = Path.Combine(_install, ConfigurationExtensions.InstalledSecretsFileName);
         Directory.CreateDirectory(secretsPath);
@@ -105,11 +106,11 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
         AssertSignInMatchesProtectedPassword();
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     [Trait("CompatBreak", "0.22")]
     public void FailedSignInWriteCanRetryWithoutReplacingPersistedKeys()
     {
-        if (!OperatingSystem.IsWindows()) return;
         Stage();
         var signIn = Path.Combine(_install, "first-run-password.txt");
         Directory.CreateDirectory(signIn);
@@ -124,11 +125,11 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
             "Sign-in credentials do not match the configured password.");
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     [Trait("CompatBreak", "0.22")]
     public void FailedFreshSharedWriteCanRetryWithoutPublishingCredentialsOrReplacingKeys()
     {
-        if (!OperatingSystem.IsWindows()) return;
         Stage();
         var configPath = Path.Combine(_install, "appsettings.json");
         var original = File.ReadAllBytes(configPath);
@@ -155,10 +156,10 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
             "Sign-in credentials do not match the configured password.");
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void FreshSignInFilePreservesConfiguredUnicodeCredentials()
     {
-        if (!OperatingSystem.IsWindows()) return;
         Stage();
         var config = ReadConfig();
         config["Portal"]!["FirstRun"]!["AdminUsername"] = "synthetic-admin-\u00e9";
@@ -175,11 +176,11 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
             "Sign-in file changed the configured password.");
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     [Trait("CompatBreak", "0.22")]
     public void RetainedRecoveryBlocksRetryWithoutChangingInstalledSecrets()
     {
-        if (!OperatingSystem.IsWindows()) return;
         Stage();
         Run("");
         var original = ReadSecrets();
@@ -194,11 +195,11 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
         Assert.True(JsonNode.DeepEquals(original, ReadSecrets()));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     [Trait("CompatBreak", "0.22")]
     public void LockedSecretFilePreservesKeysAndAllowsRetryAfterUnlock()
     {
-        if (!OperatingSystem.IsWindows()) return;
         Stage();
         Run("");
         var original = ReadSecrets();
@@ -211,22 +212,22 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
         Assert.True(JsonNode.DeepEquals(original, ReadSecrets()));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     [Trait("CompatBreak", "0.22")]
     public void MissingSettingsFailsWithoutGeneratingSecrets()
     {
-        if (!OperatingSystem.IsWindows()) return;
         Stage();
         File.Delete(Path.Combine(_install, "appsettings.json"));
         Assert.NotEqual(0, RunProcess("upgrade-fixture").ExitCode);
         Assert.False(File.Exists(Path.Combine(_install, ConfigurationExtensions.InstalledSecretsFileName)));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     [Trait("CompatBreak", "0.22")]
     public void FailedSecretReplacementPreservesExistingKeysAndReportsFailure()
     {
-        if (!OperatingSystem.IsWindows()) return;
         Stage();
         Run(upgradeCode: "");
         var secretsPath = Path.Combine(_install, ConfigurationExtensions.InstalledSecretsFileName);
@@ -270,10 +271,10 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
         Assert.Empty(Directory.GetFiles(_install, "*.tmp"));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void FreshInstall_GeneratesEveryStartupSecretIntoTheProtectedFile()
     {
-        if (!OperatingSystem.IsWindows()) return;
         Stage();
 
         Run(upgradeCode: "");
@@ -305,10 +306,10 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
         Assert.Equal((string?)secrets["Portal"]!["FirstRun"]!["AdminPassword"], lines[1]);
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void UpgradeFromAnInstallWithSecretsInAppSettings_MovesThemAndKeepsEveryValue()
     {
-        if (!OperatingSystem.IsWindows()) return;
         Stage();
         // The configuration an earlier release left installed: its own secrets in appsettings.json,
         // an operator setting and safe zone, and no key the new release added.
@@ -343,10 +344,10 @@ public sealed class InstallerConfigurationScriptTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_install, "first-run-password.txt")));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void LaterUpgrade_KeepsTheProtectedSecretsAndRegeneratesNothing()
     {
-        if (!OperatingSystem.IsWindows()) return;
         Stage();
         Run(upgradeCode: "");
         var first = ReadSecrets().ToJsonString();

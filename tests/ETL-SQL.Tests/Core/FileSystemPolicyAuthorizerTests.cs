@@ -49,11 +49,10 @@ public sealed class FileSystemPolicyAuthorizerTests
         }
     }
 
-    [Fact]
+    [WindowsFact]
+    [Trait("Platform", "Windows")]
     public void Authorize_RejectsNonCanonicalWindowsForms()
     {
-        if (!OperatingSystem.IsWindows()) return;
-
         var root = Path.Combine(Path.GetTempPath(), $"policy_forms_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         try
