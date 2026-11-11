@@ -7,6 +7,7 @@
 | [ETL-SQL v0.22.0](v0.22.0.md) | Released 2026-11-04: release recovery, installed-package checks and security boundaries. |
 | [Operator release evidence](operator-evidence.md) | Candidate-bound reports, applicability reviews and publication checks. |
 | [Release recovery acceptance](recovery-acceptance.md) | Timing targets, verified recovery cases and remaining hosted acceptance. |
+| [v0.22.0 release tooling review](v0.22.0-tooling-review.md) | Findings and fixes from the review of `scripts/`, the installers and `tests/`. |
 | [v0.21.0 bugs and logic audit](v0.21.0-bug-logic-audit.md) | Defect review and validation evidence. |
 | [v0.21.0 performance results](v0.21.0-performance-results.md) | Scale certification measurements and run-order findings. |
 | [v0.21.0 closed TODO audit](v0.21.0-closed-todo-audit.md) | Completed-item review and validation evidence. |
