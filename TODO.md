@@ -378,7 +378,17 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   no defects: the `pre-commit` and `pre-push` hooks, `check-staged-csharp`, `Test-PrePush` (every
   test filter matches real tests), `release-preflight` (runner and manifest),
   `check-workflow-timeouts`, `ensure-release-certification`, `Test-BrowserShardResult`,
-  `Test-VulnerablePackages`, `collect-windows-payload`, `MsiUpgrade.Helpers`. **Left:** the rest
+  `Test-VulnerablePackages`, `collect-windows-payload`, `MsiUpgrade.Helpers`,
+  `lib/DependencyAudit` (an unrestored project and an unreachable feed both exit non-zero),
+  `lib/run-owned-command`, `ScaleCertification.Helpers`, `ReleaseEvidence.Helpers`,
+  `ReleaseOutput.Helpers`, the `DeploymentCertification.*` and `DeploymentTestEvidence` helpers
+  (all 100 test selectors in the plan match a real test), `Test-DeploymentProfileCertification`,
+  `Test-ProviderNeutralFaultCertification`, `Test-OperatorReportInputs`,
+  `finalize-release-metadata`. Started, not finished: a `tests/` sweep for platform early
+  returns. 17 tests return early off Windows (`InstallerConfigurationScriptTests` x15,
+  `FileSystemPolicyAuthorizerTests`, `InstalledSecretsConfigurationTests`) and one
+  (`BrowserProcessResourcesTests`) off Windows or without IPv6; check each runs in a Windows
+  lane and make the skip visible. **Left:** the rest
   of `scripts/` and `tests/`; the first hosted run of the Portal and Orchestrator samples; native installed-MSI
   certification of the fixed installer paths.
 
