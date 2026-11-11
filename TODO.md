@@ -8,7 +8,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 18 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 17 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -106,9 +106,6 @@ sample on a shared runner.
 fixed, and the list of scripts reviewed clean). Add new findings there, not here.
 
 - [ ] **Native installed-MSI certification of the fixed installer paths.**
-- [ ] **Docker free-space margin.** The Docker job frees preinstalled toolchains and records free
-  space before and after the tests. Read the margin after a few runs, then decide whether "no
-  space left on device" needs a supervisor signature.
 
 ### 5. VS Code extension issues (planned for v0.23.0)
 
