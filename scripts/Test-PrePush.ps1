@@ -2,7 +2,11 @@
 param(
     [string]$Configuration = "Release",
     [switch]$SkipFormat,
-    [switch]$SkipSmoke
+    [switch]$SkipSmoke,
+    # What the pre-push hook runs: source preflight and formatting, a few minutes. The type, lint,
+    # consumer-contract, smoke, extension and browser steps are left to CI, which runs every one of
+    # them. Run this script without -Fast for the complete local set before a risky batch.
+    [switch]$Fast
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,6 +52,21 @@ if ($selectedSourceLanes -ceq 'msi-upgrade,source-preflight' -and
 Write-Host "Preparing browser assets..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "sync-assets.js")
 if ($LASTEXITCODE -ne 0) { throw 'Browser asset preparation failed. Run npm ci --prefix scripts/typecheck first.' }
+
+if ($Fast) {
+    if (-not $SkipFormat) {
+        Write-Host "Verifying code formatting..." -ForegroundColor White
+        & dotnet format (Join-Path $RepoRoot "ETL-SQL.slnx") --verify-no-changes --no-restore
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Formatting check failed. Run 'dotnet format' to fix."
+            exit $LASTEXITCODE
+        }
+    }
+    $stopwatch.Stop()
+    Write-Host (" FAST PRE-PUSH PASSED in {0:F1}s (lanes: {1})" -f $stopwatch.Elapsed.TotalSeconds, (@($impact.lanes | Sort-Object) -join ', ')) -ForegroundColor Green
+    Write-Host " CI runs the type, lint, contract, smoke and browser checks. For the complete local set: .\scripts\Test-PrePush.ps1" -ForegroundColor Green
+    exit 0
+}
 
 # Browser-test-only edits use the same consumers as regular CI. One complete shard also runs
 # StudioPerformanceBudgetTests, so capture that result without a second test invocation.

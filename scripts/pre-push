@@ -19,19 +19,20 @@ while read -r _local_ref local_sha _remote_ref _remote_sha; do
 done
 [ "$content" = yes ] || exit 0
 
-# The browser asset toolchain and several fixtures require Node.js 22; other majors fail them
-# with unrelated-looking errors.
-case "$(node --version 2>/dev/null)" in
-    v22.*) ;;
-    *)
-        echo "pre-push: Node.js 22 is required on PATH (found: $(node --version 2>/dev/null || echo none))." >&2
-        exit 1
-        ;;
-esac
-
-if command -v pwsh >/dev/null 2>&1; then
-    pwsh -NoProfile -File ./scripts/Test-PrePush.ps1
-else
+if ! command -v pwsh >/dev/null 2>&1; then
     echo "pre-push: PowerShell 7 (pwsh) is required to run scripts/Test-PrePush.ps1." >&2
     exit 1
+fi
+
+# Fails in seconds on a missing tool (Node.js 22, the pinned .NET SDK) instead of minutes into a
+# fixture with an unrelated-looking error.
+pwsh -NoProfile -File ./scripts/Test-Environment.ps1 -For PrePush
+
+# CI certifies; the hook only stops what would fail every hosted workflow at once. It runs source
+# preflight and formatting. ETLSQL_PREPUSH_FULL=1 runs the complete local set, as does running
+# scripts/Test-PrePush.ps1 directly.
+if [ "${ETLSQL_PREPUSH_FULL:-}" = 1 ]; then
+    pwsh -NoProfile -File ./scripts/Test-PrePush.ps1
+else
+    pwsh -NoProfile -File ./scripts/Test-PrePush.ps1 -Fast
 fi

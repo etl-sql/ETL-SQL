@@ -58,9 +58,10 @@ dotnet test ETL-SQL.slnx --collect:"XPlat Code Coverage" --results-directory ./c
 ```
 
 The opt-in lanes (Docker integration, performance, SLT, fuzz, browser) and the `scripts/test-lane.ps1`
-gateway are documented in [AGENTS.md §9](AGENTS.md#9-build-test--run). Run
-`.\scripts\Test-PrePush.ps1` before pushing — it checks formatting, asset sync, syntax-index sync, link
-coverage, and fast contract tests in about 30 seconds.
+gateway are documented in [AGENTS.md §9](AGENTS.md#9-build-test--run). The
+pre-push hook runs source preflight and formatting in about three minutes. Run
+`.\scripts\Test-PrePush.ps1` yourself for the complete local set (about twelve minutes) before a
+broad change.
 
 ### Running the Application
 

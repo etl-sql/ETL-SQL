@@ -8,11 +8,18 @@ To provide fast, deterministic feedback during engine and tool development, the 
 
 ## Fast Local Validation (`Test-PrePush.ps1`)
 
-Before pushing code or submitting a PR, always execute the local fast pre-push validation script:
+The pre-push hook runs the fast tier on every push: an environment check, source preflight and
+formatting, about three minutes. CI runs everything else.
 
 ```powershell
-.\scripts\Test-PrePush.ps1
+.\scripts\Test-PrePush.ps1 -Fast                     # what the hook runs
+.\scripts\Test-PrePush.ps1                           # the complete local set, before a risky batch
+.\scripts\Test-Environment.ps1 -For Integration      # Docker and the ODBC driver, in seconds
+.\scripts\Test-Environment.ps1 -For Timing           # refuses a busy machine
 ```
+
+Set `ETLSQL_PREPUSH_FULL=1` to make the hook run the complete set. The rest of this section
+describes the complete set.
 
 The script runs source preflight, then uses the shared CI impact selection to choose local checks.
 Classified documentation-only edits stop after source checks. Extension-only edits run the engine

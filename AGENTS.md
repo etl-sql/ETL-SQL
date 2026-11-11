@@ -650,11 +650,16 @@ To prevent cross-platform CI failures and avoid wasting 1-hour GitHub Actions ru
    - Edit shared runtime/designer modules in `src/ETL-SQL.ReportRuntime/Resources/TypeScript/`, Portal modules in `src/ETL-SQL.Portal/BrowserSources/`, and retained styles/vendor assets in `Resources/Shared/`. Run `node .\scripts\sync-assets.js` followed by `node .\scripts\sync-assets.js -Check`; never edit generated JavaScript.
 4. **C# Text/Doc Assertions Must Normalize Line Endings**:
    - When writing C# tests that read markdown or text files from disk via `File.ReadAllText()`, never assume `\r\n` or `\n`. Always use `.Replace("\r\n", "\n")` or regex `\r?\n` for cross-platform stability.
-5. **Always Run Pre-Push Validation Locally**:
-   - Before pushing to remote, always execute `.\scripts\Test-PrePush.ps1` (or verify via git pre-push hook).
-     It selects affected checks and verifies formatting, assets, syntax, documentation, test inventory,
-     contracts and smoke tests. Source preflight has measured about two minutes; broad runs about
-     twelve minutes. These are observations, not timeout guarantees.
+5. **Pre-Push Validation**:
+   - The pre-push hook runs the fast tier: an environment check (`scripts/Test-Environment.ps1`),
+     source preflight and formatting. It has measured about three minutes. CI runs everything else
+     and is what certifies a commit.
+   - Before a risky or broad batch, run the complete local set: `.\scripts\Test-PrePush.ps1` (or
+     push with `ETLSQL_PREPUSH_FULL=1`). It adds the browser type and lint gates, the consumer
+     contracts, smoke tests and, when selected, the extension and browser checks; broad runs have
+     measured about twelve minutes. These are observations, not timeout guarantees.
+   - Before an integration or timing lane, run `scripts/Test-Environment.ps1 -For Integration` or
+     `-For Timing`. A timing lane must not start on a busy machine.
 
 ---
 
