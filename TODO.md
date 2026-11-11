@@ -352,7 +352,15 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   names from before the snake_case migration, so those columns had always read as NULL. A sweep
   of `samples/` found five more doing the same against `eng.*` tables (which the check does not
   cover), so their filters matched nothing: `register_schedule`, `Job_Scheduling`,
-  `Bulk_Insert_Mapping`, `Lineage_Tag_Import`, `20-Lineage`. All fixed. **Left:** the rest
+  `Bulk_Insert_Mapping`, `Lineage_Tag_Import`, `20-Lineage`. All fixed. (22) Checked a
+  suspicion that 77 `scripts/checks/test-*.mjs` files run nowhere because no workflow or script
+  names them. They do run: `check-consumer-contracts.mjs` reads the folder, so every
+  `test-*.mjs` is in either the release preflight manifest (55) or the consumer gate (124, which
+  includes `test-service-capacity.mjs --validate-only`), with no third state. Pre-push step 6 and
+  the CI job "Browser and Consumer Contracts" both run the gate; on `9759f2e3c` it passed 124 of
+  124 (CI job 130193980566). The 15 files in `scripts/checks` that do not match the pattern
+  (`Test-*.ps1`, two `.sh`, one `.py`) and every file in `fixtures/` are each named by a caller.
+  No defect; nothing to wire. **Left:** the rest
   of `scripts/` and `tests/`; the Portal and Orchestrator samples in GitHub; native installed-MSI
   certification of the fixed installer paths.
 
