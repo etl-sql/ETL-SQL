@@ -109,6 +109,10 @@ function Test-CapacityReport {
     $report = Read-Json $Path 'capacity report'
     if ($null -eq $report) { return }
     foreach ($serviceName in @('portal', 'orchestrator')) {
+        # A report with no steps measured nothing; it must not read as a pass.
+        if (@($report.$serviceName).Count -eq 0) {
+            Add-Issue 'Error' 'empty-report' "Capacity report has no $serviceName steps."
+        }
         foreach ($step in @($report.$serviceName)) {
             if ($step.passed -ne $true) {
                 Add-Issue 'Error' 'capacity-breach' "$serviceName step at concurrency $($step.concurrency) did not pass."
@@ -127,6 +131,9 @@ function Test-GenericPassedReport {
     if ([string]$report.runnerKind -clike 'NativeBounded*' -and
         ($report.mode -cne 'CiSmoke' -or $report.certificationLevel -cne 'CiSmokeEvidence')) {
         Add-Issue 'Error' 'evidence-scope-mismatch' "$Kind bounded native report cannot certify a physical topology run."
+    }
+    if ($null -eq $report.PSObject.Properties['passed'] -and $null -eq $report.PSObject.Properties['status']) {
+        Add-Issue 'Error' 'missing-verdict' "$Kind has neither a passed nor a status field."
     }
     if ($null -ne $report.PSObject.Properties['passed'] -and $report.passed -ne $true) {
         Add-Issue 'Error' 'failed-report' "$Kind did not pass."
@@ -206,7 +213,10 @@ if ($RequiredGate -in @('Sustained', 'All')) {
     $metricsMd = Join-Path $sustainedDir 'postgres-ha-metrics.md'
     Test-CapacityReport $capacityJson
     Assert-File $capacityMd 'capacity Markdown report' | Out-Null
-    Read-Json $metricsJson 'PostgreSQL metrics snapshot' | Out-Null
+    $metrics = Read-Json $metricsJson 'PostgreSQL metrics snapshot'
+    if ($null -ne $metrics -and @($metrics.databases | Where-Object { $null -ne $_ }).Count -eq 0) {
+        Add-Issue 'Error' 'empty-report' 'PostgreSQL metrics snapshot lists no database.'
+    }
     Assert-File $metricsMd 'PostgreSQL metrics Markdown report' | Out-Null
 }
 
@@ -240,8 +250,16 @@ if ($RequiredGate -in @('EnterpriseHardening', 'All')) {
 }
 
 if ($RequiredGate -in @('GateF', 'All')) {
-    Read-Json (Join-Path $gateFDir 'gate-f-report.json') 'Gate F report' | Out-Null
-    Assert-File (Join-Path $gateFDir 'gate-f-evidence-validation.md') 'Gate F evidence validation Markdown' | Out-Null
+    $gateFReport = Read-Json (Join-Path $gateFDir 'gate-f-report.json') 'Gate F report'
+    if ($null -ne $gateFReport -and $gateFReport.testsPassed -ne $true) {
+        Add-Issue 'Error' 'failed-report' 'Gate F report is not marked testsPassed=true.'
+    }
+    # Test-GateFEvidence writes this file on failure too, so its presence alone proves nothing.
+    $gateFValidation = Join-Path $gateFDir 'gate-f-evidence-validation.md'
+    if ((Assert-File $gateFValidation 'Gate F evidence validation Markdown') -and
+        (Get-Content -LiteralPath $gateFValidation -Raw) -match '(?m)^\| FAIL \|') {
+        Add-Issue 'Error' 'failed-report' 'Gate F evidence validation recorded a failure.'
+    }
 }
 
 $checkedArtifactArray = $checkedArtifacts.ToArray()

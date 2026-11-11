@@ -114,7 +114,6 @@ MISS=""
 MISS+="$(check_src 'Directory.Build.props'           "<VersionPrefix>$VERSION</VersionPrefix>")
 $(check_src 'src/etl-sql-vscode/package.json'        "\"version\": \"$VERSION\"")
 $(check_src 'scripts/build-msi.ps1'                  "} else { \"$VERSION\" }")
-$(check_src 'scripts/publish-release.ps1'            "} else { \"$VERSION\" }")
 $(check_src 'scripts/Master-Release.ps1'             "\$Version = \"$VERSION\"")"
 MISS="$(printf '%s\n' "$MISS" | grep -v '^[[:space:]]*$' || true)"
 if [ -n "$MISS" ]; then
@@ -122,7 +121,7 @@ if [ -n "$MISS" ]; then
 $MISS
 Run Set-Version.ps1 -Version $VERSION."
 fi
-ok "all six version sources read $VERSION"
+ok "all four version sources read $VERSION"
 
 # ---- 3b. operator evidence before push/tag --------------------------------
 step "Operator release evidence"

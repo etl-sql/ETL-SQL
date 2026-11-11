@@ -8,7 +8,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 19 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 18 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -102,16 +102,9 @@ sample on a shared runner.
 
 ### 4. Review of `scripts/`, the installers and `tests/`
 
-**Record:** [v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md) (28 findings, all
+**Record:** [v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md) (34 findings, all
 fixed, and the list of scripts reviewed clean). Add new findings there, not here.
 
-- [ ] **The rest of `scripts/`.** Not yet read, none on a release path: `Test-GateF`,
-  `Test-GateFEvidence`, `Invoke-Release`, `Master-Release`, `test-pre-release.sh`, `set-version.sh`,
-  the HA soak tools (`New-*`, `Export-*`, `Test-HaSoak*`), `Test-ScaleBaseline`,
-  `Test-ScaleCommitComparison`, `Test-ProductionCanaryCertification` and its helpers,
-  `collect-release-timeline`, `lib/submitted-evidence`, `lib/vsix-*`, `compile-browser`,
-  `generate-browser-contracts`, `lib/browser-asset-inputs`, `test-packaged-browser-runtime`,
-  `Test-ReportPayloadBudget`, `Test-ReportingGoldens`, `generate-syntax-index`.
 - [ ] **Native installed-MSI certification of the fixed installer paths.**
 - [ ] **Docker free-space margin.** The Docker job frees preinstalled toolchains and records free
   space before and after the tests. Read the margin after a few runs, then decide whether "no

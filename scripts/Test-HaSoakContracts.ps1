@@ -73,7 +73,7 @@ try {
         Invoke-Step 'HA soak manifest and native CLI tests' {
             dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj `
                 --filter "FullyQualifiedName~ETL_SQL.Tests.Scale.HaLargeJobSoakManifestTests|FullyQualifiedName~ETL_SQL.Tests.Scale.HaFaultInjectionManifestTests|FullyQualifiedName~HaSoakAdminServiceTests|FullyQualifiedName~CliOrchestrator_AdminHaSoak" `
-                --no-restore
+                --no-restore -- RunConfiguration.TreatNoTestsAsError=true
         }
     }
 

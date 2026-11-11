@@ -144,7 +144,6 @@ $versionSources = @(
     @{ File = "Directory.Build.props";                 Needle = "<VersionPrefix>$Version</VersionPrefix>" }
     @{ File = "src/etl-sql-vscode/package.json";       Needle = "`"version`": `"$Version`"" }
     @{ File = "scripts/build-msi.ps1";                 Needle = "} else { `"$Version`" }" }
-    @{ File = "scripts/publish-release.ps1";           Needle = "} else { `"$Version`" }" }
     @{ File = "scripts/Master-Release.ps1";            Needle = "`$Version = `"$Version`"" }
 )
 $mismatch = @()
@@ -158,7 +157,7 @@ foreach ($s in $versionSources) {
 if ($mismatch.Count -gt 0) {
     Fail "Version $Version not found in: $($mismatch -join ', '). Run Set-Version.ps1 -Version $Version."
 }
-Write-Ok "all six version sources read $Version"
+Write-Ok "all $($versionSources.Count) version sources read $Version"
 
 # ---- 3b. operator evidence before push/tag --------------------------------
 Write-Step 'Operator release evidence'

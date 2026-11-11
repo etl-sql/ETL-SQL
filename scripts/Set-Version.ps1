@@ -99,10 +99,6 @@ Update-File "scripts/Master-Release.ps1" `
     '(Master-Release\.ps1 -Version ")\d+\.\d+\.\d+(")' `
     "`${1}$Version`${2}"
 
-Update-File "scripts/publish-release.ps1" `
-    '(\} else \{ ")\d+\.\d+\.\d+(" \})' `
-    "`${1}$Version`${2}"
-
 Update-File "scripts/build-msi.ps1" `
     '(\} else \{ ")\d+\.\d+\.\d+(" \})' `
     "`${1}$Version`${2}"
@@ -124,10 +120,6 @@ Update-File "docs/releases/release-checklist.md" `
 
 Update-File "docs/guides/onboarding/migration-guide.md" `
     '(ETL-SQL Migration Guide \(v)\d+\.\d+\.\d+(\))' `
-    "`${1}$Version`${2}"
-
-Update-File "docs/guides/onboarding/migration-guide.md" `
-    '(ETL-SQL v)\d+\.\d+\.\d+( is the current release baseline)' `
     "`${1}$Version`${2}"
 
 Update-File "docs/reference/performance/performance.md" `

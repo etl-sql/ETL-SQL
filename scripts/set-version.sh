@@ -128,10 +128,6 @@ update_file "scripts/Master-Release.ps1" \
     "(Master-Release\.ps1 -Version \")[0-9]+\.[0-9]+\.[0-9]+(\")" \
     "\1${VERSION}\2"
 
-update_file "scripts/publish-release.ps1" \
-    "(\} else \{ \")[0-9]+\.[0-9]+\.[0-9]+(\" \})" \
-    "\1${VERSION}\2"
-
 update_file "scripts/build-msi.ps1" \
     "(\} else \{ \")[0-9]+\.[0-9]+\.[0-9]+(\" \})" \
     "\1${VERSION}\2"
@@ -153,10 +149,6 @@ update_file "docs/releases/release-checklist.md" \
 
 update_file "docs/guides/onboarding/migration-guide.md" \
     "(ETL-SQL Migration Guide \(v)[0-9]+\.[0-9]+\.[0-9]+(\))" \
-    "\1${VERSION}\2"
-
-update_file "docs/guides/onboarding/migration-guide.md" \
-    "(ETL-SQL v)[0-9]+\.[0-9]+\.[0-9]+( is the current release baseline)" \
     "\1${VERSION}\2"
 
 update_file "docs/reference/performance/performance.md" \

@@ -62,7 +62,7 @@ try {
     ([ordered]@{
         runId = $runId
         generatedAt = (Get-Date).ToUniversalTime().ToString('o')
-        databases = @()
+        databases = @([ordered]@{ datname = 'portal'; size_bytes = 1 }, [ordered]@{ datname = 'orchestrator'; size_bytes = 1 })
     } | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath (Join-Path $resultRoot 'postgres-ha-metrics.json') -Encoding UTF8
     '# PostgreSQL Metrics' | Set-Content -LiteralPath (Join-Path $resultRoot 'postgres-ha-metrics.md') -Encoding UTF8
 
@@ -111,6 +111,20 @@ try {
         $global:LASTEXITCODE = 0
     }
     '# Capacity Report' | Set-Content -LiteralPath (Join-Path $resultRoot 'capacity-report.md') -Encoding UTF8
+
+    # A report that measured nothing, or carries no verdict, must not pass.
+    $capacityJsonPath = Join-Path $resultRoot 'capacity-report.json'
+    $capacityText = Get-Content -LiteralPath $capacityJsonPath -Raw
+    '{"portal":[],"orchestrator":[]}' | Set-Content -LiteralPath $capacityJsonPath -Encoding UTF8
+    $emptySummary = & (Join-Path $ScriptRoot 'Test-HaSoakEvidence.ps1') `
+        -TopologyRunRoot $topology.runRoot -RequiredGate Sustained -AllowDirty
+    Assert-True (@($emptySummary.issues | Where-Object { $_.kind -eq 'empty-report' }).Count -eq 2) 'Expected a capacity report with no steps to fail.'
+    $capacityText | Set-Content -LiteralPath $capacityJsonPath -Encoding UTF8
+    '{}' | Set-Content -LiteralPath (Join-Path $faultResultRoot 'fault-report.json') -Encoding UTF8
+    $noVerdict = & (Join-Path $ScriptRoot 'Test-HaSoakEvidence.ps1') `
+        -TopologyRunRoot $topology.runRoot -RequiredGate FaultInjection -AllowDirty
+    Assert-True (@($noVerdict.issues | Where-Object { $_.kind -eq 'missing-verdict' }).Count -eq 1) 'Expected a fault report with no verdict to fail.'
+    $global:LASTEXITCODE = 0
 
     Remove-Item -LiteralPath (Join-Path $resultRoot 'capacity-report.md') -Force
     $failedSummary = & (Join-Path $ScriptRoot 'Test-HaSoakEvidence.ps1') `

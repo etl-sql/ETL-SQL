@@ -137,7 +137,10 @@ foreach ($scenario in $scenarioNames) {
                 Assert-ScaleCaptureCompatibility -BaselineReport $existing -CurrentReport $existing
                 $child = $existing
             }
-        } catch { /* incomplete/corrupt child report is rerun */ }
+        } catch {
+            # An incomplete, corrupt or incompatible child report is rerun.
+            Write-Host "[$scenario] Stored result not reusable: $($_.Exception.Message)" -ForegroundColor DarkGray
+        }
     }
     if ($null -eq $child) {
         Write-Host "[$scenario] $Rows rows (${scale}x), isolated test host..." -ForegroundColor Cyan
@@ -155,6 +158,10 @@ foreach ($scenario in $scenarioNames) {
         if ($process.ExitCode -ne 0) { throw "Baseline scenario '$scenario' failed with exit code $($process.ExitCode)." }
 
         $child = Get-Content (Join-Path $scenarioOut 'cert-report.json') -Raw | ConvertFrom-Json
+    }
+    $childMetrics = @($child.scenarios)
+    if (-not $child.testsPassed -or $childMetrics.Count -ne 1 -or [long]$childMetrics[0].rowCount -ne $Rows) {
+        throw "Baseline scenario '$scenario' did not produce one passing metric at $Rows rows."
     }
     if ($null -eq $referenceChild) { $referenceChild = $child }
     Assert-ScaleCaptureCompatibility -BaselineReport $referenceChild -CurrentReport $child

@@ -176,6 +176,8 @@ if (process.argv[1] && key(process.argv[1]) === key(fileURLToPath(import.meta.ur
     const run = () => {
         try {
             const result = compileBrowser({ check: process.argv.includes('--check') });
+            // The repository always has TypeScript owners; none found means a broken checkout, not a pass.
+            if (!result.outputs) throw new Error('Browser compilation found no TypeScript sources.');
             console.log(`browser compilation: ${result.outputs} module(s) ${process.argv.includes('--check') ? 'verified' : 'generated'}`);
             return true;
         } catch (error) { console.error(error.message); return false; }
