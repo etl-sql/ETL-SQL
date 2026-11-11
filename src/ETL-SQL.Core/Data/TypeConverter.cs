@@ -148,6 +148,8 @@ public static class TypeConverter
     public static string? ToInvariantText(object? value) => value switch
     {
         null => null,
+        // A database NULL is NULL, not an empty string: `5 + NULL` concatenated to '5'.
+        DBNull => null,
         string text => text,
         DateTime dateTime => FormatDateTime(dateTime),
         DateTimeOffset offset => FormatDateTime(offset.DateTime) + offset.ToString(" zzz", CultureInfo.InvariantCulture),

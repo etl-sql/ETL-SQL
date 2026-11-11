@@ -11,14 +11,15 @@ namespace ETL_SQL.Tests.Hardening
     public class OutputRedactionAndArithmeticSafetyTests
     {
         [Fact]
-        public async Task MathOverflow_ReturnsNull()
+        public async Task MathOverflow_FailsTheStatement()
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
 
-            // Decimal.MaxValue is ~7.9e28. Multiplying it by 10 should overflow.
-            await TestHelpers.Execute(eval, "DECLARE @Large DECIMAL = 79228162514264337593543950335; SELECT @Large * 10 AS Res;");
-            var result = eval.LastResult?.Rows[0]["Res"];
-            Assert.Null(result); // Should be NULL due to overflow protection
+            // Decimal.MaxValue is ~7.9e28. Multiplying it by 10 overflows, which is an error and
+            // not NULL: a NULL read as missing data.
+            var ex = await Assert.ThrowsAnyAsync<Exception>(() =>
+                TestHelpers.Execute(eval, "DECLARE @Large DECIMAL = 79228162514264337593543950335; SELECT @Large * 10 AS Res;"));
+            Assert.Contains("Arithmetic overflow", ex.ToString());
         }
 
         [Fact]

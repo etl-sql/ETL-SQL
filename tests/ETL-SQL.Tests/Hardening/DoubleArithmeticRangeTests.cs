@@ -22,11 +22,16 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
-        public void NonFiniteDoubleResult_IsNull_LikeDecimalOverflow()
+        public void DoubleOverflow_Throws_LikeDecimalOverflow()
         {
-            Assert.Null(BinaryOperatorFactory.Execute(TokenType.STAR, 1e300, 1e300));
-            Assert.Null(BinaryOperatorFactory.Execute(TokenType.PLUS, double.NaN, 1m));
+            var ex = Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(
+                () => BinaryOperatorFactory.Execute(TokenType.STAR, 1e300, 1e300));
+            Assert.Contains("overflow", ex.Message, System.StringComparison.OrdinalIgnoreCase);
         }
+
+        [Fact]
+        public void NonFiniteOperand_PropagatesInsteadOfOverflowing() =>
+            Assert.Equal(double.NaN, BinaryOperatorFactory.Execute(TokenType.PLUS, double.NaN, 1m));
 
         [Fact]
         public void InRangeValues_KeepDecimalResults() =>

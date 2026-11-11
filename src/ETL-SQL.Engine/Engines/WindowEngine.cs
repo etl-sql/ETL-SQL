@@ -189,10 +189,21 @@ public class WindowEngine
                                 break;
                             }
                         case "FIRST_VALUE":
-                            winVal = partitionRows.Count > 0 ? await _context.EvaluateValue(f.Arguments[0], partitionRows[0]) : null;
-                            break;
                         case "LAST_VALUE":
-                            winVal = partitionRows.Count > 0 ? await _context.EvaluateValue(f.Arguments[0], partitionRows[partitionRows.Count - 1]) : null;
+                            {
+                                // Both read a frame the query wrote, as NTH_VALUE does; they used to read
+                                // the whole partition whatever the frame said. The frame the parser adds
+                                // for a bare ORDER BY still reads the whole partition, as it always has:
+                                // changing that changes results for existing scripts (ROADMAP SQ12).
+                                var frame = window.Frame;
+                                bool parserDefault = frame is { Type: WindowFrameType.RANGE, StartBound: WindowFrameBoundType.UNBOUNDED_PRECEDING, EndBound: WindowFrameBoundType.CURRENT_ROW };
+                                var valueFrame = frame != null && !parserDefault
+                                    ? await ResolveFrameRows(i, partitionRows, window)
+                                    : partitionRows;
+                                winVal = valueFrame.Count == 0
+                                    ? null
+                                    : await _context.EvaluateValue(f.Arguments[0], valueFrame[name == "FIRST_VALUE" ? 0 : valueFrame.Count - 1]);
+                            }
                             break;
                         case "NTILE":
                             if (f.Arguments.Count == 0) { winVal = null; break; }

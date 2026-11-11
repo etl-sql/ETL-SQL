@@ -14,6 +14,33 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Return `NULL` from scalar functions given a `NULL` argument: `REPLACE`, `SUBSTRING`, `LEFT`,
+  `RIGHT`, `CHARINDEX`, `INSTR`, `STUFF`, `STR`, `QUOTENAME`, `TRANSLATE`, `PATINDEX`,
+  `STRING_ESCAPE`, `LOG`, `LOG10`, `ATAN2`, `ROUND`, `DATETIMEFROMPARTS`, `TIMEFROMPARTS`,
+  `EOMONTH`, `DATEPART`, `DATEDIFF`, `HASHBYTES`, `SIMILARITY`, `LEVENSHTEIN`, `POSITION` and
+  `AT TIME ZONE`. They answered with an empty string, 0, 1, the first argument or an exception:
+  `CHARINDEX(NULL, 'abc')` was 1, `REPLACE('abc', 'b', NULL)` was `'ac'` and
+  `SIMILARITY(NULL, NULL)` was a 100% match. **Behaviour change.**
+- Skip `NULL` in `STRING_AGG` and `LIST_AGG`, and return `NULL` when a group has no value to
+  join. A `NULL` joined as an empty string (`'a,,b'`) and an empty group gave `''`.
+  **Behaviour change.**
+- Read the window frame in `FIRST_VALUE` and `LAST_VALUE`. Both read the whole partition, so
+  `LAST_VALUE(x) OVER (ORDER BY d ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)` gave the partition's
+  last row on every row.
+- Fail arithmetic on text that is not a number and on a result that does not fit. `'abc' - 5`,
+  `'abc' * 5`, a date plus text and a product too large for `decimal` or `double` all gave `NULL`,
+  so a bad value read as missing data. This covers `-`, `*`, `/`, `%`, `<<` and `>>`; `+` on text
+  still concatenates, and `NaN` or infinity as an operand still carries through.
+  **Behaviour change.**
+- Fail `EXTRACT` on a field it does not know or a value that is not a date. Both gave `NULL`.
+  **Behaviour change.**
+- Compare timestamps at full precision in `=`. Equality dropped the fraction of a second while
+  `<` and `>` kept it, so two times in one second were both equal and ordered.
+  **Behaviour change.**
+- Treat a database `NULL` as `NULL` in arithmetic, `CAST` and aggregates. `5 + NULL` gave `'5'`,
+  `CAST(NULL AS VARCHAR)` gave `''`, `COUNT(col)` counted the row and `MIN`/`MAX` failed when the
+  `NULL` came from a source as `DBNull`. `SUM` and `AVG` over a value that is not a number now fail
+  in test mode too, where they counted it as 0.
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to
   the updated rows and the statement succeeded. The error names the column and lists the columns
   that exist. **Behaviour change.**

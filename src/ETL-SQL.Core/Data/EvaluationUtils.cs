@@ -51,8 +51,10 @@ public static class EvaluationUtils
             if (a is long la && b is long lb) return la == lb;
             if (a is double dbla && b is double dblb) return dbla == dblb;
 
+            // Full precision, as CompareConstants orders. Equality used to drop the fraction of a
+            // second, so two times in one second were both equal and ordered: a = b and a < b.
             if (a is DateTime dta && b is DateTime dtb)
-                return dta.Ticks / TimeSpan.TicksPerSecond == dtb.Ticks / TimeSpan.TicksPerSecond;
+                return dta.Ticks == dtb.Ticks;
 
             // Support ON/OFF boolean literals vs string equivalents
             if (a is bool ba && b is string sb1 && (sb1.Equals("ON", StringComparison.OrdinalIgnoreCase) || sb1.Equals("OFF", StringComparison.OrdinalIgnoreCase)))
@@ -62,7 +64,7 @@ public static class EvaluationUtils
 
             if (decimal.TryParse(Convert.ToString(a, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var m1) && decimal.TryParse(Convert.ToString(b, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var m2)) return m1 == m2;
 
-            if (TryToDateTime(a, out var dt1) && TryToDateTime(b, out var dt2)) return dt1.Year == dt2.Year && dt1.Month == dt2.Month && dt1.Day == dt2.Day && dt1.Hour == dt2.Hour && dt1.Minute == dt2.Minute && dt1.Second == dt2.Second;
+            if (TryToDateTime(a, out var dt1) && TryToDateTime(b, out var dt2)) return dt1.Ticks == dt2.Ticks;
         }
         catch (Exception ex)
         {
@@ -343,7 +345,7 @@ public static class EvaluationUtils
 
     public static object? CastToType(object? value, string? type)
     {
-        if (value == null) return null;
+        if (value is null or DBNull) return null;
         try
         {
             return TypeConverter.Cast(value, type);

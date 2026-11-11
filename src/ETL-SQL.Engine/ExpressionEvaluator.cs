@@ -710,7 +710,7 @@ public class ExpressionEvaluator
     {
         var val = await EvaluateInternal(atTz.Left, context, decryptSensitive);
         var zone = await EvaluateInternal(atTz.TimeZone, context, decryptSensitive);
-        if (val == null || zone == null) return val;
+        if (val is null or DBNull || zone is null or DBNull) return null;
 
         DateTimeOffset dto;
         if (val is DateTimeOffset valDto)
@@ -1405,14 +1405,14 @@ public class ExpressionEvaluator
     {
         var substrVal = await EvaluateInternal(pos.Substring, context, decryptSensitive);
         var strVal = await EvaluateInternal(pos.String, context, decryptSensitive);
-        if (substrVal == null || strVal == null) return 0;
+        if (substrVal is null or DBNull || strVal is null or DBNull) return null;
 
         var substr = substrVal.ToString() ?? "";
         var str = strVal.ToString() ?? "";
 
         // SQL POSITION returns 1-based index, or 0 if not found
         int index = str.IndexOf(substr, StringComparison.OrdinalIgnoreCase);
-        return index + 1;
+        return (decimal)(index + 1);
     }
 
     private async ValueTask<object?> EvaluateExtract(ExtractExpression ext, Row context, bool decryptSensitive = false)
@@ -1420,12 +1420,16 @@ public class ExpressionEvaluator
         var val = await EvaluateInternal(ext.Source, context, decryptSensitive);
         if (val == null) return null;
 
+        if (val is DBNull) return null;
+
+        // A value that is not a date, or a field that does not exist, is an error. Both gave NULL.
         DateTime dt;
-        if (!EvaluationUtils.TryToDateTime(val, out dt)) return null;
+        if (!EvaluationUtils.TryToDateTime(val, out dt))
+            throw new ExecutionException($"EXTRACT cannot read '{TypeConverter.ToInvariantText(val)}' as a date.");
 
         return ext.Field.ToUpperInvariant() switch
         {
-            "YEAR" => dt.Year,
+            "YEAR" => (object)dt.Year,   // object, so each field keeps its own numeric type
             "MONTH" => dt.Month,
             "DAY" => dt.Day,
             "HOUR" => dt.Hour,
@@ -1441,7 +1445,7 @@ public class ExpressionEvaluator
             "DECADE" => (int)Math.Floor(dt.Year / 10.0),
             "CENTURY" => (int)Math.Ceiling(dt.Year / 100.0),
             "MILLENNIUM" => (int)Math.Ceiling(dt.Year / 1000.0),
-            _ => null
+            _ => throw new ExecutionException($"EXTRACT does not know the field '{ext.Field}'.")
         };
     }
 
