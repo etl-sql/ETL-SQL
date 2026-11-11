@@ -365,7 +365,20 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   from the checkout, and `SAMPLES_REQUIRED_SERVICES` names both, so they fail instead of skipping.
   Run locally against both services, each sample passed twice and the jobs, schedules, schedule
   links and the bundle pin (`orch://manufacturing-integration@1/...`) read back from the
-  Orchestrator API. Not yet proven on a hosted runner. **Left:** the rest
+  Orchestrator API. Not yet proven on a hosted runner. (24) `Invoke-AcceptanceProfile.ps1`
+  skipped its three report checks whenever the report publish was refused, for any reason. Smoke
+  parity supplies the script root on both targets, so a publish broken on both passed the Docker
+  job as agreeing skips. With `-ScriptRootPath` given, a missing report now fails "seeded report
+  is listed"; without it the checks still skip (`test-acceptance-profile.mjs`, a stub Portal that
+  answers 500). (25) `Compare-AllocBudget.ps1` warned and exited 0 when the budget file was
+  missing, so the hosted spill gate would pass on nothing if the 10M budget were renamed or the
+  row count changed; with `-MachineMetricsReportOnly` (the hosted gate) a missing budget now
+  fails. (26) `test-installed-portal-assets.mjs` passed an install whose `wwwroot` held no files,
+  and a `--revalidate` whose recorded cache had no entries; both are now problems. Also reviewed,
+  no defects: the `pre-commit` and `pre-push` hooks, `check-staged-csharp`, `Test-PrePush` (every
+  test filter matches real tests), `release-preflight` (runner and manifest),
+  `check-workflow-timeouts`, `ensure-release-certification`, `Test-BrowserShardResult`,
+  `Test-VulnerablePackages`, `collect-windows-payload`, `MsiUpgrade.Helpers`. **Left:** the rest
   of `scripts/` and `tests/`; the first hosted run of the Portal and Orchestrator samples; native installed-MSI
   certification of the fixed installer paths.
 

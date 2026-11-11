@@ -36,6 +36,19 @@ try {
     ['allocation', r => { r.allocation.bytesPerRow *= 1.2; }],
     ['no spill', r => { r.spillBytes = 0; }],
   ]) assert.equal(compare(name, mutate, true).status, 1, `${name} still fails in hosted CI`);
+  // A hosted gate with no budget to compare against proves nothing, so it fails. A workstation
+  // run at a row count nobody has blessed still only warns.
+  const unblessed = reportOnly => {
+    const result = spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-File', path.join(repo, 'scripts/Compare-AllocBudget.ps1'),
+      '-Report', budgetPath, '-Budget', path.join(root, 'no-such-budget.json'), ...(reportOnly ? ['-MachineMetricsReportOnly'] : [])],
+    { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+    assert.ifError(result.error);
+    return { status: result.status, output: result.stdout + result.stderr };
+  };
+  assert.equal(unblessed(false).status, 0, 'a missing budget only warns on a workstation');
+  const hostedUnblessed = unblessed(true);
+  assert.equal(hostedUnblessed.status, 1, `a missing budget fails in hosted CI: ${hostedUnblessed.output}`);
+  assert.match(hostedUnblessed.output, /No allocation budget found/);
   const ci = readFileSync(path.join(repo, '.github/workflows/ci.yml'), 'utf8');
   assert.match(ci, /Test-SpillAllocProfile\.ps1 -ScriptArguments @\([^)]*'-MachineMetricsReportOnly'/);
   console.log('Allocation budget: host-dependent metrics warn in hosted CI; allocation and spill evidence still fail.');

@@ -35,7 +35,8 @@
 .PARAMETER Budget
     Path to the budget JSON. Defaults to
     certification-results/spill-alloc-budgets/budget-<rows>rows.json (resolved after reading the
-    report's row count). Missing budget -> warning + exit 0, with instructions to establish one.
+    report's row count). Missing budget -> warning + exit 0, with instructions to establish one;
+    with -MachineMetricsReportOnly (the hosted gate) a missing budget fails.
 #>
 param(
     [Parameter(Mandatory = $true)]
@@ -58,6 +59,11 @@ if (-not $Budget) {
     $Budget = Join-Path $repoRoot ("certification-results\spill-alloc-budgets\budget-{0}rows.json" -f $new.rows)
 }
 if (-not (Test-Path $Budget)) {
+    if ($MachineMetricsReportOnly) {
+        # The hosted gate exists to compare against a budget; without one it would pass on nothing.
+        Write-Host "[FAIL] No allocation budget found at '$Budget'. The hosted gate needs a checked-in budget for $($new.rows) rows." -ForegroundColor Red
+        exit 1
+    }
     Write-Host "[WARN] No allocation budget found at '$Budget' - skipping budget check." -ForegroundColor Yellow
     Write-Host "       To establish one from a known-good run:" -ForegroundColor Gray
     Write-Host "       .\scripts\Test-SpillAllocProfile.ps1 -Rows $($new.rows) -UpdateBudget" -ForegroundColor Gray
