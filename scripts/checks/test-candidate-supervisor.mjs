@@ -23,13 +23,16 @@ const samples = {
   'hdiutil-busy': { log: 'hdiutil: create failed - Resource busy' },
   'apt-mirror-dns': { log: "  Temporary failure resolving 'security.ubuntu.com'" },
   'windows-payload-dependency': { log: '[stderr] Shared Windows payload selection failed; no rebuild fallback is permitted.' },
-  'playwright-wait': { log: "Microsoft.Playwright.PlaywrightException : Locator expected to contain text 'Previous diagnostics are stale'" },
+  'playwright-wait': { log: 'Microsoft.Playwright.PlaywrightException : net::ERR_NO_BUFFER_SPACE at http://127.0.0.1:5123/' },
   'first-run-sign-in-wait': { log: '  - waiting for Locator("#changeForm") to be visible' },
 };
 for (const [id, input] of Object.entries(samples)) assert.equal(classifyFailure(input)?.id, id);
 // Fixed causes are defects again: a Studio budget missed by the median of three rounds, and a
 // preflight check that outlives its 180 s hang guard.
-for (const log of ['   Studio startup measured 5757.64 ms; budget is 5000.00 ms.',
+// So is any other Playwright wait: the signature used to match every locator or timeout failure.
+for (const log of ["Microsoft.Playwright.PlaywrightException : Locator expected to contain text 'Previous diagnostics are stale'",
+  'Microsoft.Playwright.PlaywrightException : Timeout 5000ms exceeded.',
+  '   Studio startup measured 5757.64 ms; budget is 5000.00 ms.',
   '   Studio keystroke input-to-frame p95 measured 417.30 ms; budget is 50.00 ms.',
   'Studio post-GC JavaScript heap measured 80.00 MiB; budget is 64.00 MiB.',
   'FAIL test-workflows (180.0s): release-validation/preflight/1/test-workflows.log']) {
@@ -86,7 +89,7 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
 {
   const state = {};
   const shard = attempt => run(7, 'Release Certification', 'completed', 'failure', [
-    job('Full CI / Portal Browser Journey (1/3)', 'failure', { log: 'Microsoft.Playwright.PlaywrightException : Timeout 5000ms exceeded.' }),
+    job('Full CI / Portal Browser Journey (1/3)', 'failure', { log: 'Microsoft.Playwright.PlaywrightException : net::ERR_NO_BUFFER_SPACE at http://127.0.0.1:5123/' }),
     job('Full CI / Portal Browser Journey', 'failure', { minute: 20 }),
     job('Full CI / Studio Performance Budgets (macos)', 'cancelled', { annotations: ['The job was not acquired by Runner of type hosted even after multiple attempts'] }),
   ], attempt);
@@ -203,7 +206,7 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
 {
   const sha = 'c'.repeat(40);
   const runs = [{ id: 21, name: 'Release Certification', head_sha: sha, status: 'completed', conclusion: 'failure', run_attempt: 1, html_url: 'u21' }];
-  const coloured = '2026-11-03T20:46:59Z [stdout] \x1b[31m[xUnit.net 00:00:49.23]       Microsoft.Playwright.PlaywrightException : Timeout 5000ms exceeded.\x1b[0m';
+  const coloured = '2026-11-03T20:46:59Z [stdout] \x1b[31m[xUnit.net 00:00:49.23]       Microsoft.Playwright.PlaywrightException : net::ERR_NO_BUFFER_SPACE at http://127.0.0.1:5123/\x1b[0m';
   const query = (args, options = {}) => {
     const route = args.find(a => a.startsWith('repos/')) ?? '';
     if (route.includes('/actions/runs?head_sha=')) return JSON.stringify({ workflow_runs: runs });

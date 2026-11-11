@@ -45,9 +45,12 @@ export const candidateFailureSignatures = [
     evidence: 'Native Package Certification 41710853145 win-x64 after MSI payload checkout timeout, 2026-11-03',
   },
   {
+    // Narrowed 2026-11-11 from every Playwright locator or timeout failure, which gave any browser
+    // regression a free rerun. Only the failures still without a cause fix match: the folder-tree
+    // test, a Windows socket-buffer exhaustion, and a navigation that timed out.
     id: 'playwright-wait', kind: 'flaky', source: 'log',
-    pattern: /Microsoft\.Playwright\.PlaywrightException : (?:Locator expected|Timeout \d+ms exceeded)/,
-    evidence: 'Release Certification 41710847926 Portal Browser Journey 2/3, 2026-11-03',
+    pattern: /TheFolderTreeShowsSubfoldersAndOpensThemByMouseAndKeyboard|net::ERR_NO_BUFFER_SPACE|Timeout \d+ms exceeded\.\s+Call log:\s+- navigating to /,
+    evidence: 'CI 42609393604 Portal Browser Journey 3/3 (folder tree), 2026-11-09; Windows browser lane ERR_NO_BUFFER_SPACE and navigation timeouts (docs/releases/flaky-test-stability.md)',
     issue: 'https://github.com/etl-sql/ETL-SQL/issues/74',
   },
   {
