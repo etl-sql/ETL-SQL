@@ -53,6 +53,7 @@ ASPNETCORE_URLS="http://127.0.0.1:5000" \
 Portal__ScriptRootPath="$ROOT/samples" \
 Portal__DatabasePath="$STATE_DIR/portal.db" \
 Portal__SnapshotDirectory="$STATE_DIR/snapshots" \
+Portal__DatasetRootPath="$STATE_DIR/datasets" \
 Portal__Jwt__Secret='LocalDevelopmentSecretKeyForPortal_32CharsMinimum!' \
 Portal__Dataset__AtRestKey='c29tZS1zZWN1cmUtYmFzZTY0LWF0LXJlc3Qta2V5LTMyLWJ5dGVzLSE=' \
 Portal__FirstRun__AdminUsername=admin \
