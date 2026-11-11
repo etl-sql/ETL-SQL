@@ -600,12 +600,19 @@ jobs:
           docker logs sample-postgres
           exit 1
 
+      # portal_promotion and setup_orchestrator ran nowhere in GitHub before this: nothing listened
+      # on 5000 or 5001, so they were skipped. Both services run from this checkout's source.
+      - name: Start the Portal and Orchestrator for their samples
+        if: runner.os == 'Linux'
+        timeout-minutes: 20
+        run: bash scripts/start-sample-services.sh release-validation/samples/services
+
       - name: Validate samples (Linux)
         if: runner.os == 'Linux'
         shell: pwsh
         timeout-minutes: 27
         env:
-          SAMPLES_REQUIRED_SERVICES: postgres postgresql docker
+          SAMPLES_REQUIRED_SERVICES: postgres postgresql docker portal orchestrator
         run: |
           ./scripts/Invoke-CertificationProcess.ps1 -Command bash -CommandArguments @('./scripts/test-all-samples.sh', '${{ github.event_name == 'pull_request' && '1' || '2' }}') -EvidenceDirectory release-validation/samples/validation -TimeoutSeconds 1500
 

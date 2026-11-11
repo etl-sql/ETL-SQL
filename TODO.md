@@ -360,8 +360,13 @@ reviews found and fixed several P0/P1 defects (see `CHANGELOG.md` and Git histor
   the CI job "Browser and Consumer Contracts" both run the gate; on `9759f2e3c` it passed 124 of
   124 (CI job 130193980566). The 15 files in `scripts/checks` that do not match the pattern
   (`Test-*.ps1`, two `.sh`, one `.py`) and every file in `fixtures/` are each named by a caller.
-  No defect; nothing to wire. **Left:** the rest
-  of `scripts/` and `tests/`; the Portal and Orchestrator samples in GitHub; native installed-MSI
+  No defect; nothing to wire. (23) `portal_promotion` and `setup_orchestrator` (see 4) now run in
+  the Linux sample job: `start-sample-services.sh` builds and starts the Portal and Orchestrator
+  from the checkout, and `SAMPLES_REQUIRED_SERVICES` names both, so they fail instead of skipping.
+  Run locally against both services, each sample passed twice and the jobs, schedules, schedule
+  links and the bundle pin (`orch://manufacturing-integration@1/...`) read back from the
+  Orchestrator API. Not yet proven on a hosted runner. **Left:** the rest
+  of `scripts/` and `tests/`; the first hosted run of the Portal and Orchestrator samples; native installed-MSI
   certification of the fixed installer paths.
 
 ### 5. JSON connector defects (found 2026-11-03)

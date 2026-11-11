@@ -31,6 +31,23 @@ for (const lane of ['EBNF conformance lane', 'SLT lane']) {
   assert.ok(step, `Engine Certification lacks ${lane}.`);
   for (const variable of ['LANG', 'LC_ALL']) assert.match(step, new RegExp(`^          ${variable}: de_DE\\.UTF-8\\r?$`, 'm'), `${lane} must run under de_DE (${variable}).`);
 }
+// portal_promotion and setup_orchestrator ran in no GitHub job: nothing listened on 5000 or 5001,
+// so the validator skipped them. The Linux sample job starts both services from the candidate's
+// source before validation and requires every service it starts.
+const sampleJob = ciSource.split(/^  sample-scripts:\r?\n/m)[1].split(/^  [\w-]+:\r?\n/m)[0];
+const sampleSteps = sampleJob.split(/^      - /m).map(block => block.split(/\r?\n/)[0]);
+const servicesStep = sampleSteps.indexOf('name: Start the Portal and Orchestrator for their samples');
+assert.ok(servicesStep > 0, 'The sample job must start the Portal and Orchestrator.');
+assert.ok(servicesStep < sampleSteps.indexOf('name: Validate samples (Linux)'), 'The services must start before the Linux samples run.');
+assert.match(sampleJob, /run: bash scripts\/start-sample-services\.sh release-validation\/samples\/services\r?$/m);
+assert.match(sampleJob, /^          SAMPLES_REQUIRED_SERVICES: postgres postgresql docker portal orchestrator\r?$/m,
+  'A Portal or Orchestrator sample must fail, not skip, when its service is unreachable.');
+const sampleServices = readFileSync(new URL('../start-sample-services.sh', import.meta.url), 'utf8');
+const sampleValidator = readFileSync(new URL('../test-all-samples.sh', import.meta.url), 'utf8');
+for (const [service, port] of [['portal', 5000], ['orchestrator', 5001]]) {
+  assert.ok(sampleValidator.includes(`${service})`.padEnd(21) + `port_open localhost ${port} ;;`), `The validator must probe ${service} on ${port}.`);
+  assert.ok(sampleServices.includes(`http://127.0.0.1:${port}`), `start-sample-services.sh must serve ${service} on ${port}.`);
+}
 // Upload artifacts are immutable within a run. Failed-only retries must preserve old evidence
 // and create distinct names, including separate matrix executions.
 const ciSections = ciSource.split(/^  ([\w-]+):\r?$/m);
