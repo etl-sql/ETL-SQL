@@ -34,6 +34,11 @@ export const candidateFailureSignatures = [
     evidence: 'Native Package Certification 41676292135 osx-x64, 2026-11-03',
   },
   {
+    id: 'apt-mirror-dns', kind: 'infra', source: 'log',
+    pattern: /Temporary failure resolving '(?:[\w-]+\.)*(?:ubuntu\.com|microsoft\.com)'/,
+    evidence: 'Release Certification 43039101047 Docker Integration Tests (ODBC driver install), 2026-11-11',
+  },
+  {
     id: 'windows-payload-dependency', kind: 'dependent', source: 'log',
     pattern: /Shared Windows payload selection failed|Windows payload publication failed/,
     waitFor: { workflow: 'MSI In-Place Upgrade', job: 'Publish Windows payload' },

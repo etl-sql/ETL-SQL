@@ -1055,16 +1055,22 @@ jobs:
           fi
 
       # OdbcTransactionCloneTests drives a real SQL Server through Microsoft's ODBC driver.
+      # The runner could not resolve the Ubuntu mirrors for three minutes on 2026-11-11 (Release
+      # Certification 43039101047), which failed the nightly. Try three times, 30 s apart.
       - name: Install Microsoft ODBC Driver 18 for SQL Server
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: |
           if ! dpkg -s msodbcsql18 >/dev/null 2>&1; then
             if [ ! -f /etc/apt/sources.list.d/microsoft-prod.list ]; then
               curl -sSL -o /tmp/packages-microsoft-prod.deb "https://packages.microsoft.com/config/ubuntu/$(. /etc/os-release && echo "$VERSION_ID")/packages-microsoft-prod.deb"
               sudo dpkg -i /tmp/packages-microsoft-prod.deb
             fi
-            sudo apt-get update
-            sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+            for attempt in 1 2 3; do
+              if sudo apt-get update && sudo ACCEPT_EULA=Y apt-get install -y -o Acquire::Retries=3 msodbcsql18; then break; fi
+              if [ "$attempt" = 3 ]; then echo "::error::The ODBC driver could not be installed after 3 attempts."; exit 1; fi
+              echo "apt attempt $attempt failed; retrying in 30 s."
+              sleep 30
+            done
           fi
           odbcinst -q -d -n "ODBC Driver 18 for SQL Server"
 

@@ -21,6 +21,7 @@ const samples = {
   'checkout-timeout': { log: "##[error]The action 'Run actions/checkout@v6' has timed out after 3 minutes." },
   'runner-not-acquired': { annotations: ['The job was not acquired by Runner of type hosted even after multiple attempts'] },
   'hdiutil-busy': { log: 'hdiutil: create failed - Resource busy' },
+  'apt-mirror-dns': { log: "  Temporary failure resolving 'security.ubuntu.com'" },
   'windows-payload-dependency': { log: '[stderr] Shared Windows payload selection failed; no rebuild fallback is permitted.' },
   'playwright-wait': { log: "Microsoft.Playwright.PlaywrightException : Locator expected to contain text 'Previous diagnostics are stale'" },
   'first-run-sign-in-wait': { log: '  - waiting for Locator("#changeForm") to be visible' },
