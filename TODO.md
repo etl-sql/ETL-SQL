@@ -8,7 +8,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 17 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 16 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -105,7 +105,7 @@ sample on a shared runner.
 **Record:** [v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md) (34 findings, all
 fixed, and the list of scripts reviewed clean). Add new findings there, not here.
 
-- [ ] **Native installed-MSI certification of the fixed installer paths.**
+Nothing is open here.
 
 ### 5. VS Code extension issues (planned for v0.23.0)
 
