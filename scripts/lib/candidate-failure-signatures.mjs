@@ -4,7 +4,8 @@
 //
 // kind:
 //   infra      GitHub or runner trouble. Rerun up to twice (run attempts 1 and 2).
-//   flaky      A known timing-sensitive test. Rerun once; a second failure is real.
+//   flaky      A known timing-sensitive test. Rerun once; a second failure is real. Temporary:
+//              each carries the issue that tracks its cause fix and its removal.
 //   dependent  Fails because another workflow's job failed. Rerun once that job has succeeded.
 // source: 'log' (the job log) or 'annotation' (check-run annotations; jobs that never started
 // have no log).
@@ -42,11 +43,13 @@ export const candidateFailureSignatures = [
     id: 'playwright-wait', kind: 'flaky', source: 'log',
     pattern: /Microsoft\.Playwright\.PlaywrightException : (?:Locator expected|Timeout \d+ms exceeded)/,
     evidence: 'Release Certification 41710847926 Portal Browser Journey 2/3, 2026-11-03',
+    issue: 'https://github.com/etl-sql/ETL-SQL/issues/74',
   },
   {
     id: 'first-run-sign-in-wait', kind: 'flaky', source: 'log',
     pattern: /waiting for Locator\("#changeForm"\) to be visible/,
     evidence: 'CI 41744076759 Portal Browser Journey 3/3, 2026-11-04 (same shard passed on 2026-11-03 rounds 4 and 5)',
+    issue: 'https://github.com/etl-sql/ETL-SQL/issues/75',
   },
 ];
 

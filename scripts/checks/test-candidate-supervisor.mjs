@@ -13,6 +13,10 @@ const run = (id, name, status, conclusion, jobs, attempt = 1) => ({ id, name, st
 
 // Every signature carries its proving evidence and matches the line it was written from.
 for (const signature of candidateFailureSignatures) assert.ok(signature.evidence, `${signature.id} needs evidence`);
+// A flaky signature hides a test defect for one rerun, so it stays only while an issue tracks its removal.
+for (const signature of candidateFailureSignatures.filter(s => s.kind === 'flaky')) {
+  assert.match(signature.issue ?? '', /^https:\/\/github\.com\/etl-sql\/ETL-SQL\/issues\/\d+$/, `${signature.id} needs its tracking issue`);
+}
 const samples = {
   'checkout-timeout': { log: "##[error]The action 'Run actions/checkout@v6' has timed out after 3 minutes." },
   'runner-not-acquired': { annotations: ['The job was not acquired by Runner of type hosted even after multiple attempts'] },

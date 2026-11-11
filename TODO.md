@@ -50,8 +50,8 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   with one click.
 - [ ] **W5 Flaky tests fixed at the cause.** Every intermittent failure in 207 runs is fixed or
   instrumented. **Left:** flake rate from nightly runs; the three instrumented failures
-  (FolderTree, first sign-in, FTP) when they next fail; an issue for each remaining flaky
-  signature (`playwright-wait`, `first-run-sign-in-wait`).
+  (FolderTree, first sign-in, FTP) when they next fail; remove the two flaky signatures when
+  their issues close (`playwright-wait` #74, `first-run-sign-in-wait` #75).
 - [ ] **W6 Performance certification redesign** (below the cut line). Deterministic metrics gate;
   timing by same-host interleaved A/B; no waivers.
 - [ ] **W7 Local gate hygiene** (below the cut line). Environment preflight; shrink the pre-push hook.
