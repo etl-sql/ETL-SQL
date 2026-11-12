@@ -37,9 +37,6 @@ DROP TABLE tX
 # the table are also deleted.
 
 # this should error, as was dropped with table
-# ETL-SQL keeps no index catalog for in-memory tables: DROP INDEX and REINDEX on one do
-# nothing, so a missing index is not an error. Tracked in ROADMAP.md (SQ15).
-skipif etlsql
 statement error
 DROP INDEX t1i1;
 

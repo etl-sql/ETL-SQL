@@ -1227,6 +1227,13 @@ public sealed record DropIndexStatement : Statement
     public DropIndexStatement(string name, TableReference? table, bool ifExists) { IndexName = name; Table = table; IfExists = ifExists; }
 }
 
+/// <summary><c>REINDEX name</c>: the name is an index, a table or a collation. A bare <c>REINDEX</c> parses as a no-op.</summary>
+public sealed record ReindexStatement : Statement
+{
+    public string Name { get; }
+    public ReindexStatement(string name) { Name = name; }
+}
+
 public sealed record DeclareStatement : Statement
 {
     public string VariableName { get; }

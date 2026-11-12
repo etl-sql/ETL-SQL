@@ -19,6 +19,33 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
     private readonly Evaluator _evaluator = evaluator;
     private readonly VariableScopeManager _variableScopeManager = variableScopeManager;
 
+    // Index name -> the in-memory table it is on. An in-memory table keeps its indexes by column,
+    // not by name, so without this DROP INDEX and REINDEX could not tell a real index from a typo.
+    private readonly Dictionary<string, string> _memoryIndexes = new(StringComparer.OrdinalIgnoreCase);
+
+    private void ForgetIndexesOf(string table)
+    {
+        foreach (var index in _memoryIndexes.Where(e => e.Value.Equals(table, StringComparison.OrdinalIgnoreCase)).Select(e => e.Key).ToList())
+            _memoryIndexes.Remove(index);
+    }
+
+    /// <summary>
+    /// Executes <c>REINDEX name</c>. In-memory indexes are kept current on every write, so there
+    /// is nothing to rebuild; the statement only has to fail on a name that is not an index, a
+    /// table or a collation.
+    /// </summary>
+    public void EvaluateReindex(ReindexStatement stmt, IDictionary<string, IDataSource> connections)
+    {
+        if (_memoryIndexes.ContainsKey(stmt.Name)
+            || connections.ContainsKey(stmt.Name)
+            || stmt.Name.Equals("BINARY", StringComparison.OrdinalIgnoreCase)
+            || stmt.Name.Equals("NOCASE", StringComparison.OrdinalIgnoreCase)
+            || stmt.Name.Equals("RTRIM", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        throw new ExecutionException($"Unknown index or table '{stmt.Name}' at Line {stmt.Line}. REINDEX takes the name of an index, a table or a collation.");
+    }
+
     /// <summary>Executes a CREATE TABLE statement.</summary>
     public async Task EvaluateCreateTable(CreateTableStatement stmt, IDictionary<string, IDataSource> connections)
     {
@@ -105,6 +132,7 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
             {
                 await src.DisposeAsync();
                 connections.Remove(connName);
+                ForgetIndexesOf(connName);
             }
             else if (!stmt.IfExists)
                 throw new ExecutionException($"Table not found: {connName}");
@@ -120,6 +148,7 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
             {
                 await conn.DisposeAsync();
                 connections.Remove(connName);
+                ForgetIndexesOf(connName);
             }
         }
         else if (!stmt.IfExists)
@@ -186,10 +215,17 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
                 _logger.WriteLine($"WHAT IF: Would drop index {stmt.IndexName} from {connName}", ConsoleColor.Yellow);
                 return;
             }
-            if (connections.TryGetValue(connName, out var connection) && connection is InMemoryDataSource mem)
+            if (connections.TryGetValue(connName, out var connection) && connection is InMemoryDataSource or AppendOnlyColumnDataSource)
             {
-                // InMemory index removal
-                _logger.WriteLine($"Index {stmt.IndexName} dropped from {connName}", ConsoleColor.Yellow);
+                if (_memoryIndexes.TryGetValue(stmt.IndexName, out var owner) && owner.Equals(connName, StringComparison.OrdinalIgnoreCase))
+                {
+                    _memoryIndexes.Remove(stmt.IndexName);
+                    _logger.WriteLine($"Index {stmt.IndexName} dropped from {connName}", ConsoleColor.Yellow);
+                }
+                else if (!stmt.IfExists)
+                {
+                    throw new ExecutionException($"Unknown index '{stmt.IndexName}' on {connName} at Line {stmt.Line}.");
+                }
             }
             else if (connection is IDatabaseSource sqlConn)
             {
@@ -199,15 +235,23 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
         }
         else
         {
+            if (_memoryIndexes.TryGetValue(stmt.IndexName, out var owner))
+            {
+                if (_evaluator.IsWhatIf)
+                {
+                    _logger.WriteLine($"WHAT IF: Would drop index {stmt.IndexName} from {owner}", ConsoleColor.Yellow);
+                    return;
+                }
+                _memoryIndexes.Remove(stmt.IndexName);
+                _logger.WriteLine($"Index {stmt.IndexName} dropped from {owner}", ConsoleColor.Yellow);
+                return;
+            }
+
+            // Not an in-memory index: a database connection may own it.
             bool executedAny = false;
             foreach (var conn in connections.Values)
             {
-                if (conn is InMemoryDataSource)
-                {
-                    _logger.WriteLine($"Index {stmt.IndexName} dropped from in-memory connection", ConsoleColor.Yellow);
-                    executedAny = true;
-                }
-                else if (conn is IDatabaseSource sqlConn)
+                if (conn is IDatabaseSource sqlConn)
                 {
                     if (_evaluator.IsWhatIf)
                     {
@@ -223,7 +267,7 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
 
             if (!executedAny && !stmt.IfExists)
             {
-                throw new ExecutionException($"Context table required for dropping index {stmt.IndexName} and no active connections were found to target.");
+                throw new ExecutionException($"Unknown index '{stmt.IndexName}' at Line {stmt.Line}. No in-memory table has an index of that name, and no database connection is open to ask.");
             }
         }
     }
@@ -243,6 +287,7 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
         if (connection is InMemoryDataSource mem)
         {
             foreach (var col in stmt.Columns) mem.CreateIndex(col, stmt.IsUnique);
+            _memoryIndexes[stmt.IndexName] = connName;
             _logger.WriteLine($"Index {stmt.IndexName} created on {connName} ({string.Join(", ", stmt.Columns)})", ConsoleColor.Green);
         }
         else if (connection is AppendOnlyColumnDataSource)
@@ -250,6 +295,7 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
             var mutable = (InMemoryDataSource)await TempTableStorageRouter.EnsureMutableAsync(
                 _evaluator, connName, connection, "CREATE INDEX");
             foreach (var col in stmt.Columns) mutable.CreateIndex(col, stmt.IsUnique);
+            _memoryIndexes[stmt.IndexName] = connName;
             _logger.WriteLine($"Index {stmt.IndexName} created on {connName} ({string.Join(", ", stmt.Columns)})", ConsoleColor.Green);
         }
         else

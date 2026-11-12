@@ -55,6 +55,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Load the table named by `EXEC (@sql) INTO #t` when no connection is given. The local form
   ignored `INTO`: it printed the result and left the table missing, which the empty table a read
   used to create had hidden. It now fails when the SQL returns no result set.
+- Fail `DROP INDEX` and `REINDEX` on an index that does not exist. An in-memory table kept its
+  indexes by column and not by name, so both statements succeeded on any name. The engine now
+  records each index name, fails with `Unknown index`, and drops a table's indexes with the
+  table. `DROP INDEX IF EXISTS` still succeeds. **Behaviour change.**
 - Read a bracketed or bare value in a `PIVOT ... IN` list by its name. `FOR id IN ([1], [2])` read
   each value as `NULL`, so the pivoted columns held nothing.
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to

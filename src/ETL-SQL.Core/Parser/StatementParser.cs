@@ -349,10 +349,10 @@ public class StatementParser
 
         if (type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("REINDEX", System.StringComparison.OrdinalIgnoreCase))
         {
-            _parser.Advance();
+            var reindexToken = _parser.Advance();
             if (_parser.Current.Type == TokenType.IDENTIFIER)
             {
-                _parser.Advance();
+                return new ReindexStatement(_parser.Advance().Value) { Line = reindexToken.Line, Column = reindexToken.Column };
             }
             return new NoOpStatement();
         }

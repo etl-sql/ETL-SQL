@@ -63,6 +63,7 @@ public static class AstSerializer
         DropProcedureStatement s => $"DROP PROCEDURE {(s.IfExists ? "IF EXISTS " : "")}{s.ProcedureName};",
         DropFunctionStatement s => $"DROP FUNCTION {(s.IfExists ? "IF EXISTS " : "")}{s.FunctionName};",
         DropViewStatement s => $"DROP VIEW {(s.IfExists ? "IF EXISTS " : "")}{s.ViewName};",
+        ReindexStatement s => $"REINDEX {s.Name};",
         DropIndexStatement s => $"DROP INDEX {(s.IfExists ? "IF EXISTS " : "")}{s.IndexName}{(s.Table != null ? " ON " + s.Table.ToSql() : "")};",
         TruncateTableStatement s => $"TRUNCATE TABLE {s.TargetTable.ToSql()};",
         CreateIndexStatement s => FormatCreateIndex(s),
