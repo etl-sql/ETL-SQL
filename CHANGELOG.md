@@ -90,6 +90,18 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   number parse and a date parse: `'00123'` came back as the number 123 and `'2026-01-05'` as a
   date. A table under the threshold was not affected, so a script gave different values at
   scale. **Behaviour change.**
+- Sort `NULL` last for `ORDER BY ... DESC` on a columnar temp table. The columnar sort put
+  `NULL` first for both directions; the row sort puts it first for `ASC` and last for `DESC`.
+  The two now agree. **Behaviour change.**
+- Keep `PIVOT` rows apart when their grouping values differ. The group key was the values
+  joined with `|`, so `('x|y', 'z')` and `('x', 'y|z')` shared one output row, and `NULL` shared
+  a row with the text `'NULL'`.
+- Count the rows of a `NULL` pivot value in a dynamic `PIVOT ... ON`. The `NULL` column was
+  filtered with `= NULL`, which matches nothing, so it was always empty.
+- Read `[q1]` or a bare `q1` in the `IN` list of a `PIVOT` that spills. The spilled path read
+  the name as a column and failed with `Unknown column 'q1'`.
+- Leave `NULL` cells out of `UNPIVOT`, as the reference says. Every cell produced a row.
+  **Behaviour change.**
 - Read a bracketed or bare value in a `PIVOT ... IN` list by its name. `FOR id IN ([1], [2])` read
   each value as `NULL`, so the pivoted columns held nothing.
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to

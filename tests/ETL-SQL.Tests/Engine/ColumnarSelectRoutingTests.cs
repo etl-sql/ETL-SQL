@@ -1304,6 +1304,47 @@ public sealed class ColumnarSelectRoutingTests
             }, scores.Length);
     }
 
+    [Theory]
+    // NULL sorts lowest, as in the row sort: first for ASC and last for DESC.
+    [InlineData("ORDER BY Region", "null,A,b,c")]
+    [InlineData("ORDER BY Region ASC", "null,A,b,c")]
+    [InlineData("ORDER BY Region DESC", "c,b,A,null")]
+    [InlineData("ORDER BY Score DESC, Region DESC", "c,b,A,null")]
+    [InlineData("ORDER BY Score, Region DESC", "c,b,A,null")]
+    public async Task SortPlannerPutsNullWhereTheRowSortPutsIt(string orderBy, string expected)
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.BatchSize = 2;
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Region", typeof(string), "VARCHAR(20)"),
+            new ColumnBatchField("Score", typeof(int), "INT"),
+            new ColumnBatchField("Label", typeof(string), "VARCHAR(20)")
+        });
+        await using var source = new NativeOnlyDataSource(new[]
+        {
+            Batch(new string?[] { "b", null }, new[] { "b", "null" }),
+            Batch(new string?[] { "A", "c" }, new[] { "A", "c" })
+        }, true);
+        evaluator.Connections["native_null_sort"] = source;
+        var statement = ParseSelect($"SELECT Label, Region, Score FROM native_null_sort {orderBy};");
+
+        var labels = (await new SelectStatementHandler(NullLogger.Instance)
+            .EvaluateQuery(statement, evaluator).ToListAsync()).SelectMany(batch => batch.Rows)
+            .Select(row => row["Label"]?.ToString()).ToArray();
+
+        Assert.Equal(expected, string.Join(",", labels));
+        Assert.Equal(0, source.RowReadAttempts);
+
+        ColumnBatch Batch(string?[] regions, string[] labels)
+            => new(schema, new IColumnBuffer[]
+            {
+                Utf8ColumnBuffer.FromStrings(regions),
+                new ColumnBuffer<int>(new[] { 1, 1 }, 2),
+                Utf8ColumnBuffer.FromStrings(labels)
+            }, 2);
+    }
+
     [Fact]
     public async Task SortPlannerRejectsOversizedEstimateBeforeRowExternalSortFallback()
     {

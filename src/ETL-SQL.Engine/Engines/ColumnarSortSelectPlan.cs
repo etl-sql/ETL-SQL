@@ -61,8 +61,9 @@ internal sealed class ColumnarSortSelectPlan
         var operatorBudget = (long)context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
         if (operatorBudget > 0 && estimatedBytes > operatorBudget) return null;
 
+        // NULL sorts lowest, as in the row sort: first for ASC and last for DESC.
         var keys = _orderKeys.Select(key => new NativeSortKey(
-            key.Column, key.Descending, NullsFirst: true,
+            key.Column, key.Descending, NullsFirst: !key.Descending,
             context.CaseSensitiveComparison ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)).ToArray();
         var batches = new List<ColumnBatch>();
         var runs = new List<NativeSortRun>();

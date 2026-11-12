@@ -54,10 +54,12 @@ public class PivotEngine
         }
 
         // 2. Group by grouping columns
-        var groups = new Dictionary<string, List<Row>>();
+        // The key holds the values themselves. Joined text put ('x|y', 'z') and ('x', 'y|z') in
+        // one group, and NULL in the group of the text 'NULL'.
+        var groups = new Dictionary<CompoundKey, List<Row>>();
         foreach (var row in rows)
         {
-            var key = string.Join("|", groupingCols.Select(c => row[c]?.ToString() ?? "NULL"));
+            var key = new CompoundKey(groupingCols.Select(c => row[c]).ToArray());
             if (!groups.TryGetValue(key, out var list)) { list = new List<Row>(); groups[key] = list; }
             list.Add(row);
         }
@@ -117,11 +119,15 @@ public class PivotEngine
         {
             foreach (var unpivotCol in unpivotCols)
             {
+                // A NULL cell is not a value: UNPIVOT leaves it out.
+                var value = FindValue(row, unpivotCol);
+                if (value is null or DBNull) continue;
+
                 var newRow = new Row();
                 foreach (var col in colsToKeep) newRow[col] = row[col];
 
                 newRow[unpivot.NameColumn] = unpivotCol;
-                newRow[unpivot.ValueColumn] = FindValue(row, unpivotCol);
+                newRow[unpivot.ValueColumn] = value;
                 resultRows.Add(newRow);
             }
         }
@@ -192,11 +198,11 @@ public class PivotEngine
         }
         else
         {
-            var seen = new Dictionary<string, List<object?>>();
+            var seen = new Dictionary<CompoundKey, List<object?>>();
             foreach (var row in rows)
             {
-                var combo = pivot.OnColumns.Select(on => row[on]).ToList();
-                var key = string.Join("", combo.Select(x => x?.ToString() ?? " "));
+                var combo = pivot.OnColumns.Select(on => row[on] is DBNull ? null : row[on]).ToList();
+                var key = new CompoundKey(combo.ToArray());
                 if (!seen.ContainsKey(key)) seen[key] = combo;
             }
             combos = seen.Values.OrderBy(c => c, Comparer<List<object?>>.Create(CompareCombo)).ToList();
@@ -212,7 +218,7 @@ public class PivotEngine
             Expression? comboFilter = null;
             for (int i = 0; i < pivot.OnColumns.Count; i++)
             {
-                var eq = new BinaryExpression(new IdentifierExpression(pivot.OnColumns[i]), TokenType.EQUALS, LiteralFor(combo[i]));
+                var eq = ValueFilter(pivot.OnColumns[i], combo[i]);
                 comboFilter = comboFilter == null ? eq : new BinaryExpression(comboFilter, TokenType.AND, eq);
             }
 
@@ -271,6 +277,12 @@ public class PivotEngine
             ? id.Name
             : await _context.EvaluateValue(value, new Row());
 
+    /// <summary>The filter that picks the rows of one pivot value. <c>= NULL</c> picks none.</summary>
+    private static Expression ValueFilter(string column, object? value) =>
+        value is null or DBNull
+            ? new IsNullExpression(new IdentifierExpression(column), false)
+            : new BinaryExpression(new IdentifierExpression(column), TokenType.EQUALS, LiteralFor(value));
+
     private static Expression LiteralFor(object? value) => value switch
     {
         null => new LiteralExpression(null, TokenType.NULL),
@@ -314,10 +326,7 @@ public class PivotEngine
                 : new List<Expression> { new IdentifierExpression(pivot.AggregateColumn) };
             var aggregate = new FunctionCallExpression(pivot.AggregateFunction, arguments)
             {
-                Filter = new BinaryExpression(
-                    new IdentifierExpression(pivot.PivotColumn),
-                    TokenType.EQUALS,
-                    valueExpression)
+                Filter = ValueFilter(pivot.PivotColumn, pivotValue)
             };
             finalColumns.Add(new SelectColumn(aggregate, targetName));
             colNames.Add(targetName);
@@ -362,11 +371,14 @@ public class PivotEngine
     {
         foreach (var unpivotCol in unpivotCols)
         {
+            var value = FindValue(row, unpivotCol);
+            if (value is null or DBNull) continue;
+
             var newRow = new Row();
             foreach (var col in colsToKeep) newRow[col] = row[col];
 
             newRow[unpivot.NameColumn] = unpivotCol;
-            newRow[unpivot.ValueColumn] = FindValue(row, unpivotCol);
+            newRow[unpivot.ValueColumn] = value;
             yield return newRow;
         }
     }
