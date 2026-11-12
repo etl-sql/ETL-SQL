@@ -108,15 +108,46 @@ public static class EvaluationUtils
         // Numeric comparison via decimal (handles mixed numeric types and numeric-looking strings).
         // TryParse instead of Parse-in-try/catch avoids throwing and catching a FormatException on
         // every non-numeric comparison (e.g. a plain string sort) — an expensive per-call cost.
-        if (decimal.TryParse(Convert.ToString(a, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var da)
-            && decimal.TryParse(Convert.ToString(b, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var db))
-            return da.CompareTo(db);
+        //
+        // Values order by kind first: numbers, then dates, then other text. A number against text
+        // that is not a number used to compare as text, which gave no consistent order
+        // (9 < 10, 10 < '5x' and '5x' < 9 all held), so a sort had no right answer.
+        bool aNumber = TryOrderAsNumber(a, out var da);
+        bool bNumber = TryOrderAsNumber(b, out var db);
+        if (aNumber && bNumber) return da.CompareTo(db);
+        if (aNumber != bNumber) return aNumber ? -1 : 1;
 
-        if (TryToDateTime(a, out var dta) && TryToDateTime(b, out var dtb))
-            return dta.CompareTo(dtb);
+        bool aDate = TryOrderAsDate(a, out var dta);
+        bool bDate = TryOrderAsDate(b, out var dtb);
+        if (aDate && bDate) return dta.CompareTo(dtb);
+        if (aDate != bDate) return aDate ? -1 : 1;
 
         var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         return string.Compare(a?.ToString() ?? "", b?.ToString() ?? "", comparison);
+    }
+
+    private static bool TryOrderAsNumber(object? value, out decimal number)
+    {
+        number = 0;
+        if (value is string text && !HasDigit(text)) return false;
+        return decimal.TryParse(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture),
+            System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out number);
+    }
+
+    private static bool TryOrderAsDate(object? value, out DateTime date)
+    {
+        date = default;
+        if (value is string text && !HasDigit(text)) return false;
+        return TryToDateTime(value, out date);
+    }
+
+    // Text with no digit is neither a number nor a date. Checking first keeps the parsers off the
+    // plain-text sort path.
+    private static bool HasDigit(string text)
+    {
+        foreach (var c in text)
+            if (c is >= '0' and <= '9') return true;
+        return false;
     }
 
     public static bool TryToDateTime(object? val, out DateTime dt)

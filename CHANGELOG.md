@@ -74,6 +74,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   database `NULL` argument, which read as the text of an empty value. A `NULL` length in
   `OVERLAY ... FOR` and `NULL` trim characters in `TRIM` now give `NULL` too; they were ignored.
   **Behaviour change.**
+- Order values by kind before value: numbers, then dates, then other text. A number compared
+  with text that is not a number fell back to comparing their text, which gave no consistent
+  order: `9 < 10`, `10 < '5x'` and `'5x' < 9` all held. `ORDER BY`, `MIN`, `MAX` and the
+  comparison operators now put `'5x'` and `'#1'` after every number. **Behaviour change.**
 - Read a bracketed or bare value in a `PIVOT ... IN` list by its name. `FOR id IN ([1], [2])` read
   each value as `NULL`, so the pivoted columns held nothing.
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to

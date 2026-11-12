@@ -302,7 +302,6 @@ Select individual IDs into `TODO.md` when scheduling.
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
 | SQ03 | **Finish failing closed on unresolved identifiers.** An unknown column, bare name or undeclared `@variable` now fails, on spilled rows and on the unmatched rows of an outer join too. Still silent: a misspelt column on an unmatched outer-join row when the other side has no rows and nothing names its columns (a table function, a `PIVOT`, a `SELECT *` over a join, or an empty left side read from a file or database). Closing that needs the statement's column set at bind time, beyond `SelectColumnBinder`'s temp-table case. A visual whose source fails also renders empty instead of reporting the error. | — | M |
-| SQ05 | **Define how a number orders against text in `EvaluationUtils`.** v0.22.0 compares `DateTime` values at full tick precision in both `IsSoftEqual` and `CompareConstants`. Left: a number compared with text that is not a number silently falls back to string ordering; fail, or define an explicit type precedence. | — | S |
 
 #### Joins, grouping, aggregates, windows, sorting, and standard library `NULL` semantics
 
