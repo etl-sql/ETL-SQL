@@ -70,6 +70,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Return `NULL` from `GENERATE_SERIES` when a bound or the step is `NULL`, and fail on a step of
   0. A `NULL` bound read as 0, and a zero step returned 1,000,001 copies of the start value.
   **Behaviour change.**
+- Return `NULL` from `CHARACTER_LENGTH`, `OCTET_LENGTH`, `SUBSTRING`, `OVERLAY` and `TRIM` for a
+  database `NULL` argument, which read as the text of an empty value. A `NULL` length in
+  `OVERLAY ... FOR` and `NULL` trim characters in `TRIM` now give `NULL` too; they were ignored.
+  **Behaviour change.**
 - Read a bracketed or bare value in a `PIVOT ... IN` list by its name. `FOR id IN ([1], [2])` read
   each value as `NULL`, so the pivoted columns held nothing.
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to

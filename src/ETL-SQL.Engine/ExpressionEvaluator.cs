@@ -659,8 +659,8 @@ public class ExpressionEvaluator
         if (fn == "CHARACTER_LENGTH" || fn == "CHAR_LENGTH" || fn == "OCTET_LENGTH")
         {
             var val = await EvaluateInternal(f.Arguments.FirstOrDefault(), context ?? Row.Empty, decryptSensitive);
-            if (val == null) return null;
-            var s = val.ToString() ?? "";
+            if (val.IsNull()) return null;
+            var s = val!.ToString() ?? "";
             return fn == "OCTET_LENGTH" ? System.Text.Encoding.UTF8.GetByteCount(s) : s.Length;
         }
 
@@ -1380,18 +1380,18 @@ public class ExpressionEvaluator
     private async ValueTask<object?> EvaluateSubstring(SubstringExpression sub, Row context, bool decryptSensitive = false)
     {
         var val = await EvaluateInternal(sub.String, context, decryptSensitive);
-        if (val == null) return null;
-        var s = val.ToString() ?? "";
+        if (val.IsNull()) return null;
+        var s = val!.ToString() ?? "";
 
         var startVal = await EvaluateInternal(sub.Start, context, decryptSensitive);
-        if (startVal == null) return null;
+        if (startVal.IsNull()) return null;
         int start = Convert.ToInt32(startVal);
 
         int? len = null;
         if (sub.Length != null)
         {
             var lenVal = await EvaluateInternal(sub.Length, context, decryptSensitive);
-            if (lenVal == null) return null;
+            if (lenVal.IsNull()) return null;
             len = Convert.ToInt32(lenVal);
             if (len <= 0) return "";
         }
@@ -1462,10 +1462,10 @@ public class ExpressionEvaluator
         var ovlVal = await EvaluateInternal(ovl.Overlay, context, decryptSensitive);
         var startVal = await EvaluateInternal(ovl.Start, context, decryptSensitive);
 
-        if (strVal == null || ovlVal == null || startVal == null) return null;
+        if (strVal.IsNull() || ovlVal.IsNull() || startVal.IsNull()) return null;
 
-        var s = strVal.ToString() ?? "";
-        var o = ovlVal.ToString() ?? "";
+        var s = strVal!.ToString() ?? "";
+        var o = ovlVal!.ToString() ?? "";
         int start = Convert.ToInt32(startVal);
 
         if (start < 1) start = 1;
@@ -1475,7 +1475,9 @@ public class ExpressionEvaluator
         if (ovl.Length != null)
         {
             var lenVal = await EvaluateInternal(ovl.Length, context, decryptSensitive);
-            if (lenVal != null) len = Convert.ToInt32(lenVal);
+            // A NULL length used to mean "the length of the replacement".
+            if (lenVal.IsNull()) return null;
+            len = Convert.ToInt32(lenVal);
         }
 
         if (dotNetStart > s.Length) return s + o;
@@ -1489,14 +1491,16 @@ public class ExpressionEvaluator
     private async ValueTask<object?> EvaluateTrim(TrimExpression trim, Row context, bool decryptSensitive = false)
     {
         var val = await EvaluateInternal(trim.String, context, decryptSensitive);
-        if (val == null) return null;
-        var s = val.ToString() ?? "";
+        if (val.IsNull()) return null;
+        var s = val!.ToString() ?? "";
 
         char[]? chars = null;
         if (trim.Characters != null)
         {
             var cVal = await EvaluateInternal(trim.Characters, context, decryptSensitive);
-            if (cVal != null) chars = cVal.ToString()?.ToCharArray();
+            // NULL trim characters used to mean "trim white space".
+            if (cVal.IsNull()) return null;
+            chars = cVal!.ToString()?.ToCharArray();
         }
 
         return trim.Type switch

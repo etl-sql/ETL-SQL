@@ -62,6 +62,43 @@ public sealed class FailClosedExpressionTests
         Assert.Null(BinaryOperatorFactory.Execute(ETL_SQL.Core.Parser.TokenType.PLUS, 5m, DBNull.Value));
     }
 
+    [Theory]
+    [InlineData("CHARACTER_LENGTH(x)")]
+    [InlineData("CHAR_LENGTH(x)")]
+    [InlineData("OCTET_LENGTH(x)")]
+    [InlineData("SUBSTRING(x FROM 1 FOR 2)")]
+    [InlineData("SUBSTRING('abc' FROM x)")]
+    [InlineData("SUBSTRING('abc' FROM 1 FOR x)")]
+    [InlineData("OVERLAY(x PLACING 'z' FROM 1)")]
+    [InlineData("OVERLAY('abc' PLACING x FROM 1)")]
+    [InlineData("OVERLAY('abc' PLACING 'z' FROM x)")]
+    [InlineData("OVERLAY('abc' PLACING 'z' FROM 1 FOR x)")]
+    [InlineData("TRIM(x)")]
+    [InlineData("TRIM(BOTH x FROM 'abc')")]
+    [InlineData("TRIM(LEADING 'a' FROM x)")]
+    public async Task ASyntaxFunctionReturnsNullForANullOrDatabaseNullArgument(string expression)
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        var select = (SelectStatement)new Lexer($"SELECT {expression} AS v FROM #t;").TokenizeToScript().Statements[0];
+        foreach (var missing in new object?[] { DBNull.Value, null })
+        {
+            var value = await evaluator.EvaluateValue(select.Columns[0].Expression, new Row { ["x"] = missing });
+            Assert.True(value is null or DBNull, $"{expression} gave '{value}' for {(missing == null ? "null" : "DBNull")}.");
+        }
+    }
+
+    [Theory]
+    [InlineData("CHARACTER_LENGTH('héllo')", "5")]
+    [InlineData("OCTET_LENGTH('héllo')", "6")]
+    [InlineData("SUBSTRING('abcdef' FROM 2 FOR 3)", "bcd")]
+    [InlineData("OVERLAY('abcdef' PLACING 'ZZ' FROM 2 FOR 3)", "aZZef")]
+    [InlineData("TRIM(BOTH 'x' FROM 'xxabcxx')", "abc")]
+    [InlineData("TRIM('  abc  ')", "abc")]
+    public async Task ASyntaxFunctionStillAnswers(string expression, string expected)
+    {
+        Assert.Equal(expected, TypeConverter.ToInvariantText(await Scalar(expression)));
+    }
+
     private static async Task<object?> Scalar(string expression)
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
