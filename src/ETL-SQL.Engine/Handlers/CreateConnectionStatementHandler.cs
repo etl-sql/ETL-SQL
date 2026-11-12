@@ -65,7 +65,7 @@ public class CreateConnectionStatementHandler(
             {
                 foreach (var kvp in stmt.Options)
                 {
-                    var val = StringifyOption(await context.EvaluateValue(kvp.Value, new Row(), decryptSensitive: true), kvp.Value);
+                    var val = StringifyOption(await context.EvaluateValue(kvp.Value, OptionRow(), decryptSensitive: true), kvp.Value);
                     options[kvp.Key] = val;
                 }
             }
@@ -86,7 +86,7 @@ public class CreateConnectionStatementHandler(
             {
                 foreach (var kvp in stmt.Options)
                 {
-                    var val = StringifyOption(await context.EvaluateValue(kvp.Value, new Row(), decryptSensitive: true), kvp.Value);
+                    var val = StringifyOption(await context.EvaluateValue(kvp.Value, OptionRow(), decryptSensitive: true), kvp.Value);
                     options[kvp.Key] = Interpolate(val, context);
                 }
             }
@@ -271,6 +271,13 @@ public class CreateConnectionStatementHandler(
         preview.ExecutionTimeMs = 0;
         return preview;
     }
+
+    /// <summary>
+    /// The row an option value is read against. An option takes a bare keyword
+    /// (<c>DELIMITER = PIPE</c>), which is not a name anything defines, so it must read as NULL here
+    /// for <see cref="StringifyOption"/> to use the keyword itself.
+    /// </summary>
+    private static Row OptionRow() => new() { MayLackColumns = true };
 
     private string StringifyOption(object? val, Expression? expr = null)
     {

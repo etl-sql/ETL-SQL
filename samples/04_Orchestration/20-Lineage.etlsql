@@ -5,11 +5,13 @@
 -- ==========================================
 
 -- 1. Setup Sample Data
-DECLARE @RawData = [
-    {"ID": 1, "Name": "Alice", "Sales": 100},
-    {"ID": 2, "Name": "Bob", "Sales": 200},
-    {"ID": 3, "Name": "Charlie", "Sales": 150}
-];
+SELECT ID, Name, Sales
+INTO @RawData
+FROM (
+    SELECT 1 AS ID, 'Alice' AS Name, 100 AS Sales
+    UNION ALL SELECT 2 AS ID, 'Bob' AS Name, 200 AS Sales
+    UNION ALL SELECT 3 AS ID, 'Charlie' AS Name, 150 AS Sales
+) src;
 
 -- 2. First Transformation: Filter and Calculate Tax
 SELECT 

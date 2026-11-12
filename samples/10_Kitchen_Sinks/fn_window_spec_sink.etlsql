@@ -14,7 +14,8 @@ SELECT
     LAG(Sol, 1, 0) OVER(ORDER BY ID) AS [LAG],
     LEAD(Sol, 1, 0) OVER(ORDER BY ID) AS [LEAD],
     FIRST_VALUE(Sol) OVER(PARTITION BY Val ORDER BY ID) AS [FIRST],
-    LAST_VALUE(Sol) OVER(PARTITION BY Val ORDER BY ID) AS [LAST];
+    LAST_VALUE(Sol) OVER(PARTITION BY Val ORDER BY ID) AS [LAST]
+FROM #T;
 
 -- Lineage (Requires tagged columns)
 -- Test if these run without error even if data is empty

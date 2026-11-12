@@ -69,7 +69,7 @@ public class PivotEngine
 
         foreach (var valExpr in pivot.PivotValues)
         {
-            var val = await _context.EvaluateValue(valExpr, new Row());
+            var val = await PivotValueAsync(valExpr);
             pivotValues.Add(val);
             pivotValueNames.Add(val?.ToString() ?? "NULL");
         }
@@ -188,7 +188,7 @@ public class PivotEngine
         {
             combos = new List<List<object?>>();
             foreach (var v in pivot.InValues)
-                combos.Add(new List<object?> { await _context.EvaluateValue(v, new Row()) });
+                combos.Add(new List<object?> { await PivotValueAsync(v) });
         }
         else
         {
@@ -262,6 +262,15 @@ public class PivotEngine
         return a.Count.CompareTo(b.Count);
     }
 
+    /// <summary>
+    /// A value in the IN list of a PIVOT. <c>[1]</c> or a bare word there is the value by name, not
+    /// a column: it read as NULL, which named every output column <c>NULL</c>.
+    /// </summary>
+    private async Task<object?> PivotValueAsync(Expression value) =>
+        value is IdentifierExpression id && !id.Name.StartsWith('@')
+            ? id.Name
+            : await _context.EvaluateValue(value, new Row());
+
     private static Expression LiteralFor(object? value) => value switch
     {
         null => new LiteralExpression(null, TokenType.NULL),
@@ -298,7 +307,7 @@ public class PivotEngine
 
         foreach (var valueExpression in pivot.PivotValues)
         {
-            var pivotValue = await _context.EvaluateValue(valueExpression, new Row());
+            var pivotValue = await PivotValueAsync(valueExpression);
             var targetName = pivotValue?.ToString() ?? "NULL";
             var arguments = pivot.AggregateColumn == "*"
                 ? new List<Expression>()

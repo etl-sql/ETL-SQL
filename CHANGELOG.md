@@ -46,6 +46,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   succeeded with wrong data. The error names the column and lists the columns in scope. The
   unmatched side of an outer join still reads as `NULL`. Not yet covered: an undeclared
   `@variable`, and rows read back from a spill file. **Behaviour change.**
+- Read a bracketed or bare value in a `PIVOT ... IN` list by its name. `FOR id IN ([1], [2])` read
+  each value as `NULL`, so the pivoted columns held nothing.
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to
   the updated rows and the statement succeeded. The error names the column and lists the columns
   that exist. **Behaviour change.**

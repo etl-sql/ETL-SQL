@@ -86,6 +86,36 @@ public sealed class UnknownIdentifierTests
         Assert.Contains(rows, row => row["rid"] is null or DBNull);
     }
 
+    [Fact]
+    public async Task PivotInListReadsABracketedValueByName()
+    {
+        var rows = await Run(
+            "SELECT [1] AS one, [2] AS two FROM (SELECT 1 AS id, 'A' AS val UNION ALL SELECT 2 AS id, 'B' AS val) src " +
+            "PIVOT (MAX(val) FOR id IN ([1], [2])) AS pvt;");
+
+        var row = Assert.Single(rows);
+        Assert.Equal("A", row["one"]);
+        Assert.Equal("B", row["two"]);
+    }
+
+    [Fact]
+    public async Task ConnectionOptionTakesABareKeyword()
+    {
+        var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"sq03-{Guid.NewGuid():N}.csv");
+        try
+        {
+            await System.IO.File.WriteAllTextAsync(path, "id|name\n1|north\n");
+            var rows = await Run(
+                $"CREATE CONNECTION f AS FLATFILE('{path}', HEADER=ON, DELIMITER=PIPE); SELECT name AS v FROM f.FILE;");
+
+            Assert.Equal("north", Assert.Single(rows)["v"]);
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+        }
+    }
+
     private static async Task<Row[]> Run(string sql)
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

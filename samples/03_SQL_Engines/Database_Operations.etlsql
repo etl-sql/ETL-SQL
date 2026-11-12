@@ -3,18 +3,18 @@ CREATE CONNECTION my_oracle AS ORACLE('Server=OracleDemo;');
 CREATE CONNECTION my_mssql AS MSSQL('Server=SqlDemo;Database=DemoDb;');
 
 -- Test Standalone Updates
-UPDATE my_mssql.DemoDb.dbo.Employee 
-SET column2 = 'New', Status = 1 
-WHERE column1 = 'Test' AND Active = 1;
+UPDATE my_mssql.DemoDb.dbo.Users
+SET UserName = 'New', Email = 'new@example.com'
+WHERE UserID = 1;
 
 -- Test Standalone Selects (Should Pushdown and Print)
-SELECT 
-    UPPER(column1, column2) AS type_uppercase, 
-    CONCAT(column2, '_processed') AS val_formatted,
-    column3 * 10 + 50 AS calculated_metric
-FROM my_oracle.hr.departments 
-WHERE (column1 = 'Test' OR column1 = 'Other') AND column3 >= 50;
+SELECT
+    UPPER(UserName) AS name_uppercase,
+    CONCAT(Email, '_processed') AS val_formatted,
+    UserID * 10 + 50 AS calculated_metric
+FROM my_oracle.hr.Users
+WHERE (UserName = 'Test' OR UserName = 'Other') AND UserID >= 50;
 
 -- Test Select -> Insert
-INSERT INTO my_mssql.DemoDb.dbo.Employee_Log
-SELECT * FROM my_mssql.DemoDb.dbo.Employee WHERE Status = 'Changed';
+INSERT INTO my_mssql.DemoDb.dbo.Users_Log
+SELECT * FROM my_mssql.DemoDb.dbo.Users WHERE UserName = 'New';
