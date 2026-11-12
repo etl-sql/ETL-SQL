@@ -181,7 +181,7 @@ internal sealed class ColumnarCompositeGroupedAggregatePlan : IColumnarGroupedAg
                 if (slot.Kind == SlotKind.Key)
                 {
                     row[index] = ColumnBatchAdapter.RestoreEngineValue(
-                        key[slot.KeyIndex], _keyLogicalTypes![slot.KeyIndex]);
+                        key.Original(slot.KeyIndex), _keyLogicalTypes![slot.KeyIndex]);
                     continue;
                 }
                 if (slot.CountStar) { row[index] = (decimal)state.RowCount; continue; }
@@ -274,11 +274,17 @@ internal sealed class ColumnarCompositeGroupedAggregatePlan : IColumnarGroupedAg
         private readonly object? _second;
         private readonly object? _third;
         private readonly object?[]? _overflow;
+        // The text a key part was built from, where normalizing changed it. Not part of equality.
+        private readonly string?[]? _originals;
         private readonly int _count;
         private readonly int _hashCode;
 
-        private CompositeKey(object? first, object? second, object? third, object?[]? overflow, int count)
+        /// <summary>The value to return for a grouping column: text stays text.</summary>
+        public object? Original(int index) => _originals?[index] ?? this[index];
+
+        private CompositeKey(object? first, object? second, object? third, object?[]? overflow, string?[]? originals, int count)
         {
+            _originals = originals;
             _first = first;
             _second = second;
             _third = third;
@@ -305,11 +311,18 @@ internal sealed class ColumnarCompositeGroupedAggregatePlan : IColumnarGroupedAg
         {
             object? first = null, second = null, third = null;
             object?[]? overflow = columns.Count > 3 ? new object?[columns.Count - 3] : null;
+            string?[]? originals = null;
             keyBytes = 0;
             for (var index = 0; index < columns.Count; index++)
             {
-                var value = CompoundKey.NormalizeValue(columns[index].GetBoxedValue(row));
+                var boxed = columns[index].GetBoxedValue(row);
+                var value = CompoundKey.NormalizeValue(boxed);
                 if (value is string text) keyBytes = checked(keyBytes + text.Length * 2L);
+                if (boxed is string original && !ReferenceEquals(original, value))
+                {
+                    (originals ??= new string?[columns.Count])[index] = original;
+                    keyBytes = checked(keyBytes + original.Length * 2L);
+                }
                 switch (index)
                 {
                     case 0: first = value; break;
@@ -318,7 +331,7 @@ internal sealed class ColumnarCompositeGroupedAggregatePlan : IColumnarGroupedAg
                     default: overflow![index - 3] = value; break;
                 }
             }
-            return new CompositeKey(first, second, third, overflow, columns.Count);
+            return new CompositeKey(first, second, third, overflow, originals, columns.Count);
         }
 
         public bool Equals(CompositeKey other)

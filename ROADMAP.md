@@ -227,16 +227,6 @@ wrong values instead of throwing an error, and blind spots in EBNF and fuzzer ge
     arguments; `<expr> AT TIME ZONE NULL` returns `<expr>` unchanged instead of `NULL`; `EXTRACT`
     returns `null` on invalid date strings or unrecognized field names; `Evaluator` batch execution
     (`GO`) catches and logs batch exceptions without failing the script.
-  - **Grouping, `DISTINCT`, aggregates, and `HAVING` (`CompoundKey.cs`, `AggregateEngine.cs`):**
-    `CompoundKey.NormalizeValue` parses numeric-looking strings (`'00123'`) into `decimal` (`123m`)
-    and date-looking strings into `DateTime`, and `AggregateEngine` copies the normalized key slot
-    into the output row—mutating string values and collapsing leading-zero codes in `GROUP BY`,
-    `DISTINCT`, and `UNION`/`INTERSECT`/`EXCEPT`. `AggregateEngine` state accumulators check
-    `val != null` instead of `!val.IsNull()`, so `COUNT(col)` counts `DBNull.Value`, `MIN`/`MAX`
-    throw `NullReferenceException` on `DBNull.Value`, and `SafeToDecimal` returns `0m` when
-    `IsTestMode` is active. `STRING_AGG` and `LIST_AGG` turn `NULL` into `""` (`'a,,b'`) and return
-    `""` on empty groups. `HAVING` runs before grouping expressions and `SELECT` aliases are
-    populated in `havingContext`.
   - **Window functions (`WindowEngine.cs`, `ExternalWindowEngine.cs`):** `FIRST_VALUE`, `LAST_VALUE`,
     and `NTH_VALUE` read `partitionRows` directly and ignore `window.Frame`. Windowed aggregates with
     `ORDER BY` and no explicit `ROWS`/`RANGE` clause use the entire partition in `WindowEngine`
@@ -307,9 +297,9 @@ Select individual IDs into `TODO.md` when scheduling.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| SQ11 | **Stop `CompoundKey` string mutation and fix `HAVING` in `AggregateEngine`.** v0.22.0 skips `DBNull.Value` in every aggregate state, fails on a value that is not a number instead of counting it as 0 in test mode, skips `NULL` in `STRING_AGG` and `LIST_AGG`, returns `NULL` for an empty group, and keeps number-like codes such as `'00123'` apart. Left: keep strings typed as strings in `CompoundKey` (the output still returns plain number text as a number), and populate grouping expressions and `SELECT` aliases before evaluating `HAVING`. | — | M |
 | SQ12 | **Apply the default running frame and fix `NULL` `RANGE` peers in `WindowEngine`.** v0.22.0 makes `FIRST_VALUE` and `LAST_VALUE` read an explicit frame. Left: with `ORDER BY` and no frame clause, `LAST_VALUE` still reads the whole partition, although the parser adds the ANSI default `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` and `NTH_VALUE` and the aggregates honour it; `WindowFunctionTests.TestFirstLastValue` pins the old result, `ExternalWindowEngine` must agree at scale, and it changes results for existing scripts; and `ResolveRangeFrame` on a `NULL` order key should cover only its `NULL` peers, not the whole partition. | — | M |
 | SQ13 | **Align columnar vs. row `ORDER BY ... DESC` null ordering and fix `PIVOT`/`UNPIVOT` key and `NULL` handling.** Make `ColumnarSortSelectPlan` / `ColumnBatchSorting` and row/stream sorting agree on `NULL` ordering for `ASC`/`DESC` and `NULLS FIRST`/`NULLS LAST`; replace stringified `"|"` group keys in `PivotEngine` with `CompoundKey`, handle `NULL` pivot column filters with `IS NULL`, and exclude `NULL` value rows in `UNPIVOT`. | — | M |
+| SQ17 | **Add `ORDER BY ... NULLS FIRST` and `NULLS LAST`.** The dialect has no syntax to place `NULL` in a sort; `NULL` always sorts lowest (first for `ASC`, last for `DESC`). Parse `NULLS FIRST` / `NULLS LAST` after `ASC` / `DESC` in a query `ORDER BY` and in a window `ORDER BY`, carry it on `OrderByClause`, and honour it in the row sort, the external sort, the columnar sort (`NativeSortKey.NullsFirst` already exists), Top-N and the window engines. Keep today's order as the default. Push it down to a source that supports it and sort locally otherwise. Update `docs/grammar.ebnf`, the `ORDER BY` reference page and the formatter; `GrammarWalkGenerator` already emits `DESC NULLS LAST`. | SQ13 | M |
 
 #### SLT corpus, EBNF grammar, and fuzzer/NoREC expansion
 

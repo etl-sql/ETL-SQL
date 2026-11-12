@@ -732,7 +732,8 @@ public sealed class ColumnarSelectRoutingTests
 
         Assert.Equal(2m, Assert.Single(rows, row => Equals(row["Category"], "A"))["RowCount"]);
         Assert.Equal(1m, Assert.Single(rows, row => Equals(row["Category"], "a"))["RowCount"]);
-        Assert.Equal(2m, Assert.Single(rows, row => Equals(row["Category"], 1m))["RowCount"]);
+        // '1' and '1.0' are one group, and the group returns the text it saw first.
+        Assert.Equal(2m, Assert.Single(rows, row => Equals(row["Category"], "1"))["RowCount"]);
         Assert.Equal(2m, Assert.Single(rows, row => row["Category"] == null)["RowCount"]);
         Assert.Equal(0, source.RowReadAttempts);
 

@@ -78,6 +78,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   with text that is not a number fell back to comparing their text, which gave no consistent
   order: `9 < 10`, `10 < '5x'` and `'5x' < 9` all held. `ORDER BY`, `MIN`, `MAX` and the
   comparison operators now put `'5x'` and `'#1'` after every number. **Behaviour change.**
+- Return a grouped text column as text. `GROUP BY` compares `'123'` and `123` as one value, and
+  the query returned the compared value: text `'123'` came back as a number, `'2026-01-05'` as a
+  date, and `'abc '` without its trailing space. A group now returns the first value it saw.
+  **Behaviour change.**
+- Let `HAVING` name a `SELECT` alias of a grouping expression, and a grouping expression that is
+  a function call. `SELECT UPPER(region) AS r ... GROUP BY UPPER(region) HAVING r = 'EAST'`
+  returned no rows, and `HAVING UPPER(region) = 'EAST'` failed on `region`.
 - Read a bracketed or bare value in a `PIVOT ... IN` list by its name. `FOR id IN ([1], [2])` read
   each value as `NULL`, so the pivoted columns held nothing.
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to

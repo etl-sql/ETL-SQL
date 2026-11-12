@@ -16,6 +16,8 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
     private readonly int _hashCode;
     private readonly bool _caseInsensitive;
     private readonly bool _isJoinKey;
+    // The text a group key was built from, where normalizing changed it. Not part of equality.
+    private readonly object?[]? _originals;
 
     public int Length => _values.Length;
     public object? this[int index] => _values[index];
@@ -55,7 +57,16 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
     public static CompoundKey CreateJoinKey(bool caseSensitive, object?[] values, int setIndex = 0) =>
         new(setIndex, caseSensitive, true, values);
 
-    private CompoundKey(int setIndex, bool caseSensitive, bool isJoinKey, object?[] values)
+    /// <summary>
+    /// Creates a group key that remembers the text it was built from. <c>'123'</c> and <c>123</c>
+    /// still fall in one group, and <see cref="Original"/> returns the first value the group saw.
+    /// </summary>
+    public static CompoundKey ForGroup(object?[] values) => new(0, true, false, values, keepOriginals: true);
+
+    /// <summary>The value to return for a grouping column: text stays text.</summary>
+    public object? Original(int index) => _originals != null ? _originals[index] : _values[index];
+
+    private CompoundKey(int setIndex, bool caseSensitive, bool isJoinKey, object?[] values, bool keepOriginals = false)
     {
         _setIndex = setIndex;
         _caseInsensitive = !caseSensitive;
@@ -81,6 +92,14 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
                 hash.Add(normalized);
         }
         _hashCode = hash.ToHashCode();
+
+        if (!keepOriginals) return;
+        for (int i = 0; i < values.Length; i++)
+        {
+            if (values[i] is not string original || ReferenceEquals(original, _values[i])) continue;
+            _originals ??= (object?[])_values.Clone();
+            _originals[i] = original;
+        }
     }
 
     public bool Equals(CompoundKey other)

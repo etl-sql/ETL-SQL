@@ -155,24 +155,11 @@ public class AggregateEngine
             CompoundKey key;
             if (groupBy != null && groupBy.Count > 0)
             {
-                if (groupBy.Count == 1)
-                {
-                    key = new CompoundKey(await EvaluateGroupExpr(groupBy[0], finalColumns, row));
-                }
-                else if (groupBy.Count == 2)
-                {
-                    key = new CompoundKey(await EvaluateGroupExpr(groupBy[0], finalColumns, row), await EvaluateGroupExpr(groupBy[1], finalColumns, row));
-                }
-                else if (groupBy.Count == 3)
-                {
-                    key = new CompoundKey(await EvaluateGroupExpr(groupBy[0], finalColumns, row), await EvaluateGroupExpr(groupBy[1], finalColumns, row), await EvaluateGroupExpr(groupBy[2], finalColumns, row));
-                }
-                else
-                {
-                    var vals = new object?[groupBy.Count];
-                    for (int i = 0; i < groupBy.Count; i++) vals[i] = await EvaluateGroupExpr(groupBy[i], finalColumns, row);
-                    key = new CompoundKey(vals);
-                }
+                // The key remembers the text it was built from, so a grouped VARCHAR '123' is
+                // returned as text and not as the number it was compared as.
+                var vals = new object?[groupBy.Count];
+                for (int i = 0; i < groupBy.Count; i++) vals[i] = await EvaluateGroupExpr(groupBy[i], finalColumns, row);
+                key = CompoundKey.ForGroup(vals);
             }
             else key = new CompoundKey("GLOBAL");
 
@@ -231,29 +218,8 @@ public class AggregateEngine
                 resRow[$"AGG_{aggregateSpecs[i].Function.ToSql().ToUpperInvariant()}"] = val;
             }
 
-            // Check HAVING
-            if (havingClause != null)
-            {
-                var havingContext = resRow.Clone(); // Use finalized aggregates
-                for (int i = 0; i < havingAggSpecs.Count; i++)
-                {
-                    var val = await states.HavingStates[i].Finalize(this);
-                    havingContext[$"AGG_{havingAggSpecs[i].Function.ToSql().ToUpperInvariant()}"] = val;
-                }
-                // For grouping columns in HAVING
-                if (groupBy != null)
-                {
-                    for (int i = 0; i < groupBy.Count; i++)
-                    {
-                        var colName = groupBy[i] is IdentifierExpression id ? id.Name.Split('.').Last() : groupBy[i].ToSql();
-                        havingContext[colName] = key[i];
-                    }
-                }
-
-                if (!await _context.EvaluateCondition(havingClause, havingContext)) continue;
-            }
-
-            // Fill non-aggregate columns (grouping columns)
+            // Fill non-aggregate columns (grouping columns). This runs before HAVING so that HAVING
+            // can name a SELECT alias of a grouping expression.
             for (int i = 0; i < finalColumns.Count; i++)
             {
                 if (aggregateSpecs.Any(spec => spec.ColumnIndex == i)) continue; // Already filled by aggregate
@@ -270,7 +236,7 @@ public class AggregateEngine
 
                 if (groupIdx >= 0 && groupIdx < key.Length)
                 {
-                    resRow[i] = key[groupIdx];
+                    resRow[i] = key.Original(groupIdx);
                 }
                 else if (IsWindowFunction(finalColumns[i].Expression)) { /* Handled later */ }
                 else if (IsAggregate(finalColumns[i].Expression))
@@ -289,6 +255,32 @@ public class AggregateEngine
                         resRow[i] = null;
                     }
                 }
+            }
+
+            // Check HAVING
+            if (havingClause != null)
+            {
+                var havingContext = resRow.Clone(); // Use finalized aggregates
+                for (int i = 0; i < havingAggSpecs.Count; i++)
+                {
+                    var val = await states.HavingStates[i].Finalize(this);
+                    havingContext[$"AGG_{havingAggSpecs[i].Function.ToSql().ToUpperInvariant()}"] = val;
+                }
+                // For grouping columns in HAVING
+                if (groupBy != null)
+                {
+                    for (int i = 0; i < groupBy.Count; i++)
+                    {
+                        var colName = groupBy[i] is IdentifierExpression id ? id.Name.Split('.').Last() : groupBy[i].ToSql();
+                        havingContext[colName] = key.Original(i);
+                        // A grouping expression that is a function call, such as UPPER(region), is
+                        // looked up by its text like a finished aggregate. Its arguments are gone.
+                        if (groupBy[i] is FunctionCallExpression groupFunction)
+                            havingContext[$"AGG_{groupFunction.ToSql().ToUpperInvariant()}"] = key.Original(i);
+                    }
+                }
+
+                if (!await _context.EvaluateCondition(havingClause, havingContext)) continue;
             }
 
             resultRows.Add(resRow);
