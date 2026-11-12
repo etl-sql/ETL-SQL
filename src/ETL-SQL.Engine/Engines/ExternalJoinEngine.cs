@@ -346,8 +346,12 @@ public class ExternalJoinEngine
     /// <summary>Streams the probe (left) side against a packed build table, emitting join results.</summary>
     private async IAsyncEnumerable<Row> ProbeJoin(string leftName, PackedBuildTable table, JoinClause join, List<string> leftKeys)
     {
-        bool isLeftJoin = join.JoinType.Contains("LEFT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase);
-        bool isRightJoin = join.JoinType.Contains("RIGHT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase);
+        // SEMI and ANTI return left rows only, each at most once. "LEFT SEMI JOIN" is not an outer join.
+        bool isSemi = join.JoinType.Contains("SEMI", StringComparison.OrdinalIgnoreCase);
+        bool isAnti = join.JoinType.Contains("ANTI", StringComparison.OrdinalIgnoreCase);
+        bool leftOnly = isSemi || isAnti;
+        bool isLeftJoin = !leftOnly && (join.JoinType.Contains("LEFT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase));
+        bool isRightJoin = !leftOnly && (join.JoinType.Contains("RIGHT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase));
         // Track matched build rows by physical index (one bit per packed blob) for RIGHT/FULL outer.
         var matched = isRightJoin ? new bool[table.Rows.Count] : null;
 
@@ -373,13 +377,19 @@ public class ExternalJoinEngine
                                 var combined = CombineRows(left, right);
                                 if (await _context.EvaluateCondition(join.Condition, combined))
                                 {
-                                    yield return combined;
                                     producedMatch = true;
+                                    if (leftOnly) break;
+                                    yield return combined;
                                     if (matched != null) matched[idx] = true;
                                 }
                             }
                         }
-                        if (!producedMatch && isLeftJoin)
+                        if (leftOnly)
+                        {
+                            if (producedMatch == isSemi)
+                                yield return left ?? RowPacker.MaterializeBatchRow(batch, rowIndex);
+                        }
+                        else if (!producedMatch && isLeftJoin)
                             yield return Shape.Unmatched(left ?? RowPacker.MaterializeBatchRow(batch, rowIndex));
                     }
                 }
@@ -400,14 +410,19 @@ public class ExternalJoinEngine
                         var combined = CombineRows(left, right);
                         if (await _context.EvaluateCondition(join.Condition, combined))
                         {
-                            yield return combined;
                             producedMatch = true;
+                            if (leftOnly) break;
+                            yield return combined;
                             if (matched != null) matched[idx] = true;
                         }
                     }
                 }
 
-                if (!producedMatch && isLeftJoin)
+                if (leftOnly)
+                {
+                    if (producedMatch == isSemi) yield return left;
+                }
+                else if (!producedMatch && isLeftJoin)
                     yield return Shape.Unmatched(left);
             }
         }

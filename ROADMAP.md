@@ -227,13 +227,6 @@ wrong values instead of throwing an error, and blind spots in EBNF and fuzzer ge
     arguments; `<expr> AT TIME ZONE NULL` returns `<expr>` unchanged instead of `NULL`; `EXTRACT`
     returns `null` on invalid date strings or unrecognized field names; `Evaluator` batch execution
     (`GO`) catches and logs batch exceptions without failing the script.
-  - **Joins (`JoinEngine.cs`):** `PerformHashSemiAntiJoin` probes `HashSet<CompoundKey>` without
-    skipping `NULL` keys or re-evaluating `join.Condition`, so `SEMI JOIN` and `ANTI JOIN` match
-    `NULL = NULL` and silently discard non-equality `ON` conjuncts (`ON a.id = b.id AND b.flag = 1`).
-    `ApplyResolvablePredicates` pushes `WHERE` predicates down before joining based on bare column
-    names (`IdentifierExpression.GetSourceColumns` strips table aliases), corrupting joins whenever
-    two tables share a column name. `PerformSortMergeJoin` ($\ge 2,000$ rows) sorts only by
-    `leftKeys[0]` / `rightKeys[0]` while comparing all composite keys.
   - **Grouping, `DISTINCT`, aggregates, and `HAVING` (`CompoundKey.cs`, `AggregateEngine.cs`):**
     `CompoundKey.NormalizeValue` parses numeric-looking strings (`'00123'`) into `decimal` (`123m`)
     and date-looking strings into `DateTime`, and `AggregateEngine` copies the normalized key slot
@@ -316,7 +309,6 @@ Select individual IDs into `TODO.md` when scheduling.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| SQ10 | **Fix `SEMI JOIN`/`ANTI JOIN` `NULL` matching, alias-aware `WHERE` pushdown, and composite merge join in `JoinEngine`.** Exclude `NULL` keys and evaluate residual `ON` predicates in `PerformHashSemiAntiJoin`; preserve table qualifiers in `ApplyResolvablePredicates` so predicates on right-side tables are never evaluated against the left table before joining; and sort by all composite keys in `PerformSortMergeJoin`. | — | M |
 | SQ11 | **Stop `CompoundKey` string mutation and fix `HAVING` in `AggregateEngine`.** v0.22.0 skips `DBNull.Value` in every aggregate state, fails on a value that is not a number instead of counting it as 0 in test mode, skips `NULL` in `STRING_AGG` and `LIST_AGG`, returns `NULL` for an empty group, and keeps number-like codes such as `'00123'` apart. Left: keep strings typed as strings in `CompoundKey` (the output still returns plain number text as a number), and populate grouping expressions and `SELECT` aliases before evaluating `HAVING`. | — | M |
 | SQ12 | **Apply the default running frame and fix `NULL` `RANGE` peers in `WindowEngine`.** v0.22.0 makes `FIRST_VALUE` and `LAST_VALUE` read an explicit frame. Left: with `ORDER BY` and no frame clause, `LAST_VALUE` still reads the whole partition, although the parser adds the ANSI default `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` and `NTH_VALUE` and the aggregates honour it; `WindowFunctionTests.TestFirstLastValue` pins the old result, `ExternalWindowEngine` must agree at scale, and it changes results for existing scripts; and `ResolveRangeFrame` on a `NULL` order key should cover only its `NULL` peers, not the whole partition. | — | M |
 | SQ13 | **Align columnar vs. row `ORDER BY ... DESC` null ordering and fix `PIVOT`/`UNPIVOT` key and `NULL` handling.** Make `ColumnarSortSelectPlan` / `ColumnBatchSorting` and row/stream sorting agree on `NULL` ordering for `ASC`/`DESC` and `NULLS FIRST`/`NULLS LAST`; replace stringified `"|"` group keys in `PivotEngine` with `CompoundKey`, handle `NULL` pivot column filters with `IS NULL`, and exclude `NULL` value rows in `UNPIVOT`. | — | M |

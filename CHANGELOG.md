@@ -59,6 +59,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   indexes by column and not by name, so both statements succeeded on any name. The engine now
   records each index name, fails with `Unknown index`, and drops a table's indexes with the
   table. `DROP INDEX IF EXISTS` still succeeds. **Behaviour change.**
+- Return each left row at most once from a `SEMI JOIN` or `ANTI JOIN` that spills to disk. The
+  spilled join ran a `SEMI JOIN` and an `ANTI JOIN` as an `INNER JOIN`, and the `LEFT` forms as a
+  `LEFT JOIN`, so the result held joined rows, one per match. Removed the buffered join path that
+  nothing called; the `NULL` key, `ON` clause and `WHERE` pushdown defects recorded against it do
+  not occur in the streaming join, and tests now pin that.
 - Read a bracketed or bare value in a `PIVOT ... IN` list by its name. `FOR id IN ([1], [2])` read
   each value as `NULL`, so the pivoted columns held nothing.
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to
