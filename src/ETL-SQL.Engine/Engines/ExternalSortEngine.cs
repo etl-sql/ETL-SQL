@@ -98,8 +98,8 @@ public class ExternalSortEngine
             {
                 for (int i = 0; i < orderBy.Count; i++)
                 {
-                    var res = _context.CompareConstants(a.Keys[i], b.Keys[i]);
-                    if (res != 0) return orderBy[i].Descending ? -res : res;
+                    var res = orderBy[i].OutputOrder(_context.CompareConstants(a.Keys[i], b.Keys[i]), a.Keys[i], b.Keys[i]);
+                    if (res != 0) return res;
                 }
                 return 0;
             }

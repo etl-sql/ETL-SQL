@@ -1124,8 +1124,7 @@ public class ExternalWindowEngine
                     foreach (var expression in group.Signature.PartitionBy)
                         reverseCriteria.Add(new OrderByClause(expression, false));
                 }
-                reverseCriteria.AddRange(group.Signature.OrderBy!.Select(c =>
-                    new OrderByClause(c.Expression, !c.Descending)));
+                reverseCriteria.AddRange(group.Signature.OrderBy!.Select(c => c.Reversed()));
 
                 var reversePartitionIndex = -1;
                 long rowsSeen = 0;

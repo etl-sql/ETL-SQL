@@ -728,7 +728,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             orderBy ??= new List<OrderByClause>(stmt.OrderBy);
             columns ??= new List<SelectColumn>(finalColumns);
             names ??= new List<string>(colNames);
-            orderBy[i] = new OrderByClause(new IdentifierExpression(name), stmt.OrderBy[i].Descending);
+            orderBy[i] = stmt.OrderBy[i].On(new IdentifierExpression(name));
             columns.Add(new SelectColumn(expression, name));
             names.Add(name);
             hidden.Add(name);

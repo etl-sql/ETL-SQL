@@ -99,8 +99,8 @@ namespace ETL_SQL.Engine.Engines
             {
                 for (int i = 0; i < orderBy.Count; i++)
                 {
-                    int cmp = _context.CompareConstants(a.Keys[i], b.Keys[i]);
-                    if (cmp != 0) return orderBy[i].Descending ? -cmp : cmp;
+                    int cmp = orderBy[i].OutputOrder(_context.CompareConstants(a.Keys[i], b.Keys[i]), a.Keys[i], b.Keys[i]);
+                    if (cmp != 0) return cmp;
                 }
                 return 0;
             });

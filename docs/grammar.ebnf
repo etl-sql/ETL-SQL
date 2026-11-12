@@ -649,7 +649,8 @@ window_clause = [ base_window_name ] [ "PARTITION" "BY" expression_list ] [ "ORD
 base_window_name = identifier ;
 grouping_expression = expression ;
 ordering_expression = expression ;
-order_list = ordering_expression [ "ASC" | "DESC" ] { "," ordering_expression [ "ASC" | "DESC" ] } ;
+order_list = order_item { "," order_item } ;
+order_item = ordering_expression [ "ASC" | "DESC" ] [ "NULLS" ( "FIRST" | "LAST" ) ] ;
 window_frame_clause = ( "ROWS" | "RANGE" | "GROUPS" )
                       ( "BETWEEN" window_frame_bound "AND" window_frame_bound | window_frame_bound )
                       [ "EXCLUDE" ( "CURRENT" "ROW" | "GROUP" | "TIES" | "NO" "OTHERS" ) ] ;

@@ -1311,6 +1311,9 @@ public sealed class ColumnarSelectRoutingTests
     [InlineData("ORDER BY Region DESC", "c,b,A,null")]
     [InlineData("ORDER BY Score DESC, Region DESC", "c,b,A,null")]
     [InlineData("ORDER BY Score, Region DESC", "c,b,A,null")]
+    // A placement the query writes wins over the default.
+    [InlineData("ORDER BY Region NULLS LAST", "A,b,c,null")]
+    [InlineData("ORDER BY Region DESC NULLS FIRST", "null,c,b,A")]
     public async Task SortPlannerPutsNullWhereTheRowSortPutsIt(string orderBy, string expected)
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

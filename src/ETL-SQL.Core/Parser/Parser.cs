@@ -614,7 +614,7 @@ public class Parser : IParser
                     {
                         Advance(); // optional ASC
                     }
-                    orderBy.Add(new OrderByClause(orderExpr, descending));
+                    orderBy.Add(new OrderByClause(orderExpr, descending, ParseNullsPlacement()));
                 }
                 while (Match(TokenType.COMMA) && !AtClauseEnd());
             }
@@ -1838,10 +1838,26 @@ public class Parser : IParser
             bool descending = false;
             if (Match(TokenType.DESC)) descending = true;
             else Match(TokenType.ASC);
-            orderBy.Add(new OrderByClause(orderExpr, descending));
+            orderBy.Add(new OrderByClause(orderExpr, descending, ParseNullsPlacement()));
         }
         while (Match(TokenType.COMMA));
         return orderBy;
+    }
+
+    /// <summary>
+    /// Reads an optional <c>NULLS FIRST</c> or <c>NULLS LAST</c> after a sort key. <c>NULLS</c>
+    /// is not a reserved word, so it is read only where a sort key can end.
+    /// </summary>
+    public bool? ParseNullsPlacement()
+    {
+        if (Current.Type != TokenType.IDENTIFIER
+            || !Current.Value.Equals("NULLS", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        Advance();
+        if (MatchWord("FIRST")) return true;
+        if (MatchWord("LAST")) return false;
+        throw new SyntaxException("Expected FIRST or LAST after NULLS", Current.Line, Current.Column);
     }
 
     private SelectColumn ParseMeasureColumn()

@@ -110,6 +110,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   frame of such a row was the whole partition; it is now the rows that share the `NULL`. An
   `UNBOUNDED PRECEDING` or `UNBOUNDED FOLLOWING` end now includes the `NULL` rows on that side,
   which it left out. **Behaviour change.**
+- Add `NULLS FIRST` and `NULLS LAST` to `ORDER BY`, after `ASC` or `DESC`:
+  `ORDER BY amount DESC NULLS LAST`. It works in a query, in a window `ORDER BY` and in
+  `WITHIN GROUP (ORDER BY ...)`. Without it `NULL` still sorts lowest: first for `ASC` and last
+  for `DESC`. PostgreSQL and Oracle are sent the placement; for another source the engine sorts.
 - Read a bracketed or bare value in a `PIVOT ... IN` list by its name. `FOR id IN ([1], [2])` read
   each value as `NULL`, so the pivoted columns held nothing.
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to

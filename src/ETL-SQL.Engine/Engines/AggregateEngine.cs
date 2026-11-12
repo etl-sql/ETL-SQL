@@ -715,8 +715,8 @@ public class AggregateEngine
         {
             for (int i = 0; i < orderBy.Count; i++)
             {
-                int res = _context.CompareConstants(a.keys[i], b.keys[i]);
-                if (res != 0) return orderBy[i].Descending ? -res : res;
+                int res = orderBy[i].OutputOrder(_context.CompareConstants(a.keys[i], b.keys[i]), a.keys[i], b.keys[i]);
+                if (res != 0) return res;
             }
             return 0;
         });
@@ -1200,9 +1200,10 @@ public class AggregateEngine
                 {
                     for (var index = 0; index < left.OrderKeys!.Length; index++)
                     {
-                        var order = engine._context.CompareConstants(left.OrderKeys[index], right.OrderKeys![index]);
-                        if (order != 0)
-                            return engineOrderDescending(index) ? -order : order;
+                        var order = _function!.WithinGroupOrderBy![index].OutputOrder(
+                            engine._context.CompareConstants(left.OrderKeys[index], right.OrderKeys![index]),
+                            left.OrderKeys[index], right.OrderKeys[index]);
+                        if (order != 0) return order;
                     }
                     return left.Sequence.CompareTo(right.Sequence);
                 });
@@ -1210,9 +1211,6 @@ public class AggregateEngine
             var separator = _separator ?? ",";
             var values = _values.Select(item => item.Value?.ToString() ?? string.Empty);
             return new ValueTask<object?>(string.Join(separator, values));
-
-            bool engineOrderDescending(int index)
-                => _function!.WithinGroupOrderBy![index].Descending;
         }
 
         private FunctionCallExpression? _function;

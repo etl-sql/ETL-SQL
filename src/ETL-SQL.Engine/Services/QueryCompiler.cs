@@ -169,7 +169,12 @@ public class QueryCompiler(Evaluator evaluator)
 
             if (sel.OrderBy != null && sel.OrderBy.Count > 0)
             {
-                sql += " ORDER BY " + string.Join(", ", sel.OrderBy.Select(o => CompileExpressionInternal(o.Expression, dialect) + (o.Descending ? " DESC" : " ASC")));
+                // A source that cannot place NULL is not sent the query: the engine sorts instead.
+                if (sel.OrderBy.Any(o => o.NullsFirst != null) && !dialect.SupportsNullsOrdering)
+                    throw new NotSupportedException($"{dialect.Name} does not support NULLS FIRST or NULLS LAST in ORDER BY.");
+                sql += " ORDER BY " + string.Join(", ", sel.OrderBy.Select(o =>
+                    CompileExpressionInternal(o.Expression, dialect) + (o.Descending ? " DESC" : " ASC")
+                    + (o.NullsFirst switch { true => " NULLS FIRST", false => " NULLS LAST", null => "" })));
             }
 
             string? offset = sel.Offset != null ? CompileExpressionInternal(sel.Offset, dialect) : null;

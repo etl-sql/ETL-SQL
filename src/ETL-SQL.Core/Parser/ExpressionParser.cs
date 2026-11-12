@@ -686,7 +686,7 @@ public partial class ExpressionParser
                         bool descending = false;
                         if (_parser.Match(TokenType.DESC)) descending = true;
                         else _parser.Match(TokenType.ASC);
-                        orderBy.Add(new OrderByClause(orderExpr, descending));
+                        orderBy.Add(new OrderByClause(orderExpr, descending, _parser.ParseNullsPlacement()));
                     } while (_parser.Match(TokenType.COMMA));
 
                     _parser.Consume(TokenType.RPAREN, "Expected ')' to close WITHIN GROUP");
@@ -825,7 +825,7 @@ public partial class ExpressionParser
                 bool descending = false;
                 if (_parser.Match(TokenType.DESC)) descending = true;
                 else _parser.Match(TokenType.ASC);
-                orderBy.Add(new OrderByClause(orderExpr, descending));
+                orderBy.Add(new OrderByClause(orderExpr, descending, _parser.ParseNullsPlacement()));
             } while (_parser.Match(TokenType.COMMA));
         }
 

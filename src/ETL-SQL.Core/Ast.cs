@@ -307,11 +307,45 @@ public sealed record OrderByClause : AstNode
 {
     public Expression Expression { get; }
     public bool Descending { get; }
-    public OrderByClause(Expression expression, bool descending = false)
+
+    /// <summary>
+    /// <c>NULLS FIRST</c> (true) or <c>NULLS LAST</c> (false). Null when the query wrote neither:
+    /// <c>NULL</c> then sorts lowest, first for <c>ASC</c> and last for <c>DESC</c>.
+    /// </summary>
+    public bool? NullsFirst { get; }
+
+    /// <summary>Where <c>NULL</c> goes in the output, whether written or by default.</summary>
+    public bool PlacesNullsFirst => NullsFirst ?? !Descending;
+
+    public OrderByClause(Expression expression, bool descending = false, bool? nullsFirst = null)
     {
         Expression = expression;
         Descending = descending;
+        NullsFirst = nullsFirst;
     }
+
+    /// <summary>
+    /// Turns an ascending comparison of two keys into their output order: negative when
+    /// <paramref name="left"/> comes first.
+    /// </summary>
+    public int OutputOrder(int ascending, object? left, object? right)
+    {
+        if (NullsFirst is { } first)
+        {
+            bool leftNull = left is null or DBNull;
+            bool rightNull = right is null or DBNull;
+            if (leftNull || rightNull)
+                return leftNull == rightNull ? 0 : leftNull == first ? -1 : 1;
+        }
+        return Descending ? -ascending : ascending;
+    }
+
+    /// <summary>The clause that gives the reverse output order.</summary>
+    public OrderByClause Reversed() =>
+        new(Expression, !Descending, NullsFirst is { } first ? !first : null);
+
+    /// <summary>The same direction and <c>NULL</c> placement on another expression.</summary>
+    public OrderByClause On(Expression expression) => new(expression, Descending, NullsFirst);
 }
 
 public sealed record CteDefinition : AstNode

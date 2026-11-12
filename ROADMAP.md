@@ -285,7 +285,6 @@ Select individual IDs into `TODO.md` when scheduling.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| SQ17 | **Add `ORDER BY ... NULLS FIRST` and `NULLS LAST`.** The dialect has no syntax to place `NULL` in a sort; `NULL` always sorts lowest (first for `ASC`, last for `DESC`). Parse `NULLS FIRST` / `NULLS LAST` after `ASC` / `DESC` in a query `ORDER BY` and in a window `ORDER BY`, carry it on `OrderByClause`, and honour it in the row sort, the external sort, the columnar sort (`NativeSortKey.NullsFirst` already exists), Top-N and the window engines. Keep today's order as the default. Push it down to a source that supports it and sort locally otherwise. Update `docs/grammar.ebnf`, the `ORDER BY` reference page and the formatter; `GrammarWalkGenerator` already emits `DESC NULLS LAST`. | — | M |
 
 #### SLT corpus, EBNF grammar, and fuzzer/NoREC expansion
 

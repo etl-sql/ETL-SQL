@@ -1062,8 +1062,8 @@ public class SelectExecutionEngine
         {
             for (int i = 0; i < orderBy.Count; i++)
             {
-                var res = _context.CompareConstants(a.Keys[i], b.Keys[i]);
-                if (res != 0) return orderBy[i].Descending ? -res : res;
+                var res = orderBy[i].OutputOrder(_context.CompareConstants(a.Keys[i], b.Keys[i]), a.Keys[i], b.Keys[i]);
+                if (res != 0) return res;
             }
             return 0;
         });
@@ -1095,8 +1095,8 @@ public class SelectExecutionEngine
             {
                 for (int i = 0; i < orderBy.Count; i++)
                 {
-                    var res = _context.CompareConstants(a.Keys[i], b.Keys[i]);
-                    if (res != 0) return orderBy[i].Descending ? res : -res; // inverted
+                    var res = orderBy[i].OutputOrder(_context.CompareConstants(a.Keys[i], b.Keys[i]), a.Keys[i], b.Keys[i]);
+                    if (res != 0) return -res; // inverted
                 }
                 return 0;
             }));
@@ -1118,8 +1118,8 @@ public class SelectExecutionEngine
                 bool better = false;
                 for (int i = 0; i < orderBy.Count; i++)
                 {
-                    var res = _context.CompareConstants(keys[i], peekKeys[i]);
-                    if (res != 0) { better = orderBy[i].Descending ? res > 0 : res < 0; break; }
+                    var res = orderBy[i].OutputOrder(_context.CompareConstants(keys[i], peekKeys[i]), keys[i], peekKeys[i]);
+                    if (res != 0) { better = res < 0; break; }
                 }
                 if (better) heap.DequeueEnqueue(entry, entry);
             }

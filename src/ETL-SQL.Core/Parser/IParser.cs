@@ -15,6 +15,9 @@ public interface IParser
     Token LookAhead(int distance);
     Token Advance();
     bool Match(TokenType type);
+
+    /// <summary>Reads an optional <c>NULLS FIRST</c> or <c>NULLS LAST</c> after a sort key.</summary>
+    bool? ParseNullsPlacement();
     Token Consume(TokenType type, string message);
     Token ConsumeIdentifier(string message);
     Statement ParseStatement();

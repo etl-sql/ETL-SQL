@@ -81,8 +81,8 @@ public class WindowEngine
                     {
                         for (int k = 0; k < window.OrderBy.Count; k++)
                         {
-                            int res = _context.CompareConstants(a.keys[k], b.keys[k]);
-                            if (res != 0) return window.OrderBy[k].Descending ? -res : res;
+                            int res = window.OrderBy[k].OutputOrder(_context.CompareConstants(a.keys[k], b.keys[k]), a.keys[k], b.keys[k]);
+                            if (res != 0) return res;
                         }
                         return 0;
                     });

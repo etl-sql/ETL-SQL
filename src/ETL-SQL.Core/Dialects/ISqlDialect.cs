@@ -12,6 +12,9 @@ public interface ISqlDialect
     string FormatStringConcat(string left, string right);
 
     bool SupportsTop { get; }
+
+    /// <summary>True when the source reads <c>NULLS FIRST</c> and <c>NULLS LAST</c> in <c>ORDER BY</c>.</summary>
+    bool SupportsNullsOrdering { get; }
     string FormatTop(string compiledTop, bool percent, bool withTies);
     string FormatOffsetLimit(string? compiledOffset, string? compiledLimit);
 

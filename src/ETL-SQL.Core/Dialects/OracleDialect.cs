@@ -7,6 +7,8 @@ public class OracleDialect : DefaultSqlDialect
 {
     public override string Name => "ORACLE";
 
+    public override bool SupportsNullsOrdering => true;
+
     public override string RewriteIdentifier(string name)
     {
         var upper = name.ToUpperInvariant();

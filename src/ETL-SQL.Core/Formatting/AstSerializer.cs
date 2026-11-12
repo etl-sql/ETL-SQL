@@ -397,7 +397,7 @@ public static class AstSerializer
         TableForeignKeyConstraint n => $"{(n.ConstraintName != null ? $"CONSTRAINT {n.ConstraintName} " : "")}FOREIGN KEY ({string.Join(", ", n.Columns)}) {n.Reference.ToSql()}",
         TableCheckConstraint n => $"{(n.ConstraintName != null ? $"CONSTRAINT {n.ConstraintName} " : "")}CHECK ({n.Expression.ToSql()})",
         ColumnDefinition n => FormatColumnDefinition(n),
-        OrderByClause n => n.Expression.ToSql() + (n.Descending ? " DESC" : " ASC"),
+        OrderByClause n => Format(n),
         JoinClause n => FormatJoin(n),
         GroupingSetClause n => FormatGroupingSet(n),
         Assignment n => $"{n.ColumnName} = {n.Value.ToSql()}",
@@ -444,7 +444,9 @@ public static class AstSerializer
     // ── Public overloads for non-AstNode types ──────────────────────────
 
     public static string Format(JoinClause join) => FormatJoin(join);
-    public static string Format(OrderByClause o) => o.Expression.ToSql() + (o.Descending ? " DESC" : " ASC");
+    public static string Format(OrderByClause o) =>
+        o.Expression.ToSql() + (o.Descending ? " DESC" : " ASC")
+        + (o.NullsFirst switch { true => " NULLS FIRST", false => " NULLS LAST", null => "" });
     public static string Format(GroupingSetClause g) => FormatGroupingSet(g);
     public static string Format(ColumnDefinition col) => FormatColumnDefinition(col);
     public static string Format(ExecuteParameter p) => p.Expression.ToSql() + (p.IsOutput ? " OUTPUT" : "") + (p.IsInput ? " INPUT" : "");
