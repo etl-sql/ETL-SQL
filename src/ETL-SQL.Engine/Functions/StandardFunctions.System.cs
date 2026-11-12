@@ -230,9 +230,13 @@ namespace ETL_SQL.Engine.Functions
         private static object? GenerateSeries(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 2) return null;
+            // A NULL bound used to read as 0, so GENERATE_SERIES(NULL, 5) returned 0..5.
+            if (args.Take(3).Any(a => a.IsNull())) return null;
             long start = Convert.ToInt64(args[0]);
             long stop = Convert.ToInt64(args[1]);
             long step = args.Count >= 3 ? Convert.ToInt64(args[2]) : 1;
+            // A zero step never reaches stop; it used to return 1,000,001 copies of start.
+            if (step == 0) throw new ExecutionException("GENERATE_SERIES: the step cannot be 0.");
 
             var list = new List<object?>();
             for (long i = start; (step > 0 ? i <= stop : i >= stop); i += step)

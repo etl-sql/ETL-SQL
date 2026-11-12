@@ -64,6 +64,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   `LEFT JOIN`, so the result held joined rows, one per match. Removed the buffered join path that
   nothing called; the `NULL` key, `ON` clause and `WHERE` pushdown defects recorded against it do
   not occur in the streaming join, and tests now pin that.
+- Compare numbers of different types in `GREATEST` and `LEAST`. `GREATEST(CAST(1 AS FLOAT), 2)`
+  failed with `Object must be of type Decimal`; both functions now order values the way
+  `ORDER BY` does.
+- Return `NULL` from `GENERATE_SERIES` when a bound or the step is `NULL`, and fail on a step of
+  0. A `NULL` bound read as 0, and a zero step returned 1,000,001 copies of the start value.
+  **Behaviour change.**
 - Read a bracketed or bare value in a `PIVOT ... IN` list by its name. `FOR id IN ([1], [2])` read
   each value as `NULL`, so the pivoted columns held nothing.
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to

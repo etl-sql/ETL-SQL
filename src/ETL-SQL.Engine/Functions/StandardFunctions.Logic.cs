@@ -22,8 +22,8 @@ namespace ETL_SQL.Engine.Functions
             // non-standard arities that the parser deliberately does not lower.
             registry.RegisterWithHelp("IIF", (args, ctx) => args.Count >= 3 ? (Convert.ToBoolean(args[0]) ? args[1] : args[2]) : args.FirstOrDefault(), "IIF(cond, true_val, false_val): Shorthand for CASE WHEN cond THEN true_val ELSE false_val END — compiled to CASE at parse time, so the untaken branch is never evaluated and it pushes down to any connector.");
             registry.RegisterWithHelp("IFNULL", IsNull, "IFNULL(v1, v2): Alias for ISNULL.");
-            registry.RegisterWithHelp("GREATEST", (args, ctx) => args.Where(a => !a.IsNull()).OrderByDescending(a => a).FirstOrDefault(), "GREATEST(v1, v2, ...): Returns the largest value in the list.");
-            registry.RegisterWithHelp("LEAST", (args, ctx) => args.Where(a => !a.IsNull()).OrderBy(a => a).FirstOrDefault(), "LEAST(v1, v2, ...): Returns the smallest value in the list.");
+            registry.RegisterWithHelp("GREATEST", (args, ctx) => Extreme(args, ctx, greatest: true), "GREATEST(v1, v2, ...): Returns the largest value in the list.");
+            registry.RegisterWithHelp("LEAST", (args, ctx) => Extreme(args, ctx, greatest: false), "LEAST(v1, v2, ...): Returns the smallest value in the list.");
             registry.RegisterWithHelp("NVL2", (args, ctx) => args.Count >= 3 ? (!args[0].IsNull() ? args[1] : args[2]) : args.FirstOrDefault(), "NVL2(v, if_not_null, if_null): Returns if_not_null if v is not null, else if_null.");
             registry.RegisterWithHelp("DECODE", Decode, "DECODE(val, search, result, ..., default): Returns the result matching the value, or the default.");
         }
@@ -33,6 +33,21 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 2) return args.FirstOrDefault();
             var first = args[0];
             return (first.IsNull()) ? args[1] : first;
+        }
+
+        // Compared the way ORDER BY compares, so numbers of different CLR types order by value.
+        // LINQ's default comparer threw "Object must be of type Decimal" on a decimal and a double.
+        private static object? Extreme(List<object?> args, IExecutionContext ctx, bool greatest)
+        {
+            object? best = null;
+            foreach (var candidate in args)
+            {
+                if (candidate.IsNull()) continue;
+                if (best == null) { best = candidate; continue; }
+                int order = ctx.CompareConstants(candidate, best);
+                if (greatest ? order > 0 : order < 0) best = candidate;
+            }
+            return best;
         }
 
         private static object? Decode(List<object?> args, IExecutionContext ctx)
