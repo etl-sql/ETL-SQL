@@ -191,18 +191,30 @@ public class WindowEngine
                         case "FIRST_VALUE":
                         case "LAST_VALUE":
                             {
-                                // Both read a frame the query wrote, as NTH_VALUE does; they used to read
-                                // the whole partition whatever the frame said. The frame the parser adds
-                                // for a bare ORDER BY still reads the whole partition, as it always has:
-                                // changing that changes results for existing scripts (ROADMAP SQ12).
-                                var frame = window.Frame;
-                                bool parserDefault = frame is { Type: WindowFrameType.RANGE, StartBound: WindowFrameBoundType.UNBOUNDED_PRECEDING, EndBound: WindowFrameBoundType.CURRENT_ROW };
-                                var valueFrame = frame != null && !parserDefault
-                                    ? await ResolveFrameRows(i, partitionRows, window)
-                                    : partitionRows;
-                                winVal = valueFrame.Count == 0
-                                    ? null
-                                    : await _context.EvaluateValue(f.Arguments[0], valueFrame[name == "FIRST_VALUE" ? 0 : valueFrame.Count - 1]);
+                                // Both read the frame, as NTH_VALUE does. With ORDER BY and no frame
+                                // clause the frame is RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW,
+                                // so LAST_VALUE is the current row's last peer and not the last row of
+                                // the partition.
+                                bool first = name == "FIRST_VALUE";
+                                Row? source;
+                                if (window.Frame != null)
+                                {
+                                    var valueFrame = await ResolveFrameRows(i, partitionRows, window);
+                                    source = valueFrame.Count == 0 ? null : valueFrame[first ? 0 : valueFrame.Count - 1];
+                                }
+                                else if (first || window.OrderBy == null || window.OrderBy.Count == 0)
+                                {
+                                    source = partitionRows[first ? 0 : partitionRows.Count - 1];
+                                }
+                                else
+                                {
+                                    // A window built without the parser has no frame: apply the default.
+                                    int lastPeer = i;
+                                    while (lastPeer + 1 < partitionRows.Count && await ArePeers(partitionRows[i], partitionRows[lastPeer + 1], window.OrderBy))
+                                        lastPeer++;
+                                    source = partitionRows[lastPeer];
+                                }
+                                winVal = source == null ? null : await _context.EvaluateValue(f.Arguments[0], source);
                             }
                             break;
                         case "NTILE":
@@ -417,6 +429,24 @@ public class WindowEngine
                 }
                 start = s == -1 ? currentIndex : s;
                 end = e == -1 ? currentIndex : e;
+                // An unbounded end is the end of the partition, whatever the keys there are: the
+                // rows with a NULL key belong to it.
+                if (frame.StartBound == WindowFrameBoundType.UNBOUNDED_PRECEDING) start = 0;
+                if (frame.EndBound == WindowFrameBoundType.UNBOUNDED_FOLLOWING) end = partitionRows.Count - 1;
+            }
+            else if (window.OrderBy is { Count: 1 }
+                && await _context.EvaluateValue(window.OrderBy[0].Expression, partitionRows[currentIndex]) is null or DBNull)
+            {
+                // A NULL key has no offset: its frame is the rows that share the NULL, and an
+                // unbounded end still reaches the end of the partition.
+                start = currentIndex;
+                while (start > 0 && await ArePeers(partitionRows[currentIndex], partitionRows[start - 1], window.OrderBy))
+                    start--;
+                end = currentIndex;
+                while (end + 1 < partitionRows.Count && await ArePeers(partitionRows[currentIndex], partitionRows[end + 1], window.OrderBy))
+                    end++;
+                if (frame.StartBound == WindowFrameBoundType.UNBOUNDED_PRECEDING) start = 0;
+                if (frame.EndBound == WindowFrameBoundType.UNBOUNDED_FOLLOWING) end = partitionRows.Count - 1;
             }
             else
             {

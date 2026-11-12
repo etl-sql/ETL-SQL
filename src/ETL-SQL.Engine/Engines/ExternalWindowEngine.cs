@@ -294,7 +294,17 @@ public class ExternalWindowEngine
                 && f.FunctionName.ToUpperInvariant() is "FIRST_VALUE" or "LAST_VALUE"
                 && f.Arguments.Count == 1
                 && f.Filter == null
-                && f.Window?.Frame == null);
+                && IsDefaultRunningFrame(f.Window?.Frame));
+    }
+
+    // No frame clause, or the frame the parser adds for a bare ORDER BY.
+    private static bool IsDefaultRunningFrame(WindowFrame? frame)
+    {
+        return frame == null
+            || (frame.Type == WindowFrameType.RANGE
+                && frame.StartBound == WindowFrameBoundType.UNBOUNDED_PRECEDING
+                && frame.EndBound is null or WindowFrameBoundType.CURRENT_ROW
+                && frame.Exclusion == WindowFrameExclusion.NoOthers);
     }
 
     private static bool IsBoundedValueCompatible(FunctionCallExpression f)
@@ -1235,9 +1245,13 @@ public class ExternalWindowEngine
         }
     }
 
+    /// <summary>
+    /// FIRST_VALUE and LAST_VALUE over the default running frame. The partition is sorted once and
+    /// read once: FIRST_VALUE is the first row of the partition, and LAST_VALUE is the last row of
+    /// the current row's peer group, so only one peer group is held at a time.
+    /// </summary>
     private async IAsyncEnumerable<Row> ProcessBucketOrderedValueReplay(string name, WindowGroup group)
     {
-        var sortedName = $"win_value_{Guid.NewGuid():N}.tmp";
         var sortCriteria = new List<OrderByClause>();
         if (group.Signature.PartitionBy != null)
         {
@@ -1246,57 +1260,56 @@ public class ExternalWindowEngine
         }
         sortCriteria.AddRange(group.Signature.OrderBy!);
 
-        var partitionResults = new List<Dictionary<string, object?>>();
+        var functions = group.Columns
+            .Select(column => (FunctionCallExpression)column.Expression)
+            .Select(f => (
+                Function: f,
+                Key: $"WINDOW_{f.ToSql().ToUpperInvariant()}",
+                IsLast: f.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+        var firstValues = new object?[functions.Length];
+        var peers = new List<Row>();
         object?[]? previousPartitionKeys = null;
-        try
+        object?[]? previousOrderKeys = null;
+
+        async Task ClosePeerGroup()
         {
-            await using (var writer = await _context.SpillStore.CreateWriterAsync(sortedName))
+            if (peers.Count == 0) return;
+            foreach (var (function, key, isLast) in functions)
             {
-                await foreach (var row in _sortEngine.SortStreamAsync(ReadPartitionStream(name), sortCriteria))
-                {
-                    var keys = await EvaluatePartitionKeys(group.Signature.PartitionBy, row);
-                    var newPartition = previousPartitionKeys == null || !PartitionKeysEqual(previousPartitionKeys, keys);
-                    if (newPartition)
-                        partitionResults.Add(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase));
-
-                    var results = partitionResults[^1];
-                    foreach (var column in group.Columns)
-                    {
-                        var f = (FunctionCallExpression)column.Expression;
-                        var resultKey = $"WINDOW_{f.ToSql().ToUpperInvariant()}";
-                        if (newPartition || f.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase))
-                            results[resultKey] = await _context.EvaluateValue(f.Arguments[0], row);
-                    }
-
-                    previousPartitionKeys = keys;
-                    await writer.WriteRowAsync(row);
-                }
-            }
-
-            var partitionIndex = -1;
-            previousPartitionKeys = null;
-            await foreach (var row in ReadPartitionStream(sortedName))
-            {
-                var keys = await EvaluatePartitionKeys(group.Signature.PartitionBy, row);
-                if (previousPartitionKeys == null || !PartitionKeysEqual(previousPartitionKeys, keys))
-                    partitionIndex++;
-                foreach (var (resultKey, value) in partitionResults[partitionIndex])
-                    row[resultKey] = value;
-                previousPartitionKeys = keys;
-                yield return row;
+                if (!isLast) continue;
+                var value = await _context.EvaluateValue(function.Arguments[0], peers[^1]);
+                foreach (var peer in peers) peer[key] = value;
             }
         }
-        finally
+
+        await foreach (var row in _sortEngine.SortStreamAsync(ReadPartitionStream(name), sortCriteria))
         {
-            try
+            var keys = await EvaluatePartitionKeys(group.Signature.PartitionBy, row);
+            var orderKeys = await EvaluateOrderKeys(group.Signature.OrderBy!, row);
+            var newPartition = previousPartitionKeys == null || !PartitionKeysEqual(previousPartitionKeys, keys);
+            if (newPartition || !PartitionKeysEqual(previousOrderKeys!, orderKeys))
             {
-                _context.SpillStore.DeleteChunk(sortedName);
+                await ClosePeerGroup();
+                foreach (var peer in peers) yield return peer;
+                peers.Clear();
             }
-            catch (Exception ex)
+
+            for (var i = 0; i < functions.Length; i++)
             {
-                _logger.Warning($"Error cleaning up ordered value window replay {sortedName}: {ex.Message}");
+                if (functions[i].IsLast) continue;
+                if (newPartition)
+                    firstValues[i] = await _context.EvaluateValue(functions[i].Function.Arguments[0], row);
+                row[functions[i].Key] = firstValues[i];
             }
+
+            peers.Add(row);
+            previousPartitionKeys = keys;
+            previousOrderKeys = orderKeys;
         }
+
+        await ClosePeerGroup();
+        foreach (var peer in peers) yield return peer;
     }
 
     private async Task<Row> CompleteLeadRow(Queue<Row> pending, WindowGroup group, bool useDefaults)

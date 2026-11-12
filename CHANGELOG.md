@@ -102,6 +102,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   the name as a column and failed with `Unknown column 'q1'`.
 - Leave `NULL` cells out of `UNPIVOT`, as the reference says. Every cell produced a row.
   **Behaviour change.**
+- Make `LAST_VALUE` read the default frame. With `ORDER BY` and no frame clause the frame is
+  `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`, so `LAST_VALUE` is the value of the
+  current row's last peer. It returned the last value of the whole partition. To get that,
+  write `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`. **Behaviour change.**
+- Give a `RANGE` frame with an offset the right rows when the `ORDER BY` key is `NULL`. The
+  frame of such a row was the whole partition; it is now the rows that share the `NULL`. An
+  `UNBOUNDED PRECEDING` or `UNBOUNDED FOLLOWING` end now includes the `NULL` rows on that side,
+  which it left out. **Behaviour change.**
 - Read a bracketed or bare value in a `PIVOT ... IN` list by its name. `FOR id IN ([1], [2])` read
   each value as `NULL`, so the pivoted columns held nothing.
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to

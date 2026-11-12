@@ -227,13 +227,6 @@ wrong values instead of throwing an error, and blind spots in EBNF and fuzzer ge
     arguments; `<expr> AT TIME ZONE NULL` returns `<expr>` unchanged instead of `NULL`; `EXTRACT`
     returns `null` on invalid date strings or unrecognized field names; `Evaluator` batch execution
     (`GO`) catches and logs batch exceptions without failing the script.
-  - **Window functions (`WindowEngine.cs`, `ExternalWindowEngine.cs`):** `FIRST_VALUE`, `LAST_VALUE`,
-    and `NTH_VALUE` read `partitionRows` directly and ignore `window.Frame`. Windowed aggregates with
-    `ORDER BY` and no explicit `ROWS`/`RANGE` clause use the entire partition in `WindowEngine`
-    instead of the ANSI default running frame (`RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`),
-    disagreeing with `ExternalWindowEngine`. `ResolveRangeFrame` (`RANGE BETWEEN <offset> PRECEDING
-    AND <offset> FOLLOWING`) falls back to the entire partition (`0..Count-1`) when a row's
-    `ORDER BY` key is `NULL`.
   - **Standard library functions (`StandardFunctions.*.cs`, `FuzzyFunctions.cs`):** `REPLACE('abc', NULL, 'x')`
     throws `ArgumentException` and `REPLACE('abc', 'b', NULL)` returns `'ac'`; `SUBSTRING`, `LEFT`,
     and `RIGHT` coerce `NULL` start/length arguments to `0` via `Convert.ToInt32(null)`;
@@ -292,7 +285,6 @@ Select individual IDs into `TODO.md` when scheduling.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| SQ12 | **Apply the default running frame and fix `NULL` `RANGE` peers in `WindowEngine`.** v0.22.0 makes `FIRST_VALUE` and `LAST_VALUE` read an explicit frame. Left: with `ORDER BY` and no frame clause, `LAST_VALUE` still reads the whole partition, although the parser adds the ANSI default `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` and `NTH_VALUE` and the aggregates honour it; `WindowFunctionTests.TestFirstLastValue` pins the old result, `ExternalWindowEngine` must agree at scale, and it changes results for existing scripts; and `ResolveRangeFrame` on a `NULL` order key should cover only its `NULL` peers, not the whole partition. | — | M |
 | SQ17 | **Add `ORDER BY ... NULLS FIRST` and `NULLS LAST`.** The dialect has no syntax to place `NULL` in a sort; `NULL` always sorts lowest (first for `ASC`, last for `DESC`). Parse `NULLS FIRST` / `NULLS LAST` after `ASC` / `DESC` in a query `ORDER BY` and in a window `ORDER BY`, carry it on `OrderByClause`, and honour it in the row sort, the external sort, the columnar sort (`NativeSortKey.NullsFirst` already exists), Top-N and the window engines. Keep today's order as the default. Push it down to a source that supports it and sort locally otherwise. Update `docs/grammar.ebnf`, the `ORDER BY` reference page and the formatter; `GrammarWalkGenerator` already emits `DESC NULLS LAST`. | — | M |
 
 #### SLT corpus, EBNF grammar, and fuzzer/NoREC expansion

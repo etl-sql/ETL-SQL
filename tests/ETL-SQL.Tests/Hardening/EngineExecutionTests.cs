@@ -903,7 +903,8 @@ namespace ETL_SQL.Tests.Hardening
             Assert.All(result, row =>
             {
                 Assert.Equal(1m, Convert.ToDecimal(row[firstKey]));
-                Assert.Equal(5m, Convert.ToDecimal(row[lastKey]));
+                // The default frame ends at the current row, and Val is unique in its partition.
+                Assert.Equal(Convert.ToDecimal(row["Val"]), Convert.ToDecimal(row[lastKey]));
             });
         }
 
