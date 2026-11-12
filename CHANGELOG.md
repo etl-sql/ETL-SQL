@@ -48,6 +48,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   still reads `NULL` there and a misspelt one fails, as it does on a row read back from a spill
   file. An undeclared `@variable` fails too, including one bound into a query pushed down to a
   database, where it was sent as `NULL`. **Behaviour change.**
+- Fail on reading a temp table or dataset that nothing created. `SELECT * FROM #mistyped`
+  created an empty table and returned no rows, so a misspelt table name succeeded. A read, a
+  join, `TRUNCATE TABLE` and `ALTER TABLE` now fail with `Unknown source`; `SELECT ... INTO`,
+  `INSERT INTO` and the other write targets still create the table. **Behaviour change.**
+- Load the table named by `EXEC (@sql) INTO #t` when no connection is given. The local form
+  ignored `INTO`: it printed the result and left the table missing, which the empty table a read
+  used to create had hidden. It now fails when the SQL returns no result set.
 - Read a bracketed or bare value in a `PIVOT ... IN` list by its name. `FOR id IN ([1], [2])` read
   each value as `NULL`, so the pivoted columns held nothing.
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to

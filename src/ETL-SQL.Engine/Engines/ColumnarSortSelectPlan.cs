@@ -53,7 +53,7 @@ internal sealed class ColumnarSortSelectPlan
 
     public async Task<Execution?> TryOpenAsync(IExecutionContext context)
     {
-        var dataSource = await context.ResolveDataSourceAsync(_statement.FromTable);
+        var dataSource = await context.ResolveReadSourceAsync(_statement.FromTable);
         if (dataSource is not IReplayableColumnarDataSource source
             || dataSource is not IEstimatedCardinalityDataSource estimate)
             return null;

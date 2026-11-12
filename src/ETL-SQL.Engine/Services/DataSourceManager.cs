@@ -61,7 +61,11 @@ public class DataSourceManager(
     /// Resolves a table reference to a functional IDataSource.
     /// Handles subqueries, function calls, dual table, and temporary tables.
     /// </summary>
-    public async Task<IDataSource> ResolveDataSourceAsync(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager)
+    /// <param name="forRead">
+    /// True when a statement reads the table. A write target creates a temp table or dataset that
+    /// does not exist yet; a read of one fails, where it used to get an empty table.
+    /// </param>
+    public async Task<IDataSource> ResolveDataSourceAsync(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager, bool forRead = false)
     {
         _evaluator.CancellationToken.ThrowIfCancellationRequested();
 
@@ -90,6 +94,10 @@ public class DataSourceManager(
         }
         else if (table.ConnectionName == null && (table.TableName.StartsWith("#") || table.TableName.StartsWith("&")))
         {
+            if (forRead)
+                throw new ExecutionException(
+                    $"Unknown source '{name}' at Line {table.Line}. Nothing has created it; check the spelling, or create it before it is read.");
+
             var mem = new InMemoryDataSource();
             mem.Validator = _evaluator;
 
@@ -605,7 +613,7 @@ public class DataSourceManager(
     /// </summary>
     public async IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager, int batchSize)
     {
-        var source = await ResolveDataSourceAsync(table, connections, transactionManager);
+        var source = await ResolveDataSourceAsync(table, connections, transactionManager, forRead: true);
         var batches = source.ReadBatches(batchSize, _evaluator.CancellationToken);
 
         if (table.TableOperators.Count == 0)

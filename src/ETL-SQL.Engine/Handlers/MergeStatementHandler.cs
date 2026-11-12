@@ -35,7 +35,7 @@ public class MergeStatementHandler : IStatementHandler
         context.LineageTracker.Record(targetConnName, stmt.GetSourceTables(), "MERGE", line: stmt.Line, column: stmt.Column);
 
         var targetSource = await context.ResolveDataSourceAsync(stmt.TargetTable);
-        var sourceSource = await context.ResolveDataSourceAsync(stmt.SourceTable);
+        var sourceSource = await context.ResolveReadSourceAsync(stmt.SourceTable);
 
         if (targetSource == null) throw new ExecutionException($"Unknown target connection: {targetConnName}");
         if (sourceSource == null) throw new ExecutionException($"Unknown source connection: {stmt.SourceTable.ToSql()}");

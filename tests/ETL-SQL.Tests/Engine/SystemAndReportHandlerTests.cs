@@ -238,8 +238,8 @@ namespace ETL_SQL.Tests.Engine
         {
             var eval = await RunAndGet(
                 "CREATE DATASET &enc ENCRYPT = MACHINE AS (SELECT 1 AS v);" +
-                "SELECT * FROM #enc;");
-            Assert.NotNull(eval.LastResult);
+                "SELECT * FROM &enc;");
+            Assert.Single(eval.LastResult!.Rows);
         }
 
         // ── ALTER CONTAINER ───────────────────────────────────────────────────

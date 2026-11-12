@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
@@ -82,8 +83,18 @@ public class ExecStatementHandler : IStatementHandler
             var script = parser.Parse();
             // A nested level: at depth 0 Evaluate starts a new run, re-capturing the execution
             // policy and resetting the file-operation budget and results mid-script.
+            var resultBefore = context.LastResult;
             using (context.EnterRecursiveScope())
                 await context.Evaluate(script);
+
+            if (stmt.IntoTable != null)
+            {
+                // The local form used to ignore INTO: the result was printed and the table never loaded.
+                var result = context.LastResult;
+                if (result == null || ReferenceEquals(result, resultBefore))
+                    throw new ExecutionException($"EXEC ... INTO {stmt.IntoTable.TableName} at Line {stmt.Line}: the SQL returned no result set to load.");
+                await LoadIntoTable(stmt.IntoTable, [result], context);
+            }
         }
     }
 

@@ -1643,6 +1643,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     }
 
     public Task<IDataSource> ResolveDataSourceAsync(TableReference table) => _dataSourceManager.ResolveDataSourceAsync(table, _connections, _transactionManager);
+    public Task<IDataSource> ResolveReadSourceAsync(TableReference table) => _dataSourceManager.ResolveDataSourceAsync(table, _connections, _transactionManager, forRead: true);
     public IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table) => _dataSourceManager.ResolveAndApplyOperators(table, _connections, _transactionManager, BatchSize);
 
 

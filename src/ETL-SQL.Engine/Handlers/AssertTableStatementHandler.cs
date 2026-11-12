@@ -28,11 +28,11 @@ public class AssertTableStatementHandler(ILogger logger) : IStatementHandler
         var stmt = (AssertTableStatement)statement;
         _logger.Debug($"Evaluating ASSERT TABLE {stmt.ActualTable} MATCHES {stmt.ExpectedTable}");
 
-        var actualDs = await context.ResolveDataSourceAsync(new TableReference(stmt.ActualTable));
+        var actualDs = await context.ResolveReadSourceAsync(new TableReference(stmt.ActualTable));
         if (actualDs == null)
             throw new ExecutionException($"ASSERT TABLE failed: actual table '{stmt.ActualTable}' does not exist or could not be resolved.");
 
-        var expectedDs = await context.ResolveDataSourceAsync(new TableReference(stmt.ExpectedTable));
+        var expectedDs = await context.ResolveReadSourceAsync(new TableReference(stmt.ExpectedTable));
         if (expectedDs == null)
             throw new ExecutionException($"ASSERT TABLE failed: expected table '{stmt.ExpectedTable}' does not exist or could not be resolved.");
 

@@ -4,6 +4,12 @@
 
 DECLARE @Topic STRING INPUT;
 
+IF @Topic IS NULL
+BEGIN
+    PRINT 'export_entity.etlsql is a sub-script: run it with @Topic set (see export_main.etlsql).';
+    RETURN;
+END
+
 PRINT 'Extracting ' + @Topic + ' with strict enforcement...';
 
 -- 1. Fetch data from Postgres

@@ -233,11 +233,11 @@ END;";
             var connAst = new Parser(new Lexer(connScript).Tokenize()).Parse();
             await Assert.ThrowsAsync<ExecutionException>(() => evaluator.Evaluate(connAst));
 
-            // Standalone query referencing unpopulated temp table has 0 rows (does not execute predecessor staging statements)
+            // Standalone query referencing a temp table nothing created fails (does not execute predecessor staging statements)
             var stagedScript = "SELECT * FROM #staged_data;";
             var stagedAst = new Parser(new Lexer(stagedScript).Tokenize()).Parse();
-            await evaluator.Evaluate(stagedAst);
-            Assert.Empty(evaluator.LastResult.Rows);
+            var unknown = await Assert.ThrowsAsync<ExecutionException>(() => evaluator.Evaluate(stagedAst));
+            Assert.Contains("Unknown source '#staged_data'", unknown.Message);
         }
 
         [Fact]

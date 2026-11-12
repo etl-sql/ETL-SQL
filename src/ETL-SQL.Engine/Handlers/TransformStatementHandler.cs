@@ -75,7 +75,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
             throw new ExecutionException($"{algorithmName} algorithm requires a source table (FROM clause)");
         }
 
-        var source = await context.ResolveDataSourceAsync(stmt.SourceTable)
+        var source = await context.ResolveReadSourceAsync(stmt.SourceTable)
             ?? throw new ExecutionException($"Could not resolve source dataset: {stmt.SourceTable.TableName}");
 
         var rows = new List<Row>();

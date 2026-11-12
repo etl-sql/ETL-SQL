@@ -279,7 +279,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             groupedPlan = compositeGroupedPlan;
         if (groupedPlan == null && IsGroupedColumnarAggregateCandidate(stmt))
         {
-            var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+            var source = await context.ResolveReadSourceAsync(stmt.FromTable);
             RecordPlanDecision(context, "select.grouped-aggregate", "ColumnarGroupedAggregate",
                 PlanDecisionOutcome.Fallback,
                 source is IColumnarDataSource
@@ -294,7 +294,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         {
             using (groupedPlan)
             {
-                var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+                var source = await context.ResolveReadSourceAsync(stmt.FromTable);
                 if (source is IColumnarDataSource columnarSource)
                 {
                     var sourceColumns = (await source.GetColumnsAsync(context.CancellationToken)).ToList();
@@ -377,7 +377,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
 
         if (IsValidatedCountCandidate(stmt))
         {
-            var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+            var source = await context.ResolveReadSourceAsync(stmt.FromTable);
             if (source is IValidatedRowCountDataSource validatedCountSource)
             {
                 var count = await validatedCountSource.CountRowsValidatedAsync(context.CancellationToken);
@@ -397,7 +397,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         if (globalAggregateCandidate
             && ColumnarAggregatePlan.TryCreate(context, stmt.Columns, out var aggregatePlan))
         {
-            var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+            var source = await context.ResolveReadSourceAsync(stmt.FromTable);
             if (source is IColumnarDataSource columnarSource)
             {
                 var sourceColumns = (await source.GetColumnsAsync(context.CancellationToken)).ToList();
@@ -478,7 +478,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         }
         else if (globalAggregateCandidate)
         {
-            var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+            var source = await context.ResolveReadSourceAsync(stmt.FromTable);
             RecordPlanDecision(context, "select.aggregate", "ColumnarAggregate",
                 PlanDecisionOutcome.Fallback,
                 source is IColumnarDataSource
@@ -494,7 +494,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         // expressions and unsupported physical types replay through the existing row streaming path.
         if (IsSimpleColumnarCandidate(stmt))
         {
-            var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+            var source = await context.ResolveReadSourceAsync(stmt.FromTable);
             if (source is IColumnarDataSource columnarSource)
             {
                 var sourceColumns = (await source.GetColumnsAsync(context.CancellationToken)).ToList();
@@ -753,7 +753,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             || statement.Columns.Count == 0)
             return null;
 
-        var source = await context.ResolveDataSourceAsync(statement.FromTable);
+        var source = await context.ResolveReadSourceAsync(statement.FromTable);
         if (ReferenceEquals(source, destination) || source is not IColumnarDataSource columnarSource)
             return null;
 

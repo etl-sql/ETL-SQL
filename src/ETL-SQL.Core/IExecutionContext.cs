@@ -64,6 +64,13 @@ public interface IQueryContext
 {
     IAsyncEnumerable<DataTable> ExecuteQuery(Statement query);
     Task<IDataSource> ResolveDataSourceAsync(TableReference table);
+
+    /// <summary>
+    /// Resolves a table a statement reads. Unlike <see cref="ResolveDataSourceAsync"/>, which a
+    /// write target uses and which creates a temp table or dataset that does not exist yet, this
+    /// fails on an unknown <c>#name</c> or <c>&amp;name</c>.
+    /// </summary>
+    Task<IDataSource> ResolveReadSourceAsync(TableReference table) => ResolveDataSourceAsync(table);
     IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table);
     IAsyncEnumerable<DataTable> EvaluateForClause(IAsyncEnumerable<DataTable> batches, ForClause forClause);
     IAsyncEnumerable<DataTable> InterceptProgress(IAsyncEnumerable<DataTable> chunks);

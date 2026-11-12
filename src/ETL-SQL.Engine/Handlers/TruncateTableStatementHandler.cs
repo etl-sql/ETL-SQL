@@ -24,7 +24,7 @@ public class TruncateTableStatementHandler(ILogger logger) : IStatementHandler
         if (context.VarContext.TryGetView(targetName, out _))
             throw new ExecutionException($"View {targetName} is read-only and cannot be truncated.");
 
-        var dataSource = await context.ResolveDataSourceAsync(truncateStmt.TargetTable);
+        var dataSource = await context.ResolveReadSourceAsync(truncateStmt.TargetTable);
         if (dataSource == null)
             throw new ExecutionException($"Table not found: {truncateStmt.TargetTable.TableName}");
 

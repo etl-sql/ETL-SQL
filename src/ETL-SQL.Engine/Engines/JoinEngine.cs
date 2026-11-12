@@ -415,7 +415,7 @@ public class JoinEngine
 
         var streamingLeftKeys = new List<string>();
         var streamingRightKeys = new List<string>();
-        var rightSource = await _context.ResolveDataSourceAsync(join.Table);
+        var rightSource = await _context.ResolveReadSourceAsync(join.Table);
         var estimatedRightRows = (rightSource as IEstimatedCardinalityDataSource)?.EstimatedRowCount;
         var knownLargeRight = estimatedRightRows > _context.JoinSpillThreshold;
         var isInnerEquiJoin = join.JoinType.Equals("INNER", StringComparison.OrdinalIgnoreCase)
@@ -1204,7 +1204,7 @@ public class JoinEngine
             || table.TableOperators.Count > 0)
             return;
 
-        var source = await _context.ResolveDataSourceAsync(table);
+        var source = await _context.ResolveReadSourceAsync(table);
         var columns = (await source.GetColumnsAsync(_context.CancellationToken)).ToList();
         if (columns.Count > 0)
             shape.DeclareRight(OuterJoinShape.Qualified(columns, table.Alias ?? table.TableName));
