@@ -1517,6 +1517,14 @@ public partial class SpillStore : ISpillStore
 
         private const string JsonPrefix = "\x1Ejson:";
 
+        private static bool IsTextLogicalType(string? logicalType)
+        {
+            if (logicalType == null) return false;
+            var paren = logicalType.IndexOf('(');
+            var baseType = (paren < 0 ? logicalType : logicalType[..paren]).Trim().ToUpperInvariant();
+            return baseType is "VARCHAR" or "NVARCHAR" or "CHAR" or "NCHAR" or "TEXT" or "NTEXT" or "VARCHAR2" or "STRING";
+        }
+
         private static object? DecodeArrowString(string? s, string? logicalType, ILogger? logger = null)
         {
             if (s == null) return null;
@@ -1537,6 +1545,9 @@ public partial class SpillStore : ISpillStore
                     logger?.Warning("Failed to deserialize spilled JSON value for logical type {LogicalType}: {Message}", logicalType, ex.Message);
                 }
             }
+            // A column the writer knew to be text is text. Parsing it turned '00123' into 123 and
+            // '2026-01-05' into a date when a temp table spilled.
+            if (IsTextLogicalType(logicalType)) return s;
             // Match JSON reader: try numeric then date parse on plain strings
             if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d)) return d;
             if (DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt)) return dt;

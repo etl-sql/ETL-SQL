@@ -85,6 +85,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Let `HAVING` name a `SELECT` alias of a grouping expression, and a grouping expression that is
   a function call. `SELECT UPPER(region) AS r ... GROUP BY UPPER(region) HAVING r = 'EAST'`
   returned no rows, and `HAVING UPPER(region) = 'EAST'` failed on `region`.
+- Read a text column of a spilled temp table back as text. Once a temp table passed
+  `TempTableSpillThresholdRows`, or memory ran short, the rows read from disk went through a
+  number parse and a date parse: `'00123'` came back as the number 123 and `'2026-01-05'` as a
+  date. A table under the threshold was not affected, so a script gave different values at
+  scale. **Behaviour change.**
 - Read a bracketed or bare value in a `PIVOT ... IN` list by its name. `FOR id IN ([1], [2])` read
   each value as `NULL`, so the pivoted columns held nothing.
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to
