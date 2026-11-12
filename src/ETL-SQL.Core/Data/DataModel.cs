@@ -156,6 +156,14 @@ public class Row
     public DataQualityReplayProvenance? DataQualityReplayProvenance { get; set; }
 
     /// <summary>
+    /// True when this row is allowed to be missing columns the statement can name: an outer-join
+    /// row with no match carries one side only, and a row read back from a spill file keeps only
+    /// the columns it had. An unknown column name reads as NULL on such a row and is an error on
+    /// any other.
+    /// </summary>
+    public bool MayLackColumns { get; set; }
+
+    /// <summary>
     /// A shared empty row with no schema or values. Use when an expression evaluator
     /// requires a row context but no column bindings are needed (e.g., evaluating
     /// literal start/end/step values in FOR loops, WHILE conditions, etc.).
@@ -558,6 +566,7 @@ public class Row
         {
             foreach (var kvp in _dynamicColumns) row[kvp.Key] = kvp.Value;
         }
+        row.MayLackColumns = MayLackColumns;
         row.DataQualityReplayProvenance = includeReplayProvenance && DataQualityReplayProvenance is not null
             ? DataQualityReplayProvenance with { SourceRow = DataQualityReplayProvenance.SourceRow.CloneWithoutReplayProvenance() }
             : null;

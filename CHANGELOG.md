@@ -41,6 +41,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   `CAST(NULL AS VARCHAR)` gave `''`, `COUNT(col)` counted the row and `MIN`/`MAX` failed when the
   `NULL` came from a source as `DBNull`. `SUM` and `AVG` over a value that is not a number now fail
   in test mode too, where they counted it as 0.
+- Fail on a name nothing defines. A misspelt column read as `NULL` on every row, and a bare name
+  with no row in scope read as its own text (`SELECT bogus` gave `'bogus'`), so the script
+  succeeded with wrong data. The error names the column and lists the columns in scope. The
+  unmatched side of an outer join still reads as `NULL`. Not yet covered: an undeclared
+  `@variable`, and rows read back from a spill file. **Behaviour change.**
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to
   the updated rows and the statement succeeded. The error names the column and lists the columns
   that exist. **Behaviour change.**

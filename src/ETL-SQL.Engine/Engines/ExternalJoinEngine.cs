@@ -373,7 +373,11 @@ public class ExternalJoinEngine
                             }
                         }
                         if (!producedMatch && isLeftJoin)
-                            yield return (left ?? RowPacker.MaterializeBatchRow(batch, rowIndex)).Clone();
+                        {
+                            var unmatched = (left ?? RowPacker.MaterializeBatchRow(batch, rowIndex)).Clone();
+                            unmatched.MayLackColumns = true;
+                            yield return unmatched;
+                        }
                     }
                 }
             }
@@ -401,7 +405,11 @@ public class ExternalJoinEngine
                 }
 
                 if (!producedMatch && isLeftJoin)
-                    yield return left.Clone();
+                {
+                    var unmatched = left.Clone();
+                    unmatched.MayLackColumns = true;
+                    yield return unmatched;
+                }
             }
         }
 
@@ -571,6 +579,8 @@ public class ExternalJoinEngine
     private Row CombineRows(Row? left, Row right)
     {
         var combined = new Row();
+        // No left row means an unmatched right row of an outer join: the left columns are absent.
+        combined.MayLackColumns = left == null || left.MayLackColumns || right.MayLackColumns;
         combined.DataQualityReplayProvenance = left?.DataQualityReplayProvenance;
         left?.ForEachColumn((name, value) => combined[name] = value);
         right.ForEachColumn((name, value) => combined[name] = value);

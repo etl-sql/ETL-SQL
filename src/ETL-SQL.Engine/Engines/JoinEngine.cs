@@ -393,7 +393,7 @@ public class JoinEngine
                     }
                     if (!hasMatch && join.JoinType.Equals("OUTER APPLY", StringComparison.OrdinalIgnoreCase))
                     {
-                        yield return qualifiedLeft.Clone();
+                        yield return Unmatched(qualifiedLeft);
                     }
                 }
                 finally { _context.OuterRowStack.Pop(); }
@@ -503,7 +503,7 @@ public class JoinEngine
             if (IsRightOuter(join.JoinType))
             {
                 foreach (var right in joinRows)
-                    yield return right.Clone();
+                    yield return Unmatched(right);
             }
             yield break;
         }
@@ -658,7 +658,7 @@ public class JoinEngine
                 }
                 if (!foundMatch && join.JoinType.Contains("OUTER", StringComparison.OrdinalIgnoreCase))
                 {
-                    nextRows.Add(left.Clone());
+                    nextRows.Add(Unmatched(left));
                 }
             }
             finally { _context.OuterRowStack.Pop(); }
@@ -722,7 +722,7 @@ public class JoinEngine
                 }
             }
             if (best != null) results.Add(best);
-            else if (asofLeft) results.Add(left.Clone());
+            else if (asofLeft) results.Add(Unmatched(left));
         }
         return results;
     }
@@ -822,7 +822,7 @@ public class JoinEngine
 
                 if (IsSemiJoin(join.JoinType) && foundMatch) results.Add(left.Clone());
                 else if (IsAntiJoin(join.JoinType) && !foundMatch) results.Add(left.Clone());
-                else if (!foundMatch && IsLeftOuter(join.JoinType)) results.Add(left.Clone());
+                else if (!foundMatch && IsLeftOuter(join.JoinType)) results.Add(Unmatched(left));
             }
 
             if (IsRightOuter(join.JoinType) && matchedRightIndices != null)
@@ -832,7 +832,7 @@ public class JoinEngine
                     if (!matchedRightIndices.Contains(ri))
                         results.Add(schema != null
                             ? CombineRows(new Row(schema), rightRows[ri], schema)
-                            : rightRows[ri].Clone());
+                            : Unmatched(rightRows[ri]));
                 }
             }
 
@@ -869,7 +869,7 @@ public class JoinEngine
 
             if (IsSemiJoin(join.JoinType) && foundMatch) yield return left.Clone();
             else if (IsAntiJoin(join.JoinType) && !foundMatch) yield return left.Clone();
-            else if (!foundMatch && IsLeftOuter(join.JoinType)) yield return left.Clone();
+            else if (!foundMatch && IsLeftOuter(join.JoinType)) yield return Unmatched(left);
         }
 
         if (IsRightOuter(join.JoinType))
@@ -879,7 +879,7 @@ public class JoinEngine
                 if (!matchedRight.Contains(right))
                     yield return combinedSchema != null
                         ? CombineRows(new Row(combinedSchema), right, combinedSchema)
-                        : right.Clone();
+                        : Unmatched(right);
             }
         }
     }
@@ -977,7 +977,7 @@ public class JoinEngine
             else if (IsAntiJoin(join.JoinType) && !foundMatch) yield return left.Clone();
             else if (!foundMatch && IsLeftOuter(join.JoinType))
             {
-                var unmatched = left.Clone();
+                var unmatched = Unmatched(left);
                 AnnotateJoinReplayObservation(unmatched, buildTable, buildSideUnique);
                 yield return unmatched;
             }
@@ -990,7 +990,7 @@ public class JoinEngine
                 if (!matchedRight.Contains(right))
                     yield return combinedSchema != null
                         ? CombineRows(new Row(combinedSchema), right, combinedSchema)
-                        : right.Clone();
+                        : Unmatched(right);
             }
         }
     }
@@ -1041,7 +1041,7 @@ public class JoinEngine
 
         if (IsLeftOuter(join.JoinType))
         {
-            foreach (var left in leftRows) if (!matchedLeft.Contains(left)) nextRows.Add(left.Clone());
+            foreach (var left in leftRows) if (!matchedLeft.Contains(left)) nextRows.Add(Unmatched(left));
         }
         if (IsRightOuter(join.JoinType))
         {
@@ -1049,7 +1049,7 @@ public class JoinEngine
                 if (!matchedRight.Contains(right))
                     nextRows.Add(combinedSchema != null
                         ? CombineRows(new Row(combinedSchema), right, combinedSchema)
-                        : right.Clone());
+                        : Unmatched(right));
         }
 
         return nextRows;
@@ -1105,6 +1105,7 @@ public class JoinEngine
     private static Row CombineRows(Row left, Row right, TableSchema? schema = null)
     {
         var combined = schema != null ? new Row(schema) : new Row();
+        combined.MayLackColumns = left.MayLackColumns || right.MayLackColumns;
         combined.DataQualityReplayProvenance = left.DataQualityReplayProvenance;
         left.ForEachColumn((k, v) => combined[k] = v);
 
@@ -1131,6 +1132,17 @@ public class JoinEngine
         }
 
         return combined;
+    }
+
+    /// <summary>
+    /// The row an outer join returns for a row with no match. It carries its own side only, so the
+    /// other side's columns read as NULL; without the mark they would be unknown columns.
+    /// </summary>
+    private static Row Unmatched(Row row)
+    {
+        var copy = row.Clone();
+        copy.MayLackColumns = true;
+        return copy;
     }
 
     private static void AnnotateJoinReplayObservation(Row row, string buildTable, bool buildSideUnique)

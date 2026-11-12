@@ -81,16 +81,28 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
-        public async Task Evaluator_QualifiedIdentifier_NoMatch_ReturnsNull()
+        public async Task Evaluator_QualifiedIdentifier_NoMatch_Throws()
         {
             var evaluator = new ExpressionEvaluator(MakeMockContext().Object);
 
             var schema = new TableSchema(new[] { "T1.ID", "T2.ID" });
             var row = new Row(schema, new object[] { 10, 20 });
 
-            // T3.ID has no match — should return null, not throw
-            var result = await evaluator.Evaluate(new IdentifierExpression("T3.ID"), row);
-            Assert.Null(result);
+            // T3.ID names nothing in the row. It read as NULL; it is an unknown column.
+            var ex = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(
+                async () => await evaluator.Evaluate(new IdentifierExpression("T3.ID"), row));
+            Assert.Contains("T3.ID", ex.Message);
+        }
+
+        [Fact]
+        public async Task Evaluator_UnknownColumn_OnRowThatMayLackColumns_IsNull()
+        {
+            var evaluator = new ExpressionEvaluator(MakeMockContext().Object);
+
+            // An outer-join row with no match carries one side only; the other side reads NULL.
+            var row = new Row(new TableSchema(new[] { "T1.ID" }), new object[] { 10 }) { MayLackColumns = true };
+
+            Assert.Null(await evaluator.Evaluate(new IdentifierExpression("T2.ID"), row));
         }
 
         [Fact]
@@ -113,12 +125,12 @@ namespace ETL_SQL.Tests.Hardening
 
             // Row has both unqualified "Name" and "T2.Name".
             // When resolving T1.Name, the unqualified "Name" is owned by T2 → not a weak match for T1.
-            // T1.Name doesn't exist as a qualified key → null.
+            // T1.Name doesn't exist as a qualified key → an unknown column, not T2's value.
             var schema = new TableSchema(new[] { "Name", "T2.Name" });
             var row = new Row(schema, new object[] { "direct", "from-t2" });
 
-            var result = await evaluator.Evaluate(new IdentifierExpression("T1.Name"), row);
-            Assert.Null(result);
+            await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(
+                async () => await evaluator.Evaluate(new IdentifierExpression("T1.Name"), row));
         }
 
         [Theory]

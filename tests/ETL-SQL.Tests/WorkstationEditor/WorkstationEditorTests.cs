@@ -782,7 +782,7 @@ public sealed class WorkstationEditorTests
         var scriptPath = Path.Combine(temp.Root, "report.rptsql");
         const string script = """
             CREATE CONNECTION m AS MOCKDB();
-            CREATE DATASET &users AS (SELECT UserId, Name FROM m.Users);
+            CREATE DATASET &users AS (SELECT UserId, UserName AS Name FROM m.Users);
             """;
         await File.WriteAllTextAsync(scriptPath, script);
 

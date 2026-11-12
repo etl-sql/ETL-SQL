@@ -1189,10 +1189,13 @@ public class ExpressionEvaluator
             return await _context.FunctionRegistry.ExecuteAsync(id.Name, new List<object?>(), _context);
         }
 
-        // For date parts (year, month, etc.) and others, return name if Row is null
-        if (context == null) return id.Name;
+        // An undeclared variable keeps its old reading; see ROADMAP SQ03.
+        if (id.Name.StartsWith('@')) return context == null ? id.Name : null;
 
-        return null;
+        // A row that may lack columns (an outer-join row with no match, a spilled row) reads NULL.
+        if (context is { MayLackColumns: true }) return null;
+
+        throw EvaluationUtils.UnknownName(id.Name, context);
     }
 
     /// <summary>Evaluates a binary operation (arithmetic or logical).</summary>

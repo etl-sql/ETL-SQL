@@ -16,8 +16,8 @@ namespace ETL_SQL.Engine.Handlers;
 /// <para>
 /// The check is deliberately narrow: it only runs when every source of the statement is a temp
 /// table that already exists with known columns, because only then is the full set of names known
-/// before execution. Anything else (files, connections, subqueries, CTEs, APPLY, PIVOT) keeps the
-/// old behaviour until the evaluator itself fails closed.
+/// before execution. Anything else (files, connections, subqueries, CTEs, APPLY, PIVOT) is left
+/// to the row evaluator, which fails on an unknown name when it reads a row.
 /// </para>
 /// </summary>
 internal static class SelectColumnBinder

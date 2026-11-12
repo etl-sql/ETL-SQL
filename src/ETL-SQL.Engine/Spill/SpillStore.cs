@@ -651,6 +651,8 @@ public partial class SpillStore : ISpillStore
             {
                 var row = await ReadRowAsync();
                 if (row == null) break;
+                // A spilled row keeps only the columns it had, and loses the mark that said so.
+                row.MayLackColumns = true;
                 yield return row;
             }
         }
@@ -1363,6 +1365,8 @@ public partial class SpillStore : ISpillStore
             {
                 var row = await ReadRowAsync();
                 if (row == null) break;
+                // A spilled row keeps only the columns it had, and loses the mark that said so.
+                row.MayLackColumns = true;
                 yield return row;
             }
         }

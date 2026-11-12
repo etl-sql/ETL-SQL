@@ -161,7 +161,7 @@ passed), so this is robustness work, not the W3 fix, and it waits for v0.23.0 un
 points at it.
 
 **Boundaries:**
-- WiX 3.14 stays (free; WiX 7 needs the OSMF fee). No MSIX or script-based installer.
+- WiX 3.14 stays (free; WiX 7 needs the OSMF fee). Open to MSIX or script-based installer.
 - Install paths, profiles (`DEPLOY_PROFILE`), service names and ports are unchanged.
 - Existing installs must upgrade in place with their settings and secrets kept.
 
@@ -308,7 +308,7 @@ Select individual IDs into `TODO.md` when scheduling.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| SQ03 | **Fail closed on unresolved identifiers in `ExpressionEvaluator.EvaluateIdentifier`.** Throw an `ExecutionException` on unknown column names in row context and unknown bare identifiers in scalar context (preserving only explicit grammar constructs like `EXTRACT`/`DATEADD` datepart tokens at parse/bind time). v0.22.0 already rejects unknown columns when every source is an existing temp table (`SelectColumnBinder`); this item removes that limit. | — | M |
+| SQ03 | **Finish failing closed on unresolved identifiers.** An unknown column or bare name now fails in both expression paths. Still silent: an undeclared `@variable` (reads `NULL` in a row, its own name without one); a misspelt column on a row read back from a spill file, which does not carry its schema; a misspelt column on the unmatched rows of an outer join. Closing the last two needs the statement's column set at bind time, beyond `SelectColumnBinder`'s temp-table case. A visual whose source fails also renders empty instead of reporting the error. | — | M |
 | SQ05 | **Define how a number orders against text in `EvaluationUtils`.** v0.22.0 compares `DateTime` values at full tick precision in both `IsSoftEqual` and `CompareConstants`. Left: a number compared with text that is not a number silently falls back to string ordering; fail, or define an explicit type precedence. | — | S |
 | SQ06 | **Finish `DBNull.Value` normalization and `GO` batch error propagation.** v0.22.0 returns `NULL` from `POSITION` and `AT TIME ZONE` on a `NULL` input, fails `EXTRACT` on an unknown field or a value that is not a date, treats `DBNull.Value` as `NULL` in `TypeConverter.ToInvariantText`, `EvaluationUtils.CastToType` and `BinaryOperatorFactory`, and stops the script on a failed `GO` batch. Left: `DBNull.Value` in the `ExpressionEvaluator` syntax functions (`CHARACTER_LENGTH`, `OCTET_LENGTH`, `SUBSTRING`, `OVERLAY`, `TRIM`) and the `RowExpressionCompiler` boolean operators, and a test that an unhandled exception crosses `GO` batches unless `TRY/CATCH` guards it. | — | S |
 | SQ15 | **Keep an index catalog for in-memory tables.** `CREATE INDEX`, `DROP INDEX` and `REINDEX` on an in-memory table record nothing, so dropping or reindexing an index that does not exist succeeds. Track index names per table, fail `DROP INDEX` without `IF EXISTS` and `REINDEX` on an unknown name, drop a table's indexes with the table, and remove the four `skipif etlsql` guards in `slt_lang_dropindex.test`, `slt_lang_droptable.test` and `slt_lang_reindex.test`. Found 2026-11-11 when `statement error` records started to count. | — | S |

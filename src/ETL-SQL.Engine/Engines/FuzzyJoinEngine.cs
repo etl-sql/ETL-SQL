@@ -96,6 +96,7 @@ internal class FuzzyJoinEngine(IExecutionContext context, ILogger logger)
                 if (isLeft)
                 {
                     var unmatched = left.Clone();
+                    unmatched.MayLackColumns = true;
                     unmatched[ScoreColumn] = null;
                     result.Add(unmatched);
                 }
@@ -146,6 +147,7 @@ internal class FuzzyJoinEngine(IExecutionContext context, ILogger logger)
     private static Row CombineRows(Row left, Row right)
     {
         var r = left.Clone();
+        r.MayLackColumns = left.MayLackColumns || right.MayLackColumns;
         r.DataQualityReplayProvenance = left.DataQualityReplayProvenance;
         right.ForEachColumn((k, v) => r[k] = v);
         // Expand schema aliases (e.g. "b.name") so qualified column references in the ON

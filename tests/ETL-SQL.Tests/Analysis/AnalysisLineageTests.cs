@@ -166,7 +166,7 @@ namespace ETL_SQL.Tests.Analysis
                 CREATE CONNECTION src AS MOCKDB(SERVER='src_serv', DATABASE='src_db');
                 CREATE CONNECTION dest AS FLATFILE(PATH='C:\tmp\dest.csv');
                 INSERT INTO dest.FILE (id, name)
-                SELECT id, name FROM src.Users;
+                SELECT UserID AS id, UserName AS name FROM src.Users;
             ";
             await evaluator1.Evaluate(new Parser(new Lexer(script1).Tokenize()).Parse());
 
@@ -174,7 +174,7 @@ namespace ETL_SQL.Tests.Analysis
             Assert.NotEmpty(lineage1);
             var entry1 = lineage1.First();
             Assert.Contains("src.Users", entry1.SourceTables);
-            Assert.Contains("id", entry1.SourceColumns);
+            Assert.Contains("UserID", entry1.SourceColumns);
 
             var services2 = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator2 = services2.GetRequiredService<Evaluator>();
@@ -186,7 +186,7 @@ namespace ETL_SQL.Tests.Analysis
                 CREATE TABLE #intermediate (id INT, name VARCHAR);
                 
                 INSERT INTO #intermediate (id, name)
-                SELECT CAST(id AS INT) AS id, name FROM src.Users;
+                SELECT CAST(UserID AS INT) AS id, UserName AS name FROM src.Users;
                 
                 INSERT INTO dest.FILE (id, name)
                 SELECT id, name FROM #intermediate;
@@ -205,7 +205,7 @@ namespace ETL_SQL.Tests.Analysis
             var intermediateEntry = ancestors.FirstOrDefault(e => e.TargetTable.Equals("#intermediate", StringComparison.OrdinalIgnoreCase));
             Assert.NotNull(intermediateEntry);
             Assert.Equal(TransformationKind.Cast, intermediateEntry.TransformationKind);
-            Assert.Contains("CAST(id, 'INT')", intermediateEntry.TransformationExpression);
+            Assert.Contains("CAST(UserID, 'INT')", intermediateEntry.TransformationExpression);
         }
     }
 }

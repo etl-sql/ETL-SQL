@@ -52,6 +52,14 @@ public static class OutputClauseHelper
                 }
             }
 
+            // An inserted row has no DELETED values and a deleted row no INSERTED values. Both
+            // namespaces still exist, so the missing one reads as NULL instead of an unknown column.
+            foreach (var col in (after ?? before)?.Columns.Keys ?? Enumerable.Empty<string>())
+            {
+                if (before == null) contextRow[$"DELETED.{col}"] = null;
+                if (after == null) contextRow[$"INSERTED.{col}"] = null;
+            }
+
             var outputRow = new Row();
             foreach (var outCol in output.Columns)
             {

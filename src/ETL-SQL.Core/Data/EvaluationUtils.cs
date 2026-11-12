@@ -343,6 +343,18 @@ public static class EvaluationUtils
         }
     }
 
+    /// <summary>
+    /// The error for a name nothing defines. It read as NULL when a row was in scope and as its own
+    /// name when none was, so a misspelt column gave a column of NULLs and the script succeeded.
+    /// </summary>
+    public static ExecutionException UnknownName(string name, Row? row)
+    {
+        var known = row?.GetColumnNames().Where(n => !n.Contains('.')).Take(30).ToList();
+        return new ExecutionException(known is { Count: > 0 }
+            ? $"Unknown column '{name}'. Columns here: {string.Join(", ", known)}."
+            : $"Unknown identifier '{name}'. It is not a column, a variable, a connection or a function.");
+    }
+
     public static object? CastToType(object? value, string? type)
     {
         if (value is null or DBNull) return null;
