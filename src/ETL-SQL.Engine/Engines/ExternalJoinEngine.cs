@@ -42,6 +42,12 @@ public class ExternalJoinEngine
         _bufferManager = _context.ServiceProvider?.GetService<IBufferManager>();
     }
 
+    /// <summary>
+    /// The column names of both sides, used to give a row with no match the other side's columns
+    /// as NULL. The engine records each side from the first row it reads.
+    /// </summary>
+    internal OuterJoinShape Shape { get; init; } = new();
+
     /// <summary>Performs an external hash join by partitioning both left and right streams to disk before join processing.</summary>
     public async IAsyncEnumerable<Row> ApplyHashJoinExternal(IAsyncEnumerable<Row> leftStream, IAsyncEnumerable<Row> rightStream, JoinClause join, List<string> leftKeys, List<string> rightKeys, long? knownBuildRowCount = null, long? knownBuildBytes = null)
     {
@@ -60,6 +66,7 @@ public class ExternalJoinEngine
                 rightSample.Add(row);
                 sampledBytes = checked(sampledBytes + row.EstimateHeapBytes());
             }
+            if (rightSample.Count > 0) Shape.SeeRight(rightSample[0]);
             ConfigurePartitionCount(rightSample, rightKeys, knownBuildRowCount, knownBuildBytes);
             PlanDecisionRecorder.Record(_context, "external-join", "ExternalJoin",
                 PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
@@ -373,11 +380,7 @@ public class ExternalJoinEngine
                             }
                         }
                         if (!producedMatch && isLeftJoin)
-                        {
-                            var unmatched = (left ?? RowPacker.MaterializeBatchRow(batch, rowIndex)).Clone();
-                            unmatched.MayLackColumns = true;
-                            yield return unmatched;
-                        }
+                            yield return Shape.Unmatched(left ?? RowPacker.MaterializeBatchRow(batch, rowIndex));
                     }
                 }
             }
@@ -405,11 +408,7 @@ public class ExternalJoinEngine
                 }
 
                 if (!producedMatch && isLeftJoin)
-                {
-                    var unmatched = left.Clone();
-                    unmatched.MayLackColumns = true;
-                    yield return unmatched;
-                }
+                    yield return Shape.Unmatched(left);
             }
         }
 
@@ -418,7 +417,11 @@ public class ExternalJoinEngine
             for (int idx = 0; idx < table.Rows.Count; idx++)
             {
                 if (!matched[idx])
-                    yield return CombineRows(null, RowPacker.Unpack(table.Rows[idx], table.Columns));
+                {
+                    var unmatched = CombineRows(null, RowPacker.Unpack(table.Rows[idx], table.Columns));
+                    Shape.Complete(unmatched);
+                    yield return unmatched;
+                }
             }
         }
     }
@@ -509,8 +512,10 @@ public class ExternalJoinEngine
 
         try
         {
+            bool isLeftInput = depth == 0 && prefix == "left";
             await foreach (var row in stream)
             {
+                if (isLeftInput) Shape.SeeLeft(row);
                 int pIdx = GetPartitionIndex(row, keys, depth);
                 counts[pIdx]++;
                 await writers[pIdx].WriteRowAsync(row);
@@ -579,8 +584,7 @@ public class ExternalJoinEngine
     private Row CombineRows(Row? left, Row right)
     {
         var combined = new Row();
-        // No left row means an unmatched right row of an outer join: the left columns are absent.
-        combined.MayLackColumns = left == null || left.MayLackColumns || right.MayLackColumns;
+        combined.MayLackColumns = (left?.MayLackColumns ?? false) || right.MayLackColumns;
         combined.DataQualityReplayProvenance = left?.DataQualityReplayProvenance;
         left?.ForEachColumn((name, value) => combined[name] = value);
         right.ForEachColumn((name, value) => combined[name] = value);

@@ -355,6 +355,13 @@ public static class EvaluationUtils
             : $"Unknown identifier '{name}'. It is not a column, a variable, a connection or a function.");
     }
 
+    /// <summary>
+    /// The error for a variable nothing declared. It read as NULL, so a misspelt variable in a
+    /// filter matched no rows and the script succeeded.
+    /// </summary>
+    public static ExecutionException UnknownVariable(string name) =>
+        new($"Unknown variable '{name}'. Declare it with DECLARE before it is read.");
+
     public static object? CastToType(object? value, string? type)
     {
         if (value is null or DBNull) return null;

@@ -1040,7 +1040,7 @@ public class ExpressionEvaluator
         if (v.Name.Equals("@@IS_ADMIN", StringComparison.OrdinalIgnoreCase)) return _context.ExecutionIdentity?.IsAdmin ?? false;
 
         if (!_context.VarContext.ContainsVariable(v.Name))
-            throw new ExecutionException($"Undeclared: {v.Name}");
+            throw EvaluationUtils.UnknownVariable(v.Name);
 
         var val = _context.VarContext.GetVariable(v.Name);
 
@@ -1189,8 +1189,12 @@ public class ExpressionEvaluator
             return await _context.FunctionRegistry.ExecuteAsync(id.Name, new List<object?>(), _context);
         }
 
-        // An undeclared variable keeps its old reading; see ROADMAP SQ03.
-        if (id.Name.StartsWith('@')) return context == null ? id.Name : null;
+        // A variable that reached here is not declared. System variables answer by name.
+        if (id.Name.StartsWith('@'))
+        {
+            if (SystemVariableProvider.IsSystemVariable(id.Name)) return SystemVariableProvider.Resolve(id.Name, _context);
+            throw EvaluationUtils.UnknownVariable(id.Name);
+        }
 
         // A row that may lack columns (an outer-join row with no match, a spilled row) reads NULL.
         if (context is { MayLackColumns: true }) return null;

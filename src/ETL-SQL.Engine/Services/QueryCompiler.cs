@@ -29,13 +29,22 @@ public class QueryCompiler(Evaluator evaluator)
         return new CompiledSql(sql, _currentParams);
     }
 
+    // A pushed-down query binds a variable as a parameter. An undeclared one bound NULL, so the
+    // database filtered on NULL and the script succeeded.
+    private object? DeclaredVariable(string name)
+    {
+        if (!SystemVariableProvider.IsSystemVariable(name) && !_evaluator.ContainsVariable(name))
+            throw EvaluationUtils.UnknownVariable(name);
+        return _evaluator.GetVariable(name);
+    }
+
     private string CompileExpressionInternal(Expression e, ISqlDialect dialect)
     {
         if (e is IdentifierExpression id)
         {
             if (id.Name.StartsWith("@"))
             {
-                var val = _evaluator.GetVariable(id.Name);
+                var val = DeclaredVariable(id.Name);
                 var pName = "@p" + _paramCounter++;
                 _currentParams[pName] = val;
                 return pName;
@@ -81,7 +90,7 @@ public class QueryCompiler(Evaluator evaluator)
         }
         if (e is VariableExpression v)
         {
-            var val = _evaluator.GetVariable(v.Name);
+            var val = DeclaredVariable(v.Name);
             var pName = "@p" + _paramCounter++;
             _currentParams[pName] = val;
             return pName;

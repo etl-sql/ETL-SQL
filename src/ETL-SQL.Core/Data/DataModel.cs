@@ -156,10 +156,10 @@ public class Row
     public DataQualityReplayProvenance? DataQualityReplayProvenance { get; set; }
 
     /// <summary>
-    /// True when this row is allowed to be missing columns the statement can name: an outer-join
-    /// row with no match carries one side only, and a row read back from a spill file keeps only
-    /// the columns it had. An unknown column name reads as NULL on such a row and is an error on
-    /// any other.
+    /// True when this row is allowed to be missing columns the statement can name. An outer-join
+    /// row with no match normally carries the other side's columns as NULL; the mark is only for
+    /// the case where the other side had no rows and nothing declares its columns. An unknown
+    /// column name reads as NULL on such a row and is an error on any other.
     /// </summary>
     public bool MayLackColumns { get; set; }
 

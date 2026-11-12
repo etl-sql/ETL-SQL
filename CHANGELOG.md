@@ -43,9 +43,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   in test mode too, where they counted it as 0.
 - Fail on a name nothing defines. A misspelt column read as `NULL` on every row, and a bare name
   with no row in scope read as its own text (`SELECT bogus` gave `'bogus'`), so the script
-  succeeded with wrong data. The error names the column and lists the columns in scope. The
-  unmatched side of an outer join still reads as `NULL`. Not yet covered: an undeclared
-  `@variable`, and rows read back from a spill file. **Behaviour change.**
+  succeeded with wrong data. The error names the column and lists the columns in scope. A row
+  with no match in an outer join carries the other side's columns as `NULL`, so a real column
+  still reads `NULL` there and a misspelt one fails, as it does on a row read back from a spill
+  file. An undeclared `@variable` fails too, including one bound into a query pushed down to a
+  database, where it was sent as `NULL`. **Behaviour change.**
 - Read a bracketed or bare value in a `PIVOT ... IN` list by its name. `FOR id IN ([1], [2])` read
   each value as `NULL`, so the pivoted columns held nothing.
 - Fail an `UPDATE` that sets a column the table does not have. The misspelt column was added to
