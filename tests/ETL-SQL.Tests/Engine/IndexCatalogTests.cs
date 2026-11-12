@@ -41,6 +41,8 @@ public sealed class IndexCatalogTests
     [InlineData("REINDEX never_made;", "never_made")]
     [InlineData("DROP INDEX ix_x; REINDEX ix_x;", "ix_x")]
     [InlineData("DROP TABLE #t; REINDEX ix_x;", "ix_x")]
+    [InlineData("CREATE CONNECTION mock AS MOCKDB(); DROP INDEX never_made;", "never_made")]
+    [InlineData("CREATE CONNECTION mock AS MOCKDB(); DROP INDEX ix_x; DROP INDEX ix_x;", "ix_x")]
     public async Task AnIndexNothingCreatedFails(string sql, string name)
     {
         var failure = await Assert.ThrowsAnyAsync<Exception>(() => Run(Setup + sql));

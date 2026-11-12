@@ -247,11 +247,12 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
                 return;
             }
 
-            // Not an in-memory index: a database connection may own it.
+            // Not an in-memory index: a database connection may own it. A source with no SQL
+            // engine behind it (MOCKDB) holds no indexes and accepts any statement, so it is not asked.
             bool executedAny = false;
             foreach (var conn in connections.Values)
             {
-                if (conn is IDatabaseSource sqlConn)
+                if (conn is IDatabaseSource { SupportsSqlPushdown: true } sqlConn)
                 {
                     if (_evaluator.IsWhatIf)
                     {
