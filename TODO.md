@@ -54,11 +54,6 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   their issues close (`playwright-wait` #74, `first-run-sign-in-wait` #75).
 - [ ] **W6 Performance certification redesign** (below the cut line). Deterministic metrics gate;
   timing by same-host interleaved A/B; no waivers.
-- [ ] **W7 Local gate hygiene** (below the cut line). Built 2026-11-11: `Test-Environment.ps1`
-  fails in seconds on a missing tool or a busy machine, and the pre-push hook runs the fast tier
-  (3 minutes, was 12). The integration and timing lanes of `test-lane` run the check first
-  (2026-11-13), and the spill lane runs in CI as Spill Certification (1/3–3/3).
-  **Left:** the first green Spill Certification run on a push.
 - [ ] **W8 Scale release evidence to current claims** (below the cut line; owner sign-off needed).
 
 **Parked from the earlier "release in four hours" goal.** Each is picked up only if a workstream
