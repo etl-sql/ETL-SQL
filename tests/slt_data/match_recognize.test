@@ -119,3 +119,47 @@ acct1
 5
 2
 B
+
+# A pattern variable with no DEFINE matches any row; DEFINE on an undeclared variable fails.
+statement error
+SELECT * FROM stock_ticker
+MATCH_RECOGNIZE (
+  PARTITION BY symbol
+  ORDER BY tstamp
+  MEASURES A.tstamp AS t
+  ONE ROW PER MATCH
+  PATTERN (A)
+  DEFINE Z AS Z.price > 0
+) AS T;
+
+statement error Unknown column
+SELECT * FROM stock_ticker
+MATCH_RECOGNIZE (
+  PARTITION BY symbol
+  ORDER BY tstamp
+  MEASURES A.tstamp AS t
+  ONE ROW PER MATCH
+  PATTERN (A)
+  DEFINE A AS A.prise > 0
+) AS T;
+
+# NULL in the ordering column of a partition with no match returns no row.
+statement ok
+CREATE TABLE mr_nulls(symbol STRING, tstamp INT, price DECIMAL(10,2));
+
+statement ok
+INSERT INTO mr_nulls VALUES ('X', 1, NULL), ('X', 2, NULL);
+
+query I
+SELECT COUNT(*) FROM (
+SELECT * FROM mr_nulls
+MATCH_RECOGNIZE (
+  PARTITION BY symbol
+  ORDER BY tstamp
+  MEASURES A.tstamp AS t
+  ONE ROW PER MATCH
+  PATTERN (A)
+  DEFINE A AS A.price > 0
+) AS T) x;
+----
+0

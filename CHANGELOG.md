@@ -14,6 +14,30 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Expand `OUTPUT INSERTED.*` and `OUTPUT DELETED.*` on `INSERT`, `UPDATE`, `DELETE` and `MERGE`
+  to every column of that row. Both failed with `Unknown column 'DELETED.*'`. A side the
+  statement has no row for (`DELETED` on an insert) reads `NULL` in every column.
+- Require a unit in `USING SAMPLE`, and fail on a percentage above 100. `USING SAMPLE 10` read
+  as 10 percent, and `USING SAMPLE 150 PERCENT` returned every row with no error.
+  **Behaviour change.**
+- Fail a `MATCH_RECOGNIZE` whose `DEFINE` names a variable `PATTERN` does not use. The
+  definition was ignored, so a misspelt variable left the real one undefined, and it matched
+  every row. **Behaviour change.**
+- Fail on a misspelt `OUTPUT` column before `INSERT`, `UPDATE`, `DELETE` or `MERGE` changes any
+  row. The clause was evaluated after the change, so `DELETE ... OUTPUT DELETED.nmae` failed
+  with the rows already deleted.
+- Run the CTEs of `WITH ... INSERT`, `UPDATE`, `DELETE` and `MERGE`. They were parsed and never
+  registered, so the statement failed with `Unknown source` on its own CTE.
+- Reject `COUNT(DISTINCT *)` and `DISTINCT *` in any function. It was accepted and the
+  `DISTINCT` ignored. **Behaviour change.**
+- Add SLT coverage: `IS [NOT] DISTINCT FROM`, named `WINDOW` clauses, `OUTPUT` on DML, `WITH`
+  on `INSERT`/`UPDATE`/`DELETE`/`MERGE`, `statement error` cases for `USING SAMPLE`,
+  `GROUP BY ALL` and `MATCH_RECOGNIZE`, and regression queries for this release's `NULL` and
+  fail-closed fixes. The standard-SQL queries of `slt_lang_aggfunc.test` (SQLite-only, halts on
+  other engines) now run as `aggregate_distinct.test`. `select5.test` has no `halt`; all 732
+  queries run. The `index/` corpus was probed: 189 of 213 files pass (see
+  `docs/architecture/standards/slt-coverage.md`).
+
 - Keep the tables a script creates on a `MOCKDB` connection. `CREATE TABLE demo.t (...)` was
   ignored and inserts into it were dropped, so `SELECT * FROM demo.t` silently returned the
   seeded `Users` table. A created table now holds its declared columns and inserted rows until it

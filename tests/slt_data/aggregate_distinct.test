@@ -1,0 +1,67 @@
+# The standard-SQL part of evidence/slt_lang_aggfunc.test, which halts on every engine but SQLite.
+# Its total(), group_concat() and text-to-0 coercion are SQLite-only; these are not. Expected values
+# follow standard SQL where SQLite differs (AVG of integers is not truncated).
+
+statement ok
+CREATE TABLE t1(x INTEGER, y VARCHAR(8));
+
+statement ok
+INSERT INTO t1 VALUES (1, 'true'), (0, 'false'), (NULL, 'NULL');
+
+# DISTINCT may precede the argument of any single-argument aggregate.
+query IRIII
+SELECT COUNT(DISTINCT x), AVG(DISTINCT x), SUM(DISTINCT x), MIN(DISTINCT x), MAX(DISTINCT x) FROM t1;
+----
+2
+0.500
+1
+0
+1
+
+statement ok
+INSERT INTO t1 VALUES (2, 'true'), (2, 'true');
+
+# Duplicates count once under DISTINCT, every time without it.
+query IIII
+SELECT COUNT(x), COUNT(DISTINCT x), SUM(x), SUM(DISTINCT x) FROM t1;
+----
+4
+3
+5
+3
+
+query RR
+SELECT AVG(x), AVG(DISTINCT x) FROM t1;
+----
+1.250
+1.000
+
+# An aggregate over only NULLs: COUNT is 0, the rest NULL.
+query IIT
+SELECT COUNT(x), COUNT(DISTINCT x), CASE WHEN AVG(x) IS NULL AND SUM(x) IS NULL AND MIN(x) IS NULL AND MAX(DISTINCT x) IS NULL THEN 'null' ELSE 'value' END
+FROM t1 WHERE y = 'NULL';
+----
+0
+0
+null
+
+query III
+SELECT COUNT(x), COUNT(DISTINCT x), COUNT(*) FROM t1 WHERE y = 'false';
+----
+1
+1
+1
+
+# MAX of text compares as text ('true' is last with or without case sensitivity).
+query T
+SELECT MAX(DISTINCT y) FROM t1;
+----
+true
+
+query I
+SELECT COUNT(DISTINCT y) FROM t1;
+----
+3
+
+statement error
+SELECT COUNT(DISTINCT *) FROM t1;

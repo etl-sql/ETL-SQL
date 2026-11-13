@@ -1,0 +1,128 @@
+# Named windows: WINDOW w AS (...) defines a window once; OVER w and OVER (w ...) use it.
+
+statement ok
+CREATE TABLE nw(grp VARCHAR(5), d INT, v INT);
+
+statement ok
+INSERT INTO nw VALUES ('a', 1, 10), ('a', 2, 20), ('a', 3, 30), ('b', 1, 5), ('b', 2, NULL);
+
+query TII
+SELECT grp, d, SUM(v) OVER w FROM nw WINDOW w AS (PARTITION BY grp ORDER BY d) ORDER BY grp, d;
+----
+a
+1
+10
+a
+2
+30
+a
+3
+60
+b
+1
+5
+b
+2
+5
+
+# Two functions share the window.
+query TIII
+SELECT grp, d, ROW_NUMBER() OVER w, COUNT(v) OVER w FROM nw WINDOW w AS (PARTITION BY grp ORDER BY d) ORDER BY grp, d;
+----
+a
+1
+1
+1
+a
+2
+2
+2
+a
+3
+3
+3
+b
+1
+1
+1
+b
+2
+2
+1
+
+# Two named windows in one clause.
+query TIII
+SELECT grp, d, SUM(v) OVER p, ROW_NUMBER() OVER o
+FROM nw
+WINDOW p AS (PARTITION BY grp), o AS (ORDER BY grp, d)
+ORDER BY grp, d;
+----
+a
+1
+60
+1
+a
+2
+60
+2
+a
+3
+60
+3
+b
+1
+5
+4
+b
+2
+5
+5
+
+# OVER (w ...) extends a named window with a frame.
+query TII
+SELECT grp, d, SUM(v) OVER (w ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+FROM nw WINDOW w AS (PARTITION BY grp ORDER BY d) ORDER BY grp, d;
+----
+a
+1
+10
+a
+2
+30
+a
+3
+50
+b
+1
+5
+b
+2
+5
+
+# A frame on the named window bounds LAST_VALUE.
+query TII
+SELECT grp, d, LAST_VALUE(v) OVER w
+FROM nw WINDOW w AS (PARTITION BY grp ORDER BY d ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)
+ORDER BY grp, d;
+----
+a
+1
+20
+a
+2
+30
+a
+3
+30
+b
+1
+NULL
+b
+2
+NULL
+
+statement error
+SELECT grp, SUM(v) OVER missing FROM nw WINDOW w AS (PARTITION BY grp);
+
+statement error
+SELECT grp, SUM(v) OVER w FROM nw WINDOW w AS (PARTITION BY grp), w AS (ORDER BY d);

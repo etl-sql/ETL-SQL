@@ -615,6 +615,9 @@ public partial class ExpressionParser
                 {
                     if (_parser.Current.Type == TokenType.STAR)
                     {
+                        // COUNT(DISTINCT *) is not SQL; it was accepted and ignored the DISTINCT.
+                        if (isFuncDistinct)
+                            throw new SyntaxException($"DISTINCT cannot be applied to * in {name}(...); name the columns", _parser.Current.Line, _parser.Current.Column);
                         var starToken = _parser.Advance();
                         args.Add(new IdentifierExpression("*") { Line = starToken.Line, Column = starToken.Column });
                     }

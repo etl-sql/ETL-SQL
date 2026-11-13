@@ -1591,6 +1591,12 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         {
             try
             {
+                // A query registers its own CTEs (SelectStatementHandler.EvaluateQuery). A WITH on
+                // INSERT, UPDATE, DELETE or MERGE was parsed and then never registered, so the
+                // statement failed with "Unknown source" on its own CTE.
+                if (statement.Ctes is { Count: > 0 } && statement is not SelectStatement and not SetOperationStatement)
+                    await new Services.CteManager(_logger).RegisterCtes(statement.Ctes, this);
+
                 await handler.Execute(statement, this);
                 if (node != null) node.Status = ExecutionStatus.Completed;
             }

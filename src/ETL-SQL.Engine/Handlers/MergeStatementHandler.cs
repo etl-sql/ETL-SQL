@@ -39,6 +39,7 @@ public class MergeStatementHandler : IStatementHandler
 
         if (targetSource == null) throw new ExecutionException($"Unknown target connection: {targetConnName}");
         if (sourceSource == null) throw new ExecutionException($"Unknown source connection: {stmt.SourceTable.ToSql()}");
+        if (stmt.Output != null) await OutputClauseHelper.ValidateNamesAsync(stmt.Output, context, await targetSource.GetColumnsAsync(context.CancellationToken));
 
         // Record column-level lineage for MERGE actions
         var sTable = stmt.SourceTable.Alias ?? stmt.SourceTable.TableName;

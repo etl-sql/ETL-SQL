@@ -105,6 +105,7 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
             throw new ExecutionException($"Unknown connection: {connName} at Line {stmt.Line}");
         _logger.Debug("Destination resolved as {DestinationType}", destination.GetType().Name);
         await GuardDataQualityEvidenceInsertAsync(stmt, connName, destination, context);
+        if (stmt.Output != null) await OutputClauseHelper.ValidateNamesAsync(stmt.Output, context, await destination.GetColumnsAsync(context.CancellationToken));
 
         if (destination is AppendOnlyColumnDataSource && stmt.IsReplace && !context.IsWhatIf)
             destination = await TempTableStorageRouter.EnsureMutableAsync(context, connName, destination, "INSERT OR REPLACE");

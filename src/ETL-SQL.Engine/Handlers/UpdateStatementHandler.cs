@@ -32,6 +32,7 @@ public partial class UpdateStatementHandler(ILogger logger) : IStatementHandler
         // COMPAT_BREAK: 0.20.0 — enlist the target before executing the first transactional mutation.
         connection = await context.ResolveReadSourceAsync(stmt.TargetTable);
         _logger.Debug("Connection resolved as {ConnectionType}", connection.GetType().Name);
+        if (stmt.Output != null) await OutputClauseHelper.ValidateNamesAsync(stmt.Output, context, await connection.GetColumnsAsync(context.CancellationToken));
 
         var dataQualityStatusAssignment = GetDataQualityStatusAssignment(stmt);
         bool touchesDataQualityColumns = dataQualityStatusAssignment != null

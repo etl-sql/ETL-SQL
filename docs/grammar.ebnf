@@ -641,7 +641,7 @@ special_sql_expression = "SUBSTRING" "(" expression ( "FROM" expression [ "FOR" 
                        | "TRIM" "(" [ "LEADING" | "TRAILING" | "BOTH" ] [ expression ] "FROM" expression ")" ;
 json_table_column = identifier ( "FOR" "ORDINALITY" | data_type [ "EXISTS" ] "PATH" expression ) ;
 
-function_call = identifier "(" [ [ "DISTINCT" | "ALL" ] ( "*" | expression_list ) ] ")"
+function_call = identifier "(" [ [ "ALL" ] "*" | [ "DISTINCT" | "ALL" ] expression_list ] ")"
                 [ "FILTER" "(" "WHERE" expression ")" ]
                 [ "OVER" ( identifier | "(" window_clause ")" ) ]
                 [ "WITHIN" "GROUP" "(" "ORDER" "BY" order_list ")" ] ;

@@ -662,10 +662,15 @@ public class Parser : IParser
             Advance(); // SAMPLE
             var numTok = Consume(TokenType.NUMBER, "Expected a number after SAMPLE");
             decimal count = decimal.Parse(numTok.Value, System.Globalization.CultureInfo.InvariantCulture);
-            bool isPercent = true;
-            if (Match(TokenType.MODULO)) isPercent = true;            // n%
-            else if (Match(TokenType.PERCENT)) isPercent = true;      // n PERCENT
-            else if (Match(TokenType.ROWS) || Match(TokenType.ROW)) isPercent = false; // n ROWS
+            // The unit is required, as docs/grammar.ebnf says: a bare number was read as a
+            // percentage, so USING SAMPLE 10 meant 10% where it reads as 10 rows.
+            bool isPercent;
+            if (Match(TokenType.MODULO) || Match(TokenType.PERCENT)) isPercent = true; // n% | n PERCENT
+            else if (Match(TokenType.ROWS) || Match(TokenType.ROW)) isPercent = false;  // n ROWS
+            else throw new SyntaxException("Expected PERCENT or ROWS after the USING SAMPLE size", Current.Line, Current.Column);
+            // A percentage above 100 sampled every row with no error.
+            if (isPercent && count > 100)
+                throw new SyntaxException($"USING SAMPLE {count} PERCENT is above 100 percent", numTok.Line, numTok.Column);
             int? seed = null;
             if (Match(TokenType.REPEATABLE))
             {

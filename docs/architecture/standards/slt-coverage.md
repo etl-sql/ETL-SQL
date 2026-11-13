@@ -45,6 +45,7 @@ Hand-authored tests covering ETL-SQL-specific features and SQL areas not in the 
 
 | File | Records | What it covers |
 | :--- | ---: | :--- |
+| `aggregate_distinct.test` | 11 | The standard-SQL part of `evidence/slt_lang_aggfunc.test`: `DISTINCT` in COUNT/AVG/SUM/MIN/MAX; aggregates over only NULLs; `COUNT(DISTINCT *)` rejected |
 | `aggregates.test` | 23 | SUM/AVG/COUNT/MIN/MAX; FILTER clause; GROUPING SETS/ROLLUP; COUNT(DISTINCT) |
 | `alter_table.test` | 18 | ALTER TABLE ADD COLUMN, RENAME COLUMN, DROP COLUMN; `#temp` table indexes |
 | `asof_join.test` | 33 | Nearest-match temporal/inequality joins: backward (`>=`), forward (`<=`), strict inequality (`>`), equi-partition keys, inner drops, ASOF LEFT NULL preservation, unsorted inputs, duplicate timestamps, empty left/right tables, NULL handling |
@@ -53,7 +54,9 @@ Hand-authored tests covering ETL-SQL-specific features and SQL areas not in the 
 | `cte.test` | 12 | Simple CTEs; chained WITH; WITH RECURSIVE; CTE in subquery |
 | `date_functions.test` | 11 | DATEPART, DATEDIFF, DATEADD; date string ordering |
 | `distinct.test` | 12 | SELECT DISTINCT; COUNT(DISTINCT); SUM(DISTINCT); DISTINCT with NULLs |
+| `distinct_from.test` | 18 | `IS [NOT] DISTINCT FROM`: NULL-safe equality in SELECT, WHERE and a join `ON`; never NULL; errors |
 | `dml.test` | 35 | UPDATE (WHERE, arithmetic, CASE-in-SET, subquery-in-WHERE, multi-column, unconditional, no-op); DELETE (WHERE, subquery-IN-WHERE, no-op, unconditional) |
+| `dml_output_cte.test` | 20 | `OUTPUT INSERTED.*`/`DELETED.*`/named columns on INSERT, UPDATE, DELETE; a misspelt OUTPUT column fails before any row changes; `WITH` on INSERT, UPDATE, DELETE and MERGE |
 | `expressions.test` | 7 | Arithmetic; UPPER/LOWER; CAST; CASE in expression list |
 | `functions.test` | 11 | UPPER, TRIM, ABS, ROUND, LEN, COALESCE (2-arg, multi-arg, all-NULL fallback), IIF |
 | `fuzzy_logic.test` | 10 | SOUNDEX, LEVENSHTEIN, SIMILARITY, METAPHONE, DMETAPHONE, NORMALIZE |
@@ -62,12 +65,14 @@ Hand-authored tests covering ETL-SQL-specific features and SQL areas not in the 
 | `insert.test` | 24 | INSERT VALUES (basic, NULL, expressions); INSERT SELECT (filtered, with JOIN, with aggregate) |
 | `join.test` | 26 | INNER/LEFT/RIGHT/FULL OUTER/CROSS JOIN; comma-join syntax; 3- and 5-table joins |
 | `json_xml.test` | 18 | ISJSON; JSON_VALUE/JSON_QUERY; XMLVALUE path expressions |
-| `language_extensions.test` | 31 | GROUP BY ALL (single aggregate, empty table, constants, non-aggregates only, expressions wrapping aggregates, lateral aliases, NULL grouping, scalar aggregates, HAVING); ORDER BY ALL; `* EXCLUDE`, `REPLACE`, `RENAME`; USING SAMPLE (0%, 100%, rows, repeatable) |
+| `language_extensions.test` | 40 | GROUP BY ALL (single aggregate, empty table, constants, non-aggregates only, expressions wrapping aggregates, lateral aliases, NULL grouping, scalar aggregates, HAVING); ORDER BY ALL; `* EXCLUDE`, `REPLACE`, `RENAME`; USING SAMPLE (0%, 100%, rows, repeatable, more rows than the table, unit required, above 100 percent fails) |
 | `lateral.test` | 17 | CROSS JOIN LATERAL; LEFT JOIN LATERAL (OUTER APPLY); Comma LATERAL; CROSS APPLY; correlated subqueries with LIMIT; scalar vs grouped aggregate lateral; empty outer table; arithmetic correlation; post-filtering ON predicates; multi-row expansions |
-| `match_recognize.test` | 7 | MATCH_RECOGNIZE; PARTITION BY; PATTERN/DEFINE; V-shape detection; ALL ROWS PER MATCH classifier output; repeated match numbering |
+| `match_recognize.test` | 12 | MATCH_RECOGNIZE; PARTITION BY; PATTERN/DEFINE; V-shape detection; ALL ROWS PER MATCH classifier output; repeated match numbering; DEFINE on a variable PATTERN does not use fails; misspelt column in DEFINE fails |
 | `merge.test` | 40 | MERGE upsert (WHEN MATCHED UPDATE + WHEN NOT MATCHED INSERT); inventory top-up with conditional update; WHEN MATCHED AND condition; unmatched source rows silently ignored |
 | `mini_select1.test` | 33 | Complex CASE/arithmetic combos; hash-verified 60-value result sets |
+| `named_window.test` | 9 | `WINDOW w AS (...)`: shared by several functions; two named windows; `OVER (w ROWS ...)`; framed LAST_VALUE; undefined and duplicate names fail |
 | `null_edge_cases.test` | 17 | NULL comparison (= vs IS NULL); NULL in arithmetic; NULLIF; three-valued logic; BETWEEN with NULL |
+| `null_semantics_regressions.test` | 26 | v0.22.0 NULL and fail-closed fixes: scalar functions on NULL, STRING_AGG skipping NULL, framed FIRST/LAST_VALUE, failing text arithmetic and EXTRACT, sub-second timestamp equality, unknown names, unknown temp tables, GENERATE_SERIES step 0 |
 | `nulls.test` | 10 | COUNT(*) vs COUNT(x); SUM over NULLs; IS NULL; COALESCE |
 | `obscure_features.test` | 33 | SEMI JOIN, ANTI JOIN, LEFT SEMI/ANTI JOIN; QUALIFY (compound predicates, pipeline execution WHERE -> GROUP BY -> HAVING -> WINDOW -> QUALIFY -> ORDER BY, ties with RANK/DENSE_RANK, impossible filters `1=0` / negative / NULL, empty tables, `1=1`, LAG boundary detection, COUNT(*) window, DISTINCT deduplication, LIMIT) |
 | `pivot_unpivot.test` | 6 | PIVOT (rows→columns); UNPIVOT (columns→rows) |
@@ -86,10 +91,10 @@ Hand-authored tests covering ETL-SQL-specific features and SQL areas not in the 
 | File | Reason |
 | :--- | :--- |
 | `corpus/select4_debug.test` | Truncated artifact — identical 1,025 setup statements as `select4.test` but only 1,019 of its 2,832 queries (cuts off before complex join tests). No unique content; deleted from repo. |
-| `evidence/slt_lang_aggfunc.test` | SQLite-only by design. Opens with `skipif sqlite; halt` — the SLT convention for "run this only on SQLite." Tests `total()` (SQLite-only function, returns 0.0 not NULL for empty sets), `group_concat()` (SQLite-specific; standard SQL uses `STRING_AGG`/`LISTAGG`), and non-numeric string coercion to 0 in `avg()`/`sum()` — all SQLite-specific behaviors ETL-SQL correctly does not replicate. |
+| `evidence/slt_lang_aggfunc.test` | SQLite-only by design. Opens with `skipif sqlite; halt` — the SLT convention for "run this only on SQLite." Tests `total()` (SQLite-only function, returns 0.0 not NULL for empty sets), `group_concat()` (SQLite-specific; standard SQL uses `STRING_AGG`/`LISTAGG`), and non-numeric string coercion to 0 in `avg()`/`sum()` — all SQLite-specific behaviors ETL-SQL correctly does not replicate. Its `halt` already stops every other engine after setup; the standard-SQL queries are ported to `aggregate_distinct.test`. |
 | `evidence/slt_lang_createtrigger.test` | ETL-SQL has no trigger support. Deleted from repo. |
 | `evidence/slt_lang_droptrigger.test` | ETL-SQL has no trigger support. Deleted from repo. |
-| `index/` subdirectories | 8 directories (`between/`, `commute/`, `delete/`, `in/`, `orderby/`, `orderby_nosort/`, `random/`, `view/`) containing real SLT index-optimization tests — 10,000+ queries per file, testing that indexed and non-indexed query paths return identical results. Excluded because all files use `CREATE INDEX` on regular (non-temp) tables, which ETL-SQL does not support (ETL-SQL supports `CREATE INDEX` only on `#temp` tables). Files are retained in the repo as a future coverage target. |
+| `index/` subdirectories | 8 directories (`between/`, `commute/`, `delete/`, `in/`, `orderby/`, `orderby_nosort/`, `random/`, `view/`), 213 files of SLT index-optimization tests (indexed and non-indexed paths must agree). `CREATE INDEX` on regular tables now works, so the old reason no longer holds. Probed 2026-11-13: 189 files pass. 22 `random/` files fail on SQLite-specific output, where `+ col` on a TEXT column is printed as integer `0` under type `I` and ETL-SQL keeps the text. 2 files (`orderby/10/slt_good_20`, `commute/10/slt_good_11`) fail only when run 4-way parallel (a NullReferenceException and a lost test process) and pass alone. Still excluded from the `slt` lane: all 213 take about 30 minutes, against the lane's 9-minute CI limit. |
 
 ---
 

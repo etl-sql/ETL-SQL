@@ -1,0 +1,126 @@
+# DML OUTPUT INSERTED.* / DELETED.*, and a WITH cte AS (...) prefix on INSERT, UPDATE, DELETE and MERGE.
+
+statement ok
+CREATE TABLE #o(id INT, v INT);
+
+statement ok
+INSERT INTO #o VALUES (1, 10), (2, 20), (3, 30);
+
+# INSERT ... OUTPUT returns the inserted rows.
+query II rowsort
+INSERT INTO #o (id, v) OUTPUT INSERTED.id, INSERTED.v VALUES (4, 40), (5, NULL);
+----
+4
+40
+5
+NULL
+
+# UPDATE ... OUTPUT sees the old value as DELETED and the new one as INSERTED.
+query III rowsort
+UPDATE #o SET v = v + 1 OUTPUT INSERTED.id, DELETED.v, INSERTED.v WHERE id IN (1, 2);
+----
+1
+10
+11
+2
+20
+21
+
+# A NULL stays NULL through the update.
+query II
+UPDATE #o SET v = v * 2 OUTPUT DELETED.v, INSERTED.v WHERE id = 5;
+----
+NULL
+NULL
+
+# DELETE ... OUTPUT returns the removed rows.
+query II rowsort
+DELETE FROM #o OUTPUT DELETED.* WHERE v >= 30;
+----
+3
+30
+4
+40
+
+query II rowsort
+SELECT id, v FROM #o;
+----
+1
+11
+2
+21
+5
+NULL
+
+# A misspelt OUTPUT column fails before any row changes. The DELETE used to remove row 1 and
+# then fail.
+statement error Unknown column
+DELETE FROM #o OUTPUT DELETED.nope WHERE id = 1;
+
+statement error Unknown column
+UPDATE #o SET v = 0 OUTPUT INSERTED.nope WHERE id = 1;
+
+statement error Unknown column
+INSERT INTO #o (id, v) OUTPUT INSERTED.nope VALUES (9, 9);
+
+query II rowsort
+SELECT id, v FROM #o;
+----
+1
+11
+2
+21
+5
+NULL
+
+# WITH on INSERT.
+statement ok
+CREATE TABLE #c(id INT, v INT);
+
+statement ok
+WITH src AS (SELECT id, v FROM #o WHERE v IS NOT NULL) INSERT INTO #c SELECT id, v FROM src;
+
+query II rowsort
+SELECT id, v FROM #c;
+----
+1
+11
+2
+21
+
+# WITH on UPDATE.
+statement ok
+WITH big AS (SELECT id FROM #c WHERE v > 20) UPDATE #c SET v = 0 WHERE id IN (SELECT id FROM big);
+
+query II rowsort
+SELECT id, v FROM #c;
+----
+1
+11
+2
+0
+
+# WITH on DELETE.
+statement ok
+WITH zero AS (SELECT id FROM #c WHERE v = 0) DELETE FROM #c WHERE id IN (SELECT id FROM zero);
+
+query II rowsort
+SELECT id, v FROM #c;
+----
+1
+11
+
+# WITH on MERGE: update the match, insert the rest.
+statement ok
+WITH incoming AS (SELECT 1 AS id, 100 AS v UNION ALL SELECT 7, 70)
+MERGE INTO #c AS t USING incoming AS s ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET v = s.v
+WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v);
+
+query II rowsort
+SELECT id, v FROM #c;
+----
+1
+100
+7
+70

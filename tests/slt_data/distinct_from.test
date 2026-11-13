@@ -1,0 +1,107 @@
+# IS [NOT] DISTINCT FROM: a NULL-safe comparison. Two NULLs are not distinct; NULL and a value are.
+# It never returns NULL, unlike = and <>.
+
+statement ok
+CREATE TABLE d1(id INT, a INT, b INT);
+
+statement ok
+INSERT INTO d1 VALUES (1, 1, 1), (2, 1, 2), (3, NULL, 1), (4, 1, NULL), (5, NULL, NULL);
+
+query IT rowsort
+SELECT id, CASE WHEN a IS DISTINCT FROM b THEN 'distinct' ELSE 'same' END FROM d1;
+----
+1
+same
+2
+distinct
+3
+distinct
+4
+distinct
+5
+same
+
+query IT rowsort
+SELECT id, CASE WHEN a IS NOT DISTINCT FROM b THEN 'same' ELSE 'distinct' END FROM d1;
+----
+1
+same
+2
+distinct
+3
+distinct
+4
+distinct
+5
+same
+
+# = gives NULL on rows 3-5, so WHERE drops them; IS NOT DISTINCT FROM keeps row 5.
+query I rowsort
+SELECT id FROM d1 WHERE a = b;
+----
+1
+
+query I rowsort
+SELECT id FROM d1 WHERE a IS NOT DISTINCT FROM b;
+----
+1
+5
+
+query I rowsort
+SELECT id FROM d1 WHERE a IS DISTINCT FROM b;
+----
+2
+3
+4
+
+# Never NULL: the negation keeps every row exactly once.
+query I
+SELECT COUNT(*) FROM d1 WHERE NOT (a IS DISTINCT FROM b);
+----
+2
+
+query I
+SELECT COUNT(*) FROM d1 WHERE (a IS DISTINCT FROM b) IS NULL;
+----
+0
+
+# Literal NULL on both sides.
+query T
+SELECT CASE WHEN NULL IS NOT DISTINCT FROM NULL THEN 'same' ELSE 'distinct' END;
+----
+same
+
+query T
+SELECT CASE WHEN NULL IS DISTINCT FROM 0 THEN 'distinct' ELSE 'same' END;
+----
+distinct
+
+# Text, and a right operand at the comparison level (concatenation is allowed there).
+query I
+SELECT COUNT(*) FROM d1 WHERE CAST(id AS VARCHAR) IS NOT DISTINCT FROM '' || '3';
+----
+1
+
+# A join on a NULL-safe key matches NULL to NULL, which = does not.
+statement ok
+CREATE TABLE d2(k INT, label VARCHAR(10));
+
+statement ok
+INSERT INTO d2 VALUES (1, 'one'), (NULL, 'none');
+
+query T rowsort
+SELECT d2.label FROM d1 JOIN d2 ON d1.a IS NOT DISTINCT FROM d2.k WHERE d1.id IN (1, 5);
+----
+none
+one
+
+query T rowsort
+SELECT d2.label FROM d1 JOIN d2 ON d1.a = d2.k WHERE d1.id IN (1, 5);
+----
+one
+
+statement error
+SELECT id FROM d1 WHERE a IS DISTINCT b;
+
+statement error Unknown column
+SELECT id FROM d1 WHERE nope IS DISTINCT FROM 1;
