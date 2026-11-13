@@ -95,7 +95,7 @@ namespace ETL_SQL.Connectors
             ["PASSIVE"] = new[] { "ON", "OFF" }
         };
         public Dictionary<string, string[]> GetOptionValues() => new();
-        public string GetHelp() => "FTP Connector for remote file operations.\nOptions:\n  USER: The username for the FTP connection.\n  PASSWORD: The password for the FTP connection.\n  PORT: The FTP control port. Default: 21.\nMethods: GET_FILE, PUT_FILE, REMOTE_FILE_LIST.";
+        public string GetHelp() => "FTP Connector for remote file operations.\nOptions:\n  USER: The username for the FTP connection.\n  PASSWORD: The password for the FTP connection.\n  PORT: The FTP control port. Default: 21.\n  USE_SSL: OFF (default), EXPLICIT or IMPLICIT; ON and TRUE mean EXPLICIT.\n  PASSIVE: ON (default) or OFF.\nMethods: GET_FILE, PUT_FILE, REMOTE_FILE_LIST.";
 
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {
@@ -109,7 +109,7 @@ namespace ETL_SQL.Connectors
             if (options?.TryGetValue("PORT", out var portText) == true && int.TryParse(portText, out var parsedPort))
                 port = parsedPort;
             string? useSsl = options?.GetValueOrDefault("USE_SSL");
-            bool passive = options?.GetValueOrDefault("PASSIVE")?.ToUpperInvariant() != "OFF";
+            bool passive = ParsePassive(options?.GetValueOrDefault("PASSIVE"));
             // A catalog connection may carry its host only in the HOST option.
             string host = string.IsNullOrWhiteSpace(connectionString)
                 ? options?.GetValueOrDefault("HOST") ?? ""
@@ -316,17 +316,42 @@ namespace ETL_SQL.Connectors
         private static AsyncFtpClient CreateClient(string host, int port, string username, string password,
             string? useSsl = null, bool passive = true)
         {
+            var encryption = ParseEncryptionMode(useSsl);
             var client = new AsyncFtpClient(host, username, password, port);
-            client.Config.EncryptionMode = useSsl?.ToUpperInvariant() switch
-            {
-                "EXPLICIT" or "ON" => FtpEncryptionMode.Explicit,
-                "IMPLICIT" => FtpEncryptionMode.Implicit,
-                _ => FtpEncryptionMode.None
-            };
+            client.Config.EncryptionMode = encryption;
             if (!passive)
                 client.Config.DataConnectionType = FtpDataConnectionType.PORT;
             return client;
         }
+
+        /// <summary>
+        /// Reads USE_SSL. An unrecognized value is an error: it used to mean no encryption, so a
+        /// misspelled TLS setting sent the credentials in clear text.
+        /// </summary>
+        internal static FtpEncryptionMode ParseEncryptionMode(string? value)
+        {
+            var text = value?.Trim().ToUpperInvariant();
+            if (string.IsNullOrEmpty(text)) return FtpEncryptionMode.None;
+            if (text == "EXPLICIT") return FtpEncryptionMode.Explicit;
+            if (text == "IMPLICIT") return FtpEncryptionMode.Implicit;
+            if (ConnectorOptionValues.IsTrue(text)) return FtpEncryptionMode.Explicit;
+            if (IsFalse(text)) return FtpEncryptionMode.None;
+            throw new ExecutionException(
+                $"FTP option USE_SSL = '{value}' is not recognized. Use OFF, EXPLICIT or IMPLICIT " +
+                "(ON and TRUE mean EXPLICIT). The connection was not opened.");
+        }
+
+        /// <summary>Reads PASSIVE: on unless OFF (or another false spelling); anything else is an error.</summary>
+        internal static bool ParsePassive(string? value)
+        {
+            var text = value?.Trim().ToUpperInvariant();
+            if (string.IsNullOrEmpty(text) || ConnectorOptionValues.IsTrue(text)) return true;
+            if (IsFalse(text)) return false;
+            throw new ExecutionException(
+                $"FTP option PASSIVE = '{value}' is not recognized. Use ON (the default) or OFF.");
+        }
+
+        private static bool IsFalse(string text) => text is "OFF" or "FALSE" or "NO" or "0";
 
         private static (string Host, int Port) NormalizeEndpoint(string host, int fallbackPort)
         {

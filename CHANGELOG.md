@@ -14,6 +14,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- FTP: an unrecognized `USE_SSL` or `PASSIVE` value is an error and the connection does not open
+  (ROADMAP RF01). `USE_SSL` read every value but `EXPLICIT`, `ON` and `IMPLICIT` as no encryption,
+  and the FTP page told users to set `USE_SSL=TRUE`, so a quoted `'TRUE'` (and `YES` or `1`) sent the
+  password in clear text. `TRUE`, `YES` and `1` now mean `EXPLICIT`, as `ON` did. The page documents
+  `USE_SSL` and `PASSIVE` as the connector reads them and drops the `FTPS` alias and `USE_PASSIVE`
+  option, which never existed. **Behaviour change; security.**
+
 - **Generate Script from Spec** in the VS Code extension now uses only a chat model from an
   installed VS Code chat extension (such as GitHub Copilot), which handles sign-in. The direct
   Gemini, OpenAI, Anthropic, OpenRouter and custom-endpoint providers are removed, with the
