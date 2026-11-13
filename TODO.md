@@ -8,7 +8,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 17 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 16 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -105,7 +105,7 @@ sample on a shared runner.
 
 ### 4. SQL engine conformance (from ROADMAP, owner 2026-11-11)
 
-SQ01, SQ02, SQ04–SQ17 and SQ18 are done (`CHANGELOG.md`). **Done when:** `statement error` tests fail
+SQ01, SQ02 and SQ04–SQ19 are done (`CHANGELOG.md`). **Done when:** `statement error` tests fail
 when the statement succeeds; `EbnfConformanceTests` expands every `select_body` clause with no
 drift against `Parser`; `SltTests`, `EngineCorpusTests` and `ParserFuzzTests` pass. After any
 change to name or expression resolution, run `scripts/Test-AllSamples.ps1 -Configuration Release`
@@ -116,11 +116,6 @@ before pushing.
   table function on either side (its names are kept from when it ran, so it is not run again).
   Still silent: an empty side that is a dynamic `PIVOT` or `MATCH_RECOGNIZE`, and a table
   function served by a database connection (`db.fn(...)`), which is not evaluated into memory.
-- [ ] **SQ19 Find the NullReferenceException in parallel SLT runs.** Running all 213
-  `tests/slt_data/index/**` files 4-way parallel failed `orderby/10/slt_good_20` with a
-  NullReferenceException and lost the test process on `commute/10/slt_good_11`; both pass alone
-  (2026-11-13). Rerun that probe and find the shared state. The other 22 index failures are
-  SQLite-only output (`docs/architecture/standards/slt-coverage.md`).
 
 ### 5. VS Code extension issues (planned for v0.23.0)
 

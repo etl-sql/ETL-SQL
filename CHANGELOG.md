@@ -14,6 +14,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Fix the SLT runner's memory check for parallel files. Every runner shared one `Process` object,
+  and one runner's `Refresh()` cleared it while another read it, so a file run 4-way parallel
+  failed with a `NullReferenceException` or "Process has exited". The engine was not involved.
 - Scope a CTE to its statement. Its result stayed registered until the script ended, so a later
   statement could read it by name, and a CTE named like an existing `#temp` table replaced and
   disposed that table. The name now means what it meant before once the statement ends, also

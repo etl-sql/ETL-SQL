@@ -29,7 +29,6 @@ namespace ETL_SQL.SqlLogicTests
     public class SltRunner : IDisposable
     {
         private static readonly long TotalSystemMemoryBytes = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
-        private static readonly System.Diagnostics.Process CurrentProcess = System.Diagnostics.Process.GetCurrentProcess();
         private const double MemoryGuardFraction = 0.75;
 
         private static int _instanceCounter;
@@ -213,8 +212,10 @@ SET TELEMETRY = OFF;";
 
         private void ThrowIfMemoryExceeded()
         {
-            CurrentProcess.Refresh();
-            var workingSet = CurrentProcess.WorkingSet64;
+            // Environment.WorkingSet reads the value on each call. A shared Process object is not
+            // thread-safe: one runner's Refresh() cleared the cached info while another runner read
+            // it, and parallel SLT files failed with NullReferenceException or "Process has exited".
+            var workingSet = Environment.WorkingSet;
             var limitBytes = (long)(TotalSystemMemoryBytes * MemoryGuardFraction);
             if (workingSet <= limitBytes) return;
 
@@ -267,7 +268,7 @@ SET TELEMETRY = OFF;";
             if (_queryCount % 50 == 0)
             {
                 var managedMB = GC.GetTotalMemory(false) / 1024 / 1024;
-                var workingMB = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024;
+                var workingMB = Environment.WorkingSet / 1024 / 1024;
                 Console.Error.WriteLine($"{prefix}  | managed={managedMB}MB working={workingMB}MB");
             }
             else
