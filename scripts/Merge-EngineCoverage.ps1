@@ -11,6 +11,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'TestLane.Helpers.ps1')
+. (Join-Path $PSScriptRoot 'TestRetry.Helpers.ps1')
 $inputRoot = [IO.Path]::GetFullPath($InputDirectory)
 $outputRoot = [IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $outputRoot) { throw 'Merged coverage output must be a new directory.' }
@@ -42,6 +43,7 @@ $receipts = @()
 $passed = 0
 $skipped = 0
 $skippedTests = @()
+$flakyTests = @()
 for ($group = 1; $group -le $GroupCount; $group++) {
     # Successful groups from earlier attempts stay usable. Select the latest execution of each
     # group; a broken latest artifact must fail instead of falling back to older evidence.
@@ -83,14 +85,38 @@ for ($group = 1; $group -le $GroupCount; $group++) {
     foreach ($shard in @($manifest.shards | Where-Object group -EQ $group)) {
         $trx = Resolve-EvidenceFile $artifact.FullName $shard.results
         $verification = Read-ShardTestResults $trx $shard.expectedMethodCounts
-        if ($verification.missingMethods.Count -gt 0 -or $verification.unexpectedMethods.Count -gt 0 -or
-            @($verification.results | Where-Object outcome -NotIn @('Passed', 'NotExecuted')).Count -gt 0) {
+        # test-lane.ps1 reruns a failed test once alone and records it in flakyMethods when it
+        # passes. Accept that first failure only for a listed method whose every case passed in
+        # the shard's retry TRX; any other failure, or a failed retry, still fails the merge.
+        $retriedPassed = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        $flakyMethods = @($shard.flakyMethods | Where-Object { $_ })
+        if ($flakyMethods.Count -gt 0) {
+            $retryTrx = Resolve-EvidenceFile $artifact.FullName "retry-$([IO.Path]::GetFileNameWithoutExtension($shard.results)).trx"
+            $retried = Get-TestOutcomesByMethod -TrxPath $retryTrx
+            foreach ($method in $flakyMethods) {
+                if ($retried.ContainsKey($method) -and @($retried[$method] | Where-Object { $_ -cne 'Passed' }).Count -eq 0) {
+                    [void]$retriedPassed.Add($method)
+                }
+            }
+        }
+        $identities = @{}
+        [xml]$trxXml = Get-Content -LiteralPath $trx -Raw
+        foreach ($definition in $trxXml.TestRun.TestDefinitions.UnitTest) {
+            $identities[$definition.id] = "$($definition.TestMethod.className.Split(',')[0]).$($definition.TestMethod.name)"
+        }
+        $rejected = @($verification.results | Where-Object {
+                $_.outcome -notin @('Passed', 'NotExecuted') -and
+                -not ($_.outcome -ceq 'Failed' -and $retriedPassed.Contains([string]$identities[$_.testId]))
+            })
+        if ($verification.missingMethods.Count -gt 0 -or $verification.unexpectedMethods.Count -gt 0 -or $rejected.Count -gt 0) {
             throw "Engine shard $($shard.number) has failed, incomplete or unexpected test results."
         }
+        $flakyPassed = @($verification.results | Where-Object { $_.outcome -ceq 'Failed' }).Count
+        $flakyTests += @($retriedPassed | Sort-Object | ForEach-Object { @{ shard = $shard.number; method = $_ } })
         foreach ($testId in @($verification.results | ForEach-Object testId | Sort-Object -Unique)) {
             if (-not $testOwners.Add($testId)) { throw 'Overlapping engine test results.' }
         }
-        $passed += @($verification.results | Where-Object outcome -EQ 'Passed').Count
+        $passed += @($verification.results | Where-Object outcome -EQ 'Passed').Count + $flakyPassed
         $skipped += @($verification.results | Where-Object outcome -EQ 'NotExecuted').Count
         $skippedTests += @($verification.results | Where-Object outcome -EQ 'NotExecuted' | ForEach-Object {
                 @{ shard = $shard.number; testId = $_.testId; testName = $_.testName }
@@ -128,6 +154,6 @@ foreach ($file in $files) {
     New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
     Copy-Item -LiteralPath $file.source -Destination $target
 }
-@{ schemaVersion = 1; commit = $Commit; runId = $RunId; groups = $receipts; shards = $files.Count; passed = $passed; skipped = $skipped; skippedTests = $skippedTests } |
+@{ schemaVersion = 1; commit = $Commit; runId = $RunId; groups = $receipts; shards = $files.Count; passed = $passed; skipped = $skipped; skippedTests = $skippedTests; flakyTests = $flakyTests } |
     ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $outputRoot 'merged-inventory.json') -Encoding utf8NoBOM
 Write-Host "Verified $ShardCount engine shards across $GroupCount groups: $passed passed, $skipped existing skips."

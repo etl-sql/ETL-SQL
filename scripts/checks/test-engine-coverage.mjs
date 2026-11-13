@@ -67,7 +67,20 @@ try {
   changeManifest(recovered, value => { value.runAttempt = '2'; }, 1, 2);
   assert.deepEqual(merge(recovered).groups.map(group => group.artifact), [
     'engine-coverage-group-1-123-2', 'engine-coverage-group-2-123-1', 'engine-coverage-group-3-123-1']);
+  // test-lane.ps1 reruns a failed test alone and lists it in flakyMethods when the rerun passes.
+  const flaky = (input, { listed = true, retry = 'Passed' } = {}) => {
+    put(groupPath(input), plan[0].results, trx(plan[0], { outcome: 'Failed' }));
+    if (retry) put(groupPath(input), `retry-${plan[0].results.replace(/\.trx$/, '')}.trx`, trx(plan[0], { outcome: retry, id: 'retry' }));
+    if (listed) changeManifest(input, value => { value.shards[0].flakyMethods = plan[0].methods; });
+  };
+  const retried = fixture(); flaky(retried);
+  const flakyReceipt = merge(retried);
+  assert.equal(flakyReceipt.passed, 24, 'A test that passed on its recorded retry counts as passed.');
+  assert.deepEqual(flakyReceipt.flakyTests, [{ shard: 1, method: plan[0].methods[0] }]);
   const mutations = [
+    input => flaky(input, { listed: false }),
+    input => flaky(input, { retry: null }),
+    input => flaky(input, { retry: 'Failed' }),
     input => rmSync(groupPath(input, 2), { recursive: true }),
     input => changeManifest(input, value => { value.commit = 'b'.repeat(40); }),
     input => changeManifest(input, value => { value.runId = '124'; }),
