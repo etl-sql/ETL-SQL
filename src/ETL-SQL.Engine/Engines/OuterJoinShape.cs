@@ -13,8 +13,11 @@ namespace ETL_SQL.Engine.Engines;
 /// same columns as a matched row and a name neither side defines is still an unknown column.
 /// <para>
 /// A side's names come from the first row seen on it. A side with no rows falls back to the names
-/// its table reference declares (<see cref="DeclaredColumnsAsync"/>). When neither is known, the
-/// row is marked <see cref="Row.MayLackColumns"/> and an unknown name on it reads NULL.
+/// its table reference declares (<see cref="DeclaredColumnsAsync"/>): a select list, a temp table,
+/// a <c>PIVOT</c> list, the names a table function returned when it ran, or the source's own
+/// header or catalog. When neither is known (a dynamic pivot, a table function served by a
+/// database connection), the row is marked <see cref="Row.MayLackColumns"/> and an unknown name
+/// on it reads NULL.
 /// </para>
 /// </summary>
 internal sealed class OuterJoinShape
@@ -41,6 +44,9 @@ internal sealed class OuterJoinShape
 
     /// <summary>True once the right side's column names are known.</summary>
     public bool RightKnown => _right != null;
+
+    /// <summary>True once the left side's column names are known.</summary>
+    public bool LeftKnown => _left != null;
 
     public void SeeLeft(Row row)
     {
@@ -94,56 +100,114 @@ internal sealed class OuterJoinShape
     /// <summary>
     /// The column names the given table references declare, bare and qualified by alias, or null
     /// when any of them cannot be known without reading rows.
+    /// <para>
+    /// With <paramref name="askSources"/> a file is asked for its header and a database for its
+    /// catalog, and a <c>PIVOT</c> or <c>UNPIVOT</c> is worked out from its source. A join asks
+    /// this way only once a side has returned no rows, so a join with rows pays nothing for it.
+    /// </para>
     /// </summary>
-    public static async Task<List<string>?> DeclaredColumnsAsync(IEnumerable<TableReference> tables, IExecutionContext context)
+    public static async Task<List<string>?> DeclaredColumnsAsync(
+        IEnumerable<TableReference> tables, IExecutionContext context, bool askSources = false)
     {
         var names = new List<string>();
         foreach (var table in tables)
         {
-            var columns = await DeclaredColumnsAsync(table, context, depth: 0);
+            var columns = await DeclaredColumnsAsync(table, context, depth: 0, askSources);
             if (columns == null) return null;
             names.AddRange(Qualified(columns, table.Alias ?? table.TableName));
         }
         return names;
     }
 
-    private static async Task<List<string>?> DeclaredColumnsAsync(TableReference table, IExecutionContext context, int depth)
+    private static async Task<List<string>?> DeclaredColumnsAsync(TableReference table, IExecutionContext context, int depth, bool askSources)
     {
-        if (depth > 8 || table.TableOperators.Count > 0 || table.FunctionCall != null || table.ValuesRows != null) return null;
+        if (depth > 8) return null;
+        if (table.TableOperators.Count == 0) return await SourceColumnsAsync(table, context, depth, askSources);
+        if (!askSources) return null;
+
+        // PIVOT and UNPIVOT: the names follow from the source's names and the operator's own list.
+        var columns = await SourceColumnsAsync(table, context, depth, askSources);
+        foreach (var tableOperator in table.TableOperators)
+        {
+            if (columns == null) return null;
+            columns = PivotEngine.DeclaredColumns(columns, tableOperator);
+        }
+        return columns;
+    }
+
+    /// <summary>The columns of the table reference itself, before any <c>PIVOT</c> or <c>UNPIVOT</c>.</summary>
+    private static async Task<List<string>?> SourceColumnsAsync(TableReference table, IExecutionContext context, int depth, bool askSources)
+    {
+        // A table function has to run to say what it returns. It is not run again here: the names
+        // are the ones it returned when this statement ran it, if it ran into memory.
+        if (table.FunctionCall != null)
+            return askSources && context.TableFunctionColumns(table) is { Count: > 0 } returned ? returned.ToList() : null;
+        if (table.ValuesRows != null) return null;
         if (table.ColumnAliases is { Count: > 0 }) return table.ColumnAliases;
 
-        if (table.Subquery != null)
-        {
-            if (table.Subquery is not SelectStatement select || select.Columns == null) return null;
-            var names = new List<string>();
-            foreach (var column in select.Columns)
-            {
-                if (!string.IsNullOrEmpty(column.Alias)) { names.Add(column.Alias!); continue; }
-                if (column.Expression is not IdentifierExpression id) return null;
-                if (id.Name == "*")
-                {
-                    // `SELECT * FROM one_table`: the names are that table's.
-                    if (select.FromTable == null || select.Joins is { Count: > 0 }) return null;
-                    var inner = await DeclaredColumnsAsync(select.FromTable, context, depth + 1);
-                    if (inner == null) return null;
-                    names.AddRange(inner);
-                    continue;
-                }
-                if (id.Name.EndsWith('*')) return null;
-                names.Add(id.Name[(id.Name.LastIndexOf('.') + 1)..]);
-            }
-            return names;
-        }
+        if (table.Subquery != null) return await SelectListAsync(table.Subquery, context, depth, askSources);
+
+        if (string.IsNullOrEmpty(table.TableName)) return null;
 
         // A CTE or a temp table: held in memory, so asking for its columns reads nothing.
-        if (table.ConnectionName != null || table.DatabaseName != null || table.SchemaName != null
-            || string.IsNullOrEmpty(table.TableName)
-            || !(context.LocalSources.TryGetValue(table.TableName, out var source)
-                 || context.Connections.TryGetValue(table.TableName, out source))
-            || source is not InMemoryDataSource memory)
-            return null;
+        var plainName = table.ConnectionName == null && table.DatabaseName == null && table.SchemaName == null;
+        IDataSource? source = null;
+        if (plainName
+            && (context.LocalSources.TryGetValue(table.TableName, out var local)
+                || context.Connections.TryGetValue(table.TableName, out local))
+            && local is InMemoryDataSource)
+            source = local;
+        else if (askSources)
+            source = await context.ResolveReadSourceAsync(table);
 
-        var declared = (await ((IDataSource)memory).GetColumnsAsync(context.CancellationToken)).ToList();
+        if (source == null) return null;
+        var declared = (await source.GetColumnsAsync(context.CancellationToken)).ToList();
         return declared.Count == 0 ? null : declared;
+    }
+
+    private static async Task<List<string>?> SelectListAsync(Statement query, IExecutionContext context, int depth, bool askSources)
+    {
+        // A UNION takes its names from its first query.
+        while (query is SetOperationStatement set) query = set.Left;
+        if (query is not SelectStatement select || select.Columns == null) return null;
+
+        var names = new List<string>();
+        foreach (var column in select.Columns)
+        {
+            if (!string.IsNullOrEmpty(column.Alias)) { names.Add(column.Alias!); continue; }
+            if (column.Expression is not IdentifierExpression id) return null;
+            if (id.Name == "*" || id.Name.EndsWith(".*", StringComparison.Ordinal))
+            {
+                // `SELECT *`: the names of every table the query reads. `t.*`: the names of t.
+                var only = id.Name == "*" ? null : id.Name[..^2];
+                var found = false;
+                foreach (var inner in StarTables(select))
+                {
+                    if (only != null && !only.Equals(inner.Alias ?? inner.TableName, StringComparison.OrdinalIgnoreCase)) continue;
+                    var innerNames = await DeclaredColumnsAsync(inner, context, depth + 1, askSources);
+                    if (innerNames == null) return null;
+                    names.AddRange(innerNames.Where(name => !names.Contains(name, StringComparer.OrdinalIgnoreCase)));
+                    found = true;
+                }
+                if (!found) return null;
+                continue;
+            }
+            names.Add(id.Name[(id.Name.LastIndexOf('.') + 1)..]);
+        }
+        return names;
+    }
+
+    /// <summary>The tables whose columns <c>SELECT *</c> returns: a SEMI or ANTI join adds none.</summary>
+    private static IEnumerable<TableReference> StarTables(SelectStatement select)
+    {
+        if (select.FromTable != null) yield return select.FromTable;
+        if (select.Joins == null) yield break;
+        foreach (var join in select.Joins)
+        {
+            if (join.JoinType.Contains("SEMI", StringComparison.OrdinalIgnoreCase)
+                || join.JoinType.Contains("ANTI", StringComparison.OrdinalIgnoreCase))
+                continue;
+            yield return join.Table;
+        }
     }
 }

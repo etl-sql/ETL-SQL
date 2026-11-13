@@ -152,7 +152,7 @@ public class JoinEngine
 
         var joinRows = await GetJoinRows(join, shape); // Buffer right side (usually smaller)
         if (joinRows.Count > 0) shape.SeeRight(joinRows[0]);
-        else await DeclareEmptyRightAsync(join, shape);
+        else await DeclareEmptyRightAsync(join, shape, rightSource);
 
         // Pre-filter the right-side join table using predicates in WHERE that reference ONLY this table (INNER/CROSS only).
         bool isInnerOrCross = !IsLeftOuter(join.JoinType) && !IsRightOuter(join.JoinType) && !IsSemiJoin(join.JoinType) && !IsAntiJoin(join.JoinType);
@@ -226,6 +226,9 @@ public class JoinEngine
         {
             if (IsRightOuter(join.JoinType))
             {
+                // The left side had no rows and nothing has named its columns yet: ask.
+                if (!shape.LeftKnown && joinRows.Count > 0)
+                    shape.DeclareLeft(await OuterJoinShape.DeclaredColumnsAsync(leftTables, _context, askSources: true));
                 foreach (var right in joinRows)
                     yield return shape.Unmatched(right);
             }
@@ -701,22 +704,25 @@ public class JoinEngine
     }
 
     /// <summary>
-    /// The right side of an outer join had no rows and nothing has named its columns yet: ask the
-    /// source itself (a file reads its header, a database its catalog). Only a plain table
-    /// reference is asked; a subquery or a function would have to run again to answer.
+    /// The right side of an outer join had no rows and nothing has named its columns yet. A table
+    /// function has already run, and <paramref name="rightSource"/> holds what it returned, so
+    /// that is asked. Anything else is worked out from the table reference: a file reads its
+    /// header, a database its catalog, and a subquery or a PIVOT is read from its own text.
     /// </summary>
-    private async Task DeclareEmptyRightAsync(JoinClause join, OuterJoinShape shape)
+    private async Task DeclareEmptyRightAsync(JoinClause join, OuterJoinShape shape, IDataSource rightSource)
     {
         var table = join.Table;
-        if (shape.RightKnown || !IsLeftOuter(join.JoinType)
-            || table.Subquery != null || table.FunctionCall != null || table.ValuesRows != null
-            || table.TableOperators.Count > 0)
-            return;
+        if (shape.RightKnown || !IsLeftOuter(join.JoinType)) return;
 
-        var source = await _context.ResolveReadSourceAsync(table);
-        var columns = (await source.GetColumnsAsync(_context.CancellationToken)).ToList();
-        if (columns.Count > 0)
-            shape.DeclareRight(OuterJoinShape.Qualified(columns, table.Alias ?? table.TableName));
+        if (table.FunctionCall != null && table.TableOperators.Count == 0)
+        {
+            var columns = (await rightSource.GetColumnsAsync(_context.CancellationToken)).ToList();
+            if (columns.Count > 0)
+                shape.DeclareRight(OuterJoinShape.Qualified(columns, table.Alias ?? table.TableName));
+            return;
+        }
+
+        shape.DeclareRight(await OuterJoinShape.DeclaredColumnsAsync(new[] { table }, _context, askSources: true));
     }
 
     private static void AnnotateJoinReplayObservation(Row row, string buildTable, bool buildSideUnique)

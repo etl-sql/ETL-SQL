@@ -48,6 +48,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   still reads `NULL` there and a misspelt one fails, as it does on a row read back from a spill
   file. An undeclared `@variable` fails too, including one bound into a query pushed down to a
   database, where it was sent as `NULL`. **Behaviour change.**
+- Fail on a misspelt column of an outer join side that returned no rows. Such a side had no
+  row to take its column names from, so any name read `NULL`. The names now come from the table
+  function's result, the `PIVOT` or `UNPIVOT` list, the tables behind `SELECT *` or `t.*`, the
+  first query of a `UNION`, or the header or catalog of an empty file or database table on the
+  left. **Behaviour change.**
+- Report a visual whose source fails on the report as well as on the visual. The visual showed
+  its error, but the report build had no error and no message. The report now carries
+  `One or more visuals failed to build.` and a message that names the visual. The other
+  visuals still render.
 - Fail on reading a temp table or dataset that nothing created. `SELECT * FROM #mistyped`
   created an empty table and returned no rows, so a misspelt table name succeeded. A read, a
   join, `TRUNCATE TABLE` and `ALTER TABLE` now fail with `Unknown source`; `SELECT ... INTO`,

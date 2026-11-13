@@ -434,6 +434,16 @@ namespace ETL_SQL.Reporting
             if (manifestMessages is { Count: > 0 })
                 manifest.Messages.AddRange(manifestMessages);
 
+            // A visual whose source failed keeps its own error state and the other visuals still
+            // render, but the build is not clean: say so, as for a visual that failed to build.
+            foreach (var visual in manifest.Visuals.Where(v => v.Error != null))
+            {
+                manifest.Error ??= "One or more visuals failed to build.";
+                if (manifest.Messages.Any(m => m.Message.Contains(visual.Error!, StringComparison.Ordinal))) continue;
+                manifest.Messages.Add(new LogEntryManifest(
+                    $"Visual '{visual.Name}' failed: {visual.Error}", "Red", DateTime.UtcNow));
+            }
+
             manifest.ExecutionTree = _ctx.Telemetry.ExecutionTree.ToSnapshot();
 
             // Payload size is the one detail-surface budget that cannot be checked while

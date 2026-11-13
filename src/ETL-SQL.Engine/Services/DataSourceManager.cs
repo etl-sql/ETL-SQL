@@ -67,6 +67,26 @@ public class DataSourceManager(
     /// </param>
     public async Task<IDataSource> ResolveDataSourceAsync(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager, bool forRead = false)
     {
+        var source = await ResolveDataSourceCoreAsync(table, connections, transactionManager, forRead);
+        // A table function evaluated into memory has run: keep its column names (not its rows) so
+        // an outer join can name an empty side without running it again.
+        if (table.FunctionCall != null && table.Subquery == null && source is InMemoryDataSource)
+        {
+            var columns = (await source.GetColumnsAsync(_evaluator.CancellationToken)).ToArray();
+            if (columns.Length > 0) _tableFunctionColumns.AddOrUpdate(table, columns);
+        }
+        return source;
+    }
+
+    /// <summary>The column names a table function returned when <paramref name="table"/> last ran it.</summary>
+    public IReadOnlyList<string>? TableFunctionColumns(TableReference table) =>
+        _tableFunctionColumns.TryGetValue(table, out var columns) ? columns : null;
+
+    // Keyed by reference: a TableReference is a record, but each one in a script is its own entry.
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<TableReference, string[]> _tableFunctionColumns = new();
+
+    private async Task<IDataSource> ResolveDataSourceCoreAsync(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager, bool forRead)
+    {
         _evaluator.CancellationToken.ThrowIfCancellationRequested();
 
         if (table.Subquery != null)

@@ -407,6 +407,45 @@ public class PivotEngine
             || fullColName.EndsWith("." + targetColName, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// The column names a <c>PIVOT</c> or <c>UNPIVOT</c> returns for a source with the given
+    /// columns, or null when they depend on the rows (a dynamic pivot, <c>MATCH_RECOGNIZE</c>).
+    /// An outer join uses it to name the columns of a side that returned no rows.
+    /// </summary>
+    public static List<string>? DeclaredColumns(IReadOnlyList<string> sourceColumns, AstNode tableOperator)
+    {
+        static bool Names(string column, string target) =>
+            column.Equals(target, StringComparison.OrdinalIgnoreCase)
+            || column.EndsWith("." + target, StringComparison.OrdinalIgnoreCase);
+
+        switch (tableOperator)
+        {
+            case PivotClause pivot:
+                {
+                    var names = sourceColumns
+                        .Where(c => !Names(c, pivot.PivotColumn) && !Names(c, pivot.AggregateColumn)).ToList();
+                    foreach (var value in pivot.PivotValues)
+                    {
+                        if (value is IdentifierExpression id && !id.Name.StartsWith('@')) names.Add(id.Name);
+                        else if (value is LiteralExpression literal) names.Add(literal.Value?.ToString() ?? "NULL");
+                        else return null;
+                    }
+                    return names;
+                }
+            case UnpivotClause unpivot:
+                {
+                    var names = unpivot.AllColumnsExcept
+                        ? sourceColumns.Where(c => (unpivot.ExcludeColumns ?? new List<string>()).Any(e => Names(c, e))).ToList()
+                        : sourceColumns.Where(c => !unpivot.UnpivotColumns.Any(u => Names(c, u))).ToList();
+                    names.Add(unpivot.NameColumn);
+                    names.Add(unpivot.ValueColumn);
+                    return names;
+                }
+            default:
+                return null;
+        }
+    }
+
     private bool IsMatch(string fullColName, string targetColName)
     {
         if (fullColName.Equals(targetColName, StringComparison.OrdinalIgnoreCase)) return true;

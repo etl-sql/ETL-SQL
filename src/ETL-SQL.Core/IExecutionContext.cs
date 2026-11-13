@@ -71,6 +71,13 @@ public interface IQueryContext
     /// fails on an unknown <c>#name</c> or <c>&amp;name</c>.
     /// </summary>
     Task<IDataSource> ResolveReadSourceAsync(TableReference table) => ResolveDataSourceAsync(table);
+
+    /// <summary>
+    /// The column names a table function returned when this table reference last ran it, or null
+    /// when it has not run here. An outer join asks this for a side that returned no rows, because
+    /// running the function again to learn its columns could repeat a side effect.
+    /// </summary>
+    IReadOnlyList<string>? TableFunctionColumns(TableReference table) => null;
     IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table);
     IAsyncEnumerable<DataTable> EvaluateForClause(IAsyncEnumerable<DataTable> batches, ForClause forClause);
     IAsyncEnumerable<DataTable> InterceptProgress(IAsyncEnumerable<DataTable> chunks);
