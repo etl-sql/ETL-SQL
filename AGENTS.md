@@ -658,8 +658,10 @@ To prevent cross-platform CI failures and avoid wasting 1-hour GitHub Actions ru
      push with `ETLSQL_PREPUSH_FULL=1`). It adds the browser type and lint gates, the consumer
      contracts, smoke tests and, when selected, the extension and browser checks; broad runs have
      measured about twelve minutes. These are observations, not timeout guarantees.
-   - Before an integration or timing lane, run `scripts/Test-Environment.ps1 -For Integration` or
-     `-For Timing`. A timing lane must not start on a busy machine.
+   - The `integration`, `perf` and `benchmarks` lanes of `scripts/test-lane.ps1` run
+     `scripts/Test-Environment.ps1 -For Integration` or `-For Timing` first and stop in seconds
+     when the machine is not ready. A timing lane must not start on a busy machine. CI skips the
+     check; `-SkipEnvironmentCheck` skips it locally.
 
 ---
 

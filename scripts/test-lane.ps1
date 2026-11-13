@@ -44,7 +44,12 @@ param(
     [ValidateRange(1, 32)]
     [int]$EngineShardGroup = 1,
     [ValidateRange(1, 32)]
-    [int]$EngineShardGroupCount = 1
+    [int]$EngineShardGroupCount = 1,
+
+    # The integration and timing lanes check the machine first (scripts/Test-Environment.ps1)
+    # and stop in seconds when Docker, the ODBC driver, free memory or an idle processor is
+    # missing, instead of failing minutes in. CI provisions its runners itself and skips it.
+    [switch]$SkipEnvironmentCheck
 )
 
 $ErrorActionPreference = "Stop"
@@ -67,6 +72,21 @@ if ($MemoryLimitGB -gt 0) {
 
 $script:LaneFailures = @()
 $script:LaneExitCode = 0
+
+# Lanes whose results mean nothing on a machine that lacks what they need.
+$environmentTier = switch ($Lane) {
+    'integration' { 'Integration' }
+    'perf' { 'Timing' }
+    'benchmarks' { 'Timing' }
+    default { $null }
+}
+if ($environmentTier -and -not $SkipEnvironmentCheck -and $env:CI -ne 'true') {
+    & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-Environment.ps1') -For $environmentTier
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "The $Lane lane did not start. Fix the above, or pass -SkipEnvironmentCheck to run it anyway." -ForegroundColor Red
+        exit 1
+    }
+}
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'Release.Helpers.ps1')

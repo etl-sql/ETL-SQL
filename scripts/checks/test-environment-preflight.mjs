@@ -33,4 +33,15 @@ const fastBlock = prePush.slice(prePush.indexOf('if ($Fast) {'), prePush.indexOf
 assert.match(fastBlock, /dotnet format .*--verify-no-changes/, 'The fast tier must still verify formatting.');
 assert.ok(prePush.indexOf('release-preflight.mjs') < prePush.indexOf('if ($Fast) {'), 'The fast tier must run source preflight first.');
 
-console.log('Environment preflight: unmet memory and timing thresholds fail with a reason, unknown tiers fail, and the hook runs it before the fast pre-push.');
+// test-lane checks the machine before the lanes that need Docker or a quiet processor, ahead of
+// any build or asset step, and CI (which provisions its own runners) skips it.
+const lane = readFileSync(fileURLToPath(new URL('../test-lane.ps1', import.meta.url)), 'utf8').replace(/\r\n/g, '\n');
+const tiers = lane.slice(lane.indexOf('$environmentTier = switch ($Lane)'), lane.indexOf('default { $null }'));
+assert.match(tiers, /'integration' \{ 'Integration' \}/, 'The integration lane must run the Integration check.');
+assert.match(tiers, /'perf' \{ 'Timing' \}/, 'The perf lane must run the Timing check.');
+assert.match(tiers, /'benchmarks' \{ 'Timing' \}/, 'The benchmarks lane must run the Timing check.');
+const check = lane.indexOf("Test-Environment.ps1') -For $environmentTier");
+assert.ok(check > 0 && check < lane.indexOf('sync-assets.js'), 'The lane check must run before the asset step.');
+assert.match(lane, /-not \$SkipEnvironmentCheck -and \$env:CI -ne 'true'/, 'CI and -SkipEnvironmentCheck must skip the lane check.');
+
+console.log('Environment preflight: unmet memory and timing thresholds fail with a reason, unknown tiers fail, the hook runs it before the fast pre-push, and the integration and timing lanes run it first.');

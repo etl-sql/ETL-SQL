@@ -56,8 +56,17 @@ function Get-FreeMemoryGB {
 function Get-CpuPercent {
     # Two readings one second apart of the whole machine, not this process.
     if ($IsWindows) {
-        $samples = Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 1 -MaxSamples 2
-        return [math]::Round(($samples.CounterSamples | Measure-Object CookedValue -Average).Average, 1)
+        # Get-Counter fails now and then with "A counter with a negative denominator value was
+        # detected" (3 in 8 calls on 2026-11-13), which ended this script with no list of problems.
+        # Retry; if it still fails, the load is unknown and the caller says so.
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+                $samples = Get-Counter '\Processor(_Total)\% Processor Time' -SampleInterval 1 -MaxSamples 2 -ErrorAction Stop
+                return [math]::Round(($samples.CounterSamples | Measure-Object CookedValue -Average).Average, 1)
+            } catch {
+                if ($attempt -eq 3) { return $null }
+            }
+        }
     }
     if ($IsLinux) {
         $read = { $f = (Get-Content /proc/stat -TotalCount 1) -split '\s+' | Select-Object -Skip 1 | ForEach-Object { [long]$_ }
@@ -118,7 +127,9 @@ if ($For -eq 'Integration') {
 # --- Timing -----------------------------------------------------------------------------------
 if ($For -eq 'Timing') {
     $cpu = Get-CpuPercent
-    if ($null -ne $cpu -and $cpu -gt $TimingMaximumCpuPercent) {
+    if ($null -eq $cpu) {
+        Write-Host 'Processor load could not be read; the timing tier runs without that check.' -ForegroundColor Yellow
+    } elseif ($cpu -gt $TimingMaximumCpuPercent) {
         $problems.Add("The processor is $cpu% busy; a timing tier needs it under $TimingMaximumCpuPercent%. Wait for other work to finish.")
     }
 }

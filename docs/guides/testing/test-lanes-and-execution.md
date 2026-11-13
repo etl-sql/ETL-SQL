@@ -18,6 +18,10 @@ formatting, about three minutes. CI runs everything else.
 .\scripts\Test-Environment.ps1 -For Timing           # refuses a busy machine
 ```
 
+The `integration` lane of `scripts\test-lane.ps1` runs the Integration check first, and the
+`perf` and `benchmarks` lanes run the Timing check, so a lane stops in seconds on a machine that
+cannot run it. CI skips the check; pass `-SkipEnvironmentCheck` to skip it locally.
+
 Set `ETLSQL_PREPUSH_FULL=1` to make the hook run the complete set. The rest of this section
 describes the complete set.
 

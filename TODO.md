@@ -56,8 +56,9 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   timing by same-host interleaved A/B; no waivers.
 - [ ] **W7 Local gate hygiene** (below the cut line). Built 2026-11-11: `Test-Environment.ps1`
   fails in seconds on a missing tool or a busy machine, and the pre-push hook runs the fast tier
-  (3 minutes, was 12). **Left:** call the environment check from the integration and timing lanes
-  of `test-lane`, and move the remaining workstation-only lanes to CI.
+  (3 minutes, was 12). The integration and timing lanes of `test-lane` run the check first
+  (2026-11-13). **Left:** move the spill lane (`test-lane -Lane spill`, the corpus under low
+  thresholds), which the release checklist still runs on the workstation, to CI.
 - [ ] **W8 Scale release evidence to current claims** (below the cut line; owner sign-off needed).
 
 **Parked from the earlier "release in four hours" goal.** Each is picked up only if a workstream

@@ -14,6 +14,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Check the machine before the `integration`, `perf` and `benchmarks` lanes of `test-lane.ps1`
+  (release reliability W7). A lane on a machine without Docker, the ODBC driver, Node.js 22,
+  enough free memory or (for timing) an idle processor stops in seconds and says why. CI skips
+  the check; `-SkipEnvironmentCheck` skips it locally. The Timing check no longer ends without a
+  reason when Windows' processor counter fails ("negative denominator", 3 in 8 reads): it retries,
+  then reports the load as unknown.
 - Fail on a misspelt column of an empty outer-join side in the last three cases that read it as
   `NULL`: a `PIVOT` whose values are variables (they are evaluated, as the pivot does), a
   `MATCH_RECOGNIZE` (its columns follow from the clause), and a table function served by a
