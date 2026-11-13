@@ -1,39 +1,37 @@
 import * as vscode from 'vscode';
+import { log } from './logger';
 
 /** SecretStorage key for the AI provider API key. */
 export const AI_API_KEY_SECRET = 'etlsql.ai.apiKey';
 
 /**
- * Moves a plain-text `etlsql.ai.apiKey` setting into SecretStorage and removes it from every
- * settings scope that holds it. `settings.json` is copied by Settings Sync (and a workspace
- * `.vscode/settings.json` is often committed), so the key must not stay there.
+ * Moves a plain-text `etlsql.ai.apiKey` from user settings into SecretStorage and removes it from
+ * user settings, which Settings Sync copies across machines.
  *
- * When SecretStorage already holds a key, the stored key wins and the setting is only removed.
+ * Only the user scope is read. The setting is application-scoped, so a workspace or folder
+ * `settings.json` (which comes with a cloned repository) can neither supply the key nor be
+ * edited by this migration.
+ *
+ * The setting is removed only when SecretStorage then holds that same key. When SecretStorage
+ * already holds a different key, the setting is left alone and a warning is logged, so neither
+ * key is lost.
  */
 export async function migrateAiApiKeySetting(context: vscode.ExtensionContext): Promise<boolean> {
     const config = vscode.workspace.getConfiguration('etlsql');
-    const inspected = config.inspect<string>('ai.apiKey');
-    if (!inspected) {
+    const userKey = config.inspect<string>('ai.apiKey')?.globalValue?.trim();
+    if (!userKey) {
         return false;
     }
 
-    const scopes: Array<[string | undefined, vscode.ConfigurationTarget]> = [
-        [inspected.workspaceFolderValue, vscode.ConfigurationTarget.WorkspaceFolder],
-        [inspected.workspaceValue, vscode.ConfigurationTarget.Workspace],
-        [inspected.globalValue, vscode.ConfigurationTarget.Global]
-    ];
-    const held = scopes.filter(([value]) => typeof value === 'string' && value.trim() !== '');
-    if (held.length === 0) {
+    const stored = await context.secrets.get(AI_API_KEY_SECRET);
+    if (!stored) {
+        await context.secrets.store(AI_API_KEY_SECRET, userKey);
+    } else if (stored !== userKey) {
+        log('etlsql.ai.apiKey in user settings differs from the stored key and was left in place. '
+            + 'Run "ETL-SQL: Set AI API Key" to choose one; it removes the setting.', 'warn');
         return false;
     }
-
-    // The most specific scope is the key the user was running with.
-    if (!(await context.secrets.get(AI_API_KEY_SECRET))) {
-        await context.secrets.store(AI_API_KEY_SECRET, (held[0][0] as string).trim());
-    }
-    for (const [, target] of held) {
-        await config.update('ai.apiKey', undefined, target);
-    }
+    await config.update('ai.apiKey', undefined, vscode.ConfigurationTarget.Global);
     return true;
 }
 
@@ -57,8 +55,10 @@ export async function setAiApiKeyCommand(context: vscode.ExtensionContext): Prom
         return;
     }
 
-    // Clear any plain-text copy so it cannot shadow or outlive the stored key.
-    await migrateAiApiKeySetting(context);
+    // The user chose a key: drop any plain-text copy in user settings, whatever it held.
+    if (vscode.workspace.getConfiguration('etlsql').inspect<string>('ai.apiKey')?.globalValue !== undefined) {
+        await vscode.workspace.getConfiguration('etlsql').update('ai.apiKey', undefined, vscode.ConfigurationTarget.Global);
+    }
     const key = value.trim();
     if (key === '') {
         await context.secrets.delete(AI_API_KEY_SECRET);

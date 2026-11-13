@@ -256,9 +256,10 @@
           },
           "etlsql.ai.apiKey": {
             "type": "string",
+            "scope": "application",
             "default": "",
-            "markdownDescription": "Deprecated. Run **ETL-SQL: Set AI API Key** instead; the key is kept in VS Code secret storage. A value set here is moved there and removed from settings.",
-            "markdownDeprecationMessage": "Run **ETL-SQL: Set AI API Key**. A key set here is moved to VS Code secret storage and removed from `settings.json`, which Settings Sync copies across machines."
+            "markdownDescription": "Deprecated. Run **ETL-SQL: Set AI API Key** instead; the key is kept in VS Code secret storage. A value in user settings is moved there and removed; workspace values are ignored.",
+            "markdownDeprecationMessage": "Run **ETL-SQL: Set AI API Key**. A key in user settings is moved to VS Code secret storage and removed from `settings.json`, which Settings Sync copies across machines."
           },
           "etlsql.ai.model": {
             "type": "string",

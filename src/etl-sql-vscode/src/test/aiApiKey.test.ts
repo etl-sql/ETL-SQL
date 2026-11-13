@@ -52,21 +52,35 @@ describe('aiApiKey', () => {
         expect(scopes.globalValue).toBeUndefined();
     });
 
-    it('takes the most specific scope and clears every scope', async () => {
-        scopes.globalValue = 'sk-global';
+    it('never takes or edits a workspace or folder key (a cloned repository supplies those)', async () => {
         scopes.workspaceValue = 'sk-workspace';
         scopes.workspaceFolderValue = 'sk-folder';
-        expect(await migrateAiApiKeySetting(context)).toBe(true);
-        expect(secrets.get(AI_API_KEY_SECRET)).toBe('sk-folder');
-        expect(scopes).toEqual({});
-        expect(update).toHaveBeenCalledTimes(3);
+        expect(await getAiApiKey(context)).toBe('');
+        expect(secrets.size).toBe(0);
+        expect(update).not.toHaveBeenCalled();
     });
 
-    it('keeps an existing secret but still removes the plain-text setting', async () => {
+    it('moves only the user key when a workspace also holds one', async () => {
+        scopes.globalValue = 'sk-global';
+        scopes.workspaceValue = 'sk-workspace';
+        expect(await migrateAiApiKeySetting(context)).toBe(true);
+        expect(secrets.get(AI_API_KEY_SECRET)).toBe('sk-global');
+        expect(scopes).toEqual({ workspaceValue: 'sk-workspace' });
+    });
+
+    it('removes a user-settings copy of the stored key', async () => {
         secrets.set(AI_API_KEY_SECRET, 'sk-stored');
-        scopes.globalValue = 'sk-old';
+        scopes.globalValue = 'sk-stored';
         expect(await getAiApiKey(context)).toBe('sk-stored');
         expect(scopes.globalValue).toBeUndefined();
+    });
+
+    it('keeps both keys when the user setting differs from the stored key', async () => {
+        secrets.set(AI_API_KEY_SECRET, 'sk-stored');
+        scopes.globalValue = 'sk-other';
+        expect(await migrateAiApiKeySetting(context)).toBe(false);
+        expect(secrets.get(AI_API_KEY_SECRET)).toBe('sk-stored');
+        expect(scopes.globalValue).toBe('sk-other');
     });
 
     it('ignores a blank setting', async () => {
@@ -83,13 +97,14 @@ describe('aiApiKey', () => {
         expect(vscode.window.showInputBox).toHaveBeenCalledWith(expect.objectContaining({ password: true }));
     });
 
-    it('replaces the key and clears a plain-text setting from the set command', async () => {
+    it('replaces the key and clears the user setting from the set command', async () => {
         secrets.set(AI_API_KEY_SECRET, 'sk-stored');
-        scopes.workspaceValue = 'sk-plain';
+        scopes.globalValue = 'sk-plain';
+        scopes.workspaceValue = 'sk-workspace';
         (vscode.window.showInputBox as ReturnType<typeof vi.fn>).mockResolvedValue('sk-new');
         await setAiApiKeyCommand(context);
         expect(secrets.get(AI_API_KEY_SECRET)).toBe('sk-new');
-        expect(scopes.workspaceValue).toBeUndefined();
+        expect(scopes).toEqual({ workspaceValue: 'sk-workspace' });
     });
 
     it('removes the key when the set command gets an empty entry', async () => {
