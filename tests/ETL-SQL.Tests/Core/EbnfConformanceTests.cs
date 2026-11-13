@@ -120,6 +120,65 @@ public class EbnfConformanceTests
         }
     }
 
+    // Statement generation stubs a nested select_statement to `SELECT 1` and an expression to a
+    // leaf, so the two tests below generate from those rules' own bodies: every select_body clause
+    // and every expression level is expanded, while what they nest is still stubbed.
+    private static readonly string[] SelectBodyClauses =
+    [
+        "DISTINCT", "TOP", "INTO", "FROM", "WHERE", "GROUP BY", "HAVING", "WINDOW", "QUALIFY", "ORDER BY",
+        "USING SAMPLE", "JOIN", "LEFT", "RIGHT", "FULL", "CROSS", "APPLY", "SEMI", "ANTI", "ASOF", "LATERAL",
+        "PIVOT", "UNPIVOT", "MATCH_RECOGNIZE", "VALUES", "UNION", "EXCEPT", "INTERSECT", "LIMIT", "FETCH",
+        "ON FAILURE", "ROLLUP", "CUBE", "GROUPING SETS",
+    ];
+
+    [Fact]
+    public void EverySelectBodyClause_GeneratesAcceptedInput()
+    {
+        var rules = EbnfParser.Parse(File.ReadAllText(GrammarPath));
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < 3000 && seen.Count < SelectBodyClauses.Length; index++)
+        {
+            var sql = AddRequiredSemanticContext((rules["select_statement"].Node.Generate(rules, new Random(40_000 + index), 0) + ";").Trim());
+            var errors = ParseErrors(sql);
+            Assert.True(errors.Count == 0,
+                $"select_statement derivation {index} generated rejected SQL.\nGenerated SQL:\n{sql}\n\nDiagnostics:\n{string.Join("\n", errors)}");
+            var words = " " + Regex.Replace(sql, @"\s+", " ") + " ";
+            seen.UnionWith(SelectBodyClauses.Where(clause => words.Contains($" {clause} ", StringComparison.Ordinal)));
+        }
+
+        var missing = SelectBodyClauses.Except(seen).ToArray();
+        Assert.True(missing.Length == 0, "select_statement generation never produced: " + string.Join(", ", missing));
+    }
+
+    private static readonly string[] ExpressionForms =
+    [
+        "=>", "OR", "AND", "NOT", "IN", "LIKE", "ILIKE", "BETWEEN", "IS", "??", "<<", "+", "||", "*", "->",
+        "AT TIME ZONE", "CAST", "CASE", "EXISTS", "SUBSTRING", "POSITION", "EXTRACT", "OVERLAY", "TRIM", "[", "?",
+    ];
+
+    [Fact]
+    public void EveryExpressionLevel_GeneratesAcceptedInput()
+    {
+        var rules = EbnfParser.Parse(File.ReadAllText(GrammarPath));
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < 3000 && seen.Count < ExpressionForms.Length; index++)
+        {
+            // The expression rules nest a level each (arrow, OR, AND, NOT, comparison, ... postfix);
+            // starting at -7 lets generation reach primary_expression before the depth limit.
+            var expression = rules["expression"].Node.Generate(rules, new Random(50_000 + index), -7).Trim();
+            // A generated `OVER x` names a window, which must be defined (a semantic check).
+            var sql = $"SELECT {expression} WINDOW x AS ( );";
+            var errors = ParseErrors(sql);
+            Assert.True(errors.Count == 0,
+                $"expression derivation {index} generated rejected SQL.\nSQL:\n{sql}\n\nDiagnostics:\n{string.Join("\n", errors)}");
+            var words = " " + Regex.Replace(sql, @"\s+", " ") + " ";
+            seen.UnionWith(ExpressionForms.Where(form => words.Contains($" {form} ", StringComparison.Ordinal)));
+        }
+
+        var missing = ExpressionForms.Except(seen).ToArray();
+        Assert.True(missing.Length == 0, "expression generation never produced: " + string.Join(", ", missing));
+    }
+
     [Fact]
     public void GeneratedInvalidSequences_AreRejected()
     {

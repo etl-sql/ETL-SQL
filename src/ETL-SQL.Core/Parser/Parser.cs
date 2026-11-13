@@ -1941,7 +1941,11 @@ public class Parser : IParser
         or TokenType.GROUP or TokenType.HAVING or TokenType.QUALIFY or TokenType.WINDOW or TokenType.ORDER
         or TokenType.LIMIT or TokenType.OFFSET or TokenType.FETCH or TokenType.FOR
         or TokenType.UNION or TokenType.EXCEPT or TokenType.INTERSECT
-        or TokenType.RPAREN or TokenType.SEMICOLON or TokenType.EOF;
+        or TokenType.RPAREN or TokenType.SEMICOLON or TokenType.EOF
+        // Clauses that start with a contextual word: USING SAMPLE, MINUS, ON FAILURE.
+        || (Current.Type == TokenType.USING && Peek.Type == TokenType.SAMPLE)
+        || (Current.Type == TokenType.IDENTIFIER && Current.Value.Equals("MINUS", StringComparison.OrdinalIgnoreCase))
+        || (Current.Type == TokenType.ON && IsContextualKeyword(Peek, "FAILURE"));
 
     public SelectColumn ParseSelectColumn()
     {

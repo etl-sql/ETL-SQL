@@ -297,7 +297,8 @@ alter_statement = "ALTER" "TABLE" table_reference "ADD" identifier data_type [ "
                 | "ALTER" "SUBSCRIPTION" number "SET" ( "ENABLE" | "DISABLE" | "PARAMETERS" "(" subscription_parameter_assignments ")"
                   | identifier [ "=" ] ( string_literal | identifier | number ) )
                 | "ALTER" "SCHEDULE" identifier "SET" "TIME" "ZONE" [ "=" ] string_literal
-                | "ALTER" "TABLE" table_reference "DROP" identifier
+                | "ALTER" "TABLE" table_reference "DROP" [ "COLUMN" ] identifier
+                | "ALTER" "TABLE" table_reference "RENAME" [ "COLUMN" ] identifier "TO" identifier
                 | "ALTER" "ALERT" identifier ( ( "ADD" | "REMOVE" ) "NOTIFICATION" identifier "." identifier | "SET" metadata_options ) ;
 report_patch_kind = "VISUAL" | "PAGE" | "CONTAINER" | "BUTTON" ;
 report_patch_clause = "TITLE" "=" string_literal ;
@@ -514,7 +515,7 @@ join_clause = [ "INNER" [ join_hint ] ] "JOIN" [ "LATERAL" ] from_reference "ON"
             | "LEFT" ( "SEMI" | "ANTI" | "FUZZY" ) "JOIN" from_reference "ON" expression
             | ( "RIGHT" [ "OUTER" ] [ join_hint ] | "FULL" [ "OUTER" ] [ join_hint ] | join_hint | "SEMI" | "ANTI" | "FUZZY"
               | "ASOF" [ "LEFT" [ "OUTER" ] | "INNER" ] ) "JOIN" from_reference "ON" expression
-            | ( "CROSS" ( "JOIN" [ "LATERAL" ] | "APPLY" ) | "OUTER" "APPLY" | "APPLY" ) from_reference [ "ON" expression ] ;
+            | ( "CROSS" ( "JOIN" [ "LATERAL" ] | "APPLY" ) | "OUTER" "APPLY" ) from_reference [ "ON" expression ] ;
 join_hint = "HASH" | "LOOP" | "MERGE" ;
 
 select_list = select_item { "," select_item } [ "," ] ;
@@ -553,7 +554,7 @@ table_operator = "PIVOT" "(" pivot_aggregate "FOR" identifier "IN" "(" expressio
 pivot_aggregate = identifier "(" ( "*" | identifier ) ")" ;
 match_recognize_clause = "PARTITION" "BY" expression_list
                        | "ORDER" "BY" order_list
-                       | "MEASURES" select_item { "," select_item }
+                       | "MEASURES" expression [ "AS" identifier ] { "," expression [ "AS" identifier ] }
                        | "ONE" "ROW" "PER" "MATCH"
                        | "ALL" "ROWS" "PER" "MATCH"
                        | "PATTERN" "(" identifier { identifier } ")"
@@ -630,15 +631,14 @@ comparison_operator = "=" | "<>" | "!=" | ">" | "<" | ">=" | "<=" | "~" | "~*" ;
 cast_expression = ( "CAST" | "TRY_CAST" ) "(" expression "AS" data_type ")" ;
 case_expression = "CASE" [ expression ] "WHEN" expression "THEN" expression { "WHEN" expression "THEN" expression } [ "ELSE" expression ] "END" ;
 list_expression = "[" [ expression_list ] "]" ;
-exists_expression = [ "NOT" ] "EXISTS" "(" select_statement ")" ;
+exists_expression = "EXISTS" "(" select_statement ")" ;
 qualified_identifier = identifier { "." ( identifier | "*" ) } ;
 special_sql_expression = "SUBSTRING" "(" expression ( "FROM" expression [ "FOR" expression ] | "," expression [ "," expression ] ) ")"
                        | "POSITION" "(" expression "IN" expression ")"
                        | "EXTRACT" "(" identifier "FROM" expression ")"
                        | "OVERLAY" "(" expression "PLACING" expression "FROM" expression [ "FOR" expression ] ")"
                        | "TRIM" "(" expression ")"
-                       | "TRIM" "(" [ "LEADING" | "TRAILING" | "BOTH" ] [ expression ] "FROM" expression ")"
-                       | "JSON_TABLE" "(" expression "," expression "COLUMNS" "(" json_table_column { "," json_table_column } ")" ")" ;
+                       | "TRIM" "(" [ "LEADING" | "TRAILING" | "BOTH" ] [ expression ] "FROM" expression ")" ;
 json_table_column = identifier ( "FOR" "ORDINALITY" | data_type [ "EXISTS" ] "PATH" expression ) ;
 
 function_call = identifier "(" [ [ "DISTINCT" | "ALL" ] ( "*" | expression_list ) ] ")"
@@ -887,7 +887,8 @@ navigation_clause = "ORIENTATION" "=" ( "HORIZONTAL" | "VERTICAL" ) | "DEFAULT" 
                   | "GROUP" "(" string_literal "=" "(" identifier { "," identifier } ")" ")"
                   | "LINK" "(" string_literal "=" report_action ")"
                   | ( "STYLE" | "ACTIVE_STYLE" ) ( "=" identifier | style_body ) ;
-navigation_page_item = identifier [ "(" report_option { "," report_option } ")" ] ;
+navigation_page_item = identifier [ "(" { navigation_item_option [ "," ] } ")" ] ;
+navigation_item_option = ( "ICON" | "LABEL" | "BADGE" ) "=" report_option_value ;
 create_button_statement = "CREATE" "BUTTON" identifier "AS" "(" { button_clause [ "," ] } ")" ;
 button_clause = "TITLE" [ "=" ] expression | "TOOLTIP" [ "=" ] ( string_literal | identifier )
               | "OPTIONS" "(" [ report_option { "," report_option } ] ")"

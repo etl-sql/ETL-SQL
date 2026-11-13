@@ -10,9 +10,13 @@ namespace ETL_SQL.Analysis.Linting.Grammar;
 
 public static class DefaultGrammar
 {
-    public static GrammarStateTree Build(IMetadataManager? metadata = null)
+    /// <param name="requireParserAcceptance">
+    /// True (the default) makes the production parser the final judge of a complete sequence. Tests
+    /// pass false to check the state transitions on their own, which the parser would otherwise mask.
+    /// </param>
+    public static GrammarStateTree Build(IMetadataManager? metadata = null, bool requireParserAcceptance = true)
     {
-        var tree = new GrammarStateTree(requireParserAcceptance: true);
+        var tree = new GrammarStateTree(requireParserAcceptance);
 
         var sharedWithNode = new StateNode("FILE_WITH");
         var sharedAtNode = new StateNode("FILE_AT");
@@ -454,7 +458,12 @@ public static class DefaultGrammar
 
         tree.RegisterStartNode("SELECT", selectNode);
 
-        selectNode.AddWildcardTransition(selectExpr, "<expression>");
+        // A select list cannot be empty: the token after SELECT cannot be a clause keyword or the end.
+        selectNode.AddTransition(new StateTransition(
+            t => t.Type is not (TokenType.EOF or TokenType.SEMICOLON or TokenType.FROM or TokenType.WHERE
+                or TokenType.GROUP or TokenType.HAVING or TokenType.ORDER or TokenType.QUALIFY),
+            selectExpr,
+            "<expression>"));
 
         // selectExpr self-loop until FROM or INTO
         selectExpr.AddTransition(new StateTransition(

@@ -14,6 +14,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Accept `||`, `??` and `<<`/`>>` in the right operand of `LIKE`, `ESCAPE`, `BETWEEN`, a bare
+  `IN` and `IS DISTINCT FROM`, as `=` already did. `name LIKE '%' || @q || '%'` and
+  `x BETWEEN @lo ?? 0 AND @hi` failed to parse. `NOT EXISTS (...) = FALSE` now parses as
+  `NOT (EXISTS (...) = FALSE)`; it failed to parse.
+- Align `docs/grammar.ebnf` with the parser: `ALTER TABLE ... DROP [COLUMN]` and
+  `RENAME [COLUMN] ... TO ...` are added; a bare `APPLY`, `JSON_TABLE` as an expression,
+  `MATCH_RECOGNIZE MEASURES *` and any option but `ICON`, `LABEL` or `BADGE` on a navigation page
+  are removed, because the parser never accepted them. A `GROUP BY` or `ORDER BY` list that
+  ends in a comma may now be followed by `USING SAMPLE`, `MINUS` or `ON FAILURE`, as the grammar
+  says.
 - Return `NULL` from scalar functions given a `NULL` argument: `REPLACE`, `SUBSTRING`, `LEFT`,
   `RIGHT`, `CHARINDEX`, `INSTR`, `STUFF`, `STR`, `QUOTENAME`, `TRANSLATE`, `PATINDEX`,
   `STRING_ESCAPE`, `LOG`, `LOG10`, `ATAN2`, `ROUND`, `DATETIMEFROMPARTS`, `TIMEFROMPARTS`,
