@@ -3,8 +3,8 @@
 # reliability W8). Records peak memory, spill disk and time; throughput is not gated
 # (MinimumRowsPerSecond 0). Never release evidence.
 #
-# Push a branch named scale-measure/<anything> to run it with the defaults below, or dispatch it
-# once this file is on the default branch.
+# Push a branch named scale-measure/<anything> to run it with the defaults below
+# (scale-measure/10m for 10M rows), or dispatch it once this file is on the default branch.
 name: Scale Measurement
 
 on:
@@ -38,7 +38,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ROWS: ${{ inputs.rows || '100000000' }}
+  # A push to scale-measure/10m measures 10M rows; any other branch name measures 100M.
+  ROWS: ${{ inputs.rows || (endsWith(github.ref_name, '/10m') && '10000000') || '100000000' }}
   MEMORY_BOUND_MB: ${{ inputs.memory_bound_mb || '4096' }}
   MEMORY_GRANT_MB: ${{ inputs.memory_grant_mb || '2048' }}
   DOTNET_CLI_TELEMETRY_OPTOUT: '1'

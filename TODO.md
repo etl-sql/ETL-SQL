@@ -8,7 +8,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 15 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 16 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -54,7 +54,17 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   their issues close (`playwright-wait` #74, `first-run-sign-in-wait` #75).
 - [ ] **W6 Performance certification redesign** (below the cut line). Deterministic metrics gate;
   timing by same-host interleaved A/B; no waivers.
-- [ ] **W8 Scale release evidence to current claims** (below the cut line; owner sign-off needed).
+- [ ] **W8 Move the operator evidence to GitHub** (below the cut line). Owner decisions
+  2026-11-13: the goal is no release step on the owner's machine; every check moves, none is
+  dropped. The 3 reports (deployment, canary, recovery) become hosted jobs; the 6 reviews become a
+  GitHub environment approval on the release run; the 11 conditional certifications become hosted
+  jobs that run once per release candidate. They must not become flaky timeouts: size each to
+  about a third of its job limit and gate on deterministic results, never throughput. The whole
+  release stays under 4 hours. Billion-row: no 1B run; each scenario runs at 10M and 100M rows
+  under a 4 GB memory cap and passes when peak memory stays flat. 100M measured on a hosted runner
+  (Scale Measurement 43504065542): all 7 pass, peak memory 0.3–1.5 GB, longest 21 min.
+  **Left:** the 10M measurement; size the other conditional certifications the same way; build
+  the hosted jobs and the approval; remove the operator submission from `release.yml`.
 
 **Parked from the earlier "release in four hours" goal.** Each is picked up only if a workstream
 needs it, otherwise moves to `ROADMAP.md` after v0.22.0:
@@ -81,6 +91,12 @@ before certification; recovery rehearsal timings.
   `ROWS_PER_SECOND`. Allocations and checksums match; the cause is unproven. Owner, 2026-11-03/04:
   accepted as one known gap for v0.22.0; record it in the release evidence and change no baseline
   or band.
+
+- [ ] **Cut allocation churn in the external sort, window and join.** At 100M rows (Scale
+  Measurement 43504065542) the sort allocated 593 GB (about 6 KB per row), the window 621 GB and
+  the join 335 GB; the join spent 337 s of 896 s in GC pauses. Peak memory stays low, so nothing
+  breaks, but these are the slowest scenarios (15–21 min) and the cheapest to speed up. Profile
+  with `Test-SpillAllocProfile.ps1` and the scenario tests in `BillionRowCertificationTests`.
 
 ### 3. Flaky tests — the dedicated fix
 
