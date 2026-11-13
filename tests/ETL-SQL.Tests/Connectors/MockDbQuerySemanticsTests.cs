@@ -111,4 +111,35 @@ public sealed class MockDbQuerySemanticsTests
         Assert.NotEmpty(filtered);
         Assert.True(filtered.Count < 250, "WHERE did not narrow the result at all.");
     }
+
+    [Fact]
+    public async Task ACreatedTable_HoldsItsColumnsAndInsertedRows()
+    {
+        // CREATE TABLE was passed to the string matcher and ignored, and inserts were dropped, so a
+        // read of the new table silently returned the first seeded table (Users).
+        var (columns, rows) = await QueryAsync(
+            "CREATE TABLE demo.Prices (ID INT, Price DECIMAL(10,2), Name VARCHAR(50));\n"
+            + "INSERT INTO demo.Prices (ID, Price, Name) VALUES (1, 2.50, 'a'), (2, 4.00, 'b');\n"
+            + "INSERT INTO demo.Prices (ID, Name) VALUES (3, 'c');\n"
+            + "SELECT ID, Price, Name FROM demo.Prices ORDER BY ID;");
+
+        Assert.Equal(new[] { "ID", "Price", "Name" }, columns);
+        Assert.Equal(new[] { 1m, 2m, 3m }, rows.Select(row => Convert.ToDecimal(row["ID"])));
+        Assert.Equal(4.00m, Convert.ToDecimal(rows[1]["Price"]));
+        Assert.Null(rows[2]["Price"]);
+    }
+
+    [Fact]
+    public async Task ADroppedCreatedTable_IsGone_AndTheSeededTablesAreUntouched()
+    {
+        var (_, rows) = await QueryAsync(
+            "CREATE TABLE demo.Scratch (ID INT);\n"
+            + "INSERT INTO demo.Scratch (ID) VALUES (1);\n"
+            + "DROP TABLE demo.Scratch;\n"
+            + "INSERT INTO demo.Orders (SaleID) VALUES (-1);\n"
+            + "SELECT COUNT(*) AS n FROM demo.Orders;");
+
+        // The seeded fixture is fixed: an insert into it is still not kept.
+        Assert.Equal(250L, Convert.ToInt64(Assert.Single(rows)["n"]));
+    }
 }

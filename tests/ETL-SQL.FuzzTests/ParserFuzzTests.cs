@@ -34,6 +34,8 @@ namespace ETL_SQL.FuzzTests
         private int _seed;
         private FuzzDataShape _dataShape = FuzzDataShape.FromSeed(0);
         private bool _strictExec;
+        private bool _queryValidByConstruction;
+        private bool _queryCorrupted;
         private bool _dumpExec;
         private readonly HashSet<string> _execMessages = new(StringComparer.Ordinal);
         private int _noRecCompared;
@@ -53,6 +55,8 @@ namespace ETL_SQL.FuzzTests
             "Unknown function",
             "Unknown source",
             "invalid time format",
+            // A grammar walk names random objects (COPY FILE src.Users WITH (src.Users = ...)).
+            "It is not a column, a variable, a connection or a function",
         };
 
         public async Task InitializeAsync()
@@ -129,12 +133,12 @@ namespace ETL_SQL.FuzzTests
             // _seed was resolved during InitializeAsync, because the seeded data shape is drawn from
             // it and the table is populated before this runs. Re-resolving here would hand the
             // grammar walk a different seed than the data, and an unseeded rerun a different shape.
-            // Strict-exec (opt-in via ETLSQL_FUZZ_STRICT_EXEC=1) treats an un-allowlisted sanitized
-            // ExecutionException as a semantic engine bug. It is opt-in for the randomized lane
-            // because the current generator emits many invalid object references, so new random seeds
-            // keep surfacing new benign "unknown/not-found" rejections; broadly allowlisting those
-            // would mask real bugs. The deterministic CI smoke lane runs strict-exec ON with a fixed,
-            // verified seed so it gives continuous semantic-bug signal without flakiness.
+            // Strictness depends on where a query came from. A template query is valid by
+            // construction against the fuzz table, so any ExecutionException from it is a bug,
+            // always. A grammar walk names random objects; with ETLSQL_FUZZ_STRICT_EXEC=1 its
+            // un-allowlisted ExecutionExceptions are bugs too (the fixed-seed smoke lane), otherwise
+            // only real crashes are. A corrupted query is expected to fail, so only a real crash
+            // counts there.
             _strictExec = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_STRICT_EXEC") == "1";
             _dumpExec = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_DUMP_EXEC") == "1";
             Console.WriteLine($"[Fuzzer] seed={_seed} iterations={iterations} generationAttempts={generationAttempts} strictExec={_strictExec} (rerun with ETLSQL_FUZZ_SEED={_seed})");
@@ -180,6 +184,15 @@ namespace ETL_SQL.FuzzTests
                         !preParsed.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
                     {
                         break;
+                    }
+
+                    // A template query is valid by construction; the parser rejecting one is a
+                    // parser regression, not a retry.
+                    if (generator.LastQueryIsValidByConstruction)
+                    {
+                        var error = preParsed?.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error)?.Message;
+                        results.TemplateParserRejected.Record(tokens, query,
+                            new InvalidOperationException($"The parser rejected a template query: {error ?? "it threw"}"));
                     }
 
                     bool grammarAcceptsRejectedCandidate = tree.ValidateSequence(tokens, out _, requireComplete: false);
@@ -246,8 +259,10 @@ namespace ETL_SQL.FuzzTests
                 // tree's own parser-acceptance gate does not mask the comparison.
                 if (!isCorrupted)
                 {
-                    bool grammarAccepts = tree.ValidateSequence(tokens, out _, requireComplete: false);
-                    if (parserAccepts && !grammarAccepts) results.GrammarRejectedParserAccepted.Increment();
+                    bool grammarAccepts = tree.ValidateSequence(tokens, out var grammarError, requireComplete: false);
+                    if (parserAccepts && !grammarAccepts)
+                        results.GrammarRejectedParserAccepted.Record(tokens, query,
+                            new InvalidOperationException($"The grammar state tree rejected a statement the parser accepts: {grammarError}"));
                     else if (!parserAccepts && grammarAccepts) results.GrammarAcceptedParserRejected.Increment();
                 }
 
@@ -261,6 +276,10 @@ namespace ETL_SQL.FuzzTests
                 }
 
                 // --- Execution stage ---
+                // A template query is valid by construction, so any engine rejection of it is a
+                // finding. A corrupted query or a grammar walk is expected to be rejected.
+                _queryValidByConstruction = generator.LastQueryIsValidByConstruction && !isCorrupted;
+                _queryCorrupted = isCorrupted;
                 try
                 {
                     _evaluator.LastResult = null;
@@ -297,6 +316,8 @@ namespace ETL_SQL.FuzzTests
             double transPct = totalTransitions == 0 ? 0 : 100.0 * reachedTransitions / totalTransitions;
 
             Console.WriteLine(results.Summary());
+            // Print the bug samples now: a failed assertion below may fire first and hide them.
+            if (results.BugBuckets.Any(b => b.Count > 0)) Console.WriteLine(results.SampleSummary());
             Console.WriteLine($"[Fuzzer] NoREC: compared={_noRecCompared} rewriteRejected={_noRecRewriteRejected}");
             Console.WriteLine($"[Fuzzer] grammar coverage: states {reachedStates}/{totalStates} ({statePct:F1}%), " +
                               $"transitions {reachedTransitions}/{totalTransitions} ({transPct:F1}%)");
@@ -355,7 +376,9 @@ namespace ETL_SQL.FuzzTests
             // a bug. Off by default (allowlist not yet calibrated) so CI behaviour is unchanged.
             if (ex is ExecutionException)
             {
-                if (_strictExec &&
+                if (_queryValidByConstruction) return true;
+                // A corrupted query is expected to fail; only a real crash counts there.
+                if (_strictExec && !_queryCorrupted &&
                     !ExpectedExecutionMessageFragments.Any(f =>
                         ex.Message.Contains(f, StringComparison.OrdinalIgnoreCase)))
                 {
@@ -376,9 +399,10 @@ namespace ETL_SQL.FuzzTests
             if (selectStmt.WhereClause == null) return;
             // Every generated query reads src.<table>, so a connection-qualified FROM must stay in
             // scope: excluding it skipped NoREC on 100% of queries.
+            // A join stays in: WHERE filters the joined rows, and SUM(CASE WHEN p ...) over the same
+            // joined rows must count the same rows.
             if (selectStmt.IntoTable != null ||
                 selectStmt.OnFailureActions != null ||
-                selectStmt.Joins.Count > 0 ||
                 selectStmt.IsDistinct ||
                 selectStmt.TopCount != null ||
                 selectStmt.LimitCount != null ||
@@ -439,15 +463,29 @@ namespace ETL_SQL.FuzzTests
 
                 _noRecCompared++;
             }
-            catch (Exception ex) when (!(ex is NoRecMismatchException) && !IsSevereCrash(ex))
+            catch (Exception ex) when (ex is not NoRecMismatchException && IsExpectedRewriteRejection(ex))
             {
-                // Ignore expected evaluation errors inside generated NoREC queries (semantically
-                // invalid rewrites, sanitized database exceptions). Severe crashes (NRE, cast,
-                // index) and mismatches fall through and propagate so the differential rewrite
-                // path cannot silently hide engine bugs.
                 _noRecRewriteRejected++;
             }
+            catch (Exception ex) when (ex is not NoRecMismatchException && !IsSevereCrash(ex))
+            {
+                // The original query ran, and both rewrites read the same rows with the same
+                // predicate. A rewrite that fails anyway is an engine or serializer defect, so it
+                // fails the run whether or not strict-exec is on; before, it was counted and dropped.
+                throw new NoRecMismatchException(
+                    $"NoREC rewrite failed although the original query ran: {ex.GetType().Name}: {ex.Message}. Query1: {sql1}, Query2: {sql2}");
+            }
         }
+
+        /// <summary>
+        /// A rewrite failure that is not a defect: a connection failure, or an engine rejection on the
+        /// expected-rejection allowlist. Arithmetic failures stay defects: the rewrite evaluates the
+        /// predicate on exactly the rows the original did.
+        /// </summary>
+        private static bool IsExpectedRewriteRejection(Exception ex) =>
+            ex is ConnectionException ||
+            (ex is ExecutionException && ExpectedExecutionMessageFragments.Any(f =>
+                ex.Message.Contains(f, StringComparison.OrdinalIgnoreCase)));
 
         private void WriteReproducer(string bucket, List<Token> originalTokens, string query, Exception ex)
         {
@@ -501,14 +539,20 @@ namespace ETL_SQL.FuzzTests
             public Bucket ParserCrash { get; } = new("parser-crash", isBug: true);
             public Bucket ExecutionCrash { get; } = new("execution-crash", isBug: true);
             public Bucket DifferentialCorrectness { get; } = new("differential-correctness", isBug: true);
+            public Bucket TemplateParserRejected { get; } = new("template-parser-rejected", isBug: true);
             public Bucket ParserDiagnostic { get; } = new("parser-diagnostic");
             public Bucket GrammarGeneratedParserRejected { get; } = new("grammar-generated-parser-rejected");
-            public Bucket GrammarRejectedParserAccepted { get; } = new("grammar-rejected-parser-accepted");
+            // The grammar state tree feeds completion, so a statement the parser accepts and the tree
+            // rejects is a suggestion that can never be offered: a defect (SQ09).
+            public Bucket GrammarRejectedParserAccepted { get; } = new("grammar-rejected-parser-accepted", isBug: true);
+            // The other direction stays a signal. The tree validates prefixes only (wildcard
+            // transitions, no accepting states), so it accepts every truncated or semantically
+            // invalid candidate the generator retries; most of the 850 or so per 2000 iterations are those.
             public Bucket GrammarAcceptedParserRejected { get; } = new("grammar-accepted-parser-rejected");
 
             private IEnumerable<Bucket> All => new[]
             {
-                ParserCrash, ExecutionCrash, DifferentialCorrectness,
+                ParserCrash, ExecutionCrash, DifferentialCorrectness, TemplateParserRejected,
                 ParserDiagnostic, GrammarGeneratedParserRejected,
                 GrammarRejectedParserAccepted, GrammarAcceptedParserRejected
             };

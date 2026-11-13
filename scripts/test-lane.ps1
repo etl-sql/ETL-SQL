@@ -613,8 +613,9 @@ switch ($Lane) {
         Invoke-FuzzLane -Seed "12345" -Iterations "2000" -StrictExec "1"
     }
     "fuzz" {
-        # Long randomized lane (opt-in). Random time seed; strict-exec left off by default because
-        # new seeds surface new benign engine rejections (set ETLSQL_FUZZ_STRICT_EXEC=1 to force).
+        # Long randomized lane (opt-in). Random time seed. Template queries are always strict;
+        # ETLSQL_FUZZ_STRICT_EXEC=1 also makes grammar-walk queries strict, which new seeds can
+        # break with new benign rejections of the random objects a walk names.
         # Override count with ETLSQL_FUZZ_ITERATIONS; the seed is logged for reproduction.
         $iterations = if ($env:ETLSQL_FUZZ_ITERATIONS) { $env:ETLSQL_FUZZ_ITERATIONS } else { "100000" }
         Invoke-FuzzLane -Seed "" -Iterations $iterations -StrictExec $env:ETLSQL_FUZZ_STRICT_EXEC

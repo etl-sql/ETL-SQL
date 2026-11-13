@@ -14,6 +14,22 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Keep the tables a script creates on a `MOCKDB` connection. `CREATE TABLE demo.t (...)` was
+  ignored and inserts into it were dropped, so `SELECT * FROM demo.t` silently returned the
+  seeded `Users` table. A created table now holds its declared columns and inserted rows until it
+  is dropped; the seeded tables still ignore writes.
+- Make the SQL fuzzer test what it claims. Its table lived on `MOCKDB`, so every query read
+  `Users`: about 1,100 of 2,000 iterations failed and the NoREC differential check compared no
+  query. The generator now builds `JOIN`s, `IN`/`EXISTS`/scalar/derived subqueries, CTEs,
+  `UNION`/`INTERSECT`/`EXCEPT`/`MINUS`, `DISTINCT`, `TOP`, `LIMIT ... OFFSET`,
+  `OFFSET ... FETCH`, `QUALIFY`, `GROUPING SETS` and `ROLLUP`, and no longer emits the retired
+  `SHOW VARIABLES`/`SHOW CONNECTIONS`. These template queries are valid by construction, so any
+  engine rejection of one, or the parser rejecting one, fails the run without
+  `ETLSQL_FUZZ_STRICT_EXEC`. A NoREC rewrite that fails when its original query ran now fails the
+  run (it was counted and dropped), NoREC covers joins, and a statement the parser accepts but
+  the grammar state tree rejects is a failure. Five seeds of 2,000 iterations: no finding, and
+  NoREC compared 243 to 279 queries per seed.
+
 - Accept `||`, `??` and `<<`/`>>` in the right operand of `LIKE`, `ESCAPE`, `BETWEEN`, a bare
   `IN` and `IS DISTINCT FROM`, as `=` already did. `name LIKE '%' || @q || '%'` and
   `x BETWEEN @lo ?? 0 AND @hi` failed to parse. `NOT EXISTS (...) = FALSE` now parses as

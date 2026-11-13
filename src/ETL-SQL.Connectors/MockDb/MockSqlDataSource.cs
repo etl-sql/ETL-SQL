@@ -109,10 +109,68 @@ namespace ETL_SQL.Connectors.MockDb
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) =>
             WriteBatches(batches, append, CancellationToken.None);
 
-        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append, CancellationToken cancellationToken)
         {
-            EffectiveCancellationToken(cancellationToken).ThrowIfCancellationRequested();
-            return Task.CompletedTask;
+            var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            effectiveCancellationToken.ThrowIfCancellationRequested();
+
+            // Only a table the script created keeps written rows. The seeded fixture stays fixed, so
+            // every test that reads Users or Sales still sees the same rows.
+            if (string.IsNullOrEmpty(_activeTable) || !_createdTables.TryGetValue(_activeTable, out var target))
+                return;
+
+            if (!append) target.Rows.Clear();
+            await foreach (var batch in batches.WithCancellation(effectiveCancellationToken))
+            {
+                foreach (var row in batch.Rows)
+                {
+                    var copy = new Row();
+                    foreach (var column in target.ColumnNames) copy[column] = row[column];
+                    await target.AddRowAsync(copy);
+                }
+            }
+        }
+
+        // Tables created through CREATE TABLE. MOCKDB passed that statement to ExecuteRawSql, which
+        // ignored it, so a later read of the new table silently returned the first seeded table.
+        private readonly Dictionary<string, DataTable> _createdTables = new(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly System.Text.RegularExpressions.Regex CreateTablePattern = new(
+            @"^CREATE\s+TABLE\s+(?<name>[^\s(]+)\s*\((?<columns>.*)\)\s*;?\s*$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        private static readonly System.Text.RegularExpressions.Regex DropTablePattern = new(
+            @"^DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?<name>[^\s;]+)\s*;?\s*$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        private static string BareTableName(string name) => name.Split('.').Last();
+
+        /// <summary>Column names of a CREATE TABLE body; commas inside a type such as DECIMAL(10,2) are not separators.</summary>
+        private static List<string> DeclaredColumnNames(string body)
+        {
+            var names = new List<string>();
+            int depth = 0, start = 0;
+            for (int i = 0; i <= body.Length; i++)
+            {
+                if (i < body.Length && body[i] == '(') depth++;
+                else if (i < body.Length && body[i] == ')') depth--;
+                else if (i == body.Length || (body[i] == ',' && depth == 0))
+                {
+                    var definition = body[start..i].Trim();
+                    start = i + 1;
+                    if (definition.Length == 0) continue;
+                    var first = definition.Split((char[]?)null, 2, StringSplitOptions.RemoveEmptyEntries)[0];
+                    // A table constraint (PRIMARY KEY (...), CONSTRAINT x ...) names no column.
+                    if (first.Equals("PRIMARY", StringComparison.OrdinalIgnoreCase)
+                        || first.Equals("CONSTRAINT", StringComparison.OrdinalIgnoreCase)
+                        || first.Equals("UNIQUE", StringComparison.OrdinalIgnoreCase)
+                        || first.Equals("FOREIGN", StringComparison.OrdinalIgnoreCase)
+                        || first.Equals("CHECK", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    names.Add(first.Trim('"', '`'));
+                }
+            }
+            return names;
         }
 
         public async Task<IEnumerable<string>> GetColumnsAsync()
@@ -144,6 +202,26 @@ namespace ETL_SQL.Connectors.MockDb
             effectiveCancellationToken.ThrowIfCancellationRequested();
             var trimmedSql = sql.Trim();
             var normSql = trimmedSql.Replace("[", "").Replace("]", "").Replace("\r", " ").Replace("\n", " ");
+
+            var create = CreateTablePattern.Match(normSql);
+            if (create.Success)
+            {
+                var name = BareTableName(create.Groups["name"].Value);
+                var created = new DataTable();
+                created.SetColumns(DeclaredColumnNames(create.Groups["columns"].Value));
+                _createdTables[name] = created;
+                _mockTables[name] = created;
+                yield break;
+            }
+
+            var drop = DropTablePattern.Match(normSql);
+            if (drop.Success)
+            {
+                var name = BareTableName(drop.Groups["name"].Value);
+                if (_createdTables.Remove(name)) _mockTables.Remove(name);
+                yield break;
+            }
+
             DataTable? source = null;
             foreach (var tableName in _mockTables.Keys)
             {

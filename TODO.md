@@ -8,7 +8,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 18 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 17 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -105,7 +105,7 @@ sample on a shared runner.
 
 ### 4. SQL engine conformance (from ROADMAP, owner 2026-11-11)
 
-SQ01, SQ02, SQ04–SQ06, SQ08 and SQ10–SQ17 are done (`CHANGELOG.md`). **Done when:** `statement error` tests fail
+SQ01, SQ02, SQ04–SQ06 and SQ08–SQ17 are done (`CHANGELOG.md`). **Done when:** `statement error` tests fail
 when the statement succeeds; `EbnfConformanceTests` expands every `select_body` clause with no
 drift against `Parser`; `SltTests`, `EngineCorpusTests` and `ParserFuzzTests` pass. After any
 change to name or expression resolution, run `scripts/Test-AllSamples.ps1 -Configuration Release`
@@ -122,12 +122,6 @@ before pushing.
   (...)` on `INSERT`/`UPDATE`/`DELETE`/`MERGE`, and regression queries for SQ10–SQ14. Remove the
   unconditional `halt` in `select5.test` (line 456; 932 of 999 join queries skipped) or gate the
   rest, and triage `slt_lang_aggfunc.test` and `tests/slt_data/index/**`.
-- [ ] **SQ09 Expand `GrammarWalkGenerator` and tighten the fuzzer.** Remove the
-  retired `SHOW VARIABLES;`/`SHOW CONNECTIONS;`; generate `JOIN`s, subqueries, CTEs, set
-  operations, `DISTINCT`, `TOP`, `OFFSET`, `QUALIFY` and `GROUPING SETS` (8 hardcoded templates
-  cover 90% of iterations today); mark grammar/parser mismatch buckets `isBug: true` once the
-  grammar drift is closed; fail on an unexpected `ExecutionException` in `VerifyNoRECParity`
-  instead of only under `ETLSQL_FUZZ_STRICT_EXEC=1`.
 
 ### 5. VS Code extension issues (planned for v0.23.0)
 
