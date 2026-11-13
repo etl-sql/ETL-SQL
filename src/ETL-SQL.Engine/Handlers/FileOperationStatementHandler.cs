@@ -351,9 +351,8 @@ public class FileOperationStatementHandler(
                         else
                         {
                             var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                            pwd ??= context.SecurityService.MasterPassword;
                             if (string.IsNullOrEmpty(pwd))
-                                throw new ExecutionException("ENCRYPT FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, or a configured master password.", null, stmt.Line, stmt.Column);
+                                throw new ExecutionException("ENCRYPT FILE requires a PASSWORD, KEYFILE or PGP_KEY clause. The script's master password is not used for files.", null, stmt.Line, stmt.Column);
                             CryptoUtils.EncryptFile(source, dest, pwd, overwrite);
                         }
                     }
@@ -382,9 +381,8 @@ public class FileOperationStatementHandler(
                         else
                         {
                             var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                            pwd ??= context.SecurityService.MasterPassword;
                             if (string.IsNullOrEmpty(pwd))
-                                throw new ExecutionException("DECRYPT FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, or a configured master password.", null, stmt.Line, stmt.Column);
+                                throw new ExecutionException("DECRYPT FILE requires a PASSWORD, KEYFILE or PGP_KEY clause. The script's master password is not used for files.", null, stmt.Line, stmt.Column);
                             CryptoUtils.DecryptFile(source, dest, pwd, overwrite);
                         }
                     }

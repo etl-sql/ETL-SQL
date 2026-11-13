@@ -36,16 +36,16 @@ DECRYPT DIRECTORY '<source_dir>' TO '<destination_dir>' PASSWORD '<passphrase>' 
   syntax error, because the statement would otherwise use one and ignore the other.
 - [CREATE PGP_KEY_PAIR](create-pgp-key-pair.md) writes `public.asc` and `private.asc` into a folder.
   [CREATE SSH_KEY_PAIR](create-ssh-key-pair.md) with `ALGORITHM = 'RSA'` writes `id_rsa` and
-  `id_rsa.pub`. Reading a `.pub` file needs `SET ALLOW_FILE_TYPE_ACCESS = '.pub';` (example 4). An
-  ECDSA key cannot be used with `KEYFILE`.
+  `id_rsa.pub`. An ECDSA key cannot be used with `KEYFILE`.
 - `TO` is required. Without it nothing is written.
 - The source file is left in place. Remove the plaintext with `DELETE FILE` once the encrypted file is
   written (see the vendor-drop example).
 - `ENCRYPT DIRECTORY` encrypts every file, subfolders included, and writes each one as `<name>.enc`
   under the destination with the same folder layout. `DECRYPT DIRECTORY` decrypts only `.enc` files
   and removes that suffix.
-- A session password from `USE PASSWORD` or `--pass` is not used for files. Give `PASSWORD` on the
-  statement.
+- The script's master password (`USE PASSWORD` or `--pass`) protects connection strings and secrets
+  in the script. It is never used to encrypt or decrypt files: a file passphrase has to travel with
+  the file, so give `PASSWORD` on the statement.
 
 ## Options
 
@@ -101,9 +101,6 @@ DECRYPT FILE 'inbound/orders.csv.pgp' TO 'staging/orders.csv'
 ```sql
 CREATE SSH_KEY_PAIR 'certs/ledger' WITH (BITS = 4096, ALGORITHM = 'RSA');
 
--- .pub is outside the default file-type list
-SET ALLOW_FILE_TYPE_ACCESS = '.pub';
-
 ENCRYPT FILE 'staging/ledger.csv' TO 'staging/ledger.csv.enc' KEYFILE 'certs/ledger/id_rsa.pub';
 DECRYPT FILE 'staging/ledger.csv.enc' TO 'restore/ledger.csv' KEYFILE 'certs/ledger/id_rsa';
 ```
@@ -126,7 +123,8 @@ DECRYPT DIRECTORY 'vault/2026-11/' TO 'restore/2026-11/' PASSWORD 'archive-passp
 
 ## Errors
 
-- **`ENCRYPT FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, ...`** — no method was given. Add one.
+- **`ENCRYPT FILE requires a PASSWORD, KEYFILE or PGP_KEY clause.`** — no method was given. Add one;
+  the master password is not a fallback.
 - **`Destination file already exists and OVERWRITE is OFF: <path>`** — remove the file or set
   `OVERWRITE = ON`.
 - **`ENCRYPT FILE takes KEYFILE (an SSH RSA key) or PGP_KEY, not both.`** — pick one method.

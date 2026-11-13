@@ -33,6 +33,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   has no `FORMAT` or `RECURSE`; `OVERWRITE` defaults to `ON` for file statements, `SEND FILE` and
   `RECEIVE FILE` (four pages said `OFF`); and `CREATE SSH_KEY_PAIR` and `CREATE PGP_KEY_PAIR` write
   `id_rsa`/`id_rsa.pub` and `public.asc`/`private.asc` into a folder, not `<path>` and `<path>.pub`.
+- `ENCRYPT`/`DECRYPT FILE` and `DIRECTORY` no longer fall back to the master password when no
+  `PASSWORD` is given (ROADMAP FO09). The master password protects connection strings and secrets in
+  a script; a file passphrase has to be shared with whoever decrypts the file, so the statement now
+  requires its own `PASSWORD`, `KEYFILE` or `PGP_KEY`. On the CLI the fallback never had a value; in
+  the TUI it silently encrypted files with the editor's master password. **Behaviour change.**
+- `.pub` and `.pem` key files are on the default file-type list (ROADMAP FO10), so a key pair from
+  `CREATE SSH_KEY_PAIR` works with `ENCRYPT FILE ... KEYFILE` without `SET ALLOW_FILE_TYPE_ACCESS`.
 
 - FTP: an unrecognized `USE_SSL` or `PASSIVE` value is an error and the connection does not open
   (ROADMAP RF01). `USE_SSL` read every value but `EXPLICIT`, `ON` and `IMPLICIT` as no encryption,

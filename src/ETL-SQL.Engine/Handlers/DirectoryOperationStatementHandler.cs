@@ -289,9 +289,9 @@ public class DirectoryOperationStatementHandler(
                         context.SecurityService.ValidateWriteAccess(dest);
 
                         var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                        pwd ??= context.SecurityService.MasterPassword;
-                        if (pwd == null)
-                            throw new ExecutionException("ENCRYPT_DIRECTORY requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
+                        // The master password protects script secrets, not files (ROADMAP FO09).
+                        if (string.IsNullOrEmpty(pwd))
+                            throw new ExecutionException("ENCRYPT DIRECTORY requires a PASSWORD clause. The script's master password is not used for files.", null, stmt.Line, stmt.Column);
                         await fsService.EncryptDirectory(path, dest, pwd, overwrite, context);
                         _logger.WriteLine($"Directory encrypted: {path} -> {dest}", ConsoleColor.Green);
                     }
@@ -303,9 +303,9 @@ public class DirectoryOperationStatementHandler(
                         context.SecurityService.ValidateWriteAccess(dest);
 
                         var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                        pwd ??= context.SecurityService.MasterPassword;
-                        if (pwd == null)
-                            throw new ExecutionException("DECRYPT_DIRECTORY requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
+                        // The master password protects script secrets, not files (ROADMAP FO09).
+                        if (string.IsNullOrEmpty(pwd))
+                            throw new ExecutionException("DECRYPT DIRECTORY requires a PASSWORD clause. The script's master password is not used for files.", null, stmt.Line, stmt.Column);
                         await fsService.DecryptDirectory(path, dest, pwd, overwrite, context);
                         _logger.WriteLine($"Directory decrypted: {path} -> {dest}", ConsoleColor.Green);
                     }

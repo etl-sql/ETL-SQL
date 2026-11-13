@@ -68,7 +68,7 @@ BEGIN TRY
   -- 2. Decrypt PGP payload
   DECRYPT FILE @encrypted_local 
   TO @decrypted_local 
-  KEYFILE 'certs/private_key.asc' 
+  PGP_KEY 'certs/private_key.asc' 
   PASSWORD 'SECRET:PgpPrivateKeyPassphrase';
 
   -- 3. Read and stage CSV contents in memory
