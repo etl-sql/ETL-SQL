@@ -556,6 +556,8 @@ fix was checked by making the failure happen on purpose first, unless the row sa
 | Preflight `test-workstation-certification-driver` | The fixture read the clock twice; a phase completed 1 ms after its state was generated is rejected. A forced 2 ms gap failed it every time. | `ec75ab073` |
 | Preflight `test-workflows` at 60.0 s | Not slow code: across 39 CI preflights its median was 47.5 s and two other checks reached 55 s, against a 60 s deadline. | `2e15fbc36`: the deadline is 180 s, a hang guard |
 | Browser shard fails after its retry passed | `$LASTEXITCODE` kept the first run's code (see above). | `cd6870b93` |
+| CI red after an engine shard's retry passed (CI 43302334001, shard 7) | `test-lane.ps1` recorded the flake in `flakyMethods`, but `Merge-EngineCoverage.ps1` still rejected the first `Failed` result. Replaying that run's artifacts reproduced it. | `a882240cd`: the merge accepts a listed method only when every case passed in the shard's retry TRX, and lists it in `flakyTests` |
+| `SandboxAdmissionReconciliationServiceTests.AbandonedQueueEntryIsReclaimedWhileALiveWaiterKeepsItsPlace` (expected 1 cancelled, got 2) | The sweep used the clock after the live waiter's poll, against a 200 ms horizon; a runner stall over 200 ms aged the live waiter out too. | `51931f4f7`: the sweep runs as of the moment before the poll |
 
 Instrumented, root cause not yet found. Each now fails with the state needed to diagnose it:
 

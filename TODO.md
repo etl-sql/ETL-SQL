@@ -8,7 +8,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 16 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 19 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -103,12 +103,38 @@ sample on a shared runner.
   heartbeat, which reproduced the timeout locally. **Left:** confirm on hosted runs; the hosted
   cause is unproven.
 
-### 4. Review of `scripts/`, the installers and `tests/`
+### 4. SQL engine conformance (from ROADMAP, owner 2026-11-11)
 
-**Record:** [v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md) (34 findings, all
-fixed, and the list of scripts reviewed clean). Add new findings there, not here.
+SQ01, SQ02 and SQ04–SQ17 are done (`CHANGELOG.md`). **Done when:** `statement error` tests fail
+when the statement succeeds; `EbnfConformanceTests` expands every `select_body` clause with no
+drift against `Parser`; `SltTests`, `EngineCorpusTests` and `ParserFuzzTests` pass. After any
+change to name or expression resolution, run `scripts/Test-AllSamples.ps1 -Configuration Release`
+before pushing.
 
-Nothing is open here.
+- [ ] **SQ03 Name the columns of an outer-join side whose names depend on its rows.** A
+  misspelt column on an unmatched outer-join row fails in every other case, including an empty
+  table function on either side (its names are kept from when it ran, so it is not run again).
+  Still silent: an empty side that is a dynamic `PIVOT` or `MATCH_RECOGNIZE`, and a table
+  function served by a database connection (`db.fn(...)`), which is not evaluated into memory.
+- [ ] **SQ07 SLT coverage for unexercised clauses and `NULL` edge cases.** Add positive and
+  `statement error` `.test` coverage for `USING SAMPLE`, `MATCH_RECOGNIZE`, `GROUP BY ALL`, named
+  `WINDOW w AS (...)`, `IS [NOT] DISTINCT FROM`, DML `OUTPUT INSERTED.*/DELETED.*`, `WITH cte AS
+  (...)` on `INSERT`/`UPDATE`/`DELETE`/`MERGE`, and regression queries for SQ10–SQ14. Remove the
+  unconditional `halt` in `select5.test` (line 456; 932 of 999 join queries skipped) or gate the
+  rest, and triage `slt_lang_aggfunc.test` and `tests/slt_data/index/**`.
+- [ ] **SQ08 Reconcile `docs/grammar.ebnf` and expand `EbnfConformanceTests`.** Add
+  `ALTER TABLE ... DROP COLUMN`, `ALTER TABLE ... RENAME [COLUMN] ... TO ...` and `REPLACE INTO` /
+  `INSERT OR REPLACE INTO` to the grammar. The tests stub `select_statement` to `SELECT 1` and
+  `expression` to 5 literals: expand `select_body` (`join_clause`, `PIVOT`/`UNPIVOT`, `GROUP BY`,
+  `HAVING`, `WINDOW`, `QUALIFY`, `USING SAMPLE`, `MATCH_RECOGNIZE`) and `expression`.
+  `Grammar_Rejects_WhatTheParserRejects` is tautological because `DefaultGrammar.Build()` hands
+  final acceptance to `Parser`; test its state transitions with `requireParserAcceptance: false`.
+- [ ] **SQ09 Expand `GrammarWalkGenerator` and tighten the fuzzer** (after SQ08). Remove the
+  retired `SHOW VARIABLES;`/`SHOW CONNECTIONS;`; generate `JOIN`s, subqueries, CTEs, set
+  operations, `DISTINCT`, `TOP`, `OFFSET`, `QUALIFY` and `GROUPING SETS` (8 hardcoded templates
+  cover 90% of iterations today); mark grammar/parser mismatch buckets `isBug: true` once the
+  grammar drift is closed; fail on an unexpected `ExecutionException` in `VerifyNoRECParity`
+  instead of only under `ETLSQL_FUZZ_STRICT_EXEC=1`.
 
 ### 5. VS Code extension issues (planned for v0.23.0)
 
