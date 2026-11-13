@@ -109,13 +109,14 @@ sample on a shared runner.
 
 ### 5. Dependency alerts
 
-- [ ] **Triage the 23 open Dependabot alerts** (7 high, 13 moderate, 3 low; listed 2026-11-13 on
-  `main`). All are npm: `vite`, `@vitest/mocker`, `undici` and `serialize-javascript` in
-  `src/etl-sql-vscode` and `src/etl-sql-vscode/ui`, and `@azure/msal-node` and `qs` in
-  `scripts/vsix`. Most are development-only (test runner, packaging), so many may not apply to
-  shipped code. For each: upgrade if a fixed version exists, or dismiss with the reason (for
-  example "dev-only, not in the VSIX"). The three `vite` alerts in `ui` are marked runtime;
-  check whether the built UI bundles any of it. Check against the release branch, not only `main`.
+- [ ] **Confirm the 23 Dependabot alerts close when v0.22.0 merges to `main`.** Triaged
+  2026-11-13: every alert is on an old version on `main`, and `release/v0.22.0` already has the
+  fixed version of each (`vite` 8.3.5, `@vitest/mocker` 4.1.12, `undici` 7.30.1,
+  `serialize-javascript` 7.1.4, `@azure/msal-node` 7.1.1, `qs` 6.16.1). Nothing to dismiss. All
+  are build or test tools; none ships in the VSIX. Optional cleanup: the `ui` alerts for `vite` say
+  runtime because `@tailwindcss/vite` and `tailwindcss` (build plugins that need `vite`) are in
+  `dependencies` of `src/etl-sql-vscode/ui/package.json`; moving them to `devDependencies`
+  fixes the label, if no build installs with `--omit=dev`.
 
 ---
 
