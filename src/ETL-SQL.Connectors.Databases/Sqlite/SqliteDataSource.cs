@@ -165,8 +165,10 @@ namespace ETL_SQL.Connectors.Sqlite
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(columns);
 
+                var noRows = true;
                 while (await reader.ReadAsync(EffectiveCancellationToken(cancellationToken)))
                 {
+                    noRows = false;
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
                     {
@@ -182,7 +184,8 @@ namespace ETL_SQL.Connectors.Sqlite
                     }
                 }
 
-                if (currentBatch.Rows.Count > 0)
+                // An empty result still names its columns, so an outer join can name an empty side.
+                if (currentBatch.Rows.Count > 0 || noRows)
                 {
                     yield return currentBatch;
                 }
@@ -509,8 +512,10 @@ namespace ETL_SQL.Connectors.Sqlite
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(columns);
 
+                var noRows = true;
                 while (await reader.ReadAsync(EffectiveCancellationToken(cancellationToken)))
                 {
+                    noRows = false;
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
                     {
@@ -526,7 +531,8 @@ namespace ETL_SQL.Connectors.Sqlite
                     }
                 }
 
-                if (currentBatch.Rows.Count > 0)
+                // An empty result still names its columns, so an outer join can name an empty side.
+                if (currentBatch.Rows.Count > 0 || noRows)
                 {
                     yield return currentBatch;
                 }

@@ -67,23 +67,52 @@ public class DataSourceManager(
     /// </param>
     public async Task<IDataSource> ResolveDataSourceAsync(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager, bool forRead = false)
     {
-        var source = await ResolveDataSourceCoreAsync(table, connections, transactionManager, forRead);
-        // A table function evaluated into memory has run: keep its column names (not its rows) so
-        // an outer join can name an empty side without running it again.
-        if (table.FunctionCall != null && table.Subquery == null && source is InMemoryDataSource)
-        {
-            var columns = (await source.GetColumnsAsync(_evaluator.CancellationToken)).ToArray();
-            if (columns.Length > 0) _tableFunctionColumns.AddOrUpdate(table, columns);
-        }
-        return source;
+        return await ResolveDataSourceCoreAsync(table, connections, transactionManager, forRead);
     }
 
-    /// <summary>The column names a table function returned when <paramref name="table"/> last ran it.</summary>
-    public IReadOnlyList<string>? TableFunctionColumns(TableReference table) =>
-        _tableFunctionColumns.TryGetValue(table, out var columns) ? columns : null;
+    /// <summary>
+    /// The column names <paramref name="table"/> returned, after its table operators, the last time
+    /// it was read; null when it has not been read or named no columns. Kept for a table function or
+    /// a table operator only: an outer join asks for it when that side returned no rows, because
+    /// running a table function again could repeat a side effect, and a dynamic pivot's names
+    /// depend on the rows it read.
+    /// </summary>
+    public IReadOnlyList<string>? ReturnedColumns(TableReference table) =>
+        _returnedColumns.TryGetValue(table, out var columns) ? columns : null;
 
     // Keyed by reference: a TableReference is a record, but each one in a script is its own entry.
-    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<TableReference, string[]> _tableFunctionColumns = new();
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<TableReference, string[]> _returnedColumns = new();
+
+    private static bool KeepsReturnedColumns(TableReference table) =>
+        table.FunctionCall != null || table.TableOperators.Count > 0;
+
+    private void RecordReturnedColumns(TableReference table, IEnumerable<string>? columns)
+    {
+        if (columns == null || !KeepsReturnedColumns(table)) return;
+        var names = columns.ToArray();
+        if (names.Length > 0) _returnedColumns.AddOrUpdate(table, names);
+    }
+
+    /// <summary>
+    /// Passes the batches through, keeping the column names of the first one that names any. An
+    /// in-memory result (a table function evaluated here) may hand back no batch when it is empty;
+    /// it is asked for its names instead, which reads nothing and runs nothing.
+    /// </summary>
+    private async IAsyncEnumerable<DataTable> RecordingColumns(TableReference table, IAsyncEnumerable<DataTable> batches, IDataSource? source = null)
+    {
+        var recorded = !KeepsReturnedColumns(table);
+        await foreach (var batch in batches)
+        {
+            if (!recorded && batch.Schema.ColumnCount > 0)
+            {
+                RecordReturnedColumns(table, batch.Schema.ColumnNames);
+                recorded = true;
+            }
+            yield return batch;
+        }
+        if (!recorded && source is InMemoryDataSource)
+            RecordReturnedColumns(table, await source.GetColumnsAsync(_evaluator.CancellationToken));
+    }
 
     private async Task<IDataSource> ResolveDataSourceCoreAsync(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager, bool forRead)
     {
@@ -633,12 +662,14 @@ public class DataSourceManager(
     /// </summary>
     public async IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager, int batchSize)
     {
+        // A name kept from an earlier read (a loop) must not stand in for this one.
+        _returnedColumns.Remove(table);
         var source = await ResolveDataSourceAsync(table, connections, transactionManager, forRead: true);
         var batches = source.ReadBatches(batchSize, _evaluator.CancellationToken);
 
         if (table.TableOperators.Count == 0)
         {
-            await foreach (var b in batches) yield return b;
+            await foreach (var b in RecordingColumns(table, batches, source)) yield return b;
             yield break;
         }
 
@@ -646,9 +677,9 @@ public class DataSourceManager(
         {
             string streamingTableName = table.Alias ?? table.TableName;
             var streamingPivotEngine = new Engines.PivotEngine(_evaluator, _logger);
-            await foreach (var b in BatchRows(
+            await foreach (var b in RecordingColumns(table, BatchRows(
                 streamingPivotEngine.ApplyUnpivotStream(PrefixRows(batches, streamingTableName), streamingUnpivot),
-                batchSize))
+                batchSize)))
                 yield return b;
             yield break;
         }
@@ -657,9 +688,9 @@ public class DataSourceManager(
         {
             string streamingTableName = table.Alias ?? table.TableName;
             var streamingPivotEngine = new Engines.PivotEngine(_evaluator, _logger);
-            await foreach (var b in BatchRows(
+            await foreach (var b in RecordingColumns(table, BatchRows(
                 streamingPivotEngine.ApplyPivotStream(PrefixRows(batches, streamingTableName), streamingPivot),
-                batchSize))
+                batchSize)))
                 yield return b;
             yield break;
         }
@@ -669,8 +700,12 @@ public class DataSourceManager(
         string tableName = table.Alias ?? table.TableName;
         var containsMatchRecognize = table.TableOperators.Any(op => op is MatchRecognizeClause);
         var warnedMatchRecognizeBuffering = false;
+        // The source's names, kept for a result with no rows: bare and qualified, as rows carry them.
+        List<string>? names = null;
         await foreach (var batch in batches)
         {
+            if (names == null && batch.Schema.ColumnCount > 0)
+                names = Engines.OuterJoinShape.Qualified(batch.Schema.ColumnNames, tableName);
             foreach (var row in batch.Rows)
             {
                 var r = row.Clone();
@@ -694,14 +729,22 @@ public class DataSourceManager(
         var matchRecognizeEngine = new Engines.MatchRecognizeEngine(_evaluator);
         foreach (var op in table.TableOperators)
         {
+            var inputEmpty = allRows.Count == 0;
             if (op is PivotClause pivot) allRows = await pivotEngine.ApplyPivot(allRows, pivot);
             else if (op is DuckPivotClause duckPivot) allRows = await pivotEngine.ApplyDuckPivot(allRows, duckPivot);
             else if (op is UnpivotClause unpivot) allRows = await pivotEngine.ApplyUnpivot(allRows, unpivot);
             else if (op is MatchRecognizeClause matchRecognize) allRows = await matchRecognizeEngine.Apply(allRows, matchRecognize);
+
+            // Each stage's names, from its first row or, with none, from what the operator declares.
+            names = allRows.Count > 0
+                ? allRows[0].Columns.Keys.ToList()
+                : names == null ? null : await Engines.PivotEngine.DeclaredColumnsAsync(names, op, _evaluator, inputEmpty);
         }
 
         var resultTable = new DataTable();
         if (allRows.Count > 0) resultTable.SetColumns(allRows[0].Columns.Keys);
+        else if (names != null) resultTable.SetColumns(names.Distinct(StringComparer.OrdinalIgnoreCase));
+        RecordReturnedColumns(table, resultTable.Schema.ColumnCount > 0 ? resultTable.Schema.ColumnNames : null);
         foreach (var r in allRows) await resultTable.AddRowAsync(r);
 
         yield return resultTable;

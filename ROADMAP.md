@@ -202,7 +202,7 @@ query with its own `WITH` works in every one of those positions, and its CTEs ar
 inside that query, shadowing an outer CTE or `#temp` table of the same name.
 
 **Why next:** Owner decision 2026-11-13: completeness over following an incomplete dialect.
-Statement-scoped CTEs (TODO §4 SQ18, `CteScope`) already restore names on exit, so nested scopes
+Statement-scoped CTEs (SQ18 in v0.22.0, `CteScope`) already restore names on exit, so nested scopes
 can reuse that mechanism.
 
 **Boundaries:**

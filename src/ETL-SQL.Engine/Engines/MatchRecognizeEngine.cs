@@ -161,6 +161,24 @@ namespace ETL_SQL.Engine.Engines
             };
         }
 
+        /// <summary>
+        /// The column names <see cref="BuildOutputRow"/> gives a match over a source with the given
+        /// columns. They follow from the clause, not the rows, so an outer join can name an empty side.
+        /// </summary>
+        public static List<string> DeclaredColumns(IReadOnlyList<string> sourceColumns, MatchRecognizeClause clause)
+        {
+            var names = new List<string>();
+            if (clause.AllRowsPerMatch)
+            {
+                names.Add("MATCH_NUMBER");
+                names.AddRange(sourceColumns);
+                names.Add("CLASSIFIER");
+            }
+            names.AddRange(clause.PartitionBy.Select(expr => expr.ToSql()));
+            names.AddRange(clause.Measures.Select(measure => measure.Alias ?? measure.Expression.ToSql()));
+            return names;
+        }
+
         private async Task<Row> BuildOutputRow(MatchRecognizeClause clause, List<Row> rows, PatternMatch match, int matchNumber, int? currentRowIndex)
         {
             var output = new Row();

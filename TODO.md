@@ -8,7 +8,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 16 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 15 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -103,27 +103,13 @@ sample on a shared runner.
   heartbeat, which reproduced the timeout locally. **Left:** confirm on hosted runs; the hosted
   cause is unproven.
 
-### 4. SQL engine conformance (from ROADMAP, owner 2026-11-11)
-
-SQ01, SQ02 and SQ04–SQ19 are done (`CHANGELOG.md`). **Done when:** `statement error` tests fail
-when the statement succeeds; `EbnfConformanceTests` expands every `select_body` clause with no
-drift against `Parser`; `SltTests`, `EngineCorpusTests` and `ParserFuzzTests` pass. After any
-change to name or expression resolution, run `scripts/Test-AllSamples.ps1 -Configuration Release`
-before pushing.
-
-- [ ] **SQ03 Name the columns of an outer-join side whose names depend on its rows.** A
-  misspelt column on an unmatched outer-join row fails in every other case, including an empty
-  table function on either side (its names are kept from when it ran, so it is not run again).
-  Still silent: an empty side that is a dynamic `PIVOT` or `MATCH_RECOGNIZE`, and a table
-  function served by a database connection (`db.fn(...)`), which is not evaluated into memory.
-
-### 5. VS Code extension issues (planned for v0.23.0)
+### 4. VS Code extension issues (planned for v0.23.0)
 
 - [ ] **[Security] Migrate `etlsql.ai.apiKey` to SecretStorage.** It is stored as plain text in
   `settings.json`, which VS Code Settings Sync copies across machines. Use `vscode.SecretStorage`
   (`context.secrets`), following the Portal token pattern in `portalPublishCommand.ts`.
 
-### 6. Engine DATE type (planned for v0.23.0, owner 2026-11-10)
+### 5. Engine DATE type (planned for v0.23.0, owner 2026-11-10)
 
 - [ ] **A DATE cast to text keeps `00:00:00`.** `CAST(CAST('2024-01-08' AS DATE) AS STRING)` gives
   `2024-01-08 00:00:00`; SQL Server and PostgreSQL give `2024-01-08`. The engine holds DATE values

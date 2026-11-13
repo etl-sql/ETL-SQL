@@ -14,6 +14,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Fail on a misspelt column of an empty outer-join side in the last three cases that read it as
+  `NULL`: a `PIVOT` whose values are variables (they are evaluated, as the pivot does), a
+  `MATCH_RECOGNIZE` (its columns follow from the clause), and a table function served by a
+  database connection (`db.fn(...)`). The side's names also answer to the alias of its `PIVOT` or
+  `MATCH_RECOGNIZE` (`AS p`). Database reads with no rows now keep their column names, and a
+  table operator over no rows names its columns, so a DuckDB `PIVOT` over an empty table returns
+  its grouping columns. **Behaviour change.**
 - Fix the SLT runner's memory check for parallel files. Every runner shared one `Process` object,
   and one runner's `Refresh()` cleared it while another read it, so a file run 4-way parallel
   failed with a `NullReferenceException` or "Process has exited". The engine was not involved.

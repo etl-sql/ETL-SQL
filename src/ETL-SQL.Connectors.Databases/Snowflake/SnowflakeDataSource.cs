@@ -177,8 +177,10 @@ namespace ETL_SQL.Connectors.Snowflake
                 var batch = new DataTable();
                 batch.SetColumns(columns);
 
+                var noRows = true;
                 while (await reader.ReadAsync(effectiveCancellationToken))
                 {
+                    noRows = false;
                     var row = batch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
                         row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
@@ -191,7 +193,8 @@ namespace ETL_SQL.Connectors.Snowflake
                         batch.SetColumns(columns);
                     }
                 }
-                if (batch.Rows.Count > 0) yield return batch;
+                // An empty result still names its columns, so an outer join can name an empty side.
+                if (batch.Rows.Count > 0 || noRows) yield return batch;
             }
             finally
             {

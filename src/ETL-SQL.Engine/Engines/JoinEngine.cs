@@ -335,7 +335,7 @@ public class JoinEngine
         {
             // A source with no rows can still hand back a batch that names its columns.
             if (shape != null && jb.Rows.Count == 0 && jb.Schema.ColumnCount > 0)
-                shape.DeclareRight(OuterJoinShape.Qualified(jb.Schema.ColumnNames, joinName));
+                shape.DeclareRight(OuterJoinShape.Qualified(jb.Schema.ColumnNames, join.Table));
 
             foreach (var jr in jb.Rows)
             {
@@ -716,9 +716,14 @@ public class JoinEngine
 
         if (table.FunctionCall != null && table.TableOperators.Count == 0)
         {
-            var columns = (await rightSource.GetColumnsAsync(_context.CancellationToken)).ToList();
-            if (columns.Count > 0)
-                shape.DeclareRight(OuterJoinShape.Qualified(columns, table.Alias ?? table.TableName));
+            // What the function returned when it was read. Only a result held in memory is asked
+            // again: a database connection's source would run the function a second time.
+            var columns = _context.ReturnedColumns(table)?.ToList()
+                ?? (rightSource is InMemoryDataSource
+                    ? (await rightSource.GetColumnsAsync(_context.CancellationToken)).ToList()
+                    : null);
+            if (columns is { Count: > 0 })
+                shape.DeclareRight(OuterJoinShape.Qualified(columns, table));
             return;
         }
 

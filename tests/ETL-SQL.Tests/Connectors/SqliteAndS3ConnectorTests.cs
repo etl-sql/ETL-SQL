@@ -501,7 +501,9 @@ namespace ETL_SQL.Tests.Connectors
                     batches.Add(batch);
                 }
 
-                Assert.Empty(batches);
+                // No rows. An empty read still hands back one batch that names the table's columns.
+                Assert.Empty(batches.SelectMany(b => b.Rows));
+                Assert.Equal(new[] { "msg" }, Assert.Single(batches).ColumnNames);
             }
             finally
             {

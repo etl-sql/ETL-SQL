@@ -15,9 +15,10 @@ namespace ETL_SQL.Engine.Engines;
 /// A side's names come from the first row seen on it. A side with no rows falls back to the names
 /// its table reference declares (<see cref="DeclaredColumnsAsync"/>): a select list, a temp table,
 /// a <c>PIVOT</c> list, the names a table function returned when it ran, or the source's own
-/// header or catalog. When neither is known (a dynamic pivot, a table function served by a
-/// database connection), the row is marked <see cref="Row.MayLackColumns"/> and an unknown name
-/// on it reads NULL.
+/// header or catalog, a <c>PIVOT</c> or <c>MATCH_RECOGNIZE</c> worked out from its clause, or the
+/// names any table function or table operator returned when this statement read it (a database
+/// connection's table function, a dynamic pivot). When none is known, the row is marked
+/// <see cref="Row.MayLackColumns"/> and an unknown name on it reads NULL.
 /// </para>
 /// </summary>
 internal sealed class OuterJoinShape
@@ -41,6 +42,32 @@ internal sealed class OuterJoinShape
         }
         return names;
     }
+
+    /// <summary>
+    /// Each name, bare and qualified by every name the side answers to: its alias (or table name)
+    /// and the alias of each table operator on it (<c>PIVOT (...) AS p</c>, <c>MATCH_RECOGNIZE (...)
+    /// AS m</c>), which the parser keeps on the operator, not on the table reference.
+    /// </summary>
+    public static List<string> Qualified(IEnumerable<string> columns, TableReference table)
+    {
+        var list = columns as IReadOnlyCollection<string> ?? columns.ToList();
+        var names = Qualified(list, table.Alias ?? table.TableName);
+        foreach (var alias in table.TableOperators.Select(OperatorAlias))
+        {
+            if (string.IsNullOrEmpty(alias) || alias.Equals(table.Alias ?? table.TableName, StringComparison.OrdinalIgnoreCase)) continue;
+            names.AddRange(list.Where(c => !c.Contains('.')).Select(c => $"{alias}.{c}"));
+        }
+        return names;
+    }
+
+    private static string? OperatorAlias(AstNode tableOperator) => tableOperator switch
+    {
+        PivotClause pivot => pivot.Alias,
+        UnpivotClause unpivot => unpivot.Alias,
+        DuckPivotClause duck => duck.Alias,
+        MatchRecognizeClause matchRecognize => matchRecognize.Alias,
+        _ => null,
+    };
 
     /// <summary>True once the right side's column names are known.</summary>
     public bool RightKnown => _right != null;
@@ -114,7 +141,7 @@ internal sealed class OuterJoinShape
         {
             var columns = await DeclaredColumnsAsync(table, context, depth: 0, askSources);
             if (columns == null) return null;
-            names.AddRange(Qualified(columns, table.Alias ?? table.TableName));
+            names.AddRange(Qualified(columns, table));
         }
         return names;
     }
@@ -125,12 +152,15 @@ internal sealed class OuterJoinShape
         if (table.TableOperators.Count == 0) return await SourceColumnsAsync(table, context, depth, askSources);
         if (!askSources) return null;
 
-        // PIVOT and UNPIVOT: the names follow from the source's names and the operator's own list.
+        // What this reference returned when the statement read it: exact, even for a dynamic pivot.
+        if (context.ReturnedColumns(table) is { Count: > 0 } returned) return returned.ToList();
+
+        // PIVOT, UNPIVOT and MATCH_RECOGNIZE: the names follow from the source's names and the clause.
         var columns = await SourceColumnsAsync(table, context, depth, askSources);
         foreach (var tableOperator in table.TableOperators)
         {
             if (columns == null) return null;
-            columns = PivotEngine.DeclaredColumns(columns, tableOperator);
+            columns = await PivotEngine.DeclaredColumnsAsync(columns, tableOperator, context);
         }
         return columns;
     }
@@ -139,9 +169,11 @@ internal sealed class OuterJoinShape
     private static async Task<List<string>?> SourceColumnsAsync(TableReference table, IExecutionContext context, int depth, bool askSources)
     {
         // A table function has to run to say what it returns. It is not run again here: the names
-        // are the ones it returned when this statement ran it, if it ran into memory.
+        // are the ones it returned when this statement read it (with no operators after it).
         if (table.FunctionCall != null)
-            return askSources && context.TableFunctionColumns(table) is { Count: > 0 } returned ? returned.ToList() : null;
+            return askSources && table.TableOperators.Count == 0 && context.ReturnedColumns(table) is { Count: > 0 } returned
+                ? returned.ToList()
+                : null;
         if (table.ValuesRows != null) return null;
         if (table.ColumnAliases is { Count: > 0 }) return table.ColumnAliases;
 

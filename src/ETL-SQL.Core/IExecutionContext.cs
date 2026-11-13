@@ -73,11 +73,12 @@ public interface IQueryContext
     Task<IDataSource> ResolveReadSourceAsync(TableReference table) => ResolveDataSourceAsync(table);
 
     /// <summary>
-    /// The column names a table function returned when this table reference last ran it, or null
-    /// when it has not run here. An outer join asks this for a side that returned no rows, because
-    /// running the function again to learn its columns could repeat a side effect.
+    /// The column names a table function or table operator returned, after its operators, when this
+    /// table reference was last read, or null when it has not been read here. An outer join asks
+    /// this for a side that returned no rows, because running a function again to learn its columns
+    /// could repeat a side effect, and a dynamic pivot's names depend on the rows it read.
     /// </summary>
-    IReadOnlyList<string>? TableFunctionColumns(TableReference table) => null;
+    IReadOnlyList<string>? ReturnedColumns(TableReference table) => null;
     IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table);
     IAsyncEnumerable<DataTable> EvaluateForClause(IAsyncEnumerable<DataTable> batches, ForClause forClause);
     IAsyncEnumerable<DataTable> InterceptProgress(IAsyncEnumerable<DataTable> chunks);

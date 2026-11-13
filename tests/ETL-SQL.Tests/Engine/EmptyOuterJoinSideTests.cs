@@ -112,6 +112,82 @@ public sealed class EmptyOuterJoinSideTests
         });
     }
 
+    // The sides whose names depend on what they read (SQ03): a pivot whose values are a variable,
+    // and MATCH_RECOGNIZE over no rows or with no match. Its names answer to its own alias.
+    private const string VariablePivot = "(SELECT id, k, x FROM #e) s PIVOT (MAX(x) FOR k IN (@q)) AS p ON 1 = 1";
+    private const string MatchNoRows =
+        "#e MATCH_RECOGNIZE (ORDER BY id MEASURES A.x AS ax ONE ROW PER MATCH PATTERN (A) DEFINE A AS A.x > 0) AS s ON 1 = 1";
+    private const string MatchNoMatch =
+        "#m MATCH_RECOGNIZE (ORDER BY id MEASURES A.x AS ax ALL ROWS PER MATCH PATTERN (A) DEFINE A AS A.x > 100) AS s ON 1 = 1";
+    private const string DynamicSetup =
+        "DECLARE @q VARCHAR = 'q1'; CREATE TABLE #m (id INT, x INT); INSERT INTO #m VALUES (1, 5); ";
+
+    [Theory]
+    [InlineData("s.bogus", VariablePivot)]
+    [InlineData("s.axx", MatchNoRows)]
+    // ONE ROW PER MATCH returns the measures only.
+    [InlineData("s.x", MatchNoRows)]
+    [InlineData("s.axx", MatchNoMatch)]
+    public async Task AMisspeltNameOnAnEmptyRowDependentSideFails(string column, string rightSide)
+    {
+        var failure = await Assert.ThrowsAnyAsync<Exception>(() =>
+            Run(Setup + DynamicSetup + $"SELECT {column} AS v FROM (SELECT 1 AS id) o LEFT JOIN {rightSide};"));
+        Assert.Contains($"Unknown column '{column}'", failure.ToString());
+    }
+
+    [Theory]
+    [InlineData("s.q1", VariablePivot)]
+    [InlineData("p.q1", VariablePivot)]
+    [InlineData("s.ax", MatchNoRows)]
+    [InlineData("s.ax", MatchNoMatch)]
+    // ALL ROWS PER MATCH returns the source's columns and the match columns too.
+    [InlineData("s.x", MatchNoMatch)]
+    [InlineData("s.CLASSIFIER", MatchNoMatch)]
+    public async Task ARealColumnOfAnEmptyRowDependentSideReadsNull(string column, string rightSide)
+    {
+        var rows = await Run(Setup + DynamicSetup + $"SELECT o.id AS id, {column} AS v FROM (SELECT 1 AS id) o LEFT JOIN {rightSide};");
+        Assert.True(Assert.Single(rows)["v"] is null or DBNull);
+    }
+
+    [Theory]
+    [InlineData("s.axx", false)]
+    [InlineData("s.ax", true)]
+    public async Task AnEmptyMatchRecognizeOnTheLeftNamesItsColumns(string column, bool known)
+    {
+        var sql = Setup + $"SELECT {column} AS v FROM #e MATCH_RECOGNIZE (ORDER BY id MEASURES A.x AS ax ONE ROW PER MATCH PATTERN (A) DEFINE A AS A.x > 0) AS s RIGHT JOIN (SELECT 1 AS id) r ON 1 = 1;";
+        if (known)
+            Assert.True(Assert.Single(await Run(sql))["v"] is null or DBNull);
+        else
+            Assert.Contains($"Unknown column '{column}'", (await Assert.ThrowsAnyAsync<Exception>(() => Run(sql))).ToString());
+    }
+
+    [Theory]
+    [InlineData("LEFT", "j.kye", false)]
+    [InlineData("LEFT", "j.key", true)]
+    [InlineData("RIGHT", "j.kye", false)]
+    [InlineData("RIGHT", "j.key", true)]
+    public async Task AnEmptyDatabaseTableFunctionNamesItsColumns(string side, string column, bool known)
+    {
+        var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"sq03-fn-{Guid.NewGuid():N}.db");
+        try
+        {
+            var connection = $"CREATE CONNECTION db AS SQLITE(DATABASE='{path.Replace('\\', '/')}'); ";
+            // SQLite's json_each is a table function: an empty array returns no rows.
+            var sql = side == "LEFT"
+                ? connection + $"SELECT {column} AS v FROM (SELECT 1 AS id) o LEFT JOIN db.json_each('[]') j ON 1 = 1;"
+                : connection + $"SELECT {column} AS v FROM db.json_each('[]') j RIGHT JOIN (SELECT 1 AS id) o ON 1 = 1;";
+            if (known)
+                Assert.True(Assert.Single(await Run(sql))["v"] is null or DBNull);
+            else
+                Assert.Contains($"Unknown column '{column}'", (await Assert.ThrowsAnyAsync<Exception>(() => Run(sql))).ToString());
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            System.IO.File.Delete(path);
+        }
+    }
+
     [Fact]
     public async Task ASideWithRowsIsNotAskedAgain()
     {
