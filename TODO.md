@@ -8,7 +8,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 14 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 15 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -106,6 +106,16 @@ sample on a shared runner.
   as `DateTime`, so it cannot tell a date from a midnight timestamp. Fix needs a date-only runtime
   value (or a type tag) through comparisons, date arithmetic, spill and Arrow storage, connectors
   and `TypeConverter.ToInvariantText`. Reports already drop a midnight time (`ReportValueText`).
+
+### 5. Dependency alerts
+
+- [ ] **Triage the 23 open Dependabot alerts** (7 high, 13 moderate, 3 low; listed 2026-11-13 on
+  `main`). All are npm: `vite`, `@vitest/mocker`, `undici` and `serialize-javascript` in
+  `src/etl-sql-vscode` and `src/etl-sql-vscode/ui`, and `@azure/msal-node` and `qs` in
+  `scripts/vsix`. Most are development-only (test runner, packaging), so many may not apply to
+  shipped code. For each: upgrade if a fixed version exists, or dismiss with the reason (for
+  example "dev-only, not in the VSIX"). The three `vite` alerts in `ui` are marked runtime;
+  check whether the built UI bundles any of it. Check against the release branch, not only `main`.
 
 ---
 
