@@ -148,6 +148,9 @@ public sealed class SandboxAdmissionReconciliationServiceTests : IDisposable
 
         await Task.Delay(400); // flaky-delay-ok: ages the abandoned entry past the 200ms horizon below
         // The live waiter polls; the pool is full so it stays queued, but its claim is now current.
+        // Sweep as of the moment before that poll: the live claim cannot be older than this, and the
+        // abandoned entry is at least 400ms older, so a runner stall cannot age the live waiter out.
+        var sweptAt = DateTimeOffset.UtcNow;
         Assert.Null(await ledger.TryActivateAsync("live", "node-live", 1, TimeSpan.FromMinutes(5)));
 
         var service = new SandboxAdmissionReconciliationService(
@@ -155,7 +158,7 @@ public sealed class SandboxAdmissionReconciliationServiceTests : IDisposable
             new StubRuntime(new Dictionary<string, SandboxRuntimeReconciliationState>()),
             ["shared-hardened"],
             TimeSpan.FromMilliseconds(200));
-        var result = await service.RunOnceAsync(DateTimeOffset.UtcNow);
+        var result = await service.RunOnceAsync(sweptAt);
 
         Assert.Equal(1, result.AbandonedQueuedCancelled);
         Assert.Equal(SandboxAdmissionState.Cancelled, (await ledger.ReadAsync("abandoned"))!.State);
