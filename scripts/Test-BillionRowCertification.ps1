@@ -12,7 +12,7 @@ param(
     [string]$Scenario = 'All',
     [ValidateRange(1000, 1000000000)]
     [long]$Rows = 1000000000,
-    [string]$OutDir = '.\certification-results\billion-row-operator-certification',
+    [string]$OutDir = './certification-results/billion-row-operator-certification',
     [double]$MemoryBoundMB = 16384,
     [int]$MemoryGrantMB = 8192,
     [ValidateRange(1000, 1000000)]

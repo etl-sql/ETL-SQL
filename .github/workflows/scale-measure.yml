@@ -1,0 +1,165 @@
+# Measures the billion-row operator scenarios (scripts/Test-BillionRowCertification.ps1) on a
+# hosted runner, one scenario per job, to size their move off the owner's workstation (release
+# reliability W8). Records peak memory, spill disk and time; throughput is not gated
+# (MinimumRowsPerSecond 0). Never release evidence.
+#
+# Push a branch named scale-measure/<anything> to run it with the defaults below, or dispatch it
+# once this file is on the default branch.
+name: Scale Measurement
+
+on:
+  push:
+    branches: [ 'scale-measure/**' ]
+  workflow_dispatch:
+    inputs:
+      rows:
+        description: Rows per scenario (the join reads this many on each side)
+        type: string
+        default: '100000000'
+      memory_bound_mb:
+        description: Peak process memory the scenarios must stay under
+        type: string
+        default: '4096'
+      memory_grant_mb:
+        description: Operator memory grant before spilling
+        type: string
+        default: '2048'
+      runner:
+        description: Hosted runner image
+        type: choice
+        options: ['ubuntu-latest', 'windows-latest']
+        default: 'ubuntu-latest'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scale-measure-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ROWS: ${{ inputs.rows || '100000000' }}
+  MEMORY_BOUND_MB: ${{ inputs.memory_bound_mb || '4096' }}
+  MEMORY_GRANT_MB: ${{ inputs.memory_grant_mb || '2048' }}
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+
+jobs:
+  measure:
+    name: Measure ${{ matrix.scenario }}
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - ColumnarCore
+          - TempTableRoundTrip
+          - AllocProfile
+          - ExternalSort
+          - ExternalJoin
+          - HighCardinalityGrouping
+          - EligibleWindowRowNumber
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 15
+
+      # Spilling scenarios need tens of GB. The Ubuntu image ships toolchains this job never uses.
+      - name: Free disk space
+        if: runner.os == 'Linux'
+        timeout-minutes: 10
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h /
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install browser compiler
+        timeout-minutes: 8
+        run: npm ci --prefix scripts/typecheck
+      - name: Prepare browser assets
+        timeout-minutes: 8
+        run: node scripts/sync-assets.js
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        timeout-minutes: 12
+        run: dotnet restore ETL-SQL.slnx
+      - name: Build
+        timeout-minutes: 20
+        run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
+
+      - name: Run ${{ matrix.scenario }}
+        shell: pwsh
+        timeout-minutes: 150
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+        run: |
+          $out = "release-validation/scale-measure/$env:SCENARIO"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $temp = [IO.Path]::GetTempPath()
+          $drive = [IO.DriveInfo]::GetDrives() |
+              Where-Object { $_.IsReady -and $temp.StartsWith($_.RootDirectory.FullName, [StringComparison]::OrdinalIgnoreCase) } |
+              Sort-Object { $_.RootDirectory.FullName.Length } -Descending | Select-Object -First 1
+          $hostInfo = [ordered]@{
+              scenario = $env:SCENARIO
+              rows = [long]$env:ROWS
+              memoryBoundMB = [int]$env:MEMORY_BOUND_MB
+              memoryGrantMB = [int]$env:MEMORY_GRANT_MB
+              runner = "$env:RUNNER_OS $env:ImageOS"
+              processors = [Environment]::ProcessorCount
+              totalMemoryGB = [math]::Round([GC]::GetGCMemoryInfo().TotalAvailableMemoryBytes / 1GB, 1)
+              tempPath = $temp
+              tempVolume = $drive.RootDirectory.FullName
+              freeDiskGBAtStart = [math]::Round($drive.AvailableFreeSpace / 1GB, 1)
+          }
+          $hostInfo | ConvertTo-Json | Set-Content "$out/host.json"
+          $hostInfo | Format-List | Out-String | Write-Host
+
+          # Sample free spill disk every 10 s; the low point is the scenario's peak spill use.
+          $sampler = Start-ThreadJob -ArgumentList $drive.RootDirectory.FullName, "$out/disk-samples.csv" -ScriptBlock {
+              param($root, $file)
+              'utc,freeGB' | Set-Content $file
+              while ($true) {
+                  $d = [IO.DriveInfo]::new($root)
+                  "{0:o},{1:N2}" -f [DateTime]::UtcNow, ($d.AvailableFreeSpace / 1GB) | Add-Content $file
+                  Start-Sleep -Seconds 10
+              }
+          }
+          $started = Get-Date
+          $failed = $false
+          try {
+              ./scripts/Test-BillionRowCertification.ps1 -Scenario $env:SCENARIO -Rows ([long]$env:ROWS) `
+                  -MemoryBoundMB ([double]$env:MEMORY_BOUND_MB) -MemoryGrantMB ([int]$env:MEMORY_GRANT_MB) `
+                  -MinimumRowsPerSecond 0 -MinimumFreeDiskGB 1 -SkipBuild -OutDir "$out/run"
+          } catch {
+              $failed = $true
+              Write-Host "::error::$($_.Exception.Message)"
+          } finally {
+              Stop-Job $sampler; Remove-Job $sampler -Force
+          }
+          $samples = Import-Csv "$out/disk-samples.csv" | ForEach-Object { [double]$_.freeGB }
+          $summary = [ordered]@{
+              scenario = $env:SCENARIO
+              rows = [long]$env:ROWS
+              passed = -not $failed
+              elapsedMinutes = [math]::Round(((Get-Date) - $started).TotalMinutes, 1)
+              peakSpillDiskGB = [math]::Round($hostInfo.freeDiskGBAtStart - ($samples | Measure-Object -Minimum).Minimum, 1)
+          }
+          $summary | ConvertTo-Json | Set-Content "$out/summary.json"
+          $summary | Format-List | Out-String | Write-Host
+          "### $env:SCENARIO`n`n| Rows | Passed | Minutes | Peak spill disk (GB) |`n| ---: | :---: | ---: | ---: |`n| $($summary.rows) | $($summary.passed) | $($summary.elapsedMinutes) | $($summary.peakSpillDiskGB) |" |
+              Add-Content $env:GITHUB_STEP_SUMMARY
+          if ($failed) { exit 1 }
+
+      - name: Upload measurements
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scale-measure-${{ matrix.scenario }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/scale-measure/
+          if-no-files-found: warn
+          retention-days: 30

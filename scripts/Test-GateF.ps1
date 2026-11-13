@@ -17,7 +17,7 @@ param(
     [string]$Scenario = 'All',
     [ValidateRange(1000, 1000000000)]
     [long]$Rows = 1000000000,
-    [string]$OutDir = '.\certification-results\gate-f-1b',
+    [string]$OutDir = './certification-results/gate-f-1b',
     [double]$MemoryBoundMB = 16384,
     [int]$MemoryGrantMB = 8192,
     [ValidateRange(1000, 1000000)]
@@ -338,13 +338,19 @@ function Get-CurrentResult([string]$resultPath, [string]$keyPath) {
 
 try {
     $tempRoot = [System.IO.Path]::GetTempPath()
-    $tempDriveName = [System.IO.Path]::GetPathRoot($tempRoot).TrimEnd(':','\')
-    $tempDrive = Get-PSDrive -Name $tempDriveName
-    $freeDiskGB = $tempDrive.Free / 1GB
+    # The volume holding the temp path: the drive letter on Windows, the longest matching mount
+    # point on Linux and macOS (hosted runners run this too).
+    $tempDrive = [System.IO.DriveInfo]::GetDrives() |
+        Where-Object { $_.IsReady -and $tempRoot.StartsWith($_.RootDirectory.FullName, [StringComparison]::OrdinalIgnoreCase) } |
+        Sort-Object { $_.RootDirectory.FullName.Length } -Descending |
+        Select-Object -First 1
+    if (-not $tempDrive) { throw "Cannot find the volume that holds the temp path $tempRoot." }
+    $tempDriveRoot = $tempDrive.RootDirectory.FullName
+    $freeDiskGB = $tempDrive.AvailableFreeSpace / 1GB
     if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip' -or $Scenario -eq 'AllocProfile' -or $Scenario -eq 'ExternalSort' -or $Scenario -eq 'ExternalJoin' -or $Scenario -eq 'HighCardinalityGrouping' -or $Scenario -eq 'EligibleWindowRowNumber') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
         $message = ("Gate F requires at least {0:N1} GB free on spill drive {1}; only {2:N1} GB is available. " +
             "Free disk space or override -MinimumFreeDiskGB only with a justified measured estimate.") -f `
-            $MinimumFreeDiskGB, $tempDrive.Root, $freeDiskGB
+            $MinimumFreeDiskGB, $tempDriveRoot, $freeDiskGB
         throw $message
     }
 
@@ -396,7 +402,7 @@ try {
         } else { 0 }
     }
     $scenarioManifests = Get-GateFScenarioManifests
-    $admissionResults = Get-GateFAdmissionResults $scenarioManifests $freeDiskGB $tempDrive.Root
+    $admissionResults = Get-GateFAdmissionResults $scenarioManifests $freeDiskGB $tempDriveRoot
 
     $runManifest = [ordered]@{
         schemaVersion = 2
@@ -413,8 +419,8 @@ try {
         rows = $Rows
         requestedScenario = $Scenario
         spillRoot = $tempRoot
-        spillDrive = $tempDrive.Root
-        spillDriveFreeBytesAtStart = [long]$tempDrive.Free
+        spillDrive = $tempDriveRoot
+        spillDriveFreeBytesAtStart = [long]$tempDrive.AvailableFreeSpace
         host = $hostProfile
         scenarioManifests = $scenarioManifests
         admission = $admissionResults
@@ -440,7 +446,7 @@ try {
             $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_OUTPUT = $result
-            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            $testProject = Join-Path $repoRoot 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'
             Invoke-LoggedProcess 'ColumnarCore' 'dotnet' @(
                 'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
                 '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.NativeScanFilterProjectionAndLowCardinalityAggregateStayBounded',
@@ -522,7 +528,7 @@ try {
             $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_EXTERNAL_SORT_OUTPUT = $result
-            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            $testProject = Join-Path $repoRoot 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'
             Invoke-LoggedProcess 'ExternalSort' 'dotnet' @(
                 'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
                 '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.ExternalSortMultiKeyCandidateStreamsAndValidatesOrder',
@@ -553,7 +559,7 @@ try {
             $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_EXTERNAL_JOIN_OUTPUT = $result
-            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            $testProject = Join-Path $repoRoot 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'
             Invoke-LoggedProcess 'ExternalJoin' 'dotnet' @(
                 'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
                 '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.ExternalEquiJoinCandidateStreamsAndValidatesControlledOverlap',
@@ -584,7 +590,7 @@ try {
             $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_HIGH_CARD_GROUP_OUTPUT = $result
-            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            $testProject = Join-Path $repoRoot 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'
             Invoke-LoggedProcess 'HighCardinalityGrouping' 'dotnet' @(
                 'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
                 '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.HighCardinalityGroupingCandidateStreamsAndValidatesAggregateTotals',
@@ -616,7 +622,7 @@ try {
             $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_ELIGIBLE_WINDOW_OUTPUT = $result
-            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            $testProject = Join-Path $repoRoot 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'
             Invoke-LoggedProcess 'EligibleWindowRowNumber' 'dotnet' @(
                 'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
                 '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.EligibleWindowRowNumberCandidateStreamsAndValidatesPartitions',
@@ -649,11 +655,11 @@ try {
         admission = $admissionResults
         columnarCore = Get-CurrentResult (Join-Path $outRoot 'columnar-core.json') (Join-Path $outRoot 'columnar-core.key')
         tempTableRoundTrip = & {
-            $certReport = Get-CurrentResult (Join-Path $outRoot 'temp-table-round-trip\cert-report.json') (Join-Path $outRoot 'temp-table-round-trip.key')
+            $certReport = Get-CurrentResult (Join-Path $outRoot 'temp-table-round-trip/cert-report.json') (Join-Path $outRoot 'temp-table-round-trip.key')
             if ($certReport) { @($certReport.scenarios)[0] } else { $null }
         }
         allocProfile = Get-CurrentResult `
-            (Join-Path $outRoot ("alloc-profile\profile-{0}rows-{1}.json" -f $Rows, (git -C $repoRoot rev-parse --short HEAD).Trim())) `
+            (Join-Path $outRoot ("alloc-profile/profile-{0}rows-{1}.json" -f $Rows, (git -C $repoRoot rev-parse --short HEAD).Trim())) `
             (Join-Path $outRoot 'alloc-profile.key')
         externalSort = Get-CurrentResult (Join-Path $outRoot 'external-sort.json') (Join-Path $outRoot 'external-sort.key')
         externalJoin = Get-CurrentResult (Join-Path $outRoot 'external-join.json') (Join-Path $outRoot 'external-join.key')
