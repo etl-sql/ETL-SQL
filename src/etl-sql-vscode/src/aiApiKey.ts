@@ -1,20 +1,22 @@
 import * as vscode from 'vscode';
-import { log } from './logger';
 
 /** SecretStorage key for the AI provider API key. */
 export const AI_API_KEY_SECRET = 'etlsql.ai.apiKey';
+
+export const USE_SETTINGS_KEY = 'Use the settings key';
+export const KEEP_STORED_KEY = 'Keep the stored key';
+export const REMOVE_WORKSPACE_KEY = 'Remove it';
 
 /**
  * Moves a plain-text `etlsql.ai.apiKey` from user settings into SecretStorage and removes it from
  * user settings, which Settings Sync copies across machines.
  *
  * Only the user scope is read. The setting is application-scoped, so a workspace or folder
- * `settings.json` (which comes with a cloned repository) can neither supply the key nor be
- * edited by this migration.
+ * `settings.json` (which comes with a cloned repository) cannot supply the key; see
+ * {@link warnWorkspaceAiApiKey}.
  *
- * The setting is removed only when SecretStorage then holds that same key. When SecretStorage
- * already holds a different key, the setting is left alone and a warning is logged, so neither
- * key is lost.
+ * When SecretStorage already holds a different key, the user chooses which to keep and the setting
+ * is removed either way. Dismissing the question leaves both, and it is asked again next time.
  */
 export async function migrateAiApiKeySetting(context: vscode.ExtensionContext): Promise<boolean> {
     const config = vscode.workspace.getConfiguration('etlsql');
@@ -27,11 +29,55 @@ export async function migrateAiApiKeySetting(context: vscode.ExtensionContext): 
     if (!stored) {
         await context.secrets.store(AI_API_KEY_SECRET, userKey);
     } else if (stored !== userKey) {
-        log('etlsql.ai.apiKey in user settings differs from the stored key and was left in place. '
-            + 'Run "ETL-SQL: Set AI API Key" to choose one; it removes the setting.', 'warn');
-        return false;
+        const choice = await vscode.window.showWarningMessage(
+            'ETL-SQL: etlsql.ai.apiKey in user settings differs from the AI API key in VS Code secret storage. '
+            + 'Which key should ETL-SQL keep? The settings copy is removed either way.',
+            USE_SETTINGS_KEY,
+            KEEP_STORED_KEY
+        );
+        if (choice === undefined) {
+            return false;
+        }
+        if (choice === USE_SETTINGS_KEY) {
+            await context.secrets.store(AI_API_KEY_SECRET, userKey);
+        }
     }
     await config.update('ai.apiKey', undefined, vscode.ConfigurationTarget.Global);
+    return true;
+}
+
+/**
+ * Warns when a workspace or folder `settings.json` holds `etlsql.ai.apiKey`. ETL-SQL ignores that
+ * value, but it is a plain-text key that may be committed. The file belongs to the repository, so
+ * it is edited only when the user agrees, and the key is never adopted.
+ */
+export async function warnWorkspaceAiApiKey(): Promise<boolean> {
+    const holding: Array<() => Thenable<void>> = [];
+    const workspaceConfig = vscode.workspace.getConfiguration('etlsql');
+    if (workspaceConfig.inspect<string>('ai.apiKey')?.workspaceValue?.trim()) {
+        holding.push(() => workspaceConfig.update('ai.apiKey', undefined, vscode.ConfigurationTarget.Workspace));
+    }
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+        const folderConfig = vscode.workspace.getConfiguration('etlsql', folder.uri);
+        if (folderConfig.inspect<string>('ai.apiKey')?.workspaceFolderValue?.trim()) {
+            holding.push(() => folderConfig.update('ai.apiKey', undefined, vscode.ConfigurationTarget.WorkspaceFolder));
+        }
+    }
+    if (holding.length === 0) {
+        return false;
+    }
+
+    const choice = await vscode.window.showWarningMessage(
+        'ETL-SQL: this workspace\'s settings hold etlsql.ai.apiKey in plain text. ETL-SQL ignores it '
+        + '(set your key with "ETL-SQL: Set AI API Key"). Remove it, and rotate the key if the file was shared or committed.',
+        REMOVE_WORKSPACE_KEY
+    );
+    if (choice !== REMOVE_WORKSPACE_KEY) {
+        return false;
+    }
+    for (const remove of holding) {
+        await remove();
+    }
     return true;
 }
 

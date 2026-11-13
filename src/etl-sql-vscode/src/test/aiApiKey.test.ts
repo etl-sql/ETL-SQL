@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as vscode from 'vscode';
-import { AI_API_KEY_SECRET, getAiApiKey, migrateAiApiKeySetting, setAiApiKeyCommand } from '../aiApiKey';
+import {
+    AI_API_KEY_SECRET, KEEP_STORED_KEY, REMOVE_WORKSPACE_KEY, USE_SETTINGS_KEY,
+    getAiApiKey, migrateAiApiKeySetting, setAiApiKeyCommand, warnWorkspaceAiApiKey
+} from '../aiApiKey';
 
 type Scopes = { globalValue?: string; workspaceValue?: string; workspaceFolderValue?: string };
 
@@ -9,9 +12,11 @@ describe('aiApiKey', () => {
     let scopes: Scopes;
     let context: vscode.ExtensionContext;
     let update: ReturnType<typeof vi.fn>;
+    const warnings = vscode.window.showWarningMessage as ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
         vi.clearAllMocks();
+        (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = undefined;
         secrets = new Map();
         scopes = {};
         update = vi.fn().mockImplementation((_key: string, value: unknown, target: vscode.ConfigurationTarget) => {
@@ -75,12 +80,52 @@ describe('aiApiKey', () => {
         expect(scopes.globalValue).toBeUndefined();
     });
 
-    it('keeps both keys when the user setting differs from the stored key', async () => {
+    it('stores the settings key and removes the setting when the user picks it over the stored key', async () => {
         secrets.set(AI_API_KEY_SECRET, 'sk-stored');
         scopes.globalValue = 'sk-other';
+        warnings.mockResolvedValue(USE_SETTINGS_KEY);
+        expect(await migrateAiApiKeySetting(context)).toBe(true);
+        expect(secrets.get(AI_API_KEY_SECRET)).toBe('sk-other');
+        expect(scopes.globalValue).toBeUndefined();
+    });
+
+    it('keeps the stored key and still removes the setting when the user picks the stored key', async () => {
+        secrets.set(AI_API_KEY_SECRET, 'sk-stored');
+        scopes.globalValue = 'sk-other';
+        warnings.mockResolvedValue(KEEP_STORED_KEY);
+        expect(await migrateAiApiKeySetting(context)).toBe(true);
+        expect(secrets.get(AI_API_KEY_SECRET)).toBe('sk-stored');
+        expect(scopes.globalValue).toBeUndefined();
+    });
+
+    it('loses neither key when the user dismisses the question', async () => {
+        secrets.set(AI_API_KEY_SECRET, 'sk-stored');
+        scopes.globalValue = 'sk-other';
+        warnings.mockResolvedValue(undefined);
         expect(await migrateAiApiKeySetting(context)).toBe(false);
         expect(secrets.get(AI_API_KEY_SECRET)).toBe('sk-stored');
         expect(scopes.globalValue).toBe('sk-other');
+    });
+
+    it('removes workspace and folder keys only with consent, and never adopts them', async () => {
+        scopes.workspaceValue = 'sk-workspace';
+        scopes.workspaceFolderValue = 'sk-folder';
+        (vscode.workspace as { workspaceFolders: unknown }).workspaceFolders = [{ uri: 'folder' }];
+
+        warnings.mockResolvedValue(undefined);
+        expect(await warnWorkspaceAiApiKey()).toBe(false);
+        expect(update).not.toHaveBeenCalled();
+
+        warnings.mockResolvedValue(REMOVE_WORKSPACE_KEY);
+        expect(await warnWorkspaceAiApiKey()).toBe(true);
+        expect(scopes).toEqual({});
+        expect(secrets.size).toBe(0);
+    });
+
+    it('says nothing when no workspace holds a key', async () => {
+        scopes.globalValue = 'sk-user';
+        expect(await warnWorkspaceAiApiKey()).toBe(false);
+        expect(warnings).not.toHaveBeenCalled();
     });
 
     it('ignores a blank setting', async () => {

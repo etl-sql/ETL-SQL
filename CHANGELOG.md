@@ -18,8 +18,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   text in `settings.json`, which Settings Sync copies to every machine, and a workspace
   `.vscode/settings.json` from a cloned repository could supply it. Set the key with **ETL-SQL:
   Set AI API Key**; an empty entry removes it. A key in user settings is moved to secret storage
-  when the extension starts and removed from them; a workspace or folder value is ignored (the
-  setting is now user-only) and deprecated. **Security.**
+  when the extension starts and removed from them (if secret storage already holds a different
+  key, you choose which to keep). A workspace or folder value is ignored, since the setting is now
+  user-only; the extension warns about it and removes it if you agree. The setting is deprecated.
+  **Security.**
 - Check the machine before the `integration`, `perf` and `benchmarks` lanes of `test-lane.ps1`
   (release reliability W7). A lane on a machine without Docker, the ODBC driver, Node.js 22,
   enough free memory or (for timing) an idle processor stops in seconds and says why. CI skips

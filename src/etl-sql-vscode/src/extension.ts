@@ -29,7 +29,7 @@ import { shadowCopyExecutable as shadowCopyToStorage, cleanupShadowDirectory as 
 import { sanitizeVariableForClient, sanitizeVariablesForClient } from './clientSanitizer';
 import { ETL_DOCUMENT_SELECTOR, ETL_FILE_WATCH_GLOB } from './lspSelectors';
 import { generateScriptFromSpec } from './generateScriptFromSpec';
-import { migrateAiApiKeySetting, setAiApiKeyCommand } from './aiApiKey';
+import { migrateAiApiKeySetting, setAiApiKeyCommand, warnWorkspaceAiApiKey } from './aiApiKey';
 import { markPolicySave, consumePolicySave } from './saveGuard';
 
 let client: LanguageClient;
@@ -338,6 +338,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Move a plain-text etlsql.ai.apiKey (synced by Settings Sync) into SecretStorage.
     migrateAiApiKeySetting(context).catch(err => logger.log(`AI API key migration failed: ${err}`, 'warn'));
+    warnWorkspaceAiApiKey().catch(err => logger.log(`AI API key workspace check failed: ${err}`, 'warn'));
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.runScript', () => {
         runEtlSql(context);
