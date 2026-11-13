@@ -322,6 +322,113 @@ Select individual IDs into `TODO.md` when scheduling.
 in `SELECT` expressions and table-wide `TRANSFORM ... USING CLEAN`; and positive + `statement error`
 SLT tests in `tests/slt_data/transform.test` pass.
 
+### Standard Library — File and Path Function Completeness
+
+**Status:** Exploring  
+**Horizon:** Later  
+**Authoritative design:** none yet; [File and path functions](docs/reference/functions/file-path/README.md)
+is the reference contract.
+
+**Problem and intended outcome:** The file and path functions cover existence, size, last write time,
+hash, listing, and three path parts. Scripts that move or archive files still need workarounds for
+common needs: the creation time, the name without its extension, and a changed extension. The
+`DIRECTORY` connector already exposes `CreationTime` and `IsReadOnly` as columns, but no scalar
+function returns them. Remote listings (`REMOTE_FILE_LIST`) return only `Name`, `FullPath`, `Size`,
+`LastModified`, and `IsDirectory`, and the only remote scalar is `REMOTE_FILE_EXISTS`. The outcome:
+a script author finds the obvious file function without writing string surgery.
+
+**Why later:** Every gap has a working alternative (`SUBSTRING`/`REPLACE` on `PATH_FILENAME`, or a
+`SELECT` over `FILE_LIST`). None blocks a profile or launch claim.
+
+**Boundaries:**
+- Local functions go through `AuthorizeLocalPath`; remote functions go through the connection's
+  `IRemoteFileSystem`. No new path-policy rules.
+- Pure path functions (`PATH_*`) do no I/O and do not resolve or authorize the path.
+- Names follow the existing `FILE_*`, `PATH_*`, `DIRECTORY_*`, `REMOTE_FILE_*` families. No aliases.
+- Remote metadata a protocol does not provide (for example SFTP creation time) returns `NULL`,
+  not an error.
+- **Every function in this entry ships with documentation.** Each gets its own reference page built
+  from the [function reference template](docs/templates/function-reference-template.md) and the
+  [help and snippet standards](docs/architecture/standards/help-and-snippet-standards.md): full
+  signature, parameters, return type, `NULL` behavior, a copy-pasteable example, and a
+  `References` section. The page, its hub link, the `RegisterWithHelp` text, and the
+  `LanguageMetadata` entry land in the same change as the function. No function merges without
+  them.
+
+**Dependencies:** none for the local functions. Remote size and modified time reuse
+`IRemoteFileSystem.ListFilesAsync`; a remote creation time needs a new metadata field and is
+out of this entry unless a connector exposes it.
+
+**Backlog (select IDs, not the family):**
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| FN01 | **`PATH_FILENAME_NO_EXT(path)`.** Returns the file name without its extension (`orders.csv` → `orders`). Signature, return type, and example in the reference; `LanguageMetadata` entry. | — | S |
+| FN02 | **`FILE_CREATED(path)`.** Returns the creation timestamp as a `DATETIME`, the counterpart of `FILE_MODIFIED`. Same authorization and error behavior as `FILE_MODIFIED`. | — | S |
+| FN03 | **`PATH_CHANGE_EXTENSION(path, ext)`.** Replaces or removes the extension; accepts `'.bak'` and `'bak'`. | — | S |
+| FN04 | **`PATH_ROOT`, `PATH_IS_ABSOLUTE`, `PATH_NORMALIZE`.** Pure string functions. `PATH_NORMALIZE` must match `CAST(... AS PATH)`; decide whether it is needed at all. | FN01 | S |
+| FN05 | **`FILE_READONLY(path)` and `FILE_ACCESSED(path)`.** Read-only flag and last access time. Confirm the `DIRECTORY` connector columns and the functions agree. | FN02 | S |
+| FN06 | **`DIRECTORY_SIZE` and `DIRECTORY_FILE_COUNT`.** Optional `recursive` flag like `FILE_LIST`. Honors the file-operation and recursion limits in the Zero-Trust guardrails. | — | S |
+| FN07 | **`FILE_LINE_COUNT(path [, header_rows])`.** Wanted for flat-file validation (row-count checks before load). `header_rows` is an integer, default `0`, which counts every line. A value of `n` leaves out the first `n` lines, so a one-row header, a multi-row header, or a banner above the data all work. The count never goes below `0` (a file with fewer than `n` lines returns `0`); a negative or non-integer `header_rows` is an error; `NULL` returns `NULL`. Streams the file once, never loads it whole, and honors cancellation. Settle in the first hour: how a trailing newline and a final line without one count, and which line endings (`\n`, `\r\n`, `\r`) are recognized. Same authorization and missing-file behavior as `FILE_SIZE`. | — | S |
+| FN08 | **`REMOTE_FILE_SIZE` and `REMOTE_FILE_MODIFIED`.** Scalar lookups over `ListFilesAsync` for FTP, SFTP, and cloud connections. | — | S |
+| FN09 | **`REMOTE_DIRECTORY_EXISTS`.** `IRemoteFileSystem.DirectoryExistsAsync` exists, but `REMOTE_FILE_EXISTS` is the only registered remote check and its help text claims to cover directories. Decide whether to split or fix the text. | — | S |
+| FN10 | **Remove the duplicate `FILE_EXISTS` / `DIRECTORY_EXISTS` registration.** Both are registered in `FileFunctions.cs` and `StandardFunctions.System.cs`; keep one, and confirm which behavior wins today. | — | S |
+
+**Acceptance evidence:** Each function has a reference page that follows the function reference
+template (signature, parameters, return type, `NULL` behavior, a copy-pasteable example,
+references) and is linked from the file-path hub; a registry test covers every name; `NULL` and missing-file behavior is
+tested and matches its neighbors; and the docs-versus-registry check passes.
+
+### File Operations — `ENCRYPT FILE` / `DECRYPT FILE` Match Their Documentation
+
+**Status:** Accepted  
+**Horizon:** Next  
+**Authoritative design:** none yet; [ENCRYPT / DECRYPT FILE](docs/reference/file-operations/encrypt-file.md)
+is the reference page, and [`ExtensionParser.cs`](src/ETL-SQL.Core/Parser/Components/ExtensionParser.cs)
+and [`FileOperationStatementHandler.cs`](src/ETL-SQL.Engine/Handlers/FileOperationStatementHandler.cs)
+are what runs today.
+
+**Problem and intended outcome:** Checked against source on 2026-11-13. The reference page documents
+`ENCRYPT FILE ... WITH (DELETE_SOURCE, ALGORITHM, KEYFILE, PASSWORD)`. The parser accepts
+`ENCRYPT FILE src TO dest [PASSWORD x | PASSWORD(x)] [KEYFILE x] [PGP_KEY x]
+[WITH (OVERWRITE, DATE_SUFFIX, SUFFIX_SEPARATOR)] [AT conn] [IF EXISTS]`. In `WITH`, any other key is
+parsed and dropped without an error, so `DELETE_SOURCE = ON` does nothing and the plaintext stays on disk.
+`KEYFILE` is an SSH key and `PGP_KEY` is the PGP key, the reverse of what the page says. `ALGORITHM` is
+not read. With no `TO`, the statement does nothing and raises no error, including under `SET WHAT_IF ON`.
+The outcome: the documented statement is the working statement, an option that is not honored is an
+error, and the two-step encrypt or decrypt has the options users expect.
+
+**Why next:** The silent no-ops leave plaintext in places a script author believes it was removed. The
+docs fix alone is small and can ship first.
+
+**Boundaries:**
+- Encrypting on write through a connector (`ENCRYPT = ON`) is separate and already works for
+  `FLATFILE` and `EXCEL`; this entry only documents it (FO07).
+- Compress before encrypt stays the rule; `CompressAfterEncryptRule` is unchanged.
+- No new cryptographic algorithms. Key handling stays in `CryptoUtils`.
+- Any new option must pass `FileSystemPolicyAuthorizer`. Deleting a source goes through the same
+  delete authorization and script-file protections as `DELETE FILE`.
+
+**Dependencies:** none.
+
+**Backlog (select IDs, not the family):**
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| FO01 | **Rewrite `encrypt-file.md` to the real syntax.** Use the clause form (`PASSWORD`, `KEYFILE` for SSH, `PGP_KEY` for PGP), remove `ALGORITHM` and the `WITH` keys the engine ignores until FO03/FO05 land, fix the vendor-drop example so it deletes the plaintext with `DELETE FILE`, and document `ENCRYPT DIRECTORY` / `DECRYPT DIRECTORY` (password only today). `OVERWRITE` defaults to `ON` in the handler; `compress-file.md` says `OFF`, so correct whichever page is wrong. Follow the [function and statement templates](docs/templates/statement-reference-template.md) and every example must run. | — | S |
+| FO02 | **Unknown `WITH` option is an error.** `ParseFileOperationOptions` discards unknown keys. Reject them for every file operation with a message naming the accepted keys, then check the directory-operation parser for the same pattern. Parser, `EbnfConformanceTests`, and a `statement error` test. | — | S |
+| FO03 | **`DELETE_SOURCE = ON \| OFF` (default `OFF`) on `ENCRYPT FILE` and `DECRYPT FILE`.** The source is deleted only after the destination is written and closed, never when the operation fails, and `SET WHAT_IF ON` logs it without deleting. Decide in the same change whether `COMPRESS` and `DECOMPRESS` take it. | FO02 | S |
+| FO04 | **Default destination when `TO` is omitted.** Never encrypt in place and never overwrite the source. `ENCRYPT FILE` writes next to the source with a method suffix appended: `.pgp` for `PGP_KEY`, `.enc` for `PASSWORD`; settle the suffix for an SSH `KEYFILE`. `DECRYPT FILE` with no `TO` removes a recognized suffix (`.pgp`, `.enc`) and raises an error for any other name rather than guessing. An existing destination follows `OVERWRITE`. `WHAT_IF` shows the derived path. | FO02 | S |
+| FO05 | **`ALGORITHM` decision.** `CryptoUtils.EncryptFile` and `DecryptFile` take an optional `HashAlgorithmName` the statement never passes. Decide whether to expose it (and what it controls) or leave it out of the language. The method already follows from the clause given, so `ALGORITHM = 'AES256' \| 'PGP'` as documented is not needed. | — | D |
+| FO06 | **`DECRYPT FILE` failure messages.** Check what a wrong password, a wrong key, and a file that was never encrypted report today; each should name the cause without echoing key material. One test per case. | — | S |
+| FO07 | **Document write-time `COMPRESS` and `ENCRYPT` on connectors.** Confirm which file connectors take both options (`FLATFILE`, `EXCEL`, `AVRO` list them; `JSON`, `XML`, and `PARQUET` call the encryption service), that compress runs before encrypt on write, and that read reverses it. Add the options and an "easy button" example to each connector page, with the mutually exclusive options called out. | — | S |
+| FO08 | **`TO DIRECTORY` for `ENCRYPT`/`DECRYPT` and `COMPRESS`/`DECOMPRESS`.** Today `TO DIRECTORY` and `DATE_SUFFIX` throw for anything but copy, move and rename. Decide whether to allow them; if not, the reference states it. | FO04 | D |
+
+**Acceptance evidence:** Every example on the reference pages runs as written; an unsupported `WITH`
+key fails with a clear error; `DELETE_SOURCE = ON` removes the source only after a successful write and
+not under `WHAT_IF`; an omitted `TO` produces the documented path or error and never alters the
+source; and the tests in `CompressAfterEncryptRuleTests` that omit `TO` still pass.
+
 ## Later Reporting and Presentation Work
 
 ### Reporting & Presentation — Grammar-of-Graphics Semantic Extensions
