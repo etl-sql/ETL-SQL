@@ -199,7 +199,7 @@ internal sealed class ExternalDistinctEngine
         {
             names[partition] = $"distinct_d{depth}_{operationId}_{partition}.tmp";
             tempFiles.Add(names[partition]);
-            writers[partition] = await _context.SpillStore.CreateWriterAsync(names[partition]);
+            writers[partition] = await _context.SpillStore.CreateWriterAsync(names[partition], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
         }
 
         try
@@ -340,7 +340,7 @@ internal sealed class ExternalDistinctEngine
             {
                 names[i] = $"distinct_d{depth}_{operationId}_{i}.tmp";
                 tempFiles.Add(names[i]);
-                writers[i] = await _context.SpillStore.CreateWriterAsync(names[i]);
+                writers[i] = await _context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, partitionCount));
             }
 
             await foreach (var row in source)

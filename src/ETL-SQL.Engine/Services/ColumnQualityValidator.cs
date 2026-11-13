@@ -1299,7 +1299,7 @@ public sealed class ColumnQualityValidator
             for (var i = 0; i < partitionCount; i++)
             {
                 names[i] = $"dq_unique_{operationId}_{i}.tmp";
-                writers[i] = await context.SpillStore.CreateWriterAsync(names[i]);
+                writers[i] = await context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(context.EffectiveBatchSize, partitionCount));
             }
             return new UniqueKeySpill(context, names, writers);
         }

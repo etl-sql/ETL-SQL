@@ -468,7 +468,7 @@ public class ExternalJoinEngine
         {
             names[i] = $"{uniquePrefix}_{prefix}_{i}.tmp";
             tempFiles.Add(names[i]);
-            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i]);
+            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
         }
 
         try
@@ -522,7 +522,7 @@ public class ExternalJoinEngine
         {
             names[i] = $"{uniquePrefix}_{prefix}_{i}.tmp";
             tempFiles.Add(names[i]);
-            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i]);
+            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i], SpillFanOut.FlushRows(_context.EffectiveBatchSize, PartitionCount));
         }
 
         try

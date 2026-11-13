@@ -51,6 +51,12 @@ public interface IColumnarSpillReader
 public interface ISpillStore : IDisposable
 {
     Task<ISpillWriter> CreateWriterAsync(string chunkName);
+    /// <summary>
+    /// Creates a writer that flushes every <paramref name="flushBatchRows"/> rows instead of every
+    /// batch. Operators that keep one writer open per partition size it with
+    /// <see cref="SpillFanOut.FlushRows"/>.
+    /// </summary>
+    Task<ISpillWriter> CreateWriterAsync(string chunkName, int flushBatchRows) => CreateWriterAsync(chunkName);
     Task<ISpillReader> CreateReaderAsync(string chunkName);
     /// <summary>Deletes a specific chunk from the store.</summary>
     void DeleteChunk(string chunkName);

@@ -186,7 +186,10 @@ public partial class SpillStore : ISpillStore
         return sha256.ComputeHash(Encoding.UTF8.GetBytes("ETL-SQL-SPILL:" + sessionId));
     }
 
-    public async Task<ISpillWriter> CreateWriterAsync(string chunkName)
+    public Task<ISpillWriter> CreateWriterAsync(string chunkName) =>
+        CreateWriterAsync(chunkName, _context.EffectiveBatchSize);
+
+    public async Task<ISpillWriter> CreateWriterAsync(string chunkName, int flushBatchRows)
     {
         EnsureInitialized();
         var path = Path.Combine(_cachedRootPath!, chunkName);
@@ -197,7 +200,7 @@ public partial class SpillStore : ISpillStore
         if (_context.SpillFormat == "Json")
             writer = new SecureSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress);
         else
-            writer = new ArrowSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress);
+            writer = new ArrowSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress, flushBatchRows);
 
         var telemetry = _context.Telemetry;
         if (telemetry != null)
@@ -691,11 +694,11 @@ public partial class SpillStore : ISpillStore
         public string ChunkName => _chunkName;
         public long BytesWritten { get; private set; }
 
-        public ArrowSpillWriter(string path, string chunkName, byte[] key, IExecutionContext context, bool encrypt, bool compress)
+        public ArrowSpillWriter(string path, string chunkName, byte[] key, IExecutionContext context, bool encrypt, bool compress, int flushBatchSize)
         {
             _chunkName = chunkName;
             _context = context;
-            _flushBatchSize = Math.Max(1, context.EffectiveBatchSize);
+            _flushBatchSize = Math.Max(1, flushBatchSize);
             _fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
 
             try
