@@ -4,35 +4,16 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as cp from 'child_process';
 import { log } from './logger';
-import { getAiApiKey } from './aiApiKey';
-
-type JsonObject = { [key: string]: unknown };
-
-interface AiApiResponse {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    content?: Array<{ text?: string }>;
-    choices?: Array<{ message?: { content?: string } }>;
-}
 
 /**
- * Maps file extensions to standard MIME types for file uploads/inline content.
+ * Spec file extensions the command accepts. A VS Code chat model takes text only, so binary
+ * specs (PDF, Excel, Word) go through the manual path in docs/spec-import/spec-driven-development.md.
  */
-export function getMimeType(filePath: string): string {
-    const ext = path.extname(filePath).toLowerCase();
-    switch (ext) {
-        case '.pdf': return 'application/pdf';
-        case '.xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-        case '.xls': return 'application/vnd.ms-excel';
-        case '.docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-        case '.doc': return 'application/msword';
-        case '.csv': return 'text/csv';
-        case '.tsv': return 'text/tab-separated-values';
-        case '.json': return 'application/json';
-        case '.xml': return 'application/xml';
-        case '.txt': return 'text/plain';
-        case '.md': return 'text/markdown';
-        default: return 'application/octet-stream';
-    }
+export const TEXT_SPEC_EXTENSIONS = ['csv', 'tsv', 'json', 'xml', 'txt', 'md'];
+
+/** True when the file is a text spec the command can send to a chat model. */
+export function isTextSpec(filePath: string): boolean {
+    return TEXT_SPEC_EXTENSIONS.includes(path.extname(filePath).slice(1).toLowerCase());
 }
 
 /**
@@ -48,193 +29,40 @@ export function cleanJsonResponse(text: string): string {
 }
 
 /**
- * Contacts the configured AI endpoint to extract structure details from the spec.
+ * Sends the parser instructions and the spec to a chat model from an installed VS Code chat
+ * extension (GitHub Copilot, Claude, ...). That extension signs in and chooses where the request
+ * goes; ETL-SQL holds no key and calls no AI endpoint itself.
  */
-async function callAiApi(
-    provider: string,
-    apiKey: string,
-    model: string,
-    customEndpoint: string,
-    prompt: string,
-    filePath: string,
-    mimeType: string,
-    isTextFile: boolean
-): Promise<AiApiResponse> {
-    let url: string;
-    let headers: Record<string, string>;
-    let body: JsonObject;
-
-    if (provider === 'Gemini') {
-        const geminiModel = model || 'gemini-1.5-flash';
-        url = customEndpoint || `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
-        headers = { 'Content-Type': 'application/json' };
-
-        const parts: JsonObject[] = [];
-        if (isTextFile) {
-            const textContent = await fs.promises.readFile(filePath, 'utf8');
-            parts.push({ text: `${prompt}\n\n--- INPUT SPECIFICATION FILE CONTENT (${path.basename(filePath)}) ---\n${textContent}` });
-        } else {
-            const fileBuffer = await fs.promises.readFile(filePath);
-            const base64Data = fileBuffer.toString('base64');
-            parts.push({ text: prompt });
-            parts.push({
-                inlineData: {
-                    mimeType: mimeType,
-                    data: base64Data
-                }
-            });
-        }
-
-        body = {
-            contents: [
-                {
-                    parts: parts
-                }
-            ],
-            generationConfig: {
-                responseMimeType: "application/json"
-            }
-        };
-    } else if (provider === 'Anthropic') {
-        url = customEndpoint || 'https://api.anthropic.com/v1/messages';
-        headers = {
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'Content-Type': 'application/json'
-        };
-
-        const anthropicModel = model || 'claude-3-5-sonnet-latest';
-        let content: string | JsonObject[];
-
-        if (isTextFile) {
-            const textContent = await fs.promises.readFile(filePath, 'utf8');
-            content = `${prompt}\n\n--- INPUT SPECIFICATION FILE CONTENT (${path.basename(filePath)}) ---\n${textContent}`;
-        } else {
-            if (mimeType !== 'application/pdf') {
-                throw new Error(`Anthropic API only supports PDF and text files. Please select a CSV, JSON, TXT or PDF, or switch to Gemini in settings.`);
-            }
-            const fileBuffer = await fs.promises.readFile(filePath);
-            const base64Data = fileBuffer.toString('base64');
-            content = [
-                {
-                    type: 'text',
-                    text: prompt
-                },
-                {
-                    type: 'document',
-                    source: {
-                        type: 'base64',
-                        media_type: 'application/pdf',
-                        data: base64Data
-                    }
-                }
-            ];
-        }
-
-        body = {
-            model: anthropicModel,
-            max_tokens: 4096,
-            messages: [
-                {
-                    role: 'user',
-                    content: content
-                }
-            ]
-        };
-    } else if (provider === 'VS Code Chat Extensions (Copilot/Claude/etc.)') {
-        if (typeof vscode.lm === 'undefined') {
-            throw new Error(`The VS Code Language Model API is not supported by your version of VS Code. Please upgrade VS Code or use a direct AI provider.`);
-        }
-
-        if (!isTextFile) {
-            throw new Error(`VS Code Chat Extensions only support text-based files (CSV, JSON, TXT). For PDF, Excel, or Word documents, please use direct Gemini or Anthropic providers in settings.`);
-        }
-
-        const textContent = await fs.promises.readFile(filePath, 'utf8');
-        const content = `${prompt}\n\n--- INPUT SPECIFICATION FILE CONTENT (${path.basename(filePath)}) ---\n${textContent}`;
-
-        const models = await vscode.lm.selectChatModels({
-            family: model || undefined
-        });
-        if (models.length === 0) {
-            throw new Error(`No active VS Code language model providers (e.g. GitHub Copilot) found. Please ensure GitHub Copilot or another chat extension is installed and enabled.`);
-        }
-
-        const chatModel = models[0];
-        const messages = [
-            vscode.LanguageModelChatMessage.User(content)
-        ];
-
-        const response = await chatModel.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
-        
-        let responseText = '';
-        for await (const chunk of response.text) {
-            responseText += chunk;
-        }
-
-        return {
-            choices: [
-                {
-                    message: {
-                        content: responseText
-                    }
-                }
-            ]
-        };
-    } else {
-        // OpenAI, OpenRouter, Custom
-        const defaultEndpoint = provider === 'OpenRouter' 
-            ? 'https://openrouter.ai/api/v1/chat/completions'
-            : 'https://api.openai.com/v1/chat/completions';
-        
-        url = customEndpoint || defaultEndpoint;
-        headers = {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-        };
-
-        const defaultModel = provider === 'OpenRouter' ? 'google/gemini-flash-1.5'
-            : provider === 'OpenAI' ? 'gpt-6-astra' : 'gpt-4o';
-        const targetModel = model || defaultModel;
-
-        if (!isTextFile) {
-            throw new Error(`${provider} API only supports text-based files (CSV, JSON, TXT) via the standard chat endpoint. For PDF, Excel, or Word documents, please switch to Gemini or Anthropic in settings.`);
-        }
-
-        const textContent = await fs.promises.readFile(filePath, 'utf8');
-        const content = `${prompt}\n\n--- INPUT SPECIFICATION FILE CONTENT (${path.basename(filePath)}) ---\n${textContent}`;
-
-        body = {
-            model: targetModel,
-            messages: [
-                {
-                    role: 'user',
-                    content: content
-                }
-            ]
-        };
-
-        if (provider === 'OpenAI') {
-            body.response_format = { type: 'json_object' };
-        }
+async function askChatModel(prompt: string, filePath: string, family: string, token: vscode.CancellationToken): Promise<string> {
+    if (typeof vscode.lm === 'undefined') {
+        throw new Error('This version of VS Code has no Language Model API. Upgrade VS Code to use spec generation.');
     }
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`API call failed (status ${response.status}): ${errText}`);
+    const models = await vscode.lm.selectChatModels(family ? { family } : undefined);
+    if (models.length === 0) {
+        throw new Error(family
+            ? `No chat model of family "${family}" is available. Clear etlsql.ai.model or install a chat extension that provides it.`
+            : 'No chat model is available. Install and sign in to a VS Code chat extension such as GitHub Copilot.');
     }
 
-    return await response.json() as AiApiResponse;
+    const specText = await fs.promises.readFile(filePath, 'utf8');
+    const content = `${prompt}\n\n--- INPUT SPECIFICATION FILE CONTENT (${path.basename(filePath)}) ---\n${specText}`;
+    const response = await models[0].sendRequest(
+        [vscode.LanguageModelChatMessage.User(content)],
+        { justification: 'ETL-SQL sends the specification file to a chat model to draft a load script.' },
+        token
+    );
+
+    let responseText = '';
+    for await (const chunk of response.text) {
+        responseText += chunk;
+    }
+    return responseText;
 }
 
 /**
- * Main command handler. Prompts for target, performs extraction/trimming, calls LLM, saves output.
+ * Main command handler. Prompts for the spec, asks a chat model for the JSON contract, compiles it
+ * with gen-script and opens the result.
  */
 export async function generateScriptFromSpec(context: vscode.ExtensionContext, exePath: string, fileUri?: vscode.Uri) {
     try {
@@ -246,8 +74,7 @@ export async function generateScriptFromSpec(context: vscode.ExtensionContext, e
                 canSelectMany: false,
                 title: 'Select Specification File',
                 filters: {
-                    'Specification Files': ['pdf', 'xlsx', 'xls', 'csv', 'tsv', 'json', 'txt', 'docx', 'doc'],
-                    'All Files': ['*']
+                    'Text Specifications': TEXT_SPEC_EXTENSIONS
                 }
             });
             if (!selected || selected.length === 0) {
@@ -256,60 +83,17 @@ export async function generateScriptFromSpec(context: vscode.ExtensionContext, e
             targetUri = selected[0];
         }
 
-        let filePath = targetUri.fsPath;
-        const mimeType = getMimeType(filePath);
-        const isTextFile = ['text/csv', 'text/tab-separated-values', 'application/json', 'application/xml', 'text/plain', 'text/markdown'].includes(mimeType);
-
-        // Get Configuration
-        const config = vscode.workspace.getConfiguration('etlsql');
-        const provider = config.get<string>('ai.provider') || 'Gemini';
-        const apiKey = await getAiApiKey(context);
-        const customEndpoint = config.get<string>('ai.endpoint') || '';
-        const model = config.get<string>('ai.model') || '';
-
-        if (!apiKey && provider !== 'VS Code Chat Extensions (Copilot/Claude/etc.)') {
-            const setKey = 'Set API Key';
-            const selection = await vscode.window.showErrorMessage(
-                'ETL-SQL: AI API Key is not configured. Run "ETL-SQL: Set AI API Key".',
-                setKey
+        const filePath = targetUri.fsPath;
+        if (!isTextSpec(filePath)) {
+            vscode.window.showErrorMessage(
+                `ETL-SQL: ${path.basename(filePath)} is not a text file. VS Code chat models read text only `
+                + `(${TEXT_SPEC_EXTENSIONS.join(', ')}). For a PDF, Excel or Word spec, follow the manual path in the `
+                + 'Spec-Driven Development guide: extract-spec, your AI assistant, then gen-script.'
             );
-            if (selection === setKey) {
-                vscode.commands.executeCommand('etlsql.setAiApiKey');
-            }
             return;
         }
 
-        // PDF Trimming Option
-        if (filePath.toLowerCase().endsWith('.pdf')) {
-            const trimChoice = await vscode.window.showInformationMessage(
-                'Would you like to trim this PDF first using `extract-spec` to isolate data dictionary pages and reduce LLM token usage?',
-                'Yes (Recommended)',
-                'No, use full PDF'
-            );
-
-            if (trimChoice === 'Yes (Recommended)') {
-                const tempDir = path.join(os.tmpdir(), 'etlsql_temp');
-                await fs.promises.mkdir(tempDir, { recursive: true });
-                const trimmedPdfPath = path.join(tempDir, `trimmed_${Date.now()}_${path.basename(filePath)}`);
-
-                await vscode.window.withProgress({
-                    location: vscode.ProgressLocation.Notification,
-                    title: 'Trimming PDF specification...',
-                    cancellable: false
-                }, async () => {
-                    return new Promise<void>((resolve, reject) => {
-                        cp.execFile(exePath, ['extract-spec', '-i', filePath, '-o', trimmedPdfPath], { shell: false }, (err, stdout, stderr) => {
-                            if (err) {
-                                reject(new Error(stderr || err.message));
-                            } else {
-                                filePath = trimmedPdfPath;
-                                resolve();
-                            }
-                        });
-                    });
-                });
-            }
-        }
+        const model = vscode.workspace.getConfiguration('etlsql').get<string>('ai.model') || '';
 
         // Load Prompt Instructions
         const instructionsPath = path.join(context.extensionPath, 'resources', 'data_spec_parser_instructions.md');
@@ -326,44 +110,13 @@ export async function generateScriptFromSpec(context: vscode.ExtensionContext, e
             }
         }
 
-        // Call AI Endpoint
-        const responseData = await vscode.window.withProgress<AiApiResponse>({
+        const responseJsonText = await vscode.window.withProgress<string>({
             location: vscode.ProgressLocation.Notification,
-            title: `Sending spec to ${provider} API...`,
-            cancellable: false
-        }, async () => {
-            return await callAiApi(
-                provider,
-                apiKey,
-                model,
-                customEndpoint,
-                prompt,
-                filePath,
-                mimeType,
-                isTextFile
-            );
-        });
-
-        // Parse Response
-        let responseJsonText = '';
-        if (provider === 'Gemini') {
-            const text = responseData?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!text) {
-                throw new Error('Invalid response structure from Gemini API');
-            }
-            responseJsonText = text;
-        } else if (provider === 'Anthropic') {
-            const text = responseData?.content?.[0]?.text;
-            if (!text) {
-                throw new Error('Invalid response structure from Anthropic API');
-            }
-            responseJsonText = text;
-        } else {
-            const text = responseData?.choices?.[0]?.message?.content;
-            if (!text) {
-                throw new Error(`Invalid response structure from ${provider} API`);
-            }
-            responseJsonText = text;
+            title: 'Sending spec to the VS Code chat model...',
+            cancellable: true
+        }, async (_progress, token) => askChatModel(prompt, filePath, model, token));
+        if (!responseJsonText) {
+            throw new Error('The chat model returned an empty response.');
         }
 
         const cleanedJson = cleanJsonResponse(responseJsonText);
@@ -433,8 +186,7 @@ export async function generateScriptFromSpec(context: vscode.ExtensionContext, e
 
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
-        const cleanMessage = message.replace(/(key=)([^&]+)/gi, '$1[REDACTED]');
-        log(`Failed to generate script: ${cleanMessage}`, 'error');
-        vscode.window.showErrorMessage(`ETL-SQL Script Generation Failed: ${cleanMessage}`);
+        log(`Failed to generate script: ${message}`, 'error');
+        vscode.window.showErrorMessage(`ETL-SQL Script Generation Failed: ${message}`);
     }
 }

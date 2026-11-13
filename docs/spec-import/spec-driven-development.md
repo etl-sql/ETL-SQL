@@ -43,54 +43,33 @@ There are two paths through this workflow: the **VS Code extension path** (autom
 
 The ETL-SQL VS Code extension integrates the entire spec-to-script workflow into the Explorer context menu. You do not need to manually call any AI or save intermediate JSON files — the extension handles all of that automatically.
 
-### A.1 Configure Your AI Provider
+### A.1 Have a VS Code Chat Model
 
-Before running the command for the first time, configure your preferred AI provider in VS Code settings (`File → Preferences → Settings`, search for `etlsql.ai`):
+The command sends the spec to a chat model from a VS Code chat extension you have installed and
+signed in to, such as GitHub Copilot. That extension decides which service receives the spec.
+ETL-SQL stores no API key and calls no AI service itself. VS Code asks once for permission to let
+ETL-SQL use the model.
 
-| Setting | Key | Description |
-| :--- | :--- | :--- |
-| **Provider** | `etlsql.ai.provider` | AI service to use for spec parsing. Default: `Gemini`. |
-| **API Key** | Command **ETL-SQL: Set AI API Key** | Your API key for the chosen provider, kept in VS Code secret storage (not `settings.json`, which Settings Sync copies). An empty entry removes it. Not required when using VS Code Chat Extensions. |
-| **Model** | `etlsql.ai.model` | Optional model override (e.g. `gemini-1.5-flash`, `gpt-6-astra`, `claude-3-5-sonnet-latest`). Leave blank to use the provider default; OpenAI uses `gpt-6-astra`. |
-| **Endpoint** | `etlsql.ai.endpoint` | Advanced: override the default API endpoint URL. Required only for `Custom` providers (e.g. local Ollama, LocalAI, or private gateways). |
+To pick a model, set `etlsql.ai.model` to a model family (for example `gpt-4o` or
+`claude-sonnet-4`). Leave it blank to use the first available model.
 
-**Supported providers and file-type compatibility:**
-
-| Provider | PDF | Excel/Word | CSV / JSON / TXT |
-| :--- | :---: | :---: | :---: |
-| Gemini | ✓ | ✓ | ✓ |
-| Anthropic | ✓ (PDF only) | ✗ | ✓ |
-| OpenAI | ✗ | ✗ | ✓ |
-| OpenRouter | ✗ | ✗ | ✓ |
-| VS Code Chat Extensions (Copilot/Claude/etc.) | ✗ | ✗ | ✓ |
-| Custom | ✗ | ✗ | ✓ |
-
-> [!TIP]
-> Use **Gemini** or **Anthropic** when your vendor spec is a PDF or Excel workbook. Use **VS Code Chat Extensions** for text-based specs if you want to avoid managing an API key — just ensure GitHub Copilot (or another chat extension) is installed and enabled.
+Chat models read text only. The command accepts `.csv`, `.tsv`, `.json`, `.xml`, `.txt` and `.md`
+specs. For a PDF, Excel or Word spec, use [Path B](#path-b--manual-cli): trim the PDF with
+`extract-spec` and give it to an AI assistant that reads documents.
 
 ### A.2 Right-Click the Spec File
 
 1. In the VS Code **Explorer**, locate your specification file.
 2. Right-click the file and select **ETL-SQL: Generate Script from Spec**.
 
-The command accepts: `.pdf`, `.xlsx`, `.xls`, `.docx`, `.doc`, `.csv`, `.tsv`, `.json`, `.txt`.
-
 > [!NOTE]
 > The command is only shown in the context menu for files with a supported extension. It is also available via the VS Code Command Palette (`Ctrl+Shift+P` → `ETL-SQL: Generate Script from Spec`), which opens a file picker so you can select the spec manually.
 
-### A.3 Trim Large PDFs (Optional Prompt)
-
-If you selected a PDF, the extension asks:
-
-> *Would you like to trim this PDF first using `extract-spec` to isolate data dictionary pages and reduce LLM token usage?*
-
-Choose **Yes (Recommended)** for large vendor PDFs (50+ pages). The extension runs `extract-spec` in the background using heuristic analysis (scanning for database type keywords and column header terms) to isolate the data dictionary pages before sending them to the AI. The trimmed file is written to a temp directory automatically — no manual steps needed.
-
-### A.4 AI Extraction and JSON Compilation
+### A.3 AI Extraction and JSON Compilation
 
 The extension:
 
-1. Sends the spec file (or trimmed PDF) to the configured AI provider along with the bundled `data_spec_parser_instructions.md` prompt.
+1. Sends the spec file to the chat model along with the bundled `data_spec_parser_instructions.md` prompt.
 2. Receives the structured JSON contract back from the AI.
 3. Validates that the JSON parses correctly.
 4. Prompts you to **choose a save location** for the output script (defaulting to your workspace root with a name derived from `pipeline_name` in the JSON).
@@ -99,7 +78,7 @@ The extension:
 
 If the JSON produced by the AI is invalid, or if `gen-script` finds schema contract violations (missing required fields, bad enum values, duplicate column names, malformed `validation_regex`, etc.), the extension surfaces the error in a VS Code error notification.
 
-### A.5 Complete the Extraction Query
+### A.4 Complete the Extraction Query
 
 Once the script is open in the editor, proceed to [Step 3: Complete the Extraction Query](#step-3-complete-the-extraction-query) below — the instructions are identical regardless of which path you used.
 

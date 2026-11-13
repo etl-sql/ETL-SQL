@@ -14,14 +14,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
-- Keep the VS Code extension's AI API key in VS Code secret storage. `etlsql.ai.apiKey` was plain
-  text in `settings.json`, which Settings Sync copies to every machine, and a workspace
-  `.vscode/settings.json` from a cloned repository could supply it. Set the key with **ETL-SQL:
-  Set AI API Key**; an empty entry removes it. A key in user settings is moved to secret storage
-  when the extension starts and removed from them (if secret storage already holds a different
-  key, you choose which to keep). A workspace or folder value is ignored, since the setting is now
-  user-only; the extension warns about it and removes it if you agree. The setting is deprecated.
-  **Security.**
+- **Generate Script from Spec** in the VS Code extension now uses only a chat model from an
+  installed VS Code chat extension (such as GitHub Copilot), which handles sign-in. The direct
+  Gemini, OpenAI, Anthropic, OpenRouter and custom-endpoint providers are removed, with the
+  `etlsql.ai.provider`, `etlsql.ai.apiKey` and `etlsql.ai.endpoint` settings. The API key was plain
+  text in `settings.json`, which Settings Sync copies to every machine, and a workspace could
+  redirect the endpoint and receive the key. If you set `etlsql.ai.apiKey`, delete it from your
+  settings and rotate the key. The command takes text specs (`.csv`, `.tsv`, `.json`, `.xml`,
+  `.txt`, `.md`); for a PDF, Excel or Word spec use the manual `extract-spec` → AI assistant →
+  `gen-script` path. **Breaking change; security.**
 - Check the machine before the `integration`, `perf` and `benchmarks` lanes of `test-lane.ps1`
   (release reliability W7). A lane on a machine without Docker, the ODBC driver, Node.js 22,
   enough free memory or (for timing) an idle processor stops in seconds and says why. CI skips

@@ -25,9 +25,6 @@ describe('reportIssueCommand', () => {
                 if (key === 'portal.url') {
                     return 'http://localhost:5001';
                 }
-                if (key === 'ai.endpoint') {
-                    return 'https://api.openai.com/v1';
-                }
                 return undefined;
             })
         };

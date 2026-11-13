@@ -241,35 +241,10 @@
         "title": "AI",
         "order": 3,
         "properties": {
-          "etlsql.ai.provider": {
-            "type": "string",
-            "enum": [
-              "Gemini",
-              "OpenAI",
-              "Anthropic",
-              "OpenRouter",
-              "VS Code Chat Extensions (Copilot/Claude/etc.)",
-              "Custom"
-            ],
-            "default": "Gemini",
-            "markdownDescription": "The AI provider to use for parsing specifications. Gemini and Anthropic support direct PDF analysis; OpenAI supports text files; VS Code Chat Extensions uses your installed VS Code chat model provider (no API key required)."
-          },
-          "etlsql.ai.apiKey": {
-            "type": "string",
-            "scope": "application",
-            "default": "",
-            "markdownDescription": "Deprecated. Run **ETL-SQL: Set AI API Key** instead; the key is kept in VS Code secret storage. A value in user settings is moved there and removed; workspace values are ignored.",
-            "markdownDeprecationMessage": "Run **ETL-SQL: Set AI API Key**. A key in user settings is moved to VS Code secret storage and removed from `settings.json`, which Settings Sync copies across machines."
-          },
           "etlsql.ai.model": {
             "type": "string",
             "default": "",
-            "markdownDescription": "The specific AI model to run (e.g. `gemini-1.5-flash`, `gpt-6-astra`, `claude-3-5-sonnet-latest`). If blank, provider defaults are used; OpenAI uses `gpt-6-astra`."
-          },
-          "etlsql.ai.endpoint": {
-            "type": "string",
-            "default": "",
-            "markdownDescription": "**(Advanced)** Override the default API endpoint URL. Required when using `Custom` provider (e.g., local Ollama, LocalAI, or custom OpenAI gateway)."
+            "markdownDescription": "Chat model family for **ETL-SQL: Generate Script from Spec** (for example `gpt-4o` or `claude-sonnet-4`). The model comes from an installed VS Code chat extension such as GitHub Copilot. Leave blank to use the first available model."
           }
         }
       },
@@ -390,10 +365,6 @@
       {
         "command": "etlsql.generateScriptFromSpec",
         "title": "ETL-SQL: Generate Script from Spec"
-      },
-      {
-        "command": "etlsql.setAiApiKey",
-        "title": "ETL-SQL: Set AI API Key"
       },
       {
         "command": "etlsql.reportIssue",
@@ -526,7 +497,7 @@
         {
           "command": "etlsql.generateScriptFromSpec",
           "group": "etlsql",
-          "when": "resourceFilename =~ /\\.(pdf|xlsx|xls|csv|tsv|json|txt|docx|doc)$/i"
+          "when": "resourceFilename =~ /\\.(csv|tsv|json|xml|txt|md)$/i"
         }
       ],
       "etlsql.launchMenu": [

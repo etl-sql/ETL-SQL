@@ -220,7 +220,7 @@ CREATE PAGE SalesDashboard AS DASHBOARD (
 - **Credentials Guard** — automatically warns if plaintext passwords or connection strings are detected on save.
 - **Save Policy Encryption** — automatically encrypts flagged plaintext credentials into `ENC:...` strings on save.
 
-*Also included: [Notebooks (`.etlnb`)](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/tooling/notebook-guide.md) for cell-based development, [AI Spec-to-Script Generation](https://github.com/etl-sql/ETL-SQL/blob/main/docs/spec-import/spec-driven-development.md) from specifications (spec contents are sent to your chosen AI provider; default is Gemini), and the [Metadata Explorer Sidebar](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/onboarding/getting-started.md).*
+*Also included: [Notebooks (`.etlnb`)](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/tooling/notebook-guide.md) for cell-based development, [AI Spec-to-Script Generation](https://github.com/etl-sql/ETL-SQL/blob/main/docs/spec-import/spec-driven-development.md) from specifications (the spec is sent to a chat model from your installed VS Code chat extension, such as GitHub Copilot), and the [Metadata Explorer Sidebar](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/onboarding/getting-started.md).*
 
 ---
 
@@ -300,10 +300,7 @@ Formatting options (`etlsql.format.*`: keyword casing, indent size, comma placem
 | `etlsql.report.executable.path` | `""` | Override path to `ETL-SQL-Report.exe`. Leave blank to auto-detect. |
 | `etlsql.report.autoOpenPreview` | `false` | Auto-open the Report Preview pane when opening a `.rptsql` file. |
 | `etlsql.portal.url` | `""` | Base URL of your hosted ETL-SQL Portal (for publishing). |
-| `etlsql.ai.provider` | `"Gemini"` | AI provider for spec-driven script generation. Document contents are sent to the selected provider for processing. |
-| `etlsql.ai.apiKey` | `""` | Deprecated. Set the key with **ETL-SQL: Set AI API Key**, which keeps it in VS Code secret storage. A key in user settings is moved there and removed; a workspace value is ignored, and the extension offers to remove it. Not required for VS Code Chat Extensions. |
-| `etlsql.ai.model` | `""` | Optional model override for spec-driven script generation. |
-| `etlsql.ai.endpoint` | `""` | Optional custom endpoint for compatible providers. |
+| `etlsql.ai.model` | `""` | Chat model family for spec-driven script generation, from an installed VS Code chat extension such as GitHub Copilot. Blank uses the first available model. |
 
 ---
 
