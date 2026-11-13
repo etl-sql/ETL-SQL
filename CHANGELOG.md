@@ -20,6 +20,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   the check; `-SkipEnvironmentCheck` skips it locally. The Timing check no longer ends without a
   reason when Windows' processor counter fails ("negative denominator", 3 in 8 reads): it retries,
   then reports the load as unknown.
+- Run the spill lane in CI (release reliability W7): the **Spill Certification** jobs rerun the
+  engine and SLT corpus with spill thresholds of a few rows, in three shard groups, on every push
+  that selects the engine lanes (not on pull requests). It ran only on the owner's workstation and
+  was advisory; it now gates and is release evidence. `test-lane -Lane spill` takes
+  `-EngineShardGroup`/`-EngineShardGroupCount`; the SLT corpus runs in group 1.
 - Fail on a misspelt column of an empty outer-join side in the last three cases that read it as
   `NULL`: a `PIVOT` whose values are variables (they are evaluated, as the pivot does), a
   `MATCH_RECOGNIZE` (its columns follow from the clause), and a table function served by a

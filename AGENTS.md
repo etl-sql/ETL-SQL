@@ -579,8 +579,10 @@ Full procedure: **[release-checklist.md](./docs/releases/release-checklist.md)**
 Regular CI is impact-selected. Explicit full certification includes Docker integration and the
 cross-platform enterprise/browser lanes. Since v0.22.0 the EBNF, SLT, spill and scale checks run in
 the hosted Engine Certification job, so no workstation run is part of the release. Green regular CI
-alone cannot authorize publication. The local pre-release gate (`Test-PreRelease`) stays an
-optional developer tool; release drivers no longer read its state.
+alone cannot authorize publication. The spill lane (the corpus again with spill thresholds of a
+few rows) runs in the hosted Spill Certification jobs on every push that selects the engine
+lanes. The local pre-release gate (`Test-PreRelease`) stays an optional developer tool; release
+drivers no longer read its state.
 
 Hosted PR native packages skip ReadyToRun precompilation while retaining self-contained bundles
 and the selected installed/CLI/webview checks. Local, nightly, release-branch push and full manual

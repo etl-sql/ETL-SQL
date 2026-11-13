@@ -57,8 +57,8 @@ $ErrorActionPreference = "Stop"
 if ($EngineShardGroup -gt $EngineShardGroupCount -or $EngineShardGroupCount -gt $EngineShardCount) {
     throw 'Engine shard groups must partition the configured shard count.'
 }
-if ($EngineShardGroupCount -gt 1 -and $Lane -ne 'engine') {
-    throw 'Engine shard groups are only valid for the engine lane.'
+if ($EngineShardGroupCount -gt 1 -and $Lane -notin @('engine', 'spill')) {
+    throw 'Engine shard groups are only valid for the engine and spill lanes.'
 }
 
 if ($MemoryLimitGB -gt 0) {
@@ -591,15 +591,19 @@ switch ($Lane) {
             }
 
             $spillEvidence = Join-Path $repoRoot ("release-validation\spill-lane-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
-            Invoke-ShardedTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $spillEvidence engine
+            Invoke-ShardedTests "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" $engineFilter $EngineShardCount $spillEvidence engine -Group $EngineShardGroup -GroupCount $EngineShardGroupCount
 
-            $previousRunSlt = $env:ETL_SQL_RUN_SLT
-            try {
-                $env:ETL_SQL_RUN_SLT = "1"
-                Invoke-DotNetTest "tests\ETL-SQL.SqlLogicTests\ETL-SQL.SqlLogicTests.csproj" "Category=SLT"
-            }
-            finally {
-                $env:ETL_SQL_RUN_SLT = $previousRunSlt
+            # CI splits the engine shards across workers (Spill Certification); the SLT corpus
+            # runs once, in the first group.
+            if ($EngineShardGroup -eq 1) {
+                $previousRunSlt = $env:ETL_SQL_RUN_SLT
+                try {
+                    $env:ETL_SQL_RUN_SLT = "1"
+                    Invoke-DotNetTest "tests\ETL-SQL.SqlLogicTests\ETL-SQL.SqlLogicTests.csproj" "Category=SLT"
+                }
+                finally {
+                    $env:ETL_SQL_RUN_SLT = $previousRunSlt
+                }
             }
         }
         finally {

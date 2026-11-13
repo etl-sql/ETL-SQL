@@ -44,7 +44,10 @@
           "Enterprise Certification (windows)": "enterprise-certification",
           "Enterprise Certification (linux)": "enterprise-certification",
           "Docker Integration Tests": "docker-integration-tests",
-          "Engine Certification": "engine-certification"
+          "Engine Certification": "engine-certification",
+          "Spill Certification (1/3)": "engine-certification",
+          "Spill Certification (2/3)": "engine-certification",
+          "Spill Certification (3/3)": "engine-certification"
         }
       },
       "jobs": [
@@ -69,7 +72,10 @@
         "Enterprise Certification (windows)",
         "Enterprise Certification (linux)",
         "Docker Integration Tests",
-        "Engine Certification"
+        "Engine Certification",
+        "Spill Certification (1/3)",
+        "Spill Certification (2/3)",
+        "Spill Certification (3/3)"
       ]
     },
     {

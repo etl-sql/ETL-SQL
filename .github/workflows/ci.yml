@@ -262,6 +262,51 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # The corpus a second time with the spill and batch thresholds at a few rows (test-lane -Lane
+  # spill), so every query also runs through the batching, spilling and streaming paths. Results
+  # must match the default run. It ran only on the owner's workstation before (release
+  # reliability W7); skipped on pull requests like Engine Coverage.
+  spill-certification:
+    needs: source-preflight
+    if: github.event_name != 'pull_request' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'engine-certification')
+    name: Spill Certification (${{ matrix.group }}/3)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 15
+      - uses: ./.github/actions/prepare-test-project
+        with:
+          project: tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj
+          evidence: release-validation/spill-prepare
+      - name: Build the SQL logic tests
+        if: matrix.group == 1
+        shell: pwsh
+        timeout-minutes: 15
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj', '--configuration', 'Release', '-m:1', '-nr:false') -EvidenceDirectory release-validation/spill-prepare/slt-build -TimeoutSeconds 840
+      - name: Run assigned engine shards (and SLT in group 1) under low thresholds
+        shell: pwsh
+        timeout-minutes: 55
+        env:
+          SPILL_GROUP: ${{ matrix.group }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/test-lane.ps1 -ScriptArguments @('-Lane', 'spill', '-Configuration', 'Release', '-NoRestore', '-NoBuild', '-EngineShardCount', '12', '-EngineShardGroup', $env:SPILL_GROUP, '-EngineShardGroupCount', '3') -EvidenceDirectory release-validation/spill-process -TimeoutSeconds 3240
+      - name: Retain spill group diagnostics
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: spill-certification-${{ matrix.group }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            release-validation/spill-prepare/
+            release-validation/spill-process/
+            release-validation/spill-lane-*/
+          if-no-files-found: error
+          retention-days: 30
+
   build-and-test:
     needs: [source-preflight, build-verification, portal-smoke, engine-coverage]
     if: always() && needs.source-preflight.result == 'success' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'build-and-test')

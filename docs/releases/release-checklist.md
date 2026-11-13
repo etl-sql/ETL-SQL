@@ -689,8 +689,9 @@ Native Linux/macOS packaging and cross-platform certifications still require the
       `coverage-gate.json` beneath the timestamped release-validation run.
 - [ ] Confirm the **Test structure audit** phase passed. This proves expensive/release-only categories
       still have targeted ownership and that file reorganization did not change lane membership.
-- [ ] Run the corpus a **second time under low engine thresholds**, and compare results to the
-      default run:
+- [ ] Confirm the corpus passed a **second time under low engine thresholds**: the
+      **Spill Certification (1/3, 2/3, 3/3)** jobs in `ci.yml` run it on every push that selects
+      the engine lanes (not on pull requests) and are release evidence. To reproduce one locally:
       ```powershell
       pwsh -File scripts/test-lane.ps1 -Lane spill -ContinueOnFailure
       ```
@@ -713,9 +714,8 @@ Native Linux/macOS packaging and cross-platform certifications still require the
       decorative. An ignored setting and a setting with no effect are indistinguishable from the
       outside, which is why this is asserted rather than observed.
 
-      Advisory, not yet blocking: the lane cannot gate until the corpus is batch-size-agnostic and
-      the release-branch baseline failures are resolved (both tracked as *Code Stability* in
-      `ROADMAP.md`). Record the run and its diff in the release-validation evidence either way.
+      The jobs gate: a failure fails CI. Each job keeps its shard results under
+      `release-validation/spill-lane-*` in its artifact.
 - [ ] Final report shows **Status: Passed** — `release-validation/latest/state.json` and the run's
       `pre-release-report.md`.
 
