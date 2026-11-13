@@ -429,6 +429,65 @@ key fails with a clear error; `DELETE_SOURCE = ON` removes the source only after
 not under `WHAT_IF`; an omitted `TO` produces the documented path or error and never alters the
 source; and the tests in `CompressAfterEncryptRuleTests` that omit `TO` still pass.
 
+### File Operations — Managing Remote File Trees over SFTP, FTP, and Cloud Connections
+
+**Status:** Accepted  
+**Horizon:** Next (RF01 and RF02), Later (the rest)  
+**Authoritative design:** none yet; [SFTP](docs/reference/connectors/services/sftp.md),
+[FTP](docs/reference/connectors/services/ftp.md), and [TRANSFER](docs/reference/file-operations/transfer.md)
+are the references. [`IRemoteFileSystem`](src/ETL-SQL.Core/Data/IRemoteFileSystem.cs) is the contract.
+
+**Problem and intended outcome:** Checked against source on 2026-11-13. `SFTP`, `FTP`/`FTPS`, `S3`,
+`AZURE_BLOB`, and `SHAREPOINT` implement `IRemoteFileSystem` (list, upload, download, delete, exists,
+rename, create and delete directory). `SEND FILE`/`RECEIVE FILE` take `*` and `?` wildcards, and
+`DELETE`, `MOVE`, `RENAME` work with `AT conn`. That covers sending and fetching a file. It does not
+cover managing a remote tree: `COPY FILE ... AT conn` and every remote directory operation except
+create and delete fail with "not supported on remote systems", `SYNC DIRECTORY` has no remote handling,
+wildcard receive does not descend into subfolders, and listings carry only name, path, size, modified
+time, and a directory flag. The FTP page tells users to set `USE_SSL=TRUE`; the connector accepts only
+`EXPLICIT`, `ON`, or `IMPLICIT` and treats anything else as no encryption, so following the page sends
+credentials in clear text. The outcome: a script can copy, mirror, and verify a remote tree with the
+same statements it uses locally, and the connector pages describe the options the code reads.
+
+**Why this horizon:** RF01 is a documentation defect with a security effect and RF02 is a
+small connector change; both are Next. The feature work has working alternatives (download and
+re-upload, `FOREACH` over a listing) and is Later.
+
+**Boundaries:**
+- No new protocol or library. FluentFTP and SSH.NET provide what is needed; a new third-party
+  dependency follows the third-party dependency policy.
+- Every remote operation counts toward the file-operation limit and honors `SET WHAT_IF ON`, as the
+  local operations do.
+- No remote command execution (SSH shell or `exec`). It is a different security boundary and needs
+  its own decision.
+- Metadata a server does not report returns `NULL`, not an error.
+- Each statement and function change ships with its reference page, following the
+  [documentation standard and templates](docs/templates/statement-reference-template.md).
+
+**Dependencies:** FN08/FN09 (remote file functions) share the listing metadata work in RF05.
+
+**Backlog (select IDs, not the family):**
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| RF01 | **Fix the FTP page and reject bad `USE_SSL` values.** Document the options the connector reads: `USE_SSL = OFF \| EXPLICIT \| IMPLICIT` (`ON` is accepted as `EXPLICIT`) and `PASSIVE = ON \| OFF` (default `ON`), not `USE_PASSIVE` or `USE_SSL=TRUE`. Remove the "use SFTP instead" line under FTPS. A value other than the accepted ones is an error, not plaintext. List `TIMEOUT_SECONDS` once RF02 lands. Both authentication patterns stay documented. | — | S |
+| RF02 | **FTP `TIMEOUT_SECONDS` and TLS certificate handling.** Read `TIMEOUT_SECONDS` (default `30`) like the other connectors. Decide how an invalid FTPS certificate behaves today and expose the choice (strict by default; a pin or an explicit opt-out, mirroring `HOST_KEY_FINGERPRINT` / `ALLOW_UNPINNED_HOST_KEY`). | RF01 | S |
+| RF03 | **Verify SFTP and FTP listings.** SSH.NET `ListDirectory` normally returns `.` and `..`; the SFTP listing does not filter them. Add a test over a recorded or containerized server, drop the dot entries from `REMOTE_FILE_LIST`, `SELECT` over the connection, and `IsDirectory` handling, and confirm FTP matches. | — | S |
+| RF04 | **Remote `COPY FILE`.** Same-connection copy (`COPY FILE a TO b AT conn`) by download to a bounded temp stream and upload, or a server-side copy where the protocol has one (S3, Azure Blob, SharePoint). Cross-connection copy follows the same path. Overwrite follows `OVERWRITE`; default `ON` as locally. | — | M |
+| RF05 | **Richer remote metadata.** Extend `FileMetaData` with creation time (where reported), permissions, owner, and a symlink flag; `NULL` where the protocol cannot supply it. `REMOTE_FILE_LIST` and the connection `SELECT` expose the new columns and the lineage and LSP column lists follow. | — | M |
+| RF06 | **Recursive listing and receive.** `REMOTE_FILE_LIST` and `RECEIVE FILE` take a recursive option bounded by `SET ALLOW_RECURSIVE_LAYERS` (five levels by default). Define what a non-empty directory delete does on every connector (SSH.NET and FluentFTP differ today) and make it identical, with an explicit option to delete recursively. | RF03 | M |
+| RF07 | **Remote directory rename, move, and copy.** `RENAME DIRECTORY`, `MOVE DIRECTORY`, and `COPY DIRECTORY` with `AT conn`. Rename and move use the server rename; copy is built on RF04 and RF06. | RF04, RF06 | M |
+| RF08 | **Remote `SYNC DIRECTORY`.** Mirror local to remote and remote to local by size and modified time, with `WHAT_IF` showing the plan. Deletions on the destination need an explicit option and pass the same guard as `DELETE FILE`. | RF05, RF06 | M |
+| RF09 | **Verify a transfer.** An option on `SEND FILE`/`RECEIVE FILE` (and the `VERIFY FILE INTEGRITY` counterpart) that compares size and, where the server offers it, a checksum after the transfer, and removes a partial local file on failure. Decide whether to support resume of large downloads here or leave it out. | RF05 | M |
+| RF10 | **FTP rename without losing the destination.** `RenameFileAsync` deletes an existing destination before renaming. Rename to a temporary name first or fail without deleting, as SFTP does. | — | S |
+| RF11 | **Decision: remote command execution.** Whether a connection type that runs a single approved command over SSH belongs in the product, and under what allow-list and audit rules. Output is a proposal and an estimate only. | — | D |
+
+**Acceptance evidence:** The FTP page matches what `FtpConnector` reads and a wrong `USE_SSL` value
+fails; an SFTP and an FTP listing contain only real entries, proven against a test server; `COPY FILE`
+and the directory operations work with `AT conn` on SFTP, FTP, and one cloud connection; a remote
+`SYNC DIRECTORY` plan under `WHAT_IF` matches what the real run does; and the transfer verification
+option fails a truncated download.
+
 ## Later Reporting and Presentation Work
 
 ### Reporting & Presentation — Grammar-of-Graphics Semantic Extensions
