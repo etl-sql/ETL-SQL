@@ -62,9 +62,15 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   about a third of its job limit and gate on deterministic results, never throughput. The whole
   release stays under 4 hours. Billion-row: no 1B run; each scenario runs at 10M and 100M rows
   under a 4 GB memory cap and passes when peak memory stays flat. 100M measured on a hosted runner
-  (Scale Measurement 43504065542): all 7 pass, peak memory 0.3–1.5 GB, longest 21 min.
-  **Left:** the 10M measurement; size the other conditional certifications the same way; build
-  the hosted jobs and the approval; remove the operator submission from `release.yml`.
+  (Scale Measurement 43504065542): all 7 pass, peak memory 0.3–1.5 GB, longest 21 min. The 10M
+  run showed join and window memory growing with rows: one spill writer per partition, and the
+  partition count grows with input. Fixed in 5f14756e4 (spill writers share a fixed buffer).
+  Re-measured (runs 43515403790 at 10M, 43515404110 at 100M): window 477 → 530 MB, flat. Join
+  838 → 1412 MB, down from 1526 MB but still growing, so the join has a second source.
+  AllocProfile fails at 10M only on the workstation machine-metric budget; the hosted job uses
+  `-MachineMetricsReportOnly`. **Left:** find the join's remaining growth; size the other
+  conditional certifications the same way; build the hosted jobs and the approval; remove the
+  operator submission from `release.yml`.
 
 **Parked from the earlier "release in four hours" goal.** Each is picked up only if a workstream
 needs it, otherwise moves to `ROADMAP.md` after v0.22.0:
