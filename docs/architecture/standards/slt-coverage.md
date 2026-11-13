@@ -52,6 +52,7 @@ Hand-authored tests covering ETL-SQL-specific features and SQL areas not in the 
 | `basic.test` | 5 | Fundamental CREATE/INSERT/SELECT/ORDER BY/SUM smoke |
 | `case.test` | 10 | Searched CASE; simple CASE (operand matching); CASE with NULLs; nested CASE; CASE in WHERE/ORDER BY |
 | `cte.test` | 12 | Simple CTEs; chained WITH; WITH RECURSIVE; CTE in subquery |
+| `cte_scope.test` | 14 | A CTE is gone after its statement (also after a failure, a recursive CTE and a WITH on DML); a CTE named like a `#temp` table shadows it only for that statement |
 | `date_functions.test` | 11 | DATEPART, DATEDIFF, DATEADD; date string ordering |
 | `distinct.test` | 12 | SELECT DISTINCT; COUNT(DISTINCT); SUM(DISTINCT); DISTINCT with NULLs |
 | `distinct_from.test` | 18 | `IS [NOT] DISTINCT FROM`: NULL-safe equality in SELECT, WHERE and a join `ON`; never NULL; errors |

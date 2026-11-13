@@ -1,0 +1,65 @@
+# A CTE is visible only to its own statement (SQ18).
+
+statement ok
+CREATE TABLE #t(id INT, v INT);
+
+statement ok
+INSERT INTO #t VALUES (1, 10), (2, 20);
+
+query I
+WITH c AS (SELECT 99 AS x) SELECT x FROM c;
+----
+99
+
+# A later statement cannot read the CTE by name.
+statement error
+SELECT x FROM c;
+
+# A CTE named like a #temp table shadows it only for its statement.
+query I
+WITH #t AS (SELECT 7 AS id) SELECT id FROM #t;
+----
+7
+
+query II rowsort
+SELECT id, v FROM #t;
+----
+1
+10
+2
+20
+
+# A WITH on DML is scoped too.
+statement ok
+WITH d AS (SELECT 1 AS id) DELETE FROM #t WHERE id IN (SELECT id FROM d);
+
+statement error
+SELECT id FROM d;
+
+query II
+SELECT id, v FROM #t;
+----
+2
+20
+
+# A recursive CTE is gone after its statement.
+query I
+WITH RECURSIVE n AS (SELECT 1 AS k UNION ALL SELECT k + 1 FROM n WHERE k < 3) SELECT COUNT(*) FROM n;
+----
+3
+
+statement error
+SELECT k FROM n;
+
+# A failing statement still removes its CTE.
+statement error
+WITH f AS (SELECT 1 AS x) SELECT nope FROM f;
+
+statement error
+SELECT x FROM f;
+
+# The same CTE name can be used again by the next statement.
+query I
+WITH c AS (SELECT 5 AS x) SELECT x FROM c;
+----
+5

@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Scope a CTE to its statement. Its result stayed registered until the script ended, so a later
+  statement could read it by name, and a CTE named like an existing `#temp` table replaced and
+  disposed that table. The name now means what it meant before once the statement ends, also
+  when the statement fails. **Behaviour change.**
 - Expand `OUTPUT INSERTED.*` and `OUTPUT DELETED.*` on `INSERT`, `UPDATE`, `DELETE` and `MERGE`
   to every column of that row. Both failed with `Unknown column 'DELETED.*'`. A side the
   statement has no row for (`DELETED` on an insert) reads `NULL` in every column.

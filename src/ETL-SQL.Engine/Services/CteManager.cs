@@ -14,22 +14,37 @@ public class CteManager(ILogger logger)
 {
     private readonly ILogger _logger = logger;
 
-    public async Task RegisterCtes(List<CteDefinition> ctes, IExecutionContext context)
+    /// <summary>
+    /// Evaluates the CTEs and registers each one under its name in <see cref="IExecutionContext.LocalSources"/>.
+    /// Dispose the returned scope when the statement finishes: it disposes the CTE results and puts back
+    /// whatever the names meant before (a <c>#temp</c> table, an outer CTE), or removes them.
+    /// </summary>
+    public async Task<CteScope> RegisterCtes(List<CteDefinition> ctes, IExecutionContext context)
     {
-        foreach (var cte in ctes)
+        var scope = new CteScope(context);
+        try
         {
-            if (IsRecursive(cte, out var anchor, out var recursive, out var isDistinct))
+            foreach (var cte in ctes)
             {
-                await EvaluateRecursiveCte(cte, anchor!, recursive!, isDistinct, context);
+                if (IsRecursive(cte, out var anchor, out var recursive, out var isDistinct))
+                {
+                    await EvaluateRecursiveCte(cte, anchor!, recursive!, isDistinct, context, scope);
+                }
+                else
+                {
+                    await EvaluateStandardCte(cte, context, scope);
+                }
             }
-            else
-            {
-                await EvaluateStandardCte(cte, context);
-            }
+            return scope;
+        }
+        catch
+        {
+            await scope.DisposeAsync();
+            throw;
         }
     }
 
-    private async Task EvaluateRecursiveCte(CteDefinition cte, Statement anchor, Statement recursive, bool isDistinct, IExecutionContext context)
+    private async Task EvaluateRecursiveCte(CteDefinition cte, Statement anchor, Statement recursive, bool isDistinct, IExecutionContext context, CteScope scope)
     {
         _logger.Debug("Evaluating RECURSIVE CTE: {CteName} ({UnionType})", cte.Name, isDistinct ? "UNION" : "UNION ALL");
         var finalResult = new DataTable();
@@ -101,8 +116,7 @@ public class CteManager(ILogger logger)
 
                 mem.SetSchema(colDefs);
                 await mem.WriteBatches(new[] { currentStep }.ToAsyncEnumerable());
-                if (context.LocalSources.TryGetValue(cte.Name, out var prev)) await prev.DisposeAsync();
-                context.LocalSources[cte.Name] = mem;
+                await scope.SetAsync(cte.Name, mem);
 
                 var nextStep = new DataTable();
                 nextStep.SetColumns(currentStep.ColumnNames);
@@ -153,11 +167,10 @@ public class CteManager(ILogger logger)
         // fractional values as DECIMAL — without the mid-recursion truncation INT would cause.
         finalMem.SetSchema(NarrowIntegralColumns(colDefs, finalResult));
         await finalMem.WriteBatches(new[] { finalResult }.ToAsyncEnumerable());
-        if (context.LocalSources.TryGetValue(cte.Name, out var prevFinal)) await prevFinal.DisposeAsync();
-        context.LocalSources[cte.Name] = finalMem;
+        await scope.SetAsync(cte.Name, finalMem);
     }
 
-    private async Task EvaluateStandardCte(CteDefinition cte, IExecutionContext context)
+    private async Task EvaluateStandardCte(CteDefinition cte, IExecutionContext context, CteScope scope)
     {
         var cteResult = new DataTable();
         await foreach (var batch in context.ExecuteQuery(cte.Query))
@@ -179,8 +192,7 @@ public class CteManager(ILogger logger)
         mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
         mem.SetSchema(cteResult.ColumnNames.Select(c => new ColumnDefinition(c, "STRING", false)));
         await mem.WriteBatches(new[] { cteResult }.ToAsyncEnumerable());
-        if (context.LocalSources.TryGetValue(cte.Name, out var prevStd)) await prevStd.DisposeAsync();
-        context.LocalSources[cte.Name] = mem;
+        await scope.SetAsync(cte.Name, mem);
     }
 
     private static CompoundKey MakeRowKey(Row r, IList<string> columnNames)
@@ -245,5 +257,53 @@ public class CteManager(ILogger logger)
             }
         }
         return false;
+    }
+}
+
+/// <summary>
+/// The CTE names one statement registered. Disposing it disposes the CTE results and restores the
+/// entries the names shadowed, so a CTE is visible only to its own statement.
+/// </summary>
+public sealed class CteScope(IExecutionContext context) : IAsyncDisposable
+{
+    private readonly IExecutionContext _context = context;
+    // Name -> (the entry it shadowed, if any; the CTE result registered now). Ordered so restore is LIFO.
+    private readonly List<(string Name, IDataSource? Shadowed, IDataSource Current)> _entries = [];
+    private bool _disposed;
+
+    /// <summary>Registers <paramref name="source"/> under <paramref name="name"/>, disposing an earlier result of this scope.</summary>
+    public async Task SetAsync(string name, IDataSource source)
+    {
+        int i = _entries.FindIndex(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (i >= 0)
+        {
+            var entry = _entries[i];
+            if (!ReferenceEquals(entry.Current, source)) await entry.Current.DisposeAsync();
+            _entries[i] = entry with { Current = source };
+        }
+        else
+        {
+            _context.LocalSources.TryGetValue(name, out var shadowed);
+            _entries.Add((name, shadowed, source));
+        }
+        _context.LocalSources[name] = source;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        for (int i = _entries.Count - 1; i >= 0; i--)
+        {
+            var (name, shadowed, current) = _entries[i];
+            // Put the name back only if the statement left our entry in place.
+            if (_context.LocalSources.TryGetValue(name, out var now) && ReferenceEquals(now, current))
+            {
+                if (shadowed != null) _context.LocalSources[name] = shadowed;
+                else _context.LocalSources.Remove(name);
+            }
+            try { await current.DisposeAsync(); } catch { /* cleanup must not mask the statement's own error */ }
+        }
+        _entries.Clear();
     }
 }

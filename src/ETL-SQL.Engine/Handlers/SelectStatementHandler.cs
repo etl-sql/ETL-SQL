@@ -180,16 +180,25 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
     /// <summary>Evaluates a query statement and returns a stream of row batches.</summary>
     public async IAsyncEnumerable<DataTable> EvaluateQuery(Statement query, IExecutionContext context)
     {
-        if (query.Ctes != null && query.Ctes.Count > 0) await _cteManager.RegisterCtes(query.Ctes, context);
+        // The CTEs live only while this query is read: the scope restores what their names meant before.
+        CteScope? cteScope = null;
+        if (query.Ctes != null && query.Ctes.Count > 0) cteScope = await _cteManager.RegisterCtes(query.Ctes, context);
 
-        if (query is SelectStatement select)
+        try
         {
-            await foreach (var batch in EvaluateSelect(select, context)) yield return batch;
+            if (query is SelectStatement select)
+            {
+                await foreach (var batch in EvaluateSelect(select, context)) yield return batch;
+            }
+            else if (query is SetOperationStatement setOp)
+            {
+                var setEngine = new SetOperationEngine(context, _logger);
+                await foreach (var batch in setEngine.ApplySetOperation(setOp)) yield return batch;
+            }
         }
-        else if (query is SetOperationStatement setOp)
+        finally
         {
-            var setEngine = new SetOperationEngine(context, _logger);
-            await foreach (var batch in setEngine.ApplySetOperation(setOp)) yield return batch;
+            if (cteScope != null) await cteScope.DisposeAsync();
         }
     }
 
