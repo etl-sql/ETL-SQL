@@ -14,6 +14,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Keep the VS Code extension's AI API key in VS Code secret storage. `etlsql.ai.apiKey` was plain
+  text in `settings.json`, which Settings Sync copies to every machine (and a workspace
+  `.vscode/settings.json` is often committed). Set the key with **ETL-SQL: Set AI API Key**; an
+  empty entry removes it. A key already in settings is moved to secret storage when the extension
+  starts and removed from every settings scope; the setting is deprecated. **Security.**
 - Check the machine before the `integration`, `perf` and `benchmarks` lanes of `test-lane.ps1`
   (release reliability W7). A lane on a machine without Docker, the ODBC driver, Node.js 22,
   enough free memory or (for timing) an idle processor stops in seconds and says why. CI skips

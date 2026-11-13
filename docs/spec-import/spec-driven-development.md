@@ -50,7 +50,7 @@ Before running the command for the first time, configure your preferred AI provi
 | Setting | Key | Description |
 | :--- | :--- | :--- |
 | **Provider** | `etlsql.ai.provider` | AI service to use for spec parsing. Default: `Gemini`. |
-| **API Key** | `etlsql.ai.apiKey` | Your API key for the chosen provider. Not required when using VS Code Chat Extensions. |
+| **API Key** | Command **ETL-SQL: Set AI API Key** | Your API key for the chosen provider, kept in VS Code secret storage (not `settings.json`, which Settings Sync copies). An empty entry removes it. Not required when using VS Code Chat Extensions. |
 | **Model** | `etlsql.ai.model` | Optional model override (e.g. `gemini-1.5-flash`, `gpt-6-astra`, `claude-3-5-sonnet-latest`). Leave blank to use the provider default; OpenAI uses `gpt-6-astra`. |
 | **Endpoint** | `etlsql.ai.endpoint` | Advanced: override the default API endpoint URL. Required only for `Custom` providers (e.g. local Ollama, LocalAI, or private gateways). |
 

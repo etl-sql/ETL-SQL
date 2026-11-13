@@ -257,7 +257,8 @@
           "etlsql.ai.apiKey": {
             "type": "string",
             "default": "",
-            "markdownDescription": "API Key for the selected AI provider. Not required if using VS Code Chat Extensions."
+            "markdownDescription": "Deprecated. Run **ETL-SQL: Set AI API Key** instead; the key is kept in VS Code secret storage. A value set here is moved there and removed from settings.",
+            "markdownDeprecationMessage": "Run **ETL-SQL: Set AI API Key**. A key set here is moved to VS Code secret storage and removed from `settings.json`, which Settings Sync copies across machines."
           },
           "etlsql.ai.model": {
             "type": "string",
@@ -388,6 +389,10 @@
       {
         "command": "etlsql.generateScriptFromSpec",
         "title": "ETL-SQL: Generate Script from Spec"
+      },
+      {
+        "command": "etlsql.setAiApiKey",
+        "title": "ETL-SQL: Set AI API Key"
       },
       {
         "command": "etlsql.reportIssue",

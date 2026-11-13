@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as cp from 'child_process';
 import { log } from './logger';
+import { getAiApiKey } from './aiApiKey';
 
 type JsonObject = { [key: string]: unknown };
 
@@ -262,18 +263,18 @@ export async function generateScriptFromSpec(context: vscode.ExtensionContext, e
         // Get Configuration
         const config = vscode.workspace.getConfiguration('etlsql');
         const provider = config.get<string>('ai.provider') || 'Gemini';
-        const apiKey = config.get<string>('ai.apiKey') || '';
+        const apiKey = await getAiApiKey(context);
         const customEndpoint = config.get<string>('ai.endpoint') || '';
         const model = config.get<string>('ai.model') || '';
 
         if (!apiKey && provider !== 'VS Code Chat Extensions (Copilot/Claude/etc.)') {
-            const openSettings = 'Open Settings';
+            const setKey = 'Set API Key';
             const selection = await vscode.window.showErrorMessage(
-                'ETL-SQL: AI API Key is not configured. Please set it in settings.',
-                openSettings
+                'ETL-SQL: AI API Key is not configured. Run "ETL-SQL: Set AI API Key".',
+                setKey
             );
-            if (selection === openSettings) {
-                vscode.commands.executeCommand('workbench.action.openSettings', 'etlsql.ai');
+            if (selection === setKey) {
+                vscode.commands.executeCommand('etlsql.setAiApiKey');
             }
             return;
         }

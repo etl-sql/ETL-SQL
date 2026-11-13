@@ -43,6 +43,8 @@ export const Uri = {
 
 export const ViewColumn = { One: 1, Two: 2, Three: 3 };
 
+export enum ConfigurationTarget { Global = 1, Workspace = 2, WorkspaceFolder = 3 }
+
 export const DiagnosticSeverity = { Error: 0, Warning: 1, Information: 2, Hint: 3 };
 
 export const languages = {

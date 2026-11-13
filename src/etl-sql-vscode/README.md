@@ -301,7 +301,7 @@ Formatting options (`etlsql.format.*`: keyword casing, indent size, comma placem
 | `etlsql.report.autoOpenPreview` | `false` | Auto-open the Report Preview pane when opening a `.rptsql` file. |
 | `etlsql.portal.url` | `""` | Base URL of your hosted ETL-SQL Portal (for publishing). |
 | `etlsql.ai.provider` | `"Gemini"` | AI provider for spec-driven script generation. Document contents are sent to the selected provider for processing. |
-| `etlsql.ai.apiKey` | `""` | API key for the selected AI provider. Stored in `settings.json` (migration to secure SecretStorage planned for v0.23.0). Not required for VS Code Chat Extensions. |
+| `etlsql.ai.apiKey` | `""` | Deprecated. Set the key with **ETL-SQL: Set AI API Key**, which keeps it in VS Code secret storage. A key found here is moved there and removed from settings. Not required for VS Code Chat Extensions. |
 | `etlsql.ai.model` | `""` | Optional model override for spec-driven script generation. |
 | `etlsql.ai.endpoint` | `""` | Optional custom endpoint for compatible providers. |
 
