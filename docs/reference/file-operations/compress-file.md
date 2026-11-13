@@ -1,6 +1,7 @@
 # COMPRESS / DECOMPRESS FILE
 
-Compresses or extracts individual files and directory hierarchies on disk using `GZIP` or `ZIP` archive formats.
+Writes a file or a directory tree into a ZIP archive, and extracts ZIP archives. ZIP is the only
+format: `COMPRESS` writes ZIP whatever the destination extension, and `DECOMPRESS` reads ZIP only.
 
 ---
 
@@ -8,40 +9,30 @@ Compresses or extracts individual files and directory hierarchies on disk using 
 
 ### 1. File Compression
 ```sql
-COMPRESS FILE '<source_file_path>' TO '<target_archive_path>' 
-[WITH (
-  FORMAT = 'GZIP' | 'ZIP',
-  OVERWRITE = ON | OFF
-)];
+COMPRESS FILE '<source_file_path>' TO '<target_zip_path>' [WITH (OVERWRITE = ON | OFF)];
 ```
 
 ### 2. Directory Compression
 ```sql
-COMPRESS DIRECTORY '<source_directory_path>' TO '<target_zip_path>' 
-[WITH (
-  FORMAT = 'ZIP',
-  RECURSE = ON | OFF,
-  OVERWRITE = ON | OFF
-)];
+COMPRESS DIRECTORY '<source_directory_path>' TO '<target_zip_path>' [WITH (OVERWRITE = ON | OFF)];
 ```
 
 ### 3. Decompression
 ```sql
-DECOMPRESS FILE '<source_archive_path>' TO '<destination_path>' 
-[WITH (
-  OVERWRITE = ON | OFF
-)];
+DECOMPRESS FILE '<source_zip_path>' TO '<destination_path>' [WITH (OVERWRITE = ON | OFF)];
 ```
 
 ---
 
-## Options & Formats
+## Options
 
 | Option | Values | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `FORMAT` | `'GZIP'`, `'ZIP'` | `GZIP` (files), `ZIP` (directories) | Compression algorithm |
-| `RECURSE` | `ON`, `OFF` | `ON` | Recursively include subfolders when compressing directories |
-| `OVERWRITE` | `ON`, `OFF` | `OFF` | Overwrite destination file if it already exists |
+| `OVERWRITE` | `ON`, `OFF` | `ON` | Replace the destination if it already exists; `OFF` fails instead |
+
+- `COMPRESS DIRECTORY` always includes subfolders.
+- There is no `FORMAT` option. GZIP (`.gz`) archives are not supported.
+- Any other `WITH` option is a syntax error that lists the accepted options.
 
 ---
 
@@ -50,36 +41,32 @@ DECOMPRESS FILE '<source_archive_path>' TO '<destination_path>'
 ### 1. Single File Compression & Decompression
 
 ```sql
--- Compress CSV export to GZIP archive
-COMPRESS FILE 'C:\exports\ledger.csv' 
-TO 'C:\exports\ledger.csv.gz' 
-WITH (FORMAT = 'GZIP', OVERWRITE = ON);
+-- Compress a CSV export into a ZIP archive
+COMPRESS FILE 'C:\exports\ledger.csv'
+TO 'C:\exports\ledger.zip'
+WITH (OVERWRITE = ON);
 
--- Extract GZIP archive back to staging
-DECOMPRESS FILE 'C:\exports\ledger.csv.gz' 
-TO 'C:\staging\ledger_unpacked.csv' 
+-- Extract the archive into a staging folder
+DECOMPRESS FILE 'C:\exports\ledger.zip'
+TO 'C:\staging\ledger\'
 WITH (OVERWRITE = ON);
 ```
 
 ### 2. Compressing Directory Trees
 
-Archive an entire directory of logs into a single `.zip` package:
+Archive an entire directory of logs, subfolders included, into a single `.zip` package:
 
 ```sql
-COMPRESS DIRECTORY 'C:\logs\2026-08\' 
-TO 'C:\archives\august_2026_logs.zip' 
-WITH (
-  FORMAT = 'ZIP',
-  RECURSE = ON,
-  OVERWRITE = ON
-);
+COMPRESS DIRECTORY 'C:\logs\2026-08\'
+TO 'C:\archives\august_2026_logs.zip'
+WITH (OVERWRITE = ON);
 
 PRINT 'Directory archived successfully.';
 ```
 
-### 3. Production ETL: Batch Log Ingestion & GZIP Archival
+### 3. Production ETL: Batch Log Ingestion from ZIP Archives
 
-Extract compressed server access logs from a landing folder, decompress, stage into engine memory, filter with regex, and write to analytical warehouse:
+Extract zipped server access logs from a landing folder, stage each one in engine memory, and load it into the warehouse. Each archive holds one `access.csv`:
 
 ```sql
 CREATE CONNECTION landing_dir AS DIRECTORY(PATH='C:\telemetry\drops');
@@ -89,17 +76,17 @@ CREATE CONNECTION dw          AS MSSQL(SERVER='dw.internal', DATABASE='analytics
 SELECT file_name, file_path 
 INTO #compressed_logs
 FROM landing_dir.files
-WHERE file_extension = '.gz';
+WHERE file_extension = '.zip';
 
 FOREACH @log IN #compressed_logs
 BEGIN
-  DECLARE @extracted_path VARCHAR = 'C:\staging\' + REPLACE(@log.file_name, '.gz', '');
+  DECLARE @extracted_dir VARCHAR = 'C:\staging\' + REPLACE(@log.file_name, '.zip', '') + '\';
 
-  -- 2. Decompress archive to local staging
-  DECOMPRESS FILE @log.file_path TO @extracted_path WITH (OVERWRITE = ON);
+  -- 2. Extract the archive into its own staging folder
+  DECOMPRESS FILE @log.file_path TO @extracted_dir WITH (OVERWRITE = ON);
 
   -- 3. Ingest and parse with CSV connector
-  CREATE CONNECTION uncompressed_csv AS FLATFILE(PATH=@extracted_path);
+  CREATE CONNECTION uncompressed_csv AS FLATFILE(PATH=@extracted_dir + 'access.csv');
   SELECT log_id, ip_address, status_code, request_path, response_time_ms
   INTO #staged_logs
   FROM uncompressed_csv.data;
@@ -109,8 +96,8 @@ BEGIN
   SELECT log_id, ip_address, status_code, request_path, response_time_ms
   FROM #staged_logs;
 
-  -- 5. Cleanup temporary uncompressed file
-  DELETE FILE @extracted_path;
+  -- 5. Clean up the extracted folder
+  DELETE DIRECTORY @extracted_dir;
   DROP TABLE #staged_logs;
 END;
 

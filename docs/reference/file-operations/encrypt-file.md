@@ -1,127 +1,142 @@
 # ENCRYPT / DECRYPT FILE
 
-Encrypts or decrypts local files and staged datasets on disk using AES-256 or PGP. Also governs session-level credential encryption (`ENC:` strings) and secure password management.
-
----
+Encrypts or decrypts a local file with a password, an SSH RSA key or a PGP key, or every file in a
+directory tree with a password.
 
 ## Syntax
 
-### 1. File Encryption
 ```sql
-ENCRYPT FILE '<source_file_path>' TO '<target_encrypted_path>' 
-[WITH (
-  DELETE_SOURCE = ON | OFF,
-  ALGORITHM = 'AES256' | 'PGP',
-  KEYFILE = '<public_key_path>',
-  PASSWORD = '<passphrase>'
-)];
+-- Files
+ENCRYPT FILE '<source>' TO '<destination>'
+    { PASSWORD '<passphrase>' | KEYFILE '<rsa_public_key.pem>' | PGP_KEY '<public_key.asc>' }
+    [WITH (OVERWRITE = ON | OFF)];
+
+DECRYPT FILE '<source>' TO '<destination>'
+    { PASSWORD '<passphrase>'
+    | KEYFILE '<rsa_private_key.pem>' [PASSWORD '<key_passphrase>']
+    | PGP_KEY '<private_key.asc>' [PASSWORD '<key_passphrase>'] }
+    [WITH (OVERWRITE = ON | OFF)];
+
+-- Directories (password only)
+ENCRYPT DIRECTORY '<source_dir>' TO '<destination_dir>' PASSWORD '<passphrase>' [WITH (OVERWRITE = ON | OFF)];
+DECRYPT DIRECTORY '<source_dir>' TO '<destination_dir>' PASSWORD '<passphrase>' [WITH (OVERWRITE = ON | OFF)];
 ```
 
-### 2. File Decryption
-```sql
-DECRYPT FILE '<encrypted_file_path>' TO '<target_plaintext_path>'
-[WITH (
-  DELETE_SOURCE = ON | OFF,
-  KEYFILE = '<private_key_path>',
-  PASSWORD = '<passphrase>'
-)];
-```
+`PASSWORD` also takes the parenthesized form `PASSWORD('<passphrase>')`. Any value can be a variable.
 
----
+## Semantics
 
-## `ENC:` Encrypted Credentials & Session Passwords
+| Method | `ENCRYPT FILE` uses | `DECRYPT FILE` needs | Format |
+| :--- | :--- | :--- | :--- |
+| `PASSWORD` | the passphrase | the same passphrase | AES-256 with an HMAC-SHA256 tag; the key is derived with PBKDF2-SHA256 (600,000 iterations, random salt). ETL-SQL's own format: decrypt it with `DECRYPT FILE`. |
+| `KEYFILE` | a PEM RSA **public** key | the matching PEM RSA **private** key, plus `PASSWORD` if that key is encrypted | A random AES-256 key, wrapped with RSA-OAEP-SHA256. ETL-SQL's own format. |
+| `PGP_KEY` | an OpenPGP **public** key | the matching OpenPGP **private** key, plus `PASSWORD` for its passphrase | Standard OpenPGP, readable by GnuPG and other PGP tools. |
 
-Connection credentials and sensitive parameters can be stored as pre-encrypted blobs prefixed with `ENC:`. Setting a session password via `USE PASSWORD` unlocks these credentials in-memory at connection time:
+- Give exactly one method. `KEYFILE` with `PGP_KEY`, or `PASSWORD` with a key on `ENCRYPT FILE`, is a
+  syntax error, because the statement would otherwise use one and ignore the other.
+- [CREATE PGP_KEY_PAIR](create-pgp-key-pair.md) writes `public.asc` and `private.asc` into a folder.
+  [CREATE SSH_KEY_PAIR](create-ssh-key-pair.md) with `ALGORITHM = 'RSA'` writes `id_rsa` and
+  `id_rsa.pub`. Reading a `.pub` file needs `SET ALLOW_FILE_TYPE_ACCESS = '.pub';` (example 4). An
+  ECDSA key cannot be used with `KEYFILE`.
+- `TO` is required. Without it nothing is written.
+- The source file is left in place. Remove the plaintext with `DELETE FILE` once the encrypted file is
+  written (see the vendor-drop example).
+- `ENCRYPT DIRECTORY` encrypts every file, subfolders included, and writes each one as `<name>.enc`
+  under the destination with the same folder layout. `DECRYPT DIRECTORY` decrypts only `.enc` files
+  and removes that suffix.
+- A session password from `USE PASSWORD` or `--pass` is not used for files. Give `PASSWORD` on the
+  statement.
 
-```sql
--- Establish session decryption context
-USE PASSWORD = 'SECRET:SessionMasterKey';
+## Options
 
--- The engine automatically decrypts the ENC: blob during connection initialization
-CREATE CONNECTION prod_db AS MSSQL(
-    SERVER   = 'sql01.internal',
-    DATABASE = 'Finance',
-    PASSWORD = 'ENC:U2FsdGVkX1+abc123=='
-);
-```
+- **`OVERWRITE`** — `ON` (default) replaces an existing destination; `OFF` fails instead.
 
----
+Any other `WITH` option is a syntax error that lists the accepted options.
 
 ## Examples
 
-### 1. Symmetric File Encryption (AES-256)
+### 1. Password round trip
 
 ```sql
-USE PASSWORD = 'SECRET:FileEncryptionPassphrase';
+DECLARE @pass VARCHAR = 'correct-horse-battery-staple';
 
--- Encrypt sensitive staging CSV and purge plaintext source
-ENCRYPT FILE 'C:\staging\payroll.csv' 
-TO 'C:\staging\payroll.csv.enc' 
-WITH (DELETE_SOURCE = ON);
+ENCRYPT FILE 'staging/payroll.csv' TO 'staging/payroll.csv.enc' PASSWORD @pass;
+DELETE FILE 'staging/payroll.csv';
 
--- Decrypt back to plaintext when needed
-DECRYPT FILE 'C:\staging\payroll.csv.enc' 
-TO 'C:\staging\payroll.csv';
+DECRYPT FILE 'staging/payroll.csv.enc' TO 'staging/payroll.csv' PASSWORD @pass WITH (OVERWRITE = OFF);
 ```
 
-### 2. Production ETL: Secure Vendor Data Drop with Public Key Encryption
-
-Extract sensitive partner records, stage to CSV, compress with GZIP, encrypt using the vendor's public PGP key, transmit via SFTP, and safely delete intermediate files:
+### 2. Vendor drop: compress, encrypt to the partner's PGP key, send, clean up
 
 ```sql
-CREATE CONNECTION dw        AS MSSQL(SERVER='dw.internal', DATABASE='analytics');
 CREATE CONNECTION sftp_drop AS SFTP(HOST='sftp.partner.com', USER='partner_agent', KEYFILE='certs/sftp_id.rsa');
 
-DECLARE @local_csv VARCHAR = 'C:\staging\partner_feed.csv';
-DECLARE @local_gz  VARCHAR = 'C:\staging\partner_feed.csv.gz';
-DECLARE @local_pgp VARCHAR = 'C:\staging\partner_feed.csv.gz.pgp';
+DECLARE @local_csv VARCHAR = 'staging/partner_feed.csv';
+DECLARE @local_zip VARCHAR = 'staging/partner_feed.zip';
+DECLARE @local_pgp VARCHAR = 'staging/partner_feed.zip.pgp';
 
-BEGIN TRY
-  -- 1. Extract and sanitize partner data
-  SELECT customer_id, first_name, last_name, HASHBYTES('SHA256', ssn) AS ssn_hash, reward_balance
-  INTO #partner_stage
-  FROM dw.dbo.CustomerRewards
-  WHERE is_active = 1;
+-- Compress first: encrypted data does not compress
+COMPRESS FILE @local_csv TO @local_zip;
 
-  -- 2. Export table to CSV
-  SELECT * INTO #export_view FROM #partner_stage;
-  COPY FILE '#export_view' TO @local_csv;
+-- Encrypt to the partner's public key; only they can decrypt it
+ENCRYPT FILE @local_zip TO @local_pgp PGP_KEY 'certs/partner_public.asc';
 
-  -- 3. Compress FIRST to maximize entropy reduction
-  COMPRESS FILE @local_csv TO @local_gz WITH (FORMAT = 'GZIP');
+SEND FILE @local_pgp TO '/inbound/partner_feed.zip.pgp' AT sftp_drop WITH (OVERWRITE = TRUE);
 
-  -- 4. Encrypt with partner's public PGP key and remove unencrypted archive
-  ENCRYPT FILE @local_gz TO @local_pgp WITH (
-    ALGORITHM = 'PGP',
-    KEYFILE = 'certs/partner_public.asc',
-    DELETE_SOURCE = ON
-  );
-
-  -- 5. Transmit encrypted archive to remote drop zone
-  SEND FILE @local_pgp TO '/inbound/partner_feed.csv.gz.pgp' AT sftp_drop WITH (OVERWRITE = TRUE);
-
-  PRINT 'Encrypted feed delivered successfully.';
-
-  -- 6. Cleanup local files
-  DELETE FILE @local_csv;
-  DELETE FILE @local_pgp;
-END TRY
-BEGIN CATCH
-  PRINT 'Secure vendor drop failed: ' + ERROR_MESSAGE();
-  THROW;
-END CATCH;
+-- Remove every local copy, plaintext included
+DELETE FILE @local_csv;
+DELETE FILE @local_zip;
+DELETE FILE @local_pgp;
 ```
 
----
+### 3. Decrypt a file a partner encrypted to your PGP key
 
-## Security Guardrails & Order of Operations
+```sql
+DECRYPT FILE 'inbound/orders.csv.pgp' TO 'staging/orders.csv'
+    PGP_KEY 'certs/our_private.asc' PASSWORD 'private-key-passphrase';
+```
 
-- **Order of Operations**: **Always compress BEFORE encrypting.** Compressing already-encrypted data is ineffective because cryptographic encryption maximizes entropy. The linter issues a warning if compression is executed after encryption.
-- **In-Memory Password Isolation**: Session passwords set by `USE PASSWORD` are held strictly in memory and are automatically redacted from error traces, query plans, and audit outboxes.
+### 4. SSH RSA key pair
 
----
+```sql
+CREATE SSH_KEY_PAIR 'certs/ledger' WITH (BITS = 4096, ALGORITHM = 'RSA');
 
-## References & Related Recipes
+-- .pub is outside the default file-type list
+SET ALLOW_FILE_TYPE_ACCESS = '.pub';
+
+ENCRYPT FILE 'staging/ledger.csv' TO 'staging/ledger.csv.enc' KEYFILE 'certs/ledger/id_rsa.pub';
+DECRYPT FILE 'staging/ledger.csv.enc' TO 'restore/ledger.csv' KEYFILE 'certs/ledger/id_rsa';
+```
+
+### 5. A whole directory
+
+```sql
+ENCRYPT DIRECTORY 'exports/2026-11/' TO 'vault/2026-11/' PASSWORD 'archive-passphrase';
+DECRYPT DIRECTORY 'vault/2026-11/' TO 'restore/2026-11/' PASSWORD 'archive-passphrase';
+```
+
+## Guardrails
+
+- **Compress before encrypting.** Compressing encrypted data saves nothing; the linter warns when
+  `COMPRESS FILE` follows `ENCRYPT FILE` on the same path.
+- **Delete the plaintext yourself.** Encryption never removes the source.
+- **Keep passphrases out of saved scripts.** A literal password is visible to anyone who can read the
+  script. Prefer an `ENC:` value or a prompted password; see [USE](../variables-parameters/use.md).
+- Destination paths pass the same file-system policy and file-type checks as every other write.
+
+## Errors
+
+- **`ENCRYPT FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, ...`** — no method was given. Add one.
+- **`Destination file already exists and OVERWRITE is OFF: <path>`** — remove the file or set
+  `OVERWRITE = ON`.
+- **`ENCRYPT FILE takes KEYFILE (an SSH RSA key) or PGP_KEY, not both.`** — pick one method.
+- **`ENCRYPT FILE with PGP_KEY encrypts to a public key and takes no PASSWORD.`** — drop `PASSWORD`;
+  it is only the private-key passphrase on `DECRYPT FILE`.
+- **`ENCRYPT DIRECTORY does not support KEYFILE or PGP_KEY.`** — directories use `PASSWORD` only.
+- **`ENCRYPT FILE has no WITH option '<key>'.`** — the message lists the accepted options.
+- A wrong password, a wrong key, or a file that was not encrypted this way fails the statement.
+
+## References
 
 - [File Operations Reference](README.md)
 - [COMPRESS FILE](compress-file.md)

@@ -14,6 +14,26 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- File and directory statements reject an option they would ignore (ROADMAP FO02). Every
+  `WITH (...)` on `COPY`, `MOVE`, `RENAME`, `DELETE`, `COMPRESS`, `DECOMPRESS`, `ENCRYPT`, `DECRYPT`
+  (file and directory), `CREATE DIRECTORY`, `DELETE DIRECTORY_CONTENTS`, `SEND FILE`, `RECEIVE FILE`,
+  `CONVERT FILE ENCODING`, `SPLIT FILE`, `MERGE FILES` and `SYNC DIRECTORY` used to parse any key and
+  drop the ones it did not know, so `ENCRYPT FILE ... WITH (DELETE_SOURCE = ON)` left the plaintext
+  on disk and `COMPRESS FILE ... WITH (FORMAT = 'GZIP')` still wrote ZIP. An unknown key is now a
+  syntax error naming the accepted keys. `DATE_SUFFIX` and `SUFFIX_SEPARATOR` are accepted only on
+  `COPY`, `MOVE` and `RENAME`, where they work. `PASSWORD`, `KEYFILE` and `PGP_KEY` are errors on
+  anything but `ENCRYPT`/`DECRYPT`; `KEYFILE` with `PGP_KEY`, or `PASSWORD` with a key on
+  `ENCRYPT FILE`, is an error instead of silently using one; directories reject `KEYFILE` and
+  `PGP_KEY`, which they ignored in favour of a password; and `RECURSIVE` is accepted only on
+  `DELETE DIRECTORY_CONTENTS`. **Behaviour change.**
+- The ENCRYPT / DECRYPT FILE page is rewritten to the real syntax (ROADMAP FO01): the clause form,
+  `KEYFILE` as an SSH RSA key and `PGP_KEY` as the PGP key (the page had them reversed), no
+  `ALGORITHM` or `DELETE_SOURCE`, the directory forms, and a vendor-drop example that deletes the
+  plaintext with `DELETE FILE`. Every example was run. Related pages: `COMPRESS` writes ZIP only and
+  has no `FORMAT` or `RECURSE`; `OVERWRITE` defaults to `ON` for file statements, `SEND FILE` and
+  `RECEIVE FILE` (four pages said `OFF`); and `CREATE SSH_KEY_PAIR` and `CREATE PGP_KEY_PAIR` write
+  `id_rsa`/`id_rsa.pub` and `public.asc`/`private.asc` into a folder, not `<path>` and `<path>.pub`.
+
 - FTP: an unrecognized `USE_SSL` or `PASSIVE` value is an error and the connection does not open
   (ROADMAP RF01). `USE_SSL` read every value but `EXPLICIT`, `ON` and `IMPLICIT` as no encryption,
   and the FTP page told users to set `USE_SSL=TRUE`, so a quoted `'TRUE'` (and `YES` or `1`) sent the

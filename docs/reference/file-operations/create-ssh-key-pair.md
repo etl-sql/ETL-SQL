@@ -9,7 +9,8 @@ Syntax:
       PASSPHRASE = '<passphrase>'
     );
 
-The private key is written to output_path; the public key is written to output_path.pub.
+`output_path` is a folder. RSA writes `id_rsa` (private) and `id_rsa.pub` (public) into it; ECDSA
+writes `id_ecdsa_<bits>` and `id_ecdsa_<bits>.pub`. Both files are PEM.
 
 Options:
 - **BITS** — key size in bits for RSA (default 2048; use 4096 for higher security)
@@ -25,7 +26,7 @@ CREATE SSH_KEY_PAIR 'C:\keys\partner_deploy'
 CREATE CONNECTION DeployServer AS SFTP(
   HOST    = 'sftp.partner.com',
   USER    = 'deploy',
-  KEYFILE = 'C:\keys\partner_deploy'
+  KEYFILE = 'C:\keys\partner_deploy\id_rsa'
 );
 ```
 

@@ -23,7 +23,7 @@ SEND FILE('<local_path>', <connection_name>, '<remote_path>' [, <overwrite_boole
 - **`local_path`** — Absolute or relative path to the local source file on disk (must sit within allowed directory boundaries).
 - **`remote_path`** — Target destination path on the remote host.
 - **`connection_name`** — Active `SFTP`, `FTP`, or `AZURE_BLOB` connection identifier.
-- **`OVERWRITE = TRUE | FALSE`** — When `TRUE`, overwrites existing remote files. When `FALSE`, throws an error if the destination already exists (default: `FALSE`).
+- **`OVERWRITE = TRUE | FALSE`** — When `TRUE`, overwrites existing remote files. When `FALSE`, throws an error if the destination already exists (default: `TRUE`).
 
 ---
 
@@ -56,8 +56,8 @@ CREATE CONNECTION bank_sftp AS SFTP(HOST='sftp.bank.internal', USER='etl_agent',
 
 DECLARE @date_str VARCHAR = CAST(FORMAT(GETDATE(), 'yyyyMMdd') AS VARCHAR);
 DECLARE @local_csv VARCHAR = 'C:\staging\settlement_' + @date_str + '.csv';
-DECLARE @local_gz  VARCHAR = 'C:\staging\settlement_' + @date_str + '.csv.gz';
-DECLARE @remote_dest VARCHAR = '/inbound/settlement_' + @date_str + '.csv.gz';
+DECLARE @local_zip VARCHAR = 'C:\staging\settlement_' + @date_str + '.zip';
+DECLARE @remote_dest VARCHAR = '/inbound/settlement_' + @date_str + '.zip';
 
 BEGIN TRY
   -- 1. Extract clean transaction ledger
@@ -71,16 +71,16 @@ BEGIN TRY
   COPY FILE '#export_view' TO @local_csv;
 
   -- 3. Compress for efficient network transit
-  COMPRESS FILE @local_csv TO @local_gz WITH (FORMAT = 'GZIP');
+  COMPRESS FILE @local_csv TO @local_zip WITH (OVERWRITE = ON);
 
   -- 4. Secure transmission to bank SFTP server
-  SEND FILE @local_gz TO @remote_dest AT bank_sftp WITH (OVERWRITE = TRUE);
+  SEND FILE @local_zip TO @remote_dest AT bank_sftp WITH (OVERWRITE = TRUE);
 
   PRINT 'Settlement file successfully delivered to remote bank server: ' + @remote_dest;
 
   -- 5. Local cleanup
   DELETE FILE @local_csv;
-  DELETE FILE @local_gz;
+  DELETE FILE @local_zip;
 END TRY
 BEGIN CATCH
   PRINT 'Transfer failed: ' + ERROR_MESSAGE();

@@ -47,8 +47,9 @@ namespace ETL_SQL.Tests.Statements.Statements
             const string sql = "COPY DIRECTORY 'source' TO 'target' RECURSIVE ON;";
             var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
 
-            Assert.Empty(script.Diagnostics);
-            Assert.IsType<DirectoryOperationStatement>(Assert.Single(script.Statements));
+            // RECURSIVE reaches the directory parser, which rejects it because only
+            // DELETE DIRECTORY_CONTENTS reads it (ROADMAP FO02).
+            Assert.Contains("COPY DIRECTORY does not take RECURSIVE", Assert.Single(script.Diagnostics).Message);
         }
 
         [Fact]

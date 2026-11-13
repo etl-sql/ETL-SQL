@@ -261,7 +261,7 @@ public class DataParser : ParserComponent
             RejectUnsupportedCreateIfNotExists("DIRECTORY");
             var path = ParseExpression();
             Expression? overwrite = null;
-            if (Match(TokenType.WITH)) overwrite = ParseWithOverwrite();
+            if (Match(TokenType.WITH)) overwrite = ParseWithOptions("CREATE DIRECTORY", "OVERWRITE").GetValueOrDefault("OVERWRITE");
             string? connectionName = null;
             if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
             Match(TokenType.SEMICOLON);
@@ -924,7 +924,7 @@ public class DataParser : ParserComponent
         {
             var path = ParseExpression();
             Expression? recursive = null;
-            if (Match(TokenType.WITH)) recursive = ParseWithRecursive();
+            if (Match(TokenType.WITH)) recursive = ParseWithOptions("DELETE DIRECTORY_CONTENTS", "RECURSIVE").GetValueOrDefault("RECURSIVE");
             Match(TokenType.SEMICOLON);
             return new DirectoryOperationStatement(DirectoryOpType.DeleteContents, path, null, null, recursive) { Line = startToken.Line, Column = startToken.Column };
         }

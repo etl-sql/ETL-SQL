@@ -23,7 +23,7 @@ RECEIVE FILE('<remote_path>', <connection_name>, '<local_path>' [, <overwrite_bo
 - **`remote_path`** — File path on the remote host/server.
 - **`local_path`** — Local destination file path on disk where the file will be saved.
 - **`connection_name`** — Active `SFTP`, `FTP`, or `AZURE_BLOB` connection identifier.
-- **`OVERWRITE = TRUE | FALSE`** — When `TRUE`, overwrites existing local files. When `FALSE`, throws an exception if the local target file already exists (default: `FALSE`).
+- **`OVERWRITE = TRUE | FALSE`** — When `TRUE`, overwrites existing local files. When `FALSE`, throws an exception if the local target file already exists (default: `TRUE`).
 
 ---
 

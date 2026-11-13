@@ -223,16 +223,23 @@ file_transfer_statement = "SEND" "FILE" expression "TO" expression "AT" identifi
 email_statement = "SEND" "EMAIL" "TO" expression "FROM" expression "SUBJECT" expression "BODY" expression
                   [ "CC" email_value_list ] [ "BCC" email_value_list ] [ "ATTACH" email_value_list ] [ "AT" expression ] ;
 email_value_list = expression | "[" [ expression_list ] "]" ;
-file_operation_statement = ( "COPY" | "MOVE" | "RENAME" | "COMPRESS" | "DECOMPRESS" ) "FILE" expression [ "TO" [ "DIRECTORY" ] expression ]
-                           [ file_security_options ] [ file_operation_options ] [ "AT" identifier ]
+file_operation_statement = ( "COPY" | "MOVE" | "RENAME" ) "FILE" expression [ "TO" [ "DIRECTORY" ] expression ]
+                           [ file_operation_options ] [ "AT" identifier ]
+                         | ( "COMPRESS" | "DECOMPRESS" ) "FILE" expression [ "TO" expression ] [ overwrite_option ] [ "AT" identifier ]
                          | "DELETE" "FILE" [ "IF" "EXISTS" ] expression [ "AT" identifier ]
-                         | ( "ENCRYPT" | "DECRYPT" ) "FILE" expression [ "TO" expression ] [ file_security_options ] [ file_operation_options ] [ "AT" identifier ] ;
-file_security_options = file_security_option { file_security_option } ;
-file_security_option = "PASSWORD" ( "(" expression ")" | expression ) | "KEYFILE" expression | "PGP_KEY" expression ;
-file_operation_options = "WITH" "(" identifier "=" expression { "," identifier "=" expression } ")" ;
+                         | "ENCRYPT" "FILE" expression [ "TO" expression ] [ encrypt_key_clause ] [ overwrite_option ] [ "AT" identifier ]
+                         | "DECRYPT" "FILE" expression [ "TO" expression ] [ decrypt_key_clause ] [ overwrite_option ] [ "AT" identifier ] ;
+overwrite_option = "WITH" "(" "OVERWRITE" "=" expression ")" ;
+password_clause = "PASSWORD" ( "(" expression ")" | expression ) ;
+encrypt_key_clause = password_clause | "KEYFILE" expression | "PGP_KEY" expression ;
+decrypt_key_clause = password_clause | ( "KEYFILE" | "PGP_KEY" ) expression [ password_clause ] ;
+file_operation_options = "WITH" "(" file_operation_option { "," file_operation_option } ")" ;
+file_operation_option = ( "OVERWRITE" | "DATE_SUFFIX" | "SUFFIX_SEPARATOR" ) "=" expression ;
 convert_encoding_statement = "CONVERT" "FILE" "ENCODING" string_literal "TO" string_literal "WITH" "(" "FROM_ENCODING" "=" string_literal "," "TO_ENCODING" "=" string_literal ")" ;
-split_file_statement = "SPLIT" "FILE" expression "TO" expression "WITH" "(" "LIMIT_TYPE" "=" expression "," "LIMIT_VALUE" "=" expression { "," identifier "=" expression } ")" ;
-sync_directory_statement = "SYNC" "DIRECTORY" expression "TO" expression [ "WITH" object_options ] ;
+split_file_statement = "SPLIT" "FILE" expression "TO" expression "WITH" "(" "LIMIT_TYPE" "=" expression "," "LIMIT_VALUE" "=" expression { "," ( "PREFIX" | "OVERWRITE" ) "=" expression } ")" ;
+sync_directory_statement = "SYNC" "DIRECTORY" expression "TO" expression
+                           [ "WITH" "(" sync_directory_option { "," sync_directory_option } ")" ] ;
+sync_directory_option = ( "DELETE_EXTRA" | "OVERWRITE" | "RECURSIVE" ) "=" expression ;
 verify_file_statement = "VERIFY" "FILE" "INTEGRITY" expression "WITH" "("
                         ( "EXPECTED_HASH" | "HASH_FILE" ) "=" expression { "," identifier "=" expression } ")" ;
 generate_statement = "GENERATE" expression "ROWS" "INTO" table_reference [ "WITH" object_options ]
@@ -260,10 +267,9 @@ directory_operation_statement = ( "COPY" | "MOVE" | "RENAME" | "COMPRESS" | "DEC
                                 [ directory_operation_options ] [ "AT" identifier ]
                               | "DELETE" "DIRECTORY" [ "IF" "EXISTS" ] expression [ "AT" identifier ]
                               | "DELETE" "DIRECTORY_CONTENTS" expression [ "WITH" "(" "RECURSIVE" "=" expression ")" ]
-                              | ( "ENCRYPT" | "DECRYPT" ) "DIRECTORY" expression [ "TO" expression ] [ file_security_options ]
+                              | ( "ENCRYPT" | "DECRYPT" ) "DIRECTORY" expression [ "TO" expression ] [ password_clause ]
                                 [ directory_operation_options ] [ "AT" identifier ] ;
-directory_operation_options = "WITH" "(" identifier "=" expression { "," identifier "=" expression } ")"
-                            | "RECURSIVE" expression ;
+directory_operation_options = "WITH" "(" "OVERWRITE" "=" expression ")" ;
 refresh_dataset_statement = "REFRESH" "DATASET" ( dataset_name | string_literal "IN" "FOLDER" string_literal ) ;
 kill_job_statement = "KILL" "JOB" expression ;
 set_option_statement = "SET" set_boolean_option [ "=" ] ( "ON" | "OFF" )
