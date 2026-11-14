@@ -1061,7 +1061,8 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         {
             if (column.Equals(dateColumn, StringComparison.OrdinalIgnoreCase))
             {
-                row[column] = date;
+                // Keep the column's type: a DATE column holds DateOnly, DATETIME holds DateTime.
+                row[column] = template[column] is DateOnly ? DateOnly.FromDateTime(date) : date;
             }
             else if (groupColumns.Contains(column, StringComparer.OrdinalIgnoreCase))
             {
