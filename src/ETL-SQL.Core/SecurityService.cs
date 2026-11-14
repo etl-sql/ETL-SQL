@@ -51,8 +51,21 @@ public partial class SecurityService
             info: "etl-sql-machine-password"u8.ToArray())));
 
     private readonly ILogger _logger;
-    [GeneratedRegex(@"(CREATE\s+CONNECTION\s+\w+\s+AS\s+\w+\s*\()(.*?)(\))", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    // Named groups number after the unnamed ones, so groups 1-3 stay prefix, content and ')'.
+    [GeneratedRegex(@"(CREATE\s+CONNECTION\s+\w+\s+AS\s+(?<type>\w+)\s*\()(.*?)(\))", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex ConnRegex();
+    [GeneratedRegex(@"^[a-z][a-z0-9+.\-]*://[^/@\s]+:[^/@\s]*@", RegexOptions.IgnoreCase)]
+    private static partial Regex UrlWithPasswordRegex();
+
+    /// <summary>
+    /// Connectors whose positional value is a file-system path (as in
+    /// <c>ConnectionStringBuilder</c>). A path is not a credential, so sealing leaves it readable
+    /// unless it carries one. MOCKDB is left out on purpose: its value is an opaque token.
+    /// </summary>
+    private static readonly HashSet<string> FilePathConnectorTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "FLATFILE", "CSV", "EXCEL", "JSON", "XML", "PARQUET", "AVRO", "DIRECTORY"
+    };
     [GeneratedRegex(@"((?:PASSWORD|API_KEY|APIKEY)\s*=\s*)(['""])(.*?)\2", RegexOptions.IgnoreCase)]
     private static partial Regex PasswordOptionRegex();
     [GeneratedRegex(@"(['""])ENC:[A-Za-z0-9+/=]*\1")]
@@ -1195,6 +1208,10 @@ public partial class SecurityService
         });
     }
 
+    /// <summary>A connection string (<c>key=value</c>) or a URL with <c>user:password@</c>.</summary>
+    private static bool CarriesCredential(string value) =>
+        value.Contains('=') || UrlWithPasswordRegex().IsMatch(value);
+
     private static bool IsSealedOrIndirectCredential(string value) =>
         value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)
         || value.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)
@@ -1234,11 +1251,13 @@ public partial class SecurityService
             if (parenContent.Contains("ENCRYPT=OFF", StringComparison.OrdinalIgnoreCase))
                 return m.Value;
 
-            // 1. Encrypt positional target if it looks like a connection string
+            // 1. Encrypt the positional target when it carries a credential, or when it is an opaque
+            //    value (no file extension) of a connector that does not take a file-system path.
+            var isFilePathConnector = FilePathConnectorTypes.Contains(m.Groups["type"].Value);
             var newContent = ReplaceFirstQuotedString(parenContent, (q, inner) =>
             {
                 if (IsSealedOrIndirectCredential(inner)) return $"{q}{inner}{q}";
-                if (inner.Contains("=") || !Path.HasExtension(inner))
+                if (CarriesCredential(inner) || (!isFilePathConnector && !Path.HasExtension(inner)))
                     return $"{q}{CryptoUtils.Encrypt(inner, password)}{q}";
                 return $"{q}{inner}{q}";
             });
@@ -1276,7 +1295,7 @@ public partial class SecurityService
             if (firstQuoted != null && firstQuoted.Length >= 2)
             {
                 var inner = firstQuoted[1..^1];
-                if (!IsSealedOrIndirectCredential(inner) && inner.Contains("="))
+                if (!IsSealedOrIndirectCredential(inner) && CarriesCredential(inner))
                     return true;
             }
 

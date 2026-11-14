@@ -79,6 +79,32 @@ public sealed class ScriptFirstRunSealingTests : IDisposable
         Assert.Equal(onDisk, await File.ReadAllTextAsync(file));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task FirstRun_Sealing_KeepsTheFilesByteOrderMarkAndPaths(bool withBom)
+    {
+        var file = Path.Combine(_dir, withBom ? "bom.etlsql" : "nobom.etlsql");
+        var raw = """
+            USE PASSWORD = 'master-123';
+            CREATE CONNECTION drop_zone AS DIRECTORY('samples/output/pickup/');
+            SELECT 1 AS ok;
+            """;
+        await File.WriteAllTextAsync(file, raw, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: withBom));
+
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.CurrentScriptPath = file;
+        Assert.True(await evaluator.SealCurrentScriptIfNeededAsync(default));
+
+        var bytes = await File.ReadAllBytesAsync(file);
+        var hasBom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+        Assert.Equal(withBom, hasBom);
+        var onDisk = await File.ReadAllTextAsync(file);
+        Assert.Contains("USE PASSWORD PROMPT;", onDisk, StringComparison.Ordinal);
+        // A directory path is not a credential: sealing leaves it readable.
+        Assert.Contains("DIRECTORY('samples/output/pickup/')", onDisk, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task FirstRun_WithAllowPlaintextSecretsOn_LeavesDiskUntouched()
     {

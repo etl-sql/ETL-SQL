@@ -345,6 +345,29 @@ namespace ETL_SQL.Tests.Hardening
             Assert.DoesNotContain(Parse(secured).Diagnostics, d => d.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error);
         }
 
+        // A file connector's positional value is a path, not a credential; it stays readable unless
+        // it carries one (a connection string, or a URL with user:password@).
+        [Fact]
+        public void SecurityService_EncryptScript_LeavesFileConnectorPathsReadable()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var sql = string.Join("\n",
+                "CREATE CONNECTION drop AS DIRECTORY('samples/output/pickup/');",
+                "CREATE CONNECTION out AS FLATFILE('exports/daily');",
+                "CREATE CONNECTION ftpdir AS DIRECTORY('ftp://etl:hunter2@files.example.com/in/');",
+                "CREATE CONNECTION mock AS MOCKDB('opaque-token');");
+
+            var encrypted = service.EncryptScript(sql, "master");
+
+            Assert.Contains("DIRECTORY('samples/output/pickup/')", encrypted);
+            Assert.Contains("FLATFILE('exports/daily')", encrypted);
+            Assert.DoesNotContain("hunter2", encrypted);
+            Assert.Contains("ftpdir AS DIRECTORY('ENC:", encrypted);
+            Assert.Contains("mock AS MOCKDB('ENC:", encrypted);
+            Assert.True(service.NeedsEncryption("CREATE CONNECTION d AS DIRECTORY('ftp://etl:hunter2@files.example.com/in/');"));
+            Assert.False(service.NeedsEncryption("CREATE CONNECTION d AS DIRECTORY('samples/output/pickup/');"));
+        }
+
         [Fact]
         public void SecurityService_NeedsEncryption_IgnoresConnectionsInsideStringLiterals()
         {

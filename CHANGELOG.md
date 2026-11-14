@@ -38,7 +38,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   `SecurityService.TrySealScriptForSave`, prompts when a save password is needed, and resets the
   CodeMirror `EditorState` on save to clear undo history. Sealing never rewrites text inside a
   string literal: a `CREATE CONNECTION` or `USE PASSWORD` in dynamic SQL is left alone, where it
-  used to be encrypted in place and broke the script's quoting. Run a sealed script unattended with
+  used to be encrypted in place and broke the script's quoting. File-connector paths (`FLATFILE`,
+  `DIRECTORY`, `PARQUET` and the other file formats) stay readable unless they carry a credential,
+  and a sealed file keeps its UTF-8 byte order mark. Run a sealed script unattended with
   `ETL_SQL_MASTER_PASSWORD`; the sample gate runs every pass that way on a copy of `samples/`.
 
 - `ENCRYPT FILE` and `DECRYPT FILE` derive default destination paths when `TO` is omitted (ROADMAP

@@ -234,6 +234,12 @@ export function makeMockApi(seedState) {
       data = { path: 'sandbox/' + (body.fileName || 'report.rptsql') };
     } else if (path.endsWith('/api/designer/save')) {
       data = { version: 2, sourceRevision: 'sandbox-rev-2' };
+    } else if (path.endsWith('/api/designer/seal')) {
+      // Mirrors SecurityService.TrySealScriptForSave closely enough for the Studio flow: a script with
+      // plaintext secrets and no password asks for one; the sandbox never encrypts anything itself.
+      const script = String(body.script ?? '');
+      const hasSecrets = /(?:PASSWORD|PWD|API_KEY|SECRET)\s*=\s*['"]?[^'";\s)]/i.test(script);
+      data = { sealedScript: script, changed: false, requiresPassword: hasSecrets && !body.password, allowsPlaintextSecrets: false };
     } else if (path.endsWith('/api/designer/lease') && init?.method === 'POST') {
       data = { acquired: true, owner: 'sandbox-author', expiresAt: new Date(Date.now() + 300_000).toISOString() };
     } else if (path.includes('/api/designer/lease/') && init?.method === 'DELETE') {

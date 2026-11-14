@@ -1329,7 +1329,10 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         if ((File.GetAttributes(scriptPath) & FileAttributes.ReadOnly) != 0)
             return false;
 
-        var source = await File.ReadAllTextAsync(scriptPath, cancellationToken);
+        // Keep the file's UTF-8 byte order mark: sealing changes secrets, not the encoding.
+        var bytes = await File.ReadAllBytesAsync(scriptPath, cancellationToken);
+        var hasUtf8Bom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+        var source = System.Text.Encoding.UTF8.GetString(bytes, hasUtf8Bom ? 3 : 0, bytes.Length - (hasUtf8Bom ? 3 : 0));
         if (string.IsNullOrEmpty(source))
             return false;
 
@@ -1375,7 +1378,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             await File.WriteAllTextAsync(
                 scriptPath,
                 sealedSource,
-                new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+                new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: hasUtf8Bom),
                 cancellationToken);
             Log($"Sealed plaintext secrets in '{Path.GetFileName(scriptPath)}'.");
             return true;
