@@ -971,8 +971,8 @@ public partial class SecurityService
     {
         if (string.IsNullOrEmpty(text)) return null;
         var cleanText = StripComments(text);
-        var match = LiteralUsePasswordRegex().Match(cleanText);
-        if (!match.Success) return null;
+        var match = MatchesOutsideStringLiterals(LiteralUsePasswordRegex(), cleanText).FirstOrDefault();
+        if (match is null) return null;
         var raw = match.Value;
         var quoteIndex = raw.IndexOf(match.Groups[1].Value, StringComparison.Ordinal);
         var lastQuoteIndex = raw.LastIndexOf(match.Groups[1].Value, StringComparison.Ordinal);
@@ -984,7 +984,7 @@ public partial class SecurityService
     {
         if (string.IsNullOrEmpty(text)) return false;
         if (NoSaveConnectionEnabled(text)) return false;
-        if (ConnectionEncryptionEnabled(text) && ConnRegex().IsMatch(text)) return true;
+        if (ConnectionEncryptionEnabled(text) && MatchesOutsideStringLiterals(ConnRegex(), text).Any()) return true;
         if (NoSaveSensitiveEnabled(text)) return false;
         return !AllowsPlaintextSecrets(text) && NeedsEncryption(text);
     }
@@ -995,7 +995,7 @@ public partial class SecurityService
     public string SanitizeUsePasswordForSave(string text)
     {
         if (string.IsNullOrEmpty(text) || AllowsPlaintextSecrets(text)) return text;
-        return LiteralUsePasswordRegex().Replace(text, "USE PASSWORD PROMPT;");
+        return ReplaceOutsideStringLiterals(LiteralUsePasswordRegex(), text, _ => "USE PASSWORD PROMPT;");
     }
 
     /// <summary>
@@ -1015,7 +1015,7 @@ public partial class SecurityService
 
         var secured = (allowPlaintext && !noSaveSensitive)
             ? text
-            : LiteralUsePasswordRegex().Replace(text, "USE PASSWORD PROMPT;");
+            : ReplaceOutsideStringLiterals(LiteralUsePasswordRegex(), text, _ => "USE PASSWORD PROMPT;");
 
         if (noSaveConnection)
         {
@@ -1034,6 +1034,91 @@ public partial class SecurityService
             secured = ScrubSensitiveLiterals(secured);
 
         return secured;
+    }
+
+    /// <summary>
+    /// Marks each character inside a string literal (<c>'...'</c> with <c>''</c> escapes, or
+    /// <c>"..."</c>). Comments are skipped so an apostrophe in <c>-- don't</c> does not open a
+    /// literal. The sealing rewrites ignore matches that start inside a literal: a
+    /// <c>CREATE CONNECTION</c> or <c>USE PASSWORD</c> in dynamic SQL is data, and rewriting it
+    /// breaks the script's quoting so the script no longer parses.
+    /// </summary>
+    private static bool[] StringLiteralMask(string text)
+    {
+        var mask = new bool[text.Length];
+        var i = 0;
+        while (i < text.Length)
+        {
+            var c = text[i];
+            if (c == '-' && i + 1 < text.Length && text[i + 1] == '-')
+            {
+                while (i < text.Length && text[i] != '\n') i++;
+            }
+            else if (c == '/' && i + 1 < text.Length && text[i + 1] == '*')
+            {
+                var end = text.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                i = end < 0 ? text.Length : end + 2;
+            }
+            else if (c == '\'' || c == '"')
+            {
+                mask[i++] = true;
+                while (i < text.Length)
+                {
+                    mask[i] = true;
+                    if (text[i] != c) { i++; continue; }
+                    if (i + 1 < text.Length && text[i + 1] == c)
+                    {
+                        mask[i + 1] = true;
+                        i += 2;
+                        continue;
+                    }
+                    i++;
+                    break;
+                }
+            }
+            else
+            {
+                i++;
+            }
+        }
+        return mask;
+    }
+
+    /// <summary>
+    /// Matches of <paramref name="regex"/> that start outside string literals. A match that starts
+    /// inside one is skipped and the search resumes one character later, so a skipped match cannot
+    /// swallow a real statement that follows it.
+    /// </summary>
+    private static IEnumerable<Match> MatchesOutsideStringLiterals(Regex regex, string text)
+    {
+        var mask = StringLiteralMask(text);
+        var match = regex.Match(text);
+        while (match.Success)
+        {
+            if (!mask[match.Index])
+            {
+                yield return match;
+                match = match.NextMatch();
+            }
+            else
+            {
+                match = regex.Match(text, match.Index + 1);
+            }
+        }
+    }
+
+    private static string ReplaceOutsideStringLiterals(Regex regex, string text, MatchEvaluator evaluator)
+    {
+        var result = new System.Text.StringBuilder(text.Length);
+        var copied = 0;
+        var replaced = false;
+        foreach (var match in MatchesOutsideStringLiterals(regex, text))
+        {
+            result.Append(text, copied, match.Index - copied).Append(evaluator(match));
+            copied = match.Index + match.Length;
+            replaced = true;
+        }
+        return replaced ? result.Append(text, copied, text.Length - copied).ToString() : text;
     }
 
     private static string StripComments(string text)
@@ -1100,7 +1185,7 @@ public partial class SecurityService
 
     private static string ScrubConnectionDetails(string text)
     {
-        return ConnRegex().Replace(text, m =>
+        return ReplaceOutsideStringLiterals(ConnRegex(), text, m =>
         {
             var parenContent = m.Groups[2].Value;
             var newContent = ReplaceFirstQuotedString(parenContent, (q, _) => $"{q}<connection>{q}");
@@ -1117,7 +1202,7 @@ public partial class SecurityService
 
     private static string EncryptConnectionDetails(string text, string password)
     {
-        return ConnRegex().Replace(text, m =>
+        return ReplaceOutsideStringLiterals(ConnRegex(), text, m =>
         {
             var parenContent = m.Groups[2].Value;
             var newContent = ReplaceFirstQuotedString(parenContent, (q, inner) =>
@@ -1142,7 +1227,7 @@ public partial class SecurityService
     {
         if (string.IsNullOrEmpty(password)) return text;
 
-        return ConnRegex().Replace(text, m =>
+        return ReplaceOutsideStringLiterals(ConnRegex(), text, m =>
         {
             var parenContent = m.Groups[2].Value;
 
@@ -1179,7 +1264,7 @@ public partial class SecurityService
     /// </summary>
     public bool NeedsEncryption(string text)
     {
-        foreach (Match m in ConnRegex().Matches(text))
+        foreach (var m in MatchesOutsideStringLiterals(ConnRegex(), text))
         {
             var parenContent = m.Groups[2].Value;
 

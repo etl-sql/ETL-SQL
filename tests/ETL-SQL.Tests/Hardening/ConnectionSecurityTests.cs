@@ -318,6 +318,45 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Equal("secret-pw", service.ExtractLiteralUsePassword("USE PASSWORD = 'secret-pw';"));
         }
 
+        // Sealing runs on the first CLI run of a script, so a rewrite inside a string literal turns a
+        // working script into one that no longer parses (samples/07_Real_World/realworld_09).
+        [Fact]
+        public void SecurityService_SecureScriptForSave_LeavesStringLiteralsIntact()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var dynamicSql =
+                "DECLARE @dynSql VARCHAR(1000) = 'CREATE CONNECTION Payload AS FLATFILE(''' + @targetFile + ''', HEADER=''ON'');';";
+            var dynamicPassword = "DECLARE @p VARCHAR(100) = 'USE PASSWORD = ''inner'';';";
+            var script = string.Join("\n",
+                "-- don't let this apostrophe hide the connection below",
+                "CREATE CONNECTION db AS MSSQL('Server=.;Database=DB;User=sa;Password=secret;');",
+                dynamicSql,
+                dynamicPassword,
+                "USE PASSWORD = 'outer';");
+
+            var secured = service.SecureScriptForSave(script, "seal-pw");
+
+            Assert.Contains(dynamicSql, secured);
+            Assert.Contains(dynamicPassword, secured);
+            Assert.Contains("CREATE CONNECTION db AS MSSQL('ENC:", secured);
+            Assert.DoesNotContain("Password=secret", secured);
+            Assert.Contains("USE PASSWORD PROMPT;", secured);
+            Assert.DoesNotContain("'outer'", secured);
+            Assert.DoesNotContain(Parse(secured).Diagnostics, d => d.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error);
+        }
+
+        [Fact]
+        public void SecurityService_NeedsEncryption_IgnoresConnectionsInsideStringLiterals()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+
+            Assert.False(service.NeedsEncryption(
+                "DECLARE @s VARCHAR(200) = 'CREATE CONNECTION c AS MSSQL(''Server=.;Password=p;'');';"));
+            Assert.False(service.RequiresSavePassword(
+                "DECLARE @s VARCHAR(200) = 'CREATE CONNECTION c AS MSSQL(''Server=.;Password=p;'');';"));
+            Assert.Null(service.ExtractLiteralUsePassword("PRINT 'USE PASSWORD = ''x'';';"));
+        }
+
         private Script Parse(string sql)
         {
             var lexer = new Lexer(sql);

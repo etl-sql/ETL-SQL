@@ -36,7 +36,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   `USE PASSWORD PROMPT;`. TUI loads keep `ENC:` sealed (no decrypt-on-load) and clear `_undo` on
   save. ETL-SQL Studio (Portal and WorkstationEditor) seals scripts via
   `SecurityService.TrySealScriptForSave`, prompts when a save password is needed, and resets the
-  CodeMirror `EditorState` on save to clear undo history.
+  CodeMirror `EditorState` on save to clear undo history. Sealing never rewrites text inside a
+  string literal: a `CREATE CONNECTION` or `USE PASSWORD` in dynamic SQL is left alone, where it
+  used to be encrypted in place and broke the script's quoting. Run a sealed script unattended with
+  `ETL_SQL_MASTER_PASSWORD`; the sample gate runs every pass that way on a copy of `samples/`.
 
 - `ENCRYPT FILE` and `DECRYPT FILE` derive default destination paths when `TO` is omitted (ROADMAP
   FO04): `ENCRYPT FILE` appends `.pgp` for `PGP_KEY` and `.enc` for `PASSWORD` or SSH `KEYFILE`,
