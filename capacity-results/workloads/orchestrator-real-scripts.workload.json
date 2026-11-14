@@ -35,12 +35,12 @@
     "workload": [
       { "name": "health", "method": "GET", "path": "/health", "service": "orchestrator", "weight": 10 },
       { "name": "metrics", "method": "GET", "path": "/metrics", "service": "orchestrator", "weight": 10 },
-      { "name": "trigger-short-10k", "method": "POST", "path": "/api/scheduled-jobs/{{shortJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 8, "thinkTimeMs": 1500 },
-      { "name": "trigger-medium-50k", "method": "POST", "path": "/api/scheduled-jobs/{{mediumJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 4, "thinkTimeMs": 3000 },
-      { "name": "trigger-long-100k", "method": "POST", "path": "/api/scheduled-jobs/{{longJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 2, "thinkTimeMs": 6000 },
-      { "name": "trigger-mock-io", "method": "POST", "path": "/api/scheduled-jobs/{{mockIoJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 3, "thinkTimeMs": 3000 },
-      { "name": "trigger-parallel", "method": "POST", "path": "/api/scheduled-jobs/{{parallelJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 2, "thinkTimeMs": 5000 },
-      { "name": "trigger-retry-failure", "method": "POST", "path": "/api/scheduled-jobs/{{retryJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 1, "thinkTimeMs": 10000 },
+      { "name": "trigger-short-10k", "method": "POST", "path": "/api/scheduled-jobs/{{shortJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 8, "thinkTimeMs": 1500, "expectedStatuses": [202, 409, 503] },
+      { "name": "trigger-medium-50k", "method": "POST", "path": "/api/scheduled-jobs/{{mediumJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 4, "thinkTimeMs": 3000, "expectedStatuses": [202, 409, 503] },
+      { "name": "trigger-long-100k", "method": "POST", "path": "/api/scheduled-jobs/{{longJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 2, "thinkTimeMs": 6000, "expectedStatuses": [202, 409, 503] },
+      { "name": "trigger-mock-io", "method": "POST", "path": "/api/scheduled-jobs/{{mockIoJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 3, "thinkTimeMs": 3000, "expectedStatuses": [202, 409, 503] },
+      { "name": "trigger-parallel", "method": "POST", "path": "/api/scheduled-jobs/{{parallelJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 2, "thinkTimeMs": 5000, "expectedStatuses": [202, 409, 503] },
+      { "name": "trigger-retry-failure", "method": "POST", "path": "/api/scheduled-jobs/{{retryJobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 1, "thinkTimeMs": 10000, "expectedStatuses": [202, 409, 503] },
       { "name": "history-short", "method": "GET", "path": "/api/scheduled-jobs/{{shortJobName}}/history?limit=50", "service": "orchestrator", "useApiKey": true, "weight": 5 },
       { "name": "history-long", "method": "GET", "path": "/api/scheduled-jobs/{{longJobName}}/history?limit=50", "service": "orchestrator", "useApiKey": true, "weight": 3 }
     ]

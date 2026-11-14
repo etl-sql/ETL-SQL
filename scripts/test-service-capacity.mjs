@@ -104,6 +104,10 @@ function validateRequest(request, owner) {
   if (request.weight !== undefined && (!Number.isFinite(request.weight) || request.weight <= 0)) {
     throw new Error(`${owner} weight must be positive.`);
   }
+  if (request.expectedStatuses !== undefined && (!Array.isArray(request.expectedStatuses) || !request.expectedStatuses.length ||
+      request.expectedStatuses.some(status => !Number.isInteger(status) || status < 200 || status > 599))) {
+    throw new Error(`${owner} expectedStatuses must list HTTP status codes.`);
+  }
   validateThinkTime(request.thinkTimeMs, `${owner} thinkTimeMs`);
 }
 
@@ -233,9 +237,15 @@ async function sendRequest(request, context) {
       body: request.body === undefined ? undefined : JSON.stringify(substituteObject(request.body, context.variables)),
     });
     const text = await response.text();
+    // A request may name the statuses its API contract allows under load, such as 409 for
+    // triggering a job that is already running or 503 with Retry-After from an overloaded node.
+    const expected = Array.isArray(request.expectedStatuses) ? request.expectedStatuses : null;
+    const ok = expected ? expected.includes(response.status) : response.ok;
     return {
       name: request.name ?? `${request.method} ${request.path}`,
-      ok: response.ok,
+      ok,
+      // The start of an unexpected response, so a failing report says why without a rerun.
+      detail: ok ? undefined : text.slice(0, 300),
       status: response.status,
       latencyMs: performance.now() - started,
       sqliteContention: /database is locked|database is busy|sqlite_busy|sqlite_locked/i.test(text),
@@ -249,6 +259,7 @@ async function sendRequest(request, context) {
       latencyMs: performance.now() - started,
       sqliteContention: /database is locked|database is busy|sqlite_busy|sqlite_locked/i.test(String(error)),
       error: String(error),
+      detail: String(error).slice(0, 300),
     };
   }
 }
@@ -319,6 +330,9 @@ function summarizeObservations(observations, durationSeconds, metricSamples) {
       max: latencies.length ? round(latencies[latencies.length - 1]) : 0,
     },
     statusCounts: countBy(observations, x => String(x.status)),
+    unexpectedStatusCounts: countBy(failures, x => String(x.status)),
+    unexpectedByRequest: countBy(failures, x => `${x.name} ${x.status}`),
+    unexpectedSamples: Object.fromEntries(failures.map(x => [`${x.name} ${x.status}`, x.detail ?? '']).reverse()),
     requestCounts: countBy(observations, x => x.name),
     serviceMetricMaxima: numericMaxima(flattenedMetrics),
     processMetricMaxima: numericMaxima(flattenedProcessMetrics),

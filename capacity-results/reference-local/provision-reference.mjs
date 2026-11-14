@@ -39,9 +39,10 @@ const group = await request(portalBaseUrl, 'POST', '/api/admin/groups', {
   name: 'Capacity Reference Users',
   description: 'Reference baseline access group',
 }, admin.token);
+// Group and folder mutations require the version the create response returned (optimistic concurrency).
 await request(portalBaseUrl, 'POST', `/api/admin/groups/${group.id}/members/bulk-add`, {
   userIds: [viewer.id, publisher.id],
-}, admin.token);
+}, admin.token, { 'If-Match': `"${group.version}"` });
 
 const folder = await request(portalBaseUrl, 'POST', '/api/folders', {
   name: 'Capacity Reference',
@@ -50,7 +51,7 @@ const folder = await request(portalBaseUrl, 'POST', '/api/folders', {
 await request(portalBaseUrl, 'POST', `/api/folders/${folder.id}/acl`, {
   groupId: group.id,
   permission: 1,
-}, admin.token);
+}, admin.token, folder.version ? { 'If-Match': `"${folder.version}"` } : {});
 
 const report = await request(portalBaseUrl, 'POST', '/api/reports', {
   folderId: folder.id,
