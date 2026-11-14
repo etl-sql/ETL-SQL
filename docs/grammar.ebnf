@@ -488,10 +488,14 @@ merge_when_clause = "WHEN" "MATCHED" [ "AND" expression ] "THEN" ( "UPDATE" "SET
                   | "WHEN" "NOT" "MATCHED" [ "BY" ( "SOURCE" | "TARGET" ) ] [ "AND" expression ] "THEN"
                     ( "INSERT" [ "(" column_list ")" ] "VALUES" "(" expression_list ")" | "UPDATE" "SET" assignment_list | "DELETE" ) ;
 
-with_statement = "WITH" [ "RECURSIVE" ] cte_definition { "," cte_definition } statement ;
-cte_definition = identifier [ "(" column_list ")" ] "AS" "(" select_statement ")" ;
+with_clause = "WITH" [ "RECURSIVE" ] cte_definition { "," cte_definition } ;
+with_statement = with_clause statement ;
+cte_definition = identifier [ "(" column_list ")" ] "AS" "(" query_expression ")" ;
 
-select_statement = select_body { set_operator select_body } { on_failure_clause } ;
+query_expression = [ with_clause ] query_body ;
+query_body = query_term { set_operator query_term } ;
+query_term = select_body | "(" query_expression ")" ;
+select_statement = query_term { set_operator query_term } ;
 select_body = "SELECT" [ "DISTINCT" | "ALL" ] [ top_clause ] select_list
               [ "INTO" table_reference ]
               [ "FROM" from_reference { "," [ "LATERAL" ] from_reference } { join_clause } ]
@@ -504,7 +508,8 @@ select_body = "SELECT" [ "DISTINCT" | "ALL" ] [ top_clause ] select_list
               [ "QUALIFY" expression ]
               [ "ORDER" "BY" ( "ALL" [ "ASC" | "DESC" ] | order_list [ "," ] ) ]
               [ row_limit_clause ]
-              [ "USING" "SAMPLE" number ( "PERCENT" | "ROWS" ) [ "REPEATABLE" "(" number ")" ] ] ;
+              [ "USING" "SAMPLE" number ( "PERCENT" | "ROWS" ) [ "REPEATABLE" "(" number ")" ] ]
+              { on_failure_clause } ;
 on_failure_clause = "ON" "FAILURE" ( "THROW"
                   | "WARN" [ "TO" table_reference [ "WITH" "(" "RETENTION" "=" retention_literal ")" ] ]
                   | "QUARANTINE" "TO" table_reference [ "WITH" failure_options ] ) ;
@@ -555,7 +560,7 @@ rule_literal = string_literal | [ "-" ] number ;
 table_reference = table_name ;
 from_reference = from_primary { table_operator }
                  [ "WITH" object_options ] [ "NOT" "INDEXED" | "INDEXED" "BY" ( identifier | string_literal ) ] ;
-from_primary = ( json_table_reference | table_name [ "(" [ expression_list ] ")" ] | "(" select_statement ")" ) [ [ "AS" ] identifier ]
+from_primary = ( json_table_reference | table_name [ "(" [ expression_list ] ")" ] | "(" query_expression ")" ) [ [ "AS" ] identifier ]
              | "(" "VALUES" "(" expression_list ")" { "," "(" expression_list ")" } ")" [ "AS" ] identifier [ "(" column_list ")" ] ;
 json_table_reference = "JSON_TABLE" "(" expression "," expression "COLUMNS" "(" json_table_column { "," json_table_column } ")" ")" ;
 table_operator = "PIVOT" "(" pivot_aggregate "FOR" identifier "IN" "(" expression_list ")" ")" [ [ "AS" ] identifier ]
@@ -611,7 +616,7 @@ and_expression = not_expression { "AND" not_expression } ;
 not_expression = [ "NOT" ] comparison_expression ;
 comparison_expression = coalesce_expression { comparison_suffix } ;
 comparison_suffix = comparison_operator coalesce_expression
-                  | [ "NOT" ] "IN" ( "(" [ expression_list | select_statement ] ")" | coalesce_expression )
+                  | [ "NOT" ] "IN" ( "(" [ expression_list | query_expression ] ")" | coalesce_expression )
                   | [ "NOT" ] ( "LIKE" | "ILIKE" )
                     ( ( "ANY" | "ALL" ) "(" expression_list ")" | coalesce_expression [ "ESCAPE" coalesce_expression ] )
                   | [ "NOT" ] "BETWEEN" coalesce_expression "AND" coalesce_expression
@@ -633,7 +638,7 @@ primary_expression = literal
                    | list_expression
                    | exists_expression
                    | temp_table_name
-                   | "(" ( select_statement | expression { "," expression } ) ")"
+                   | "(" ( query_expression | expression { "," expression } ) ")"
                    | ( "+" | "-" ) primary_expression ;
 
 literal = string_literal | number_literal | "NULL" | "TRUE" | "FALSE" | "ON" | "OFF" | "CURRENT_TIMESTAMP" | "CURRENT_DATE" | "CURRENT_TIME" | "SYSDATE" ;
@@ -641,7 +646,7 @@ comparison_operator = "=" | "<>" | "!=" | ">" | "<" | ">=" | "<=" | "~" | "~*" ;
 cast_expression = ( "CAST" | "TRY_CAST" ) "(" expression "AS" data_type ")" ;
 case_expression = "CASE" [ expression ] "WHEN" expression "THEN" expression { "WHEN" expression "THEN" expression } [ "ELSE" expression ] "END" ;
 list_expression = "[" [ expression_list ] "]" ;
-exists_expression = "EXISTS" "(" select_statement ")" ;
+exists_expression = "EXISTS" "(" query_expression ")" ;
 qualified_identifier = identifier { "." ( identifier | "*" ) } ;
 special_sql_expression = "SUBSTRING" "(" expression ( "FROM" expression [ "FOR" expression ] | "," expression [ "," expression ] ) ")"
                        | "POSITION" "(" expression "IN" expression ")"

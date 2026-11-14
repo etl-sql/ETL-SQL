@@ -268,7 +268,7 @@ public class StatementParser
             return FlowParser.ParseFor();
         }
 
-        if (type == TokenType.SELECT) return _parser.ParseQuery();
+        if (type == TokenType.SELECT || type == TokenType.LPAREN) return _parser.ParseQuery();
         if (type == TokenType.PIVOT) return _parser.ParseDuckPivotStatement();
         if (type == TokenType.UNPIVOT) return _parser.ParseDuckUnpivotStatement();
         if (type == TokenType.DESCRIBE)
@@ -665,14 +665,13 @@ public class StatementParser
     {
         bool isRecursive = _parser.Match(TokenType.RECURSIVE);
         var ctes = ParseCtes();
-        var stmt = ParseStatement();
-        stmt = stmt with { Ctes = ctes };
-        if (stmt is SelectStatement select && isRecursive)
-            stmt = select with { IsRecursive = true };
-        return stmt;
+        var stmt = (_parser.Current.Type == TokenType.SELECT || _parser.Current.Type == TokenType.LPAREN)
+            ? _parser.ParseQuery()
+            : ParseStatement();
+        return _parser.AttachCtes(stmt, ctes, isRecursive);
     }
 
-    private List<CteDefinition> ParseCtes()
+    internal List<CteDefinition> ParseCtes()
     {
         var ctes = new List<CteDefinition>();
         do

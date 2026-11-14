@@ -65,6 +65,7 @@ public class LanguageService : ILanguageService
         {
             if (context.Aliases.Count == 0 && !string.IsNullOrEmpty(context.FullScript))
                 context.Aliases = AliasScanner.Scan(context.FullScript, context.ScriptBefore.Length);
+            PopulateScopedCtes(context);
 
             var allSuggestions = new List<Suggestion>();
             allSuggestions.AddRange(GetFilePathSuggestions(context));
@@ -198,6 +199,9 @@ public class LanguageService : ILanguageService
             else if (last.Text.Equals("AS", StringComparison.OrdinalIgnoreCase) && prev2?.Text.Equals("CONNECTION", StringComparison.OrdinalIgnoreCase) == true) results.AddRange(_metadata.GetRegisteredNames().Select(c => new Suggestion(c, SuggestionType.Connection, Priority: 0)));
             else if (last.Text.Equals("FROM", StringComparison.OrdinalIgnoreCase) || last.Text.Equals("JOIN", StringComparison.OrdinalIgnoreCase) || last.Text.Equals("INTO", StringComparison.OrdinalIgnoreCase) || last.Text.Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
             {
+                results.AddRange(context.VirtualSchemas.Keys
+                    .Where(cte => string.IsNullOrEmpty(context.Prefix) || cte.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase))
+                    .Select(cte => new Suggestion(cte, SuggestionType.Table, Priority: 3)));
                 var conns = _metadata.GetConnections(context.DocumentUri);
                 results.AddRange(conns.Select(c => new Suggestion(c.Name, SuggestionType.Connection, Priority: 1)));
                 foreach (var conn in conns)
@@ -524,6 +528,22 @@ public class LanguageService : ILanguageService
                         }
                     }
                 }
+                else if (context.VirtualSchemas.TryGetValue(alias, out var directCteCols))
+                {
+                    if (pref == "*")
+                    {
+                        if (directCteCols.Any())
+                        {
+                            string expansion = string.Join(", ", directCteCols.Select(c => $"{alias}.{c.Trim('[', ']', '\"', '\'')}"));
+                            results.Add(new Suggestion(expansion, SuggestionType.Column, Priority: 0));
+                        }
+                    }
+                    else
+                    {
+                        results.AddRange(directCteCols.Where(c => c.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                                                      .Select(c => new Suggestion($"{alias}.{c.Trim('[', ']', '\"', '\'')}", SuggestionType.Column, Documentation: $"**Column**: {c}\n**Type**: ANY")));
+                    }
+                }
                 else
                 {
                     // Check if it's a direct connection reference
@@ -633,5 +653,155 @@ public class LanguageService : ILanguageService
             TraverseLabels(p.Body, labels);
         }
     }
+
+    private static void PopulateScopedCtes(SuggestionContext context)
+    {
+        if (string.IsNullOrEmpty(context.ScriptBefore)) return;
+
+        List<Token> tokens;
+        try
+        {
+            tokens = new Lexer(context.ScriptBefore).Tokenize();
+        }
+        catch
+        {
+            return;
+        }
+
+        int end = tokens.Count > 0 && tokens[^1].Type == TokenType.EOF ? tokens.Count - 1 : tokens.Count;
+        int start = 0;
+        for (int i = end - 1; i >= 0; i--)
+        {
+            if (tokens[i].Type == TokenType.SEMICOLON)
+            {
+                start = i + 1;
+                break;
+            }
+        }
+        if (start >= end) return;
+
+        var depthBefore = new int[end];
+        int depth = 0;
+        for (int i = start; i < end; i++)
+        {
+            depthBefore[i] = depth;
+            if (tokens[i].Type == TokenType.LPAREN) depth++;
+            else if (tokens[i].Type == TokenType.RPAREN && depth > 0) depth--;
+        }
+
+        bool StaysOpenToCursor(int fromIndex, int targetDepth)
+        {
+            for (int k = fromIndex + 1; k < end; k++)
+            {
+                if (depthBefore[k] < targetDepth) return false;
+            }
+            return depth >= targetDepth;
+        }
+
+        for (int i = start; i < end; i++)
+        {
+            if (tokens[i].Type != TokenType.WITH) continue;
+            int cteScopeDepth = depthBefore[i];
+            if (!StaysOpenToCursor(i, cteScopeDepth)) continue;
+
+            int j = i + 1;
+            bool isRecursive = j < end && tokens[j].Type == TokenType.RECURSIVE;
+            if (isRecursive) j++;
+
+            while (j < end)
+            {
+                var nameTok = tokens[j];
+                if (nameTok.Type != TokenType.IDENTIFIER && !LanguageMetadata.IsKeyword(nameTok.Value)) break;
+                string cteName = nameTok.Value;
+                j++;
+
+                var explicitCols = new List<string>();
+                if (j < end && tokens[j].Type == TokenType.LPAREN)
+                {
+                    j++;
+                    while (j < end && tokens[j].Type != TokenType.RPAREN)
+                    {
+                        if (tokens[j].Type != TokenType.COMMA)
+                            explicitCols.Add(tokens[j].Value);
+                        j++;
+                    }
+                    if (j >= end || tokens[j].Type != TokenType.RPAREN) break;
+                    j++;
+                }
+
+                if (j + 1 >= end || tokens[j].Type != TokenType.AS || tokens[j + 1].Type != TokenType.LPAREN)
+                    break;
+
+                int bodyOpenParen = j + 1;
+                int bodyStart = j + 2;
+                int bodyCloseParen = -1;
+                int parenDepth = 1;
+                for (int k = bodyStart; k < end; k++)
+                {
+                    if (tokens[k].Type == TokenType.LPAREN) parenDepth++;
+                    else if (tokens[k].Type == TokenType.RPAREN)
+                    {
+                        parenDepth--;
+                        if (parenDepth == 0)
+                        {
+                            bodyCloseParen = k;
+                            break;
+                        }
+                    }
+                }
+
+                if (bodyCloseParen < 0)
+                {
+                    // Cursor is inside this CTE's body; recursive CTEs are visible inside their own body.
+                    if (isRecursive)
+                        context.VirtualSchemas[cteName] = explicitCols;
+                    break;
+                }
+
+                var cols = explicitCols.Count > 0
+                    ? explicitCols
+                    : InferProjectedColumns(tokens, bodyStart, bodyCloseParen);
+                context.VirtualSchemas[cteName] = cols;
+
+                j = bodyCloseParen + 1;
+                if (j < end && tokens[j].Type == TokenType.COMMA) j++;
+                else break;
+            }
+        }
+    }
+
+    private static List<string> InferProjectedColumns(List<Token> tokens, int startIndex, int endIndexExclusive)
+    {
+        var cols = new List<string>();
+        if (startIndex >= endIndexExclusive) return cols;
+        try
+        {
+            var slice = tokens.GetRange(startIndex, endIndexExclusive - startIndex);
+            var last = slice[^1];
+            slice.Add(new Token(TokenType.EOF, "", last.EndLine, last.EndColumn, last.EndOffset, last.EndLine, last.EndColumn, last.EndOffset));
+            var stmt = new ETL_SQL.Core.Parser.Parser(slice).ParseQuery();
+            var select = FirstSelect(stmt);
+            if (select != null)
+            {
+                foreach (var c in select.Columns)
+                {
+                    if (!string.IsNullOrEmpty(c.Alias)) cols.Add(c.Alias);
+                    else if (c.Expression is IdentifierExpression id && id.Name != "*")
+                        cols.Add(id.Name.Split('.').Last());
+                }
+            }
+        }
+        catch
+        {
+        }
+        return cols;
+    }
+
+    private static SelectStatement? FirstSelect(Statement stmt) => stmt switch
+    {
+        SelectStatement sel => sel,
+        SetOperationStatement setOp => FirstSelect(setOp.Left) ?? FirstSelect(setOp.Right),
+        _ => null
+    };
 }
 

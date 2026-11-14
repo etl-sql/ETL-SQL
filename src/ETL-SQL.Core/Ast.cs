@@ -498,6 +498,8 @@ public sealed record SetOperationStatement : Statement
     /// <summary>True for <c>UNION [ALL] BY NAME</c>: align inputs by column name rather than position,
     /// filling columns missing from either side with NULL.</summary>
     public bool ByName { get; init; }
+    /// <summary>True when preceded by <c>WITH RECURSIVE</c>.</summary>
+    public bool IsRecursive { get; init; }
 
     public SetOperationStatement(Statement left, SetOpType op, Statement right)
     {

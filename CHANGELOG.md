@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Query-level `WITH` / `WITH RECURSIVE` and parenthesized queries (`query_expression = [ with_clause ] query_body`) are now accepted and executed across every query expression position: CTE bodies, derived tables/`JOIN` subqueries, scalar subqueries, `IN`/`NOT IN`, `EXISTS`/`NOT EXISTS`, and parenthesized set-operation branches (`SetOperationStatement.IsRecursive`, `AstSerializer.FormatWithClause`, `docs/grammar.ebnf`, and `EbnfConformanceTests`).
+- Engine execution evaluates query-level CTEs in isolated `CteScope` frames so inner CTEs shadow outer CTEs or `#temp` tables only within their subquery, supports `SetOperationStatement` in scalar/`IN`/`EXISTS` subqueries, and keeps correlated subqueries with nested CTEs free of stale cache hits (`ExpressionEvaluator`, `SubqueryAnalyzer`).
+- Linter CTE/column discovery, `QuarantineBoundaryRule`, `UnusedConnectionRule`, `LineageAnalyzer`, `ScriptDataModelService`, and `DefaultGrammar` completion recognize nested CTEs and parenthesized query expressions.
+
 ## [0.22.0] — 2026-11-04
 
 - Engine `DATE` values now use CLR `System.DateOnly` instead of `DateTime`, so

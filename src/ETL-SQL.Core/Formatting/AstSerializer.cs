@@ -372,7 +372,7 @@ public static class AstSerializer
         InExpression e => $"{e.Left.ToSql()} {(e.IsNot ? "NOT " : "")}IN {e.Right.ToSql()}",
         BetweenExpression e => FormatBetween(e),
         LikeExpression e => FormatLike(e),
-        ExistsExpression e => $"{(e.IsNot ? "NOT " : "")}EXISTS ({e.Subquery.ToSql()})",
+        ExistsExpression e => $"{(e.IsNot ? "NOT " : "")}EXISTS ({e.Subquery.ToSql().TrimEnd(';')})",
         CaseExpression e => FormatCase(e),
         AtTimeZoneExpression e => $"{e.Left.ToSql()} AT TIME ZONE {e.TimeZone.ToSql()}",
 
@@ -482,12 +482,20 @@ public static class AstSerializer
             : "(" + string.Join(", ", targets) + ")";
     }
 
+    private static string FormatWithClause(IReadOnlyList<CteDefinition>? ctes, bool isRecursive = false)
+    {
+        if (ctes == null || ctes.Count == 0) return "";
+        var recursive = isRecursive ? "RECURSIVE " : "";
+        return $"WITH {recursive}" + string.Join(", ", ctes.Select(c =>
+        {
+            var cols = c.ColumnNames is { Count: > 0 } ? $"({string.Join(", ", c.ColumnNames)})" : "";
+            return $"{c.Name}{cols} AS ({c.Query.ToSql().TrimEnd(';')})";
+        })) + " ";
+    }
+
     private static string FormatSelect(SelectStatement s)
     {
-        var recursive = s.IsRecursive ? "RECURSIVE " : "";
-        var with = (s.Ctes != null && s.Ctes.Count > 0)
-            ? $"WITH {recursive}" + string.Join(", ", s.Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " "
-            : "";
+        var with = FormatWithClause(s.Ctes, s.IsRecursive);
         var distinct = s.IsDistinct ? "DISTINCT " : "";
         var top = "";
         if (s.TopCount != null)
@@ -578,6 +586,7 @@ public static class AstSerializer
 
     private static string FormatSetOperation(SetOperationStatement s)
     {
+        var with = FormatWithClause(s.Ctes, s.IsRecursive);
         string op = s.Operation switch
         {
             SetOpType.UNION => "UNION",
@@ -587,12 +596,12 @@ public static class AstSerializer
             _ => "UNION"
         };
         if (s.ByName) op += " BY NAME";
-        return $"({s.Left.ToSql().TrimEnd(';')}) {op} ({s.Right.ToSql().TrimEnd(';')});";
+        return $"{with}({s.Left.ToSql().TrimEnd(';')}) {op} ({s.Right.ToSql().TrimEnd(';')});";
     }
 
     private static string FormatInsert(InsertStatement s)
     {
-        var with = (s.Ctes != null && s.Ctes.Count > 0) ? "WITH " + string.Join(", ", s.Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
+        var with = FormatWithClause(s.Ctes);
         var cols = s.Columns != null && s.Columns.Count > 0 ? "(" + string.Join(", ", s.Columns) + ") " : "";
         var output = s.Output != null ? " " + s.Output.ToSql() : "";
         if (s.SelectQuery != null)
@@ -603,7 +612,7 @@ public static class AstSerializer
 
     private static string FormatUpdate(UpdateStatement s)
     {
-        var with = (s.Ctes != null && s.Ctes.Count > 0) ? "WITH " + string.Join(", ", s.Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
+        var with = FormatWithClause(s.Ctes);
         var sets = string.Join(", ", s.Assignments.Select(a => a.ToSql()));
         var from = s.FromTable != null ? $" FROM {s.FromTable.ToSql()}" : "";
         var joins = s.Joins != null && s.Joins.Count > 0 ? " " + string.Join(" ", s.Joins.Select(j => j.ToSql())) : "";
@@ -614,7 +623,7 @@ public static class AstSerializer
 
     private static string FormatDelete(DeleteStatement s)
     {
-        var with = (s.Ctes != null && s.Ctes.Count > 0) ? "WITH " + string.Join(", ", s.Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
+        var with = FormatWithClause(s.Ctes);
         var out_ = s.Output != null ? " " + s.Output.ToSql() : "";
         var where = s.WhereClause != null ? $" WHERE {s.WhereClause.ToSql()}" : "";
         return $"{with}DELETE FROM {s.TargetTable.ToSql()}{out_}{where};";
@@ -622,7 +631,7 @@ public static class AstSerializer
 
     private static string FormatMerge(MergeStatement s)
     {
-        var with = (s.Ctes != null && s.Ctes.Count > 0) ? "WITH " + string.Join(", ", s.Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
+        var with = FormatWithClause(s.Ctes);
         var sb = new System.Text.StringBuilder();
         sb.Append(with);
         sb.AppendLine($"MERGE INTO {s.TargetTable.ToSql()}{(s.TargetAlias != null ? " AS " + s.TargetAlias : "")}");

@@ -573,6 +573,11 @@ public abstract class EbnfNode
             case EbnfOptional or EbnfRepetition:
                 return true;
             case EbnfRef reference:
+                if (reference.Name == "retention_literal")
+                {
+                    text = "'30 DAYS' ";
+                    return true;
+                }
                 if (!active.Add(reference.Name)) return false;
                 try
                 {
@@ -635,6 +640,7 @@ public class EbnfRef : EbnfNode
         if (Name == "visual_clause") return "TITLE = 'x' ";
         if (Name == "button_clause") return "TITLE = 'x' ";
         if (Name == "select_statement") return "SELECT 1 ";
+        if (Name == "query_expression" && depth > 3) return "SELECT 1 ";
         if (Name == "lineage_name") return "x ";
         if (Name == "set_boolean_option") return "ALLOW_PLAINTEXT_SECRETS ";
         if (Name == "any_char_except_quote") return "a"; // naive stub

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Analysis.Services;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Quality;
 
@@ -153,7 +154,14 @@ public class QuarantineBoundaryRule : ILintRule
         // Nested queries under this sink are not materialization boundaries.
         if (select.FromTable?.Subquery != null) CheckNonSinkQuery(select.FromTable.Subquery, results);
         foreach (var join in select.Joins)
+        {
             if (join.Table?.Subquery != null) CheckNonSinkQuery(join.Table.Subquery, results);
+            CheckNonSinkExpression(join.Condition, results);
+        }
+        foreach (var col in select.Columns) CheckNonSinkExpression(col.Expression, results);
+        CheckNonSinkExpression(select.WhereClause, results);
+        CheckNonSinkExpression(select.HavingClause, results);
+        CheckNonSinkExpression(select.QualifyClause, results);
         foreach (var cte in select.Ctes ?? [])
             CheckNonSinkQuery(cte.Query, results);
     }
@@ -175,19 +183,33 @@ public class QuarantineBoundaryRule : ILintRule
                             Report(results, LintSeverity.Error, column,
                                 "ON FAILURE QUARANTINE is only legal at a sink/materialization boundary (top-level SELECT, INSERT ... SELECT, SELECT ... INTO) — it is a filter with a side effect that would silently change downstream row counts here.");
                         }
+                        CheckNonSinkExpression(column.Expression, results);
                     }
                     if (select.FromTable?.Subquery != null) CheckNonSinkQuery(select.FromTable.Subquery, results);
                     foreach (var join in select.Joins)
+                    {
                         if (join.Table?.Subquery != null) CheckNonSinkQuery(join.Table.Subquery, results);
+                        CheckNonSinkExpression(join.Condition, results);
+                    }
+                    CheckNonSinkExpression(select.WhereClause, results);
+                    CheckNonSinkExpression(select.HavingClause, results);
+                    CheckNonSinkExpression(select.QualifyClause, results);
                     foreach (var cte in select.Ctes ?? [])
                         CheckNonSinkQuery(cte.Query, results);
                     break;
                 }
             case SetOperationStatement setOp:
+                foreach (var cte in setOp.Ctes ?? []) CheckNonSinkQuery(cte.Query, results);
                 CheckNonSinkQuery(setOp.Left, results);
                 CheckNonSinkQuery(setOp.Right, results);
                 break;
         }
+    }
+
+    private void CheckNonSinkExpression(Expression? expr, List<LintResult> results)
+    {
+        foreach (var query in ScriptTextEditing.EnumerateSubqueries(expr))
+            CheckNonSinkQuery(query, results);
     }
 
     private static HashSet<FailAction> CollectActions(SelectStatement select, out bool hasRules)

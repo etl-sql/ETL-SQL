@@ -52,6 +52,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         // GROUP BY ALL / ORDER BY ALL / star modifiers are resolved locally in EvaluateSelect;
         // skip the early raw-statement pushdown for them.
         if (statement is SelectStatement selPush && selPush.IntoTable == null
+            && selPush.Ctes is not { Count: > 0 }
             && !selPush.GroupByAll && !selPush.OrderByAll && selPush.Sample == null
             && !selPush.Columns.Any(c => c.Expression is StarExpression)
             && !HasDataQualityRules(selPush))

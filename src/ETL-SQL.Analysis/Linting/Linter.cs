@@ -77,8 +77,9 @@ public class Linter
         }
     }
 
-    private void DiscoverFromStatement(Statement statement, ScriptMetadataOverlay overlay)
+    private void DiscoverFromStatement(Statement? statement, ScriptMetadataOverlay overlay)
     {
+        if (statement == null) return;
         DiscoverCtes(statement, overlay);
 
         switch (statement)
@@ -96,10 +97,96 @@ public class Linter
             case CreateFunctionStatement func: DiscoverFromStatement(func.Body, overlay); break;
             case ParallelStatement parallel: DiscoverFromStatement(parallel.Body, overlay); break;
             case ParallelForStatement parallelFor: DiscoverFromStatement(parallelFor.Body, overlay); break;
+            case SetOperationStatement setOp:
+                DiscoverFromStatement(setOp.Left, overlay);
+                DiscoverFromStatement(setOp.Right, overlay);
+                break;
+            case InsertStatement { SelectQuery: not null } insert:
+                DiscoverFromStatement(insert.SelectQuery, overlay);
+                break;
+            case CreateDatasetStatement dataset:
+                DiscoverFromStatement(dataset.SourceQuery, overlay);
+                break;
+            case SelectStatement select:
+                DiscoverFromTableRef(select.FromTable, overlay);
+                foreach (var join in select.Joins ?? [])
+                {
+                    DiscoverFromTableRef(join.Table, overlay);
+                    DiscoverFromExpression(join.Condition, overlay);
+                }
+                foreach (var col in select.Columns ?? []) DiscoverFromExpression(col.Expression, overlay);
+                DiscoverFromExpression(select.WhereClause, overlay);
+                foreach (var g in select.GroupBy ?? []) DiscoverFromExpression(g, overlay);
+                DiscoverFromExpression(select.HavingClause, overlay);
+                DiscoverFromExpression(select.QualifyClause, overlay);
+                foreach (var o in select.OrderBy ?? []) DiscoverFromExpression(o.Expression, overlay);
+                break;
         }
     }
 
-    private static void DiscoverCtes(Statement statement, ScriptMetadataOverlay overlay)
+    private void DiscoverFromTableRef(TableReference? table, ScriptMetadataOverlay overlay)
+    {
+        if (table == null) return;
+        if (table.Subquery != null) DiscoverFromStatement(table.Subquery, overlay);
+        if (table.FunctionCall != null) DiscoverFromExpression(table.FunctionCall, overlay);
+    }
+
+    private void DiscoverFromExpression(Expression? expr, ScriptMetadataOverlay overlay)
+    {
+        switch (expr)
+        {
+            case SubqueryExpression subq: DiscoverFromStatement(subq.Query, overlay); break;
+            case ExistsExpression exists: DiscoverFromStatement(exists.Subquery, overlay); break;
+            case InExpression inExpr:
+                DiscoverFromExpression(inExpr.Left, overlay);
+                DiscoverFromExpression(inExpr.Right, overlay);
+                break;
+            case BinaryExpression bin:
+                DiscoverFromExpression(bin.Left, overlay);
+                DiscoverFromExpression(bin.Right, overlay);
+                break;
+            case UnaryExpression un:
+                DiscoverFromExpression(un.Expression, overlay);
+                break;
+            case FunctionCallExpression func:
+                foreach (var arg in func.Arguments) DiscoverFromExpression(arg, overlay);
+                DiscoverFromExpression(func.Filter, overlay);
+                break;
+            case CaseExpression c:
+                DiscoverFromExpression(c.InputExpression, overlay);
+                foreach (var w in c.WhenClauses)
+                {
+                    DiscoverFromExpression(w.Condition, overlay);
+                    DiscoverFromExpression(w.Result, overlay);
+                }
+                DiscoverFromExpression(c.ElseResult, overlay);
+                break;
+            case BetweenExpression b:
+                DiscoverFromExpression(b.Left, overlay);
+                DiscoverFromExpression(b.Start, overlay);
+                DiscoverFromExpression(b.End, overlay);
+                break;
+            case IsNullExpression n: DiscoverFromExpression(n.Expression, overlay); break;
+            case IsDistinctFromExpression d:
+                DiscoverFromExpression(d.Left, overlay);
+                DiscoverFromExpression(d.Right, overlay);
+                break;
+            case LikeExpression l:
+                DiscoverFromExpression(l.Left, overlay);
+                DiscoverFromExpression(l.Pattern, overlay);
+                DiscoverFromExpression(l.EscapeChar, overlay);
+                break;
+            case ListExpression list:
+                foreach (var item in list.Items) DiscoverFromExpression(item, overlay);
+                break;
+            case AtTimeZoneExpression atz:
+                DiscoverFromExpression(atz.Left, overlay);
+                DiscoverFromExpression(atz.TimeZone, overlay);
+                break;
+        }
+    }
+
+    private void DiscoverCtes(Statement statement, ScriptMetadataOverlay overlay)
     {
         if (statement.Ctes == null) return;
         foreach (var cte in statement.Ctes)
@@ -107,6 +194,7 @@ public class Linter
             overlay.RegisterTable("DEFAULT", cte.Name);
             if (cte.ColumnNames != null)
                 foreach (var col in cte.ColumnNames) overlay.RegisterColumn("DEFAULT", cte.Name, col);
+            DiscoverFromStatement(cte.Query, overlay);
         }
     }
 

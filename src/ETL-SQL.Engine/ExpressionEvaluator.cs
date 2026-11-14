@@ -474,8 +474,8 @@ public class ExpressionEvaluator
         {
             // IN compares against the first projected value, so a second column was silently
             // ignored. `*` is left alone: its width is not known here.
-            if (subq.Query is SelectStatement { Columns: { Count: > 1 } projected } && !projected.Any(IsStarColumn))
-                throw new ExecutionException($"A subquery used with IN must return one column; this one returns {projected.Count}.");
+            if (GetExplicitMultiColumnCount(subq.Query) is int columnCount)
+                throw new ExecutionException($"A subquery used with IN must return one column; this one returns {columnCount}.");
 
             // Use cached stream evaluation for subqueries in IN clauses
             await foreach (var rowVal in EvaluateStreamSubquery(subq, context))
@@ -603,12 +603,12 @@ public class ExpressionEvaluator
     /// <summary>Evaluates an EXISTS clause.</summary>
     private async ValueTask<object?> EvaluateExists(ExistsExpression ex, Row context)
     {
-        if (ex.Subquery is SelectStatement select)
+        if (ex.Subquery is SelectStatement or SetOperationStatement)
         {
-            bool found = await EvaluateExistsSubquery(select, context);
+            bool found = await EvaluateExistsSubquery(ex.Subquery, context);
             return ex.IsNot ? !found : found;
         }
-        throw new ExecutionException("EXISTS subquery must be a SELECT statement.");
+        throw new ExecutionException("EXISTS subquery must be a query statement.");
     }
 
     /// <summary>Evaluates a list of expressions.</summary>
@@ -763,12 +763,8 @@ public class ExpressionEvaluator
         }
     }
 
-    /// <summary>Evaluates a scalar subquery.</summary>
-    private async ValueTask<object?> EvaluateSubquery(SubqueryExpression subq, Row context)
+    private SubqueryCacheKey BuildSubqueryCacheKey(Statement query, Row context, SubqueryResultType resultType)
     {
-        object? result = null;
-        var query = (SelectStatement)subq.Query;
-
         if (!_outerRefCache.TryGetValue(query, out var outerRefs))
         {
             var analyzer = new SubqueryAnalyzer();
@@ -786,7 +782,28 @@ public class ExpressionEvaluator
             }
         }
 
-        var cacheKey = new SubqueryCacheKey(query, new CompoundKey(captureValues.ToArray()), SubqueryResultType.Scalar);
+        return new SubqueryCacheKey(query, new CompoundKey(captureValues.ToArray()), resultType);
+    }
+
+    private static int? GetExplicitMultiColumnCount(Statement query) => query switch
+    {
+        SelectStatement sel when sel.Columns.Count > 1 && !sel.Columns.Any(IsStarColumn) => sel.Columns.Count,
+        SetOperationStatement setOp => GetExplicitMultiColumnCount(setOp.Left) ?? GetExplicitMultiColumnCount(setOp.Right),
+        _ => null
+    };
+
+    private static bool HasAnyStarColumn(Statement query) => query switch
+    {
+        SelectStatement sel => sel.Columns.Any(IsStarColumn),
+        SetOperationStatement setOp => HasAnyStarColumn(setOp.Left) || HasAnyStarColumn(setOp.Right),
+        _ => false
+    };
+
+    /// <summary>Evaluates a scalar subquery.</summary>
+    private async ValueTask<object?> EvaluateSubquery(SubqueryExpression subq, Row context)
+    {
+        object? result = null;
+        var cacheKey = BuildSubqueryCacheKey(subq.Query, context, SubqueryResultType.Scalar);
 
         if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
         {
@@ -822,24 +839,8 @@ public class ExpressionEvaluator
 
     private async IAsyncEnumerable<object?> EvaluateStreamSubquery(SubqueryExpression subq, Row context)
     {
-        var query = (SelectStatement)subq.Query;
-        if (!_outerRefCache.TryGetValue(query, out var outerRefs))
-        {
-            var analyzer = new SubqueryAnalyzer();
-            outerRefs = analyzer.GetOuterReferences(query);
-            _outerRefCache[query] = outerRefs;
-        }
-
-        var captureValues = new List<object?>();
-        foreach (var or in outerRefs)
-        {
-            if (IsResolvableInOuterScope(or, context))
-            {
-                captureValues.Add(ResolveIdentifier(or, context));
-            }
-        }
-
-        var cacheKey = new SubqueryCacheKey(query, new CompoundKey(captureValues.ToArray()), SubqueryResultType.Stream);
+        var query = subq.Query;
+        var cacheKey = BuildSubqueryCacheKey(query, context, SubqueryResultType.Stream);
 
         if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
         {
@@ -902,7 +903,7 @@ public class ExpressionEvaluator
                 {
                     rowCount++;
                     // `SELECT *` has no width until it runs; the explicit lists are checked before.
-                    if (rowCount == 1 && row.Schema?.ColumnCount > 1 && query.Columns.Any(IsStarColumn))
+                    if (rowCount == 1 && row.Schema?.ColumnCount > 1 && HasAnyStarColumn(query))
                         throw new ExecutionException($"A subquery used with IN must return one column; this one returns {row.Schema.ColumnCount}.");
                     var val = row.Schema?.ColumnCount > 0 ? row[0] : null;
 
@@ -952,25 +953,9 @@ public class ExpressionEvaluator
         }
     }
 
-    private async Task<bool> EvaluateExistsSubquery(SelectStatement query, Row context)
+    private async Task<bool> EvaluateExistsSubquery(Statement query, Row context)
     {
-        if (!_outerRefCache.TryGetValue(query, out var outerRefs))
-        {
-            var analyzer = new SubqueryAnalyzer();
-            outerRefs = analyzer.GetOuterReferences(query);
-            _outerRefCache[query] = outerRefs;
-        }
-
-        var captureValues = new List<object?>();
-        foreach (var or in outerRefs)
-        {
-            if (IsResolvableInOuterScope(or, context))
-            {
-                captureValues.Add(ResolveIdentifier(or, context));
-            }
-        }
-
-        var cacheKey = new SubqueryCacheKey(query, new CompoundKey(captureValues.ToArray()), SubqueryResultType.Exists);
+        var cacheKey = BuildSubqueryCacheKey(query, context, SubqueryResultType.Exists);
 
         if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
         {

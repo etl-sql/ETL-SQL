@@ -22,6 +22,9 @@ public interface IParser
     Token ConsumeIdentifier(string message);
     Statement ParseStatement();
     Statement ParseQuery();
+    bool IsQueryStart();
+    bool IsInsertQueryStart();
+    Statement AttachCtes(Statement stmt, System.Collections.Generic.List<CteDefinition> ctes, bool isRecursive);
     Statement ParseDuckPivotStatement();
     Statement ParseDuckUnpivotStatement();
     Expression ParseExpression();

@@ -50,6 +50,7 @@ public class ColumnRuleValidationRule : ILintRule
                 AnalyzeStatement(dataset.SourceQuery, results);
                 break;
             case SetOperationStatement setOp:
+                foreach (var cte in setOp.Ctes ?? []) AnalyzeStatement(cte.Query, results);
                 AnalyzeStatement(setOp.Left, results);
                 AnalyzeStatement(setOp.Right, results);
                 break;
@@ -100,9 +101,72 @@ public class ColumnRuleValidationRule : ILintRule
 
         if (select.FromTable?.Subquery != null) AnalyzeStatement(select.FromTable.Subquery, results);
         foreach (var join in select.Joins)
+        {
             if (join.Table?.Subquery != null) AnalyzeStatement(join.Table.Subquery, results);
+            AnalyzeExpression(join.Condition, results);
+        }
+        foreach (var col in select.Columns) AnalyzeExpression(col.Expression, results);
+        AnalyzeExpression(select.WhereClause, results);
+        foreach (var g in select.GroupBy ?? []) AnalyzeExpression(g, results);
+        AnalyzeExpression(select.HavingClause, results);
+        AnalyzeExpression(select.QualifyClause, results);
         foreach (var cte in select.Ctes ?? [])
             AnalyzeStatement(cte.Query, results);
+    }
+
+    private void AnalyzeExpression(Expression? expr, List<LintResult> results)
+    {
+        switch (expr)
+        {
+            case SubqueryExpression subq: AnalyzeStatement(subq.Query, results); break;
+            case ExistsExpression exists: AnalyzeStatement(exists.Subquery, results); break;
+            case InExpression inExpr:
+                AnalyzeExpression(inExpr.Left, results);
+                AnalyzeExpression(inExpr.Right, results);
+                break;
+            case BinaryExpression bin:
+                AnalyzeExpression(bin.Left, results);
+                AnalyzeExpression(bin.Right, results);
+                break;
+            case UnaryExpression un:
+                AnalyzeExpression(un.Expression, results);
+                break;
+            case FunctionCallExpression func:
+                foreach (var arg in func.Arguments) AnalyzeExpression(arg, results);
+                AnalyzeExpression(func.Filter, results);
+                break;
+            case CaseExpression c:
+                AnalyzeExpression(c.InputExpression, results);
+                foreach (var w in c.WhenClauses)
+                {
+                    AnalyzeExpression(w.Condition, results);
+                    AnalyzeExpression(w.Result, results);
+                }
+                AnalyzeExpression(c.ElseResult, results);
+                break;
+            case BetweenExpression b:
+                AnalyzeExpression(b.Left, results);
+                AnalyzeExpression(b.Start, results);
+                AnalyzeExpression(b.End, results);
+                break;
+            case IsNullExpression n: AnalyzeExpression(n.Expression, results); break;
+            case IsDistinctFromExpression d:
+                AnalyzeExpression(d.Left, results);
+                AnalyzeExpression(d.Right, results);
+                break;
+            case LikeExpression l:
+                AnalyzeExpression(l.Left, results);
+                AnalyzeExpression(l.Pattern, results);
+                AnalyzeExpression(l.EscapeChar, results);
+                break;
+            case ListExpression list:
+                foreach (var item in list.Items) AnalyzeExpression(item, results);
+                break;
+            case AtTimeZoneExpression atz:
+                AnalyzeExpression(atz.Left, results);
+                AnalyzeExpression(atz.TimeZone, results);
+                break;
+        }
     }
 
     /// <summary>

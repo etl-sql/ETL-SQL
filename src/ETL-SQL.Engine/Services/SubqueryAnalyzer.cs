@@ -11,7 +11,7 @@ public class SubqueryAnalyzer
 {
     private readonly Stack<HashSet<string>> _localAliasStack = new();
 
-    public List<string> GetOuterReferences(SelectStatement subquery)
+    public List<string> GetOuterReferences(Statement subquery)
     {
         _localAliasStack.Clear();
         var outerRefs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -21,32 +21,74 @@ public class SubqueryAnalyzer
         return outerRefs.OrderBy(s => s).ToList();
     }
 
+    private void CollectSelectOuterReferences(SelectStatement sel, HashSet<string> outerRefs)
+    {
+        var localAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (sel.FromTable != null) localAliases.Add(sel.FromTable.Alias ?? sel.FromTable.TableName);
+        foreach (var join in sel.Joins) localAliases.Add(join.Table.Alias ?? join.Table.TableName);
+
+        _localAliasStack.Push(localAliases);
+        try
+        {
+            // Walk FROM and JOINs for outer references (e.g. correlated table functions)
+            if (sel.FromTable != null) CollectOuterReferences(sel.FromTable, outerRefs);
+            foreach (var join in sel.Joins) CollectOuterReferences(join, outerRefs);
+
+            foreach (var col in sel.Columns) CollectOuterReferences(col.Expression, outerRefs);
+            CollectOuterReferences(sel.WhereClause, outerRefs);
+            if (sel.GroupBy != null) foreach (var g in sel.GroupBy) CollectOuterReferences(g, outerRefs);
+            CollectOuterReferences(sel.HavingClause, outerRefs);
+            CollectOuterReferences(sel.QualifyClause, outerRefs);
+            if (sel.OrderBy != null) foreach (var o in sel.OrderBy) CollectOuterReferences(o.Expression, outerRefs);
+        }
+        finally
+        {
+            _localAliasStack.Pop();
+        }
+    }
+
     private void CollectOuterReferences(AstNode? node, HashSet<string> outerRefs)
     {
         if (node == null) return;
 
-        if (node is SelectStatement sel)
+        if (node is Statement stmt)
         {
-            var localAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (sel.FromTable != null) localAliases.Add(sel.FromTable.Alias ?? sel.FromTable.TableName);
-            foreach (var join in sel.Joins) localAliases.Add(join.Table.Alias ?? join.Table.TableName);
+            HashSet<string>? cteAliases = null;
+            if (stmt.Ctes is { Count: > 0 })
+            {
+                cteAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                _localAliasStack.Push(cteAliases);
+            }
 
-            _localAliasStack.Push(localAliases);
             try
             {
-                // Walk FROM and JOINs for outer references (e.g. correlated table functions)
-                if (sel.FromTable != null) CollectOuterReferences(sel.FromTable, outerRefs);
-                foreach (var join in sel.Joins) CollectOuterReferences(join, outerRefs);
+                if (stmt.Ctes is { Count: > 0 })
+                {
+                    foreach (var cte in stmt.Ctes)
+                    {
+                        if (stmt is SelectStatement { IsRecursive: true } or SetOperationStatement { IsRecursive: true })
+                            cteAliases!.Add(cte.Name);
+                        CollectOuterReferences(cte.Query, outerRefs);
+                        cteAliases!.Add(cte.Name);
+                    }
+                }
 
-                foreach (var col in sel.Columns) CollectOuterReferences(col.Expression, outerRefs);
-                CollectOuterReferences(sel.WhereClause, outerRefs);
-                if (sel.GroupBy != null) foreach (var g in sel.GroupBy) CollectOuterReferences(g, outerRefs);
-                CollectOuterReferences(sel.HavingClause, outerRefs);
-                if (sel.OrderBy != null) foreach (var o in sel.OrderBy) CollectOuterReferences(o.Expression, outerRefs);
+                if (stmt is SelectStatement sel)
+                {
+                    CollectSelectOuterReferences(sel, outerRefs);
+                    return;
+                }
+
+                if (stmt is SetOperationStatement setOp)
+                {
+                    CollectOuterReferences(setOp.Left, outerRefs);
+                    CollectOuterReferences(setOp.Right, outerRefs);
+                    return;
+                }
             }
             finally
             {
-                _localAliasStack.Pop();
+                if (cteAliases != null) _localAliasStack.Pop();
             }
             return;
         }
@@ -83,6 +125,7 @@ public class SubqueryAnalyzer
         else if (node is FunctionCallExpression func)
         {
             foreach (var arg in func.Arguments) CollectOuterReferences(arg, outerRefs);
+            CollectOuterReferences(func.Filter, outerRefs);
             if (func.Window != null)
             {
                 foreach (var p in func.Window.PartitionBy) CollectOuterReferences(p, outerRefs);
@@ -91,12 +134,30 @@ public class SubqueryAnalyzer
         }
         else if (node is CaseExpression caseExpr)
         {
+            CollectOuterReferences(caseExpr.InputExpression, outerRefs);
             foreach (var clause in caseExpr.WhenClauses)
             {
                 CollectOuterReferences(clause.Condition, outerRefs);
                 CollectOuterReferences(clause.Result, outerRefs);
             }
             CollectOuterReferences(caseExpr.ElseResult, outerRefs);
+        }
+        else if (node is BetweenExpression bet)
+        {
+            CollectOuterReferences(bet.Left, outerRefs);
+            CollectOuterReferences(bet.Start, outerRefs);
+            CollectOuterReferences(bet.End, outerRefs);
+        }
+        else if (node is LikeExpression like)
+        {
+            CollectOuterReferences(like.Left, outerRefs);
+            CollectOuterReferences(like.Pattern, outerRefs);
+            CollectOuterReferences(like.EscapeChar, outerRefs);
+        }
+        else if (node is AtTimeZoneExpression atz)
+        {
+            CollectOuterReferences(atz.Left, outerRefs);
+            CollectOuterReferences(atz.TimeZone, outerRefs);
         }
         else if (node is InExpression inExpr)
         {

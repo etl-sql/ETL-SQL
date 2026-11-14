@@ -209,7 +209,7 @@ public partial class ExpressionParser
                 Expression rightExpr;
                 if (_parser.Match(TokenType.LPAREN))
                 {
-                    if (_parser.Current.Type == TokenType.SELECT)
+                    if (_parser.IsQueryStart())
                     {
                         var subq = _parser.ParseQuery();
                         rightExpr = new SubqueryExpression(subq);
@@ -723,7 +723,7 @@ public partial class ExpressionParser
         if (_parser.Match(TokenType.LPAREN))
         {
             var parenToken = _parser.Previous;
-            if (_parser.Current.Type == TokenType.SELECT)
+            if (_parser.IsQueryStart())
             {
                 var select = _parser.ParseQuery();
                 _parser.Consume(TokenType.RPAREN, "Expected ')' after subquery");

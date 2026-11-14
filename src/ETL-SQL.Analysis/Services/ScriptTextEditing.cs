@@ -122,4 +122,86 @@ internal static class ScriptTextEditing
                 yield return child;
         }
     }
+
+    /// <summary>Yields every query statement nested inside <paramref name="expr"/>.</summary>
+    public static IEnumerable<Statement> EnumerateSubqueries(Expression? expr)
+    {
+        switch (expr)
+        {
+            case SubqueryExpression subq when subq.Query != null:
+                yield return subq.Query;
+                break;
+            case ExistsExpression exists when exists.Subquery != null:
+                yield return exists.Subquery;
+                break;
+            case InExpression inExpr:
+                foreach (var q in EnumerateSubqueries(inExpr.Left)) yield return q;
+                foreach (var q in EnumerateSubqueries(inExpr.Right)) yield return q;
+                break;
+            case BinaryExpression bin:
+                foreach (var q in EnumerateSubqueries(bin.Left)) yield return q;
+                foreach (var q in EnumerateSubqueries(bin.Right)) yield return q;
+                break;
+            case UnaryExpression un:
+                foreach (var q in EnumerateSubqueries(un.Expression)) yield return q;
+                break;
+            case FunctionCallExpression func:
+                foreach (var arg in func.Arguments)
+                    foreach (var q in EnumerateSubqueries(arg)) yield return q;
+                foreach (var q in EnumerateSubqueries(func.Filter)) yield return q;
+                break;
+            case CaseExpression c:
+                foreach (var q in EnumerateSubqueries(c.InputExpression)) yield return q;
+                foreach (var w in c.WhenClauses)
+                {
+                    foreach (var q in EnumerateSubqueries(w.Condition)) yield return q;
+                    foreach (var q in EnumerateSubqueries(w.Result)) yield return q;
+                }
+                foreach (var q in EnumerateSubqueries(c.ElseResult)) yield return q;
+                break;
+            case BetweenExpression b:
+                foreach (var q in EnumerateSubqueries(b.Left)) yield return q;
+                foreach (var q in EnumerateSubqueries(b.Start)) yield return q;
+                foreach (var q in EnumerateSubqueries(b.End)) yield return q;
+                break;
+            case LikeExpression like:
+                foreach (var q in EnumerateSubqueries(like.Left)) yield return q;
+                foreach (var q in EnumerateSubqueries(like.Pattern)) yield return q;
+                foreach (var q in EnumerateSubqueries(like.EscapeChar)) yield return q;
+                break;
+            case IsNullExpression isNull:
+                foreach (var q in EnumerateSubqueries(isNull.Expression)) yield return q;
+                break;
+            case IsDistinctFromExpression idf:
+                foreach (var q in EnumerateSubqueries(idf.Left)) yield return q;
+                foreach (var q in EnumerateSubqueries(idf.Right)) yield return q;
+                break;
+            case ListExpression list:
+                foreach (var item in list.Items)
+                    foreach (var q in EnumerateSubqueries(item)) yield return q;
+                break;
+            case AtTimeZoneExpression atz:
+                foreach (var q in EnumerateSubqueries(atz.Left)) yield return q;
+                foreach (var q in EnumerateSubqueries(atz.TimeZone)) yield return q;
+                break;
+        }
+    }
+
+    /// <summary>Yields every query nested inside a <see cref="SelectStatement"/>'s expressions and clauses.</summary>
+    public static IEnumerable<Statement> EnumerateNestedSelectQueries(SelectStatement select)
+    {
+        foreach (var cte in select.Ctes ?? [])
+            if (cte.Query != null) yield return cte.Query;
+        if (select.FromTable?.Subquery != null) yield return select.FromTable.Subquery;
+        foreach (var join in select.Joins ?? [])
+        {
+            if (join.Table?.Subquery != null) yield return join.Table.Subquery;
+            foreach (var q in EnumerateSubqueries(join.Condition)) yield return q;
+        }
+        foreach (var col in select.Columns ?? [])
+            foreach (var q in EnumerateSubqueries(col.Expression)) yield return q;
+        foreach (var q in EnumerateSubqueries(select.WhereClause)) yield return q;
+        foreach (var q in EnumerateSubqueries(select.HavingClause)) yield return q;
+        foreach (var q in EnumerateSubqueries(select.QualifyClause)) yield return q;
+    }
 }

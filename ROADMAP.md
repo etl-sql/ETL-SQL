@@ -187,44 +187,6 @@ points at it.
 install and an upgrade from v0.22.0 keep their secrets and settings; the Portal-profile certification
 (fresh, upgrade, rollback via `admin restore`) passes on its first attempt on five nightly runs.
 
-### SQL Language — `WITH` in Every Query Expression
-
-**Status:** Accepted  
-**Horizon:** Next (v0.23.0)  
-**Authoritative design:** none yet; [`docs/grammar.ebnf`](docs/grammar.ebnf) is the grammar contract.
-
-**Problem and intended outcome:** ETL-SQL accepts `WITH` only at the start of a statement, as
-T-SQL does. Standard SQL allows it at the start of any query expression, and PostgreSQL, SQLite,
-MySQL 8, Oracle and DuckDB accept it. Each of these fails today with a syntax error (probed
-2026-11-13): a CTE body (`WITH a AS (WITH b AS (...) SELECT ...)`), a derived table, a scalar
-subquery, `IN (...)`, `EXISTS (...)`, and a parenthesized set-operation branch. The outcome: a
-query with its own `WITH` works in every one of those positions, and its CTEs are visible only
-inside that query, shadowing an outer CTE or `#temp` table of the same name.
-
-**Why next:** Owner decision 2026-11-13: completeness over following an incomplete dialect.
-Statement-scoped CTEs (SQ18 in v0.22.0, `CteScope`) already restore names on exit, so nested scopes
-can reuse that mechanism.
-
-**Boundaries:**
-- Statement-level `WITH`, including `WITH` on `INSERT`, `UPDATE`, `DELETE` and `MERGE`, is unchanged.
-- No new CTE features (`MATERIALIZED`, `SEARCH`/`CYCLE`); `WITH RECURSIVE` in a nested position
-  follows the same rules as at statement level.
-- A correlated subquery with its own `WITH` may re-run its CTEs per outer row; measure before
-  caching.
-
-**Dependencies:** SQ18 (statement-scoped CTEs, done in v0.22.0).
-
-**Slices:**
-1. Parser and `docs/grammar.ebnf`: `query_expression = [ with_clause ] query_body` in every
-   subquery position; `EbnfConformanceTests` and `AstSerializer` round-trip cover it.
-2. Engine: a nested query registers its CTEs in its own `CteScope`; SLT cases for each position,
-   shadowing an outer CTE and a `#temp` table, and a correlated subquery.
-3. Tooling: the linter, lineage, `ScriptDataModelService` and LSP completion see nested CTEs.
-
-**Acceptance evidence:** the six probe queries return the same results as PostgreSQL; an inner CTE
-named like an outer one shadows it only inside its subquery; `SltTests`, `EbnfConformanceTests`
-and `ParserFuzzTests` pass.
-
 ### Data Preparation — `TRANSFORM` Reliability, Schema/Lineage Integration, and Analyst Operations
 
 **Status:** Incremental  

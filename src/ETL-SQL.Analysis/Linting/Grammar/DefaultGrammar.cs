@@ -610,7 +610,7 @@ public static class DefaultGrammar
         AddUnionTransitions(groupBy);
         AddUnionTransitions(orderBy);
 
-        // From unionNode: allow optional ALL/DISTINCT, then must go to SELECT
+        // From unionNode: allow optional ALL/DISTINCT, then must go to SELECT or "("
         var unionAll = new StateNode("UNION_ALL");
         unionNode.AddTransitionTo("ALL", unionAll, SuggestionType.Keyword);
         unionNode.AddTransitionTo("DISTINCT", unionAll, SuggestionType.Keyword);
@@ -618,28 +618,28 @@ public static class DefaultGrammar
         unionNode.AddTransitionTo("SELECT", selectNode, SuggestionType.Keyword);
         unionAll.AddTransitionTo("SELECT", selectNode, SuggestionType.Keyword);
 
-        // Subqueries (nested SELECT queries inside FROM and JOIN clauses)
+        // Subqueries (nested SELECT / WITH queries inside FROM, JOIN, and UNION branches)
         var querySubqueryStart = new StateNode("QUERY_SUBQUERY_START");
         var querySubqueryEnd = new StateNode("QUERY_SUBQUERY_END");
         var querySubqueryAlias = new StateNode("QUERY_SUBQUERY_ALIAS");
 
         static int GetQueryDepth(TokenWalker walker) => walker.StateBag.TryGetValue("QueryParenDepth", out var d) ? (int)d : 0;
 
-        fromSource.AddTokenTransition(TokenType.LPAREN, querySubqueryStart, "(", null, null,
-            (token, walker) =>
-            {
-                int d = GetQueryDepth(walker);
-                walker.StateBag["QueryParenDepth"] = d + 1;
-            }
-        );
+        void AddSubqueryOpenTransition(StateNode sourceNode) =>
+            sourceNode.AddTokenTransition(TokenType.LPAREN, querySubqueryStart, "(", null, null,
+                (token, walker) => walker.StateBag["QueryParenDepth"] = GetQueryDepth(walker) + 1);
 
-        joinSource.AddTokenTransition(TokenType.LPAREN, querySubqueryStart, "(", null, null,
-            (token, walker) =>
-            {
-                int d = GetQueryDepth(walker);
-                walker.StateBag["QueryParenDepth"] = d + 1;
-            }
-        );
+        AddSubqueryOpenTransition(selectNode);
+        AddSubqueryOpenTransition(selectExpr);
+        AddSubqueryOpenTransition(fromNode);
+        AddSubqueryOpenTransition(fromSource);
+        AddSubqueryOpenTransition(joinNode);
+        AddSubqueryOpenTransition(joinSource);
+        AddSubqueryOpenTransition(joinOnNode);
+        AddSubqueryOpenTransition(whereNode);
+        AddSubqueryOpenTransition(unionNode);
+        AddSubqueryOpenTransition(unionAll);
+        AddSubqueryOpenTransition(querySubqueryStart);
 
         querySubqueryStart.AddTransitionTo("SELECT", selectNode, SuggestionType.Keyword);
 
@@ -876,22 +876,29 @@ public static class DefaultGrammar
             "<next_statement>"
         ));
 
-        // 6. WITH <cte> AS ( <subquery> ) [, <cte> AS ( ... )] <SELECT|INSERT|UPDATE|DELETE|MERGE>
+        // 6. WITH [RECURSIVE] <cte> AS ( <subquery> ) [, <cte> AS ( ... )] <SELECT|(|INSERT|UPDATE|DELETE|MERGE>
         // The parser accepts CTEs, so the grammar must too (otherwise completion stops offering valid
         // next tokens inside/after a WITH). The subquery body is consumed with balanced-paren tracking
         // via the walker StateBag, then control hands off to the existing DML start nodes.
         var withStart = new StateNode("WITH");
+        var withRecursive = new StateNode("WITH_RECURSIVE");
         var withName = new StateNode("WITH_NAME");
         var withAs = new StateNode("WITH_AS");
         var withBody = new StateNode("WITH_BODY");
         var withAfter = new StateNode("WITH_AFTER");
 
         tree.RegisterStartNode("WITH", withStart);
+        querySubqueryStart.AddTransitionTo("WITH", withStart, SuggestionType.Keyword);
 
         var withCols = new StateNode("WITH_COLS");
         var withColsDone = new StateNode("WITH_COLS_DONE");
 
+        withStart.AddTransitionTo("RECURSIVE", withRecursive, SuggestionType.Keyword);
         withStart.AddTransition(new StateTransition(
+            t => !t.Value.Equals("RECURSIVE", StringComparison.OrdinalIgnoreCase) && (t.Type == TokenType.IDENTIFIER || IsWord(t.Value)),
+            withName,
+            "<cte_name>"));
+        withRecursive.AddTransition(new StateTransition(
             t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
             withName,
             "<cte_name>"));
@@ -932,8 +939,9 @@ public static class DefaultGrammar
             withBody,
             "<cte_body_token>"));
 
-        // After ")": another CTE (comma) or the main statement.
+        // After ")": another CTE (comma), a parenthesized query branch, or the main statement.
         withAfter.AddTokenTransition(TokenType.COMMA, withStart, ",");
+        AddSubqueryOpenTransition(withAfter);
         withAfter.AddTransitionTo("SELECT", selectNode, SuggestionType.Keyword);
         withAfter.AddTransitionTo("INSERT", insertNode, SuggestionType.Keyword);
         withAfter.AddTransitionTo("UPDATE", updateNode, SuggestionType.Keyword);

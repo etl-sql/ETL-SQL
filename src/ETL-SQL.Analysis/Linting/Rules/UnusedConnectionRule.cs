@@ -75,7 +75,15 @@ public class UnusedConnectionRule : ILintRule
             AddTableRef(sel.FromTable, names);
             if (sel.IntoTable != null) AddTableRef(sel.IntoTable, names);
             foreach (var join in sel.Joins)
+            {
                 AddTableRef(join.Table, names);
+                AddExpressionRefs(join.Condition, names);
+            }
+            foreach (var col in sel.Columns)
+                AddExpressionRefs(col.Expression, names);
+            AddExpressionRefs(sel.WhereClause, names);
+            AddExpressionRefs(sel.HavingClause, names);
+            AddExpressionRefs(sel.QualifyClause, names);
         }
         else if (stmt is SetOperationStatement setOp)
         {
@@ -180,5 +188,11 @@ public class UnusedConnectionRule : ILintRule
 
         if (table.Subquery != null)
             names.AddRange(CollectConnectionRefs(table.Subquery));
+    }
+
+    private static void AddExpressionRefs(Expression? expr, List<string> names)
+    {
+        foreach (var query in ScriptTextEditing.EnumerateSubqueries(expr))
+            names.AddRange(CollectConnectionRefs(query));
     }
 }

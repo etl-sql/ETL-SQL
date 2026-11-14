@@ -63,3 +63,91 @@ query I
 WITH c AS (SELECT 5 AS x) SELECT x FROM c;
 ----
 5
+
+# WITH in every query expression:
+# 1. CTE body
+query I
+WITH a AS (WITH b(x) AS (SELECT 1) SELECT x FROM b) SELECT x FROM a;
+----
+1
+
+# 2. Derived table and JOIN subquery
+query I
+SELECT a.x + b.y
+FROM (WITH c1 AS (SELECT 10 AS x) SELECT x FROM c1) a
+JOIN (WITH c2 AS (SELECT 20 AS y) SELECT y FROM c2) b ON 1 = 1;
+----
+30
+
+# 3. Scalar subquery
+query I
+SELECT (WITH a AS (SELECT 42 AS x) SELECT x FROM a);
+----
+42
+
+# 4. IN and NOT IN subqueries
+query I rowsort
+SELECT id FROM (VALUES (1), (2), (3)) v(id)
+WHERE id IN (WITH a AS (SELECT 1 AS x UNION ALL SELECT 2 AS x) SELECT x FROM a)
+  AND id NOT IN (WITH b AS (SELECT 2 AS x) SELECT x FROM b);
+----
+1
+
+# 5. EXISTS and NOT EXISTS subqueries
+query II
+SELECT
+  CASE WHEN EXISTS (WITH a AS (SELECT 1 AS x) SELECT x FROM a) THEN 1 ELSE 0 END,
+  CASE WHEN NOT EXISTS (WITH b AS (SELECT 1 AS x WHERE 1 = 0) SELECT x FROM b) THEN 1 ELSE 0 END;
+----
+1
+1
+
+# 6. Parenthesized set-operation branches
+query I rowsort
+(WITH a AS (SELECT 1 AS x) SELECT x FROM a) UNION (WITH b AS (SELECT 2 AS x) SELECT x FROM b);
+----
+1
+2
+
+# Inner CTE shadows outer CTE and #temp table only within its subquery
+query IIII
+WITH shared AS (SELECT 10 AS x)
+SELECT
+  (WITH shared AS (SELECT 99 AS x) SELECT x FROM shared),
+  (SELECT x FROM shared),
+  (WITH #t AS (SELECT 777 AS v) SELECT v FROM #t),
+  (SELECT v FROM #t);
+----
+99
+10
+777
+20
+
+# Correlated subquery with nested WITH
+statement ok
+INSERT INTO #t VALUES (1, 10), (3, 30);
+
+query II rowsort
+SELECT t.id, (WITH scaled AS (SELECT t.v * 2 AS sv) SELECT sv FROM scaled)
+FROM #t t;
+----
+1
+20
+2
+40
+3
+60
+
+# Recursive CTE whose body starts with a helper WITH clause
+query I rowsort
+WITH RECURSIVE r(n) AS (
+  WITH seed AS (SELECT 1 AS s)
+  SELECT s FROM seed
+  UNION ALL
+  SELECT n + 1 FROM r WHERE n < 3
+)
+SELECT n FROM r;
+----
+1
+2
+3

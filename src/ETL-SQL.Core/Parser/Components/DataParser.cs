@@ -971,8 +971,9 @@ public class DataParser : ParserComponent
         var targetTable = ParseTableReference(false);
 
         List<string>? columns = null;
-        if (Match(TokenType.LPAREN))
+        if (_parser.Current.Type == TokenType.LPAREN && !_parser.IsInsertQueryStart())
         {
+            Advance();
             columns = ParseIdentifierList();
             Consume(TokenType.RPAREN, "Expected ')' after column list");
         }

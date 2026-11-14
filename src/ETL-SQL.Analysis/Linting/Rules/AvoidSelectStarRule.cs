@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Analysis.Services;
 
 namespace ETL_SQL.Analysis.Linting.Rules;
 
@@ -37,18 +38,13 @@ public class AvoidSelectStarRule : ILintRule
                 });
             }
 
-            // Check subqueries
-            if (select.FromTable?.Subquery != null) AnalyzeStatement(select.FromTable.Subquery, results);
-            if (select.Joins != null)
-            {
-                foreach (var join in select.Joins)
-                {
-                    if (join.Table?.Subquery != null) AnalyzeStatement(join.Table.Subquery, results);
-                }
-            }
+            // Check CTEs and nested subqueries (FROM, JOIN, and expression subqueries)
+            foreach (var nested in ScriptTextEditing.EnumerateNestedSelectQueries(select))
+                AnalyzeStatement(nested, results);
         }
         else if (statement is SetOperationStatement setOp)
         {
+            foreach (var cte in setOp.Ctes ?? []) AnalyzeStatement(cte.Query, results);
             AnalyzeStatement(setOp.Left, results);
             AnalyzeStatement(setOp.Right, results);
         }

@@ -309,11 +309,91 @@ public class Parser : IParser
     }
 
 
-    /// <summary>Parses a top-level query (SELECT or set operation).</summary>
+    /// <summary>
+    /// Returns true if the current position begins a query expression (<c>SELECT</c>, <c>WITH</c>,
+    /// or a parenthesized query term / set operation).
+    /// </summary>
+    public bool IsQueryStart()
+    {
+        if (Current.Type == TokenType.SELECT || Current.Type == TokenType.WITH)
+            return true;
+        return Current.Type == TokenType.LPAREN && IsParenthesizedQueryAt(0, requireFollowingQueryContext: true);
+    }
+
+    public bool IsInsertQueryStart()
+    {
+        if (Current.Type != TokenType.LPAREN) return false;
+        var next = LookAhead(1);
+        if (next.Type == TokenType.SELECT || next.Type == TokenType.WITH)
+            return true;
+        return next.Type == TokenType.LPAREN && IsParenthesizedQueryAt(1, requireFollowingQueryContext: true);
+    }
+
+    private bool IsParenthesizedQueryAt(int offset, bool requireFollowingQueryContext)
+    {
+        if (LookAhead(offset).Type != TokenType.LPAREN) return false;
+
+        var inner = LookAhead(offset + 1);
+        if (inner.Type == TokenType.LPAREN)
+        {
+            if (!IsParenthesizedQueryAt(offset + 1, requireFollowingQueryContext: true))
+                return false;
+        }
+        else if (inner.Type != TokenType.SELECT && inner.Type != TokenType.WITH)
+        {
+            return false;
+        }
+
+        int depth = 1;
+        int i = offset + 1;
+        while (depth > 0)
+        {
+            var tok = LookAhead(i);
+            if (tok.Type == TokenType.EOF) return false;
+            if (tok.Type == TokenType.LPAREN) depth++;
+            else if (tok.Type == TokenType.RPAREN) depth--;
+            i++;
+        }
+
+        if (!requireFollowingQueryContext) return true;
+        var after = LookAhead(i);
+        return after.Type == TokenType.RPAREN
+            || after.Type == TokenType.UNION
+            || after.Type == TokenType.EXCEPT
+            || after.Type == TokenType.INTERSECT
+            || (after.Type == TokenType.IDENTIFIER && after.Value.Equals("MINUS", StringComparison.OrdinalIgnoreCase));
+    }
+
+    public Statement AttachCtes(Statement stmt, List<CteDefinition> ctes, bool isRecursive)
+    {
+        var mergedCtes = stmt.Ctes is { Count: > 0 }
+            ? ctes.Concat(stmt.Ctes).ToList()
+            : ctes;
+        stmt = stmt with { Ctes = mergedCtes };
+        if (isRecursive)
+        {
+            stmt = stmt switch
+            {
+                SelectStatement select => select with { IsRecursive = true },
+                SetOperationStatement setOp => setOp with { IsRecursive = true },
+                _ => stmt
+            };
+        }
+        return stmt;
+    }
+
+    /// <summary>Parses a query expression (optional WITH clause, SELECT/parenthesized terms, and set operations).</summary>
     public Statement ParseQuery()
     {
-        if (!Match(TokenType.SELECT)) throw new SyntaxException("Expected SELECT", Current.Line, Current.Column);
-        var left = ParseSelectBody();
+        bool isRecursive = false;
+        List<CteDefinition>? ctes = null;
+        if (Match(TokenType.WITH))
+        {
+            isRecursive = Match(TokenType.RECURSIVE);
+            ctes = _statementParser.ParseCtes();
+        }
+
+        var left = ParseQueryTerm();
 
         while (Current.Type == TokenType.UNION || Current.Type == TokenType.EXCEPT || Current.Type == TokenType.INTERSECT || IsMinusKeyword())
         {
@@ -338,14 +418,33 @@ public class Parser : IParser
                 op = SetOpType.EXCEPT;
             }
 
-            Consume(TokenType.SELECT, "Expected SELECT after set operator");
-            var right = ParseSelectBody();
+            var right = ParseQueryTerm();
             left = new SetOperationStatement(left, op, right) { ByName = byName };
+        }
+
+        if (ctes != null)
+        {
+            left = AttachCtes(left, ctes, isRecursive);
         }
 
         // Global semicolon consumption for top level queries
         if (Current.Type == TokenType.SEMICOLON) Advance();
         return left;
+    }
+
+    private Statement ParseQueryTerm()
+    {
+        if (Match(TokenType.SELECT))
+            return ParseSelectBody();
+
+        if (Match(TokenType.LPAREN))
+        {
+            var inner = ParseQuery();
+            Consume(TokenType.RPAREN, "Expected ')' after parenthesized query");
+            return inner;
+        }
+
+        throw new SyntaxException("Expected SELECT or '(' in query expression", Current.Line, Current.Column);
     }
 
     public string CaptureRawBlock()
@@ -458,7 +557,7 @@ public class Parser : IParser
         {
             hasExplicitFrom = true;
             bool parenthesizedFrom = false;
-            if (Current.Type == TokenType.LPAREN && Peek.Type != TokenType.SELECT && Peek.Type != TokenType.VALUES)
+            if (Current.Type == TokenType.LPAREN && Peek.Type != TokenType.VALUES && !IsParenthesizedQueryAt(0, requireFollowingQueryContext: false))
             {
                 parenthesizedFrom = true;
                 Consume(TokenType.LPAREN, "Expected '('");
@@ -1240,10 +1339,10 @@ public class Parser : IParser
 
         TableReference tableRef;
 
-        // Subquery Support: (SELECT ...) [AS] Alias
+        // Subquery Support: (SELECT ...) / (WITH ...) [AS] Alias
         if (Match(TokenType.LPAREN))
         {
-            if (Current.Type == TokenType.SELECT)
+            if (IsQueryStart())
             {
                 var subquery = ParseQuery();
                 Consume(TokenType.RPAREN, "Expected ')' after subquery in FROM/JOIN");
@@ -1428,8 +1527,9 @@ public class Parser : IParser
             };
         }
 
-        // Handle WITH (...) options
-        if (allowWithClause && Match(TokenType.WITH))
+        // Handle WITH (...) options (require '(' after WITH so a trailing CTE clause like
+        // `INSERT INTO t WITH c AS (...) SELECT ...` is not mistaken for table options)
+        if (allowWithClause && Current.Type == TokenType.WITH && Peek.Type == TokenType.LPAREN && Match(TokenType.WITH))
         {
             Consume(TokenType.LPAREN, "Expected '(' after WITH");
             while (Current.Type != TokenType.RPAREN && Current.Type != TokenType.EOF)
