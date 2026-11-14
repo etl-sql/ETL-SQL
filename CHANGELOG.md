@@ -14,6 +14,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- `ENCRYPT FILE`, `DECRYPT FILE`, `COMPRESS FILE` and `DECOMPRESS FILE` take
+  `WITH (DELETE_SOURCE = ON)` (ROADMAP FO03). The source file is deleted only after the output is
+  written; a failed run or `SET WHAT_IF ON` keeps it. A directory source, or a destination that is
+  the source itself, is refused before anything runs. The default stays `OFF`.
+
 - PGP files can be signed and their signatures checked (ROADMAP FO11).
   `ENCRYPT FILE ... PGP_KEY 'partner_public.asc' SIGNING_KEY 'our_private.asc' [SIGNING_PASSWORD x]`
   encrypts and signs in one pass. `DECRYPT FILE ... PGP_KEY 'our_private.asc' [PASSWORD x]

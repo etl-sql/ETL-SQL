@@ -58,6 +58,8 @@ namespace ETL_SQL.Tests.Core
             { "copy-file", "COPY FILE 'a' TO DIRECTORY 'b' WITH (OVERWRITE = OFF, DATE_SUFFIX = 'yyyyMMdd', SUFFIX_SEPARATOR = '-') AT ftp;" },
             { "encrypt-password", "ENCRYPT FILE 'a' TO 'b' PASSWORD 'p' WITH (OVERWRITE = OFF);" },
             { "encrypt-pgp", "ENCRYPT FILE 'a' TO 'b' PGP_KEY 'k.asc';" },
+            { "encrypt-delete-source", "ENCRYPT FILE 'a' TO 'b' PASSWORD 'p' WITH (OVERWRITE = OFF, DELETE_SOURCE = ON);" },
+            { "compress-delete-source", "COMPRESS FILE 'a' TO 'b.zip' WITH (DELETE_SOURCE = ON);" },
             { "decrypt-keyfile", "DECRYPT FILE 'a' TO 'b' KEYFILE 'id_rsa' PASSWORD 'p';" },
             { "encrypt-sign", "ENCRYPT FILE 'a' TO 'b' PGP_KEY 'them.asc' SIGNING_KEY 'us.asc' SIGNING_PASSWORD 'p';" },
             { "decrypt-verify", "DECRYPT FILE 'a' TO 'b' PGP_KEY 'us.asc' PASSWORD 'p' VERIFY_KEY 'them.asc' AT sftp;" },

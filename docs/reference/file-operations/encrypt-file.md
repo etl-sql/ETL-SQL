@@ -13,14 +13,14 @@ ENCRYPT FILE '<source>' TO '<destination>'
     | KEYFILE '<rsa_public_key.pem>'
     | PGP_KEY '<recipient_public_key.asc>'
         [SIGNING_KEY '<your_private_key.asc>' [SIGNING_PASSWORD '<key_passphrase>']] }
-    [WITH (OVERWRITE = ON | OFF)];
+    [WITH (OVERWRITE = ON | OFF, DELETE_SOURCE = ON | OFF)];
 
 DECRYPT FILE '<source>' TO '<destination>'
     { PASSWORD '<passphrase>'
     | KEYFILE '<rsa_private_key.pem>' [PASSWORD '<key_passphrase>']
     | PGP_KEY '<your_private_key.asc>' [PASSWORD '<key_passphrase>']
         [VERIFY_KEY '<sender_public_key.asc>'] }
-    [WITH (OVERWRITE = ON | OFF)];
+    [WITH (OVERWRITE = ON | OFF, DELETE_SOURCE = ON | OFF)];
 
 -- Directories (password only)
 ENCRYPT DIRECTORY '<source_dir>' TO '<destination_dir>' PASSWORD '<passphrase>' [WITH (OVERWRITE = ON | OFF)];
@@ -43,8 +43,7 @@ DECRYPT DIRECTORY '<source_dir>' TO '<destination_dir>' PASSWORD '<passphrase>' 
   [CREATE SSH_KEY_PAIR](create-ssh-key-pair.md) with `ALGORITHM = 'RSA'` writes `id_rsa` and
   `id_rsa.pub`. An ECDSA key cannot be used with `KEYFILE`.
 - `TO` is required. Without it nothing is written.
-- The source file is left in place. Remove the plaintext with `DELETE FILE` once the encrypted file is
-  written (see the vendor-drop example).
+- The source file is left in place unless `DELETE_SOURCE = ON` (see the vendor-drop example).
 - `ENCRYPT DIRECTORY` encrypts every file, subfolders included, and writes each one as `<name>.enc`
   under the destination with the same folder layout. `DECRYPT DIRECTORY` decrypts only `.enc` files
   and removes that suffix.
@@ -64,6 +63,9 @@ DECRYPT DIRECTORY '<source_dir>' TO '<destination_dir>' PASSWORD '<passphrase>' 
 ## Options
 
 - **`OVERWRITE`** — `ON` (default) replaces an existing destination; `OFF` fails instead.
+- **`DELETE_SOURCE`** — `OFF` (default) keeps the source; `ON` deletes the source file after the
+  output is written. A failed run or `SET WHAT_IF ON` never deletes it. A destination that is the
+  source itself, or a directory source, is refused before anything runs. Directories (`ENCRYPT DIRECTORY`) do not take it.
 
 Any other `WITH` option is a syntax error that lists the accepted options.
 
@@ -89,17 +91,14 @@ DECLARE @local_csv VARCHAR = 'staging/partner_feed.csv';
 DECLARE @local_zip VARCHAR = 'staging/partner_feed.zip';
 DECLARE @local_pgp VARCHAR = 'staging/partner_feed.zip.pgp';
 
--- Compress first: encrypted data does not compress
-COMPRESS FILE @local_csv TO @local_zip;
+-- Compress first: encrypted data does not compress. Each step removes its input once its
+-- output is written, so no plaintext copy is left behind.
+COMPRESS FILE @local_csv TO @local_zip WITH (DELETE_SOURCE = ON);
 
 -- Encrypt to the partner's public key; only they can decrypt it
-ENCRYPT FILE @local_zip TO @local_pgp PGP_KEY 'certs/partner_public.asc';
+ENCRYPT FILE @local_zip TO @local_pgp PGP_KEY 'certs/partner_public.asc' WITH (DELETE_SOURCE = ON);
 
 SEND FILE @local_pgp TO '/inbound/partner_feed.zip.pgp' AT sftp_drop WITH (OVERWRITE = TRUE);
-
--- Remove every local copy, plaintext included
-DELETE FILE @local_csv;
-DELETE FILE @local_zip;
 DELETE FILE @local_pgp;
 ```
 
@@ -146,7 +145,7 @@ DECRYPT DIRECTORY 'vault/2026-11/' TO 'restore/2026-11/' PASSWORD 'archive-passp
 
 - **Compress before encrypting.** Compressing encrypted data saves nothing; the linter warns when
   `COMPRESS FILE` follows `ENCRYPT FILE` on the same path.
-- **Delete the plaintext yourself.** Encryption never removes the source.
+- **Remove the plaintext.** Encryption keeps the source unless `DELETE_SOURCE = ON`.
 - **Keep passphrases out of saved scripts.** A literal password is visible to anyone who can read the
   script. Prefer an `ENC:` value or a prompted password; see [USE](../variables-parameters/use.md).
 - Destination paths pass the same file-system policy and file-type checks as every other write.
@@ -173,6 +172,8 @@ DECRYPT DIRECTORY 'vault/2026-11/' TO 'restore/2026-11/' PASSWORD 'archive-passp
 - **`Could not decrypt '<file>': the file was changed after it was encrypted.`** — the PGP integrity
   check failed.
 - **`ENCRYPT FILE has no WITH option '<key>'.`** — the message lists the accepted options.
+- **`DELETE_SOURCE would delete the output`** / **`DELETE_SOURCE deletes a file, and '<path>' is a
+  directory`** — refused before anything runs; write elsewhere, or use `DELETE DIRECTORY`.
 - **`Could not decrypt '<file>': the password is wrong, or the file was changed after it was encrypted.`**
 - **`Could not decrypt '<file>': the private key does not match the public key the file was encrypted to.`**
   — the `KEYFILE` is not the partner of the key used to encrypt.

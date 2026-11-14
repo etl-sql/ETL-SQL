@@ -2115,6 +2115,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `DEFAULT_EXPAND` | General | Canonical language token |
 | `DEFAULT_SORT` | General | Canonical language token |
 | `DELETE_EXTRA` | General | Canonical language token |
+| `DELETE_SOURCE` | General | Canonical language token |
 | `DEPENDS_ON` | General | Canonical language token |
 | `DIRECTED` | General | Canonical language token |
 | `DISABLE` | General | Canonical language token |

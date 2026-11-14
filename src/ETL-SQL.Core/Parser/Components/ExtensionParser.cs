@@ -227,7 +227,7 @@ public class ExtensionParser : ParserComponent
         };
 
         Expression? source = null, dest = null, overwrite = null, password = null, keyFile = null, pgpKey = null;
-        Expression? dateSuffix = null, suffixSeparator = null, signingKey = null, signingPassword = null, verifyKey = null;
+        Expression? dateSuffix = null, suffixSeparator = null, signingKey = null, signingPassword = null, verifyKey = null, deleteSource = null;
         string? connectionName = null;
         bool isFunctionStyle = Match(TokenType.LPAREN);
         if (isFunctionStyle)
@@ -286,10 +286,15 @@ public class ExtensionParser : ParserComponent
                 {
                     // The handler applies DATE_SUFFIX only to COPY, MOVE and RENAME (ROADMAP FO08).
                     var name = $"{type.ToString().ToUpperInvariant()} FILE";
-                    var options = type is FileOpType.Copy or FileOpType.Move or FileOpType.Rename
-                        ? ParseWithOptions(name, "OVERWRITE", "DATE_SUFFIX", "SUFFIX_SEPARATOR")
-                        : ParseWithOptions(name, "OVERWRITE");
+                    // DELETE_SOURCE only where the statement writes a new file from the source (ROADMAP FO03).
+                    var options = type switch
+                    {
+                        FileOpType.Copy or FileOpType.Move or FileOpType.Rename => ParseWithOptions(name, "OVERWRITE", "DATE_SUFFIX", "SUFFIX_SEPARATOR"),
+                        FileOpType.Encrypt or FileOpType.Decrypt or FileOpType.Compress or FileOpType.Decompress => ParseWithOptions(name, "OVERWRITE", "DELETE_SOURCE"),
+                        _ => ParseWithOptions(name, "OVERWRITE"),
+                    };
                     overwrite = options.GetValueOrDefault("OVERWRITE") ?? overwrite;
+                    deleteSource = options.GetValueOrDefault("DELETE_SOURCE") ?? deleteSource;
                     dateSuffix = options.GetValueOrDefault("DATE_SUFFIX") ?? dateSuffix;
                     suffixSeparator = options.GetValueOrDefault("SUFFIX_SEPARATOR") ?? suffixSeparator;
                 }
@@ -312,6 +317,7 @@ public class ExtensionParser : ParserComponent
             SigningKey = signingKey,
             SigningPassword = signingPassword,
             VerifyKey = verifyKey,
+            DeleteSource = deleteSource,
             Line = startToken.Line,
             Column = startToken.Column,
         };

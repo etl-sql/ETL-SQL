@@ -225,10 +225,12 @@ email_statement = "SEND" "EMAIL" "TO" expression "FROM" expression "SUBJECT" exp
 email_value_list = expression | "[" [ expression_list ] "]" ;
 file_operation_statement = ( "COPY" | "MOVE" | "RENAME" ) "FILE" expression [ "TO" [ "DIRECTORY" ] expression ]
                            [ file_operation_options ] [ "AT" identifier ]
-                         | ( "COMPRESS" | "DECOMPRESS" ) "FILE" expression [ "TO" expression ] [ overwrite_option ] [ "AT" identifier ]
+                         | ( "COMPRESS" | "DECOMPRESS" ) "FILE" expression [ "TO" expression ] [ transform_options ] [ "AT" identifier ]
                          | "DELETE" "FILE" [ "IF" "EXISTS" ] expression [ "AT" identifier ]
-                         | "ENCRYPT" "FILE" expression [ "TO" expression ] [ encrypt_key_clause ] [ overwrite_option ] [ "AT" identifier ]
-                         | "DECRYPT" "FILE" expression [ "TO" expression ] [ decrypt_key_clause ] [ overwrite_option ] [ "AT" identifier ] ;
+                         | "ENCRYPT" "FILE" expression [ "TO" expression ] [ encrypt_key_clause ] [ transform_options ] [ "AT" identifier ]
+                         | "DECRYPT" "FILE" expression [ "TO" expression ] [ decrypt_key_clause ] [ transform_options ] [ "AT" identifier ] ;
+transform_options = "WITH" "(" transform_option { "," transform_option } ")" ;
+transform_option = ( "OVERWRITE" | "DELETE_SOURCE" ) "=" expression ;
 overwrite_option = "WITH" "(" "OVERWRITE" "=" expression ")" ;
 password_clause = "PASSWORD" ( "(" expression ")" | expression ) ;
 encrypt_key_clause = password_clause | "KEYFILE" expression

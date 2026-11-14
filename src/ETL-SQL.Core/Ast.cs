@@ -1459,6 +1459,8 @@ public sealed record FileOperationStatement : Statement
     public Expression? SigningPassword { get; init; }
     /// <summary>DECRYPT FILE with PGP_KEY: the sender's public key the signature must match.</summary>
     public Expression? VerifyKey { get; init; }
+    /// <summary>ENCRYPT, DECRYPT, COMPRESS, DECOMPRESS: delete the source once the output is written (ROADMAP FO03).</summary>
+    public Expression? DeleteSource { get; init; }
     public Expression? DateSuffix { get; }
     public Expression? SuffixSeparator { get; }
     public bool DestinationIsDirectory { get; }

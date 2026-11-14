@@ -135,6 +135,7 @@ public class FileOperationStatementHandler(
                 else if (string.Equals(ovrVal.ToString(), "FALSE", StringComparison.OrdinalIgnoreCase)) overwrite = false;
             }
         }
+        bool deleteSourceAfter = stmt.DeleteSource != null && await EvaluateOnOffAsync(stmt.DeleteSource, "DELETE_SOURCE", context);
 
         // Bridge Remote <-> Local / Remote <-> Remote connections
         if (sourceOperand.IsRemote || destOperand.IsRemote)
@@ -163,11 +164,21 @@ public class FileOperationStatementHandler(
                 validateFileType: destinationAccess != FileSystemAccessKind.Extract).CanonicalPath;
         }
 
+        if (deleteSourceAfter)
+        {
+            // Refuse before anything runs: deleting a source that is also the output would destroy
+            // the result, and a directory source is DELETE DIRECTORY's job, not a side effect.
+            if (Directory.Exists(source))
+                throw new ExecutionException($"DELETE_SOURCE deletes a file, and '{sourceVal}' is a directory. Remove it with DELETE DIRECTORY after this statement.", null, stmt.Line, stmt.Column);
+            if (dest != null && string.Equals(Path.GetFullPath(source), Path.GetFullPath(dest), StringComparison.OrdinalIgnoreCase))
+                throw new ExecutionException($"DELETE_SOURCE would delete the output: the destination is the source file '{sourceVal}'. Write to another path.", null, stmt.Line, stmt.Column);
+        }
+
         // Security Hardening: Count this as a file operation for runaway protection
         context.IncrementOperationCount(OperationType.FileSystem, source, 1);
         if (context.IsWhatIf)
         {
-            context.Log($"WHAT IF: Would perform {stmt.Type}_FILE", ConsoleColor.Yellow);
+            context.Log($"WHAT IF: Would perform {stmt.Type}_FILE{(deleteSourceAfter && dest != null ? $" and then delete the source {source}" : "")}", ConsoleColor.Yellow);
             return;
         }
 
@@ -401,6 +412,16 @@ public class FileOperationStatementHandler(
                     }
                     break;
             }
+
+            // Only after the operation returned and its output exists: a failure above throws past this.
+            if (deleteSourceAfter && dest != null && (File.Exists(dest) || Directory.Exists(dest)))
+            {
+                var deleteTarget = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Delete);
+                context.SecurityService.ValidateWriteAccess(deleteTarget.CanonicalPath);
+                context.SecurityService.ValidateFileType(deleteTarget.CanonicalPath);
+                pathAuthorizer.DeleteValidatedFile(context, deleteTarget);
+                context.Log($"Source deleted after {stmt.Type.ToString().ToUpperInvariant()} FILE: {deleteTarget.CanonicalPath}", ConsoleColor.Green);
+            }
         }
         catch (ExecutionException) { throw; }
         catch (ETL_SQL.Services.SecurityException) { throw; }
@@ -409,6 +430,21 @@ public class FileOperationStatementHandler(
             throw new ExecutionException($"File operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
         }
         await Task.CompletedTask;
+    }
+
+    private static async Task<bool> EvaluateOnOffAsync(Expression expression, string option, IExecutionContext context)
+    {
+        var value = await context.EvaluateValue(expression, new Row());
+        return value switch
+        {
+            bool b => b,
+            null => false,
+            _ when string.Equals(value.ToString(), "ON", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value.ToString(), "TRUE", StringComparison.OrdinalIgnoreCase) => true,
+            _ when string.Equals(value.ToString(), "OFF", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value.ToString(), "FALSE", StringComparison.OrdinalIgnoreCase) => false,
+            _ => throw new ExecutionException($"{option} must be ON or OFF, not '{value}'."),
+        };
     }
 
     private async Task ExecuteRemoteBridgedFileOperationAsync(

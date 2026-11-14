@@ -9,7 +9,7 @@ format: `COMPRESS` writes ZIP whatever the destination extension, and `DECOMPRES
 
 ### 1. File Compression
 ```sql
-COMPRESS FILE '<source_file_path>' TO '<target_zip_path>' [WITH (OVERWRITE = ON | OFF)];
+COMPRESS FILE '<source_file_path>' TO '<target_zip_path>' [WITH (OVERWRITE = ON | OFF, DELETE_SOURCE = ON | OFF)];
 ```
 
 ### 2. Directory Compression
@@ -19,7 +19,7 @@ COMPRESS DIRECTORY '<source_directory_path>' TO '<target_zip_path>' [WITH (OVERW
 
 ### 3. Decompression
 ```sql
-DECOMPRESS FILE '<source_zip_path>' TO '<destination_path>' [WITH (OVERWRITE = ON | OFF)];
+DECOMPRESS FILE '<source_zip_path>' TO '<destination_path>' [WITH (OVERWRITE = ON | OFF, DELETE_SOURCE = ON | OFF)];
 ```
 
 ---
@@ -29,6 +29,7 @@ DECOMPRESS FILE '<source_zip_path>' TO '<destination_path>' [WITH (OVERWRITE = O
 | Option | Values | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `OVERWRITE` | `ON`, `OFF` | `ON` | Replace the destination if it already exists; `OFF` fails instead |
+| `DELETE_SOURCE` | `ON`, `OFF` | `OFF` | `COMPRESS FILE` and `DECOMPRESS FILE` only. Delete the source file after the output is written; never on failure or under `SET WHAT_IF ON`. A directory source is refused: remove it with `DELETE DIRECTORY`. |
 
 - `COMPRESS DIRECTORY` always includes subfolders.
 - There is no `FORMAT` option. GZIP (`.gz`) archives are not supported.
