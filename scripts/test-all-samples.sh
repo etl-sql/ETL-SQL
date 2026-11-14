@@ -29,6 +29,17 @@ ORCHESTRATOR_DATABASE_PATH="$VALIDATOR_STATE_ROOT/orchestrator.db"
 mkdir -p "$VALIDATOR_STATE_ROOT"
 trap 'rm -rf -- "$VALIDATOR_STATE_ROOT"' EXIT
 
+# Run a copy of the samples, never the repository files: the first run of a script with a literal
+# USE PASSWORD or plaintext secret seals it on disk (USE PASSWORD PROMPT, ENC:...). Every pass runs
+# the same copy with ETL_SQL_MASTER_PASSWORD set, so a later pass proves a sealed script runs
+# unattended. Paths inside samples resolve against the working directory (the repository root), so
+# the copy reads and writes the same data files. samples/output is generated and not copied.
+# Mirrors Test-AllSamples.ps1.
+SAMPLE_COPY_ROOT="$VALIDATOR_STATE_ROOT/samples"
+SAMPLE_SEAL_PASSWORD="etlsql-sample-gate"
+mkdir -p "$SAMPLE_COPY_ROOT"
+tar -C "$SAMPLES_DIR" --exclude=./output -cf - . | tar -C "$SAMPLE_COPY_ROOT" -xf -
+
 # Check port availability (returns 0=open, 1=closed)
 port_open() {
     local host="$1" port="$2"
@@ -60,8 +71,8 @@ echo "======================================================="
 echo " ETL-SQL SAMPLE VALIDATOR STARTING..."
 echo " Configuration: $CONFIGURATION"
 
-mapfile -t SCRIPTS < <(find "$SAMPLES_DIR" -type f \( -name "*.etlsql" -o -name "*.rptsql" \) | sort)
-echo " Found ${#SCRIPTS[@]} scripts to validate in '$SAMPLES_DIR'."
+mapfile -t SCRIPTS < <(find "$SAMPLE_COPY_ROOT" -type f \( -name "*.etlsql" -o -name "*.rptsql" \) | sort)
+echo " Found ${#SCRIPTS[@]} scripts to validate in '$SAMPLES_DIR' (run from a copy)."
 if [[ "$PASSES" -gt 1 ]]; then
     echo " Running $PASSES passes to prove the samples are re-runnable."
 fi
@@ -111,7 +122,7 @@ for SCRIPT_FILE in "${SCRIPTS[@]}"; do
 
     printf "Starting: %s ... " "$SCRIPT_NAME"
 
-    OUTPUT=$(ETLSQL_SECURITY_EVENT_OUTBOX_PATH="$SECURITY_EVENT_OUTBOX_PATH" Session__Root="$SESSION_ROOT" Orchestrator__DatabasePath="$ORCHESTRATOR_DATABASE_PATH" timeout 180 dotnet run --no-build --configuration "$CONFIGURATION" --project "$PROJECT_PATH" -- run "$SCRIPT_FILE" --silent 2>&1) && EXIT_CODE=$? || EXIT_CODE=$?
+    OUTPUT=$(ETL_SQL_MASTER_PASSWORD="$SAMPLE_SEAL_PASSWORD" ETLSQL_SECURITY_EVENT_OUTBOX_PATH="$SECURITY_EVENT_OUTBOX_PATH" Session__Root="$SESSION_ROOT" Orchestrator__DatabasePath="$ORCHESTRATOR_DATABASE_PATH" timeout 180 dotnet run --no-build --configuration "$CONFIGURATION" --project "$PROJECT_PATH" -- run "$SCRIPT_FILE" --silent 2>&1) && EXIT_CODE=$? || EXIT_CODE=$?
 
     HAS_INTERNAL_ERROR=false
     if [[ "$OUTPUT" =~ "CRITICAL FAILURE" || "$OUTPUT" =~ "Unhandled exception" ]]; then
