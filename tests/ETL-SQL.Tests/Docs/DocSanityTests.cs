@@ -955,6 +955,7 @@ namespace ETL_SQL.Tests.Docs
         {
             var registry = new ETL_SQL.Engine.Functions.FunctionRegistry();
             ETL_SQL.Engine.Functions.StandardFunctions.Register(registry);
+            ETL_SQL.Engine.Functions.FileFunctions.Register(registry);
 
             var functionsDir = RepoFile("docs/reference/functions");
             Assert.True(Directory.Exists(functionsDir), $"Missing functions doc dir: {functionsDir}");
@@ -986,6 +987,7 @@ namespace ETL_SQL.Tests.Docs
             // (renamed or removed) would silently mask a genuinely undocumented function later.
             var registry = new ETL_SQL.Engine.Functions.FunctionRegistry();
             ETL_SQL.Engine.Functions.StandardFunctions.Register(registry);
+            ETL_SQL.Engine.Functions.FileFunctions.Register(registry);
             var registered = registry.GetRegisteredNames().ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var stale = FunctionsWithoutOwnReferencePage

@@ -14,6 +14,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- `FILE_EXISTS` and `DIRECTORY_EXISTS` give the same result on every host (ROADMAP FN10). Two
+  versions were registered and the last one won: the CLI and language server returned `1`/`0` and
+  `NULL` for a `NULL` path, while the Orchestrator and TUI returned `TRUE`/`FALSE` and `FALSE`. All
+  hosts now return `1`/`0` and `NULL` for `NULL`, and the reference pages say `NULL` (they said `0`).
+  A test fails if any function name is registered twice. **Behaviour change** for Orchestrator jobs
+  and the TUI only.
+
 - Renaming or moving a file on an FTP or SFTP connection no longer loses the destination (ROADMAP
   RF10). Both deleted an existing destination before renaming, so a mistyped source path or a
   refused rename destroyed it. The source is now checked first, an existing destination is moved

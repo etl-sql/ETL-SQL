@@ -144,8 +144,8 @@ sample on a shared runner.
 
 - [ ] **Work the file-function backlog in this order.** IDs are rows in `ROADMAP.md` (file
   operations FO, file functions FN, remote files RF). Each function or statement change ships with
-  its reference page, help text and `LanguageMetadata` entry. Done: RF01, FO01, FO02, FO09, FO10, RF10.
-  **Left, in order:** bugs FN10, FO06; then FO11 (PGP sign and verify); then FO03, FO04,
+  its reference page, help text and `LanguageMetadata` entry. Done: RF01, FO01, FO02, FO09, FO10, RF10, FN10.
+  **Left, in order:** bug FO06; then FO11 (PGP sign and verify); then FO03, FO04,
   FN07, FN01, FN03, FN02, FN08, FN09, RF02. RF03–RF09 stay in `ROADMAP.md` for later.
 
 ### 7. `USE PASSWORD` and secret sealing drift (owner 2026-11-13: to be prioritized)
