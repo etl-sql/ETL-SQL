@@ -119,6 +119,36 @@ public class SpillRootLifecycleTests : IDisposable
     }
 
     [Fact]
+    public void Ownership_AHeldMarkerIsNeverAbandonedWhateverItSays()
+    {
+        var root = Path.Combine(_parent, "held");
+        Directory.CreateDirectory(root);
+        var marker = SpillRootOwnership.MarkerPath(root);
+        File.WriteAllText(marker, $"{Environment.MachineName}\n{int.MaxValue}\n0");
+        Assert.True(SpillRootOwnership.IsAbandoned(root), "An unheld marker naming a dead process is abandoned.");
+
+        // The owner's open handle is what proves it alive; the marker's text cannot override that.
+        using (new FileStream(marker, FileMode.Open, FileAccess.Read, FileShare.Read))
+            Assert.False(SpillRootOwnership.IsAbandoned(root));
+
+        Assert.True(SpillRootOwnership.IsAbandoned(root));
+    }
+
+    [Fact]
+    public void Sweep_IgnoresMarkersInASpillDirectoryOtherUsersCanWrite()
+    {
+        if (OperatingSystem.IsWindows()) return; // Unix permission bits; Windows ACLs are not modelled here.
+        File.SetUnixFileMode(_parent, File.GetUnixFileMode(_parent) | UnixFileMode.OtherWrite);
+        var crashed = Path.Combine(_parent, "crashed");
+        Directory.CreateDirectory(crashed);
+        File.WriteAllText(SpillRootOwnership.MarkerPath(crashed), $"{Environment.MachineName}\n{int.MaxValue}\n0");
+
+        Assert.False(SpillRootOwnership.ParentIsPrivate(_parent));
+        Assert.Equal(0, ChildProcessTracker.SweepSpillRoots(_parent, TimeSpan.FromHours(24), NullLogger.Instance));
+        Assert.True(Directory.Exists(crashed), "A marker anyone could have planted does not remove a fresh root.");
+    }
+
+    [Fact]
     public void Sweep_RemovesAbandonedAndAgedRootsAndKeepsLiveOnes()
     {
         using var self = Process.GetCurrentProcess();

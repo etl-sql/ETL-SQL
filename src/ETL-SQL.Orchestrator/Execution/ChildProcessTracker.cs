@@ -179,12 +179,19 @@ namespace ETL_SQL.Orchestrator.Execution
             try
             {
                 var cutoff = DateTime.UtcNow - maxAge;
+                var trustMarkers = SpillRootOwnership.ParentIsPrivate(spillParent);
+                if (!trustMarkers)
+                    logger.LogWarning(
+                        "Spill directory {Path} is writable by other users; its owner markers are ignored and only roots older than {MaxAge} are removed.",
+                        spillParent, maxAge);
                 foreach (var dir in Directory.GetDirectories(spillParent))
                 {
                     try
                     {
+                        // Never follow a link out of the spill directory.
+                        if (new DirectoryInfo(dir).LinkTarget is not null) continue;
                         // A live owner keeps its root whatever its age: a long job is not an orphan.
-                        var marked = File.Exists(SpillRootOwnership.MarkerPath(dir));
+                        var marked = trustMarkers && File.Exists(SpillRootOwnership.MarkerPath(dir));
                         var remove = marked
                             ? SpillRootOwnership.IsAbandoned(dir)
                             : Directory.GetLastWriteTimeUtc(dir) < cutoff;
@@ -200,7 +207,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 }
 
                 // A marker whose root is already gone is left by a cleanup interrupted between the two deletes.
-                foreach (var marker in Directory.GetFiles(spillParent, "*" + SpillRootOwnership.MarkerSuffix))
+                foreach (var marker in trustMarkers ? Directory.GetFiles(spillParent, "*" + SpillRootOwnership.MarkerSuffix) : [])
                 {
                     var root = marker[..^SpillRootOwnership.MarkerSuffix.Length];
                     if (!Directory.Exists(root)) SpillRootOwnership.Release(root);

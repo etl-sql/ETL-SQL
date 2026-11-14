@@ -47,6 +47,8 @@ public partial class SpillStore : ISpillStore
             _ => element.GetRawText()
         };
     private string? _cachedRootPath;
+    // Held open while this store owns a disposable temp root; see SpillRootOwnership.
+    private IDisposable? _ownerClaim;
     private byte[]? _cachedSessionKey;
     private string? _cachedSessionId;
     private bool _usingTemporaryFallback;
@@ -155,7 +157,11 @@ public partial class SpillStore : ISpillStore
             // sweep remove it at once instead of after the 24-hour age-out.
             if (!IsPersistent && IsSweptTempRoot(_cachedRootPath!))
             {
-                try { SpillRootOwnership.Claim(_cachedRootPath!); }
+                try
+                {
+                    _ownerClaim?.Dispose();
+                    _ownerClaim = SpillRootOwnership.Claim(_cachedRootPath!);
+                }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
                     _context.Logger.Warning("Could not record the owner of spill directory {Path}: {Message}", _cachedRootPath, ex.Message);
@@ -466,7 +472,14 @@ public partial class SpillStore : ISpillStore
                 _context.Logger.Warning("Failed to cleanup spill directory {Path}: {Message}", _cachedRootPath, ex.Message);
             }
         }
-        if (!Directory.Exists(_cachedRootPath)) SpillRootOwnership.Release(_cachedRootPath!);
+        if (!Directory.Exists(_cachedRootPath)) ReleaseOwnership(_cachedRootPath!);
+    }
+
+    private void ReleaseOwnership(string root)
+    {
+        _ownerClaim?.Dispose();
+        _ownerClaim = null;
+        SpillRootOwnership.Release(root);
     }
 
     public void Dispose()
@@ -486,7 +499,9 @@ public partial class SpillStore : ISpillStore
             }
         }
         if (!IsPersistent && _cachedRootPath != null && !Directory.Exists(_cachedRootPath))
-            SpillRootOwnership.Release(_cachedRootPath);
+            ReleaseOwnership(_cachedRootPath);
+        _ownerClaim?.Dispose();
+        _ownerClaim = null;
 
         if (_cachedSessionKey != null) System.Array.Clear(_cachedSessionKey);
         _disposed = true;
