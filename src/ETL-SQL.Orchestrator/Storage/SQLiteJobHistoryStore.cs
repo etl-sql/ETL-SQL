@@ -424,6 +424,15 @@ namespace ETL_SQL.Orchestrator.Storage
                     expires_at TEXT NOT NULL
                 );";
 
+                    // Cancel requests for runs, so a cancel accepted by any node reaches the node running
+                    // the job. Keyed on the run; the owning node deletes the row when the run ends.
+                    var createRunCancelTable = @"
+                CREATE TABLE IF NOT EXISTS job_run_cancel_requests (
+                    history_id INTEGER PRIMARY KEY,
+                    requested_by TEXT NOT NULL,
+                    requested_at TEXT NOT NULL
+                );";
+
                     // Watermarks live here. Keyed on the job's surrogate Id rather than its name: two
                     // tenants running a job of the same name sharing one high-water mark would silently
                     // load the wrong rows, which nothing would report.
@@ -493,7 +502,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
                     var schema = createJobsTable + createCatalogTables + createObjectAclTable + createHistoryTable + createColumnMetricsTable
                         + createDataQualityFailuresTable + createStatementMetricsTable + createBundleTables
-                        + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createJobStateTable
+                        + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createRunCancelTable + createJobStateTable
                         + createHostMetricsTable + createRollupTables + createTenantUsageTable
                         + createSharedTenantLifecycleTables;
                     // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other

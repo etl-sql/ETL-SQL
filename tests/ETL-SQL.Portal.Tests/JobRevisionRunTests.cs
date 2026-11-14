@@ -285,6 +285,43 @@ public sealed class JobRevisionRunTests : IDisposable
         Assert.Equal("SUCCESS", (await Body(await client.SendAsync(read)))["status"]!.GetValue<string>());
     }
 
+    [Fact]
+    public async Task ACancelRecordedByAnotherNodeStopsTheRunOnTheNodeRunningIt()
+    {
+        await ProvisionAsync("PIPELINE:10");
+        var started = DateTime.UtcNow;
+        var runId = (await Body(await SubmitAsync("PIPELINE:10", Operator, Slow)))["runId"]!.GetValue<long>();
+        var cancels = Cancels();
+
+        // What a node behind the load balancer records when it does not run the job itself.
+        await cancels.RequestRunCancelAsync(runId, "user:operator-key");
+
+        var run = await FollowAsync(runId, Operator);
+        Assert.Equal("CANCELLED", run["status"]!.GetValue<string>());
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(20), "the recorded request was not applied");
+        Assert.Empty(await cancels.GetRequestedRunCancelsAsync([runId]));
+    }
+
+    [Fact]
+    public async Task CancellingARunThisNodeDoesNotRunRecordsTheRequestForItsNode()
+    {
+        await ProvisionAsync("PIPELINE:11");
+        var job = await StoredJobAsync("PIPELINE:11");
+        long runId;
+        using (var scope = factory.Services.CreateScope())
+            // A run started by another node: recorded as running in the shared store, unknown here.
+            runId = await scope.ServiceProvider.GetRequiredService<IJobHistoryStore>().LogJobStartAsync(job.Id);
+
+        using var cancel = Request(HttpMethod.Post, $"/api/job-runs/{runId}/cancel", Operator);
+        var response = await client.SendAsync(cancel);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.Equal([runId], await Cancels().GetRequestedRunCancelsAsync([runId]));
+    }
+
+    private IJobRunCancelStore Cancels() =>
+        (IJobRunCancelStore)factory.Services.GetRequiredService<IJobHistoryStore>();
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private const string Slow = "WAITFOR DELAY '00:00:30';\n";

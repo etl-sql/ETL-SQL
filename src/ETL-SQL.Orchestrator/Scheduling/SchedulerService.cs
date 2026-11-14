@@ -57,6 +57,17 @@ namespace ETL_SQL.Orchestrator.Scheduling
         IdentityNotCarried
     }
 
+    /// <summary>How a cancel request reached its run.</summary>
+    public enum RunCancelDelivery
+    {
+        /// <summary>This node runs it and signalled it.</summary>
+        Signalled,
+        /// <summary>Another node runs it; the request is recorded for that node to apply.</summary>
+        Recorded,
+        /// <summary>This node does not run it and has no shared store to record the request in.</summary>
+        NotRunningHere,
+    }
+
     /// <summary><see cref="RunId"/> is the history id of the run, set only when it was accepted.</summary>
     public sealed record RevisionRunResult(RevisionRunStatus Status, long? RunId = null);
 
@@ -152,6 +163,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private DateTime _lastSessionReap = DateTime.MinValue;
         private DateTime _lastHistoryPrune = DateTime.MinValue;
         private Task? _runTask;
+        private Task? _cancelPollTask;
 
         /// <summary>Starts the background scheduler loop.</summary>
         public void Start()
@@ -161,6 +173,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
             _lastSessionReap = DateTime.Now;
             _lastHistoryPrune = DateTime.Now;
             _runTask = Task.Run(() => RunAsync(_cts.Token));
+            if (_store is IJobRunCancelStore cancels)
+                _cancelPollTask = Task.Run(() => PollRunCancelsAsync(cancels, _cts.Token));
             _ = _runTask.ContinueWith(t =>
                 _logger.LogError(t.Exception, "Scheduler background task terminated unexpectedly."),
                 TaskContinuationOptions.OnlyOnFaulted);
@@ -214,6 +228,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         _logger.LogWarning(ex, "Scheduler loop terminated with an error during shutdown.");
                     }
                 }
+                if (_cancelPollTask != null)
+                    await _cancelPollTask.WaitAsync(shutdown.Token).ConfigureAwait(false);
                 await Task.WhenAll(_jobTasks.Values).WaitAsync(shutdown.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -691,6 +707,61 @@ namespace ETL_SQL.Orchestrator.Scheduling
         }
 
         /// <summary>
+        /// Cancels a run wherever it is executing. This node signals it directly when it runs it;
+        /// otherwise the request is recorded in the shared store, and the node running the job
+        /// picks it up within <c>Scheduler:CancelPollSeconds</c>.
+        /// </summary>
+        public async Task<RunCancelDelivery> RequestRunCancelAsync(long historyId, string requestedBy)
+        {
+            if (CancelRun(historyId)) return RunCancelDelivery.Signalled;
+            if (_store is not IJobRunCancelStore cancels) return RunCancelDelivery.NotRunningHere;
+            await cancels.RequestRunCancelAsync(historyId, requestedBy);
+            _logger.LogInformation(
+                "Run {HistoryId} is not running on this node; its cancel request was recorded for the node running it.",
+                historyId);
+            return RunCancelDelivery.Recorded;
+        }
+
+        private TimeSpan RunCancelPollInterval =>
+            TimeSpan.FromSeconds(Math.Clamp(_configuration.GetValue("Scheduler:CancelPollSeconds", 5), 1, 300));
+
+        /// <summary>Signals the runs on this node that another node recorded a cancel request for.</summary>
+        internal async Task<int> ApplyRecordedRunCancelsAsync(IJobRunCancelStore cancels, CancellationToken cancellationToken)
+        {
+            var running = _runningJobs.Keys.ToArray();
+            if (running.Length == 0) return 0;
+            var applied = 0;
+            foreach (var historyId in await cancels.GetRequestedRunCancelsAsync(running, cancellationToken))
+            {
+                if (_cancelRequested.ContainsKey(historyId) || !CancelRun(historyId)) continue;
+                applied++;
+                _logger.LogInformation("Run {HistoryId} cancelled by a request recorded on another node.", historyId);
+            }
+            return applied;
+        }
+
+        private async Task PollRunCancelsAsync(IJobRunCancelStore cancels, CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(RunCancelPollInterval, cancellationToken);
+                    await ApplyRecordedRunCancelsAsync(cancels, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // A store outage delays remote cancels; it must not stop the poll.
+                    _logger.LogWarning(ex, "Reading recorded run cancel requests failed; retrying.");
+                }
+            }
+        }
+
+        /// <summary>
         /// The recorded status of an attempt that did not succeed. A run someone asked to cancel
         /// ended because of that request, whatever error the interrupted statement reported.
         /// </summary>
@@ -1090,6 +1161,15 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     _runningJobs.TryRemove(lastHistoryId, out _);
                     _runSubmitters.TryRemove(lastHistoryId, out _);
                     _cancelRequested.TryRemove(lastHistoryId, out _);
+                    if (_store is IJobRunCancelStore cancels)
+                    {
+                        try { await cancels.ClearRunCancelAsync(lastHistoryId); }
+                        catch (Exception ex)
+                        {
+                            // The request ages out of the store; it can no longer match a running job.
+                            _logger.LogDebug(ex, "Clearing the cancel request of run {HistoryId} failed.", lastHistoryId);
+                        }
+                    }
                 }
 
                 if (!cycleCts.IsCancellationRequested)

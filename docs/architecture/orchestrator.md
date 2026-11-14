@@ -380,10 +380,17 @@ execution lease, throttle, history and metering. It differs from a trigger in se
 `NextRun` parked at `SchedulerService.ManualOnlyNextRun`. It cannot be a disabled job: the execution
 lease refuses one, and disabling the job is how an operator stops it being run at all.
 
-Cancel by run ID records `CANCELLED`. The older `POST /api/scheduled-jobs/{name}/kill` is unchanged
-and still records `FAILURE` with a cancellation message. Who submitted a run is held in memory for
-the life of the run, so after a restart only `MANAGE` can cancel it. A cancel for a run this node is
-not executing answers `409 not_running_here`; there is no cross-node signal.
+Cancel by run ID records `CANCELLED`. The older `POST /api/scheduled-jobs/{name}/kill` still
+records `FAILURE` with a cancellation message when this node runs the job. Who submitted a run is
+held in memory on the node running it, so after a restart, or through another node, only `MANAGE`
+can cancel it.
+
+A cancel can land on any node behind the load balancer. When this node does not run the job, it
+records the request in the shared `job_run_cancel_requests` table and answers `202 Accepted`. Each
+node polls that table for the runs it holds every `Scheduler:CancelPollSeconds` (default 5, range
+1–300), stops a requested run, and records it as `CANCELLED`. The row is deleted when the run ends;
+an unmatched request is pruned after a day. `409 not_running_here` remains only for a store that
+cannot record the request.
 
 Refusals return `{ Code, Error }`: `not_a_run_slot`, `sandbox_identity_unsupported`,
 `job_not_provisioned`, `run_grant_denied`, `already_running`,

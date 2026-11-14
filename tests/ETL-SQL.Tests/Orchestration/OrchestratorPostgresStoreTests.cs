@@ -289,6 +289,24 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task RunCancel_RecordedOnOneNodeIsReadOnAnother_OnPostgres()
+        {
+            var accepting = NewStore();
+            await accepting.InitializeAsync();
+            var running = NewStore();
+            await running.InitializeAsync();
+
+            await accepting.RequestRunCancelAsync(41, "user:operator");
+            await accepting.RequestRunCancelAsync(41, "user:someone-else"); // repeating is harmless
+
+            Assert.Equal([41L], await running.GetRequestedRunCancelsAsync([40, 41, 42]));
+            Assert.Empty(await running.GetRequestedRunCancelsAsync([]));
+
+            await running.ClearRunCancelAsync(41);
+            Assert.Empty(await accepting.GetRequestedRunCancelsAsync([41]));
+        }
+
+        [Fact]
         public async Task WriteEpoch_CompareAndAdvance_OnPostgres()
         {
             var store = NewStore();

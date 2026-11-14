@@ -1853,7 +1853,11 @@ namespace ETL_SQL.Orchestrator.Service
                     return Results.NotFound(new { Error = $"No running instance of job '{name}' found." });
 
                 var killed = jobManager.KillJob(running.Id);
-                if (killed)
+                // Another node behind the load balancer may be running it: record the request for
+                // that node, which stops the run within Scheduler:CancelPollSeconds.
+                var recorded = !killed && jobManager is SchedulerService scheduler
+                    && await scheduler.RequestRunCancelAsync(running.Id, caller.PrincipalKey) == RunCancelDelivery.Recorded;
+                if (killed || recorded)
                 {
                     logger.LogWarning(
                         "Job {JobName} (historyId={HistoryId}) killed by {Actor}.",
@@ -1863,8 +1867,10 @@ namespace ETL_SQL.Orchestrator.Service
                         $"Run {running.Id} of job '{unescaped}' cancelled.",
                         ctx.TraceIdentifier, SecurityEventSeverity.Warning);
                 }
-                return killed
-                    ? Results.Ok(new { Message = $"Job '{unescaped}' (historyId={running.Id}) kill signal sent." })
+                if (killed)
+                    return Results.Ok(new { Message = $"Job '{unescaped}' (historyId={running.Id}) kill signal sent." });
+                return recorded
+                    ? Results.Accepted($"/api/job-runs/{running.Id}", new { Message = $"Job '{unescaped}' (historyId={running.Id}) runs on another node; the kill request was recorded for it." })
                     : Results.Problem($"Kill signal for history entry {running.Id} did not match a running job.");
             }).WithName("killScheduledJob");
 

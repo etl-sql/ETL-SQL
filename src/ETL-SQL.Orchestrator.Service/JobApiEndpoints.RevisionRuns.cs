@@ -207,7 +207,8 @@ public static partial class JobApiEndpoints
                         $"This caller did not submit run {historyId} and holds no MANAGE grant on job '{job.Name}'."),
                     statusCode: StatusCodes.Status403Forbidden);
 
-            if (!scheduler.CancelRun(historyId))
+            var delivery = await scheduler.RequestRunCancelAsync(historyId, caller.PrincipalKey);
+            if (delivery == RunCancelDelivery.NotRunningHere)
             {
                 // Either it finished in the last moment or another node is running it. Say which.
                 var current = await store.GetHistoryEntryAsync(historyId) ?? history;

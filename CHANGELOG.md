@@ -865,6 +865,20 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 
 ### Added
 
+- Spill storage keeps a free-space reserve. A spill that would start a new extent on a volume with
+  less than `Engine:SpillMinimumFreeDiskMB` free (default 256 MB, `0` turns it off) fails with a
+  clear error instead of filling the disk.
+- The Orchestrator removes the spill root of a process that died without cleaning up as soon as it
+  sweeps, rather than after 24 hours. Each disposable spill root names its owning process in a
+  `<root>.owner` marker; a root whose owner is gone is removed, and a live owner keeps its root.
+- `eng.profile` reports `spill_write_ms_per_mb` and `storage_pressure_events` for each statement.
+  Slow spill writes that make adaptive execution scale down are counted as storage pressure.
+- Cancelling a run works through a load balancer. A node that does not run the job records the
+  request in the shared Orchestrator store, and the node running it stops the run within
+  `Scheduler:CancelPollSeconds` (default 5). `POST /api/job-runs/{id}/cancel` and
+  `POST /api/scheduled-jobs/{name}/kill` return `202 Accepted` for such a run instead of
+  `409 not_running_here` or an error.
+
 - Controlled-host local certification can resume failed phases or recover failed evidence uploads
   after verifying the same run, runner, workspace, toolchain, cached outputs and original receipts.
   Reused phases retain their original execution times and job identities. Missing checkpoints or
@@ -1248,6 +1262,9 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
   files, and the `.deb` is built with root ownership.
 
 ### Fixed
+
+- A `SELECT ... INTO #temp` whose source fails part way leaves the table empty and its spill files
+  deleted. It used to keep the extents already written until the session ended.
 
 - A script can no longer switch off the `Security:MaxSpillBytesPerScript` ceiling with
   `SET TELEMETRY = OFF`.
