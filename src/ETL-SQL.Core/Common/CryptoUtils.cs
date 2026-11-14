@@ -901,35 +901,111 @@ public static class CryptoUtils
         return SHA256.HashData(Encoding.UTF8.GetBytes(key));
     }
     /// <summary>
-    /// Encrypts a file using a PGP public key.
+    /// Encrypts a file to a PGP public key and, when <paramref name="signingKeyFile"/> is given, signs it
+    /// with that private key in the same pass (ROADMAP FO11).
     /// </summary>
-    public static async Task EncryptFileWithPgp(string inputFile, string outputFile, string keyFile, bool overwrite)
+    public static async Task EncryptFileWithPgp(string inputFile, string outputFile, string keyFile, bool overwrite,
+        string? signingKeyFile = null, string? signingPassphrase = null)
     {
         if (File.Exists(outputFile) && !overwrite)
             throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
 
-        var keys = new EncryptionKeys(new FileInfo(keyFile));
-        using var pgp = new PGP(keys);
-        await pgp.EncryptFileAsync(new FileInfo(inputFile), new FileInfo(outputFile));
+        // PgpCore leaves a partial output when signing fails (a wrong passphrase, a public key given
+        // as SIGNING_KEY), so write beside the destination and move into place only on success.
+        var tempFile = outputFile + ".etlsql-encrypt-" + Guid.NewGuid().ToString("N")[..12];
+        try
+        {
+            if (signingKeyFile == null)
+            {
+                using var pgp = new PGP(new EncryptionKeys(new FileInfo(keyFile)));
+                await pgp.EncryptFileAsync(new FileInfo(inputFile), new FileInfo(tempFile));
+            }
+            else
+            {
+                try
+                {
+                    var keys = new EncryptionKeys(new FileInfo(keyFile), new FileInfo(signingKeyFile), signingPassphrase ?? string.Empty);
+                    using var pgp = new PGP(keys);
+                    await pgp.EncryptAndSignAsync(new FileInfo(inputFile), new FileInfo(tempFile));
+                }
+                catch (Exception ex) when (ex is not ExecutionException and not IOException and not OperationCanceledException)
+                {
+                    throw SigningKeyError(signingKeyFile, ex);
+                }
+            }
+            File.Move(tempFile, outputFile, overwrite);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
     }
 
     /// <summary>
-    /// Decrypts a file using a PGP private key.
+    /// PgpCore reports a wrong passphrase with the key id and a public key as "No PGP secret keys";
+    /// name the clause instead. Neither the passphrase nor key material is echoed.
     /// </summary>
-    public static async Task DecryptFileWithPgp(string inputFile, string outputFile, string keyFile, string? passphrase, bool overwrite)
+    private static ExecutionException SigningKeyError(string signingKeyFile, Exception inner)
+    {
+        var name = Path.GetFileName(signingKeyFile);
+        var kind = inner.GetType().Name;
+        if (kind.Contains("Passphrase", StringComparison.Ordinal))
+            return new ExecutionException($"Could not sign with '{name}': the SIGNING_PASSWORD is wrong for this SIGNING_KEY.");
+        if (kind.Contains("KeyMaterial", StringComparison.Ordinal) || inner.Message.Contains("secret key", StringComparison.OrdinalIgnoreCase))
+            return new ExecutionException($"Could not sign with '{name}': SIGNING_KEY must be your PGP private key, not a public key.");
+        return new ExecutionException($"Could not sign with '{name}': it is not a usable PGP private key ({kind}).");
+    }
+
+    /// <summary>
+    /// Decrypts a file using a PGP private key. With <paramref name="verifyKeyFile"/>, the file must be
+    /// signed by that public key; an unsigned file, another signer or a changed file fails (ROADMAP FO11).
+    /// </summary>
+    public static async Task DecryptFileWithPgp(string inputFile, string outputFile, string keyFile, string? passphrase, bool overwrite,
+        string? verifyKeyFile = null)
     {
         if (File.Exists(outputFile) && !overwrite)
             throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
 
         // Decrypt beside the destination and move it into place only on success, so a wrong key,
-        // a wrong passphrase or a file that is not PGP data leaves no partial output (ROADMAP FO06).
+        // a wrong passphrase, a failed signature check or a file that is not PGP data leaves no
+        // partial output (ROADMAP FO06, FO11). PgpCore writes the plaintext before it checks.
         var tempFile = outputFile + ".etlsql-decrypt-" + Guid.NewGuid().ToString("N")[..12];
+        var name = Path.GetFileName(inputFile);
         try
         {
-            EncryptionKeys keys = new EncryptionKeys(new FileInfo(keyFile), passphrase ?? string.Empty);
-            using (var pgp = new PGP(keys))
+            try
             {
-                await pgp.DecryptFileAsync(new FileInfo(inputFile), new FileInfo(tempFile));
+                if (verifyKeyFile == null)
+                {
+                    using var pgp = new PGP(new EncryptionKeys(new FileInfo(keyFile), passphrase ?? string.Empty));
+                    await pgp.DecryptFileAsync(new FileInfo(inputFile), new FileInfo(tempFile));
+                }
+                else
+                {
+                    using var pgp = new PGP(new EncryptionKeys(new FileInfo(verifyKeyFile), new FileInfo(keyFile), passphrase ?? string.Empty));
+                    await pgp.DecryptAndVerifyAsync(new FileInfo(inputFile), new FileInfo(tempFile));
+                }
+            }
+            catch (MessageIntegrityException)
+            {
+                throw new ExecutionException($"Could not decrypt '{name}': the file was changed after it was encrypted.");
+            }
+            catch (Org.BouncyCastle.Bcpg.OpenPgp.PgpException ex) when (ex.InnerException is Org.BouncyCastle.Crypto.InvalidCipherTextException)
+            {
+                // The session key would not decrypt: PgpCore says "exception decrypting secret key",
+                // which reads like a wrong passphrase. It is a key the file was not encrypted to, or damage.
+                throw new ExecutionException(
+                    $"Could not decrypt '{name}': PGP_KEY is not the private key this file was encrypted to, or the file is damaged.");
+            }
+            catch (Org.BouncyCastle.Bcpg.OpenPgp.PgpException ex) when (verifyKeyFile != null && ex.Message.Contains("not signed", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ExecutionException($"Could not verify '{name}': it is not signed. No output was written.");
+            }
+            catch (Org.BouncyCastle.Bcpg.OpenPgp.PgpException ex) when (verifyKeyFile != null && ex.Message.Contains("verify", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ExecutionException(
+                    $"Could not verify '{name}': it was not signed by the VERIFY_KEY '{Path.GetFileName(verifyKeyFile)}', " +
+                    "or it was changed after it was signed. No output was written.");
             }
             File.Move(tempFile, outputFile, overwrite);
         }

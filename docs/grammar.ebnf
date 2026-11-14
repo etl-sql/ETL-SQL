@@ -231,8 +231,10 @@ file_operation_statement = ( "COPY" | "MOVE" | "RENAME" ) "FILE" expression [ "T
                          | "DECRYPT" "FILE" expression [ "TO" expression ] [ decrypt_key_clause ] [ overwrite_option ] [ "AT" identifier ] ;
 overwrite_option = "WITH" "(" "OVERWRITE" "=" expression ")" ;
 password_clause = "PASSWORD" ( "(" expression ")" | expression ) ;
-encrypt_key_clause = password_clause | "KEYFILE" expression | "PGP_KEY" expression ;
-decrypt_key_clause = password_clause | ( "KEYFILE" | "PGP_KEY" ) expression [ password_clause ] ;
+encrypt_key_clause = password_clause | "KEYFILE" expression
+                   | "PGP_KEY" expression [ "SIGNING_KEY" expression [ "SIGNING_PASSWORD" expression ] ] ;
+decrypt_key_clause = password_clause | "KEYFILE" expression [ password_clause ]
+                   | "PGP_KEY" expression [ password_clause ] [ "VERIFY_KEY" expression ] ;
 file_operation_options = "WITH" "(" file_operation_option { "," file_operation_option } ")" ;
 file_operation_option = ( "OVERWRITE" | "DATE_SUFFIX" | "SUFFIX_SEPARATOR" ) "=" expression ;
 convert_encoding_statement = "CONVERT" "FILE" "ENCODING" string_literal "TO" string_literal "WITH" "(" "FROM_ENCODING" "=" string_literal "," "TO_ENCODING" "=" string_literal ")" ;

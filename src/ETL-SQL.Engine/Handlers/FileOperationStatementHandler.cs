@@ -340,7 +340,14 @@ public class FileOperationStatementHandler(
                         {
                             string pgpKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
                             pgpKeyPath = pathAuthorizer.Authorize(context, pgpKeyPath, FileSystemAccessKind.Read).CanonicalPath;
-                            await CryptoUtils.EncryptFileWithPgp(source, dest, pgpKeyPath, overwrite);
+                            string? signingKeyPath = null, signingPassword = null;
+                            if (stmt.SigningKey != null)
+                            {
+                                signingKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.SigningKey, new Row()))?.ToString() ?? "");
+                                signingKeyPath = pathAuthorizer.Authorize(context, signingKeyPath, FileSystemAccessKind.Read).CanonicalPath;
+                                signingPassword = stmt.SigningPassword != null ? (await context.EvaluateValue(stmt.SigningPassword, new Row(), decryptSensitive: true))?.ToString() : null;
+                            }
+                            await CryptoUtils.EncryptFileWithPgp(source, dest, pgpKeyPath, overwrite, signingKeyPath, signingPassword);
                         }
                         else if (stmt.KeyFile != null)
                         {
@@ -369,7 +376,13 @@ public class FileOperationStatementHandler(
                             string pgpKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
                             pgpKeyPath = pathAuthorizer.Authorize(context, pgpKeyPath, FileSystemAccessKind.Read).CanonicalPath;
                             var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                            await CryptoUtils.DecryptFileWithPgp(source, dest, pgpKeyPath, pwd, overwrite);
+                            string? verifyKeyPath = null;
+                            if (stmt.VerifyKey != null)
+                            {
+                                verifyKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.VerifyKey, new Row()))?.ToString() ?? "");
+                                verifyKeyPath = pathAuthorizer.Authorize(context, verifyKeyPath, FileSystemAccessKind.Read).CanonicalPath;
+                            }
+                            await CryptoUtils.DecryptFileWithPgp(source, dest, pgpKeyPath, pwd, overwrite, verifyKeyPath);
                         }
                         else if (stmt.KeyFile != null)
                         {

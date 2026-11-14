@@ -14,6 +14,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- PGP files can be signed and their signatures checked (ROADMAP FO11).
+  `ENCRYPT FILE ... PGP_KEY 'partner_public.asc' SIGNING_KEY 'our_private.asc' [SIGNING_PASSWORD x]`
+  encrypts and signs in one pass. `DECRYPT FILE ... PGP_KEY 'our_private.asc' [PASSWORD x]
+  VERIFY_KEY 'partner_public.asc'` fails and writes nothing when the file is unsigned, signed by
+  another key, or changed after signing. A PGP file that fails its integrity check, signed or not,
+  no longer leaves the decrypted plaintext behind, and a failed signing leaves no partial output.
+
 - Formatting a script no longer breaks file and directory statements. The formatter wrote
   `PASSWORD`, `KEYFILE` and `PGP_KEY` inside `WITH (...)`, which the parser now rejects, dropped
   `AT connection` and `IF EXISTS` (so a remote delete became a local one), wrote `ON`/`OFF` as

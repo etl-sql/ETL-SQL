@@ -59,6 +59,8 @@ namespace ETL_SQL.Tests.Core
             { "encrypt-password", "ENCRYPT FILE 'a' TO 'b' PASSWORD 'p' WITH (OVERWRITE = OFF);" },
             { "encrypt-pgp", "ENCRYPT FILE 'a' TO 'b' PGP_KEY 'k.asc';" },
             { "decrypt-keyfile", "DECRYPT FILE 'a' TO 'b' KEYFILE 'id_rsa' PASSWORD 'p';" },
+            { "encrypt-sign", "ENCRYPT FILE 'a' TO 'b' PGP_KEY 'them.asc' SIGNING_KEY 'us.asc' SIGNING_PASSWORD 'p';" },
+            { "decrypt-verify", "DECRYPT FILE 'a' TO 'b' PGP_KEY 'us.asc' PASSWORD 'p' VERIFY_KEY 'them.asc' AT sftp;" },
             { "delete-file-if-exists", "DELETE FILE IF EXISTS 'a' AT ftp;" },
             { "encrypt-directory", "ENCRYPT DIRECTORY 'a' TO 'b' PASSWORD 'p' WITH (OVERWRITE = ON);" },
             { "delete-directory-contents", "DELETE DIRECTORY_CONTENTS 'a' WITH (RECURSIVE = ON);" },

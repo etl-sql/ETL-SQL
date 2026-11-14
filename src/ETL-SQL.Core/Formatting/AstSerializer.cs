@@ -838,7 +838,10 @@ public static class AstSerializer
         // Keys are clauses, not WITH options: the parser rejects PASSWORD, KEYFILE and PGP_KEY inside WITH.
         var keys = (s.PgpKey != null ? " PGP_KEY " + s.PgpKey.ToSql() : "")
             + (s.KeyFile != null ? " KEYFILE " + s.KeyFile.ToSql() : "")
-            + (s.Password != null ? " PASSWORD " + s.Password.ToSql() : "");
+            + (s.Password != null ? " PASSWORD " + s.Password.ToSql() : "")
+            + (s.SigningKey != null ? " SIGNING_KEY " + s.SigningKey.ToSql() : "")
+            + (s.SigningPassword != null ? " SIGNING_PASSWORD " + s.SigningPassword.ToSql() : "")
+            + (s.VerifyKey != null ? " VERIFY_KEY " + s.VerifyKey.ToSql() : "");
         var opts = new List<string>();
         if (s.Overwrite != null) opts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
         if (s.DateSuffix != null) opts.Add($"DATE_SUFFIX={s.DateSuffix.ToSql()}");

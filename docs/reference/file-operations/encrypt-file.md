@@ -1,20 +1,25 @@
 # ENCRYPT / DECRYPT FILE
 
 Encrypts or decrypts a local file with a password, an SSH RSA key or a PGP key, or every file in a
-directory tree with a password.
+directory tree with a password. With PGP, a file can also be signed while it is encrypted and its
+signature checked while it is decrypted.
 
 ## Syntax
 
 ```sql
 -- Files
 ENCRYPT FILE '<source>' TO '<destination>'
-    { PASSWORD '<passphrase>' | KEYFILE '<rsa_public_key.pem>' | PGP_KEY '<public_key.asc>' }
+    { PASSWORD '<passphrase>'
+    | KEYFILE '<rsa_public_key.pem>'
+    | PGP_KEY '<recipient_public_key.asc>'
+        [SIGNING_KEY '<your_private_key.asc>' [SIGNING_PASSWORD '<key_passphrase>']] }
     [WITH (OVERWRITE = ON | OFF)];
 
 DECRYPT FILE '<source>' TO '<destination>'
     { PASSWORD '<passphrase>'
     | KEYFILE '<rsa_private_key.pem>' [PASSWORD '<key_passphrase>']
-    | PGP_KEY '<private_key.asc>' [PASSWORD '<key_passphrase>'] }
+    | PGP_KEY '<your_private_key.asc>' [PASSWORD '<key_passphrase>']
+        [VERIFY_KEY '<sender_public_key.asc>'] }
     [WITH (OVERWRITE = ON | OFF)];
 
 -- Directories (password only)
@@ -43,6 +48,15 @@ DECRYPT DIRECTORY '<source_dir>' TO '<destination_dir>' PASSWORD '<passphrase>' 
 - `ENCRYPT DIRECTORY` encrypts every file, subfolders included, and writes each one as `<name>.enc`
   under the destination with the same folder layout. `DECRYPT DIRECTORY` decrypts only `.enc` files
   and removes that suffix.
+- **Signing (PGP only).** `SIGNING_KEY` is your OpenPGP **private** key; the file is encrypted and
+  signed in one pass, the way most partners that require signed files expect. `SIGNING_PASSWORD` is
+  that key's passphrase.
+- **Verifying (PGP only).** `VERIFY_KEY` is the sender's OpenPGP **public** key. `DECRYPT FILE` then
+  fails, and writes nothing, when the file is unsigned, signed by another key, or changed after it
+  was signed. Without `VERIFY_KEY` a signed file decrypts like any other and its signature is not
+  checked.
+- `SIGNING_KEY` and `VERIFY_KEY` with `PASSWORD` or `KEYFILE`, `VERIFY_KEY` on `ENCRYPT FILE`, and
+  `SIGNING_KEY` on `DECRYPT FILE` are syntax errors.
 - The script's master password (`USE PASSWORD` or `--pass`) protects connection strings and secrets
   in the script. It is never used to encrypt or decrypt files: a file passphrase has to travel with
   the file, so give `PASSWORD` on the statement.
@@ -96,7 +110,23 @@ DECRYPT FILE 'inbound/orders.csv.pgp' TO 'staging/orders.csv'
     PGP_KEY 'certs/our_private.asc' PASSWORD 'private-key-passphrase';
 ```
 
-### 4. SSH RSA key pair
+### 4. Signed exchange with a partner
+
+Send a file the partner can trust came from you, and accept only files they signed.
+
+```sql
+-- Outbound: encrypt to the partner, sign with our key
+ENCRYPT FILE 'staging/remittance.csv' TO 'outbound/remittance.csv.pgp'
+    PGP_KEY 'certs/partner_public.asc'
+    SIGNING_KEY 'certs/our_private.asc' SIGNING_PASSWORD @our_key_passphrase;
+
+-- Inbound: decrypt with our key, refuse anything the partner did not sign
+DECRYPT FILE 'inbound/orders.csv.pgp' TO 'staging/orders.csv'
+    PGP_KEY 'certs/our_private.asc' PASSWORD @our_key_passphrase
+    VERIFY_KEY 'certs/partner_public.asc';
+```
+
+### 5. SSH RSA key pair
 
 ```sql
 CREATE SSH_KEY_PAIR 'certs/ledger' WITH (BITS = 4096, ALGORITHM = 'RSA');
@@ -105,7 +135,7 @@ ENCRYPT FILE 'staging/ledger.csv' TO 'staging/ledger.csv.enc' KEYFILE 'certs/led
 DECRYPT FILE 'staging/ledger.csv.enc' TO 'restore/ledger.csv' KEYFILE 'certs/ledger/id_rsa';
 ```
 
-### 5. A whole directory
+### 6. A whole directory
 
 ```sql
 ENCRYPT DIRECTORY 'exports/2026-11/' TO 'vault/2026-11/' PASSWORD 'archive-passphrase';
@@ -131,14 +161,25 @@ DECRYPT DIRECTORY 'vault/2026-11/' TO 'restore/2026-11/' PASSWORD 'archive-passp
 - **`ENCRYPT FILE with PGP_KEY encrypts to a public key and takes no PASSWORD.`** — drop `PASSWORD`;
   it is only the private-key passphrase on `DECRYPT FILE`.
 - **`ENCRYPT DIRECTORY does not support KEYFILE or PGP_KEY.`** — directories use `PASSWORD` only.
+- **`SIGNING_KEY works with PGP_KEY only.`** / **`VERIFY_KEY works with PGP_KEY only.`** —
+  `PASSWORD` and `KEYFILE` files carry no signature.
+- **`Could not sign with '<key>': the SIGNING_PASSWORD is wrong for this SIGNING_KEY.`**
+- **`Could not sign with '<key>': SIGNING_KEY must be your PGP private key, not a public key.`**
+- **`Could not verify '<file>': it is not signed.`** — the sender did not sign it. Ask them to, or
+  drop `VERIFY_KEY` if an unsigned file is acceptable.
+- **`Could not verify '<file>': it was not signed by the VERIFY_KEY '<key>', or it was changed after
+  it was signed.`** — check you have the sender's current public key; otherwise treat the file as
+  untrusted.
+- **`Could not decrypt '<file>': the file was changed after it was encrypted.`** — the PGP integrity
+  check failed.
 - **`ENCRYPT FILE has no WITH option '<key>'.`** — the message lists the accepted options.
 - **`Could not decrypt '<file>': the password is wrong, or the file was changed after it was encrypted.`**
 - **`Could not decrypt '<file>': the private key does not match the public key the file was encrypted to.`**
   — the `KEYFILE` is not the partner of the key used to encrypt.
 - **`Could not decrypt '<file>': it was not encrypted with PASSWORD by ETL-SQL.`** (or `KEYFILE`) —
   the file is plain text or used another method; decrypt it with the method that encrypted it.
-- PGP failures name the cause: no matching private key (with the key IDs the file was encrypted
-  to), a wrong passphrase, or input that is not PGP data.
+- Other PGP failures name the cause: no matching private key (with the key IDs the file was
+  encrypted to), a wrong passphrase, or input that is not PGP data.
 - A failed decrypt writes no output and leaves an existing destination unchanged. Messages never
   include passwords or key contents.
 

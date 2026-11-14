@@ -1453,6 +1453,12 @@ public sealed record FileOperationStatement : Statement
     public Expression? Password { get; }
     public Expression? KeyFile { get; }
     public Expression? PgpKey { get; }
+    /// <summary>ENCRYPT FILE with PGP_KEY: our private key, to sign while encrypting (ROADMAP FO11).</summary>
+    public Expression? SigningKey { get; init; }
+    /// <summary>Passphrase for <see cref="SigningKey"/>.</summary>
+    public Expression? SigningPassword { get; init; }
+    /// <summary>DECRYPT FILE with PGP_KEY: the sender's public key the signature must match.</summary>
+    public Expression? VerifyKey { get; init; }
     public Expression? DateSuffix { get; }
     public Expression? SuffixSeparator { get; }
     public bool DestinationIsDirectory { get; }

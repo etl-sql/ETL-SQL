@@ -218,6 +218,13 @@ public static class DefaultGrammar
         var keyfileValNode = new StateNode("KF_VAL");
         var pgpkeyKeywordNode = new StateNode("PK_KEYWORD");
         var pgpkeyValNode = new StateNode("PK_VAL");
+        // PGP signing (ROADMAP FO11): SIGNING_KEY 'k' [SIGNING_PASSWORD 'p'] on ENCRYPT, VERIFY_KEY 'k' on DECRYPT.
+        var signKeywordNode = new StateNode("SIGN_KEYWORD");
+        var signValNode = new StateNode("SIGN_VAL");
+        var signPasswordKeywordNode = new StateNode("SIGN_PW_KEYWORD");
+        var signPasswordValNode = new StateNode("SIGN_PW_VAL");
+        var verifyKeywordNode = new StateNode("VERIFY_KEYWORD");
+        var verifyValNode = new StateNode("VERIFY_VAL");
 
         var withOpenParenNode = new StateNode("FILE_WITH_PAREN_OPEN");
         var withOptionNameNode = new StateNode("FILE_WITH_OPTION_NAME");
@@ -290,6 +297,7 @@ public static class DefaultGrammar
         passwordValNode.AddTransitionTo("KEYFILE", keyfileKeywordNode, SuggestionType.Keyword);
         passwordValNode.AddTransitionTo("PGP_KEY", pgpkeyKeywordNode, SuggestionType.Keyword);
         passwordValNode.AddTransitionTo("AT", atNode, SuggestionType.Keyword);
+        passwordValNode.AddTransitionTo("VERIFY_KEY", verifyKeywordNode, SuggestionType.Keyword);
 
         // Keyfile logic: KEYFILE 'val'
         keyfileKeywordNode.AddWildcardTransition(keyfileValNode, "<keyfile>");
@@ -304,6 +312,21 @@ public static class DefaultGrammar
         pgpkeyValNode.AddTransitionTo("PASSWORD", passwordKeywordNode, SuggestionType.Keyword);
         pgpkeyValNode.AddTransitionTo("KEYFILE", keyfileKeywordNode, SuggestionType.Keyword);
         pgpkeyValNode.AddTransitionTo("AT", atNode, SuggestionType.Keyword);
+        pgpkeyValNode.AddTransitionTo("SIGNING_KEY", signKeywordNode, SuggestionType.Keyword);
+        pgpkeyValNode.AddTransitionTo("VERIFY_KEY", verifyKeywordNode, SuggestionType.Keyword);
+
+        signKeywordNode.AddWildcardTransition(signValNode, "<signing_key>");
+        signValNode.AddTransitionTo("SIGNING_PASSWORD", signPasswordKeywordNode, SuggestionType.Keyword);
+        signValNode.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
+        signValNode.AddTransitionTo("AT", atNode, SuggestionType.Keyword);
+        signPasswordKeywordNode.AddWildcardTransition(signPasswordValNode, "<signing_password>");
+        signPasswordValNode.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
+        signPasswordValNode.AddTransitionTo("AT", atNode, SuggestionType.Keyword);
+
+        verifyKeywordNode.AddWildcardTransition(verifyValNode, "<verify_key>");
+        verifyValNode.AddTransitionTo("PASSWORD", passwordKeywordNode, SuggestionType.Keyword);
+        verifyValNode.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
+        verifyValNode.AddTransitionTo("AT", atNode, SuggestionType.Keyword);
 
         // AT connection
         atNode.AddTransition(new StateTransition(

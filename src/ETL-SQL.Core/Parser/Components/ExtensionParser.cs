@@ -227,7 +227,7 @@ public class ExtensionParser : ParserComponent
         };
 
         Expression? source = null, dest = null, overwrite = null, password = null, keyFile = null, pgpKey = null;
-        Expression? dateSuffix = null, suffixSeparator = null;
+        Expression? dateSuffix = null, suffixSeparator = null, signingKey = null, signingPassword = null, verifyKey = null;
         string? connectionName = null;
         bool isFunctionStyle = Match(TokenType.LPAREN);
         if (isFunctionStyle)
@@ -279,6 +279,9 @@ public class ExtensionParser : ParserComponent
                 }
                 else if (Match(TokenType.KEYFILE)) { keyFile = ParseExpression(); }
                 else if (Match(TokenType.PGP_KEY)) { pgpKey = ParseExpression(); }
+                else if (MatchIdentifier("SIGNING_KEY")) { signingKey = ParseExpression(); }
+                else if (MatchIdentifier("SIGNING_PASSWORD")) { signingPassword = ParseExpression(); }
+                else if (MatchIdentifier("VERIFY_KEY")) { verifyKey = ParseExpression(); }
                 else if (Match(TokenType.WITH))
                 {
                     // The handler applies DATE_SUFFIX only to COPY, MOVE and RENAME (ROADMAP FO08).
@@ -300,10 +303,18 @@ public class ExtensionParser : ParserComponent
             if (source == null) throw new SyntaxException($"Source path is mandatory for {startToken.Value}", _parser.Current.Line, _parser.Current.Column);
             RejectIgnoredKeyClauses($"{type.ToString().ToUpperInvariant()} FILE", type is FileOpType.Encrypt or FileOpType.Decrypt,
                 type == FileOpType.Encrypt, password, keyFile, pgpKey, startToken);
+            RejectMisplacedSigningClauses(type, pgpKey, signingKey, signingPassword, verifyKey, startToken);
         }
 
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-        return new FileOperationStatement(type, source, dest, overwrite, password, keyFile, pgpKey, ifExists, connectionName, dateSuffix, suffixSeparator, destinationIsDirectory) { Line = startToken.Line, Column = startToken.Column };
+        return new FileOperationStatement(type, source, dest, overwrite, password, keyFile, pgpKey, ifExists, connectionName, dateSuffix, suffixSeparator, destinationIsDirectory)
+        {
+            SigningKey = signingKey,
+            SigningPassword = signingPassword,
+            VerifyKey = verifyKey,
+            Line = startToken.Line,
+            Column = startToken.Column,
+        };
     }
 
     /// <summary>
@@ -320,6 +331,30 @@ public class ExtensionParser : ParserComponent
             throw new SyntaxException($"{name} takes KEYFILE (an SSH RSA key) or PGP_KEY, not both.", at.Line, at.Column);
         if (isEncrypt && password != null && (keyFile != null || pgpKey != null))
             throw new SyntaxException($"{name} with {(pgpKey != null ? "PGP_KEY" : "KEYFILE")} encrypts to a public key and takes no PASSWORD. PASSWORD is the private-key passphrase on DECRYPT FILE.", at.Line, at.Column);
+    }
+
+    /// <summary>
+    /// SIGNING_KEY signs on ENCRYPT FILE and VERIFY_KEY checks on DECRYPT FILE, both with PGP_KEY only
+    /// (ROADMAP FO11). A signing clause the run would ignore is a syntax error, so a script never
+    /// believes it checked a signature that it did not.
+    /// </summary>
+    private static void RejectMisplacedSigningClauses(FileOpType type, Expression? pgpKey,
+        Expression? signingKey, Expression? signingPassword, Expression? verifyKey, Token at)
+    {
+        if (signingKey == null && signingPassword == null && verifyKey == null) return;
+        var name = $"{type.ToString().ToUpperInvariant()} FILE";
+        if (type is not (FileOpType.Encrypt or FileOpType.Decrypt))
+            throw new SyntaxException($"{name} does not take SIGNING_KEY, SIGNING_PASSWORD or VERIFY_KEY; only ENCRYPT FILE and DECRYPT FILE with PGP_KEY do.", at.Line, at.Column);
+        if (type == FileOpType.Decrypt && (signingKey != null || signingPassword != null))
+            throw new SyntaxException("DECRYPT FILE does not take SIGNING_KEY or SIGNING_PASSWORD. To check who signed the file, use VERIFY_KEY with the sender's public key.", at.Line, at.Column);
+        if (type == FileOpType.Encrypt && verifyKey != null)
+            throw new SyntaxException("ENCRYPT FILE does not take VERIFY_KEY. To sign the file, use SIGNING_KEY with your private key.", at.Line, at.Column);
+        if (pgpKey == null)
+            throw new SyntaxException(type == FileOpType.Encrypt
+                ? "SIGNING_KEY works with PGP_KEY only. PASSWORD and KEYFILE encryption cannot be signed."
+                : "VERIFY_KEY works with PGP_KEY only. PASSWORD and KEYFILE files carry no signature.", at.Line, at.Column);
+        if (signingPassword != null && signingKey == null)
+            throw new SyntaxException("SIGNING_PASSWORD needs SIGNING_KEY: it is the passphrase of the private key that signs.", at.Line, at.Column);
     }
 
     private static string DirectoryStatementName(DirectoryOpType type) => type switch
