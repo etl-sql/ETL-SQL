@@ -53,6 +53,21 @@ namespace ETL_SQL.Tests.Core
             { "drop-if-exists", "DROP TABLE IF EXISTS t;" },
             { "create-index", "CREATE INDEX ix_a ON t (a);" },
             { "replay-quarantine", "REPLAY QUARANTINE q;" },
+            // File statements: FO02 made their WITH keys strict, which exposed a serializer that
+            // wrote PASSWORD/KEYFILE/PGP_KEY inside WITH and dropped AT and IF EXISTS.
+            { "copy-file", "COPY FILE 'a' TO DIRECTORY 'b' WITH (OVERWRITE = OFF, DATE_SUFFIX = 'yyyyMMdd', SUFFIX_SEPARATOR = '-') AT ftp;" },
+            { "encrypt-password", "ENCRYPT FILE 'a' TO 'b' PASSWORD 'p' WITH (OVERWRITE = OFF);" },
+            { "encrypt-pgp", "ENCRYPT FILE 'a' TO 'b' PGP_KEY 'k.asc';" },
+            { "decrypt-keyfile", "DECRYPT FILE 'a' TO 'b' KEYFILE 'id_rsa' PASSWORD 'p';" },
+            { "delete-file-if-exists", "DELETE FILE IF EXISTS 'a' AT ftp;" },
+            { "encrypt-directory", "ENCRYPT DIRECTORY 'a' TO 'b' PASSWORD 'p' WITH (OVERWRITE = ON);" },
+            { "delete-directory-contents", "DELETE DIRECTORY_CONTENTS 'a' WITH (RECURSIVE = ON);" },
+            { "delete-directory-if-exists", "DELETE DIRECTORY IF EXISTS 'a' AT ftp;" },
+            { "convert-encoding", "CONVERT FILE ENCODING 'a' TO 'b' WITH (FROM_ENCODING = 'UTF8', TO_ENCODING = 'ANSI', OVERWRITE = ON);" },
+            { "send-file", "SEND FILE 'a' TO 'b' AT ftp WITH (OVERWRITE = OFF);" },
+            { "split-file", "SPLIT FILE 'a' TO 'b' WITH (LIMIT_TYPE = 'ROWS', LIMIT_VALUE = 2, PREFIX = 'p_', OVERWRITE = ON);" },
+            { "merge-files", "MERGE FILES 'a*' TO 'b' WITH (HEADER = ON, OVERWRITE = ON);" },
+            { "sync-directory", "SYNC DIRECTORY 'a' TO 'b' WITH (DELETE_EXTRA = ON, OVERWRITE = ON, RECURSIVE = OFF);" },
         };
 
         [Theory]
@@ -83,9 +98,14 @@ namespace ETL_SQL.Tests.Core
         {
             var serialized = SerializeScript(sql);
 
-            var exception = Record.Exception(() => Parse(serialized));
+            // Parse reports syntax errors as diagnostics rather than throwing, so check both.
+            Assert.True(Parse(sql).Diagnostics.Count == 0, $"{name}: the test input itself does not parse: {sql}");
+            Script? reparsed = null;
+            var exception = Record.Exception(() => reparsed = Parse(serialized));
+            var errors = reparsed?.Diagnostics.Select(d => d.Message).ToList() ?? new List<string>();
 
-            Assert.True(exception == null, $"{name}: ToSql() output did not reparse.\n  out: {serialized}\n{exception}");
+            Assert.True(exception == null && errors.Count == 0,
+                $"{name}: ToSql() output did not reparse.\n  out: {serialized}\n{exception}{string.Join("\n", errors)}");
         }
 
         /// <summary>

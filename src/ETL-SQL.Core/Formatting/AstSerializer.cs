@@ -101,7 +101,7 @@ public static class AstSerializer
         DirectoryOperationStatement s => FormatDirectoryOperation(s),
         FileTransferStatement s => FormatFileTransfer(s),
         WaitForFileStatement s => $"WAITFOR FILE UNLOCKED {s.Path.ToSql()}" + (s.Timeout != null ? $" TIMEOUT {s.Timeout.ToSql()}" : "") + (s.PollInterval != null ? $" POLL_INTERVAL_MS {s.PollInterval.ToSql()}" : "") + ";",
-        ConvertFileEncodingStatement s => $"CONVERT FILE ENCODING {s.Source.ToSql()} TO {s.Destination.ToSql()} FROM_ENCODING {s.FromEncoding.ToSql()} TO_ENCODING {s.ToEncoding.ToSql()}" + (s.Overwrite != null ? $" WITH(OVERWRITE={s.Overwrite.ToSql()})" : "") + ";",
+        ConvertFileEncodingStatement s => $"CONVERT FILE ENCODING {s.Source.ToSql()} TO {s.Destination.ToSql()} WITH(FROM_ENCODING={s.FromEncoding.ToSql()}, TO_ENCODING={s.ToEncoding.ToSql()}" + (s.Overwrite != null ? $", OVERWRITE={s.Overwrite.ToSql()}" : "") + ");",
         SplitFileStatement s => $"SPLIT FILE {s.Source.ToSql()} TO {s.DestinationDir.ToSql()} WITH(LIMIT_TYPE={s.LimitType.ToSql()}, LIMIT_VALUE={s.LimitValue.ToSql()}" + (s.Prefix != null ? $", PREFIX={s.Prefix.ToSql()}" : "") + (s.Overwrite != null ? $", OVERWRITE={s.Overwrite.ToSql()}" : "") + ");",
         MergeFilesStatement s => $"MERGE FILES {s.Source.ToSql()} TO {s.Destination.ToSql()}" + (s.Header != null || s.Overwrite != null ? " WITH(" + string.Join(", ", new[] { s.Header != null ? $"HEADER={s.Header.ToSql()}" : null, s.Overwrite != null ? $"OVERWRITE={s.Overwrite.ToSql()}" : null }.Where(x => x != null)) + ")" : "") + ";",
         SyncDirectoryStatement s => $"SYNC DIRECTORY {s.Source.ToSql()} TO {s.Destination.ToSql()}" + (s.DeleteExtra != null || s.Overwrite != null || s.Recursive != null ? " WITH(" + string.Join(", ", new[] { s.DeleteExtra != null ? $"DELETE_EXTRA={s.DeleteExtra.ToSql()}" : null, s.Overwrite != null ? $"OVERWRITE={s.Overwrite.ToSql()}" : null, s.Recursive != null ? $"RECURSIVE={s.Recursive.ToSql()}" : null }.Where(x => x != null)) + ")" : "") + ";",
@@ -835,15 +835,18 @@ public static class AstSerializer
     {
         var op = s.Type.ToString().ToUpper() + " FILE";
         var dest = s.Destination != null ? " TO " + (s.DestinationIsDirectory ? "DIRECTORY " : "") + s.Destination.ToSql() : "";
+        // Keys are clauses, not WITH options: the parser rejects PASSWORD, KEYFILE and PGP_KEY inside WITH.
+        var keys = (s.PgpKey != null ? " PGP_KEY " + s.PgpKey.ToSql() : "")
+            + (s.KeyFile != null ? " KEYFILE " + s.KeyFile.ToSql() : "")
+            + (s.Password != null ? " PASSWORD " + s.Password.ToSql() : "");
         var opts = new List<string>();
         if (s.Overwrite != null) opts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
-        if (s.Password != null) opts.Add($"PASSWORD={s.Password.ToSql()}");
-        if (s.KeyFile != null) opts.Add($"KEYFILE={s.KeyFile.ToSql()}");
-        if (s.PgpKey != null) opts.Add($"PGP_KEY={s.PgpKey.ToSql()}");
         if (s.DateSuffix != null) opts.Add($"DATE_SUFFIX={s.DateSuffix.ToSql()}");
         if (s.SuffixSeparator != null) opts.Add($"SUFFIX_SEPARATOR={s.SuffixSeparator.ToSql()}");
         var options = opts.Count > 0 ? " WITH(" + string.Join(", ", opts) + ")" : "";
-        return $"{op} {s.Source.ToSql()}{dest}{options};";
+        var ifExists = s.IfExists ? " IF EXISTS" : "";
+        var at = s.ConnectionName != null ? " AT " + s.ConnectionName : "";
+        return $"{op}{ifExists} {s.Source.ToSql()}{dest}{keys}{options}{at};";
     }
 
     private static string FormatDirectoryOperation(DirectoryOperationStatement s)
@@ -852,14 +855,15 @@ public static class AstSerializer
             ? "DELETE DIRECTORY_CONTENTS"
             : s.Type.ToString().ToUpper() + " DIRECTORY";
         var extra = s.Destination != null ? " TO " + s.Destination.ToSql() : "";
+        // Directories take PASSWORD only, as a clause; the parser rejects KEYFILE and PGP_KEY.
+        var password = s.Password != null ? " PASSWORD " + s.Password.ToSql() : "";
         var opts = new List<string>();
         if (s.Overwrite != null) opts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
         if (s.Recursive != null) opts.Add($"RECURSIVE={s.Recursive.ToSql()}");
-        if (s.Password != null) opts.Add($"PASSWORD={s.Password.ToSql()}");
-        if (s.KeyFile != null) opts.Add($"KEYFILE={s.KeyFile.ToSql()}");
-        if (s.PgpKey != null) opts.Add($"PGP_KEY={s.PgpKey.ToSql()}");
         var with = opts.Count > 0 ? " WITH(" + string.Join(", ", opts) + ")" : "";
-        return $"{op} {s.Path.ToSql()}{extra}{with};";
+        var ifExists = s.IfExists ? " IF EXISTS" : "";
+        var at = s.ConnectionName != null ? " AT " + s.ConnectionName : "";
+        return $"{op}{ifExists} {s.Path.ToSql()}{extra}{password}{with}{at};";
     }
 
     private static string FormatFileTransfer(FileTransferStatement s)
@@ -1194,6 +1198,8 @@ public static class AstSerializer
         var valStr = e.Value.ToString() ?? "";
         if (e.Type == TokenType.TRUE) return "TRUE";
         if (e.Type == TokenType.FALSE) return "FALSE";
+        if (e.Type == TokenType.ON) return "ON";
+        if (e.Type == TokenType.OFF) return "OFF";
         if (e.Type == TokenType.STRING_LITERAL) return $"'{valStr.Replace("'", "''")}'";
         return valStr;
     }

@@ -14,6 +14,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Formatting a script no longer breaks file and directory statements. The formatter wrote
+  `PASSWORD`, `KEYFILE` and `PGP_KEY` inside `WITH (...)`, which the parser now rejects, dropped
+  `AT connection` and `IF EXISTS` (so a remote delete became a local one), wrote `ON`/`OFF` as
+  `True`/`False`, and put `CONVERT FILE ENCODING`'s encodings outside `WITH`. The round-trip
+  test now covers these statements and checks that the output parses without diagnostics.
+
 - `DECRYPT FILE` failures name the cause (ROADMAP FO06). A wrong SSH key reported
   `Unknown error (0xc100000d)`; it now says the private key does not match. A wrong password says
   the password is wrong or the file was changed, and a file that was never encrypted (or used
