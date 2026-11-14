@@ -6096,7 +6096,8 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         var modalBackdrop = page.Locator("[data-modal-backdrop]");
         await modalBackdrop.WaitForAsync();
         Assert.False(await modalBackdrop.IsHiddenAsync());
-        Assert.Contains("Plaintext Secret Detected", await page.Locator("[data-modal-box]").InnerTextAsync());
+        Assert.Contains("Master Password Required to Seal Script", await page.Locator("[data-modal-box]").InnerTextAsync());
+        Assert.Contains("plaintext credentials", await page.Locator("[data-modal-box]").InnerTextAsync());
         Assert.Contains("(value hidden)", await page.Locator("[data-modal-box]").InnerTextAsync());
         Assert.DoesNotContain("SuperSecretPassword123!", await page.Locator("[data-modal-box]").InnerTextAsync());
         Assert.False(await page.Locator("[data-modal-box]").EvaluateAsync<bool>(
