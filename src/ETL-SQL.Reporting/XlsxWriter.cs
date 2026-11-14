@@ -112,6 +112,7 @@ namespace ETL_SQL.Reporting
                     return raw switch
                     {
                         DateTime dt => dt,
+                        DateOnly d => d.ToDateTime(TimeOnly.MinValue),
                         DateTimeOffset dto => dto.DateTime,
                         _ => DateTime.TryParse(raw.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
                             ? parsed

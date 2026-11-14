@@ -178,6 +178,7 @@ namespace ETL_SQL.Reporting.Renderers
 
         protected static object? FormatValue(object? s)
         {
+            if (s is DateOnly d) return d.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
             if (s is DateTime dt) return dt.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
             if (s is string str && ETL_SQL.Core.Data.EvaluationUtils.SafeTryParseDate(str, out var dt2)) return dt2.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
             return s;

@@ -96,7 +96,9 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
         if (!keepOriginals) return;
         for (int i = 0; i < values.Length; i++)
         {
-            if (values[i] is not string original || ReferenceEquals(original, _values[i])) continue;
+            var original = values[i];
+            if (original is null || (original is string s && ReferenceEquals(s, _values[i])) || (original is not string && original is not DateOnly))
+                continue;
             _originals ??= (object?[])_values.Clone();
             _originals[i] = original;
         }
@@ -165,6 +167,7 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
         if (val is decimal dec) return dec / 1.00000000000000000000000000000m;
 
         if (val is DateTime dt) return dt;
+        if (val is DateOnly dateOnly) return dateOnly.ToDateTime(TimeOnly.MinValue);
         if (val is DateTimeOffset dto) return dto.DateTime;
 
         // Ensure dates and numbers in strings are normalized

@@ -187,7 +187,11 @@ namespace ETL_SQL.Connectors.Oracle
                         var dataRow = dt.NewRow();
                         foreach (var col in batch.ColumnNames)
                         {
-                            dataRow[col] = row.Columns.TryGetValue(col, out var val) && val != null ? val : DBNull.Value;
+                            dataRow[col] = row.Columns.TryGetValue(col, out var val) && val != null
+                                ? (val is DateOnly dateOnly
+                                    ? dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                                    : val)
+                                : DBNull.Value;
                         }
                         dt.Rows.Add(dataRow);
                     }

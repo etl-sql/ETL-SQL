@@ -28,6 +28,7 @@ namespace ETL_SQL.Engine.Spill;
 /// </summary>
 public partial class SpillStore : ISpillStore
 {
+    private const string DateOnlyPrefix = "\x1Edateonly:";
     private static bool IsDecimalLogicalType(string? logicalType) =>
         logicalType?.StartsWith("DECIMAL", StringComparison.OrdinalIgnoreCase) == true
         || logicalType?.StartsWith("NUMERIC", StringComparison.OrdinalIgnoreCase) == true
@@ -944,6 +945,7 @@ public partial class SpillStore : ISpillStore
             if (elementType == typeof(decimal)) return StringType.Default;
             if (elementType == typeof(double) || elementType == typeof(float)) return DoubleType.Default;
             if (elementType == typeof(bool)) return BooleanType.Default;
+            if (elementType == typeof(DateOnly)) return StringType.Default;
             if (elementType == typeof(DateTime)) return new TimestampType(TimeUnit.Microsecond, "UTC");
             // Arrow timestamps preserve an instant but not the original DateTimeOffset offset. Store
             // the round-trip representation as UTF-8 so spill/reload retains both pieces of information.
@@ -980,6 +982,7 @@ public partial class SpillStore : ISpillStore
             decimal => "Decimal",
             double or float => "Double",
             bool => "Boolean",
+            DateOnly => "DateOnly",
             DateTime => "Timestamp",
             DateTimeOffset => "DateTimeOffset",
             TimeSpan => "TIME",
@@ -993,6 +996,7 @@ public partial class SpillStore : ISpillStore
             decimal => StringType.Default,
             double or float => DoubleType.Default,
             bool => BooleanType.Default,
+            DateOnly => StringType.Default,
             DateTime => new TimestampType(TimeUnit.Microsecond, "UTC"),
             _ => StringType.Default
         };
@@ -1039,6 +1043,14 @@ public partial class SpillStore : ISpillStore
                 var builder = new BooleanArray.Builder();
                 for (var i = 0; i < booleans.Count; i++)
                     if (booleans.IsNull(i)) builder.AppendNull(); else builder.Append(booleans.Values.Span[i]);
+                return builder.Build();
+            }
+            if (column is ColumnBuffer<DateOnly> dateOnlyValues)
+            {
+                var builder = new StringArray.Builder();
+                for (var i = 0; i < dateOnlyValues.Count; i++)
+                    if (dateOnlyValues.IsNull(i)) builder.AppendNull();
+                    else builder.Append(dateOnlyValues.Values.Span[i].ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
                 return builder.Build();
             }
             if (column is ColumnBuffer<DateTime> dates)
@@ -1183,7 +1195,7 @@ public partial class SpillStore : ISpillStore
                             if (v == null) b.AppendNull();
                             else
                             {
-                                var dt = ConvertSpillValue(field, v, firstRowNumber + i, Convert.ToDateTime);
+                                var dt = ConvertSpillValue(field, v, firstRowNumber + i, CoerceSpillDateTime);
                                 var dto = dt.Kind == DateTimeKind.Unspecified
                                     ? new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc))
                                     : new DateTimeOffset(dt);
@@ -1200,6 +1212,7 @@ public partial class SpillStore : ISpillStore
                         {
                             var v = row.TryGetValue(field.Name, out var val) ? val : null;
                             if (v == null) b.AppendNull();
+                            else if (v is DateOnly dateOnly) b.Append(DateOnlyPrefix + dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
                             else if (v is string s) b.Append(s);
                             else b.Append(JsonPrefix + JsonSerializer.Serialize(v));
                         }
@@ -1207,6 +1220,14 @@ public partial class SpillStore : ISpillStore
                     }
             }
         }
+
+        private static DateTime CoerceSpillDateTime(object value) => value switch
+        {
+            DateTime dt => dt,
+            DateOnly d => d.ToDateTime(TimeOnly.MinValue),
+            DateTimeOffset dto => dto.DateTime,
+            _ => Convert.ToDateTime(value)
+        };
 
         private T ConvertSpillValue<T>(Field field, object value, long rowNumber, Func<object, T> converter)
         {
@@ -1449,6 +1470,9 @@ public partial class SpillStore : ISpillStore
             StringArray values when IsDecimalLogicalType(logicalType)
                 => CopyFixed<decimal>(count, values.IsNull,
                     i => decimal.Parse(values.GetString(i)!, System.Globalization.CultureInfo.InvariantCulture)),
+            StringArray values when IsDateOnlyLogicalType(logicalType)
+                => CopyFixed<DateOnly>(count, values.IsNull,
+                    i => ParseDateOnlyString(values.GetString(i)!)),
             StringArray values when IsDateTimeOffsetLogicalType(logicalType)
                 => CopyFixed<DateTimeOffset>(count, values.IsNull,
                     i => ParseDateTimeOffsetString(values.GetString(i)!)),
@@ -1509,6 +1533,8 @@ public partial class SpillStore : ISpillStore
                 DoubleArray a => ToDecimalOrDouble(a.GetValue(index)),
                 BooleanArray a => (object?)a.GetValue(index),
                 TimestampArray a => (object?)a.GetTimestamp(index)?.UtcDateTime,
+                StringArray a when IsDateOnlyLogicalType(logicalType)
+                    => ParseDateOnlyString(a.GetString(index)!),
                 StringArray a when IsDateTimeOffsetLogicalType(logicalType)
                     => ParseDateTimeOffsetString(a.GetString(index)!),
                 StringArray a when IsGuidLogicalType(logicalType)
@@ -1534,6 +1560,10 @@ public partial class SpillStore : ISpillStore
             if (logicalType == "String") return s;
             if (IsDecimalLogicalType(logicalType))
                 return decimal.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+            if (IsDateOnlyLogicalType(logicalType))
+                return ParseDateOnlyString(s);
+            if (s.StartsWith(DateOnlyPrefix, StringComparison.Ordinal))
+                return ParseDateOnlyString(s);
             if (IsDateTimeOffsetLogicalType(logicalType))
                 return ParseDateTimeOffsetString(s);
             if (s.StartsWith(JsonPrefix, StringComparison.Ordinal))
@@ -1557,6 +1587,10 @@ public partial class SpillStore : ISpillStore
             return s;
         }
 
+        private static bool IsDateOnlyLogicalType(string? logicalType)
+            => logicalType?.Equals("DATE", StringComparison.OrdinalIgnoreCase) == true
+                || logicalType?.Equals("DateOnly", StringComparison.OrdinalIgnoreCase) == true;
+
         private static bool IsDateTimeOffsetLogicalType(string? logicalType)
             => logicalType?.StartsWith("DATETIMEOFFSET", StringComparison.OrdinalIgnoreCase) == true
                 || logicalType?.Equals("DateTimeOffset", StringComparison.OrdinalIgnoreCase) == true;
@@ -1565,6 +1599,18 @@ public partial class SpillStore : ISpillStore
             => logicalType?.Equals("GUID", StringComparison.OrdinalIgnoreCase) == true
                 || logicalType?.Equals("UUID", StringComparison.OrdinalIgnoreCase) == true
                 || logicalType?.Equals("UNIQUEIDENTIFIER", StringComparison.OrdinalIgnoreCase) == true;
+
+        private static DateOnly ParseDateOnlyString(string value)
+        {
+            var payload = value;
+            if (payload.StartsWith(DateOnlyPrefix, StringComparison.Ordinal))
+                payload = payload[DateOnlyPrefix.Length..];
+            else if (payload.StartsWith(JsonPrefix, StringComparison.Ordinal))
+                payload = payload[JsonPrefix.Length..];
+            if (payload.Length >= 2 && payload[0] == '"' && payload[^1] == '"')
+                payload = JsonSerializer.Deserialize<string>(payload) ?? payload;
+            return DateOnly.ParseExact(payload, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        }
 
         private static DateTimeOffset ParseDateTimeOffsetString(string value)
         {

@@ -355,6 +355,10 @@ public sealed class DataQualityReport
             if (dt.Kind == DateTimeKind.Unspecified) dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
             return new DateTimeOffset(dt.ToUniversalTime());
         }
+        if (value is DateOnly dateOnly)
+        {
+            return new DateTimeOffset(dateOnly.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), TimeSpan.Zero);
+        }
         if (DateTimeOffset.TryParse(value.ToString(), CultureInfo.InvariantCulture,
             DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
             return parsed.ToUniversalTime();

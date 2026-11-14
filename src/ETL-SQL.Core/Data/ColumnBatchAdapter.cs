@@ -65,7 +65,8 @@ public static class ColumnBatchAdapter
         "FLOAT" or "DOUBLE" or "REAL" => typeof(double),
         "DECIMAL" or "NUMERIC" or "MONEY" => typeof(decimal),
         "BIT" or "BOOL" or "BOOLEAN" => typeof(byte),
-        "DATE" or "DATETIME" or "TIMESTAMP" => typeof(DateTime),
+        "DATE" => typeof(DateOnly),
+        "DATETIME" or "TIMESTAMP" => typeof(DateTime),
         "DATETIMEOFFSET" => typeof(DateTimeOffset),
         "TIME" => typeof(TimeSpan),
         "GUID" or "UUID" or "UNIQUEIDENTIFIER" => typeof(Guid),
@@ -236,9 +237,10 @@ public static class ColumnBatchAdapter
             case "BOOLEAN":
                 return BuildFixed(rows, ordinal, value => Convert.ToBoolean(value) ? (byte)1 : (byte)0);
             case "DATE":
+                return BuildFixed(rows, ordinal, value => value is DateOnly d ? d : DateOnly.FromDateTime(CoerceDateTime(value)));
             case "DATETIME":
             case "TIMESTAMP":
-                return BuildFixed(rows, ordinal, value => value is DateTime date ? date : Convert.ToDateTime(value));
+                return BuildFixed(rows, ordinal, CoerceDateTime);
             case "DATETIMEOFFSET":
                 return BuildFixed(rows, ordinal, value => value is DateTimeOffset dto ? dto : (EvaluationUtils.TryToDateTimeOffset(value, out var parsedDto) ? parsedDto : DateTimeOffset.Parse(value.ToString()!, System.Globalization.CultureInfo.InvariantCulture)));
             case "TIME":
@@ -261,7 +263,7 @@ public static class ColumnBatchAdapter
                 return Utf8ColumnBuffer.FromStrings(rows.Select(row =>
                 {
                     var value = row[ordinal];
-                    return value == null || value == DBNull.Value ? null : value.ToString();
+                    return value == null || value == DBNull.Value ? null : (value is string s ? s : TypeConverter.ToInvariantText(value));
                 }).ToArray());
             default:
                 throw new NotSupportedException($"Logical type '{logicalType}' does not yet have a native column buffer.");
@@ -289,6 +291,7 @@ public static class ColumnBatchAdapter
         if (source is ColumnBuffer<double> doubles) return CopyFixed(doubles, sourceRowCount, selectedRows, hasSelection, cancellationToken);
         if (source is ColumnBuffer<decimal> decimals) return CopyFixed(decimals, sourceRowCount, selectedRows, hasSelection, cancellationToken);
         if (source is ColumnBuffer<bool> booleans) return CopyFixed(booleans, sourceRowCount, selectedRows, hasSelection, cancellationToken);
+        if (source is ColumnBuffer<DateOnly> dateOnlyValues) return CopyFixed(dateOnlyValues, sourceRowCount, selectedRows, hasSelection, cancellationToken);
         if (source is ColumnBuffer<DateTime> dates) return CopyFixed(dates, sourceRowCount, selectedRows, hasSelection, cancellationToken);
         if (source is ColumnBuffer<DateTimeOffset> offsets) return CopyFixed(offsets, sourceRowCount, selectedRows, hasSelection, cancellationToken);
         if (source is ColumnBuffer<TimeSpan> times) return CopyFixed(times, sourceRowCount, selectedRows, hasSelection, cancellationToken);
@@ -311,6 +314,7 @@ public static class ColumnBatchAdapter
         if (source is ColumnBuffer<double> doubles) return GatherFixed(doubles, sourceRowCount, rows, cancellationToken);
         if (source is ColumnBuffer<decimal> decimals) return GatherFixed(decimals, sourceRowCount, rows, cancellationToken);
         if (source is ColumnBuffer<bool> booleans) return GatherFixed(booleans, sourceRowCount, rows, cancellationToken);
+        if (source is ColumnBuffer<DateOnly> dateOnlyValues) return GatherFixed(dateOnlyValues, sourceRowCount, rows, cancellationToken);
         if (source is ColumnBuffer<DateTime> dates) return GatherFixed(dates, sourceRowCount, rows, cancellationToken);
         if (source is ColumnBuffer<DateTimeOffset> offsets) return GatherFixed(offsets, sourceRowCount, rows, cancellationToken);
         if (source is ColumnBuffer<TimeSpan> times) return GatherFixed(times, sourceRowCount, rows, cancellationToken);
@@ -441,6 +445,7 @@ public static class ColumnBatchAdapter
             float or double => "DOUBLE",
             decimal => "DECIMAL",
             bool => "BOOLEAN",
+            DateOnly => "DATE",
             DateTime => "DATETIME",
             DateTimeOffset => "DATETIMEOFFSET",
             TimeSpan => "TIME",
@@ -456,4 +461,12 @@ public static class ColumnBatchAdapter
 
     private static string BaseType(string logicalType)
         => logicalType.Split('(', 2)[0].Trim().ToUpperInvariant();
+
+    private static DateTime CoerceDateTime(object value) => value switch
+    {
+        DateTime dt => dt,
+        DateOnly d => d.ToDateTime(TimeOnly.MinValue),
+        DateTimeOffset dto => dto.DateTime,
+        _ => EvaluationUtils.TryToDateTime(value, out var parsed) ? parsed : Convert.ToDateTime(value)
+    };
 }

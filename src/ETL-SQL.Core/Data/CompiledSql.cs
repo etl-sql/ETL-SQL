@@ -37,6 +37,7 @@ public record CompiledSql(string Sql, Dictionary<string, object?> Parameters)
         }
         if (val is DateTimeOffset dto) return $"'{dto:yyyy-MM-dd HH:mm:ss.ffffff zzz}'";
         if (val is DateTime dt) return $"'{dt:yyyy-MM-dd HH:mm:ss.ffffff}'";
+        if (val is DateOnly d) return $"'{d:yyyy-MM-dd}'";
         if (val is bool b)
         {
             if (dialect.Equals("POSTGRES", StringComparison.OrdinalIgnoreCase) || dialect.Equals("ORACLE", StringComparison.OrdinalIgnoreCase))

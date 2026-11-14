@@ -7,6 +7,8 @@ const state = vi.hoisted(() => ({
     documents: [] as { uri: { fsPath: string }; getText: () => string; positionAt: (n: number) => number; save: () => Promise<boolean> }[],
     edits: [] as { fsPath: string; text: string }[],
     saved: [] as string[],
+    executedCommands: [] as string[],
+    shownDocuments: [] as unknown[],
     applyResult: true
 }));
 
@@ -16,12 +18,27 @@ vi.mock('vscode', () => {
     }
     class Range { constructor(public start: number, public end: number) { } }
     return {
-        Uri: { file: (fsPath: string) => ({ fsPath }) },
+        Uri: { file: (fsPath: string) => ({ fsPath, scheme: 'file', toString: () => `file://${fsPath}` }) },
         WorkspaceEdit,
         Range,
+        window: {
+            showTextDocument: vi.fn(async (doc: unknown) => {
+                state.shownDocuments.push(doc);
+                return undefined;
+            })
+        },
+        commands: {
+            executeCommand: vi.fn(async (cmd: string) => {
+                state.executedCommands.push(cmd);
+                return undefined;
+            })
+        },
         workspace: {
             get textDocuments() { return state.documents; },
-            fs: { writeFile: vi.fn(async (uri: { fsPath: string }) => fs.writeFileSync(uri.fsPath, '')) },
+            fs: {
+                writeFile: vi.fn(async (uri: { fsPath: string }, data: Uint8Array) =>
+                    fs.writeFileSync(uri.fsPath, Buffer.from(data)))
+            },
             openTextDocument: vi.fn(async (uri: { fsPath: string }) => {
                 const existing = state.documents.find(d => d.uri.fsPath === uri.fsPath);
                 if (existing) return existing;
@@ -33,7 +50,7 @@ vi.mock('vscode', () => {
     };
 });
 
-import { readScriptText, writeScriptThroughEditor } from '../documentWriter';
+import { readScriptText, writeScriptThroughEditor, replaceDocumentWithoutUndoHistory } from '../documentWriter';
 
 describe('documentWriter', () => {
     let root: string;
@@ -42,6 +59,8 @@ describe('documentWriter', () => {
         state.documents = [];
         state.edits = [];
         state.saved = [];
+        state.executedCommands = [];
+        state.shownDocuments = [];
         state.applyResult = true;
     });
     afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -89,5 +108,28 @@ describe('documentWriter', () => {
 
         await expect(writeScriptThroughEditor(file, 'x')).rejects.toThrow('refused');
         expect(state.saved).toEqual([]);
+    });
+
+    it('writes sealed content to disk and reverts file-backed editors so Ctrl+Z cannot undo plaintext back', async () => {
+        const file = path.join(root, 'secret.etlsql');
+        fs.writeFileSync(file, `USE PASSWORD = 'plain';`);
+        const editorEdit = vi.fn();
+        const editor = {
+            document: {
+                uri: { fsPath: file, scheme: 'file', toString: () => `file://${file}` },
+                isUntitled: false,
+                getText: () => `USE PASSWORD = 'plain';`,
+                positionAt: (n: number) => n,
+                save: vi.fn()
+            },
+            edit: editorEdit
+        } as unknown as import('vscode').TextEditor;
+
+        const outcome = await replaceDocumentWithoutUndoHistory(editor, 'USE PASSWORD PROMPT;');
+
+        expect(outcome).toBe('reverted');
+        expect(fs.readFileSync(file, 'utf8')).toBe('USE PASSWORD PROMPT;');
+        expect(state.executedCommands).toContain('workbench.action.files.revert');
+        expect(editorEdit).not.toHaveBeenCalled();
     });
 });

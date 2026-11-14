@@ -348,6 +348,7 @@ namespace ETL_SQL.Connectors.Postgres
         {
             DateTimeOffset offset => offset.UtcDateTime.ToString(
                 "yyyy-MM-dd HH:mm:ss.ffffff+00", System.Globalization.CultureInfo.InvariantCulture),
+            DateOnly dateOnly => dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
             DateTime dateTime => dateTime.ToString("yyyy-MM-dd HH:mm:ss.ffffff",
                 System.Globalization.CultureInfo.InvariantCulture),
             IFormattable formattable => formattable.ToString(null, System.Globalization.CultureInfo.InvariantCulture),

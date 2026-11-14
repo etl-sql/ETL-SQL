@@ -207,7 +207,10 @@ namespace ETL_SQL.Connectors.MySql
                         var dataRow = dt.NewRow();
                         foreach (var col in batch.ColumnNames)
                         {
-                            dataRow[col] = row[col] ?? DBNull.Value;
+                            var val = row[col];
+                            dataRow[col] = val is DateOnly dateOnly
+                                ? dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                                : val ?? DBNull.Value;
                         }
                         dt.Rows.Add(dataRow);
                     }

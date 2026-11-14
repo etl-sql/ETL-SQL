@@ -449,6 +449,9 @@ namespace ETL_SQL.App
                         evaluator.Telemetry.QueueWaitMs = envQueueWait;
                     }
 
+                    // Seal plaintext secrets and literal USE PASSWORD on disk on first run before hashing/running.
+                    await evaluator.SealCurrentScriptIfNeededAsync(CancellationToken.None);
+
                     if (System.IO.File.Exists(ctx.ScriptFile.FullName))
                     {
                         var bytes = await System.IO.File.ReadAllBytesAsync(ctx.ScriptFile.FullName);
@@ -1341,6 +1344,7 @@ CREATE PAGE Main AS DASHBOARD (
                     var rptScript = new Parser(new Lexer(rptSource).Tokenize(), rptSource).Parse();
                     await using var rptEval = Program.ServiceProvider.GetRequiredService<Evaluator>();
                     rptEval.SecurityService.IsTestMode = true;
+                    rptEval.SealScriptOnFirstRun = false;
                     rptEval.CurrentScriptPath = rptSmokePath;
                     await rptEval.Evaluate(rptScript);
 

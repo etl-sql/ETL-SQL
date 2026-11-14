@@ -304,6 +304,7 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
     private static object? NormalizeValue(object? value) => value switch
     {
         null => null,
+        DateOnly dateOnly => dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
         DateTime dateTime => dateTime.ToString("O"),
         DateTimeOffset dateTimeOffset => dateTimeOffset.ToString("O"),
         _ => value

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-globalThis.ETLSQLFeedback = { notify() {}, confirm: async () => true, prompt: async () => null };
+let onNotify = () => {};
+globalThis.ETLSQLFeedback = { notify: (message, opts) => onNotify(message, opts), confirm: async () => true, prompt: async () => null };
 const { createStudioFileCommands } = await import('../../src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-file-commands.js');
 
 function deferred() {
@@ -86,4 +87,86 @@ test('multiple saves are serialized and the later save receives the current vers
     assert.equal(doc.isDirty, false);
     assert.equal(doc.version, 3);
     assert.deepEqual(removed, [doc]);
+});
+
+test('save-time server sealing resets editor undo history and saves sealed text', async () => {
+    const doc = {
+        path: 'item.etlsql',
+        name: 'item.etlsql',
+        content: "USE PASSWORD = 'secret';\nCREATE CONNECTION db AS MSSQL(PASSWORD = 'pw');",
+        isDirty: true,
+        version: 1,
+        editorState: { old: true },
+    };
+    const sealed = "USE PASSWORD PROMPT;\nCREATE CONNECTION db AS MSSQL(PASSWORD = 'ENC:sealed');";
+    const resetCalls = [];
+    const savedPayloads = [];
+    const commands = createStudioFileCommands({
+        apiBase: 'http://localhost',
+        authFetch: async () => new Response(JSON.stringify({
+            sealedScript: sealed,
+            requiresPassword: false,
+            wasSealed: true,
+            allowsPlaintextSecrets: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        getActiveDoc: () => doc,
+        state: {
+            editorInstance: {
+                getValue: () => doc.content,
+                setValue: () => { throw new Error('Should use resetDocument to clear undo stack'); },
+                resetDocument: text => resetCalls.push(text),
+                getState: () => ({ reset: true }),
+            },
+        },
+        opts: {
+            onSave: async content => {
+                savedPayloads.push(content);
+                return { version: 2 };
+            },
+        },
+        leaseLifecycle: { removeDraft() {} },
+        renderTabs() {},
+    });
+
+    assert.equal(await commands.handleSave(), true);
+    assert.deepEqual(resetCalls, [sealed]);
+    assert.equal(doc.content, sealed);
+    assert.deepEqual(doc.editorState, { reset: true });
+    assert.deepEqual(savedPayloads, [sealed]);
+});
+
+test('save-time policy honors server ALLOW_PLAINTEXT_SECRETS without rewriting', async () => {
+    const warnings = [];
+    const prevNotify = onNotify;
+    onNotify = (message, opts) => warnings.push({ message, opts });
+    try {
+        const raw = "SET ALLOW_PLAINTEXT_SECRETS = ON;\nCREATE CONNECTION db AS MSSQL(PASSWORD = 'pw');";
+        const doc = { path: 'item.etlsql', name: 'item.etlsql', content: raw, isDirty: true, version: 1 };
+        const savedPayloads = [];
+        const commands = createStudioFileCommands({
+            apiBase: 'http://localhost',
+            authFetch: async () => new Response(JSON.stringify({
+                sealedScript: raw,
+                requiresPassword: false,
+                wasSealed: false,
+                allowsPlaintextSecrets: true,
+            }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+            getActiveDoc: () => doc,
+            state: { editorInstance: { getValue: () => doc.content, resetDocument() {} } },
+            opts: {
+                onSave: async content => {
+                    savedPayloads.push(content);
+                    return { version: 2 };
+                },
+            },
+            leaseLifecycle: { removeDraft() {} },
+            renderTabs() {},
+        });
+
+        assert.equal(await commands.handleSave(), true);
+        assert.deepEqual(savedPayloads, [raw]);
+        assert.ok(warnings.some(w => w.opts?.title === 'Plaintext Secrets Allowed'));
+    } finally {
+        onNotify = prevNotify;
+    }
 });

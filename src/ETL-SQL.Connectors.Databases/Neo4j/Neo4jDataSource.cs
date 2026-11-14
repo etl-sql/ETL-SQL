@@ -943,6 +943,7 @@ namespace ETL_SQL.Connectors.Neo4j
             }
             if (value is char charValue) return charValue.ToString();
             if (value is Guid guidValue) return guidValue.ToString();
+            if (value is DateOnly dateOnlyValue) return dateOnlyValue.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
             if (value is DateTime dateTimeValue) return dateTimeValue.ToString("O");
             if (value is DateTimeOffset dateTimeOffsetValue) return dateTimeOffsetValue.ToString("O");
             if (value is TimeSpan timeSpanValue) return timeSpanValue.ToString("c");

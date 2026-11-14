@@ -55,6 +55,7 @@ public class DesignerController : ControllerBase
     private readonly LanguageHoverService? _hoverService;
     private readonly PortalDbContext? _db;
     private readonly ETL_SQL.Common.ILogger? _logger;
+    private readonly ETL_SQL.Services.SecurityService _securityService;
 
     public DesignerController(
         PortalDesignerSchemaService? schemaService = null,
@@ -74,7 +75,8 @@ public class DesignerController : ControllerBase
         ILanguageHelpRegistry? languageHelp = null,
         IFunctionRegistry? functionRegistry = null,
         PortalDbContext? db = null,
-        ETL_SQL.Common.ILogger? logger = null)
+        ETL_SQL.Common.ILogger? logger = null,
+        ETL_SQL.Services.SecurityService? securityService = null)
     {
         _schemaService = schemaService;
         _runService = runService;
@@ -92,6 +94,8 @@ public class DesignerController : ControllerBase
         _scriptDag = scriptDag ?? new ScriptDagProjectionService();
         _db = db;
         _logger = logger;
+        _securityService = securityService ?? new ETL_SQL.Services.SecurityService(
+            logger ?? ETL_SQL.Common.NullLogger.Instance);
         _hoverService = languageHelp is not null && functionRegistry is not null
             ? new LanguageHoverService(languageHelp, functionRegistry)
             : null;
@@ -778,6 +782,21 @@ public class DesignerController : ControllerBase
         }
     }
 
+    [HttpPost("seal", Name = "Studio.Shared.seal")]
+    [EnableRateLimiting("designer")]
+    public IActionResult Seal([FromBody] SealDesignerRequest req)
+    {
+        if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
+            return limitResult;
+
+        var outcome = _securityService.TrySealScriptForSave(req.Script ?? string.Empty, req.Password);
+        return Ok(new SealDesignerResponse(
+            outcome.ScriptText,
+            outcome.Changed,
+            outcome.RequiresPassword,
+            outcome.AllowsPlaintextSecrets));
+    }
+
     // ── GET /api/designer/preview-as ─────────────────────────────────────────
     // The audiences a run can be previewed as: the group and role names this tenant defines, which
     // are the vocabulary an author's HAS_GROUP / HAS_ROLE predicates already name in the script.
@@ -1051,7 +1070,8 @@ public class DesignerController : ControllerBase
                 User,
                 CurrentUserId,
                 req.BaseRevision,
-                cancellationToken);
+                cancellationToken,
+                req.SealPassword);
 
             return result.Status switch
             {
@@ -1063,6 +1083,11 @@ public class DesignerController : ControllerBase
                 {
                     error = "The resource changed after it was read. Refresh it and retry.",
                     current = new { id = result.Current!.Id, version = result.Current.Version }
+                }),
+                ReportScriptSaveStatus.SealPasswordRequired => UnprocessableEntity(new
+                {
+                    error = "Master password is required to seal plaintext secrets before saving.",
+                    code = "SEAL_PASSWORD_REQUIRED"
                 }),
                 _ => StatusCode(500, new { error = "Unknown save status." })
             };
@@ -1387,7 +1412,7 @@ public class DesignerController : ControllerBase
     private IActionResult SavedScriptResponse(ReportScriptSaveResult result)
     {
         OptimisticConcurrency.SetETag(Response, result.Version!.Value);
-        return Ok(new SaveDesignerResponse(result.Version.Value, result.SourceRevision));
+        return Ok(new SaveDesignerResponse(result.Version.Value, result.SourceRevision, result.ScriptText));
     }
 
 }

@@ -29,7 +29,9 @@ import { shadowCopyExecutable as shadowCopyToStorage, cleanupShadowDirectory as 
 import { sanitizeVariableForClient, sanitizeVariablesForClient } from './clientSanitizer';
 import { ETL_DOCUMENT_SELECTOR, ETL_FILE_WATCH_GLOB } from './lspSelectors';
 import { generateScriptFromSpec } from './generateScriptFromSpec';
-import { markPolicySave, consumePolicySave } from './saveGuard';
+import { consumePolicySave } from './saveGuard';
+import { replaceDocumentWithoutUndoHistory } from './documentWriter';
+import { analyzeSavePolicy, getSealPasswordRequirement, requiresRunPasswordPrompt } from './savePolicy';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
@@ -480,14 +482,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }
 
         const text = editor.document.getText();
-        const noSaveSensitive = lastOnOffSetting(text, 'NO_SAVE_SENSITIVE');
-        const noSaveConnection = lastOnOffSetting(text, 'NO_SAVE_CONNECTION');
-        const connectionEncryption = lastOnOffSetting(text, 'CONNECTION_ENCRYPTION');
-        const hasPlainTextCreds = /\b(PASSWORD|API_KEY|APIKEY)\s*=\s*'(?!ENC:)[^']*'/i.test(text) ||
-                                  /\bPassword\s*=\s*(?!['\s]|ENC:)[^;'\s]+/i.test(text);
-        const hasConnection = /\bCREATE\s+CONNECTION\b/i.test(text);
-        const literalUsePassword = text.match(/\bUSE\s+PASSWORD\s*=\s*(['"])([\s\S]*?)\1\s*;?/i)?.[2];
-        const needsPassword = !noSaveConnection && ((connectionEncryption && hasConnection) || (!noSaveSensitive && hasPlainTextCreds));
+        const { needsPassword, literalUsePassword } = getSealPasswordRequirement(text);
         const password = needsPassword
             ? literalUsePassword ?? await vscode.window.showInputBox({
                 password: true,
@@ -507,30 +502,12 @@ export async function activate(context: vscode.ExtensionContext) {
             }) as { encryptedText: string };
 
             if (response && response.encryptedText) {
-                const fullRange = new vscode.Range(
-                    editor.document.positionAt(0),
-                    editor.document.positionAt(editor.document.getText().length)
-                );
-                
-                const applied = await editor.edit(editBuilder => {
-                    editBuilder.replace(fullRange, response.encryptedText);
-                });
-
-                if (!applied) {
+                const outcome = await replaceDocumentWithoutUndoHistory(editor, response.encryptedText);
+                if (outcome === 'failed') {
                     vscode.window.showErrorMessage("ETL-SQL: Could not rewrite the script with the secured connections.");
-                    return;
-                }
-
-                // Persist immediately. Leaving the encrypted text unsaved is worse than not having
-                // encrypted at all: the editor shows ENC:... while the file on disk still holds the
-                // plaintext password, so closing without saving silently keeps the secret.
-                const documentKey = editor.document.uri.toString();
-                markPolicySave(documentKey);
-                const saved = await editor.document.save();
-
-                if (saved) {
+                } else if (outcome === 'reverted' || outcome === 'saved') {
                     vscode.window.showInformationMessage("Script secrets secured and saved.");
-                } else {
+                } else if (outcome === 'unsaved') {
                     vscode.window.showWarningMessage(
                         "ETL-SQL: Connections were secured but the file could not be saved — save it before closing, or the plaintext on disk will remain."
                     );
@@ -594,48 +571,15 @@ export async function activate(context: vscode.ExtensionContext) {
         if (consumePolicySave(document.uri.toString())) {
             return;
         }
-        const text = document.getText();
-        const allowPlaintextSecretsPattern = /\bSET\s+ALLOW_PLAINTEXT_SECRETS\s*(?:=\s*)?(ON|OFF)\b/gi;
-        const noSaveSensitivePattern = /\bSET\s+NO_SAVE_SENSITIVE\s*(?:=\s*)?(ON|OFF)\b/gi;
-        const noSaveConnectionPattern = /\bSET\s+NO_SAVE_CONNECTION\s*(?:=\s*)?(ON|OFF)\b/gi;
-        const connectionEncryptionPattern = /\bSET\s+CONNECTION_ENCRYPTION\s*(?:=\s*)?(ON|OFF)\b/gi;
-        let allowPlaintextSecrets = false;
-        let noSaveSensitive = false;
-        let noSaveConnection = false;
-        let connectionEncryption = false;
-        let allowPlaintextSecretsMatch: RegExpExecArray | null;
-        while ((allowPlaintextSecretsMatch = allowPlaintextSecretsPattern.exec(text)) !== null) {
-            allowPlaintextSecrets = allowPlaintextSecretsMatch[1].toUpperCase() === 'ON';
-        }
-        let match: RegExpExecArray | null;
-        while ((match = noSaveSensitivePattern.exec(text)) !== null) {
-            noSaveSensitive = match[1].toUpperCase() === 'ON';
-        }
-        while ((match = noSaveConnectionPattern.exec(text)) !== null) {
-            noSaveConnection = match[1].toUpperCase() === 'ON';
-        }
-        while ((match = connectionEncryptionPattern.exec(text)) !== null) {
-            connectionEncryption = match[1].toUpperCase() === 'ON';
-        }
-        const hasPlainTextCreds = /\b(PASSWORD|API_KEY|APIKEY)\s*=\s*'(?!ENC:)[^']*'/i.test(text) || 
-                                 /\bPassword\s*=\s*(?!['\s]|ENC:)[^;'\s]+/i.test(text);
-        const hasLiteralUsePassword = /\bUSE\s+PASSWORD\s*=\s*(['"])[\s\S]*?\1\s*;?/i.test(text);
-        const hasConnection = /\bCREATE\s+CONNECTION\b/i.test(text);
-        if (allowPlaintextSecrets && !noSaveSensitive && !noSaveConnection && !connectionEncryption && (hasPlainTextCreds || hasLiteralUsePassword)) {
+        const decision = analyzeSavePolicy(document.getText());
+        if (decision.action === 'warn-plaintext') {
             vscode.window.showWarningMessage(
                 "ALLOW_PLAINTEXT_SECRETS is ON. Plaintext secrets may remain in this file and should not be committed."
             );
             return;
         }
-        if (hasPlainTextCreds || hasLiteralUsePassword || noSaveSensitive || noSaveConnection || (connectionEncryption && hasConnection)) {
-            const encryptOption = "Apply Save Policy";
-            const response = await vscode.window.showWarningMessage(
-                "This script contains save-time security work. Would you like to apply the script save policy now?",
-                encryptOption
-            );
-            if (response === encryptOption) {
-                vscode.commands.executeCommand('etlsql.secureConnection', document.uri.toString());
-            }
+        if (decision.action === 'auto-seal') {
+            await vscode.commands.executeCommand('etlsql.secureConnection', document.uri.toString());
         }
     }));
 }
@@ -646,18 +590,6 @@ function syncConnectionsToLsp() {
         client.sendNotification('etlsql/setConnections', { connections });
         sidebarProvider.postMessage({ type: 'connections', connections });
     }
-}
-
-function lastOnOffSetting(text: string, settingName: string): boolean {
-    const pattern = /\bSET\s+([A-Z_]+)\s*(?:=\s*)?(ON|OFF)\b/gi;
-    let value = false;
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(text)) !== null) {
-        if (match[1].toUpperCase() === settingName) {
-            value = match[2].toUpperCase() === 'ON';
-        }
-    }
-    return value;
 }
 
 // Removed syncDebugModeToLsp
@@ -706,7 +638,7 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
     const fileName = path.basename(document.fileName);
 
     let masterPassword = "";
-    if (scriptText.includes('ENC:')) {
+    if (requiresRunPasswordPrompt(scriptText)) {
         masterPassword = await vscode.window.showInputBox({
             password: true,
             prompt: "Master Password required for encrypted credentials in this script",

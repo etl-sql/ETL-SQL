@@ -241,6 +241,7 @@ public static class ColumnBatchSortKernels
         if (column is ColumnBuffer<long> longs) return Fixed(longs, key);
         if (column is ColumnBuffer<double> doubles) return Fixed(doubles, key);
         if (column is ColumnBuffer<decimal> decimals) return Fixed(decimals, key);
+        if (column is ColumnBuffer<DateOnly> dateOnlyValues) return Fixed(dateOnlyValues, key);
         if (column is ColumnBuffer<DateTime> dates) return Fixed(dates, key);
         if (column is ColumnBuffer<DateTimeOffset> offsets) return Fixed(offsets, key);
         if (column is ColumnBuffer<TimeSpan> times) return Fixed(times, key);
@@ -284,6 +285,7 @@ public static class ColumnBatchSortKernels
         if (left is ColumnBuffer<long> ll && right is ColumnBuffer<long> rl) return ll.Values.Span[leftRow].CompareTo(rl.Values.Span[rightRow]);
         if (left is ColumnBuffer<double> ld && right is ColumnBuffer<double> rd) return ld.Values.Span[leftRow].CompareTo(rd.Values.Span[rightRow]);
         if (left is ColumnBuffer<decimal> lm && right is ColumnBuffer<decimal> rm) return lm.Values.Span[leftRow].CompareTo(rm.Values.Span[rightRow]);
+        if (left is ColumnBuffer<DateOnly> ldoOnly && right is ColumnBuffer<DateOnly> rdoOnly) return ldoOnly.Values.Span[leftRow].CompareTo(rdoOnly.Values.Span[rightRow]);
         if (left is ColumnBuffer<DateTime> ldt && right is ColumnBuffer<DateTime> rdt) return ldt.Values.Span[leftRow].CompareTo(rdt.Values.Span[rightRow]);
         if (left is ColumnBuffer<DateTimeOffset> ldo && right is ColumnBuffer<DateTimeOffset> rdo) return ldo.Values.Span[leftRow].CompareTo(rdo.Values.Span[rightRow]);
         if (left is ColumnBuffer<TimeSpan> lt && right is ColumnBuffer<TimeSpan> rt) return lt.Values.Span[leftRow].CompareTo(rt.Values.Span[rightRow]);

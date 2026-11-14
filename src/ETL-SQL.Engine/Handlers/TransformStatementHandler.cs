@@ -1097,6 +1097,7 @@ public class TransformStatementHandler(ILogger logger) : IStatementHandler
         var v = GetValue(val);
         if (v == null) return 0m;
         if (v is DateTime dt) return dt.Ticks;
+        if (v is DateOnly dateOnly) return dateOnly.ToDateTime(TimeOnly.MinValue).Ticks;
         if (decimal.TryParse(v.ToString(), out var d)) return d;
         throw new ExecutionException($"Cannot convert ORDER_COL value '{val}' to a numeric or date value for linear interpolation.");
     }

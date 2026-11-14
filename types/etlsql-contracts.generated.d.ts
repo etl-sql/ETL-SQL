@@ -2092,6 +2092,7 @@ interface RunDesignerResponse {
 interface SaveDesignerResponse {
     version: number;
     sourceRevision?: string | null;
+    scriptText?: string | null;
 }
 
 interface SaveGlossaryTermRequest {

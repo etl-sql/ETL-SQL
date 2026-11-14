@@ -14,6 +14,40 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Engine `DATE` values now use CLR `System.DateOnly` instead of `DateTime`, so
+  `CAST(CAST('2024-01-08' AS DATE) AS STRING)` produces `'2024-01-08'` while `DATETIME` and
+  `TIMESTAMP` continue to format as `'yyyy-MM-dd HH:mm:ss'`. Updated comparisons, `CompoundKey`
+  join/group normalization and original-value retention, date arithmetic, date/string functions
+  (`CURRENT_DATE`, `TO_DATE`, `DATEADD`, `DATE_TRUNC`, `TRUNC`, `EOMONTH`, `START_OF_*`, `END_OF_*`,
+  `SAME_PERIOD_LAST_YEAR`, `FORMAT`), columnar buffers/plans (`ColumnBuffer<DateOnly>`), Arrow
+  spill storage, `RowPacker`, composite unique keys, watermarks, reporting export, and
+  database/file connectors, with unit and integration coverage in `DateOnlyEngineTests`.
+
+- Scripts using `USE PASSWORD = '...'` or plaintext secrets now seal automatically and clear undo
+  history unless `SET ALLOW_PLAINTEXT_SECRETS = ON` is active. Running a file-backed script via the
+  CLI or engine rewrites literal `USE PASSWORD` to `USE PASSWORD PROMPT;` and encrypts secrets as
+  `ENC:...` on disk before execution. VS Code saves apply save-time policy automatically (prompting
+  when no literal `USE PASSWORD` exists) and reload via `workbench.action.files.revert` so `Ctrl+Z`
+  does not restore plaintext, while `runEtlSql` respects both literal `USE PASSWORD` and
+  `USE PASSWORD PROMPT;`. TUI loads keep `ENC:` sealed (no decrypt-on-load) and clear `_undo` on
+  save. ETL-SQL Studio (Portal and WorkstationEditor) seals scripts via
+  `SecurityService.TrySealScriptForSave`, prompts when a save password is needed, and resets the
+  CodeMirror `EditorState` on save to clear undo history.
+
+- `ENCRYPT FILE` and `DECRYPT FILE` derive default destination paths when `TO` is omitted (ROADMAP
+  FO04): `ENCRYPT FILE` appends `.pgp` for `PGP_KEY` and `.enc` for `PASSWORD` or SSH `KEYFILE`,
+  and `DECRYPT FILE` strips a recognized `.pgp`/`.enc` suffix (or fails on unrecognized suffixes),
+  honoring `OVERWRITE` and `WHAT_IF`.
+
+- Added file, path, and remote transfer scalar functions (ROADMAP FN01, FN02, FN03, FN07, FN08,
+  FN09): `PATH_FILENAME_NO_EXT`, `PATH_CHANGE_EXTENSION`, `FILE_CREATED`, `FILE_LINE_COUNT`,
+  `REMOTE_FILE_SIZE`, `REMOTE_FILE_MODIFIED`, and `REMOTE_DIRECTORY_EXISTS`, with updated
+  reference pages and `LanguageMetadata` entries.
+
+- FTP connections now read `TIMEOUT_SECONDS` (default 30s) and enforce strict FTPS TLS certificate
+  validation by default, adding `CERT_FINGERPRINT` certificate pinning and explicit opt-out
+  `ALLOW_UNTRUSTED_CERT` (ROADMAP RF02).
+
 - `ENCRYPT FILE`, `DECRYPT FILE`, `COMPRESS FILE` and `DECOMPRESS FILE` take
   `WITH (DELETE_SOURCE = ON)` (ROADMAP FO03). The source file is deleted only after the output is
   written; a failed run or `SET WHAT_IF ON` keeps it. A directory source, or a destination that is

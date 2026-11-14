@@ -555,6 +555,21 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
             const created = await host.create({ name, kind: pipeline ? 'Pipeline' : 'Report',
                 content: hostContext.withLineEnding(content, doc.lineEnding || '\n') });
             const newerEdits = doc.content !== content;
+            if (!newerEdits && typeof created.content === 'string' && created.content !== content) {
+                doc.content = created.content;
+                hostContext.rememberLineEnding(doc);
+                const editor = hostContext.state.editorInstance as StudioDynamic | null;
+                if (editor && hostContext.getActiveDoc()?.id === doc.id) {
+                    hostContext.isSettingDocumentContent = true;
+                    try {
+                        if (typeof editor.resetDocument === 'function') editor.resetDocument(created.content);
+                        else editor.setValue?.(created.content);
+                        doc.editorState = editor.getState?.() ?? null;
+                    } finally {
+                        hostContext.isSettingDocumentContent = false;
+                    }
+                }
+            }
             doc.privateDraftId = created.id;
             doc.version = created.version;
             doc.name = `${created.name}${catalogExtension(created)}`;

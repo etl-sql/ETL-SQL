@@ -277,6 +277,11 @@ namespace ETL_SQL.Engine.Functions
             object? val = args[0];
             string fmt = Text(args[1]) ?? "";
 
+            if (val is DateOnly dOnly)
+            {
+                try { return dOnly.ToString(fmt, System.Globalization.CultureInfo.InvariantCulture); }
+                catch (FormatException) { return dOnly.ToDateTime(TimeOnly.MinValue).ToString(fmt, System.Globalization.CultureInfo.InvariantCulture); }
+            }
             if (val is IFormattable formattable) return formattable.ToString(fmt, System.Globalization.CultureInfo.InvariantCulture);
             return val?.ToString();
         }

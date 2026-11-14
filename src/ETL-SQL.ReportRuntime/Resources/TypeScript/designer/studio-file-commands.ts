@@ -14,7 +14,11 @@ import type { StudioDom, StudioDomElement, StudioDynamic, StudioOptions, StudioR
 import { STUDIO_ROUTES } from './studio-contracts.js';
 import { buildSideBySideDiff } from './studio-git-diff.js';
 import type { StudioLeaseLifecycleHandle } from './studio-lifecycle.js';
-import { detectPlaintextSecrets as _detectPlaintextSecrets, secureStudioScriptForSave } from './studio-security.js';
+import {
+    detectPlaintextSecrets as _detectPlaintextSecrets,
+    sealStudioScriptOnServer,
+    secureStudioScriptForSave,
+} from './studio-security.js';
 
 export interface StudioFileCommandsContext {
     readonly activeScriptText: () => any;
@@ -201,25 +205,81 @@ export function createStudioFileCommands(hostContext: StudioFileCommandsContext)
         const currentContent = hostContext.state.editorInstance ? hostContext.state.editorInstance.getValue() : doc.content;
         doc.content = currentContent;
 
+        function applySealedScriptToBuffer(targetDoc: StudioRuntimeDocument, sealedText: string) {
+            if (targetDoc.content !== currentContent) {
+                return;
+            }
+            targetDoc.content = sealedText;
+            const editor = hostContext.state.editorInstance as StudioDynamic | null;
+            if (editor && hostContext.getActiveDoc() === targetDoc) {
+                // Reset the CodeMirror state rather than dispatching a change so the undo stack is
+                // cleared and Ctrl+Z cannot restore plaintext credentials or literal USE PASSWORD.
+                if (typeof editor.resetDocument === 'function') {
+                    editor.resetDocument(sealedText);
+                } else {
+                    editor.setValue(sealedText);
+                }
+                if (typeof editor.getState === 'function') {
+                    targetDoc.editorState = editor.getState();
+                }
+            }
+            hostContext.leaseLifecycle.removeDraft(targetDoc as any);
+        }
+
+        const shouldCheckServerSeal = typeof hostContext.authFetch === 'function'
+            && /(?:password|secret|token|key|passphrase|pwd|connection|credential|auth|cert|oauth)/i.test(currentContent);
+        const serverSeal = shouldCheckServerSeal
+            ? await sealStudioScriptOnServer(
+                hostContext.apiBase + STUDIO_ROUTES.seal,
+                currentContent,
+                null,
+                hostContext.authFetch
+            )
+            : null;
+
         const secrets = _detectPlaintextSecrets(currentContent);
-        if (secrets.length > 0) {
+        const promptForPassword = serverSeal ? serverSeal.requiresPassword : secrets.length > 0;
+
+        if (serverSeal && !serverSeal.requiresPassword) {
+            if (serverSeal.allowsPlaintextSecrets && secrets.length > 0) {
+                _feedback.notify(
+                    'ALLOW_PLAINTEXT_SECRETS is ON. Plaintext secrets may remain in this file and should not be committed.',
+                    { title: 'Plaintext Secrets Allowed', tone: 'warning' }
+                );
+            }
+            let contentToSave = currentContent;
+            if (serverSeal.sealedScript !== currentContent) {
+                applySealedScriptToBuffer(doc, serverSeal.sealedScript);
+                contentToSave = serverSeal.sealedScript;
+            }
+            return performSave(contentToSave, doc.path);
+        }
+
+        if (promptForPassword) {
             const titleId = 'etlsql-secret-modal-title';
+            const summaryHtml = secrets.length > 0
+                ? `Found <strong>${secrets.length} plaintext credentials</strong> in script. ETL-SQL zero-trust policy requires encrypting credentials before commit or save.`
+                : 'ETL-SQL zero-trust save policy requires a master password to seal connection definitions or credentials before saving.';
+            const detailListHtml = secrets.length > 0
+                ? `<div style="background:rgba(210,153,34,0.1); border:1px solid rgba(210,153,34,0.3); border-radius:6px; padding:10px; font-size:0.75rem; font-family:monospace; margin-bottom:12px; max-height:100px; overflow:auto;">
+                        ${secrets.map((s, index) => `<div>${index + 1}. ${_escapeHtml(s.label)} <span style="color:var(--portal-warning,#d29922);">(value hidden)</span></div>`).join('')}
+                   </div>`
+                : '';
+
             hostContext.modalBox.innerHTML = `
                 <div class="etlsql-studio-modal-header">
                     <span id="${titleId}" style="color:var(--portal-warning,#d29922); display:flex; align-items:center; gap:6px;">
-                        ⚠️ Plaintext Secret Detected
+                        ⚠️ Master Password Required to Seal Script
                     </span>
                     <button type="button" class="etlsql-studio-sidebar-close" data-modal-close aria-label="Close">${_studioIcon('close', 12)}</button>
                 </div>
                 <div class="etlsql-studio-modal-body">
                     <p style="font-size:0.8125rem; color:var(--portal-text-soft,#8b949e); margin:0 0 12px;">
-                        Found <strong>${secrets.length} plaintext credentials</strong> in script. ETL-SQL zero-trust policy requires encrypting credentials before commit or save.
+                        ${summaryHtml}
                     </p>
-                    <div style="background:rgba(210,153,34,0.1); border:1px solid rgba(210,153,34,0.3); border-radius:6px; padding:10px; font-size:0.75rem; font-family:monospace; margin-bottom:12px; max-height:100px; overflow:auto;">
-                        ${secrets.map((s, index) => `<div>${index + 1}. ${_escapeHtml(s.label)} <span style="color:var(--portal-warning,#d29922);">(value hidden)</span></div>`).join('')}
-                    </div>
+                    ${detailListHtml}
                     <label style="font-size:0.75rem; color:var(--portal-text-soft,#8b949e); font-weight:600; display:block; margin-bottom:4px;">
-                        Enter Passphrase to Encrypt as <code>ENC:...</code>:
+                        Enter Passphrase to Seal Credentials as <code>ENC:...</code>:
                     </label>
                     <input type="password" data-encrypt-passphrase placeholder="Passphrase" style="width:100%; box-sizing:border-box; background:var(--portal-bg,#0d1117); border:1px solid var(--portal-border,#30363d); color:var(--portal-text,#f0f6fc); border-radius:4px; padding:6px 8px; font-size:0.8125rem;">
                 </div>
@@ -249,11 +309,21 @@ export function createStudioFileCommands(hostContext: StudioFileCommandsContext)
                 encryptButton.disabled = true;
                 encryptButton.setAttribute('aria-busy', 'true');
                 try {
-                    const encryptedScript = await secureStudioScriptForSave(currentContent, pass);
-                    if (hostContext.state.editorInstance) hostContext.state.editorInstance.setValue(encryptedScript);
-                    doc.content = encryptedScript;
+                    const sealedOnServer = await sealStudioScriptOnServer(
+                        hostContext.apiBase + STUDIO_ROUTES.seal,
+                        currentContent,
+                        pass,
+                        hostContext.authFetch
+                    );
+                    if (sealedOnServer?.requiresPassword) {
+                        throw new Error('A passphrase is required to encrypt credentials.');
+                    }
+                    const encryptedScript = sealedOnServer
+                        ? sealedOnServer.sealedScript
+                        : await secureStudioScriptForSave(currentContent, pass);
+                    applySealedScriptToBuffer(doc, encryptedScript);
                     closeModal();
-                    await performSave(doc.content, doc.path);
+                    await performSave(encryptedScript, doc.path);
                 } catch (error) {
                     doc.isDirty = true;
                     hostContext.renderTabs();
@@ -267,7 +337,7 @@ export function createStudioFileCommands(hostContext: StudioFileCommandsContext)
             return;
         }
 
-        return performSave(doc.content, doc.path);
+        return performSave(currentContent, doc.path);
     }
 
     /**

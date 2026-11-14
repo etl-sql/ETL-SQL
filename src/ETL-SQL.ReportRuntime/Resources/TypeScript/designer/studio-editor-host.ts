@@ -182,6 +182,7 @@ export function createStudioEditorHost(hostContext: StudioEditorHostContext) {
             hostContext.state.editorInstance = {
                 getValue: () => ta.value,
                 setValue: (v: string) => { ta.value = v; },
+                resetDocument: (v: string) => { ta.value = v; },
                 gotoLine: () => {},
                 // The textarea fallback can still show the author what a canvas gesture wrote, which is
                 // the half of the loop that teaches. A no-op here would make the palette silently less

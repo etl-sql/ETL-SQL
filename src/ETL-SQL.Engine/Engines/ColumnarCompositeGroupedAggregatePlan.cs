@@ -214,8 +214,9 @@ internal sealed class ColumnarCompositeGroupedAggregatePlan : IColumnarGroupedAg
             || type == typeof(float) || type == typeof(double) || type == typeof(decimal);
 
     private static bool IsSupportedKey(Type type)
-        => IsNumeric(type) || type == typeof(DateTime) || type == typeof(DateTimeOffset)
-            || type == typeof(TimeSpan) || type == typeof(Guid) || type == typeof(string);
+        => IsNumeric(type) || type == typeof(DateOnly) || type == typeof(DateTime)
+            || type == typeof(DateTimeOffset) || type == typeof(TimeSpan)
+            || type == typeof(Guid) || type == typeof(string);
 
     private static bool TryRewriteHaving(
         Expression? expression,

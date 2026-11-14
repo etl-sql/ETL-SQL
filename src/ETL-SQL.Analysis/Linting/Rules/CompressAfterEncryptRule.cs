@@ -82,9 +82,16 @@ public class CompressAfterEncryptRule : ILintRule
             var path = GetLiteralPath(fileOp.Source);
             if (path != null) encryptedPaths.Add(path);
 
-            // If a destination is specified, the encrypted output goes there
+            // If a destination is specified, the encrypted output goes there; otherwise it uses the default suffix.
             var destPath = GetLiteralPath(fileOp.Destination);
-            if (destPath != null) encryptedPaths.Add(destPath);
+            if (destPath != null)
+            {
+                encryptedPaths.Add(destPath);
+            }
+            else if (path != null)
+            {
+                encryptedPaths.Add(path + (fileOp.PgpKey != null ? ".pgp" : ".enc"));
+            }
         }
 
         // If we see a COMPRESS FILE on a path that was previously encrypted, warn

@@ -155,6 +155,10 @@ public class FileOperationStatementHandler(
             : FileSystemAccessKind.Read;
         source = pathAuthorizer.Authorize(context, source, sourceAccess,
             validateFileType: stmt.Type != FileOpType.Compress || !Directory.Exists(source)).CanonicalPath;
+        if (dest == null && stmt.Destination == null && stmt.Type is FileOpType.Encrypt or FileOpType.Decrypt)
+        {
+            dest = DeriveDefaultCryptoDestination(stmt, source, sourceVal);
+        }
         if (dest != null && stmt.Type != FileOpType.Rename)
         {
             var destinationAccess = stmt.Type == FileOpType.Decompress
@@ -178,7 +182,9 @@ public class FileOperationStatementHandler(
         context.IncrementOperationCount(OperationType.FileSystem, source, 1);
         if (context.IsWhatIf)
         {
-            context.Log($"WHAT IF: Would perform {stmt.Type}_FILE{(deleteSourceAfter && dest != null ? $" and then delete the source {source}" : "")}", ConsoleColor.Yellow);
+            var target = dest != null ? $" -> {dest}" : "";
+            var cleanup = deleteSourceAfter && dest != null ? $" and then delete the source {source}" : "";
+            context.Log($"WHAT IF: Would perform {stmt.Type}_FILE: {source}{target}{cleanup}", ConsoleColor.Yellow);
             return;
         }
 
@@ -430,6 +436,31 @@ public class FileOperationStatementHandler(
             throw new ExecutionException($"File operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
         }
         await Task.CompletedTask;
+    }
+
+    private static string DeriveDefaultCryptoDestination(FileOperationStatement stmt, string source, string sourceDisplay)
+    {
+        if (stmt.Type == FileOpType.Encrypt)
+        {
+            return stmt.PgpKey != null ? source + ".pgp" : source + ".enc";
+        }
+
+        const string pgpSuffix = ".pgp";
+        const string encSuffix = ".enc";
+        string? derived = null;
+        if (source.EndsWith(pgpSuffix, StringComparison.OrdinalIgnoreCase))
+            derived = source[..^pgpSuffix.Length];
+        else if (source.EndsWith(encSuffix, StringComparison.OrdinalIgnoreCase))
+            derived = source[..^encSuffix.Length];
+
+        if (string.IsNullOrEmpty(derived) || string.IsNullOrEmpty(Path.GetFileName(derived)))
+        {
+            throw new ExecutionException(
+                $"DECRYPT FILE without TO requires a '.pgp' or '.enc' file extension on '{sourceDisplay}', or specify TO '<destination>'.",
+                null, stmt.Line, stmt.Column);
+        }
+
+        return derived;
     }
 
     private static async Task<bool> EvaluateOnOffAsync(Expression expression, string option, IExecutionContext context)

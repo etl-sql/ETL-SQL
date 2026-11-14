@@ -58,7 +58,9 @@ public sealed class EngineTextCultureTests
     public async Task StringFunctionsReadADateAsTheCastText(string culture)
     {
         Assert.Equal("2024-01-08", await EvalUnder(culture, "LEFT(CAST('2024-01-08' AS DATE), 10)"));
-        Assert.Equal("2024/01/08 00:00:00", await EvalUnder(culture, "REPLACE(CAST('2024-01-08' AS DATE), '-', '/')"));
+        Assert.Equal("2024/01/08", await EvalUnder(culture, "REPLACE(CAST('2024-01-08' AS DATE), '-', '/')"));
+        Assert.Equal("2024-01-08", await EvalUnder(culture, "CAST(CAST('2024-01-08' AS DATE) AS STRING)"));
+        Assert.Equal("2024-01-08 00:00:00", await EvalUnder(culture, "CAST(CAST('2024-01-08 00:00:00' AS DATETIME) AS STRING)"));
     }
 
     // Under tr-TR, culture casing turns 'i' into the dotted capital 'İ' and 'I' into the dotless 'ı'.
@@ -88,7 +90,7 @@ public sealed class EngineTextCultureTests
     [MemberData(nameof(Cultures))]
     public async Task SlashDatesAreMonthFirstByDefaultOnEveryPath(string culture)
     {
-        Assert.Equal(new DateTime(2024, 8, 1), await EvalUnder(culture, "CAST('08/01/2024' AS DATE)"));
+        Assert.Equal(new DateOnly(2024, 8, 1), await EvalUnder(culture, "CAST('08/01/2024' AS DATE)"));
         Assert.Equal(8m, Convert.ToDecimal(await EvalUnder(culture, "DATEPART(month, '08/01/2024')"), CultureInfo.InvariantCulture));
         Assert.Equal(8m, Convert.ToDecimal(await EvalUnder(culture, "EXTRACT(MONTH FROM '08/01/2024')"), CultureInfo.InvariantCulture));
         Assert.Equal("August", await EvalUnder(culture, "DATENAME(month, '08/01/2024')"));
@@ -101,8 +103,8 @@ public sealed class EngineTextCultureTests
         var offset = Assert.IsType<DateTimeOffset>(await EvalUnder(culture, "CAST('08/01/2024' AS DATETIMEOFFSET)"));
         Assert.Equal(new DateTime(2024, 8, 1), offset.DateTime);
         // A first number that cannot be a month reads day first rather than failing.
-        Assert.Equal(new DateTime(2024, 1, 25), await EvalUnder(culture, "CAST('25/01/2024' AS DATE)"));
-        Assert.Equal(new DateTime(2024, 8, 1), await EvalUnder(culture, "CAST('8/1/24' AS DATE)"));
+        Assert.Equal(new DateOnly(2024, 1, 25), await EvalUnder(culture, "CAST('25/01/2024' AS DATE)"));
+        Assert.Equal(new DateOnly(2024, 8, 1), await EvalUnder(culture, "CAST('8/1/24' AS DATE)"));
     }
 
     [Theory]
@@ -111,24 +113,24 @@ public sealed class EngineTextCultureTests
     {
         foreach (var set in new[] { "SET DATEFORMAT DMY;", "SET DATEFORMAT = 'dmy';", "SET DATEFORMAT dmy" })
         {
-            Assert.Equal(new DateTime(2024, 1, 8), await EvalUnder(culture, "CAST('08/01/2024' AS DATE)", set));
+            Assert.Equal(new DateOnly(2024, 1, 8), await EvalUnder(culture, "CAST('08/01/2024' AS DATE)", set));
             Assert.Equal(1m, Convert.ToDecimal(await EvalUnder(culture, "DATEPART(month, '08/01/2024')", set), CultureInfo.InvariantCulture));
             Assert.Equal(1m, Convert.ToDecimal(await EvalUnder(culture, "DATEDIFF(day, '08/01/2024', '2024-01-09')", set), CultureInfo.InvariantCulture));
             Assert.Equal(true, await EvalUnder(culture, "'08/01/2024' = CAST('2024-01-08' AS DATE)", set));
-            Assert.Equal(new DateTime(2024, 1, 25), await EvalUnder(culture, "CAST('01/25/2024' AS DATE)", set));
+            Assert.Equal(new DateOnly(2024, 1, 25), await EvalUnder(culture, "CAST('01/25/2024' AS DATE)", set));
         }
         // ISO text means the same date under either order.
-        Assert.Equal(new DateTime(2024, 8, 1), await EvalUnder(culture, "CAST('2024-08-01' AS DATE)", "SET DATEFORMAT DMY;"));
+        Assert.Equal(new DateOnly(2024, 8, 1), await EvalUnder(culture, "CAST('2024-08-01' AS DATE)", "SET DATEFORMAT DMY;"));
         // A later SET in the same script changes it back.
-        Assert.Equal(new DateTime(2024, 8, 1), await EvalUnder(culture, "CAST('08/01/2024' AS DATE)", "SET DATEFORMAT DMY; SET DATEFORMAT MDY;"));
+        Assert.Equal(new DateOnly(2024, 8, 1), await EvalUnder(culture, "CAST('08/01/2024' AS DATE)", "SET DATEFORMAT DMY; SET DATEFORMAT MDY;"));
     }
 
     [Fact]
     public async Task AppsettingsSetsTheDefaultAndSetOverridesIt()
     {
         var dmy = new System.Collections.Generic.Dictionary<string, string?> { ["Engine:DateFormat"] = "DMY" };
-        Assert.Equal(new DateTime(2024, 1, 8), await EvalUnder("en-US", "CAST('08/01/2024' AS DATE)", config: dmy));
-        Assert.Equal(new DateTime(2024, 8, 1), await EvalUnder("en-US", "CAST('08/01/2024' AS DATE)", "SET DATEFORMAT MDY;", dmy));
+        Assert.Equal(new DateOnly(2024, 1, 8), await EvalUnder("en-US", "CAST('08/01/2024' AS DATE)", config: dmy));
+        Assert.Equal(new DateOnly(2024, 8, 1), await EvalUnder("en-US", "CAST('08/01/2024' AS DATE)", "SET DATEFORMAT MDY;", dmy));
 
         var bad = new System.Collections.Generic.Dictionary<string, string?> { ["Engine:DateFormat"] = "YDM" };
         var error = await Assert.ThrowsAnyAsync<Exception>(() => EvalUnder("en-US", "1", config: bad));

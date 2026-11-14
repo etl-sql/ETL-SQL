@@ -1566,6 +1566,79 @@ public sealed class WorkstationEditorTests
         Assert.Contains("lookup.sql", RunGitCapture(temp.Root, "show", "--name-only", "--format=", "HEAD"), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task DesignerSeal_SealsLiteralUsePasswordAndPromptsWhenPasswordNeeded()
+    {
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        using var literalReq = new HttpRequestMessage(HttpMethod.Post, "/api/designer/seal");
+        literalReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        literalReq.Content = JsonContent.Create(new SealDesignerAuthoringRequest(
+            "USE PASSWORD = 'AuthorPassword1!';\nCREATE CONNECTION db AS MSSQL(SERVER='s', DATABASE='d', UID='u', PASSWORD='DbPassword1!');"));
+        var literalRes = await client.SendAsync(literalReq);
+        Assert.Equal(HttpStatusCode.OK, literalRes.StatusCode);
+        var literalBody = await literalRes.Content.ReadFromJsonAsync<SealDesignerAuthoringResponse>();
+        Assert.NotNull(literalBody);
+        Assert.True(literalBody!.Changed);
+        Assert.False(literalBody.RequiresPassword);
+        Assert.Contains("USE PASSWORD PROMPT;", literalBody.SealedScript, StringComparison.Ordinal);
+        Assert.Contains("ENC:", literalBody.SealedScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("AuthorPassword1!", literalBody.SealedScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("DbPassword1!", literalBody.SealedScript, StringComparison.Ordinal);
+
+        using var promptReq = new HttpRequestMessage(HttpMethod.Post, "/api/designer/seal");
+        promptReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        promptReq.Content = JsonContent.Create(new SealDesignerAuthoringRequest(
+            "CREATE CONNECTION db AS MSSQL(SERVER='s', DATABASE='d', UID='u', PASSWORD='DbPassword1!');"));
+        var promptRes = await client.SendAsync(promptReq);
+        Assert.Equal(HttpStatusCode.OK, promptRes.StatusCode);
+        var promptBody = await promptRes.Content.ReadFromJsonAsync<SealDesignerAuthoringResponse>();
+        Assert.NotNull(promptBody);
+        Assert.True(promptBody!.RequiresPassword);
+        Assert.False(promptBody.Changed);
+    }
+
+    [Fact]
+    public async Task PutFiles_SealsScriptWithUsePasswordAndRejectsMissingSealPassword()
+    {
+        using var temp = new TempWorkspace();
+        var filePath = Path.Combine(temp.Root, "pipeline.etlsql");
+        await File.WriteAllTextAsync(filePath, "SELECT 1;");
+
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+
+        const string unsealedWithoutPass = "CREATE CONNECTION db AS MSSQL(SERVER='s', DATABASE='d', UID='u', PASSWORD='DbPassword1!');";
+        using var missingPassReq = new HttpRequestMessage(HttpMethod.Put, "/api/files");
+        missingPassReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        missingPassReq.Content = JsonContent.Create(new SaveFileRequest("pipeline.etlsql", unsealedWithoutPass));
+        var missingPassRes = await client.SendAsync(missingPassReq);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, missingPassRes.StatusCode);
+        Assert.Equal("SELECT 1;", await File.ReadAllTextAsync(filePath));
+
+        using var withLiteralReq = new HttpRequestMessage(HttpMethod.Put, "/api/files");
+        withLiteralReq.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        withLiteralReq.Content = JsonContent.Create(new SaveFileRequest(
+            "pipeline.etlsql",
+            "USE PASSWORD = 'AuthorPassword1!';\n" + unsealedWithoutPass));
+        var withLiteralRes = await client.SendAsync(withLiteralReq);
+        Assert.Equal(HttpStatusCode.OK, withLiteralRes.StatusCode);
+
+        var written = await File.ReadAllTextAsync(filePath);
+        Assert.Contains("USE PASSWORD PROMPT;", written, StringComparison.Ordinal);
+        Assert.Contains("ENC:", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("AuthorPassword1!", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("DbPassword1!", written, StringComparison.Ordinal);
+    }
+
     private static void RunGit(string workingDirectory, params string[] arguments)
     {
         _ = RunGitCapture(workingDirectory, arguments);

@@ -8,14 +8,14 @@ signature checked while it is decrypted.
 
 ```sql
 -- Files
-ENCRYPT FILE '<source>' TO '<destination>'
+ENCRYPT FILE '<source>' [TO '<destination>']
     { PASSWORD '<passphrase>'
     | KEYFILE '<rsa_public_key.pem>'
     | PGP_KEY '<recipient_public_key.asc>'
         [SIGNING_KEY '<your_private_key.asc>' [SIGNING_PASSWORD '<key_passphrase>']] }
     [WITH (OVERWRITE = ON | OFF, DELETE_SOURCE = ON | OFF)];
 
-DECRYPT FILE '<source>' TO '<destination>'
+DECRYPT FILE '<source>' [TO '<destination>']
     { PASSWORD '<passphrase>'
     | KEYFILE '<rsa_private_key.pem>' [PASSWORD '<key_passphrase>']
     | PGP_KEY '<your_private_key.asc>' [PASSWORD '<key_passphrase>']
@@ -42,7 +42,11 @@ DECRYPT DIRECTORY '<source_dir>' TO '<destination_dir>' PASSWORD '<passphrase>' 
 - [CREATE PGP_KEY_PAIR](create-pgp-key-pair.md) writes `public.asc` and `private.asc` into a folder.
   [CREATE SSH_KEY_PAIR](create-ssh-key-pair.md) with `ALGORITHM = 'RSA'` writes `id_rsa` and
   `id_rsa.pub`. An ECDSA key cannot be used with `KEYFILE`.
-- `TO` is required. Without it nothing is written.
+- `TO` is optional on `ENCRYPT FILE` and `DECRYPT FILE` (and never encrypts in place). When omitted
+  on `ENCRYPT FILE`, it writes next to the source with `.pgp` appended for `PGP_KEY`, or `.enc`
+  appended for `PASSWORD` and `KEYFILE`. When omitted on `DECRYPT FILE`, it removes a `.pgp` or
+  `.enc` suffix and errors on any other file name rather than guessing. Existing destinations follow
+  `OVERWRITE`.
 - The source file is left in place unless `DELETE_SOURCE = ON` (see the vendor-drop example).
 - `ENCRYPT DIRECTORY` encrypts every file, subfolders included, and writes each one as `<name>.enc`
   under the destination with the same folder layout. `DECRYPT DIRECTORY` decrypts only `.enc` files
@@ -152,6 +156,8 @@ DECRYPT DIRECTORY 'vault/2026-11/' TO 'restore/2026-11/' PASSWORD 'archive-passp
 
 ## Errors
 
+- **`DECRYPT FILE without TO requires a '.pgp' or '.enc' file extension on '<source>', or specify TO '<destination>'.`**
+  — the input file does not end in `.pgp` or `.enc`; pass an explicit `TO` path.
 - **`ENCRYPT FILE requires a PASSWORD, KEYFILE or PGP_KEY clause.`** — no method was given. Add one;
   the master password is not a fallback.
 - **`Destination file already exists and OVERWRITE is OFF: <path>`** — remove the file or set

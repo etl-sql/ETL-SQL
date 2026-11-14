@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import { markPolicySave } from './saveGuard';
 
 function sameFile(a: string, b: string): boolean {
     return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
@@ -41,4 +42,42 @@ export async function writeScriptThroughEditor(scriptPath: string, script: strin
     if (!await document.save()) {
         throw new Error('The report could not be saved.');
     }
+}
+
+/**
+ * Replaces a sealed script on disk and reverts the file-backed editor so VS Code discards the
+ * undo stack (preventing Ctrl+Z from restoring plaintext secrets or literal `USE PASSWORD` values).
+ * Falls back to an in-buffer edit only for untitled documents that have no disk backing yet.
+ */
+export async function replaceDocumentWithoutUndoHistory(
+    editor: vscode.TextEditor,
+    sealedText: string
+): Promise<'unchanged' | 'reverted' | 'saved' | 'unsaved' | 'failed'> {
+    const document = editor.document;
+    const current = document.getText();
+    if (sealedText === current) {
+        return 'unchanged';
+    }
+
+    const documentKey = document.uri.toString();
+    markPolicySave(documentKey);
+
+    if (!document.isUntitled && document.uri.scheme === 'file') {
+        await vscode.workspace.fs.writeFile(document.uri, Buffer.from(sealedText, 'utf8'));
+        await vscode.window.showTextDocument(document, { preview: false, preserveFocus: false });
+        await vscode.commands.executeCommand('workbench.action.files.revert');
+        return 'reverted';
+    }
+
+    const fullRange = new vscode.Range(
+        document.positionAt(0),
+        document.positionAt(current.length)
+    );
+    const applied = await editor.edit(editBuilder => {
+        editBuilder.replace(fullRange, sealedText);
+    });
+    if (!applied) {
+        return 'failed';
+    }
+    return (await document.save()) ? 'saved' : 'unsaved';
 }

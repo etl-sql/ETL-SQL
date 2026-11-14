@@ -17,12 +17,16 @@ Aliases: `FTP_CONN`
 | `PORT` | Control port (default: `21`; implicit FTPS servers usually listen on `990`) | No |
 | `USER` | Login username | No |
 | `PASSWORD` | Login password | No |
+| `TIMEOUT_SECONDS` | Control and data connection timeout in seconds. Default `30`. Must be a positive integer. | No |
 | `USE_SSL` | `OFF` (default), `EXPLICIT` or `IMPLICIT`. `ON` and `TRUE` mean `EXPLICIT`. Any other value is an error and the connection does not open. | No |
 | `PASSIVE` | `ON` (default) or `OFF` for active mode. Any other value is an error. | No |
+| `CERT_FINGERPRINT` | Optional pinned FTPS TLS certificate SHA-256 (or `SHA1:<hex>`) fingerprint. When set, the certificate must match even if `ALLOW_UNTRUSTED_CERT` is enabled. | No |
+| `ALLOW_UNTRUSTED_CERT` | `OFF` (default) or `ON`. By default FTPS validates the TLS certificate against the system trust store; set `ON` only for explicit opt-out on unpinned self-signed endpoints. | No |
 
 `EXPLICIT` connects in plain text and upgrades with `AUTH TLS` before logging in, which is what most
 FTPS servers expect on port 21. `IMPLICIT` starts TLS immediately and is for older servers on a
-dedicated port, usually 990.
+dedicated port, usually 990. When `USE_SSL` is enabled, FTPS enforces strict TLS certificate validation
+unless a matching `CERT_FINGERPRINT` pin is supplied or `ALLOW_UNTRUSTED_CERT='ON'` is explicitly configured.
 
 ## Authentication
 

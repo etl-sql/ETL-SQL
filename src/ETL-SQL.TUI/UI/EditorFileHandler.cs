@@ -18,6 +18,7 @@ namespace ETL_SQL.TUI.UI
 
         public async Task<(string[] lines, string path)> LoadAsync(string filePath, Func<string, string, bool, Task<string?>> passwordPrompt)
         {
+            _ = passwordPrompt;
             if (!string.IsNullOrEmpty(filePath)) filePath = filePath.Trim('"', '\'', ' ');
 
             if (string.IsNullOrEmpty(filePath) || filePath == "untitled.etlsql")
@@ -32,33 +33,29 @@ namespace ETL_SQL.TUI.UI
             }
 
             var lines = await Task.Run(() => _fs.ReadAllLines(filePath));
-            var text = string.Join("\n", lines);
-
-            if (text.Contains("ENC:"))
-            {
-                string password = _security.MasterPassword ?? "";
-                if (string.IsNullOrEmpty(password))
-                {
-                    password = await passwordPrompt("Master Password (to decrypt connection strings)", "", true) ?? "";
-                    _security.MasterPassword = password;
-                }
-
-                if (!string.IsNullOrEmpty(password))
-                {
-                    text = _security.DecryptScript(text, password);
-                    return (text.Split('\n'), filePath);
-                }
-            }
-
             return (lines, filePath);
         }
 
         public async Task<bool> SaveAsync(string filePath, string text, Func<string, string, bool, Task<string?>> passwordPrompt)
         {
+            var (success, _) = await SaveAndReturnSealedAsync(filePath, text, passwordPrompt);
+            return success;
+        }
+
+        /// <summary>
+        /// Applies save-time secret sealing and writes <paramref name="filePath"/>, returning
+        /// both the write outcome and the sealed script text so callers can sync their buffer
+        /// and clear undo history.
+        /// </summary>
+        public async Task<(bool success, string sealedText)> SaveAndReturnSealedAsync(
+            string filePath,
+            string text,
+            Func<string, string, bool, Task<string?>> passwordPrompt)
+        {
             string password = "";
             if (_security.RequiresSavePassword(text))
             {
-                password = _security.MasterPassword ?? _security.ExtractLiteralUsePassword(text) ?? "";
+                password = _security.ExtractLiteralUsePassword(text) ?? _security.MasterPassword ?? "";
                 if (string.IsNullOrEmpty(password))
                 {
                     password = await passwordPrompt("Master Password (to encrypt script)", "", true) ?? "";
@@ -66,16 +63,16 @@ namespace ETL_SQL.TUI.UI
                 }
             }
 
-            text = _security.SecureScriptForSave(text, password);
+            string secured = _security.SecureScriptForSave(text, password);
 
             try
             {
-                await Task.Run(() => _fs.WriteAllText(filePath, text));
-                return true;
+                await Task.Run(() => _fs.WriteAllText(filePath, secured));
+                return (true, secured);
             }
             catch
             {
-                return false;
+                return (false, text);
             }
         }
     }

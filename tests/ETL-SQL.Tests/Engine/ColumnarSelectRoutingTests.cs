@@ -662,21 +662,21 @@ public sealed class ColumnarSelectRoutingTests
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         var schema = new ColumnBatchSchema(new[]
         {
-            new ColumnBatchField("EventDate", typeof(DateTime), "DATE"),
+            new ColumnBatchField("EventDate", typeof(DateOnly), "DATE"),
             new ColumnBatchField("Amount", typeof(int), "INT")
         });
-        var firstDate = new DateTime(2026, 1, 1);
-        var secondDate = new DateTime(2026, 1, 2);
+        var firstDate = new DateOnly(2026, 1, 1);
+        var secondDate = new DateOnly(2026, 1, 2);
         await using var source = new NativeOnlyDataSource(new[]
         {
             new ColumnBatch(schema, new IColumnBuffer[]
             {
-                new ColumnBuffer<DateTime>(new[] { firstDate, default, secondDate }, 3, new byte[] { 0b0000_0010 }),
+                new ColumnBuffer<DateOnly>(new[] { firstDate, default, secondDate }, 3, new byte[] { 0b0000_0010 }),
                 new ColumnBuffer<int>(new[] { 10, 5, 7 }, 3)
             }, 3),
             new ColumnBatch(schema, new IColumnBuffer[]
             {
-                new ColumnBuffer<DateTime>(new[] { firstDate, default }, 2, new byte[] { 0b0000_0010 }),
+                new ColumnBuffer<DateOnly>(new[] { firstDate, default }, 2, new byte[] { 0b0000_0010 }),
                 new ColumnBuffer<int>(new[] { 20, 3 }, 2)
             }, 2)
         }, throwOnRowRead: true);

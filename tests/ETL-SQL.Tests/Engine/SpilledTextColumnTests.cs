@@ -56,6 +56,6 @@ public sealed class SpilledTextColumnTests
         var row = Assert.Single(evaluator.LastResult!.Rows);
         Assert.Equal(20100m, Convert.ToDecimal(row["total"]));
         Assert.Equal(20150m, Convert.ToDecimal(row["amounts"]));
-        Assert.Equal(new DateTime(2026, 1, 1), Convert.ToDateTime(row["first_day"]));
+        Assert.Equal(new DateOnly(2026, 1, 1), row["first_day"]);
     }
 }

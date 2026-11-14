@@ -315,18 +315,22 @@ namespace ETL_SQL.Connectors.Parquet
                     decimal => typeof(decimal),
                     double or float => typeof(double),
                     bool => typeof(bool),
+                    DateOnly => typeof(DateOnly),
                     DateTime => typeof(DateTime),
                     _ => typeof(string)
                 };
                 if (inferred is null || inferred == kind) { inferred = kind; continue; }
                 if (IsNumeric(inferred) && IsNumeric(kind))
                     inferred = inferred == typeof(double) || kind == typeof(double) ? typeof(double) : typeof(decimal);
+                else if (IsDateOrDateTime(inferred) && IsDateOrDateTime(kind))
+                    inferred = typeof(DateTime);
                 else
                     return typeof(string);
             }
             return inferred ?? typeof(string);
 
             static bool IsNumeric(Type t) => t == typeof(long) || t == typeof(decimal) || t == typeof(double);
+            static bool IsDateOrDateTime(Type t) => t == typeof(DateOnly) || t == typeof(DateTime);
         }
 
         private static DataField CreateField(string name, Type type) =>
@@ -334,11 +338,12 @@ namespace ETL_SQL.Connectors.Parquet
             : type == typeof(decimal) ? new DataField<decimal>(name, nullable: true)
             : type == typeof(double) ? new DataField<double>(name, nullable: true)
             : type == typeof(bool) ? new DataField<bool>(name, nullable: true)
+            : type == typeof(DateOnly) ? new DataField<DateOnly>(name, nullable: true)
             : type == typeof(DateTime) ? new DataField<DateTime>(name, nullable: true)
             : new DataField<string>(name, nullable: true);
 
         private static readonly HashSet<Type> AppendableTypes =
-            [typeof(long), typeof(decimal), typeof(double), typeof(bool), typeof(DateTime), typeof(string)];
+            [typeof(long), typeof(decimal), typeof(double), typeof(bool), typeof(DateOnly), typeof(DateTime), typeof(string)];
 
         /// <summary>
         /// The existing file's schema, when this connector can add row groups to it: flat nullable
@@ -455,6 +460,12 @@ namespace ETL_SQL.Connectors.Parquet
                 await rgReader.ReadAsync(field, buf.AsMemory(), null, cancellationToken);
                 return Array.ConvertAll(buf, v => (object?)v);
             }
+            if (clrType == typeof(DateOnly) || clrType == typeof(DateOnly?))
+            {
+                var buf = new DateOnly[rowCount];
+                await rgReader.ReadAsync(field, buf.AsMemory(), null, cancellationToken);
+                return Array.ConvertAll(buf, v => (object?)v);
+            }
             if (clrType == typeof(DateTime) || clrType == typeof(DateTime?))
             {
                 var buf = new DateTime[rowCount];
@@ -498,18 +509,32 @@ namespace ETL_SQL.Connectors.Parquet
                 for (int r = 0; r < count; r++) { cancellationToken.ThrowIfCancellationRequested(); var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToBoolean(v) : (bool?)null; }
                 await rgWriter.WriteAsync(field, new ReadOnlyMemory<bool?>(buf), null, null, cancellationToken);
             }
+            else if (clrType == typeof(DateOnly))
+            {
+                var buf = new DateOnly?[count];
+                for (int r = 0; r < count; r++) { cancellationToken.ThrowIfCancellationRequested(); var v = rows[r][field.Name]; buf[r] = v != null ? (v is DateOnly d ? d : DateOnly.FromDateTime(CoerceDateTime(v))) : (DateOnly?)null; }
+                await rgWriter.WriteAsync(field, new ReadOnlyMemory<DateOnly?>(buf), null, null, cancellationToken);
+            }
             else if (clrType == typeof(DateTime))
             {
                 var buf = new DateTime?[count];
-                for (int r = 0; r < count; r++) { cancellationToken.ThrowIfCancellationRequested(); var v = rows[r][field.Name]; buf[r] = v != null ? Convert.ToDateTime(v) : (DateTime?)null; }
+                for (int r = 0; r < count; r++) { cancellationToken.ThrowIfCancellationRequested(); var v = rows[r][field.Name]; buf[r] = v != null ? CoerceDateTime(v) : (DateTime?)null; }
                 await rgWriter.WriteAsync(field, new ReadOnlyMemory<DateTime?>(buf), null, null, cancellationToken);
             }
             else
             {
-                var buf = rows.Select(r => r[field.Name]?.ToString()).ToList();
+                var buf = rows.Select(r => ETL_SQL.Core.Data.TypeConverter.ToInvariantText(r[field.Name])).ToList();
                 await rgWriter.WriteAsync(field, buf, null);
             }
         }
+
+        private static DateTime CoerceDateTime(object value) => value switch
+        {
+            DateTime dt => dt,
+            DateOnly d => d.ToDateTime(TimeOnly.MinValue),
+            DateTimeOffset dto => dto.DateTime,
+            _ => Convert.ToDateTime(value, System.Globalization.CultureInfo.InvariantCulture)
+        };
 
         public Task<IEnumerable<string>> GetColumnsAsync(string tableName) =>
             GetColumnsAsync(tableName, CancellationToken.None);

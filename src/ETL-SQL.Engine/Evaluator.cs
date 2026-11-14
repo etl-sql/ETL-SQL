@@ -179,6 +179,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         set { _options.RegexMatchTimeoutMs = value; _securityService.RegexMatchTimeout = TimeSpan.FromMilliseconds(value); }
     }
     public string? CurrentScriptPath { get; set; }
+    /// <summary>When true (default), file-backed scripts are sealed via <see cref="SecurityService.SecureScriptForSave"/> on first run.</summary>
+    public bool SealScriptOnFirstRun { get; set; } = true;
     public string? CurrentSectionLabel { get; set; }
     public string WorkingDirectory { get; set; } = Directory.GetCurrentDirectory();
     public int MaxFileOperations
@@ -1132,6 +1134,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
                 throw new ExecutionException($"Syntax error: {firstError.Message} at {firstError.Line}:{firstError.Column}");
             }
 
+            await SealCurrentScriptIfNeededAsync(cancellationToken);
+
             ExecutionNode? scriptNode = null;
             if (Telemetry.TelemetryEnabled)
             {
@@ -1303,6 +1307,83 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     {
         LastResult?.Clear();
         LastResult = null;
+    }
+
+    /// <summary>
+    /// Rewrites a file-backed script on disk via <see cref="SecurityService.SecureScriptForSave"/>
+    /// when <c>ALLOW_PLAINTEXT_SECRETS</c> is OFF, so secrets and literal <c>USE PASSWORD</c>
+    /// statements are sealed on first run instead of lingering in plaintext on disk.
+    /// </summary>
+    public async Task<bool> SealCurrentScriptIfNeededAsync(CancellationToken cancellationToken = default)
+    {
+        if (!SealScriptOnFirstRun || IsWhatIf || string.IsNullOrWhiteSpace(CurrentScriptPath))
+            return false;
+
+        if (BundleUri.TryParse(CurrentScriptPath, out _))
+            return false;
+
+        var scriptPath = CurrentScriptPath;
+        if (!File.Exists(scriptPath))
+            return false;
+
+        if ((File.GetAttributes(scriptPath) & FileAttributes.ReadOnly) != 0)
+            return false;
+
+        var source = await File.ReadAllTextAsync(scriptPath, cancellationToken);
+        if (string.IsNullOrEmpty(source))
+            return false;
+
+        bool previousDefaultAllow = _securityService.DefaultAllowPlaintextSecrets;
+        if (AllowPlaintextSecrets && !previousDefaultAllow)
+            _securityService.DefaultAllowPlaintextSecrets = true;
+
+        try
+        {
+            if (_securityService.AllowsPlaintextSecrets(source))
+                return false;
+
+            string? literalPassword = _securityService.ExtractLiteralUsePassword(source);
+            string? sealPassword = !string.IsNullOrEmpty(ScriptPassword)
+                ? ScriptPassword
+                : !string.IsNullOrEmpty(MasterPassword)
+                    ? MasterPassword
+                    : literalPassword;
+
+            if (string.IsNullOrEmpty(sealPassword) && _securityService.RequiresSavePassword(source))
+            {
+                var promptProvider = _serviceProvider?.GetService<IPasswordPromptProvider>()
+                    ?? (!Console.IsInputRedirected ? ConsolePasswordPromptProvider.Instance : null);
+                if (promptProvider != null)
+                {
+                    sealPassword = promptProvider.ReadPassword("Master password (to seal secrets in script): ");
+                    if (!string.IsNullOrEmpty(sealPassword))
+                    {
+                        MasterPassword = sealPassword;
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(sealPassword))
+                SecretRedactor.RegisterRuntimeSecret(sealPassword);
+            if (!string.IsNullOrEmpty(literalPassword))
+                SecretRedactor.RegisterRuntimeSecret(literalPassword);
+
+            string sealedSource = _securityService.SecureScriptForSave(source, sealPassword ?? "");
+            if (string.Equals(sealedSource, source, StringComparison.Ordinal))
+                return false;
+
+            await File.WriteAllTextAsync(
+                scriptPath,
+                sealedSource,
+                new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+                cancellationToken);
+            Log($"Sealed plaintext secrets in '{Path.GetFileName(scriptPath)}'.");
+            return true;
+        }
+        finally
+        {
+            _securityService.DefaultAllowPlaintextSecrets = previousDefaultAllow;
+        }
     }
 
     private async Task CommitPendingJobStateAsync()

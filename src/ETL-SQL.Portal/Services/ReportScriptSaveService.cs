@@ -13,7 +13,8 @@ public enum ReportScriptSaveStatus
     NotFound,
     Forbidden,
     MissingVersion,
-    Conflict
+    Conflict,
+    SealPasswordRequired
 }
 
 public sealed record ReportScriptSaveResult(
@@ -21,7 +22,8 @@ public sealed record ReportScriptSaveResult(
     long? Version = null,
     string? SourceRevision = null,
     Report? Current = null,
-    string? Error = null);
+    string? Error = null,
+    string? ScriptText = null);
 
 public sealed class ReportScriptSaveService(
     PortalDbContext db,
@@ -30,7 +32,8 @@ public sealed class ReportScriptSaveService(
     PortalConfig portalConfig,
     PortalScriptSourceControlService sourceControl,
     AuditService audit,
-    PortalTenantCatalogScope? catalogScope = null)
+    PortalTenantCatalogScope? catalogScope = null,
+    ETL_SQL.Services.SecurityService? securityService = null)
 {
     // Saving is an authoring path: it serves pipelines as well as reports.
     private IQueryable<Report> Reports => catalogScope?.Documents ?? db.Reports;
@@ -42,7 +45,8 @@ public sealed class ReportScriptSaveService(
         ClaimsPrincipal user,
         int currentUserId,
         string? baseRevision = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? sealPassword = null)
     {
         var report = await Reports.Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted, ct);
@@ -55,8 +59,6 @@ public sealed class ReportScriptSaveService(
 
         if (expectedVersion is null)
             return new ReportScriptSaveResult(ReportScriptSaveStatus.MissingVersion);
-        if (!OptimisticConcurrency.Prepare(db, report, expectedVersion.Value))
-            return new ReportScriptSaveResult(ReportScriptSaveStatus.Conflict, Current: report);
 
         if (portalConfig.SharedTenancy.Enabled && catalogScope is null)
             throw new InvalidOperationException("Shared Studio saves require a tenant-scoped catalog.");
@@ -66,6 +68,17 @@ public sealed class ReportScriptSaveService(
             : PortalPathGuard.ToScriptKey(portalConfig, catalogScope.TenantId, report.ScriptPath);
         if (scriptKey is null)
             return new ReportScriptSaveResult(ReportScriptSaveStatus.Forbidden);
+
+        if (securityService is not null)
+        {
+            var sealOutcome = securityService.TrySealScriptForSave(scriptText, sealPassword);
+            if (sealOutcome.RequiresPassword)
+                return new ReportScriptSaveResult(ReportScriptSaveStatus.SealPasswordRequired);
+            scriptText = sealOutcome.ScriptText;
+        }
+
+        if (!OptimisticConcurrency.Prepare(db, report, expectedVersion.Value))
+            return new ReportScriptSaveResult(ReportScriptSaveStatus.Conflict, Current: report);
 
         sourceControl.ValidateScriptTextForCommit(scriptText);
         var currentRevision = await sourceControl.GetCurrentRevisionAsync(ct);
@@ -111,7 +124,7 @@ public sealed class ReportScriptSaveService(
             throw;
         }
 
-        return new ReportScriptSaveResult(ReportScriptSaveStatus.Saved, report.Version, currentRevision);
+        return new ReportScriptSaveResult(ReportScriptSaveStatus.Saved, report.Version, currentRevision, ScriptText: scriptText);
     }
 
     private async Task RestoreScriptAsync(string scriptKey, byte[]? backup, bool hadOriginal, CancellationToken ct)

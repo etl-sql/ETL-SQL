@@ -15,7 +15,7 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("DATENAME", DateName, "DATENAME(datepart, date): Returns a string representing the specified date part (e.g. 'January').");
             registry.RegisterWithHelp("DATEPART", DatePart, "DATEPART(datepart, date): Returns an integer representing the specified date part.");
             registry.RegisterWithHelp("DATEDIFF", DateDiff, "DATEDIFF(datepart, start, end): Returns the count of specified datepart boundaries crossed between two dates.");
-            registry.RegisterWithHelp("ISDATE", (args, ctx) => EvaluationUtils.SafeTryParseDate(args[0]?.ToString() ?? "", out _) ? 1 : 0, "ISDATE(expr): Returns 1 if the expression is a valid date, 0 otherwise.");
+            registry.RegisterWithHelp("ISDATE", (args, ctx) => args[0] is DateOnly or DateTime || EvaluationUtils.SafeTryParseDate(TypeConverter.ToInvariantText(args[0]) ?? "", out _) ? 1 : 0, "ISDATE(expr): Returns 1 if the expression is a valid date, 0 otherwise.");
             registry.RegisterWithHelp("EOMONTH", EoMonth, "EOMONTH(date[, months_to_add]): Returns the last day of the month containing the date.");
 
             registry.RegisterWithHelp("YEAR", (args, ctx) => args[0] == null ? null : (EvaluationUtils.TryToDateTime(args[0], out var dt) ? (decimal)dt.Year : null), "YEAR(date): Returns the year part of a date.");
@@ -26,7 +26,7 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("SYSDATE", (args, ctx) => DateTime.Now, "SYSDATE(): Returns the current system date and time (Oracle style).");
             registry.RegisterWithHelp("NOW", (args, ctx) => DateTime.Now, "NOW(): Alias for GETDATE.");
             registry.RegisterWithHelp("CURRENT_TIMESTAMP", (args, ctx) => DateTime.Now, "CURRENT_TIMESTAMP: Returns the current system date and time.");
-            registry.RegisterWithHelp("CURRENT_DATE", (args, ctx) => DateTime.Today, "CURRENT_DATE: Returns the current system date.");
+            registry.RegisterWithHelp("CURRENT_DATE", (args, ctx) => DateOnly.FromDateTime(DateTime.Today), "CURRENT_DATE: Returns the current system date.");
             registry.RegisterWithHelp("CURRENT_TIME", (args, ctx) => DateTime.Now.TimeOfDay, "CURRENT_TIME: Returns the current system time.");
 
             registry.RegisterWithHelp("DATETIMEFROMPARTS", DateTimeFromParts, "DATETIMEFROMPARTS(y, m, d, h, mi, s, ms): Constructs a DATETIME from parts.");
@@ -34,7 +34,7 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("DATETIMEOFFSETSFROMPARTS", DateTimeOffsetsFromParts, "DATETIMEOFFSETSFROMPARTS(...): Constructs a DATETIMEOFFSET from parts.");
 
             registry.RegisterWithHelp("TRUNC", Trunc, "TRUNC(val[, part]): Truncates a date to the specified part (default 'DAY') or a number to decimals.");
-            registry.RegisterWithHelp("TO_DATE", (args, ctx) => args.Count >= 1 ? EvaluationUtils.CastToType(args[0], "DATETIME") : null, "TO_DATE(str[, fmt]): Converts a string to a date.");
+            registry.RegisterWithHelp("TO_DATE", (args, ctx) => args.Count >= 1 ? EvaluationUtils.CastToType(args[0], "DATE") : null, "TO_DATE(str[, fmt]): Converts a string to a date.");
             registry.RegisterWithHelp("RELDATE", (args, ctx) => args.Count == 0 ? null : RelDateResolver.ResolveValue(args[0]?.ToString() ?? "", ctx.WeekStartDay), "RELDATE(expr): Resolves a relative date expression (e.g. 'D-7', 'M-1', 'W-1').");
             registry.RegisterWithHelp("DATEADD", DateAdd, "DATEADD(datepart, number, date): Adds a value to a date.");
             registry.RegisterWithHelp("TO_TIMESTAMP", ToTimestamp, "TO_TIMESTAMP(seconds): Converts Unix epoch seconds to a DATETIME.");
@@ -121,7 +121,7 @@ namespace ETL_SQL.Engine.Functions
             var monthsToAdd = args.Count >= 2 && int.TryParse(args[1]?.ToString(), out var m) ? m : 0;
             var target = dt.AddMonths(monthsToAdd);
             var firstOfNextMonth = new DateTime(target.Year, target.Month, 1).AddMonths(1);
-            return firstOfNextMonth.AddDays(-1);
+            return PreserveDateType(args[0], firstOfNextMonth.AddDays(-1), dateGranular: true);
         }
 
         private static object? DateTimeFromParts(List<object?> args, IExecutionContext ctx)
@@ -156,18 +156,7 @@ namespace ETL_SQL.Engine.Functions
             if (EvaluationUtils.TryToDateTime(args[0], out var dt))
             {
                 string part = args.Count >= 2 ? args[1]?.ToString()?.ToUpperInvariant() ?? "DAY" : "DAY";
-                return part switch
-                {
-                    "YEAR" or "YYYY" or "YY" => new DateTime(dt.Year, 1, 1),
-                    "QUARTER" or "QQ" or "Q" => new DateTime(dt.Year, ((dt.Month - 1) / 3) * 3 + 1, 1),
-                    "MONTH" or "MM" or "M" => new DateTime(dt.Year, dt.Month, 1),
-                    "WEEK" or "WW" or "WK" => GetStartOfWeek(dt),
-                    "DAY" or "DD" or "D" => dt.Date,
-                    "HOUR" or "HH" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, 0, 0),
-                    "MINUTE" or "MI" or "N" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0),
-                    "SECOND" or "SS" or "S" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second),
-                    _ => dt.Date
-                };
+                return TruncateDate(args[0], dt, part);
             }
 
             return null;
@@ -180,7 +169,7 @@ namespace ETL_SQL.Engine.Functions
             if (!double.TryParse(args[1]?.ToString(), out var val)) return null;
             if (!EvaluationUtils.TryToDateTime(args[2], out var dt)) return null;
 
-            return part switch
+            DateTime result = part switch
             {
                 "YEAR" or "YY" or "YYYY" => dt.AddYears((int)val),
                 "QUARTER" or "QQ" or "Q" => dt.AddMonths((int)val * 3),
@@ -193,6 +182,14 @@ namespace ETL_SQL.Engine.Functions
                 "MILLISECOND" or "MS" => dt.AddMilliseconds(val),
                 _ => dt
             };
+            bool dateGranular = part switch
+            {
+                "YEAR" or "YY" or "YYYY" or "QUARTER" or "QQ" or "Q" or "MONTH" or "MM" or "M" => true,
+                "WEEK" or "WK" or "WW" or "DAY" or "DD" or "D" => val == Math.Truncate(val),
+                "HOUR" or "HH" or "MINUTE" or "MI" or "N" or "SECOND" or "SS" or "S" or "MILLISECOND" or "MS" => false,
+                _ => true
+            };
+            return PreserveDateType(args[2], result, dateGranular);
         }
 
         private static object? ToTimestamp(List<object?> args, IExecutionContext ctx)
@@ -220,19 +217,7 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 2 || args[1] == null) return null;
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "DAY";
             if (!EvaluationUtils.TryToDateTime(args[1], out var dt)) return null;
-
-            return part switch
-            {
-                "YEAR" or "YYYY" or "YY" => new DateTime(dt.Year, 1, 1),
-                "QUARTER" or "QQ" or "Q" => new DateTime(dt.Year, ((dt.Month - 1) / 3) * 3 + 1, 1),
-                "MONTH" or "MM" or "M" => new DateTime(dt.Year, dt.Month, 1),
-                "WEEK" or "WW" or "WK" => GetStartOfWeek(dt),
-                "DAY" or "DD" or "D" => dt.Date,
-                "HOUR" or "HH" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, 0, 0),
-                "MINUTE" or "MI" or "N" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0),
-                "SECOND" or "SS" or "S" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second),
-                _ => dt.Date
-            };
+            return TruncateDate(args[1], dt, part);
         }
 
         private static object? SamePeriodLastYear(List<object?> args, IExecutionContext ctx)
@@ -241,7 +226,7 @@ namespace ETL_SQL.Engine.Functions
             if (!EvaluationUtils.TryToDateTime(args[0], out var dt)) return null;
             try
             {
-                return dt.AddYears(-1);
+                return PreserveDateType(args[0], dt.AddYears(-1), dateGranular: true);
             }
             catch
             {
@@ -253,7 +238,7 @@ namespace ETL_SQL.Engine.Functions
         {
             if (args.Count < 1 || args[0] == null) return null;
             if (!EvaluationUtils.TryToDateTime(args[0], out var dt)) return null;
-            return new DateTime(dt.Year, dt.Month, 1);
+            return PreserveDateType(args[0], new DateTime(dt.Year, dt.Month, 1), dateGranular: true);
         }
 
         private static object? StartOfQuarter(List<object?> args, IExecutionContext ctx)
@@ -261,7 +246,7 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 1 || args[0] == null) return null;
             if (!EvaluationUtils.TryToDateTime(args[0], out var dt)) return null;
             int qMonth = ((dt.Month - 1) / 3) * 3 + 1;
-            return new DateTime(dt.Year, qMonth, 1);
+            return PreserveDateType(args[0], new DateTime(dt.Year, qMonth, 1), dateGranular: true);
         }
 
         private static object? EndOfQuarter(List<object?> args, IExecutionContext ctx)
@@ -270,21 +255,42 @@ namespace ETL_SQL.Engine.Functions
             if (!EvaluationUtils.TryToDateTime(args[0], out var dt)) return null;
             int qEndMonth = ((dt.Month - 1) / 3) * 3 + 3;
             int daysInMonth = DateTime.DaysInMonth(dt.Year, qEndMonth);
-            return new DateTime(dt.Year, qEndMonth, daysInMonth);
+            return PreserveDateType(args[0], new DateTime(dt.Year, qEndMonth, daysInMonth), dateGranular: true);
         }
 
         private static object? StartOfWeekFn(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 1 || args[0] == null) return null;
             if (!EvaluationUtils.TryToDateTime(args[0], out var dt)) return null;
-            return GetStartOfWeek(dt);
+            return PreserveDateType(args[0], GetStartOfWeek(dt), dateGranular: true);
         }
 
         private static object? EndOfWeekFn(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 1 || args[0] == null) return null;
             if (!EvaluationUtils.TryToDateTime(args[0], out var dt)) return null;
-            return GetStartOfWeek(dt).AddDays(6);
+            return PreserveDateType(args[0], GetStartOfWeek(dt).AddDays(6), dateGranular: true);
         }
+
+        private static object TruncateDate(object? source, DateTime dt, string part)
+        {
+            DateTime truncated = part switch
+            {
+                "YEAR" or "YYYY" or "YY" => new DateTime(dt.Year, 1, 1),
+                "QUARTER" or "QQ" or "Q" => new DateTime(dt.Year, ((dt.Month - 1) / 3) * 3 + 1, 1),
+                "MONTH" or "MM" or "M" => new DateTime(dt.Year, dt.Month, 1),
+                "WEEK" or "WW" or "WK" => GetStartOfWeek(dt),
+                "DAY" or "DD" or "D" => dt.Date,
+                "HOUR" or "HH" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, 0, 0),
+                "MINUTE" or "MI" or "N" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0),
+                "SECOND" or "SS" or "S" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second),
+                _ => dt.Date
+            };
+            bool dateGranular = part is not ("HOUR" or "HH" or "MINUTE" or "MI" or "N" or "SECOND" or "SS" or "S");
+            return PreserveDateType(source, truncated, dateGranular);
+        }
+
+        private static object PreserveDateType(object? source, DateTime result, bool dateGranular)
+            => source is DateOnly && dateGranular ? DateOnly.FromDateTime(result) : result;
     }
 }

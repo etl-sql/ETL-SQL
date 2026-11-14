@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Security;
+using System.Security.Authentication;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
@@ -8,6 +12,7 @@ using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using FluentFTP;
+using FluentFTP.Client.BaseClient;
 
 namespace ETL_SQL.Connectors
 {
@@ -37,6 +42,8 @@ namespace ETL_SQL.Connectors
         private readonly int _port;
         private readonly string? _username;
         private readonly string? _password;
+        private readonly string? _certFingerprint;
+        private readonly bool _allowUntrustedCert;
 
         public FtpConnector()
         {
@@ -55,6 +62,7 @@ namespace ETL_SQL.Connectors
             _username = username;
             _password = password;
             _client = CreateClient(_host, _port, username, password);
+            _client.ValidateCertificate += OnValidateCertificate;
         }
 
         public FtpConnector(IExecutionContext context, string host, string username, string password)
@@ -63,14 +71,18 @@ namespace ETL_SQL.Connectors
         }
 
         public FtpConnector(IExecutionContext context, string host, string username, string password, int port,
-            string? useSsl = null, bool passive = true)
+            string? useSsl = null, bool passive = true, int timeoutSeconds = 30,
+            string? certFingerprint = null, bool allowUntrustedCert = false)
         {
             _context = context;
             _logger = context.Logger;
             (_host, _port) = NormalizeEndpoint(host, port);
             _username = username;
             _password = password;
-            _client = CreateClient(_host, _port, username, password, useSsl, passive);
+            _certFingerprint = certFingerprint;
+            _allowUntrustedCert = allowUntrustedCert;
+            _client = CreateClient(_host, _port, username, password, useSsl, passive, timeoutSeconds);
+            _client.ValidateCertificate += OnValidateCertificate;
 
             // Security Hardening: egress control
             ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, _host);
@@ -91,11 +103,14 @@ namespace ETL_SQL.Connectors
             ["USER"] = Array.Empty<string>(),
             ["PASSWORD"] = Array.Empty<string>(),
             ["PORT"] = Array.Empty<string>(),
+            ["TIMEOUT_SECONDS"] = new[] { "Default: 30" },
             ["USE_SSL"] = new[] { "OFF", "EXPLICIT", "IMPLICIT" },
-            ["PASSIVE"] = new[] { "ON", "OFF" }
+            ["PASSIVE"] = new[] { "ON", "OFF" },
+            ["CERT_FINGERPRINT"] = Array.Empty<string>(),
+            ["ALLOW_UNTRUSTED_CERT"] = new[] { "OFF", "ON" }
         };
         public Dictionary<string, string[]> GetOptionValues() => new();
-        public string GetHelp() => "FTP Connector for remote file operations.\nOptions:\n  USER: The username for the FTP connection.\n  PASSWORD: The password for the FTP connection.\n  PORT: The FTP control port. Default: 21.\n  USE_SSL: OFF (default), EXPLICIT or IMPLICIT; ON and TRUE mean EXPLICIT.\n  PASSIVE: ON (default) or OFF.\nMethods: GET_FILE, PUT_FILE, REMOTE_FILE_LIST.";
+        public string GetHelp() => "FTP Connector for remote file operations.\nOptions:\n  USER: The username for the FTP connection.\n  PASSWORD: The password for the FTP connection.\n  PORT: The FTP control port. Default: 21.\n  TIMEOUT_SECONDS: Control and data socket timeout in seconds. Default: 30.\n  USE_SSL: OFF (default), EXPLICIT or IMPLICIT; ON and TRUE mean EXPLICIT.\n  PASSIVE: ON (default) or OFF.\n  CERT_FINGERPRINT: Optional pinned TLS certificate SHA-256 (or SHA1:<hex>) fingerprint for FTPS.\n  ALLOW_UNTRUSTED_CERT: ON or OFF (default). Allows unverified TLS certificates when no CERT_FINGERPRINT pin is configured.\nMethods: GET_FILE, PUT_FILE, REMOTE_FILE_LIST.";
 
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {
@@ -110,11 +125,14 @@ namespace ETL_SQL.Connectors
                 port = parsedPort;
             string? useSsl = options?.GetValueOrDefault("USE_SSL");
             bool passive = ParsePassive(options?.GetValueOrDefault("PASSIVE"));
+            int timeoutSeconds = ParseTimeoutSeconds(context, options);
+            string? certFingerprint = options?.GetValueOrDefault("CERT_FINGERPRINT");
+            bool allowUntrustedCert = ParseAllowUntrustedCert(options?.GetValueOrDefault("ALLOW_UNTRUSTED_CERT"));
             // A catalog connection may carry its host only in the HOST option.
             string host = string.IsNullOrWhiteSpace(connectionString)
                 ? options?.GetValueOrDefault("HOST") ?? ""
                 : connectionString;
-            return new FtpConnector(context, host, user, pass, port, useSsl, passive);
+            return new FtpConnector(context, host, user, pass, port, useSsl, passive, timeoutSeconds, certFingerprint, allowUntrustedCert);
         }
 
         public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetTablesAsync instead.");
@@ -313,14 +331,139 @@ namespace ETL_SQL.Connectors
         }
 
         private static AsyncFtpClient CreateClient(string host, int port, string username, string password,
-            string? useSsl = null, bool passive = true)
+            string? useSsl = null, bool passive = true, int timeoutSeconds = 30)
         {
             var encryption = ParseEncryptionMode(useSsl);
             var client = new AsyncFtpClient(host, username, password, port);
             client.Config.EncryptionMode = encryption;
+            client.Config.ValidateAnyCertificate = false;
+            int timeoutMs = checked(Math.Min(timeoutSeconds, int.MaxValue / 1000) * 1000);
+            client.Config.ConnectTimeout = timeoutMs;
+            client.Config.ReadTimeout = timeoutMs;
+            client.Config.WriteTimeout = timeoutMs;
+            client.Config.DataConnectionConnectTimeout = timeoutMs;
+            client.Config.DataConnectionReadTimeout = timeoutMs;
+            client.Config.DataConnectionWriteTimeout = timeoutMs;
             if (!passive)
                 client.Config.DataConnectionType = FtpDataConnectionType.PORT;
             return client;
+        }
+
+        private void OnValidateCertificate(BaseFtpClient control, FtpSslValidationEventArgs e)
+        {
+            var decision = EvaluateServerCertificate(_certFingerprint, _allowUntrustedCert, e.PolicyErrors, e.Certificate);
+            var host = _host ?? "(unknown)";
+
+            switch (decision)
+            {
+                case TlsCertDecision.TrustedByChain:
+                case TlsCertDecision.TrustedByPin:
+                    e.Accept = true;
+                    return;
+
+                case TlsCertDecision.UntrustedAllowed:
+                    e.Accept = true;
+                    _logger.Warning(
+                        "FTPS certificate for {Host} failed policy checks ({PolicyErrors}) but ALLOW_UNTRUSTED_CERT is set; accepting unverified TLS certificate. Pin CERT_FINGERPRINT or install a trusted CA certificate for production transfers.",
+                        host, e.PolicyErrors);
+                    return;
+
+                case TlsCertDecision.RejectedMismatch:
+                    e.Accept = false;
+                    _logger.Error(
+                        "FTPS certificate for {Host} did not match pinned CERT_FINGERPRINT; rejecting TLS connection.",
+                        null, host);
+                    return;
+
+                default:
+                    e.Accept = false;
+                    _logger.Error(
+                        "FTPS certificate validation failed for {Host} ({PolicyErrors}). Install a trusted certificate, pin CERT_FINGERPRINT, or set ALLOW_UNTRUSTED_CERT = ON for explicit opt-out.",
+                        null, host, e.PolicyErrors);
+                    return;
+            }
+        }
+
+        internal enum TlsCertDecision
+        {
+            TrustedByChain,
+            TrustedByPin,
+            UntrustedAllowed,
+            RejectedUntrusted,
+            RejectedMismatch
+        }
+
+        /// <summary>
+        /// Evaluates a server TLS certificate for FTPS connections. System CA validation is enforced by default;
+        /// an explicit <c>CERT_FINGERPRINT</c> pin requires an exact match even when <c>ALLOW_UNTRUSTED_CERT</c> is set.
+        /// </summary>
+        internal static TlsCertDecision EvaluateServerCertificate(
+            string? pin,
+            bool allowUntrusted,
+            SslPolicyErrors policyErrors,
+            X509Certificate? certificate)
+        {
+            if (!string.IsNullOrWhiteSpace(pin))
+            {
+                return CertificateFingerprintMatches(pin, certificate)
+                    ? TlsCertDecision.TrustedByPin
+                    : TlsCertDecision.RejectedMismatch;
+            }
+
+            if (policyErrors == SslPolicyErrors.None)
+                return TlsCertDecision.TrustedByChain;
+
+            return allowUntrusted
+                ? TlsCertDecision.UntrustedAllowed
+                : TlsCertDecision.RejectedUntrusted;
+        }
+
+        internal static bool CertificateFingerprintMatches(string? pin, X509Certificate? certificate)
+        {
+            if (string.IsNullOrWhiteSpace(pin) || certificate == null)
+                return false;
+
+            string trimmed = pin.Trim();
+            int colon = trimmed.IndexOf(':');
+            string? prefix = colon > 0 ? trimmed[..colon].Trim().ToUpperInvariant() : null;
+            bool hasKnownAlgoPrefix = prefix is "SHA256" or "SHA-256" or "SHA1" or "SHA-1";
+            string algo = hasKnownAlgoPrefix ? prefix!.Replace("-", "") : "SHA256";
+            string expectedHex = NormalizeHex(hasKnownAlgoPrefix ? trimmed[(colon + 1)..] : trimmed);
+            if (string.IsNullOrEmpty(expectedHex))
+                return false;
+
+            string actualHex = algo == "SHA1"
+                ? certificate.GetCertHashString(HashAlgorithmName.SHA1)
+                : certificate.GetCertHashString(HashAlgorithmName.SHA256);
+
+            return string.Equals(actualHex, expectedHex, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeHex(string value) =>
+            value.Trim().Replace(":", "").Replace("-", "").Replace(" ", "");
+
+        internal static int ParseTimeoutSeconds(IExecutionContext? context, Dictionary<string, string>? options)
+        {
+            if (options != null && options.TryGetValue("TIMEOUT_SECONDS", out var raw) && !string.IsNullOrWhiteSpace(raw))
+            {
+                if (!int.TryParse(raw.Trim(), out var parsed) || parsed <= 0)
+                {
+                    throw new ExecutionException(
+                        $"FTP option TIMEOUT_SECONDS = '{raw}' is not valid. Use a positive integer number of seconds.");
+                }
+                return parsed;
+            }
+
+            return ConnectorTimeouts.ResolveCommandTimeoutSeconds(context, options, 30);
+        }
+
+        internal static bool ParseAllowUntrustedCert(string? value)
+        {
+            var text = value?.Trim().ToUpperInvariant();
+            if (string.IsNullOrEmpty(text) || IsFalse(text)) return false;
+            if (ConnectorOptionValues.IsTrue(text)) return true;
+            throw new ExecutionException(
+                $"FTP option ALLOW_UNTRUSTED_CERT = '{value}' is not recognized. Use OFF (the default) or ON.");
         }
 
         /// <summary>
@@ -407,6 +550,6 @@ namespace ETL_SQL.Connectors
         private static bool ShouldWrapProviderException(Exception ex) =>
             ex.GetType().Namespace?.StartsWith("FluentFTP", StringComparison.Ordinal) == true
                 || ex is System.Net.Sockets.SocketException or TimeoutException or InvalidOperationException
-                || ex is System.IO.IOException;
+                || ex is System.IO.IOException or AuthenticationException;
     }
 }

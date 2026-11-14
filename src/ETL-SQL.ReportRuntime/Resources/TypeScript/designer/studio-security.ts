@@ -34,6 +34,39 @@ export function detectPlaintextSecrets(scriptText: unknown): PlaintextSecretFind
     return findings;
 }
 
+export interface ServerSealResponse {
+    sealedScript: string;
+    changed: boolean;
+    requiresPassword: boolean;
+    allowsPlaintextSecrets: boolean;
+}
+
+export async function sealStudioScriptOnServer(
+    sealUrl: string,
+    scriptText: string,
+    password: string | null | undefined,
+    authFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+): Promise<ServerSealResponse | null> {
+    try {
+        const res = await authFetch(sealUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ script: scriptText, password: password ?? null })
+        });
+        if (!res?.ok) return null;
+        const data = await res.json();
+        if (typeof data?.sealedScript !== 'string') return null;
+        return {
+            sealedScript: data.sealedScript,
+            changed: Boolean(data.changed),
+            requiresPassword: Boolean(data.requiresPassword),
+            allowsPlaintextSecrets: Boolean(data.allowsPlaintextSecrets)
+        };
+    } catch {
+        return null;
+    }
+}
+
 export async function secureStudioScriptForSave(scriptText: string, passphrase: string | null | undefined, encrypt: EncryptCredential = encryptClientPassword): Promise<string> {
     if (!passphrase?.trim()) throw new Error('A passphrase is required to encrypt credentials.');
     const findings = detectPlaintextSecrets(scriptText);

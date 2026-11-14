@@ -1110,6 +1110,11 @@ public partial class SecurityService
         });
     }
 
+    private static bool IsSealedOrIndirectCredential(string value) =>
+        value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("SHARED:", StringComparison.OrdinalIgnoreCase);
+
     private static string EncryptConnectionDetails(string text, string password)
     {
         return ConnRegex().Replace(text, m =>
@@ -1117,13 +1122,13 @@ public partial class SecurityService
             var parenContent = m.Groups[2].Value;
             var newContent = ReplaceFirstQuotedString(parenContent, (q, inner) =>
             {
-                if (inner.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)) return $"{q}{inner}{q}";
+                if (IsSealedOrIndirectCredential(inner)) return $"{q}{inner}{q}";
                 return $"{q}{CryptoUtils.Encrypt(inner, password)}{q}";
             });
             newContent = StringOptionRegex().Replace(newContent, opt =>
             {
                 var value = opt.Groups[3].Value;
-                if (value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)) return opt.Value;
+                if (IsSealedOrIndirectCredential(value)) return opt.Value;
                 return $"{opt.Groups[1].Value}{opt.Groups[2].Value}{CryptoUtils.Encrypt(value, password)}{opt.Groups[2].Value}";
             });
             return m.Groups[1].Value + newContent + m.Groups[3].Value;
@@ -1147,7 +1152,7 @@ public partial class SecurityService
             // 1. Encrypt positional target if it looks like a connection string
             var newContent = ReplaceFirstQuotedString(parenContent, (q, inner) =>
             {
-                if (inner.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)) return $"{q}{inner}{q}";
+                if (IsSealedOrIndirectCredential(inner)) return $"{q}{inner}{q}";
                 if (inner.Contains("=") || !Path.HasExtension(inner))
                     return $"{q}{CryptoUtils.Encrypt(inner, password)}{q}";
                 return $"{q}{inner}{q}";
@@ -1157,7 +1162,7 @@ public partial class SecurityService
             newContent = PasswordOptionRegex().Replace(newContent, pm =>
             {
                 var pwd = pm.Groups[3].Value;
-                if (!string.IsNullOrEmpty(pwd) && !pwd.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrEmpty(pwd) && !IsSealedOrIndirectCredential(pwd))
                     return pm.Groups[1].Value + pm.Groups[2].Value + CryptoUtils.Encrypt(pwd, password) + pm.Groups[2].Value;
                 return pm.Value;
             });
@@ -1186,7 +1191,7 @@ public partial class SecurityService
             if (firstQuoted != null && firstQuoted.Length >= 2)
             {
                 var inner = firstQuoted[1..^1];
-                if (!inner.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase) && inner.Contains("="))
+                if (!IsSealedOrIndirectCredential(inner) && inner.Contains("="))
                     return true;
             }
 
@@ -1195,7 +1200,7 @@ public partial class SecurityService
             {
                 var pm = PasswordOptionRegex().Match(parenContent);
                 var pwd = pm.Groups[3].Value;
-                if (!string.IsNullOrEmpty(pwd) && !pwd.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrEmpty(pwd) && !IsSealedOrIndirectCredential(pwd))
                     return true;
             }
         }
@@ -1325,7 +1330,37 @@ public partial class SecurityService
         _logger.Debug("[SECURITY] Path DENIED — not within any approved safe zone: {Path}", fullPath);
         return false;
     }
+
+    public ScriptSealOutcome TrySealScriptForSave(string scriptText, string? password = null)
+    {
+        var allowPlaintext = AllowsPlaintextSecrets(scriptText);
+        var effectivePassword = !string.IsNullOrEmpty(password)
+            ? password
+            : ExtractLiteralUsePassword(scriptText);
+
+        if (RequiresSavePassword(scriptText) && string.IsNullOrEmpty(effectivePassword))
+        {
+            return new ScriptSealOutcome(
+                scriptText,
+                Changed: false,
+                RequiresPassword: true,
+                AllowsPlaintextSecrets: allowPlaintext);
+        }
+
+        var secured = SecureScriptForSave(scriptText, effectivePassword ?? "");
+        return new ScriptSealOutcome(
+            secured,
+            !string.Equals(secured, scriptText, StringComparison.Ordinal),
+            RequiresPassword: false,
+            AllowsPlaintextSecrets: allowPlaintext);
+    }
 }
+
+public sealed record ScriptSealOutcome(
+    string ScriptText,
+    bool Changed,
+    bool RequiresPassword,
+    bool AllowsPlaintextSecrets);
 
 public class SecurityException : Exception
 {

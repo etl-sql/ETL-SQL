@@ -1,6 +1,11 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Services;
 using ETL_SQL.TUI.UI;
 using Xunit;
 
@@ -63,6 +68,78 @@ namespace ETL_SQL.Tests.UI
             var tab = e.CaptureSession().Tabs[0];
             Assert.True(tab.IsDirty);
             Assert.Null(tab.RecoveryText); // excluded — secret never persisted
+        }
+
+        [Fact]
+        public async Task LoadAsync_DoesNotDecryptEncStringsOnOpen()
+        {
+            var tempFile = Path.Combine(Path.GetTempPath(), $"etlsql-tui-load-{Guid.NewGuid():N}.etlsql");
+            try
+            {
+                var security = new SecurityService(
+                    ETL_SQL.TUI.Program.ServiceProvider.GetService(typeof(ILogger)) as ILogger
+                    ?? throw new InvalidOperationException("logger"));
+                var raw = "USE PASSWORD = 'pw-1';\nCREATE CONNECTION m AS MSSQL(SERVER='s', PASSWORD='secret');";
+                var sealedContent = security.SecureScriptForSave(raw, "pw-1");
+                Assert.Contains("ENC:", sealedContent, StringComparison.Ordinal);
+                await File.WriteAllTextAsync(tempFile, sealedContent);
+
+                var handler = new EditorFileHandler(new PhysicalFileSystem(), security);
+                bool prompted = false;
+                var (lines, _) = await handler.LoadAsync(tempFile, (_, _, _) =>
+                {
+                    prompted = true;
+                    return Task.FromResult<string?>("pw-1");
+                });
+
+                Assert.False(prompted);
+                var loaded = string.Join("\n", lines);
+                Assert.Contains("ENC:", loaded, StringComparison.Ordinal);
+                Assert.DoesNotContain("secret", loaded, StringComparison.Ordinal);
+            }
+            finally
+            {
+                try { File.Delete(tempFile); } catch (IOException) { }
+            }
+        }
+
+        [Fact]
+        public async Task SaveScript_SealsSecretsReplacesBufferAndClearsUndoHistory()
+        {
+            var tempFile = Path.Combine(Path.GetTempPath(), $"etlsql-tui-save-{Guid.NewGuid():N}.etlsql");
+            try
+            {
+                var editor = new ConsoleEditor(tempFile, new Dictionary<string, IDataSource>());
+                editor._renderer.Headless = true;
+
+                editor._buffer.Load(new[] { "SELECT 1;" });
+                editor.SaveUndoState();
+                editor._buffer.Load(new[]
+                {
+                    "USE PASSWORD = 'tui-pw';",
+                    "CREATE CONNECTION m AS MSSQL(SERVER='s', PASSWORD='my-db-password');"
+                });
+                editor.MarkDirty();
+
+                Assert.True(await editor.SaveScript());
+
+                var buffered = editor._buffer.GetText();
+                Assert.DoesNotContain("tui-pw", buffered, StringComparison.Ordinal);
+                Assert.DoesNotContain("my-db-password", buffered, StringComparison.Ordinal);
+                Assert.Contains("USE PASSWORD PROMPT;", buffered, StringComparison.Ordinal);
+                Assert.Contains("ENC:", buffered, StringComparison.Ordinal);
+
+                // Ctrl+Z (Undo) must not restore plaintext password after save-time sealing.
+                editor.Undo();
+                var afterUndo = editor._buffer.GetText();
+                Assert.DoesNotContain("tui-pw", afterUndo, StringComparison.Ordinal);
+                Assert.DoesNotContain("my-db-password", afterUndo, StringComparison.Ordinal);
+                Assert.Equal(buffered, afterUndo);
+            }
+            finally
+            {
+                try { File.Delete(tempFile); } catch (IOException) { }
+            }
         }
     }
 }

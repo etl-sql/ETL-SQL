@@ -57,6 +57,8 @@ namespace ETL_SQL.Connectors.FlatFile
         private string FormatCell(object? value) => value switch
         {
             null => "",
+            DateOnly date when _dateFormat != null => date.ToString(_dateFormat, _culture),
+            DateOnly date => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             DateTime date when _dateFormat != null => date.ToString(_dateFormat, _culture),
             DateTimeOffset offset when _dateFormat != null => offset.ToString(_dateFormat, _culture),
             IFormattable formattable when _cultureNamed => formattable.ToString(null, _culture),

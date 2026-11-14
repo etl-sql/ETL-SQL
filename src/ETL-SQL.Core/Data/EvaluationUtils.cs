@@ -55,6 +55,8 @@ public static class EvaluationUtils
             // second, so two times in one second were both equal and ordered: a = b and a < b.
             if (a is DateTime dta && b is DateTime dtb)
                 return dta.Ticks == dtb.Ticks;
+            if (a is DateOnly doa && b is DateOnly dob)
+                return doa == dob;
 
             // Support ON/OFF boolean literals vs string equivalents
             if (a is bool ba && b is string sb1 && (sb1.Equals("ON", StringComparison.OrdinalIgnoreCase) || sb1.Equals("OFF", StringComparison.OrdinalIgnoreCase)))
@@ -104,6 +106,7 @@ public static class EvaluationUtils
         if (a is decimal ma && b is decimal mb) return ma.CompareTo(mb);
         if (a is long la && b is long lb) return la.CompareTo(lb);
         if (a is int ia && b is int ib) return ia.CompareTo(ib);
+        if (a is DateOnly daOnly && b is DateOnly dbOnly) return daOnly.CompareTo(dbOnly);
 
         // Numeric comparison via decimal (handles mixed numeric types and numeric-looking strings).
         // TryParse instead of Parse-in-try/catch avoids throwing and catching a FormatException on
@@ -153,6 +156,7 @@ public static class EvaluationUtils
     public static bool TryToDateTime(object? val, out DateTime dt)
     {
         if (val is DateTime d) { dt = d; return true; }
+        if (val is DateOnly dateOnly) { dt = dateOnly.ToDateTime(TimeOnly.MinValue); return true; }
         if (val is DateTimeOffset dto) { dt = dto.DateTime; return true; }
         if (SafeTryParseDateTimeOffset(val?.ToString() ?? "", out var dto2))
         {
@@ -166,6 +170,7 @@ public static class EvaluationUtils
     {
         if (val is DateTimeOffset dtoBe) { dto = dtoBe; return true; }
         if (val is DateTime dt) { dto = new DateTimeOffset(dt); return true; }
+        if (val is DateOnly dOnly) { dto = new DateTimeOffset(dOnly.ToDateTime(TimeOnly.MinValue)); return true; }
         return SafeTryParseDateTimeOffset(val?.ToString() ?? "", out dto);
     }
 
@@ -281,8 +286,8 @@ public static class EvaluationUtils
     public static bool EvaluateLike(object? input, object? pattern, string? escapeChar = null)
     {
         if (input == null || pattern == null || input is DBNull || pattern is DBNull) return false;
-        string s = input.ToString() ?? "";
-        string p = pattern.ToString() ?? "";
+        string s = TypeConverter.ToInvariantText(input) ?? "";
+        string p = TypeConverter.ToInvariantText(pattern) ?? "";
 
         // Fast path for simple non-escaped patterns
         if (string.IsNullOrEmpty(escapeChar))

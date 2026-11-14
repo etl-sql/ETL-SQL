@@ -1817,6 +1817,11 @@ public class ReportsController : ControllerBase
             ReportScriptSaveStatus.Forbidden => Forbid(),
             ReportScriptSaveStatus.MissingVersion => OptimisticConcurrency.MissingVersion(this),
             ReportScriptSaveStatus.Conflict => OptimisticConcurrency.Conflict(this, ToDto(result.Current!, null)),
+            ReportScriptSaveStatus.SealPasswordRequired => UnprocessableEntity(new
+            {
+                error = "Master password is required to seal plaintext secrets before saving.",
+                code = "SEAL_PASSWORD_REQUIRED"
+            }),
             _ => StatusCode(500, new { error = "Unknown save status." })
         };
     }
@@ -1887,7 +1892,7 @@ public class ReportsController : ControllerBase
     private IActionResult SavedScriptResponse(ReportScriptSaveResult result)
     {
         OptimisticConcurrency.SetETag(Response, result.Version!.Value);
-        return Ok(new SaveDesignerResponse(result.Version.Value, result.SourceRevision));
+        return Ok(new SaveDesignerResponse(result.Version.Value, result.SourceRevision, result.ScriptText));
     }
 
     // ── POST /api/scripts/upload ──────────────────────────────────────────────

@@ -279,7 +279,7 @@ public class Row
         null => 0L,
         string s => 24L + 2L * s.Length,
         decimal => 32L,
-        DateTime => 24L,
+        DateTime or DateOnly => 24L,
         bool => 24L,
         double or float or long or ulong or int or uint or short or ushort or byte or sbyte => 24L,
         _ => 32L

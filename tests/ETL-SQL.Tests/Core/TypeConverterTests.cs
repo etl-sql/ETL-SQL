@@ -12,6 +12,7 @@ namespace ETL_SQL.Tests.Core
         [InlineData("123.45", "DECIMAL", 123.45)]
         [InlineData("true", "BIT", true)]
         [InlineData("2023-01-01", "DATE", "2023-01-01")]
+        [InlineData("2023-01-01", "DATETIME", "2023-01-01")]
         [InlineData("612495f8-8e32-4c4d-993e-17e18a244e6b", "GUID", "612495f8-8e32-4c4d-993e-17e18a244e6b")]
         public void TestSuccessfulCasts(object value, string typeName, object expected)
         {
@@ -19,7 +20,11 @@ namespace ETL_SQL.Tests.Core
 
             if (typeName == "DATE")
             {
-                Assert.Equal(DateTime.Parse(expected.ToString()), (DateTime)result);
+                Assert.Equal(DateOnly.Parse(expected.ToString()!, System.Globalization.CultureInfo.InvariantCulture), (DateOnly)result!);
+            }
+            else if (typeName == "DATETIME")
+            {
+                Assert.Equal(DateTime.Parse(expected.ToString()!, System.Globalization.CultureInfo.InvariantCulture), (DateTime)result!);
             }
             else if (typeName == "GUID")
             {
@@ -120,6 +125,7 @@ namespace ETL_SQL.Tests.Core
             try
             {
                 System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo(cultureName);
+                Assert.Equal("2024-01-08", TypeConverter.Cast(new DateOnly(2024, 1, 8), "STRING"));
                 Assert.Equal("2024-01-08 00:00:00", TypeConverter.Cast(new DateTime(2024, 1, 8), "STRING"));
                 Assert.Equal("2024-01-08 09:30:05.25", TypeConverter.Cast(new DateTime(2024, 1, 8, 9, 30, 5, 250), "VARCHAR(30)"));
                 Assert.Equal("2024-01-08 09:30:05.0000001", TypeConverter.Cast(new DateTime(2024, 1, 8, 9, 30, 5).AddTicks(1), "NVARCHAR"));

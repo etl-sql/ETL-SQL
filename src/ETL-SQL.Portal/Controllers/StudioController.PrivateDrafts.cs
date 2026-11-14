@@ -48,6 +48,14 @@ public sealed partial class StudioController
             return BadRequest(new StudioPrivateDraftRefusalDto("INVALID_KIND", "Kind must be Report or Pipeline."));
         var content = request.Content ?? "";
         if (RefusePrivateDraftText(content) is { } refusal) return refusal;
+        var sealOutcome = _securityService.TrySealScriptForSave(content, null);
+        if (sealOutcome.RequiresPassword)
+        {
+            return UnprocessableEntity(new StudioPrivateDraftRefusalDto(
+                "SEAL_PASSWORD_REQUIRED",
+                "Master password is required to seal plaintext secrets before saving."));
+        }
+        content = sealOutcome.ScriptText;
 
         await ExpirePrivateDraftsAsync(ct);
         var limit = Math.Max(1, portalConfig.Studio.PrivateDraftsPerUser);
@@ -107,6 +115,14 @@ public sealed partial class StudioController
 
         var content = request.Content ?? "";
         if (RefusePrivateDraftText(content) is { } refusal) return refusal;
+        var sealOutcome = _securityService.TrySealScriptForSave(content, request.SealPassword);
+        if (sealOutcome.RequiresPassword)
+        {
+            return UnprocessableEntity(new StudioPrivateDraftRefusalDto(
+                "SEAL_PASSWORD_REQUIRED",
+                "Master password is required to seal plaintext secrets before saving."));
+        }
+        content = sealOutcome.ScriptText;
         var name = request.Name?.Trim();
         if (name is not null && name != draft.Name)
         {

@@ -38,20 +38,18 @@ public static class BinaryOperatorFactory
         // Handle date arithmetic (FW-6)
         if (a is DateTime dtA)
         {
-            if (op == "+")
-            {
-                try { return dtA.AddDays(Convert.ToDouble(b, System.Globalization.CultureInfo.InvariantCulture)); }
-                catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException or ArgumentOutOfRangeException) { throw NotNumeric(a, b, op); }
-            }
-            if (op == "-" && b is DateTime dtB)
-            {
-                return (decimal)(dtA - dtB).TotalDays;
-            }
-            if (op == "-")
-            {
-                try { return dtA.AddDays(-Convert.ToDouble(b, System.Globalization.CultureInfo.InvariantCulture)); }
-                catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException or ArgumentOutOfRangeException) { throw NotNumeric(a, b, op); }
-            }
+            if (op == "-" && TryGetDateDiffDays(dtA, b, out var diffDays))
+                return diffDays;
+            if (op is "+" or "-")
+                return AddDays(dtA, b, op, sign: op == "+" ? 1 : -1);
+        }
+
+        if (a is DateOnly dA)
+        {
+            if (op == "-" && TryGetDateDiffDays(dA.ToDateTime(TimeOnly.MinValue), b, out var diffDays))
+                return diffDays;
+            if (op is "+" or "-")
+                return AddDays(dA, b, op, sign: op == "+" ? 1 : -1);
         }
 
         decimal da, db;
@@ -150,6 +148,34 @@ public static class BinaryOperatorFactory
             return !s.Contains('.') && !s.Contains('e') && !s.Contains('E');
         }
         return false;
+    }
+
+    private static bool TryGetDateDiffDays(DateTime dtA, object b, out decimal diffDays)
+    {
+        if (b is DateTime dtB) { diffDays = (decimal)(dtA - dtB).TotalDays; return true; }
+        if (b is DateOnly dB) { diffDays = (decimal)(dtA - dB.ToDateTime(TimeOnly.MinValue)).TotalDays; return true; }
+        diffDays = 0;
+        return false;
+    }
+
+    private static object AddDays(object a, object b, string op, int sign)
+    {
+        try
+        {
+            double days = sign * Convert.ToDouble(b, System.Globalization.CultureInfo.InvariantCulture);
+            if (a is DateTime dt) return dt.AddDays(days);
+            if (a is DateOnly dateOnly)
+            {
+                if (days == Math.Truncate(days) && days >= int.MinValue && days <= int.MaxValue)
+                    return dateOnly.AddDays((int)days);
+                return dateOnly.ToDateTime(TimeOnly.MinValue).AddDays(days);
+            }
+            throw NotNumeric(a, b, op);
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException or ArgumentOutOfRangeException)
+        {
+            throw NotNumeric(a, b, op);
+        }
     }
 
     /// <summary>Executes a binary operation for the given token type.</summary>

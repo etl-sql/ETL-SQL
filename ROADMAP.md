@@ -363,15 +363,15 @@ out of this entry unless a connector exposes it.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| FN01 | **`PATH_FILENAME_NO_EXT(path)`.** Returns the file name without its extension (`orders.csv` → `orders`). Signature, return type, and example in the reference; `LanguageMetadata` entry. | — | S |
-| FN02 | **`FILE_CREATED(path)`.** Returns the creation timestamp as a `DATETIME`, the counterpart of `FILE_MODIFIED`. Same authorization and error behavior as `FILE_MODIFIED`. | — | S |
-| FN03 | **`PATH_CHANGE_EXTENSION(path, ext)`.** Replaces or removes the extension; accepts `'.bak'` and `'bak'`. | — | S |
+| FN01 | **Done in v0.22.0.** **`PATH_FILENAME_NO_EXT(path)`.** Returns the file name without its extension (`orders.csv` → `orders`). Signature, return type, and example in the reference; `LanguageMetadata` entry. | — | S |
+| FN02 | **Done in v0.22.0.** **`FILE_CREATED(path)`.** Returns the creation timestamp as a `DATETIME`, the counterpart of `FILE_MODIFIED`. Same authorization and error behavior as `FILE_MODIFIED`. | — | S |
+| FN03 | **Done in v0.22.0.** **`PATH_CHANGE_EXTENSION(path, ext)`.** Replaces or removes the extension; accepts `'.bak'` and `'bak'`. | — | S |
 | FN04 | **`PATH_ROOT`, `PATH_IS_ABSOLUTE`, `PATH_NORMALIZE`.** Pure string functions. `PATH_NORMALIZE` must match `CAST(... AS PATH)`; decide whether it is needed at all. | FN01 | S |
 | FN05 | **`FILE_READONLY(path)` and `FILE_ACCESSED(path)`.** Read-only flag and last access time. Confirm the `DIRECTORY` connector columns and the functions agree. | FN02 | S |
 | FN06 | **`DIRECTORY_SIZE` and `DIRECTORY_FILE_COUNT`.** Optional `recursive` flag like `FILE_LIST`. Honors the file-operation and recursion limits in the Zero-Trust guardrails. | — | S |
-| FN07 | **`FILE_LINE_COUNT(path [, header_rows])`.** Wanted for flat-file validation (row-count checks before load). `header_rows` is an integer, default `0`, which counts every line. A value of `n` leaves out the first `n` lines, so a one-row header, a multi-row header, or a banner above the data all work. The count never goes below `0` (a file with fewer than `n` lines returns `0`); a negative or non-integer `header_rows` is an error; `NULL` returns `NULL`. Streams the file once, never loads it whole, and honors cancellation. Settle in the first hour: how a trailing newline and a final line without one count, and which line endings (`\n`, `\r\n`, `\r`) are recognized. Same authorization and missing-file behavior as `FILE_SIZE`. | — | S |
-| FN08 | **`REMOTE_FILE_SIZE` and `REMOTE_FILE_MODIFIED`.** Scalar lookups over `ListFilesAsync` for FTP, SFTP, and cloud connections. | — | S |
-| FN09 | **`REMOTE_DIRECTORY_EXISTS`.** `IRemoteFileSystem.DirectoryExistsAsync` exists, but `REMOTE_FILE_EXISTS` is the only registered remote check and its help text claims to cover directories. Decide whether to split or fix the text. | — | S |
+| FN07 | **Done in v0.22.0.** **`FILE_LINE_COUNT(path [, header_rows])`.** Wanted for flat-file validation (row-count checks before load). `header_rows` is an integer, default `0`, which counts every line. A value of `n` leaves out the first `n` lines, so a one-row header, a multi-row header, or a banner above the data all work. The count never goes below `0` (a file with fewer than `n` lines returns `0`); a negative or non-integer `header_rows` is an error; `NULL` returns `NULL`. Streams the file once, never loads it whole, and honors cancellation. Settle in the first hour: how a trailing newline and a final line without one count, and which line endings (`\n`, `\r\n`, `\r`) are recognized. Same authorization and missing-file behavior as `FILE_SIZE`. | — | S |
+| FN08 | **Done in v0.22.0.** **`REMOTE_FILE_SIZE` and `REMOTE_FILE_MODIFIED`.** Scalar lookups over `ListFilesAsync` for FTP, SFTP, and cloud connections. | — | S |
+| FN09 | **Done in v0.22.0.** **`REMOTE_DIRECTORY_EXISTS`.** `IRemoteFileSystem.DirectoryExistsAsync` exists, but `REMOTE_FILE_EXISTS` is the only registered remote check and its help text claims to cover directories. Decide whether to split or fix the text. | — | S |
 | FN10 | **Done in v0.22.0.** **Remove the duplicate `FILE_EXISTS` / `DIRECTORY_EXISTS` registration.** Both are registered in `FileFunctions.cs` and `StandardFunctions.System.cs`; keep one, and confirm which behavior wins today. | — | S |
 
 **Acceptance evidence:** Each function has a reference page that follows the function reference
@@ -418,7 +418,7 @@ docs fix alone is small and can ship first.
 | FO01 | **Done in v0.22.0.** **Rewrite `encrypt-file.md` to the real syntax.** Use the clause form (`PASSWORD`, `KEYFILE` for SSH, `PGP_KEY` for PGP), remove `ALGORITHM` and the `WITH` keys the engine ignores until FO03/FO05 land, fix the vendor-drop example so it deletes the plaintext with `DELETE FILE`, and document `ENCRYPT DIRECTORY` / `DECRYPT DIRECTORY` (password only today). `OVERWRITE` defaults to `ON` in the handler; `compress-file.md` says `OFF`, so correct whichever page is wrong. Follow the [function and statement templates](docs/templates/statement-reference-template.md) and every example must run. | — | S |
 | FO02 | **Done in v0.22.0.** **Unknown `WITH` option is an error.** `ParseFileOperationOptions` discards unknown keys. Reject them for every file operation with a message naming the accepted keys, then check the directory-operation parser for the same pattern. Parser, `EbnfConformanceTests`, and a `statement error` test. | — | S |
 | FO03 | **Done in v0.22.0** (`COMPRESS` and `DECOMPRESS` take it too; a directory source or an output over the source is refused). **`DELETE_SOURCE = ON \| OFF` (default `OFF`) on `ENCRYPT FILE` and `DECRYPT FILE`.** The source is deleted only after the destination is written and closed, never when the operation fails, and `SET WHAT_IF ON` logs it without deleting. Decide in the same change whether `COMPRESS` and `DECOMPRESS` take it. | FO02 | S |
-| FO04 | **Default destination when `TO` is omitted.** Never encrypt in place and never overwrite the source. `ENCRYPT FILE` writes next to the source with a method suffix appended: `.pgp` for `PGP_KEY`, `.enc` for `PASSWORD`; settle the suffix for an SSH `KEYFILE`. `DECRYPT FILE` with no `TO` removes a recognized suffix (`.pgp`, `.enc`) and raises an error for any other name rather than guessing. An existing destination follows `OVERWRITE`. `WHAT_IF` shows the derived path. | FO02 | S |
+| FO04 | **Done in v0.22.0.** **Default destination when `TO` is omitted.** Never encrypt in place and never overwrite the source. `ENCRYPT FILE` writes next to the source with a method suffix appended: `.pgp` for `PGP_KEY`, `.enc` for `PASSWORD`; settle the suffix for an SSH `KEYFILE`. `DECRYPT FILE` with no `TO` removes a recognized suffix (`.pgp`, `.enc`) and raises an error for any other name rather than guessing. An existing destination follows `OVERWRITE`. `WHAT_IF` shows the derived path. | FO02 | S |
 | FO05 | **`ALGORITHM` decision.** `CryptoUtils.EncryptFile` and `DecryptFile` take an optional `HashAlgorithmName` the statement never passes. Decide whether to expose it (and what it controls) or leave it out of the language. The method already follows from the clause given, so `ALGORITHM = 'AES256' \| 'PGP'` as documented is not needed. | — | D |
 | FO06 | **Done in v0.22.0** (PGP also left a partial output file; fixed). **`DECRYPT FILE` failure messages.** Check what a wrong password, a wrong key, and a file that was never encrypted report today; each should name the cause without echoing key material. One test per case. | — | S |
 | FO07 | **Document write-time `COMPRESS` and `ENCRYPT` on connectors.** Confirm which file connectors take both options (`FLATFILE`, `EXCEL`, `AVRO` list them; `JSON`, `XML`, and `PARQUET` call the encryption service), that compress runs before encrypt on write, and that read reverses it. Add the options and an "easy button" example to each connector page, with the mutually exclusive options called out. | — | S |
@@ -474,7 +474,7 @@ re-upload, `FOREACH` over a listing) and is Later.
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
 | RF01 | **Done in v0.22.0.** **Fix the FTP page and reject bad `USE_SSL` values.** Document the options the connector reads: `USE_SSL = OFF \| EXPLICIT \| IMPLICIT` (`ON` is accepted as `EXPLICIT`) and `PASSIVE = ON \| OFF` (default `ON`), not `USE_PASSIVE` or `USE_SSL=TRUE`. Remove the "use SFTP instead" line under FTPS. A value other than the accepted ones is an error, not plaintext. List `TIMEOUT_SECONDS` once RF02 lands. Both authentication patterns stay documented. | — | S |
-| RF02 | **FTP `TIMEOUT_SECONDS` and TLS certificate handling.** Read `TIMEOUT_SECONDS` (default `30`) like the other connectors. Decide how an invalid FTPS certificate behaves today and expose the choice (strict by default; a pin or an explicit opt-out, mirroring `HOST_KEY_FINGERPRINT` / `ALLOW_UNPINNED_HOST_KEY`). | RF01 | S |
+| RF02 | **Done in v0.22.0.** **FTP `TIMEOUT_SECONDS` and TLS certificate handling.** Read `TIMEOUT_SECONDS` (default `30`) like the other connectors. Decide how an invalid FTPS certificate behaves today and expose the choice (strict by default; a pin or an explicit opt-out, mirroring `HOST_KEY_FINGERPRINT` / `ALLOW_UNPINNED_HOST_KEY`). | RF01 | S |
 | RF03 | **Verify SFTP and FTP listings.** SSH.NET `ListDirectory` normally returns `.` and `..`; the SFTP listing does not filter them. Add a test over a recorded or containerized server, drop the dot entries from `REMOTE_FILE_LIST`, `SELECT` over the connection, and `IsDirectory` handling, and confirm FTP matches. | — | S |
 | RF04 | **Remote `COPY FILE`.** Same-connection copy (`COPY FILE a TO b AT conn`) by download to a bounded temp stream and upload, or a server-side copy where the protocol has one (S3, Azure Blob, SharePoint). Cross-connection copy follows the same path. Overwrite follows `OVERWRITE`; default `ON` as locally. | — | M |
 | RF05 | **Richer remote metadata.** Extend `FileMetaData` with creation time (where reported), permissions, owner, and a symlink flag; `NULL` where the protocol cannot supply it. `REMOTE_FILE_LIST` and the connection `SELECT` expose the new columns and the lineage and LSP column lists follow. | — | M |
@@ -490,6 +490,69 @@ fails; an SFTP and an FTP listing contain only real entries, proven against a te
 and the directory operations work with `AT conn` on SFTP, FTP, and one cloud connection; a remote
 `SYNC DIRECTORY` plan under `WHAT_IF` matches what the real run does; and the transfer verification
 option fails a truncated download.
+
+### Database Connectors — Documentation Parity, Write-Path Clarity, and Credential Gaps
+
+**Status:** Accepted  
+**Horizon:** Next (DB01–DB03), Later (the rest)  
+**Authoritative design:** none yet; [Database connectors](docs/reference/connectors/databases/README.md)
+are the references and [Connector Standards](docs/architecture/standards/connectors-standards.md)
+govern option naming. The connector classes under `src/ETL-SQL.Connectors.Databases/` own the accepted
+option lists.
+
+**Problem and intended outcome:** Checked against source on 2026-11-13 (a review of the ten database
+connector pages against each connector's option allowlist). The connectors work, but the pages
+disagree with the code, and a developer cannot tell from the docs how each target writes data. The
+page text describes options the code does not accept (`ROLE`, `PRIVATE_KEY_PASSPHRASE`, `SSL_CA`,
+`WALLET_LOCATION`, `SID`, `READ_ONLY`, `BUSY_TIMEOUT_MS`, `KEY_FILE`, `ENCRYPTION`) and omits options it
+does (`ACCOUNT`, `PORT`, `PROTOCOL`, `ENCRYPT`, `TIMEOUT_SECONDS`, and several ODBC keys). Bulk-write
+paths exist in the code (`SqlBulkCopy` for MSSQL, array binding for Oracle, `MySqlBulkCopy` for MySQL)
+but only MySQL documents one. The outcome: every connector page matches what the connector reads, a
+developer can pick a write strategy per target from one place, and the credential gaps below are
+either closed or recorded as decisions.
+
+**Why this horizon:** DB01–DB03 are documentation defects, and following them wastes a developer's
+time or silently ignores an option. The new capabilities have working alternatives (`ODBC`, staging
+through `#temp`) and are Later.
+
+**Boundaries:**
+- No new native warehouse connector. Redshift, Synapse, Databricks, Trino, and Dremio stay on `ODBC`
+  per the [data-lake connectors strategy](docs/architecture/roadmaps/data-lake-connectors-strategy.md).
+  DB11 only re-opens that decision with evidence.
+- DuckDB is not shipped. The strategy document lists it as an unchecked, low-priority Phase 5 item;
+  this entry does not change that.
+- Option names stay `UPPERCASE_WITH_UNDERSCORES` with no aliases, per Connector Standards.
+- `TEST CONNECTION` and `MERGE` already ship and are not roadmap work. Per-connector `MERGE` pushdown
+  behavior is documented under DB04, not rebuilt.
+
+**Dependencies:** none for DB01–DB05. DB07 and DB08 follow the third-party dependency policy for any
+new package.
+
+**Backlog (select IDs, not the family):**
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| DB01 | **Reconcile option lists with the code.** For each of the ten pages, make the Options table equal the connector's allowlist and fix the Authentication section. Known mismatches: Snowflake (`USER` vs `USERNAME`; add `ACCOUNT`, `PORT`, `PROTOCOL`; `ROLE` and `PRIVATE_KEY_PASSPHRASE` are documented but not read), BigQuery (`KEY_FILE` vs `CREDENTIAL_FILE`), Oracle (`SID`, `WALLET_LOCATION`), MySQL (`SSL_CA`, and the `VERIFY_*` spellings against the `SSL_MODE` values the code accepts), SQLite (`READ_ONLY`, `BUSY_TIMEOUT_MS`), Neo4j (`ENCRYPTION`; confirm whether encryption comes from the URI scheme), MSSQL (`ENCRYPT`, `PORT`), ODBC (`USER`, `PWD`, `TIMEOUT_SECONDS`, `TABLE`, `HTTPPATH`, `AUTHMECH`, `SSL`). A test compares each page's option table to the allowlist so they cannot drift again. | — | M |
+| DB02 | **Document `TIMEOUT_SECONDS` everywhere.** Add it to Oracle, Postgres, Snowflake, and BigQuery with the defaults the code applies (30 s for OLTP, the data-warehouse default for Snowflake and BigQuery). State the defaults in each page's option table. | DB01 | S |
+| DB03 | **Page-standard gaps.** Add the mutually exclusive call-outs the page standard requires (MSSQL and Oracle have them; the rest do not, including Snowflake `PASSWORD` vs `PRIVATE_KEY_FILE` and the Mongo URI vs `HOST`/`PORT` forms). Quote the `ENC:` value in the MongoDB example or confirm the lexer accepts it bare. Show one non-inline credential pattern (`ENC:`, `SECRET:`, or `${ENV}` with `Security:AllowedEnvVars`) on each page. | DB01 | S |
+| DB04 | **Write-path reference per connector.** For each database connector, state the bulk path (`SqlBulkCopy`, Oracle array binding, `MySqlBulkCopy`, row batches for the rest), what `MERGE` pushes down versus what the engine emulates, transaction support, `WHAT_IF` behavior, and the idempotent-load pattern to use. Verify each statement against the data source class before writing it. | DB01 | M |
+| DB05 | **Capability matrix.** One table on the databases README: transactions, pushdown, bulk load, schema introspection, `WHAT_IF`, default timeout, and auth modes, one row per connector. BigQuery has no transactions and SQLite is single-writer; Neo4j enlists transactions in its own way. Built from DB04 so it stays accurate. | DB04 | S |
+| DB06 | **Dialect notes for Postgres, Oracle, and MSSQL.** Snowflake, MySQL, and BigQuery list their supported native SQL; these three do not. Cover row capping (`LIMIT`, `FETCH FIRST`, `TOP`), `DUAL`, and identifier quoting, checked against the linter's dialect metadata. | — | S |
+| DB07 | **Postgres bulk load.** The Postgres data source has no binary `COPY` import, unlike MSSQL, Oracle, and MySQL. Add one behind the existing write path, with the same transaction and `WHAT_IF` behavior, and measure it against the current batch insert on a fixture before claiming a speedup. | DB04 | M |
+| DB08 | **Decision: credential providers.** No source references Azure Key Vault or AWS Secrets Manager; secrets come from `ENC:`, `SECRET:`, and allow-listed environment variables. Decide whether a vault-backed `SECRET:` source belongs in the product and under which trust rules. Output is a proposal and an estimate only. | — | D |
+| DB09 | **Decision: cloud identity authentication.** `SqlServerConnector` reads no Entra or managed-identity option, and the review did not check Postgres, MySQL, or Oracle for IAM or Entra token auth. BigQuery already uses Application Default Credentials. Verify the current state for each connector, then propose the options (for example Entra access tokens for MSSQL, IAM tokens for Postgres and MySQL) and an estimate. | — | D |
+| DB10 | **Snowflake `ROLE` and key passphrase.** Either add `ROLE` and `PRIVATE_KEY_PASSPHRASE` to the connector (encrypted keys are common in production) or confirm they are out of scope and keep them off the page. An encrypted private key currently has no passphrase option. | DB01 | S |
+| DB11 | **Decision: native warehouse connectors.** Whether Databricks or Redshift justify a native connector over `ODBC`, given that `ODBC` needs a vendor driver installed on the host. Gather evidence (install friction, feature loss through the bridge, type fidelity) and propose or reject. | — | D |
+| DB12 | **Decision: connector resilience options.** The review found no connector-level retry, isolation-level, or session-setup option (`search_path`, time zone). Confirm that against source, then decide which belong on `CREATE CONNECTION` and which belong in script. Output is a proposal and an estimate only. | — | D |
+| DB13 | **Document native-to-engine type mapping.** Per connector, how native types land in the engine (Oracle `NUMBER`, Postgres arrays and `jsonb`, Snowflake `VARIANT`, MSSQL `datetimeoffset`, BigQuery `STRUCT`), including that integer types store as `decimal`. Confirm whether this already exists elsewhere in the docs before writing. | DB04 | M |
+| DB14 | **Incremental-load examples.** Confirm whether the ETL Cookbook already shows a watermark pull per source; if not, add runnable lifecycle recipes (MSSQL `rowversion`, Postgres `xmin` or a timestamp column, Oracle `SCN`) following the Extract → Stage → Validate → Merge → Cleanup → Notify shape. | DB04 | M |
+| DB15 | **MongoDB and SQLite parity.** MongoDB has no pipeline or filter pass-through like Neo4j's `EXECUTE ... BEGIN ... END` and no upsert key like Neo4j's `KEY_COLUMNS`. SQLite has no journal-mode or pragma option. Decide per item whether to add or document the workaround. | DB04 | D |
+
+**Acceptance evidence:** A test fails when any database page's option table differs from the matching
+connector allowlist; each page lists `TIMEOUT_SECONDS` with its default and the mutually exclusive
+options; the capability matrix and write-path reference match the data source classes, checked line
+by line against the source; and each decision item (DB08, DB09, DB11, DB12, DB15) has a written
+proposal and estimate.
 
 ## Later Reporting and Presentation Work
 

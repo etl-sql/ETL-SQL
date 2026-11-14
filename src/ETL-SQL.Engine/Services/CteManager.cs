@@ -104,6 +104,7 @@ public class CteManager(ILogger logger)
                         // "INT" cast) and corrupt the result. DECIMAL holds integers losslessly. The
                         // final result is re-typed below once all values are known.
                         if (val is int || val is long || val is decimal || val is double || val is float) type = "DECIMAL";
+                        else if (val is DateOnly) type = "DATE";
                         else if (val is DateTime) type = "DATETIME";
                         else if (val is bool) type = "BOOLEAN";
                         colDefs.Add(new ColumnDefinition(colName, type, true));

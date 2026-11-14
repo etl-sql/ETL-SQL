@@ -1793,10 +1793,16 @@ namespace ETL_SQL.TUI.UI
             }
 
             var text = _buffer.GetText();
-            bool success = await _fileHandler.SaveAsync(_filePath, text, ShowPrompt);
+            var (success, sealedText) = await _fileHandler.SaveAndReturnSealedAsync(_filePath, text, ShowPrompt);
 
             if (success)
             {
+                if (!string.Equals(sealedText, text, StringComparison.Ordinal))
+                {
+                    _buffer.Load(sealedText.Replace("\r\n", "\n").Split('\n'));
+                    // Drop pre-seal snapshots so Ctrl+Z cannot restore plaintext secrets or USE PASSWORD.
+                    _undo.Clear();
+                }
                 _isDirty = false;
                 _fileTracker.Record(_filePath);
                 _renderer.ShowStatus($"Saved to {_filePath}");

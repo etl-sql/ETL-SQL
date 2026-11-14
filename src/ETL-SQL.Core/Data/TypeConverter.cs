@@ -26,11 +26,11 @@ public static class TypeConverter
         ["SMALLINT"] = v => Math.Truncate(Convert.ToDecimal(v, CultureInfo.InvariantCulture)),
         ["BIGINT"] = v => Math.Truncate(Convert.ToDecimal(v, CultureInfo.InvariantCulture)),
         ["REAL"] = v => Convert.ToSingle(v, CultureInfo.InvariantCulture),
-        ["DATETIME"] = v => v is DateTime dt ? dt : (v is DateTimeOffset dto ? dto.DateTime : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2 : DateTime.Parse(v.ToString() ?? "", CultureInfo.InvariantCulture))),
-        ["DATE"] = v => v is DateTime dt ? dt.Date : (v is DateTimeOffset dto ? dto.DateTime.Date : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2.Date : DateTime.Parse(v.ToString() ?? "", CultureInfo.InvariantCulture).Date)),
-        ["TIMESTAMP"] = v => v is DateTime dt ? dt : (v is DateTimeOffset dto ? dto.DateTime : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? dt2 : DateTime.Parse(v.ToString() ?? "", CultureInfo.InvariantCulture))),
+        ["DATETIME"] = ConvertToDateTime,
+        ["DATE"] = ConvertToDateOnly,
+        ["TIMESTAMP"] = ConvertToDateTime,
 
-        ["TIME"] = v => TimeSpan.Parse(v.ToString() ?? "00:00:00"),
+        ["TIME"] = v => v is DateOnly ? TimeSpan.Zero : TimeSpan.Parse(v.ToString() ?? "00:00:00"),
         ["STRING"] = v => ToInvariantText(v),
         ["VARCHAR"] = v => ToInvariantText(v),
         ["NVARCHAR"] = v => ToInvariantText(v),
@@ -84,6 +84,8 @@ public static class TypeConverter
         ["UUID"] = v => v is Guid g ? g : Guid.Parse(v.ToString() ?? Guid.Empty.ToString()),
         ["DATETIMEOFFSET"] = v => v is DateTimeOffset dto ? dto : (v is DateTime dt
             ? new DateTimeOffset(dt)
+            : v is DateOnly dateOnly
+            ? new DateTimeOffset(dateOnly.ToDateTime(TimeOnly.MinValue))
             : (EvaluationUtils.SafeTryParseDateTimeOffset(v.ToString() ?? "", out var parsed)
                 ? parsed
                 : DateTimeOffset.Parse(v.ToString() ?? "", System.Globalization.CultureInfo.InvariantCulture))),
@@ -141,9 +143,10 @@ public static class TypeConverter
 
     /// <summary>
     /// The text a value becomes when cast to a string type. It never depends on the server's
-    /// locale, so the same query returns the same text on every host: dates are ISO
-    /// <c>yyyy-MM-dd HH:mm:ss</c> (fractional seconds only when present, then the offset for a
-    /// DATETIMEOFFSET) and numbers use invariant digits. Locale-aware text is FORMAT's job.
+    /// locale, so the same query returns the same text on every host: DATE values are ISO
+    /// <c>yyyy-MM-dd</c>, DATETIME/TIMESTAMP values are <c>yyyy-MM-dd HH:mm:ss</c> (fractional
+    /// seconds only when present, then the offset for a DATETIMEOFFSET), and numbers use
+    /// invariant digits. Locale-aware text is FORMAT's job.
     /// </summary>
     public static string? ToInvariantText(object? value) => value switch
     {
@@ -151,10 +154,31 @@ public static class TypeConverter
         // A database NULL is NULL, not an empty string: `5 + NULL` concatenated to '5'.
         DBNull => null,
         string text => text,
+        DateOnly dateOnly => dateOnly.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         DateTime dateTime => FormatDateTime(dateTime),
         DateTimeOffset offset => FormatDateTime(offset.DateTime) + offset.ToString(" zzz", CultureInfo.InvariantCulture),
         IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
         _ => value.ToString()
+    };
+
+    private static object ConvertToDateTime(object v) => v switch
+    {
+        DateTime dt => dt,
+        DateOnly d => d.ToDateTime(TimeOnly.MinValue),
+        DateTimeOffset dto => dto.DateTime,
+        _ => EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2)
+            ? dt2
+            : DateTime.Parse(v.ToString() ?? "", CultureInfo.InvariantCulture)
+    };
+
+    private static object ConvertToDateOnly(object v) => v switch
+    {
+        DateOnly d => d,
+        DateTime dt => DateOnly.FromDateTime(dt),
+        DateTimeOffset dto => DateOnly.FromDateTime(dto.DateTime),
+        _ => DateOnly.FromDateTime(EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2)
+            ? dt2
+            : DateTime.Parse(v.ToString() ?? "", CultureInfo.InvariantCulture))
     };
 
     private static string FormatDateTime(DateTime value)

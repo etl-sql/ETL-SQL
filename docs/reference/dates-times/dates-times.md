@@ -11,7 +11,8 @@ ETL-SQL distinguishes three concepts that must not be used interchangeably:
 
 | Concept | ETL-SQL / CLR representation | Meaning |
 | :--- | :--- | :--- |
-| Calendar or wall-clock value | `DATE`, `TIME`, `DATETIME`, `TIMESTAMP` / `DateTime` or `TimeSpan` | A local reading with no durable timezone identity |
+| Calendar date | `DATE` / `DateOnly` | A calendar date with no time of day or timezone (`yyyy-MM-dd` when cast to text) |
+| Wall-clock time or timestamp | `TIME`, `DATETIME`, `TIMESTAMP` / `TimeSpan` or `DateTime` | A local reading with no durable timezone identity |
 | Instant with numeric offset | `DATETIMEOFFSET` / `DateTimeOffset` | An absolute instant plus the offset used to display it |
 | Named timezone | IANA or Windows timezone ID supplied to `AT TIME ZONE` or `RELDATE` | A rule set such as `America/Chicago`, including historical DST rules |
 
@@ -23,7 +24,8 @@ IANA timezone ID in a separate string column when that identity is business data
 
 ## 2. Engine representations and casts
 
-- `DATE`, `DATETIME`, and `TIMESTAMP` use CLR `DateTime`.
+- `DATE` uses CLR `DateOnly` and formats as `yyyy-MM-dd` when cast to text.
+- `DATETIME` and `TIMESTAMP` use CLR `DateTime` and format as `yyyy-MM-dd HH:mm:ss`.
 - `TIME` uses CLR `TimeSpan`.
 - `DATETIMEOFFSET` uses CLR `DateTimeOffset` and preserves its numeric offset inside the engine,
   including native column batches and spill/reload.

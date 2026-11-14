@@ -85,6 +85,7 @@ public class ShowVariablesStatementHandler : IStatementHandler
         if (value is int || value is long) return "INT";
         if (value is bool) return "BOOLEAN";
         if (value is double || value is decimal) return "DECIMAL";
+        if (value is DateOnly) return "DATE";
         if (value is DateTime) return "DATETIME";
         if (value is string) return "STRING";
         if (value is IEnumerable<object>) return "LIST";

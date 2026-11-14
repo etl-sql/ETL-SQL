@@ -665,7 +665,7 @@ public class ExpressionEvaluator
         }
 
         if (fn == "SYSDATE" || fn == "GETDATE" || fn == "CURRENT_TIMESTAMP") return DateTime.Now;
-        if (fn == "CURRENT_DATE") return DateTime.Today;
+        if (fn == "CURRENT_DATE") return DateOnly.FromDateTime(DateTime.Today);
         if (fn == "CURRENT_TIME") return DateTime.Now.TimeOfDay;
 
         var args = new List<object?>(f.Arguments.Count);
@@ -725,6 +725,10 @@ public class ExpressionEvaluator
                 dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
             }
             dto = new DateTimeOffset(dt);
+        }
+        else if (val is DateOnly valDateOnly)
+        {
+            dto = new DateTimeOffset(DateTime.SpecifyKind(valDateOnly.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc));
         }
         else if (val is string text && DateTime.TryParse(
                      text,

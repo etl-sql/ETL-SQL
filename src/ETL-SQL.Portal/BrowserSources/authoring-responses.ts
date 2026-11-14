@@ -101,9 +101,11 @@ export function readDesignerLease(value: unknown): DesignerLeaseResponse {
     return { acquired: value.acquired, owner: value.owner, expiresAt: value.expiresAt };
 }
 export function readDesignerSave(value: unknown): SaveDesignerResponse {
-    if (!isObject(value) || !version(value.version) || !nullable(value.sourceRevision, string))
+    if (!isObject(value) || !version(value.version) || !nullable(value.sourceRevision, string)
+        || ('scriptText' in value && !nullable(value.scriptText, string)))
         throw new TypeError('Invalid report save response.');
-    return { version: value.version, sourceRevision: value.sourceRevision };
+    return { version: value.version, sourceRevision: value.sourceRevision,
+        ...(typeof value.scriptText === 'string' ? { scriptText: value.scriptText } : {}) };
 }
 export function readStudioDraft(value: unknown): StudioRecoveryDraftDto {
     if (!isObject(value) || !string(value.content) || !nullable(value.baseVersion, version)

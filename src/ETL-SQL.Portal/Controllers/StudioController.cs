@@ -28,8 +28,11 @@ public sealed partial class StudioController(
     PortalScriptSourceControlService sourceControl,
     AuditService audit,
     DatasetTenantScope? tenantScope = null,
-    PortalTenantCatalogScope? catalogScope = null) : ControllerBase
+    PortalTenantCatalogScope? catalogScope = null,
+    ETL_SQL.Services.SecurityService? securityService = null) : ControllerBase
 {
+    private readonly ETL_SQL.Services.SecurityService _securityService =
+        securityService ?? new ETL_SQL.Services.SecurityService(ETL_SQL.Common.NullLogger.Instance);
     private readonly DatasetTenantScope _tenantScope = tenantScope ?? new DatasetTenantScope(portalConfig);
     private PortalTenantCatalogScope CatalogScope => catalogScope ?? new PortalTenantCatalogScope(db, _tenantScope);
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -166,6 +169,17 @@ public sealed partial class StudioController(
             return (BadRequest(new { error = "Report name must be between 1 and 160 characters." }), null);
         if (scriptText is null || scriptText.Length > Math.Max(1, portalConfig.DesignerLimits.MaxScriptCharacters))
             return (BadRequest(new { error = $"Script text exceeds the {portalConfig.DesignerLimits.MaxScriptCharacters} character limit." }), null);
+
+        var sealOutcome = _securityService.TrySealScriptForSave(scriptText);
+        if (sealOutcome.RequiresPassword)
+        {
+            return (UnprocessableEntity(new
+            {
+                error = "Master password is required to seal plaintext secrets before creating a document.",
+                code = "SEAL_PASSWORD_REQUIRED"
+            }), null);
+        }
+        scriptText = sealOutcome.ScriptText;
 
         var folder = await CatalogScope.Folders.FirstOrDefaultAsync(value => value.Id == folderId, ct);
         if (folder is null)

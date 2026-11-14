@@ -494,17 +494,24 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `XMLFOREST(value1, ...)` | XML | [XMLFOREST.md](reference/functions/json-xml/xmlforest.md) | Forest of XML elements |
 | `FILE_EXISTS(path)` | File | [FILE_EXISTS.md](reference/functions/file-path/file_exists.md) | 1 if file exists, 0 otherwise |
 | `FILE_SIZE(path)` | File | [FILE_SIZE.md](reference/functions/file-path/file_size.md) | Returns local file size in bytes |
+| `FILE_CREATED(path)` | File | [FILE_CREATED.md](reference/functions/file-path/file_created.md) | Returns local file creation timestamp |
 | `FILE_MODIFIED(path)` | File | [FILE_MODIFIED.md](reference/functions/file-path/file_modified.md) | Returns local file last modified timestamp |
+| `FILE_LINE_COUNT(path, [header_rows])` | File | [FILE_LINE_COUNT.md](reference/functions/file-path/file_line_count.md) | Counts lines in a local file with optional header exclusion |
 | `FILE_HASH(path, [algorithm])` | File | [FILE_HASH.md](reference/functions/file-path/file_hash.md) | Computes cryptographic hash of a file |
 | `DIRECTORY_EXISTS(path)` | File | [DIRECTORY_EXISTS.md](reference/functions/file-path/directory_exists.md) | 1 if directory exists, 0 otherwise |
 | `FILE_LIST(path, [mask])` | File | [FILE_LIST.md](reference/functions/file-path/file_list.md) | Returns table of files in path |
 | `REMOTE_FILE_LIST(connection, path)` | File | [REMOTE_FILE_LIST.md](reference/functions/file-path/remote_file_list.md) | Table of files on remote connection |
 | `REMOTE_FILE_EXISTS(connection, path)` | File | [REMOTE_FILE_EXISTS.md](reference/functions/file-path/remote_file_exists.md) | 1 if remote file exists, 0 otherwise |
+| `REMOTE_DIRECTORY_EXISTS(connection, path)` | File | [REMOTE_DIRECTORY_EXISTS.md](reference/functions/file-path/remote_directory_exists.md) | 1 if remote directory exists, 0 otherwise |
+| `REMOTE_FILE_SIZE(connection, path)` | File | [REMOTE_FILE_SIZE.md](reference/functions/file-path/remote_file_size.md) | Returns remote file size in bytes |
+| `REMOTE_FILE_MODIFIED(connection, path)` | File | [REMOTE_FILE_MODIFIED.md](reference/functions/file-path/remote_file_modified.md) | Returns remote file last modified timestamp |
 | `DIRECTORY(path)` | File | [DIRECTORY.md](reference/functions/file-path/directory.md) | Returns directory metadata |
 | `PATH_COMBINE(path1, path2, ...)` | File | [PATH_COMBINE.md](reference/functions/file-path/path_combine.md) | Combines multiple path segments |
 | `PATH_DIRECTORY(path)` | File | [PATH_DIRECTORY.md](reference/functions/file-path/path_directory.md) | Extracts directory path from a full path |
 | `PATH_EXTENSION(path)` | File | [PATH_EXTENSION.md](reference/functions/file-path/path_extension.md) | Extracts file extension from a path |
 | `PATH_FILENAME(path)` | File | [PATH_FILENAME.md](reference/functions/file-path/path_filename.md) | Extracts filename from a full path |
+| `PATH_FILENAME_NO_EXT(path)` | File | [PATH_FILENAME_NO_EXT.md](reference/functions/file-path/path_filename_no_ext.md) | Extracts filename without its extension |
+| `PATH_CHANGE_EXTENSION(path, extension)` | File | [PATH_CHANGE_EXTENSION.md](reference/functions/file-path/path_change_extension.md) | Replaces or removes the file extension in a path |
 | `SUM(expression)` | Aggregate | [SUM.md](reference/functions/aggregate/sum.md) | Sum of values |
 | `COUNT(expression)` | Aggregate | [COUNT.md](reference/functions/aggregate/count.md) | Count of non-null values |
 | `AVG(expression)` | Aggregate | [AVG.md](reference/functions/aggregate/avg.md) | Average of values |
@@ -2453,8 +2460,10 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `END_OF_WEEK` | Function | Canonical built-in function |
 | `EXP` | Function | Canonical built-in function |
 | `EXTRACTVALUE` | Function | Canonical built-in function |
+| `FILE_CREATED` | Function | Canonical built-in function |
 | `FILE_EXISTS` | Function | Canonical built-in function |
 | `FILE_HASH` | Function | Canonical built-in function |
+| `FILE_LINE_COUNT` | Function | Canonical built-in function |
 | `FILE_LIST` | Function | Canonical built-in function |
 | `FILE_MODIFIED` | Function | Canonical built-in function |
 | `FILE_SIZE` | Function | Canonical built-in function |
@@ -2510,10 +2519,12 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `NVL` | Function | Canonical built-in function |
 | `NVL2` | Function | Canonical built-in function |
 | `OPENJSON` | Function | Canonical built-in function |
+| `PATH_CHANGE_EXTENSION` | Function | Canonical built-in function |
 | `PATH_COMBINE` | Function | Canonical built-in function |
 | `PATH_DIRECTORY` | Function | Canonical built-in function |
 | `PATH_EXTENSION` | Function | Canonical built-in function |
 | `PATH_FILENAME` | Function | Canonical built-in function |
+| `PATH_FILENAME_NO_EXT` | Function | Canonical built-in function |
 | `PATINDEX` | Function | Canonical built-in function |
 | `PERCENT_RANK` | Function | Canonical built-in function |
 | `PERCENTILE_CONT` | Function | Canonical built-in function |
@@ -2535,6 +2546,11 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `REGEXP_SPLIT_TO_TABLE` | Function | Canonical built-in function |
 | `REGEXP_SUBSTR` | Function | Canonical built-in function |
 | `RELDATE` | Function | Canonical built-in function |
+| `REMOTE_DIRECTORY_EXISTS` | Function | Canonical built-in function |
+| `REMOTE_FILE_EXISTS` | Function | Canonical built-in function |
+| `REMOTE_FILE_LIST` | Function | Canonical built-in function |
+| `REMOTE_FILE_MODIFIED` | Function | Canonical built-in function |
+| `REMOTE_FILE_SIZE` | Function | Canonical built-in function |
 | `REMOVE_FROM_LIST` | Function | Canonical built-in function |
 | `REMOVE_HIDDEN_CHARACTERS` | Function | Canonical built-in function |
 | `REMOVE_HTML_CHARACTERS` | Function | Canonical built-in function |

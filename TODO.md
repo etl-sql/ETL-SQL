@@ -8,7 +8,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 23 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 15 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -121,15 +121,7 @@ sample on a shared runner.
   heartbeat, which reproduced the timeout locally. **Left:** confirm on hosted runs; the hosted
   cause is unproven.
 
-### 4. Engine DATE type (planned for v0.23.0, owner 2026-11-10)
-
-- [ ] **A DATE cast to text keeps `00:00:00`.** `CAST(CAST('2024-01-08' AS DATE) AS STRING)` gives
-  `2024-01-08 00:00:00`; SQL Server and PostgreSQL give `2024-01-08`. The engine holds DATE values
-  as `DateTime`, so it cannot tell a date from a midnight timestamp. Fix needs a date-only runtime
-  value (or a type tag) through comparisons, date arithmetic, spill and Arrow storage, connectors
-  and `TypeConverter.ToInvariantText`. Reports already drop a midnight time (`ReportValueText`).
-
-### 5. Dependency alerts
+### 4. Dependency alerts
 
 - [ ] **Confirm the 23 Dependabot alerts close when v0.22.0 merges to `main`.** Triaged
   2026-11-13: every alert is on an old version on `main`, and `release/v0.22.0` already has the
@@ -139,71 +131,6 @@ sample on a shared runner.
   runtime because `@tailwindcss/vite` and `tailwindcss` (build plugins that need `vite`) are in
   `dependencies` of `src/etl-sql-vscode/ui/package.json`; moving them to `devDependencies`
   fixes the label, if no build installs with `--omit=dev`.
-
-### 6. File operations and remote transfer (owner 2026-11-13: all in v0.22.0)
-
-- [ ] **Work the file-function backlog in this order.** IDs are rows in `ROADMAP.md` (file
-  operations FO, file functions FN, remote files RF). Each function or statement change ships with
-  its reference page, help text and `LanguageMetadata` entry. Done: RF01, FO01, FO02, FO09, FO10, RF10, FN10, FO06.
-  **Left, in order:** FO11 (PGP sign and verify); then FO03, FO04,
-  FN07, FN01, FN03, FN02, FN08, FN09, RF02. RF03–RF09 stay in `ROADMAP.md` for later.
-
-### 7. `USE PASSWORD` and secret sealing drift (owner 2026-11-13: to be prioritized)
-
-**Design contract:** `USE PASSWORD = '<password>';` is a one-time bootstrap for script secrets only
-(never for `ENCRYPT FILE` or as a raw SFTP/connector password). When a script is saved in an ETL-SQL
-editor (VS Code, TUI, ETL-SQL Studio) or run once via the engine/CLI, plaintext secrets in the
-script are converted to `ENC:...` and `USE PASSWORD = '<password>';` is rewritten on disk to
-`USE PASSWORD PROMPT;` unless `SET ALLOW_PLAINTEXT_SECRETS ON` is set. Having the password lets a
-user run the script or seal new secrets, never decrypt existing `ENC:...` back to plaintext in an
-editor or via Undo (`Ctrl+Z`).
-
-- [ ] **Rewrite and seal the script on disk on first run (CLI and engine).** Running a script with a
-  literal `USE PASSWORD = '...'` or plaintext secrets currently sets `context.ScriptPassword` in
-  memory (`UsePasswordStatementHandler.cs`) and leaves the plaintext file on disk untouched. When
-  the engine executes a file-backed script and `SET ALLOW_PLAINTEXT_SECRETS` is `OFF`, apply
-  `SecurityService.SecureScriptForSave` to rewrite the source file on disk (converting plaintext
-  secrets to `ENC:...` and `USE PASSWORD = '...'` to `USE PASSWORD PROMPT;`) so authors using any
-  external text editor get their script sealed on first run.
-- [ ] **Remove decrypt-on-load from the TUI editor.** `EditorFileHandler.LoadAsync`
-  (`src/ETL-SQL.TUI/UI/EditorFileHandler.cs`) prompts for the Master Password when opening a file
-  with `ENC:` and calls `_security.DecryptScript(text, password)`, exposing plaintext secrets in the
-  editor buffer. Remove that decryption so `ENC:...` stays sealed one-way on load, matching VS Code.
-- [ ] **Make VS Code save-time sealing automatic and align run-time password prompting.** In
-  `src/etl-sql-vscode/src/extension.ts`, saving a file with plaintext credentials or a literal
-  `USE PASSWORD` writes the plaintext to disk first and only pops an opt-in warning toast
-  (`"Apply Save Policy"`). Apply the save policy automatically on save when
-  `ALLOW_PLAINTEXT_SECRETS` is `OFF` (prompting for a password if no literal `USE PASSWORD` is
-  present). Also update `runEtlSql` so it respects `USE PASSWORD = '...'` and `USE PASSWORD PROMPT;`
-  instead of only checking `scriptText.includes('ENC:')`.
-- [ ] **Add save-time secret sealing to ETL-SQL Studio (Portal script editor).** Wire the Portal /
-  ETL-SQL Studio script save path through `SecurityService.SecureScriptForSave` (and prompt for a
-  password when `RequiresSavePassword` is true and no literal `USE PASSWORD` is present) so Studio
-  matches TUI and VS Code.
-- [ ] **Prevent `Ctrl+Z` (Undo) from restoring plaintext passwords or secrets in VS Code, TUI, and
-  ETL-SQL Studio.** After save-time or run-time sealing rewrites a buffer to `ENC:...` and
-  `USE PASSWORD PROMPT;`:
-  - **VS Code:** write the sealed content to disk and call
-    `workbench.action.files.revert` (rather than `editor.edit(...)`, which pushes the plaintext onto
-    the undo stack) so VS Code reloads the clean file from disk with an empty undo history.
-  - **TUI:** replace the buffer lines in `EditorFileHandler.SaveAsync` and clear the TUI editor's
-    undo stack.
-  - **ETL-SQL Studio:** replace the editor model/value and clear its undo history on save.
-- [ ] **Update `USE PASSWORD` documentation across reference and onboarding guides.** Update
-  `docs/reference/variables-parameters/use.md`,
-  `docs/reference/set-commands/set-allow-plaintext-secrets.md`,
-  `docs/guides/onboarding/getting-started.md`, and `docs/reference/cli/encrypt.md` to state the
-  exact contract:
-  1. `USE PASSWORD = '<password>';` is a one-time bootstrap for script secrets only, rewritten to
-     `USE PASSWORD PROMPT;` on first save (in VS Code, TUI, or ETL-SQL Studio) or first run.
-  2. Saving without an explicit `USE PASSWORD` in an ETL-SQL editor prompts for a password and
-     converts secrets to `ENC:...`.
-  3. If authoring in an external editor (Notepad++, Vim, etc.), the user must run the script once
-     via ETL-SQL before committing to source control so the file is sealed.
-  4. Having the password lets a user run the script, never view the plaintext of existing `ENC:...`
-     secrets.
-  5. `SET ALLOW_PLAINTEXT_SECRETS ON` is a discouraged test-only escape hatch that keeps the literal
-     password on disk.
 
 ---
 

@@ -248,7 +248,10 @@ namespace ETL_SQL.Connectors.Sqlite
                     {
                         for (int idx = 0; idx < batch.ColumnNames.Count; idx++)
                         {
-                            insertCmd.Parameters[idx].Value = row[idx] ?? DBNull.Value;
+                            var val = row[idx];
+                            insertCmd.Parameters[idx].Value = val is DateOnly dateOnly
+                                ? dateOnly.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)
+                                : val ?? DBNull.Value;
                         }
                         await insertCmd.ExecuteNonQueryAsync(effectiveCancellationToken);
                     }

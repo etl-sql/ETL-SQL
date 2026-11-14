@@ -53,6 +53,7 @@ export interface ScriptEditorHandle {
     hasCompletion: boolean;
     triggerCompletion: () => boolean;
     setValue: (text: string) => void;
+    resetDocument?: (text: string) => void;
     replaceAll: (text: string) => ScriptEditorSpan | null;
     revealRange: (from: number, to: number, select?: boolean) => ScriptEditorSpan | undefined;
     revealLines: (fromLine: number, toLine?: number) => ScriptEditorSpan | null;
@@ -207,6 +208,7 @@ export function diagnosticSeverity(d?: ScriptEditorDiagnostic): 'error' | 'info'
  * @property {boolean} hasCompletion          Whether a completion endpoint was configured.
  * @property {() => boolean} triggerCompletion
  * @property {(text: string) => void} setValue
+ * @property {(text: string) => void} [resetDocument] Replaces the buffer with a fresh document state whose undo history is empty.
  * @property {(text: string) => ({from: number, to: number}|null)} replaceAll Dispatches only the
  *   span that changed, so the caret and scroll position survive a GUI-generated edit.
  * @property {(from: number, to: number, select?: boolean) => void} revealRange
@@ -842,6 +844,10 @@ export async function createScriptEditor(container: HTMLElement, opts: ScriptEdi
         setValue: (text: string): void => view.dispatch({
             changes: { from: 0, to: view.state.doc.length, insert: text },
         }),
+        resetDocument: (text: string): void => {
+            if (!view) return;
+            view.setState(EditorState.create({ doc: String(text ?? ''), extensions }));
+        },
         /**
          * Bring the buffer to `text` by dispatching only the span that actually changed.
          *
