@@ -59,12 +59,17 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   (Scale Measurement 43504065542): all 7 pass, peak memory 0.3–1.5 GB, longest 21 min. The 10M
   run showed join and window memory growing with rows: one spill writer per partition, and the
   partition count grows with input. Fixed in 5f14756e4 (spill writers share a fixed buffer).
-  Re-measured (runs 43515403790 at 10M, 43515404110 at 100M): window 477 → 530 MB, flat. Join
-  838 → 1412 MB, down from 1526 MB but still growing, so the join has a second source.
-  AllocProfile fails at 10M only on the workstation machine-metric budget; the hosted job uses
-  `-MachineMetricsReportOnly`. **Left:** find the join's remaining growth; size the other
-  conditional certifications the same way; build the hosted jobs and the approval; remove the
-  operator submission from `release.yml`.
+  Re-measured (runs 43515403790 at 10M, 43515404110 at 100M): window 477 → 530 MB, flat. The
+  join's remaining growth (838 → 1412 MB) is uncollected garbage, not live data (2026-11-14): the
+  job only checked the 4 GB bound afterwards, so the GC kept more garbage on longer runs. Live
+  heap (bytes surviving full collections) is 269 MB at 2M rows and 303 MB at 20M, one build
+  partition; under a 512 MB GC hard limit the 20M join passes about 6% slower. Owner decision
+  2026-11-14: the cap is enforced (`DOTNET_GCHeapHardLimit` = the bound) and "flat" is judged on
+  `peakLiveHeapMB`; working set and heap peak are report-only. AllocProfile fails at 10M only on
+  the workstation machine-metric budget; the hosted job uses `-MachineMetricsReportOnly`.
+  **Left:** re-measure 10M and 100M with the enforced cap and confirm `peakLiveHeapMB` is flat for
+  all 7 scenarios; size the other conditional certifications the same way; build the hosted jobs
+  and the approval; remove the operator submission from `release.yml`.
 
 **Parked from the earlier "release in four hours" goal.** Each is picked up only if a workstream
 needs it, otherwise moves to `ROADMAP.md` after v0.22.0:

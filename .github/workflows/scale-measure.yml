@@ -3,6 +3,11 @@
 # reliability W8). Records peak memory, spill disk and time; throughput is not gated
 # (MinimumRowsPerSecond 0). Never release evidence.
 #
+# The memory bound is enforced, not just checked afterwards: the managed heap runs under
+# DOTNET_GCHeapHardLimit = memory_bound_mb. Without a limit the GC keeps uncollected garbage that
+# grows with run length, so the peak heap rose with the input although live data did not (the
+# join, 2026-11-14). Read peakLiveHeapMB (bytes surviving full collections) for flatness.
+#
 # Push a branch named scale-measure/<anything> to run it with the defaults below
 # (scale-measure/10m for 10M rows), or dispatch it once this file is on the default branch.
 name: Scale Measurement
@@ -17,7 +22,7 @@ on:
         type: string
         default: '100000000'
       memory_bound_mb:
-        description: Peak process memory the scenarios must stay under
+        description: Managed heap hard limit and peak process memory the scenarios must stay under
         type: string
         default: '4096'
       memory_grant_mb:
@@ -130,6 +135,8 @@ jobs:
                   Start-Sleep -Seconds 10
               }
           }
+          # Hex byte count, no 0x prefix (as scripts/test-lane.ps1 sets it).
+          $env:DOTNET_GCHeapHardLimit = ([int64]$env:MEMORY_BOUND_MB * 1MB).ToString('X')
           $started = Get-Date
           $failed = $false
           try {
@@ -143,16 +150,22 @@ jobs:
               Stop-Job $sampler; Remove-Job $sampler -Force
           }
           $samples = Import-Csv "$out/disk-samples.csv" | ForEach-Object { [double]$_.freeGB }
+          # The scenario metric JSON carries peakLiveHeapMB at the top level (AllocProfile: under gc).
+          $peakLiveHeapMB = Get-ChildItem "$out/run" -Filter *.json -Recurse -ErrorAction SilentlyContinue |
+              ForEach-Object { try { Get-Content $_.FullName -Raw | ConvertFrom-Json } catch { $null } } |
+              ForEach-Object { if ($_.peakLiveHeapMB -ne $null) { $_.peakLiveHeapMB } elseif ($_.gc.peakLiveHeapMB -ne $null) { $_.gc.peakLiveHeapMB } } |
+              Measure-Object -Maximum | Select-Object -ExpandProperty Maximum
           $summary = [ordered]@{
               scenario = $env:SCENARIO
               rows = [long]$env:ROWS
               passed = -not $failed
               elapsedMinutes = [math]::Round(((Get-Date) - $started).TotalMinutes, 1)
               peakSpillDiskGB = [math]::Round($hostInfo.freeDiskGBAtStart - ($samples | Measure-Object -Minimum).Minimum, 1)
+              peakLiveHeapMB = $peakLiveHeapMB
           }
           $summary | ConvertTo-Json | Set-Content "$out/summary.json"
           $summary | Format-List | Out-String | Write-Host
-          "### $env:SCENARIO`n`n| Rows | Passed | Minutes | Peak spill disk (GB) |`n| ---: | :---: | ---: | ---: |`n| $($summary.rows) | $($summary.passed) | $($summary.elapsedMinutes) | $($summary.peakSpillDiskGB) |" |
+          "### $env:SCENARIO`n`n| Rows | Passed | Minutes | Peak spill disk (GB) | Peak live heap (MB) |`n| ---: | :---: | ---: | ---: | ---: |`n| $($summary.rows) | $($summary.passed) | $($summary.elapsedMinutes) | $($summary.peakSpillDiskGB) | $($summary.peakLiveHeapMB) |" |
               Add-Content $env:GITHUB_STEP_SUMMARY
           if ($failed) { exit 1 }
 

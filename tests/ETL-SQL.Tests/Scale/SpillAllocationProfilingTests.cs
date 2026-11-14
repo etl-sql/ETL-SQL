@@ -49,6 +49,7 @@ namespace ETL_SQL.Tests.Scale
 
             using var allocationProfiler = new AllocationTypeProfiler();
             using var sampler = new ScenarioResourceSampler();
+            using var liveHeap = new LiveHeapTracker();
             var ioBefore = ProcessIoCounters.Capture();
             allocationProfiler.Start();
 
@@ -113,7 +114,8 @@ namespace ETL_SQL.Tests.Scale
                     gen1 = resources.Gen1Collections,
                     gen2 = resources.Gen2Collections,
                     pauseMs = Math.Round(resources.GcPauseTime.TotalMilliseconds, 1),
-                    peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1048576d, 1)
+                    peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1048576d, 1),
+                    peakLiveHeapMB = LiveHeapTracker.ToMegabytes(liveHeap.Snapshot())
                 },
                 cpu = new
                 {

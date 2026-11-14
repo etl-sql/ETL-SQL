@@ -41,6 +41,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         GC.Collect(2, GCCollectionMode.Forced, blocking: true);
         GC.WaitForPendingFinalizers();
         using var sampler = new ScenarioResourceSampler();
+        using var liveHeap = new LiveHeapTracker();
         await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         await using var source = new StreamingColumnarSource(rowCount, batchSize);
         evaluator.Connections["gate_f_source"] = source;
@@ -98,6 +99,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
             peakProcessWorkingSetMB = Math.Round(peakWorkingSetMb, 1),
             peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / 1024d / 1024d, 1),
             peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1024d / 1024d, 1),
+            peakLiveHeapMB = LiveHeapTracker.ToMegabytes(liveHeap.Snapshot()),
             allocatedMB = Math.Round(resources.AllocatedBytes / 1024d / 1024d, 1),
             gcGen0Collections = resources.Gen0Collections,
             gcGen1Collections = resources.Gen1Collections,
@@ -136,6 +138,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         GC.Collect(2, GCCollectionMode.Forced, blocking: true);
         GC.WaitForPendingFinalizers();
         using var sampler = new ScenarioResourceSampler();
+        using var liveHeap = new LiveHeapTracker();
         await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         evaluator.ExternalSortChunkSize = chunkRows;
         var logger = evaluator.ServiceProvider.GetRequiredService<ETL_SQL.Common.ILogger>();
@@ -218,6 +221,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
             peakProcessWorkingSetMB = Math.Round(peakWorkingSetMb, 1),
             peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / 1024d / 1024d, 1),
             peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1024d / 1024d, 1),
+            peakLiveHeapMB = LiveHeapTracker.ToMegabytes(liveHeap.Snapshot()),
             allocatedMB = Math.Round(resources.AllocatedBytes / 1024d / 1024d, 1),
             gcGen0Collections = resources.Gen0Collections,
             gcGen1Collections = resources.Gen1Collections,
@@ -259,6 +263,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         GC.Collect(2, GCCollectionMode.Forced, blocking: true);
         GC.WaitForPendingFinalizers();
         using var sampler = new ScenarioResourceSampler();
+        using var liveHeap = new LiveHeapTracker();
         await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         evaluator.ExternalHashPartitions = partitions;
         var logger = evaluator.ServiceProvider.GetRequiredService<ETL_SQL.Common.ILogger>();
@@ -325,6 +330,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
             peakProcessWorkingSetMB = Math.Round(peakWorkingSetMb, 1),
             peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / 1024d / 1024d, 1),
             peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1024d / 1024d, 1),
+            peakLiveHeapMB = LiveHeapTracker.ToMegabytes(liveHeap.Snapshot()),
             allocatedMB = Math.Round(resources.AllocatedBytes / 1024d / 1024d, 1),
             gcGen0Collections = resources.Gen0Collections,
             gcGen1Collections = resources.Gen1Collections,
@@ -364,6 +370,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         GC.Collect(2, GCCollectionMode.Forced, blocking: true);
         GC.WaitForPendingFinalizers();
         using var sampler = new ScenarioResourceSampler();
+        using var liveHeap = new LiveHeapTracker();
         await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         evaluator.OperatorMemoryGrantMB = ReadPositiveInt("GATE_F_OPERATOR_MEMORY_GRANT_MB", 8192);
         var logger = evaluator.ServiceProvider.GetRequiredService<ETL_SQL.Common.ILogger>();
@@ -452,6 +459,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
             peakProcessWorkingSetMB = Math.Round(peakWorkingSetMb, 1),
             peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / 1024d / 1024d, 1),
             peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1024d / 1024d, 1),
+            peakLiveHeapMB = LiveHeapTracker.ToMegabytes(liveHeap.Snapshot()),
             allocatedMB = Math.Round(resources.AllocatedBytes / 1024d / 1024d, 1),
             gcGen0Collections = resources.Gen0Collections,
             gcGen1Collections = resources.Gen1Collections,
@@ -491,6 +499,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         GC.Collect(2, GCCollectionMode.Forced, blocking: true);
         GC.WaitForPendingFinalizers();
         using var sampler = new ScenarioResourceSampler();
+        using var liveHeap = new LiveHeapTracker();
         await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         evaluator.WindowSpillThreshold = ReadPositiveInt("GATE_F_WINDOW_SPILL_THRESHOLD", 100_000);
         var logger = evaluator.ServiceProvider.GetRequiredService<ETL_SQL.Common.ILogger>();
@@ -579,6 +588,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
             peakProcessWorkingSetMB = Math.Round(peakWorkingSetMb, 1),
             peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / 1024d / 1024d, 1),
             peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1024d / 1024d, 1),
+            peakLiveHeapMB = LiveHeapTracker.ToMegabytes(liveHeap.Snapshot()),
             allocatedMB = Math.Round(resources.AllocatedBytes / 1024d / 1024d, 1),
             gcGen0Collections = resources.Gen0Collections,
             gcGen1Collections = resources.Gen1Collections,
