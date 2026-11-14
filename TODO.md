@@ -65,11 +65,15 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   heap (bytes surviving full collections) is 269 MB at 2M rows and 303 MB at 20M, one build
   partition; under a 512 MB GC hard limit the 20M join passes about 6% slower. Owner decision
   2026-11-14: the cap is enforced (`DOTNET_GCHeapHardLimit` = the bound) and "flat" is judged on
-  `peakLiveHeapMB`; working set and heap peak are report-only. AllocProfile fails at 10M only on
-  the workstation machine-metric budget; the hosted job uses `-MachineMetricsReportOnly`.
-  **Left:** re-measure 10M and 100M with the enforced cap and confirm `peakLiveHeapMB` is flat for
-  all 7 scenarios; size the other conditional certifications the same way; build the hosted jobs
-  and the approval; remove the operator submission from `release.yml`.
+  `peakLiveHeapMB`; working set and heap peak are report-only. Re-measured with the cap (runs
+  43617518622 at 10M, 43617518644 at 100M): all pass; live heap is flat for sort (183 → 183 MB),
+  window (152 → 173), grouping (188 → 168) and AllocProfile (82 → 88). The join is not: 292 →
+  435 MB as its partitions go 16 → 128, about 1.3 MB of live heap per partition (locally 1.2 MB
+  per partition from 4 to 32). Bounded by the 1,024-partition cap (about 1.3 GB) but not flat.
+  AllocProfile fails at 10M only on the workstation machine-metric budget; the hosted job uses
+  `-MachineMetricsReportOnly`. **Left:** find the join's per-partition live cost (suspect: the
+  open spill writers); size the other conditional certifications the same way; build the hosted
+  jobs and the approval; remove the operator submission from `release.yml`.
 
 **Parked from the earlier "release in four hours" goal.** Each is picked up only if a workstream
 needs it, otherwise moves to `ROADMAP.md` after v0.22.0:
