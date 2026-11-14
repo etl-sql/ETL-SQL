@@ -1,0 +1,306 @@
+# Release evidence that used to be an operator submission from the owner's workstation (release
+# reliability W8): deployment profiles and transitions, production-canary contracts, the
+# conditional scale and columnar certifications, and the billion-row memory-flatness proof. It runs
+# once per release candidate. Each job is sized to about a third of its limit and gates only on
+# deterministic results (rows, checksums, bounded memory, contract outcomes), never throughput.
+#
+# The spill allocation profile is not repeated here: Engine Certification runs it at 10M rows on
+# every CI run of the candidate. The recovery drill is part of DEB Installed Upgrade.
+#
+# Push a branch named release-evidence/<anything> to measure the jobs; such runs are never
+# release evidence. Release evidence comes from a dispatch on the release branch.
+name: Release Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact frozen candidate SHA; the selected branch must still point to it
+        required: true
+        type: string
+  push:
+    branches: [ 'release-evidence/**' ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-evidence-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  # Billion-row proof: every scenario at two sizes under the same enforced heap limit.
+  BILLION_ROW_MEMORY_BOUND_MB: '4096'
+  BILLION_ROW_MEMORY_GRANT_MB: '2048'
+
+jobs:
+  candidate:
+    name: Candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.identity.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 5
+      - name: Confirm candidate identity
+        id: identity
+        timeout-minutes: 3
+        shell: pwsh
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
+            if ($env:GITHUB_REF -notmatch '^refs/heads/(main|release/v\d+\.\d+\.\d+)$') { throw 'Dispatch release evidence on main or a release branch.' }
+            if ($env:CANDIDATE_SHA -cnotmatch '^[0-9a-f]{40}$' -or $env:CANDIDATE_SHA -cne $env:GITHUB_SHA) { throw 'The branch moved away from the requested candidate.' }
+          }
+          [xml]$props = Get-Content Directory.Build.props
+          "version=$([string]$props.Project.PropertyGroup.VersionPrefix)" >> $env:GITHUB_OUTPUT
+
+  deployment:
+    name: Deployment ${{ matrix.kind }}s
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [Profile, Transition]
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Install browser compiler
+        timeout-minutes: 8
+        run: npm ci --prefix scripts/typecheck
+      - name: Prepare browser assets
+        timeout-minutes: 8
+        run: node scripts/sync-assets.js
+      # The script builds for itself: a -NoBuild run is development evidence.
+      - name: Certify all deployment ${{ matrix.kind }}s
+        timeout-minutes: 150
+        shell: pwsh
+        env:
+          KIND: ${{ matrix.kind }}
+          VERSION: ${{ needs.candidate.outputs.version }}
+        run: |
+          $selection = if ($env:KIND -eq 'Profile') { @('-Profile', 'All') } else { @('-Transition', 'All') }
+          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-DeploymentProfileCertification.ps1 `
+            -ScriptArguments ($selection + @('-ReleaseVersion', $env:VERSION)) `
+            -EvidenceDirectory "release-validation/deployment-$env:KIND" -TimeoutSeconds 8700
+      - name: Retain deployment evidence
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-evidence-deployment-${{ matrix.kind }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            certification-results/deployment-profiles/
+            artifacts/release-evidence/
+            release-validation/deployment-${{ matrix.kind }}/
+          if-no-files-found: error
+          retention-days: 90
+
+  canary:
+    name: Production-canary contracts
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Install browser compiler
+        timeout-minutes: 8
+        run: npm ci --prefix scripts/typecheck
+      - name: Prepare browser assets
+        timeout-minutes: 8
+        run: node scripts/sync-assets.js
+      - name: Certify production-canary contracts
+        timeout-minutes: 60
+        shell: pwsh
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ProductionCanaryCertification.ps1 -ScriptArguments @('-Configuration', 'Release') -EvidenceDirectory release-validation/canary -TimeoutSeconds 3480
+      - name: Retain canary evidence
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-evidence-canary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            certification-results/production-canaries/
+            release-validation/canary/
+          if-no-files-found: error
+          retention-days: 90
+
+  scale:
+    name: Scale ${{ matrix.tier }}
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        tier: [Stress, Provider, Huge]
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 10
+      - name: Free disk space
+        timeout-minutes: 10
+        run: sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+      - uses: ./.github/actions/build-release
+        with:
+          evidence: release-validation/scale-${{ matrix.tier }}/build
+      # Rows and checksums gate; one sample is enough for that, and timing is not gated here.
+      - name: Certify the ${{ matrix.tier }} tier
+        timeout-minutes: 140
+        shell: pwsh
+        env:
+          TIER: ${{ matrix.tier }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ScaleCertification.ps1 -ScriptArguments @('-Tier', $env:TIER, '-Samples', '1', '-SkipBuild', '-OutDir', "release-validation/scale-$env:TIER/report") -EvidenceDirectory "release-validation/scale-$env:TIER/process" -TimeoutSeconds 8100
+      - name: Retain scale evidence
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-evidence-scale-${{ matrix.tier }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/scale-${{ matrix.tier }}/
+          if-no-files-found: error
+          retention-days: 90
+
+  columnar:
+    name: Columnar ${{ matrix.gate }} gate
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: [Storage, Operator]
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 10
+      - uses: ./.github/actions/build-release
+        with:
+          evidence: release-validation/columnar-${{ matrix.gate }}/build
+      # Storage gates on resident memory against the row store; Operator on matching rows and
+      # checksums. The operator speedup is a single timing sample, so it is recorded only.
+      - name: Run the columnar ${{ matrix.gate }} gate
+        timeout-minutes: 45
+        shell: pwsh
+        env:
+          GATE: ${{ matrix.gate }}
+        run: |
+          $arguments = @('-SkipBuild', '-OutFile', "release-validation/columnar-$env:GATE/columnar-$($env:GATE.ToLowerInvariant())-gate.json")
+          if ($env:GATE -eq 'Operator') { $arguments += '-SpeedupReportOnly' }
+          ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath "scripts/Test-Columnar$($env:GATE)Gate.ps1" -ScriptArguments $arguments -EvidenceDirectory "release-validation/columnar-$env:GATE/process" -TimeoutSeconds 2580
+      - name: Retain columnar evidence
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-evidence-columnar-${{ matrix.gate }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/columnar-${{ matrix.gate }}/
+          if-no-files-found: error
+          retention-days: 90
+
+  billion-row:
+    name: Billion-row ${{ matrix.scenario }} (${{ matrix.rows }} rows)
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [ColumnarCore, TempTableRoundTrip, AllocProfile, ExternalSort, ExternalJoin, HighCardinalityGrouping, EligibleWindowRowNumber]
+        rows: ['10000000', '100000000']
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 10
+      # Spilling scenarios need tens of GB. The Ubuntu image ships toolchains this job never uses.
+      - name: Free disk space
+        timeout-minutes: 10
+        run: sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+      - uses: ./.github/actions/build-release
+        with:
+          evidence: release-validation/billion-row/build
+      # The memory bound is enforced, not checked afterwards: the managed heap runs under
+      # DOTNET_GCHeapHardLimit. Without it the GC keeps garbage that grows with run length.
+      - name: Run ${{ matrix.scenario }}
+        timeout-minutes: 60
+        shell: pwsh
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+          ROWS: ${{ matrix.rows }}
+        run: |
+          $out = "release-validation/billion-row/$env:SCENARIO-$env:ROWS"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $env:DOTNET_GCHeapHardLimit = ([int64]$env:BILLION_ROW_MEMORY_BOUND_MB * 1MB).ToString('X')
+          $started = Get-Date
+          $passed = $true
+          try {
+              ./scripts/Test-BillionRowCertification.ps1 -Scenario $env:SCENARIO -Rows ([long]$env:ROWS) `
+                  -MemoryBoundMB ([double]$env:BILLION_ROW_MEMORY_BOUND_MB) -MemoryGrantMB ([int]$env:BILLION_ROW_MEMORY_GRANT_MB) `
+                  -MinimumRowsPerSecond 0 -MinimumFreeDiskGB 1 -MachineMetricsReportOnly -SkipBuild -OutDir "$out/run"
+          } catch {
+              $passed = $false
+              Write-Host "::error::$($_.Exception.Message)"
+          }
+          $minutes = [math]::Round(((Get-Date) - $started).TotalMinutes, 1)
+          node scripts/billion-row-evidence.mjs summarize "$out/run" $env:SCENARIO $env:ROWS $env:BILLION_ROW_MEMORY_BOUND_MB ($passed.ToString().ToLowerInvariant()) $minutes "$out/summary.json"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot summarize the scenario run.' }
+          if (-not $passed) { exit 1 }
+      - name: Retain billion-row evidence
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-evidence-billion-row-${{ matrix.scenario }}-${{ matrix.rows }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/billion-row/
+          if-no-files-found: error
+          retention-days: 90
+
+  billion-row-flatness:
+    name: Billion-row memory flatness
+    needs: billion-row
+    if: always() && needs.billion-row.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 5
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-evidence-billion-row-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/billion-row-runs
+      - name: Gate peak memory across row counts
+        timeout-minutes: 5
+        run: |
+          mkdir -p release-validation/billion-row-flatness
+          status=0
+          node scripts/billion-row-evidence.mjs flatness release-validation/billion-row-runs \
+            release-validation/billion-row-flatness/flatness.json release-validation/billion-row-flatness/flatness.md || status=$?
+          cat release-validation/billion-row-flatness/flatness.md >> "$GITHUB_STEP_SUMMARY" || true
+          exit $status
+      - name: Retain flatness result
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-evidence-billion-row-flatness-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/billion-row-flatness/
+          if-no-files-found: error
+          retention-days: 90

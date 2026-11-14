@@ -1,0 +1,35 @@
+name: Build the Release solution
+description: Prepare pinned browser assets, restore and build the whole solution in Release with retained deadlines.
+inputs:
+  evidence:
+    description: Supervisor evidence directory
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 22
+    - uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: 10.0.x
+    - name: Install browser compiler
+      shell: pwsh
+      env:
+        BUILD_EVIDENCE: ${{ inputs.evidence }}
+      run: ./scripts/Invoke-CertificationProcess.ps1 -Command pwsh -CommandArguments @('-NoProfile', '-Command', 'npm ci --prefix scripts/typecheck; exit $LASTEXITCODE') -EvidenceDirectory "$env:BUILD_EVIDENCE/compiler" -TimeoutSeconds 480
+    - name: Prepare browser assets
+      shell: pwsh
+      env:
+        BUILD_EVIDENCE: ${{ inputs.evidence }}
+      run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/sync-assets.js') -EvidenceDirectory "$env:BUILD_EVIDENCE/assets" -TimeoutSeconds 480
+    - name: Restore solution
+      shell: pwsh
+      env:
+        BUILD_EVIDENCE: ${{ inputs.evidence }}
+      run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('restore', 'ETL-SQL.slnx') -EvidenceDirectory "$env:BUILD_EVIDENCE/restore" -TimeoutSeconds 720
+    - name: Build solution
+      shell: pwsh
+      env:
+        BUILD_EVIDENCE: ${{ inputs.evidence }}
+      run: ./scripts/Invoke-CertificationProcess.ps1 -Command dotnet -CommandArguments @('build', 'ETL-SQL.slnx', '--no-restore', '--configuration', 'Release') -EvidenceDirectory "$env:BUILD_EVIDENCE/build" -TimeoutSeconds 1200

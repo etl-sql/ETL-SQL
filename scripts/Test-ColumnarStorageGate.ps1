@@ -23,9 +23,10 @@ try {
     $env:COLUMNAR_STORAGE_GATE_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
     $env:COLUMNAR_STORAGE_GATE_MAX_RATIO = $MaximumRatio.ToString([Globalization.CultureInfo]::InvariantCulture)
     $env:COLUMNAR_STORAGE_GATE_OUTPUT = $outputPath
-    $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+    $testProject = Join-Path $repoRoot 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'
     dotnet test $testProject -c Release --no-build --no-restore -m:1 `
-        --filter 'FullyQualifiedName=ETL_SQL.Tests.Scale.ColumnarStorageAssessmentTests.NativeStoreUsesMateriallyLessResidentCapacityAndScansTypedBuffers'
+        --filter 'FullyQualifiedName=ETL_SQL.Tests.Scale.ColumnarStorageAssessmentTests.NativeStoreUsesMateriallyLessResidentCapacityAndScansTypedBuffers' `
+        -- RunConfiguration.TreatNoTestsAsError=true
     if ($LASTEXITCODE -ne 0) { throw 'Columnar storage gate failed.' }
 }
 finally {

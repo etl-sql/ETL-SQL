@@ -19,6 +19,9 @@ param(
     [int]$TempBatchRows = 25000,
     [double]$MinimumRowsPerSecond = 50000,
     [double]$MinimumFreeDiskGB = 25,
+    # Hosted runs: the AllocProfile scenario reports its machine metrics (elapsed, GC pause, CPU)
+    # without gating them; allocation and retained bytes still gate.
+    [switch]$MachineMetricsReportOnly,
     [switch]$SkipBuild,
     [switch]$Force
 )
@@ -36,5 +39,6 @@ $arguments = @{
     MinimumFreeDiskGB = $MinimumFreeDiskGB
 }
 if ($SkipBuild) { $arguments.SkipBuild = $true }
+if ($MachineMetricsReportOnly) { $arguments.MachineMetricsReportOnly = $true }
 if ($Force) { $arguments.Force = $true }
 & $legacy @arguments

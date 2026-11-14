@@ -2,6 +2,9 @@ param(
     [ValidateSet(100000, 10000000, 50000000)]
     [int]$Rows = 10000000,
     [double]$MinimumSpeedup = 1.5,
+    # Hosted release evidence: rows, projection checksum and group sums still gate; the single-sample
+    # speedup is recorded only, because a timing ratio on a shared runner is not a deterministic result.
+    [switch]$SpeedupReportOnly,
     [string]$OutFile = '.\certification-results\columnar-operator-gate.json',
     [switch]$SkipBuild
 )
@@ -22,11 +25,12 @@ $previousSpeedup = $env:COLUMNAR_GATE_MIN_SPEEDUP
 $previousOutput = $env:COLUMNAR_GATE_OUTPUT
 try {
     $env:COLUMNAR_GATE_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
-    $env:COLUMNAR_GATE_MIN_SPEEDUP = $MinimumSpeedup.ToString([Globalization.CultureInfo]::InvariantCulture)
+    $env:COLUMNAR_GATE_MIN_SPEEDUP = if ($SpeedupReportOnly) { $null } else { $MinimumSpeedup.ToString([Globalization.CultureInfo]::InvariantCulture) }
     $env:COLUMNAR_GATE_OUTPUT = $outputPath
-    $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+    $testProject = Join-Path $repoRoot 'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj'
     dotnet test $testProject -c Release --no-build --no-restore -m:1 `
-        --filter 'FullyQualifiedName=ETL_SQL.Tests.Scale.ColumnarOperatorGateTests.NativeFilterProjectionAndGroupMatchRowsAndReportThroughput'
+        --filter 'FullyQualifiedName=ETL_SQL.Tests.Scale.ColumnarOperatorGateTests.NativeFilterProjectionAndGroupMatchRowsAndReportThroughput' `
+        -- RunConfiguration.TreatNoTestsAsError=true
     if ($LASTEXITCODE -ne 0) { throw 'Columnar operator gate failed.' }
 }
 finally {

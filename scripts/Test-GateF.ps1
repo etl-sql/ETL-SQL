@@ -24,6 +24,9 @@ param(
     [int]$TempBatchRows = 25000,
     [double]$MinimumRowsPerSecond = 50000,
     [double]$MinimumFreeDiskGB = 25,
+    # Hosted runs: the AllocProfile scenario reports its machine metrics (elapsed, GC pause, CPU)
+    # without gating them; allocation and retained bytes still gate.
+    [switch]$MachineMetricsReportOnly,
     [switch]$SkipBuild,
     [switch]$Force
 )
@@ -498,13 +501,13 @@ try {
             ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
         if ($Force -or -not $reusable) {
             $pwsh = (Get-Process -Id $PID).Path
-            Invoke-LoggedProcess 'AllocProfile' $pwsh @(
+            Invoke-LoggedProcess 'AllocProfile' $pwsh (@(
                 '-NoProfile', '-File', (Join-Path $PSScriptRoot 'Test-SpillAllocProfile.ps1'),
                 '-Rows', $Rows.ToString([Globalization.CultureInfo]::InvariantCulture),
                 '-MemoryGrantMB', $MemoryGrantMB.ToString([Globalization.CultureInfo]::InvariantCulture),
                 '-BatchRows', $TempBatchRows.ToString([Globalization.CultureInfo]::InvariantCulture),
                 '-OutDir', $allocOut, '-SkipBuild'
-            ) (Join-Path $outRoot 'alloc-profile.log') (Join-Path $outRoot 'alloc-profile.err.log') $result
+            ) + @(if ($MachineMetricsReportOnly) { '-MachineMetricsReportOnly' })) (Join-Path $outRoot 'alloc-profile.log') (Join-Path $outRoot 'alloc-profile.err.log') $result
             Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
         } else {
             Write-Status 'resuming' 'AllocProfile' 0 "reusing completed result for commit $commit"
