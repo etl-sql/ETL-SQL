@@ -1,5 +1,5 @@
-using ETL_SQL.Core;
 using System.Linq;
+using ETL_SQL.Core;
 using Xunit;
 
 namespace ETL_SQL.Tests.Statements;
