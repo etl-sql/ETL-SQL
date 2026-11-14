@@ -150,8 +150,24 @@ public partial class SpillStore : ISpillStore
                 _cachedSessionKey = RandomNumberGenerator.GetBytes(32);
                 Directory.CreateDirectory(_cachedRootPath);
             }
+
+            // A crashed process cannot delete its temp root; the marker lets the Orchestrator's
+            // sweep remove it at once instead of after the 24-hour age-out.
+            if (!IsPersistent && IsSweptTempRoot(_cachedRootPath!))
+            {
+                try { SpillRootOwnership.Claim(_cachedRootPath!); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    _context.Logger.Warning("Could not record the owner of spill directory {Path}: {Message}", _cachedRootPath, ex.Message);
+                }
+            }
         }
     }
+
+    private static bool IsSweptTempRoot(string root) => string.Equals(
+        Path.GetDirectoryName(Path.GetFullPath(root)),
+        Path.GetFullPath(Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill")),
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     private bool CacheMatchesContext()
     {
@@ -193,6 +209,7 @@ public partial class SpillStore : ISpillStore
     public async Task<ISpillWriter> CreateWriterAsync(string chunkName, int flushBatchRows)
     {
         EnsureInitialized();
+        AdmitNewExtent();
         var path = Path.Combine(_cachedRootPath!, chunkName);
         var encrypt = _context.SpillEncryptionEnabled;
         var compress = _context.SpillCompressionEnabled;
@@ -213,6 +230,34 @@ public partial class SpillStore : ISpillStore
             ? new GatedColumnarSpillWriter(writer, this, _context)
             : new GatedSpillWriter(writer, this, _context);
         return await Task.FromResult(writer);
+    }
+
+    // Refuse a new extent while the spill volume is below its reserve, before any byte is written.
+    // The message names the setting, not the path: it reaches script authors and job history.
+    private void AdmitNewExtent()
+    {
+        var reserve = _context.SpillMinimumFreeBytes;
+        if (reserve <= 0 || TryGetAvailableBytes(_cachedRootPath!) is not long available || available >= reserve)
+            return;
+        const long mb = 1024 * 1024;
+        throw new ExecutionException(
+            $"Spill storage is low on space: {available / mb:N0} MB free, below the {reserve / mb:N0} MB reserve " +
+            "(Engine:SpillMinimumFreeDiskMB). Free space on the spill volume or move the spill root to a larger one.");
+    }
+
+    private static long? TryGetAvailableBytes(string directory)
+    {
+        try
+        {
+            var full = Path.GetFullPath(directory);
+            // On Unix DriveInfo reports the file system holding any path; Windows needs the root.
+            var drive = new DriveInfo(OperatingSystem.IsWindows() ? Path.GetPathRoot(full)! : full);
+            return drive.IsReady ? drive.AvailableFreeSpace : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return null; // Unknown free space never blocks a spill; the write itself still fails on a full disk.
+        }
     }
 
     private ValueTask<SpillWriteSlot> AcquireWriteSlotAsync(CancellationToken cancellationToken)
@@ -313,27 +358,25 @@ public partial class SpillStore : ISpillStore
         public async Task WriteRowAsync(Row row)
         {
             using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
-            var collectMetrics = Context.AdaptiveExecutionEnabled;
-            var before = collectMetrics ? Inner.BytesWritten : 0;
-            var started = collectMetrics ? Stopwatch.GetTimestamp() : 0;
+            // Timed whether or not adaptive execution is on: the profile reports spill write cost.
+            var before = Inner.BytesWritten;
+            var started = Stopwatch.GetTimestamp();
             await Inner.WriteRowAsync(row);
-            if (collectMetrics)
-                Context.AdaptiveMetrics.ReportSpillWrite(
-                    Inner.BytesWritten - before,
-                    Stopwatch.GetElapsedTime(started));
+            Context.AdaptiveMetrics.ReportSpillWrite(
+                Inner.BytesWritten - before,
+                Stopwatch.GetElapsedTime(started));
         }
 
         public async Task WriteRowsAsync(IEnumerable<Row> rows)
         {
             using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
-            var collectMetrics = Context.AdaptiveExecutionEnabled;
-            var before = collectMetrics ? Inner.BytesWritten : 0;
-            var started = collectMetrics ? Stopwatch.GetTimestamp() : 0;
+            // Timed whether or not adaptive execution is on: the profile reports spill write cost.
+            var before = Inner.BytesWritten;
+            var started = Stopwatch.GetTimestamp();
             await Inner.WriteRowsAsync(rows);
-            if (collectMetrics)
-                Context.AdaptiveMetrics.ReportSpillWrite(
-                    Inner.BytesWritten - before,
-                    Stopwatch.GetElapsedTime(started));
+            Context.AdaptiveMetrics.ReportSpillWrite(
+                Inner.BytesWritten - before,
+                Stopwatch.GetElapsedTime(started));
         }
 
         public ValueTask DisposeAsync() => Inner.DisposeAsync();
@@ -352,14 +395,13 @@ public partial class SpillStore : ISpillStore
                 throw new NotSupportedException("The underlying spill writer does not support columnar batches.");
 
             using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
-            var collectMetrics = Context.AdaptiveExecutionEnabled;
-            var before = collectMetrics ? Inner.BytesWritten : 0;
-            var started = collectMetrics ? Stopwatch.GetTimestamp() : 0;
+            // Timed whether or not adaptive execution is on: the profile reports spill write cost.
+            var before = Inner.BytesWritten;
+            var started = Stopwatch.GetTimestamp();
             await columnar.WriteBatchAsync(batch);
-            if (collectMetrics)
-                Context.AdaptiveMetrics.ReportSpillWrite(
-                    Inner.BytesWritten - before,
-                    Stopwatch.GetElapsedTime(started));
+            Context.AdaptiveMetrics.ReportSpillWrite(
+                Inner.BytesWritten - before,
+                Stopwatch.GetElapsedTime(started));
         }
     }
 
@@ -424,6 +466,7 @@ public partial class SpillStore : ISpillStore
                 _context.Logger.Warning("Failed to cleanup spill directory {Path}: {Message}", _cachedRootPath, ex.Message);
             }
         }
+        if (!Directory.Exists(_cachedRootPath)) SpillRootOwnership.Release(_cachedRootPath!);
     }
 
     public void Dispose()
@@ -442,6 +485,8 @@ public partial class SpillStore : ISpillStore
                 _context.Logger.Warning("Failed to cleanup spill directory on dispose {Path}: {Message}", _cachedRootPath, ex.Message);
             }
         }
+        if (!IsPersistent && _cachedRootPath != null && !Directory.Exists(_cachedRootPath))
+            SpillRootOwnership.Release(_cachedRootPath);
 
         if (_cachedSessionKey != null) System.Array.Clear(_cachedSessionKey);
         _disposed = true;

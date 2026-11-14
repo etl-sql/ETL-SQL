@@ -407,7 +407,9 @@ public sealed class ProfileDataSource : IDataSource
         // reached the profile, so the surface an operator profiles with described the pre-spill
         // engine: it reported bytes written and never bytes read back, partitions and never passes.
         "spill_read_bytes", "spill_extents", "partition_passes",
-        "aggregate_groups", "aggregate_expansion_ratio", "sort_spills", "cpu_time_ms"
+        "aggregate_groups", "aggregate_expansion_ratio", "sort_spills", "cpu_time_ms",
+        // Spill volume health: write cost per MB, and adaptive scale-downs it caused.
+        "spill_write_ms_per_mb", "storage_pressure_events"
     ];
 
     public ProfileDataSource(IExecutionContext context)
@@ -469,7 +471,9 @@ public sealed class ProfileDataSource : IDataSource
                 ["aggregate_groups"] = metric.AggregateGroupsCount,
                 ["aggregate_expansion_ratio"] = metric.AggregateExpansionRatio,
                 ["sort_spills"] = metric.SortSpillCount,
-                ["cpu_time_ms"] = metric.CpuTimeMs
+                ["cpu_time_ms"] = metric.CpuTimeMs,
+                ["spill_write_ms_per_mb"] = metric.SpillWriteMsPerMB,
+                ["storage_pressure_events"] = metric.StoragePressureEvents
             });
 
             if (rows.Count >= batchSize)

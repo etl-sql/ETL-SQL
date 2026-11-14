@@ -31,6 +31,9 @@ public class ExecutionMetricsReporter(IExecutionContext context)
     private int _lastPartitionPassCount;
     private long _lastAggregateGroupsCount;
     private int _lastSortSpillCount;
+    private TimeSpan _lastSpillWriteTime;
+    private long _lastSpillWriteBytes;
+    private int _lastStoragePressureEvents;
     private TimeSpan _lastCpuTime;
 
     // Cached: Process.GetCurrentProcess() allocates, and this is read twice per statement.
@@ -63,6 +66,9 @@ public class ExecutionMetricsReporter(IExecutionContext context)
         _lastPartitionPassCount = _context.Telemetry.PartitionPassCount;
         _lastAggregateGroupsCount = _context.Telemetry.AggregateGroupsCount;
         _lastSortSpillCount = _context.Telemetry.SortSpillCount;
+        _lastSpillWriteTime = _context.AdaptiveMetrics.TotalSpillWriteTime;
+        _lastSpillWriteBytes = _context.AdaptiveMetrics.TotalSpillWriteBytes;
+        _lastStoragePressureEvents = _context.AdaptiveMetrics.StoragePressureEvents;
         _lastCpuTime = SafeCpuTime();
     }
 
@@ -118,6 +124,10 @@ public class ExecutionMetricsReporter(IExecutionContext context)
             // A ratio, not a counter — the current value is the statement's own, not a running sum.
             AggregateExpansionRatio = _context.Telemetry.AggregateExpansionRatio,
             SortSpillCount = _context.Telemetry.SortSpillCount - _lastSortSpillCount,
+            SpillWriteMsPerMB = SpillWriteMsPerMB(
+                _context.AdaptiveMetrics.TotalSpillWriteTime - _lastSpillWriteTime,
+                _context.AdaptiveMetrics.TotalSpillWriteBytes - _lastSpillWriteBytes),
+            StoragePressureEvents = _context.AdaptiveMetrics.StoragePressureEvents - _lastStoragePressureEvents,
             CpuTimeMs = (long)(SafeCpuTime() - _lastCpuTime).TotalMilliseconds
         });
     }
@@ -134,4 +144,7 @@ public class ExecutionMetricsReporter(IExecutionContext context)
     }
 
     public void Clear() => _context.Telemetry.ProfileMetrics.Clear();
+
+    private static double SpillWriteMsPerMB(TimeSpan elapsed, long bytes) =>
+        bytes <= 0 ? 0 : Math.Round(elapsed.TotalMilliseconds / (bytes / 1024d / 1024d), 3);
 }

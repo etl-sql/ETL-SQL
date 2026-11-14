@@ -163,7 +163,20 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             }
 
             if (destination is InMemoryDataSource rowStore)
-                await rowStore.WriteOwnedBatches(CountBatches(boundBatches), append: true);
+            {
+                try
+                {
+                    await rowStore.WriteOwnedBatches(CountBatches(boundBatches), append: true);
+                }
+                catch
+                {
+                    // The target was emptied above. Leave it empty, not partly loaded: the extents
+                    // completed before the failure would otherwise hold disk until the session ends.
+                    try { await rowStore.TruncateAsync(); }
+                    catch { /* preserve the original exception */ }
+                    throw;
+                }
+            }
             else
                 await destination.WriteBatches(context.Buffer(CountBatches(boundBatches)), append: true);
             RecordSelectIntoCompletion(intoTable, context, totalRows);

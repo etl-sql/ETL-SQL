@@ -37,6 +37,7 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 | `Engine:ExternalSortChunkSize` | integer | `10000` | `SET EXTERNAL_SORT_CHUNK_SIZE = n` | Run size in rows for sorting buffers spilled to disk. |
 | `Engine:WindowSpillThreshold` | integer | `10000` | `SET WINDOW_SPILL_THRESHOLD = n` | Rows in a partition before window functions spill to disk. |
 | `Engine:TempTableSpillThresholdRows` | integer | `1000000` | `SET TEMP_TABLE_SPILL_THRESHOLD = n` | Rows stored in `#temp` tables before shifting from memory to disk. |
+| `Engine:SpillMinimumFreeDiskMB` | integer | `256` | — | Free space the spill volume keeps in reserve. A new spill extent is refused below it, so a filling disk fails one statement with a low-space error before writing, rather than failing every writer on the host. `0` disables the check. |
 
 ---
 

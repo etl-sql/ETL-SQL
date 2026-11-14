@@ -93,6 +93,13 @@ public static class DefaultThresholds
     public static bool SpillCompressionEnabled(IConfiguration? config)
         => config?.GetValue<bool>("Security:SpillCompressionEnabled") ?? true;
 
+    /// <summary>
+    /// Free space, in MB, the spill volume keeps in reserve: a new extent is refused below it, so a
+    /// filling disk fails one statement cleanly instead of every writer on the host. Zero disables it.
+    /// </summary>
+    public static long SpillMinimumFreeDiskMB(IConfiguration? config)
+        => Math.Max(0, config?.GetValue<long?>("Engine:SpillMinimumFreeDiskMB") ?? 256);
+
     public static string SpillFormat(IConfiguration? config)
         => config?.GetValue<string>("Security:SpillFormat") ?? "Arrow";
 

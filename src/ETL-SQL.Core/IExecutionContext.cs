@@ -496,6 +496,12 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
     bool SpillEncryptionEnabled { get; set; }
     bool SpillCompressionEnabled { get; set; }
     string SpillFormat { get; set; }
+
+    /// <summary>
+    /// Free bytes the spill volume must keep. A new spill extent is refused, with a low-space
+    /// error and before any byte is written, while the volume holds less. Zero disables the check.
+    /// </summary>
+    long SpillMinimumFreeBytes => 0;
     ISpillStore SpillStore { get; }
 
     /// <summary>Decrypts an 'ENC:...' value using the current session context passwords.</summary>

@@ -42,6 +42,15 @@ public class ExecutionMetrics
     public int SortSpillCount { get; set; }
 
     /// <summary>
+    /// Milliseconds of spill write time per MB written, or 0 when nothing spilled. A slow spill
+    /// volume shows here before it shows in duration.
+    /// </summary>
+    public double SpillWriteMsPerMB { get; set; }
+
+    /// <summary>Times adaptive execution scaled down this statement because spill writes were slow.</summary>
+    public int StoragePressureEvents { get; set; }
+
+    /// <summary>
     /// CPU milliseconds consumed while this statement ran. Distinguishes "slow because it was
     /// working" from "slow because it was waiting" — the latter shows duration without CPU.
     /// </summary>

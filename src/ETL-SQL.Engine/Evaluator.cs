@@ -426,6 +426,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public bool SpillEncryptionEnabled { get => _options.SpillEncryptionEnabled; set => _options.SpillEncryptionEnabled = value; }
     public bool SpillCompressionEnabled { get => _options.SpillCompressionEnabled; set => _options.SpillCompressionEnabled = value; }
     public string SpillFormat { get => _options.SpillFormat; set => _options.SpillFormat = value; }
+    public long SpillMinimumFreeBytes { get; set; } = DefaultThresholds.SpillMinimumFreeDiskMB(null) * 1024L * 1024L;
 
     public string? DecryptValue(string? val)
     {
@@ -723,6 +724,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         SpillEncryptionEnabled = DefaultThresholds.SpillEncryptionEnabled(config);
         SpillCompressionEnabled = DefaultThresholds.SpillCompressionEnabled(config);
         SpillFormat = DefaultThresholds.SpillFormat(config);
+        SpillMinimumFreeBytes = DefaultThresholds.SpillMinimumFreeDiskMB(config) * 1024L * 1024L;
         MaxLastResultRows = DefaultThresholds.MaxLastResultRows(config);
         MaxMessages = config?.GetValue<int>("Engine:MaxMessages", 1000) ?? 1000;
         MaxInternalOperations = config?.GetValue<int>("Security:MaxInternalOperations", 100000) ?? 100000;
@@ -807,7 +809,9 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Math.Max(50, _options.AdaptiveExecutionOptions.SampleMs)));
             while (await timer.WaitForNextTickAsync(cancellationToken))
             {
-                _adaptiveController?.Observe(_adaptiveSampler?.Sample() ?? new ResourceSignals(0, 0, 0, 0, 0, 0));
+                var decision = _adaptiveController?.Observe(_adaptiveSampler?.Sample() ?? new ResourceSignals(0, 0, 0, 0, 0, 0));
+                if (decision is { Kind: AdaptiveDecisionKind.ScaleDown, Reason: "spill-latency-high" })
+                    AdaptiveMetrics.ReportStoragePressure();
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

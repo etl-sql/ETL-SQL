@@ -1210,7 +1210,9 @@ namespace ETL_SQL.Tests.Scale
             var spillRoot = ev.SpillStore.RootPath;
             var filesBeforeDispose = CountFiles(spillRoot);
             AssertSpilled(ev, "SpillCleanupFailure");
-            Assert.Equal(0, filesBeforeDispose); // completed and incomplete extents are deleted on failure
+            // Completed and incomplete extents are deleted on failure.
+            Assert.True(filesBeforeDispose == 0, "Spill files survived the failed statement: " + string.Join(", ",
+                Directory.GetFiles(spillRoot, "*", SearchOption.AllDirectories).Select(file => $"{Path.GetRelativePath(spillRoot, file)} ({new FileInfo(file).Length} B)")));
 
             await DisposeEvaluatorRootAsync(ev);
 

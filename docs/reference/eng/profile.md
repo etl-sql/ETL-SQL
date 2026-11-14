@@ -40,6 +40,8 @@ ORDER BY timestamp DESC;
 | `aggregate_expansion_ratio` | Aggregate output rows over input rows. |
 | `sort_spills` | Times a sort spilled to disk. |
 | `cpu_time_ms` | CPU milliseconds consumed while the statement ran. |
+| `spill_write_ms_per_mb` | Milliseconds of spill write time per MB written; 0 when the statement did not spill. |
+| `storage_pressure_events` | Times adaptive execution scaled down during the statement because spill writes were slow. |
 | `dq_rows_validated` | Rows this statement put through data-quality rule evaluation. |
 | `dq_rows_quarantined` | Rows this statement diverted to a quarantine target. |
 | `dq_rows_warned` | Rows this statement recorded as warnings. |
@@ -61,6 +63,11 @@ points at batch sizing rather than at memory limits.
 `cpu_time_ms` against `duration_ms` separates **slow because it was working** from **slow because it
 was waiting**: a statement with high duration and low CPU spent its time on I/O, a lock, or a remote
 database, and tuning the engine will not help it.
+
+`spill_write_ms_per_mb` is the spill volume's health on this statement. A value that rises while
+`spilled_bytes` stays flat means the disk slowed down, not that the data grew. With adaptive
+execution on, a sustained high value also shows as `storage_pressure_events`: the engine narrowed
+its batches and pipeline to stop queuing writes on a slow volume.
 
 ### What data-quality rules cost
 
