@@ -133,6 +133,10 @@ commit reruns only the affected checks.
    docs did. So suspect the hosted environment or a race, not a code regression.
 2. MSI and DEB certification run nightly in W1, so breakage appears mid-month.
 **Done when:** 5 nightly installer runs in a row pass.
+**Status 2026-11-14: done.** The fresh-install MSI certification (portal and workstation) passed
+6 nightly runs in a row, 2026-11-09 to 2026-11-14 (nightlies 42687964349 and 42839633435, then
+MSI runs 43039140299, 43247369662, 43445175324 and 43600793914). Upgrade certification returns in
+v0.23.0, upgrading from v0.22.0.
 
 ### W4. Release tooling tested on real output
 Keep recorded real outputs (CLI launch logs, MSI verbose logs, workflow run JSON, scenario

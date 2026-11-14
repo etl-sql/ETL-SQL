@@ -8,7 +8,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 15 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 14 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -35,12 +35,6 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
 - [ ] **W2 Reuse evidence when inputs did not change.** Built 2026-11-10
   ([design](docs/architecture/roadmaps/evidence-reuse-design.md)): CI lanes are reused from an
   ancestor's full run, packages are always rebuilt. **Left:** the first real reuse on a recommit.
-- [ ] **W3 MSI Portal runner loss.** Fixed (`MSIRESTARTMANAGERCONTROL=Disable` in the MSI, enforced
-  by the source check; plan section 10). v0.22.0 certifies the fresh install only. **Left:** 5
-  nightly passes in a row on the fresh-only lane; the streak is 2 (nightly 42687964349,
-  42839633435). Only nightly runs whose MSI certification actually ran count, pass or fail; a run
-  that stopped before the installer neither counts nor resets the streak. Upgrade certification
-  returns in v0.23.0, upgrading from v0.22.0.
 - [ ] **W4 Release tooling tested on real output.** `test-real-release-output.mjs` replays the
   responses recorded for dry run 42699535102. **Left:** the native Windows and macOS collectors
   and the draft-manifest check (they hash about 1 GB of packages per platform, too much for the

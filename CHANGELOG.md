@@ -377,7 +377,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   a minute, and the MSI certification lost its runner. The MSI now authors
   `MSIRESTARTMANAGERCONTROL=Disable`: a quick uninstall lost 0 of 6 runners with it and 4 of 6
   without. `DisableShutdown`, tried on 2026-11-01, still shut applications down in silent mode.
-  The source preflight rejects missing, weakened or duplicate authoring.
+  The source preflight rejects missing, weakened or duplicate authoring. Fresh-install MSI
+  certification then passed 6 nightly runs in a row (2026-11-09 to 2026-11-14).
 - Run the Shared SaaS metering and backup-recovery certification tests in the project that holds
   them. Those phases ran their filters against the Portal tests, so the release receipt check
   failed. A contract test now requires every phase filter to name tests in its own project.
