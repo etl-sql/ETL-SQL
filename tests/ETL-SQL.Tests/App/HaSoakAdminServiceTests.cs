@@ -177,6 +177,45 @@ namespace ETL_SQL.Tests.CliCommands
             Assert.Contains("Status: **Passed**", File.ReadAllText(passedReportPath));
         }
 
+        [Theory]
+        // Latency depends on the host: a slow step is reported, not failed.
+        [InlineData("""{ "concurrency": 10, "requestCount": 400, "errorRatePct": 0, "sqliteContentionCount": 0, "unexpectedStatusCounts": {}, "passed": false, "breaches": ["p95 7200ms > 5000ms"] }""", 0, "capacity-latency")]
+        // Any server error or dropped request fails it, even under the error-rate limit.
+        [InlineData("""{ "concurrency": 10, "requestCount": 400, "errorRatePct": 0.25, "sqliteContentionCount": 0, "unexpectedStatusCounts": { "502": 1 }, "passed": true, "breaches": [] }""", 1, "capacity-errors")]
+        [InlineData("""{ "concurrency": 10, "requestCount": 400, "errorRatePct": 2.5, "sqliteContentionCount": 0, "unexpectedStatusCounts": { "409": 10 }, "passed": false, "breaches": ["error rate 2.5% > 1%"] }""", 1, "capacity-errors")]
+        public async Task SustainedEvidenceIsGatedOnErrorsNotLatency(string step, int expectedExit, string expectedIssue)
+        {
+            var logger = new CapturingLogger();
+            var runRoot = Path.Combine(_outputRoot, _runId);
+            Assert.Equal(0, await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-prepare",
+                HaSoakRunId = _runId,
+                HaSoakOutputRoot = _outputRoot,
+                HaSoakForce = true
+            }, logger));
+            Assert.Equal(0, await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-evidence",
+                HaSoakRunRoot = runRoot,
+                HaSoakForce = true
+            }, logger));
+            SeedSustainedEvidence(step);
+
+            var reportPath = Path.Combine(_outputRoot, "validation-gate.md");
+            var exit = await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-validate",
+                HaSoakRunRoot = runRoot,
+                HaSoakRequiredGate = "Sustained",
+                HaSoakAllowDirty = true,
+                HaSoakMarkdownReport = reportPath
+            }, logger);
+
+            Assert.Equal(expectedExit, exit);
+            Assert.Contains(expectedIssue, File.ReadAllText(reportPath));
+        }
+
         [Fact]
         public async Task LargeJobRunProducesEvidenceAcceptedByValidator()
         {
@@ -345,17 +384,19 @@ namespace ETL_SQL.Tests.CliCommands
             Assert.Contains("evidence-scope-mismatch", File.ReadAllText(validationReport));
         }
 
-        private void SeedSustainedEvidence()
+        private void SeedSustainedEvidence(string orchestratorStep =
+            """{ "concurrency": 1, "requestCount": 40, "errorRatePct": 0, "sqliteContentionCount": 0, "unexpectedStatusCounts": {}, "passed": true, "breaches": [] }""")
         {
             var dir = Path.Combine(_evidenceRoot, "postgres-ha-soak", _runId);
             Directory.CreateDirectory(dir);
-            File.WriteAllText(Path.Combine(dir, "capacity-report.json"), """
+            File.WriteAllText(Path.Combine(dir, "capacity-report.json"), $$"""
             {
+              "breachCriteria": { "maxErrorRatePct": 1, "maxP95LatencyMs": 5000, "maxSqliteContentionCount": 0 },
               "portal": [
-                { "concurrency": 1, "passed": true, "breaches": [] }
+                { "concurrency": 1, "requestCount": 50, "errorRatePct": 0, "sqliteContentionCount": 0, "unexpectedStatusCounts": {}, "passed": true, "breaches": [] }
               ],
               "orchestrator": [
-                { "concurrency": 1, "passed": true, "breaches": [] }
+                {{orchestratorStep}}
               ]
             }
             """);

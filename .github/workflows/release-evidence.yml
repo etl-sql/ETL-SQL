@@ -1,6 +1,7 @@
 # Release evidence that used to be an operator submission from the owner's workstation (release
 # reliability W8): deployment profiles and transitions, production-canary contracts, the
-# conditional scale and columnar certifications, and the billion-row memory-flatness proof. It runs
+# conditional scale, columnar and service-capacity certifications (with the full
+# capacity baseline), and the billion-row memory-flatness proof. It runs
 # once per release candidate. Each job is sized to about a third of its limit and gates only on
 # deterministic results (rows, checksums, bounded memory, contract outcomes), never throughput.
 #
@@ -131,15 +132,24 @@ jobs:
         timeout-minutes: 60
         shell: pwsh
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ProductionCanaryCertification.ps1 -ScriptArguments @('-Configuration', 'Release') -EvidenceDirectory release-validation/canary -TimeoutSeconds 3480
+      # The folder also holds a checked-in historical run; retain only what this run wrote.
+      - name: Collect this run's canary evidence
+        if: always()
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          foreach ($file in git ls-files --others -- certification-results/production-canaries) {
+            $target = Join-Path release-validation/canary/run $file
+            New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
+            Copy-Item -LiteralPath $file -Destination $target
+          }
       - name: Retain canary evidence
         if: always()
         timeout-minutes: 5
         uses: actions/upload-artifact@v7
         with:
           name: release-evidence-canary-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            certification-results/production-canaries/
-            release-validation/canary/
+          path: release-validation/canary/
           if-no-files-found: error
           retention-days: 90
 
@@ -211,6 +221,95 @@ jobs:
         with:
           name: release-evidence-columnar-${{ matrix.gate }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/columnar-${{ matrix.gate }}/
+          if-no-files-found: error
+          retention-days: 90
+
+  # The conditional service-capacity certification (reference) and the full baseline. Both start
+  # the Portal and Orchestrator from this Release build on loopback with throwaway state. They
+  # gate on errors only; latency on a shared runner is recorded for comparison.
+  service-capacity:
+    name: Service capacity (${{ matrix.profile }})
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [reference, full]
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 10
+      - uses: ./.github/actions/build-release
+        with:
+          evidence: release-validation/service-capacity-${{ matrix.profile }}/build
+      - name: Certify service capacity (${{ matrix.profile }})
+        timeout-minutes: 100
+        shell: pwsh
+        env:
+          PROFILE: ${{ matrix.profile }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/run-service-capacity-certification.mjs', '--profile', $env:PROFILE, '--out-dir', "release-validation/service-capacity-$env:PROFILE/report") -EvidenceDirectory "release-validation/service-capacity-$env:PROFILE/process" -TimeoutSeconds 5700
+      - name: Retain service-capacity evidence
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-evidence-service-capacity-${{ matrix.profile }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/service-capacity-${{ matrix.profile }}/
+          if-no-files-found: error
+          retention-days: 90
+
+  # The HA soak on a real Compose topology built from the candidate: two Portals and two
+  # Orchestrators behind HAProxy on PostgreSQL. Sustained load, real large jobs with cancels
+  # through the load balancer, and ten injected faults; gated by ha-soak validate --required-gate All.
+  ha-soak:
+    name: HA soak (Compose topology)
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 10
+      - name: Free disk space
+        timeout-minutes: 10
+        run: sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+      - uses: ./.github/actions/build-release
+        with:
+          evidence: release-validation/ha-soak/build
+      - name: Certify the HA topology
+        timeout-minutes: 150
+        shell: pwsh
+        env:
+          RUN_ID: ha-${{ github.run_id }}-${{ github.run_attempt }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/run-ha-soak-certification.mjs', '--run-id', $env:RUN_ID) -EvidenceDirectory release-validation/ha-soak/process -TimeoutSeconds 8700
+      - name: Validate the HA evidence
+        timeout-minutes: 5
+        shell: pwsh
+        env:
+          RUN_ID: ha-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          # The run root is removed after the run; validation needs only its non-secret metadata.
+          ./src/ETL-SQL.App/bin/Release/net10.0/ETL-SQL admin ha-soak validate --run-root "certification-results/ha-soak-logs/$env:RUN_ID/run-root" --required-gate All --required-commit $env:GITHUB_SHA --markdown-report release-validation/ha-soak/validation.md
+          $status = $LASTEXITCODE
+          Get-Content release-validation/ha-soak/validation.md | Add-Content $env:GITHUB_STEP_SUMMARY
+          exit $status
+      - name: Collect the HA evidence
+        if: always()
+        timeout-minutes: 5
+        shell: bash
+        env:
+          RUN_ID: ha-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          mkdir -p release-validation/ha-soak/evidence
+          for dir in postgres-ha-soak ha-large-job-soak ha-fault-injection ha-soak-logs; do
+            [ -d "certification-results/$dir/$RUN_ID" ] && cp -r "certification-results/$dir/$RUN_ID" "release-validation/ha-soak/evidence/$dir" || true
+          done
+      - name: Retain HA evidence
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-evidence-ha-soak-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/ha-soak/
           if-no-files-found: error
           retention-days: 90
 

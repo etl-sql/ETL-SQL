@@ -870,7 +870,9 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
   clear error instead of filling the disk.
 - The Orchestrator removes the spill root of a process that died without cleaning up as soon as it
   sweeps, rather than after 24 hours. Each disposable spill root names its owning process in a
-  `<root>.owner` marker; a root whose owner is gone is removed, and a live owner keeps its root.
+  `<root>.owner` marker that the owner holds open; a root whose marker nobody holds and whose owner
+  is gone is removed, and a live owner keeps its root. On Linux and macOS, markers in a spill
+  directory that other users can write are ignored, so those roots only age out.
 - `eng.profile` reports `spill_write_ms_per_mb` and `storage_pressure_events` for each statement.
   Slow spill writes that make adaptive execution scale down are counted as storage pressure.
 - Cancelling a run works through a load balancer. A node that does not run the job records the
@@ -878,6 +880,11 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
   `Scheduler:CancelPollSeconds` (default 5). `POST /api/job-runs/{id}/cancel` and
   `POST /api/scheduled-jobs/{name}/kill` return `202 Accepted` for such a run instead of
   `409 not_running_here` or an error.
+- Release evidence runs two more certifications on GitHub-hosted runners for each candidate: service
+  capacity (five workloads against the candidate's Portal and Orchestrator) and an HA soak on a
+  Compose topology of two Portals and two Orchestrators behind a load balancer on PostgreSQL. The
+  soak runs sustained load, real large spilling jobs cancelled through the load balancer at four
+  points, and ten injected faults, and is gated by `ha-soak validate --required-gate All`.
 
 - Controlled-host local certification can resume failed phases or recover failed evidence uploads
   after verifying the same run, runner, workspace, toolchain, cached outputs and original receipts.
@@ -886,6 +893,10 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
 
 ### Changed
 
+- `admin ha-soak validate` gates sustained load on errors only: error rate, request count, SQLite
+  contention and unexpected 5xx or transport failures. A p95 latency above the workload limit is a
+  warning. Large-job and fault reports must contain a passing result for every planned scenario or
+  fault.
 - Release now requires a verified full local phase bundle from the exact candidate's controlled-host
   workflow. It checks job/artifact origin, freshness, execution windows and file hashes, pins the
   manifest, and verifies the attached ZIP before publication. The new manual Windows workflow retains
