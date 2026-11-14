@@ -167,7 +167,15 @@ public static class CryptoUtils
                     throw new ExecutionException("Invalid encrypted file format.");
 
                 var (encryptionKey, hmacKey) = DeriveFileKeys(password, v2Salt, hashAlgo);
-                VerifyAuthenticatedFile(fsIn, v2Salt, v2Iv, hmacKey, cipherStart, cipherLength);
+                try
+                {
+                    VerifyAuthenticatedFile(fsIn, v2Salt, v2Iv, hmacKey, cipherStart, cipherLength);
+                }
+                catch (CryptographicException)
+                {
+                    throw new ExecutionException(
+                        $"Could not decrypt '{Path.GetFileName(inputFile)}': the password is wrong, or the file was changed after it was encrypted.");
+                }
 
                 fsIn.Position = cipherStart;
                 using var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
@@ -181,7 +189,9 @@ public static class CryptoUtils
                 return;
             }
 
-            throw new ExecutionException("Unsupported encrypted file format. Encrypt the file again.");
+            throw new ExecutionException(
+                $"Could not decrypt '{Path.GetFileName(inputFile)}': it was not encrypted with PASSWORD by ETL-SQL. " +
+                "It may be plain text, encrypted with KEYFILE or PGP_KEY, or from an older format; decrypt it with the method that encrypted it.");
         }
     }
 
@@ -493,7 +503,16 @@ public static class CryptoUtils
                 byte[] ivV2 = new byte[IvSize];
                 await fsIn.ReadExactlyAsync(ivV2, cancellationToken).ConfigureAwait(false);
 
-                byte[] keyMaterial = rsa.Decrypt(encryptedKeyV2, RSAEncryptionPadding.OaepSHA256);
+                byte[] keyMaterial;
+                try
+                {
+                    keyMaterial = rsa.Decrypt(encryptedKeyV2, RSAEncryptionPadding.OaepSHA256);
+                }
+                catch (CryptographicException)
+                {
+                    throw new ExecutionException(
+                        $"Could not decrypt '{Path.GetFileName(inputFile)}': the private key does not match the public key the file was encrypted to.");
+                }
                 if (keyMaterial.Length < 64)
                     throw new ExecutionException("Invalid SSH encrypted file key material.");
 
@@ -504,7 +523,15 @@ public static class CryptoUtils
                 if (cipherLength < 0)
                     throw new ExecutionException("Invalid SSH encrypted file format.");
 
-                await VerifyAuthenticatedSshFileAsync(fsIn, encryptedKeyV2, ivV2, hmacKeyV2, cipherStart, cipherLength, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await VerifyAuthenticatedSshFileAsync(fsIn, encryptedKeyV2, ivV2, hmacKeyV2, cipherStart, cipherLength, cancellationToken).ConfigureAwait(false);
+                }
+                catch (CryptographicException)
+                {
+                    throw new ExecutionException(
+                        $"Could not decrypt '{Path.GetFileName(inputFile)}': the file was changed after it was encrypted.");
+                }
 
                 fsIn.Position = cipherStart;
                 using var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
@@ -516,7 +543,9 @@ public static class CryptoUtils
                 return;
             }
 
-            throw new ExecutionException("Unsupported SSH encrypted file format. Encrypt the file again.");
+            throw new ExecutionException(
+                $"Could not decrypt '{Path.GetFileName(inputFile)}': it was not encrypted with KEYFILE by ETL-SQL. " +
+                "It may be plain text, encrypted with PASSWORD or PGP_KEY, or from an older format; decrypt it with the method that encrypted it.");
         }
     }
 
@@ -892,9 +921,22 @@ public static class CryptoUtils
         if (File.Exists(outputFile) && !overwrite)
             throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
 
-        EncryptionKeys keys = new EncryptionKeys(new FileInfo(keyFile), passphrase ?? string.Empty);
-        using var pgp = new PGP(keys);
-        await pgp.DecryptFileAsync(new FileInfo(inputFile), new FileInfo(outputFile));
+        // Decrypt beside the destination and move it into place only on success, so a wrong key,
+        // a wrong passphrase or a file that is not PGP data leaves no partial output (ROADMAP FO06).
+        var tempFile = outputFile + ".etlsql-decrypt-" + Guid.NewGuid().ToString("N")[..12];
+        try
+        {
+            EncryptionKeys keys = new EncryptionKeys(new FileInfo(keyFile), passphrase ?? string.Empty);
+            using (var pgp = new PGP(keys))
+            {
+                await pgp.DecryptFileAsync(new FileInfo(inputFile), new FileInfo(tempFile));
+            }
+            File.Move(tempFile, outputFile, overwrite);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
     }
 
     /// <summary>

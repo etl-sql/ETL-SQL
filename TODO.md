@@ -8,7 +8,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 24 |
+| [Now](#now--v0220-work-that-can-be-done-today) | Work that needs nothing but this repository and a desk | 23 |
 | [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -144,8 +144,8 @@ sample on a shared runner.
 
 - [ ] **Work the file-function backlog in this order.** IDs are rows in `ROADMAP.md` (file
   operations FO, file functions FN, remote files RF). Each function or statement change ships with
-  its reference page, help text and `LanguageMetadata` entry. Done: RF01, FO01, FO02, FO09, FO10, RF10, FN10.
-  **Left, in order:** bug FO06; then FO11 (PGP sign and verify); then FO03, FO04,
+  its reference page, help text and `LanguageMetadata` entry. Done: RF01, FO01, FO02, FO09, FO10, RF10, FN10, FO06.
+  **Left, in order:** FO11 (PGP sign and verify); then FO03, FO04,
   FN07, FN01, FN03, FN02, FN08, FN09, RF02. RF03–RF09 stay in `ROADMAP.md` for later.
 
 ### 7. `USE PASSWORD` and secret sealing drift (owner 2026-11-13: to be prioritized)
@@ -189,12 +189,6 @@ editor or via Undo (`Ctrl+Z`).
   - **TUI:** replace the buffer lines in `EditorFileHandler.SaveAsync` and clear the TUI editor's
     undo stack.
   - **ETL-SQL Studio:** replace the editor model/value and clear its undo history on save.
-- [ ] **Remove `USE PASSWORD` file-encryption examples from `encrypt-file.md`.**
-  `docs/reference/file-operations/encrypt-file.md` teaches `USE PASSWORD = '...'` as the passphrase
-  for `ENCRYPT FILE` / `DECRYPT FILE`. `UsePasswordStatementHandler` sets `ScriptPassword`, while
-  `FileOperationStatementHandler` reads `MasterPassword`, and `USE PASSWORD` is strictly for script
-  secrets (`ENC:`), not file encryption. Remove the `USE PASSWORD` claims and examples from
-  `encrypt-file.md` (coordinate with FO01).
 - [ ] **Update `USE PASSWORD` documentation across reference and onboarding guides.** Update
   `docs/reference/variables-parameters/use.md`,
   `docs/reference/set-commands/set-allow-plaintext-secrets.md`,

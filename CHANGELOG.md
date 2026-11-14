@@ -14,6 +14,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- `DECRYPT FILE` failures name the cause (ROADMAP FO06). A wrong SSH key reported
+  `Unknown error (0xc100000d)`; it now says the private key does not match. A wrong password says
+  the password is wrong or the file was changed, and a file that was never encrypted (or used
+  another method) says so instead of `Unsupported encrypted file format`. A failed PGP decrypt no
+  longer leaves a partial output file: it decrypts to a temporary file and moves it into place
+  only on success. Messages never include passwords or key contents.
+
 - `FILE_EXISTS` and `DIRECTORY_EXISTS` give the same result on every host (ROADMAP FN10). Two
   versions were registered and the last one won: the CLI and language server returned `1`/`0` and
   `NULL` for a `NULL` path, while the Orchestrator and TUI returned `TRUE`/`FALSE` and `FALSE`. All

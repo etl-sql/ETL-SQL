@@ -132,7 +132,15 @@ DECRYPT DIRECTORY 'vault/2026-11/' TO 'restore/2026-11/' PASSWORD 'archive-passp
   it is only the private-key passphrase on `DECRYPT FILE`.
 - **`ENCRYPT DIRECTORY does not support KEYFILE or PGP_KEY.`** — directories use `PASSWORD` only.
 - **`ENCRYPT FILE has no WITH option '<key>'.`** — the message lists the accepted options.
-- A wrong password, a wrong key, or a file that was not encrypted this way fails the statement.
+- **`Could not decrypt '<file>': the password is wrong, or the file was changed after it was encrypted.`**
+- **`Could not decrypt '<file>': the private key does not match the public key the file was encrypted to.`**
+  — the `KEYFILE` is not the partner of the key used to encrypt.
+- **`Could not decrypt '<file>': it was not encrypted with PASSWORD by ETL-SQL.`** (or `KEYFILE`) —
+  the file is plain text or used another method; decrypt it with the method that encrypted it.
+- PGP failures name the cause: no matching private key (with the key IDs the file was encrypted
+  to), a wrong passphrase, or input that is not PGP data.
+- A failed decrypt writes no output and leaves an existing destination unchanged. Messages never
+  include passwords or key contents.
 
 ## References
 
