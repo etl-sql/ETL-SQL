@@ -20,6 +20,7 @@ namespace ETL_SQL.Tests.Hardening
         {
             // Arrange
             var mockContext = new Mock<IExecutionContext>();
+            mockContext.SetupGet(value => value.AdaptiveMetrics).Returns(new global::ETL_SQL.Core.Adaptive.AdaptiveRuntimeMetrics());
             mockContext.SetupProperty(c => c.SpillEncryptionEnabled, true);
             mockContext.SetupProperty(c => c.SpillCompressionEnabled, true);
             mockContext.Setup(c => c.SessionStateManager).Returns(new global::ETL_SQL.Core.Execution.NullSessionStateManager());
@@ -63,6 +64,7 @@ namespace ETL_SQL.Tests.Hardening
         {
             // Arrange
             var mockContext = new Mock<IExecutionContext>();
+            mockContext.SetupGet(value => value.AdaptiveMetrics).Returns(new global::ETL_SQL.Core.Adaptive.AdaptiveRuntimeMetrics());
             mockContext.SetupProperty(c => c.SpillEncryptionEnabled, false);
             mockContext.SetupProperty(c => c.SpillCompressionEnabled, true);
 
@@ -90,6 +92,7 @@ namespace ETL_SQL.Tests.Hardening
         {
             // Arrange
             var mockContext = new Mock<IExecutionContext>();
+            mockContext.SetupGet(value => value.AdaptiveMetrics).Returns(new global::ETL_SQL.Core.Adaptive.AdaptiveRuntimeMetrics());
             string rootPath;
             mockContext.Setup(c => c.SessionRoot).Returns(Path.GetTempPath());
             mockContext.Setup(c => c.SessionStateManager).Returns(new global::ETL_SQL.Core.Execution.NullSessionStateManager());

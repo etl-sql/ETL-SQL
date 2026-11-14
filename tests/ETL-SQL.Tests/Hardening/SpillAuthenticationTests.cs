@@ -167,6 +167,7 @@ public class SpillAuthenticationTests
     private static SpillStore CreateStore(string format, bool compress, string root = null, byte[] key = null, bool encrypt = true)
     {
         var context = new Mock<IExecutionContext>();
+        context.SetupGet(value => value.AdaptiveMetrics).Returns(new global::ETL_SQL.Core.Adaptive.AdaptiveRuntimeMetrics());
         context.SetupProperty(value => value.SpillFormat, format);
         context.SetupProperty(value => value.SpillEncryptionEnabled, encrypt);
         context.SetupProperty(value => value.SpillCompressionEnabled, compress);

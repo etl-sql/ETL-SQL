@@ -69,6 +69,7 @@ public class SpillScalarFidelityTests
             Guid.Parse("01234567-89ab-cdef-0123-456789abcdef"), new byte[] { 0, 1, 255 },
             JsonSerializer.SerializeToElement(new { text = "001", nested = new[] { "2026-10-25" } })];
         var context = new Mock<IExecutionContext>();
+        context.SetupGet(value => value.AdaptiveMetrics).Returns(new global::ETL_SQL.Core.Adaptive.AdaptiveRuntimeMetrics());
         context.SetupProperty(value => value.SpillFormat, "Json");
         context.SetupProperty(value => value.SpillEncryptionEnabled, encrypt);
         context.SetupProperty(value => value.SpillCompressionEnabled, compress);
@@ -138,6 +139,7 @@ public class SpillScalarFidelityTests
     public async Task JsonRejectsAmbiguousOrUnsupportedRows(string payload, bool typed)
     {
         var context = new Mock<IExecutionContext>();
+        context.SetupGet(value => value.AdaptiveMetrics).Returns(new global::ETL_SQL.Core.Adaptive.AdaptiveRuntimeMetrics());
         context.SetupProperty(value => value.SpillFormat, "Json");
         context.SetupGet(value => value.SessionStateManager).Returns(new NullSessionStateManager());
         using var store = new SpillStore(context.Object);
@@ -162,6 +164,7 @@ public class SpillScalarFidelityTests
     {
         string[] values = ["001", "123.4500", "1,234", "1e3", "2026-10-25", "2026-10-25T01:02:03.1234567Z", "true", "null", "é中文🌿"];
         var context = new Mock<IExecutionContext>();
+        context.SetupGet(value => value.AdaptiveMetrics).Returns(new global::ETL_SQL.Core.Adaptive.AdaptiveRuntimeMetrics());
         context.SetupProperty(value => value.SpillFormat, format);
         context.SetupProperty(value => value.SpillEncryptionEnabled, encrypt);
         context.SetupProperty(value => value.SpillCompressionEnabled, compress);
