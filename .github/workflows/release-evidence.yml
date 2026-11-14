@@ -1,7 +1,8 @@
 # Release evidence that used to be an operator submission from the owner's workstation (release
 # reliability W8): deployment profiles and transitions, production-canary contracts, the
 # conditional scale, columnar and service-capacity certifications (with the full
-# capacity baseline), and the billion-row memory-flatness proof. It runs
+# capacity baseline), the HA soak on a Compose topology, and the billion-row
+# memory-flatness proof. It runs
 # once per release candidate. Each job is sized to about a third of its limit and gates only on
 # deterministic results (rows, checksums, bounded memory, contract outcomes), never throughput.
 #
