@@ -232,11 +232,10 @@ namespace ETL_SQL.Connectors
             try
             {
                 var client = await EnsureConnectedAsync();
-                if (overwrite && await client.FileExists(remoteDest, Cancellation))
-                {
-                    await client.DeleteFile(remoteDest, Cancellation);
-                }
-                await client.Rename(remoteSource, remoteDest, Cancellation);
+                await RemoteRename.RunAsync("FTP", remoteSource, remoteDest, overwrite,
+                    path => client.FileExists(path, Cancellation),
+                    (from, to) => client.Rename(from, to, Cancellation),
+                    path => client.DeleteFile(path, Cancellation));
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {

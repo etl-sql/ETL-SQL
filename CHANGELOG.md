@@ -14,6 +14,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- Renaming or moving a file on an FTP or SFTP connection no longer loses the destination (ROADMAP
+  RF10). Both deleted an existing destination before renaming, so a mistyped source path or a
+  refused rename destroyed it. The source is now checked first, an existing destination is moved
+  aside and put back if the rename fails, and `OVERWRITE = OFF` fails before anything changes
+  instead of depending on the server.
+
 - File and directory statements reject an option they would ignore (ROADMAP FO02). Every
   `WITH (...)` on `COPY`, `MOVE`, `RENAME`, `DELETE`, `COMPRESS`, `DECOMPRESS`, `ENCRYPT`, `DECRYPT`
   (file and directory), `CREATE DIRECTORY`, `DELETE DIRECTORY_CONTENTS`, `SEND FILE`, `RECEIVE FILE`,

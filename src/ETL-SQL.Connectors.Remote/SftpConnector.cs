@@ -580,15 +580,10 @@ namespace ETL_SQL.Connectors
             {
                 remoteSource = NormalizeRemotePath(remoteSource);
                 remoteDest = NormalizeRemotePath(remoteDest);
-                await RunClientOperationAsync(client =>
-                {
-                    if (overwrite && client.Exists(remoteDest))
-                    {
-                        client.DeleteFile(remoteDest);
-                    }
-
-                    client.RenameFile(remoteSource, remoteDest);
-                });
+                await RunClientOperationAsync(client => RemoteRename.RunAsync("SFTP", remoteSource, remoteDest, overwrite,
+                    path => Task.Run(() => client.Exists(path)),
+                    (from, to) => Task.Run(() => client.RenameFile(from, to)),
+                    path => Task.Run(() => client.DeleteFile(path))), CancellationToken.None);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {

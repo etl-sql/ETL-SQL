@@ -482,7 +482,7 @@ re-upload, `FOREACH` over a listing) and is Later.
 | RF07 | **Remote directory rename, move, and copy.** `RENAME DIRECTORY`, `MOVE DIRECTORY`, and `COPY DIRECTORY` with `AT conn`. Rename and move use the server rename; copy is built on RF04 and RF06. | RF04, RF06 | M |
 | RF08 | **Remote `SYNC DIRECTORY`.** Mirror local to remote and remote to local by size and modified time, with `WHAT_IF` showing the plan. Deletions on the destination need an explicit option and pass the same guard as `DELETE FILE`. | RF05, RF06 | M |
 | RF09 | **Verify a transfer.** An option on `SEND FILE`/`RECEIVE FILE` (and the `VERIFY FILE INTEGRITY` counterpart) that compares size and, where the server offers it, a checksum after the transfer, and removes a partial local file on failure. Decide whether to support resume of large downloads here or leave it out. | RF05 | M |
-| RF10 | **FTP rename without losing the destination.** `RenameFileAsync` deletes an existing destination before renaming. Rename to a temporary name first or fail without deleting, as SFTP does. | — | S |
+| RF10 | **Done in v0.22.0** (SFTP had the same bug and is fixed too). **FTP rename without losing the destination.** `RenameFileAsync` deletes an existing destination before renaming. Rename to a temporary name first or fail without deleting. | — | S |
 | RF11 | **Decision: remote command execution.** Whether a connection type that runs a single approved command over SSH belongs in the product, and under what allow-list and audit rules. Output is a proposal and an estimate only. | — | D |
 
 **Acceptance evidence:** The FTP page matches what `FtpConnector` reads and a wrong `USE_SSL` value
