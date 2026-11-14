@@ -17,9 +17,9 @@ public sealed class FileOperationWithOptionTests
         new Parser(new Lexer(sql).Tokenize(), sql).Parse().Diagnostics.Select(d => d.Message).ToArray();
 
     [Theory]
-    [InlineData("ENCRYPT FILE 'a.csv' TO 'a.enc' PASSWORD 'p' WITH (DELETE_SOURCE = ON);", "ENCRYPT FILE", "DELETE_SOURCE", "OVERWRITE")]
-    [InlineData("ENCRYPT FILE 'a.csv' TO 'a.enc' PASSWORD 'p' WITH (DATE_SUFFIX = 'yyyyMMdd');", "ENCRYPT FILE", "DATE_SUFFIX", "OVERWRITE")]
-    [InlineData("COMPRESS FILE 'a.csv' TO 'a.gz' WITH (FORMAT = 'GZIP');", "COMPRESS FILE", "FORMAT", "OVERWRITE")]
+    [InlineData("ENCRYPT DIRECTORY 'a' TO 'b' PASSWORD 'p' WITH (DELETE_SOURCE = ON);", "ENCRYPT DIRECTORY", "DELETE_SOURCE", "OVERWRITE")]
+    [InlineData("ENCRYPT FILE 'a.csv' TO 'a.enc' PASSWORD 'p' WITH (DATE_SUFFIX = 'yyyyMMdd');", "ENCRYPT FILE", "DATE_SUFFIX", "OVERWRITE, DELETE_SOURCE")]
+    [InlineData("COMPRESS FILE 'a.csv' TO 'a.gz' WITH (FORMAT = 'GZIP');", "COMPRESS FILE", "FORMAT", "OVERWRITE, DELETE_SOURCE")]
     [InlineData("COPY FILE 'a' TO 'b' WITH (OVERWRITE = ON, OVERWITE = ON);", "COPY FILE", "OVERWITE", "OVERWRITE, DATE_SUFFIX, SUFFIX_SEPARATOR")]
     [InlineData("COPY DIRECTORY 'a' TO 'b' WITH (RECURSE = ON);", "COPY DIRECTORY", "RECURSE", "OVERWRITE")]
     [InlineData("COPY DIRECTORY 'a' TO 'b' WITH (RECURSIVE = OFF);", "COPY DIRECTORY", "RECURSIVE", "OVERWRITE")]
@@ -43,6 +43,7 @@ public sealed class FileOperationWithOptionTests
     [InlineData("COPY FILE 'a' TO DIRECTORY 'b' WITH (overwrite = ON, Date_Suffix = 'yyyyMMdd', SUFFIX_SEPARATOR = '-');")]
     [InlineData("ENCRYPT DIRECTORY 'a' TO 'b' PASSWORD 'p' WITH (OVERWRITE = ON);")]
     [InlineData("ENCRYPT FILE 'a' TO 'b' PGP_KEY 'pub.asc';")]
+    [InlineData("ENCRYPT FILE 'a' TO 'b' PASSWORD 'p' WITH (OVERWRITE = OFF, DELETE_SOURCE = ON);")]
     [InlineData("ENCRYPT FILE 'a' TO 'b' KEYFILE 'id_rsa.pub.pem';")]
     [InlineData("DECRYPT FILE 'a' TO 'b' PGP_KEY 'priv.asc' PASSWORD 'phrase';")]
     [InlineData("DECRYPT FILE 'a' TO 'b' KEYFILE 'id_rsa' PASSWORD('phrase') WITH (OVERWRITE = OFF);")]
