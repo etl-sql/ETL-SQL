@@ -150,8 +150,13 @@ public class AggregateEngine
         // sampling the GC heap, which was process-wide and reactive.
         var budget = new MemoryBudgetGuard(memoryCeilingBytes);
 
-        await foreach (var row in inputStream)
+        // A scalar aggregate streams its whole input here, which can be billions of rows. Pass the
+        // run's token to the source and check it ourselves too, since not every source observes it.
+        var cancellationToken = _context.CancellationToken;
+        long rowsSeen = 0;
+        await foreach (var row in inputStream.WithCancellation(cancellationToken))
         {
+            if ((++rowsSeen & 1023) == 0) cancellationToken.ThrowIfCancellationRequested();
             CompoundKey key;
             if (groupBy != null && groupBy.Count > 0)
             {

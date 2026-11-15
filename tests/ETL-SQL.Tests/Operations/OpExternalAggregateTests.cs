@@ -80,6 +80,28 @@ namespace ETL_SQL.Tests.Operations.Operations
             Assert.DoesNotContain(eval.Telemetry.PlanDecisions, d => d.CandidatePath == "ExternalAggregate");
         }
 
+        // Streaming a scalar aggregate in memory must still honour a cancel: the hosted HA soak
+        // (run 43684479666) killed a 1e9-row COUNT(*) and the run did not end within 300 s.
+        [Fact]
+        public async Task StreamingScalarAggregateStopsPromptlyWhenCancelled()
+        {
+            var (eval, _) = BuildContext();
+            // Late enough to land in the streaming loop: a 1 s cancel lands while the million-value
+            // series is still being built, which already stopped promptly and hid the hang.
+            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            var error = await Record.ExceptionAsync(() => eval.Evaluate(TestHelpers.Parse(
+                "DECLARE @n BIGINT = (SELECT COUNT(*) FROM (SELECT (a.value - 1) * 1000 + b.value AS value " +
+                "FROM GENERATE_SERIES(1, 1000000) a CROSS JOIN GENERATE_SERIES(1, 1000) b) s WHERE value % 7 = 3);"),
+                cts.Token));
+
+            stopwatch.Stop();
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(40), $"cancel took {stopwatch.Elapsed}");
+            // 1e9 rows cannot finish in that time, so a run that returned without an error ignored the cancel.
+            Assert.NotNull(error);
+        }
+
         // DISTINCT, STRING_AGG and percentiles hold every value, so they still go to the external engine.
         [Theory]
         [InlineData("COUNT(DISTINCT value)", 714)]
