@@ -162,7 +162,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tier: [Stress, Provider, Huge]
+        tier: [Stress, Provider]
     steps:
       - uses: actions/checkout@v6
         timeout-minutes: 10
@@ -186,6 +186,43 @@ jobs:
         with:
           name: release-evidence-scale-${{ matrix.tier }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/scale-${{ matrix.tier }}/
+          if-no-files-found: error
+          retention-days: 90
+
+  # Huge runs one scenario per job: the whole set needs ~3 h on a hosted runner (the discarded
+  # warm-up alone took ~85 min in run 43648440192), past the job budget. Each job keeps its own
+  # discarded warm-up and own-path warm-up, so the numbers stay comparable with warmed baselines.
+  scale-huge:
+    name: Scale Huge ${{ matrix.scenario }}
+    needs: candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 140
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [ExternalSort, ExternalAggregate, ExternalJoin, TempTableSpill, StreamingSelect, WindowFunction, CsvIngest, ParquetRoundTrip, ReportDatasetSnapshotReload, CubeGroupingSets, ScalarSubqueryCache, SpillCleanupSuccess, SpillCleanupFailure]
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 10
+      - name: Free disk space
+        timeout-minutes: 10
+        run: sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+      - uses: ./.github/actions/build-release
+        with:
+          evidence: release-validation/scale-Huge-${{ matrix.scenario }}/build
+      - name: Certify Huge ${{ matrix.scenario }}
+        timeout-minutes: 110
+        shell: pwsh
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+        run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-ScaleCertification.ps1 -ScriptArguments @('-Tier', 'Huge', '-Scenario', $env:SCENARIO, '-Samples', '1', '-SkipBuild', '-OutDir', "release-validation/scale-Huge-$env:SCENARIO/report") -EvidenceDirectory "release-validation/scale-Huge-$env:SCENARIO/process" -TimeoutSeconds 6300
+      - name: Retain scale evidence
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-evidence-scale-Huge-${{ matrix.scenario }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/scale-Huge-${{ matrix.scenario }}/
           if-no-files-found: error
           retention-days: 90
 
