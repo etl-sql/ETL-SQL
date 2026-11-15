@@ -101,47 +101,51 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  # 2. The operator submission for this exact candidate (still a human submission, W8).
-  verify-operator:
-    name: Verify operator release evidence
+  # 2. Every certification as hosted jobs: a green Release Evidence dispatch on this exact candidate
+  # and no open CodeQL alerts on the release branch (W8). The job summary lists the six reviews.
+  verify-release-evidence:
+    name: Verify release evidence
     needs: verify-candidate
-    timeout-minutes: 30
+    timeout-minutes: 25
     runs-on: ubuntu-latest
     permissions:
-      contents: write # GitHub requires write access to read unpublished evidence drafts.
+      contents: read
+      actions: read
+      security-events: read
     steps:
       - uses: actions/checkout@v6
         timeout-minutes: 6
         with:
           ref: ${{ inputs.candidate_sha }}
-          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - name: Require candidate operator submission
-        timeout-minutes: 22
-        shell: pwsh
+      - name: Require a green Release Evidence run on the candidate
+        timeout-minutes: 8
         env:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-          VERSION: ${{ needs.verify-candidate.outputs.version }}
-        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-operator-release-evidence.mjs', $env:GITHUB_REPOSITORY, $env:CANDIDATE_SHA, $env:VERSION, 'selected-operator') -EvidenceDirectory release-validation/supervisors/operator -TimeoutSeconds 1200
-      - name: Retain operator diagnostics
-        if: always()
-        timeout-minutes: 2
-        uses: actions/upload-artifact@v7
-        with:
-          name: tag-release-operator-${{ github.run_id }}-${{ github.run_attempt }}
-          path: release-validation/supervisors/operator/
-          if-no-files-found: warn
-          retention-days: 30
+        run: node scripts/collect-release-evidence.mjs collect "$GITHUB_REPOSITORY" "$CANDIDATE_SHA" release-validation/release-evidence-selection.json
 
-  # 3. Tag the candidate and start Release on the tag. A tag pushed with the Actions token does not
+  # 3. The owner's sign-off. The release-approval environment has required reviewers: the run waits
+  # here until the owner completes the review checklist in the job summary above and approves.
+  approve:
+    name: Approve release
+    needs: [verify-candidate, verify-release-evidence]
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    environment: release-approval
+    permissions: {}
+    steps:
+      - name: Record approval
+        run: echo "Release approved for $GITHUB_SHA."
+
+  # 4. Tag the candidate and start Release on the tag. A tag pushed with the Actions token does not
   # fire Release's v* push trigger, so the run is dispatched explicitly. A rerun after a partial
   # failure reuses a tag that is already on the candidate.
   tag:
     name: Tag and start Release
-    needs: [verify-candidate, verify-operator]
+    needs: [verify-candidate, approve]
     timeout-minutes: 10
     runs-on: ubuntu-latest
     permissions:

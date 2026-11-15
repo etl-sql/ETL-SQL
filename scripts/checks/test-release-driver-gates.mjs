@@ -107,9 +107,9 @@ echo TAG_REACHABLE
       assert.equal(result.status === 0, exit === 0, result.stdout + result.stderr);
       assert.equal(result.stdout.includes('TAG_REACHABLE'), exit === 0);
       const recorded = command === 'pwsh' ? JSON.parse(readFileSync(path.join(root, 'operator-args.json'))) : readFileSync(path.join(root, 'operator-args.txt'), 'utf8').trim().split(/\r?\n/);
-      assert.ok(recorded[0].replaceAll('\\', '/').endsWith('/collect-operator-release-evidence.mjs'));
-      assert.deepEqual(recorded.slice(1, 4), ['owner/repo', 'a'.repeat(40), '1.2.3']);
-      assert.ok(recorded[4].replaceAll('\\', '/').includes('release-validation/operator-preflight/'));
+      assert.ok(recorded[0].replaceAll('\\', '/').endsWith('/collect-release-evidence.mjs'));
+      assert.deepEqual(recorded.slice(1, 4), ['collect', 'owner/repo', 'a'.repeat(40)]);
+      assert.ok(recorded[4].replaceAll('\\', '/').includes('release-validation/release-evidence-preflight/'));
     }
   }
   writeFileSync(path.join(root, 'status-failure.ps1'), `

@@ -159,16 +159,16 @@ if ($mismatch.Count -gt 0) {
 }
 Write-Ok "all $($versionSources.Count) version sources read $Version"
 
-# ---- 3b. operator evidence before push/tag --------------------------------
-Write-Step 'Operator release evidence'
-$operatorRepository = (& gh repo view --json nameWithOwner --jq '.nameWithOwner')
-if ($LASTEXITCODE -ne 0 -or -not $operatorRepository) { Fail 'Cannot resolve the operator evidence repository.' }
-$operatorRoot = Join-Path $RepoRoot 'release-validation/operator-preflight'
-New-Item -ItemType Directory -Force -Path $operatorRoot | Out-Null
-$operatorOutput = Join-Path $operatorRoot ("$localSha-" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() + "-$PID")
-& node (Join-Path $ScriptRoot 'collect-operator-release-evidence.mjs') $operatorRepository.Trim() $localSha $Version $operatorOutput
-if ($LASTEXITCODE -ne 0) { Fail 'Operator evidence is missing, incomplete or changed. Complete its candidate draft before tagging; no certification was rerun.' }
-Write-Ok 'operator checklist and retained reports verified'
+# ---- 3b. release evidence before push/tag ---------------------------------
+Write-Step 'Release evidence'
+$evidenceRepository = (& gh repo view --json nameWithOwner --jq '.nameWithOwner')
+if ($LASTEXITCODE -ne 0 -or -not $evidenceRepository) { Fail 'Cannot resolve the release evidence repository.' }
+$evidenceRoot = Join-Path $RepoRoot 'release-validation/release-evidence-preflight'
+New-Item -ItemType Directory -Force -Path $evidenceRoot | Out-Null
+$evidenceOutput = Join-Path $evidenceRoot ("$localSha-" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() + "-$PID.json")
+& node (Join-Path $ScriptRoot 'collect-release-evidence.mjs') collect $evidenceRepository.Trim() $localSha $evidenceOutput
+if ($LASTEXITCODE -ne 0) { Fail 'Release Evidence is missing, failed or stale for this candidate, or CodeQL has open alerts. Dispatch Release Evidence on the candidate before tagging.' }
+Write-Ok 'Release Evidence run and CodeQL alerts verified (the release-approval sign-off happens in Tag Release)'
 
 # ---- 4. resolve release notes --------------------------------------------
 Write-Step "Release notes"

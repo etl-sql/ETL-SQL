@@ -30,8 +30,9 @@ certification first time, no gate passes by waiver, and a script or doc fix reru
 Cut line: W6–W8 move to the feature backlog if the timebox runs out.
 
 - [ ] **W1 Nightly release rehearsal.** Running since 2026-11-08; first full pass including the
-  release dry run on 2026-11-09 (nightly 42687964349). **Left:** operator evidence once W8 settles
-  its scope.
+  release dry run on 2026-11-09 (nightly 42687964349). Release Evidence is not part of the nightly:
+  it runs once per release candidate (owner, 2026-11-13); the dry run rehearses its collector.
+  **Left:** confirm the 5-night green streak.
 - [ ] **W2 Reuse evidence when inputs did not change.** Built 2026-11-10
   ([design](docs/architecture/roadmaps/evidence-reuse-design.md)): CI lanes are reused from an
   ancestor's full run, packages are always rebuilt. **Left:** the first real reuse on a recommit.
@@ -78,8 +79,15 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   the 100M run has ~4x the collections, so it catches the transient more often. Owner decision
   2026-11-15: AllocProfile gates on a fixed 256 MB live-heap ceiling in both runs.
   AllocProfile fails at 10M only on the workstation machine-metric budget; the hosted job uses
-  `-MachineMetricsReportOnly`. **Left:** size the other conditional certifications the same way;
-  build the hosted jobs and the approval; remove the operator submission from `release.yml`.
+  `-MachineMetricsReportOnly`. Sized: every Release Evidence job runs at about a third of its limit
+  or less (runs 43684479666, 43714859186; longest Huge WindowFunction 45 of 140 min, billion-row
+  window 34 of 120). Wired (2026-11-15): Tag Release and Release require a green Release Evidence
+  dispatch on the candidate, zero open CodeQL alerts and the `release-approval` environment approval
+  (owner = required reviewer; the 6 reviews are its checklist) through
+  `scripts/collect-release-evidence.mjs`. The deployment/canary report-contract check is a hosted
+  job (`Report contracts`). The operator submission and its tooling are removed. **Left:** one
+  green HA soak (the faults after WorkerProcessCrashMidJob have never run hosted), then the first
+  green Release Evidence dispatch on the candidate.
 
 **Parked from the earlier "release in four hours" goal.** Each is picked up only if a workstream
 needs it, otherwise moves to `ROADMAP.md` after v0.22.0:

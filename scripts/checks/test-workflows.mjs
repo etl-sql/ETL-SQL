@@ -83,14 +83,14 @@ for (const prefix of ['browser-asset-ownership-', 'studio-performance-windows-',
   assert.ok(artifactNames.has(`${prefix}123-2`));
 }
 const windowsUpload = jobs.get('upload-windows');
-assert.match(jobs.get('prepare-release'), /needs: \[validate, operator-evidence\]/);
-for (const kind of ['msi', 'deb']) assert.match(jobs.get(`certify-${kind}`), /needs: \[validate, find-\w+, operator-evidence\]/);
-assert.match(jobs.get('operator-evidence'), /contents: write/);
-assert.match(jobs.get('operator-evidence'), /security-events: read/);
-assert.match(jobs.get('operator-evidence'), /collect-operator-release-evidence\.mjs/);
-assert.match(jobs.get('attest-provenance'), /Verify and attach operator evidence to draft/);
-assert.match(jobs.get('publish-release'), /Recheck operator evidence before publication/);
-assert.match(jobs.get('publish-release'), /Verify draft operator evidence attachment/);
+assert.match(jobs.get('prepare-release'), /needs: \[validate, release-evidence\]/);
+for (const kind of ['msi', 'deb']) assert.match(jobs.get(`certify-${kind}`), /needs: \[validate, find-\w+, release-evidence\]/);
+assert.match(jobs.get('release-evidence'), /security-events: read/);
+assert.match(jobs.get('release-evidence'), /collect-release-evidence\.mjs "\$MODE"/);
+assert.match(jobs.get('release-evidence'), /MODE: \$\{\{ inputs\.dry_run == true && 'collect' \|\| 'collect-approved' \}\}/);
+assert.match(jobs.get('attest-provenance'), /Attach release evidence selection to draft/);
+assert.match(jobs.get('publish-release'), /collect-release-evidence\.mjs recheck/);
+assert.match(jobs.get('publish-release'), /cmp selected-release-evidence\/release-evidence-selection\.json current-release-evidence\/release-evidence-selection\.json/);
 assert.equal(jobs.has('build-windows'), false, 'Release must promote the accepted Windows bytes without rebuilding.');
 assert.match(jobs.get('validate'), /Require certified pre-tag Windows packages/);
 assert.match(jobs.get('validate'), /collect-certified-windows\.mjs/);
@@ -354,7 +354,7 @@ exit ([int]$env:FIXTURE_EXIT)
     }
     assertJobBudget(nativeJob, `Native package (${rid})`, inactiveSteps);
   }
-  for (const id of ['select-macos-intel', 'select-macos-arm64', 'upload-windows', 'upload-macos', 'operator-evidence']) assertJobBudget(jobs.get(id), id);
+  for (const id of ['select-macos-intel', 'select-macos-arm64', 'upload-windows', 'upload-macos', 'release-evidence']) assertJobBudget(jobs.get(id), id);
   assert.match(publishStep, /^        timeout-minutes: 80/m);
   const nativeCommands = publishStep.split('        run: |')[1].replace(/^          /gm, '');
   writeFileSync(path.join(directory, 'native-publish.ps1'), nativeCommands);

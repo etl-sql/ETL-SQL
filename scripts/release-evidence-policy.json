@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "maximumAgeHours": 168,
+  "workflows": [
+    {
+      "file": "release-evidence.yml",
+      "events": ["workflow_dispatch"],
+      "releaseBranchesOnly": true,
+      "jobs": [
+        "Candidate",
+        "Deployment Profiles",
+        "Deployment Transitions",
+        "Production-canary contracts",
+        "Report contracts",
+        "Scale Stress",
+        "Scale Provider",
+        "Scale Huge ExternalSort",
+        "Scale Huge ExternalAggregate",
+        "Scale Huge ExternalJoin",
+        "Scale Huge TempTableSpill",
+        "Scale Huge StreamingSelect",
+        "Scale Huge WindowFunction",
+        "Scale Huge CsvIngest",
+        "Scale Huge ParquetRoundTrip",
+        "Scale Huge ReportDatasetSnapshotReload",
+        "Scale Huge CubeGroupingSets",
+        "Scale Huge ScalarSubqueryCache",
+        "Scale Huge SpillCleanupSuccess",
+        "Scale Huge SpillCleanupFailure",
+        "Columnar Storage gate",
+        "Columnar Operator gate",
+        "Service capacity (reference)",
+        "Service capacity (full)",
+        "HA soak (Compose topology)",
+        "Billion-row ExternalSort (10000000 rows)",
+        "Billion-row ExternalSort (100000000 rows)",
+        "Billion-row ExternalJoin (10000000 rows)",
+        "Billion-row ExternalJoin (100000000 rows)",
+        "Billion-row EligibleWindowRowNumber (10000000 rows)",
+        "Billion-row EligibleWindowRowNumber (100000000 rows)",
+        "Billion-row HighCardinalityGrouping (10000000 rows)",
+        "Billion-row HighCardinalityGrouping (100000000 rows)",
+        "Billion-row TempTableRoundTrip (10000000 rows)",
+        "Billion-row TempTableRoundTrip (100000000 rows)",
+        "Billion-row ColumnarCore (10000000 rows)",
+        "Billion-row ColumnarCore (100000000 rows)",
+        "Billion-row AllocProfile (10000000 rows)",
+        "Billion-row AllocProfile (100000000 rows)",
+        "Billion-row memory flatness"
+      ]
+    }
+  ],
+  "approval": {
+    "workflow": "tag-release.yml",
+    "environment": "release-approval"
+  },
+  "reviews": [
+    { "id": "source-and-security", "check": "The candidate diff since the previous release has no unreviewed security-sensitive change; the security review findings are fixed or tracked." },
+    { "id": "dependency-and-license", "check": "New or upgraded dependencies are in the third-party inventory and NOTICES; no license conflicts." },
+    { "id": "evidence-redaction", "check": "The Release Evidence artifacts and job logs carry no secrets, credentials or customer data." },
+    { "id": "release-notes-and-upgrade-guidance", "check": "Release notes, CHANGELOG and upgrade guidance describe the shipped scope." },
+    { "id": "deployment-claims-and-overlays", "check": "The deployment-profile claims match the Deployment Profiles/Transitions evidence; no Shared SaaS or hosted-production claim is promoted." },
+    { "id": "codeql-alert-triage", "check": "CodeQL has no open alerts on the release branch (the collector enforces this) and every dismissal since the previous release has a reason." }
+  ]
+}

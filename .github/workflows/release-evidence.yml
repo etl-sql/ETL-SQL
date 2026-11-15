@@ -1,10 +1,11 @@
-# Release evidence that used to be an operator submission from the owner's workstation (release
-# reliability W8): deployment profiles and transitions, production-canary contracts, the
-# conditional scale, columnar and service-capacity certifications (with the full
-# capacity baseline), the HA soak on a Compose topology, and the billion-row
-# memory-flatness proof. It runs
-# once per release candidate. Each job is sized to about a third of its limit and gates only on
-# deterministic results (rows, checksums, bounded memory, contract outcomes), never throughput.
+# Every release certification as hosted jobs (release reliability W8; it replaced the operator
+# submission from the owner's workstation): deployment profiles and transitions with their report
+# contracts, production-canary contracts, the scale, columnar and service-capacity certifications
+# (with the full capacity baseline), the HA soak on a Compose topology, and the billion-row
+# memory-flatness proof. It runs once per release candidate; Tag Release and Release require a
+# green dispatch on the exact candidate (scripts/collect-release-evidence.mjs). Each job is sized
+# to about a third of its limit and gates only on deterministic results (rows, checksums, bounded
+# memory, contract outcomes), never throughput.
 #
 # The spill allocation profile is not repeated here: Engine Certification runs it at 10M rows on
 # every CI run of the candidate. The recovery drill is part of DEB Installed Upgrade.
@@ -152,6 +153,48 @@ jobs:
           name: release-evidence-canary-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/canary/
           if-no-files-found: error
+          retention-days: 90
+
+  # The contract check the operator bundle used to run: merge the Profile and Transition claim
+  # indexes into one complete index and validate it, then check the canary report against its plan.
+  report-contracts:
+    name: Report contracts
+    needs: [candidate, deployment, canary]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        timeout-minutes: 5
+      - uses: actions/download-artifact@v8
+        timeout-minutes: 5
+        with:
+          pattern: release-evidence-deployment-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/report-inputs
+      - uses: actions/download-artifact@v8
+        timeout-minutes: 5
+        with:
+          name: release-evidence-canary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/report-inputs/release-evidence-canary-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Validate deployment and canary reports
+        timeout-minutes: 5
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.candidate.outputs.version }}
+          RUN_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          $inputs = 'release-validation/report-inputs'
+          $deployment = { param($kind) "$inputs/release-evidence-deployment-$kind-$env:RUN_SUFFIX/artifacts/release-evidence/$env:VERSION/deployment-profiles" }
+          ./scripts/Test-ReleaseEvidenceReports.ps1 -ProfileRoot (& $deployment 'Profile') -TransitionRoot (& $deployment 'Transition') `
+            -CanaryRoot "$inputs/release-evidence-canary-$env:RUN_SUFFIX/run" -CandidateSha $env:GITHUB_SHA -Version $env:VERSION `
+            -OutDir release-validation/report-contracts/deployment-profiles
+      - name: Retain merged claims index
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-evidence-report-contracts-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/report-contracts/deployment-profiles/claims-index.json
+          if-no-files-found: warn
           retention-days: 90
 
   scale:

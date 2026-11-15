@@ -144,8 +144,8 @@ evidence) as test data for every collector and validator. (The end-to-end workst
 was dropped with the driver in W4b.) **Done when:** every post-tag
 collector has a real-output test. Status 2026-11-10: hosted, DEB and MSI selection and the Windows
 package-origin check replay real recordings from dry run 42699535102
-(`scripts/checks/test-real-release-output.mjs`); the native, draft-manifest and operator collectors
-remain (package bytes too large to keep; no real operator submission yet).
+(`scripts/checks/test-real-release-output.mjs`); the native and draft-manifest collectors remain
+(package bytes too large to keep) and the release-evidence collector (no real dispatch yet).
 
 ### W4b. Remove the workstation from the release path (owner decided 2026-11-04)
 **Status 2026-11-09: done, unpushed.** The hosted Engine Certification job in `ci.yml` runs the
@@ -220,11 +220,13 @@ Shrink the pre-push hook to fast checks (seconds to a few minutes: lint, format,
 move heavy validation into CI and the nightly rehearsal. Goal: CI certifies, the workstation
 does not. (Removing the workstation from releases is W4b, above the cut line.)
 
-### W8. Scale release evidence to current claims (small)
-Keep the operator submission only for claims the product makes to real users today. v0.22.0 is
-the first public release, but Shared SaaS and ETL-SQL Studio ship as alpha, so their rows
-and reviews can be dropped or deferred until they leave alpha. **Done when:** every remaining row names the claim
-it backs. Needs explicit owner sign-off, because it removes evidence behind enterprise claims.
+### W8. Move the operator evidence to GitHub
+Owner decision 2026-11-13: drop no check; move every one off the workstation. The 3 reports and
+11 conditional certifications are hosted jobs in Release Evidence (`release-evidence.yml`), run
+once per candidate and gated on deterministic results; the 6 reviews are a checklist the owner
+completes before approving the `release-approval` environment in Tag Release. Tag Release and
+Release require both through `collect-release-evidence.mjs`; the operator submission is gone.
+**Done when:** a real release passes with them.
 
 ### Later (after the finish line)
 Once the nightly rehearsal makes failures rare, consider replacing the custom release supervisor
@@ -242,7 +244,7 @@ with a merge queue, required checks and GitHub's built-in rerun of failed jobs.
 | Performance regression detection | Continuous benchmarks with statistics | Single-run timing on a workstation, waived | W6 |
 | Re-certification on change | Path filters or input-keyed build cache | Everything reruns on any commit | W2 |
 | Who certifies | CI; local hooks take seconds | 13-min hook and 2-h local gate | W7 |
-| Release evidence | Checklist and release notes | 11 conditional certs, 6 reviews, sealed bundle | W8 |
+| Release evidence | Checklist and release notes, CI behind an approval | Hosted Release Evidence run and an environment approval | W8 |
 | Where releases are built and published | CI only, behind an approval gate; nothing from a laptop | Tag, workstation and operator evidence from the owner's machine | W4b, W4c |
 | Failure handling | Merge queue and built-in reruns | Custom supervisor | Later |
 | Installer upgrade/rollback testing | Lighter in most projects; prepared VM images where thorough | Full matrix on general CI runners | Keep the coverage; W3 fixes reliability |

@@ -1,18 +1,19 @@
-# Synthetic complete reports for the real retained-report validator; no product tests run here.
+# Synthetic complete reports, laid out as the Release Evidence deployment and canary jobs upload
+# them, for the real report-contract validator (Test-ReleaseEvidenceReports.ps1). No product tests run.
 param([string]$Root, [string]$CandidateSha, [string]$Version)
 $ErrorActionPreference = 'Stop'
 $scripts = (Get-Item (Join-Path $PSScriptRoot '../..')).FullName
 . (Join-Path $scripts 'ReleaseEvidence.Helpers.ps1')
 . (Join-Path $PSScriptRoot 'DeploymentEvidence.Fixture.ps1')
 $fingerprint = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($CandidateSha))).ToLowerInvariant()
-$deployment = Join-Path $Root 'evidence/deployment'
-$evidence = @{ root = $deployment; reports = @{}; paths = @{}; index = @{ schemaVersion = 'etl-sql.deployment-profile-release-claims/v1'; releaseVersion = $Version; claims = @() } }
 foreach ($kind in @('Profile', 'Transition')) {
+    # Each deployment job writes its own root and claims index, for its own kind only.
+    $deployment = Join-Path $Root "deployment-$kind"
+    $evidence = @{ root = $deployment; reports = @{}; paths = @{}; index = @{ schemaVersion = 'etl-sql.deployment-profile-release-claims/v1'; releaseVersion = $Version; claims = @() } }
     foreach ($lane in (Get-DeploymentCertificationLanes $kind)) {
         $topology = Get-TopologyClaim $lane
         $relative = "$kind-$lane/certification.json"
-        $directory = Join-Path $deployment "$kind-$lane"
-        $null = New-Item -ItemType Directory -Path $directory -Force
+        $null = New-Item -ItemType Directory -Path (Join-Path $deployment "$kind-$lane") -Force
         $evidence.paths[$lane] = $relative
         $evidence.reports[$lane] = [ordered]@{
             schemaVersion = 'etl-sql.deployment-profile-certification/v1'; commit = $CandidateSha; sourceFingerprint = $fingerprint
@@ -26,13 +27,13 @@ foreach ($kind in @('Profile', 'Transition')) {
             commit = $CandidateSha; result = 'Passed'; releaseEligible = $true; evidence = $relative
         }
     }
+    Add-FixtureExecutionEvidence $evidence
+    foreach ($lane in $evidence.reports.Keys) { $evidence.reports[$lane] | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $deployment $evidence.paths[$lane]) }
+    $evidence.index.generatedUtc = [DateTimeOffset]::UtcNow.ToString('O')
+    $evidence.index | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $deployment 'claims-index.json')
 }
-Add-FixtureExecutionEvidence $evidence
-foreach ($lane in $evidence.reports.Keys) { $evidence.reports[$lane] | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $deployment $evidence.paths[$lane]) }
-$evidence.index.generatedUtc = [DateTimeOffset]::UtcNow.ToString('O')
-$evidence.index | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $deployment 'claims-index.json')
 . (Join-Path $PSScriptRoot 'test-production-canary-evidence.ps1')
-$canary = Join-Path $Root 'evidence/canary'
+$canary = Join-Path $Root 'canary/certification-results/production-canaries/20260101-000000-000'
 $journeys = Join-Path $canary 'journey-evidence'
 $null = New-Item -ItemType Directory -Path $journeys -Force
 $report | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath (Join-Path $journeys 'production-canary-report.json')
@@ -48,13 +49,3 @@ $boundary.credential | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join
     journeyEvidence = 'journey-evidence/production-canary-report.json'; provisioningEvidence = 'journey-evidence/production-canary-provisioning.json'
     credentialLifecycleEvidence = 'journey-evidence/production-canary-credential-lifecycle.json'; testLog = 'production-canary-tests.log'
 } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $canary 'certification.json')
-@{
-    schemaVersion = '1.0'; operation = 'validate'; status = 'Pass'; backupId = 'fixture-backup'; keysBackupId = 'fixture-backup'
-    appVersion = "$Version.0"; generatedUtc = [DateTimeOffset]::UtcNow.AddSeconds(-1).ToString('O'); restored = $false
-    fileCount = 1; achievedRpoSeconds = 5; dataLossWindowSeconds = 5; missingDependencies = @(); operatorActions = @('Synthetic recovery review')
-} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Root 'evidence/recovery/recovery-report.json')
-$checklistPath = Join-Path $Root 'checklist.json'
-$checklist = Get-Content -LiteralPath $checklistPath -Raw | ConvertFrom-Json
-$checklist.reviewedAt = [DateTimeOffset]::UtcNow.ToString('O')
-$checklist.generatedAt = [DateTimeOffset]::UtcNow.ToString('O')
-$checklist | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $checklistPath

@@ -9,12 +9,13 @@ bootstrap scripts and obsolete standalone service helpers were retired in v0.22.
 
 ## Release evidence
 
-The [operator evidence guide](../docs/releases/operator-evidence.md) describes the required
-candidate-bound checklist bundle. `operator-release-evidence.mjs` creates pending templates and
-validates/seals completed submissions. `collect-operator-release-evidence.mjs` collects the original
-draft attachment and rechecks its hashes, previous-release diff, candidate branch and CodeQL alerts.
-Both release drivers and publication require it. Validation reads retained reports without rerunning
-their suites. Operator attestations remain distinct from trusted-host execution evidence.
+`collect-release-evidence.mjs` requires a green Release Evidence dispatch on the exact candidate
+(every job in `release-evidence-policy.json`, artifacts still retained with digests), no open CodeQL
+alerts on its release branch and, for a real release, an approved `release-approval` deployment in
+Tag Release. Tag Release, both release drivers and Release run it; Release rechecks the same selection
+before publication. `Test-ReleaseEvidenceReports.ps1` merges the deployment Profile and Transition
+claim indexes and checks them and the canary report against their contracts in Release Evidence. See
+[Release Evidence and approval](../docs/releases/release-checklist.md#release-evidence-and-approval).
 
 MSI Portal diagnostics submit phase markers and memory counts to their own check-run annotations
 before/after resource probes. This is opt-in CI transport with current-job identity checks, a
@@ -192,15 +193,14 @@ must not be combined into passing release evidence.
 Each profile uploads candidate identity, the Portal summary and supervisor result/heartbeat/stderr
 before its full evidence bundle. The focused upload has a five-minute deadline, the full upload
 20 minutes, and the profile job 65 minutes. Both artifacts retain their original run attempt.
-Operator and package certification requirements remain.
+Release Evidence and package certification requirements remain.
 
 Since v0.22.0 no workstation run is part of the release. The checks that used to run only there
 (EBNF, SLT, 10M-row spill, Smoke and Standard scale) run in the hosted Engine Certification CI job.
 Scale timings are reported, not gated, because hosted runner hardware varies; row counts, checksums
 and scenario failures still fail the job. The third-party inventory drift check runs in Build
 Verification and the local/container smoke parity check in Docker Integration Tests.
-`lib/submitted-evidence.mjs` holds the shared draft-asset collection and safe ZIP extraction used
-by the operator evidence and Windows payload collectors.
+`lib/submitted-evidence.mjs` holds the safe ZIP extraction the Windows payload collector uses.
 
 ## Portal test processes
 

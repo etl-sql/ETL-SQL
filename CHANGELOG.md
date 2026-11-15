@@ -893,6 +893,14 @@ Each entry's migration is in [BREAKING_CHANGES.md](BREAKING_CHANGES.md).
   Compose topology of two Portals and two Orchestrators behind a load balancer on PostgreSQL. The
   soak runs sustained load, real large spilling jobs cancelled through the load balancer at four
   points, and ten injected faults, and is gated by `ha-soak validate --required-gate All`.
+- Releases no longer need an operator submission from the owner's workstation. Tag Release and
+  Release require a green Release Evidence dispatch on the exact candidate (every certification as
+  a hosted job, including a new `Report contracts` job that checks the deployment and canary
+  reports), no open CodeQL alerts on the release branch, and approval of the `release-approval`
+  environment, whose checklist holds the six release reviews. Release attaches the selected run to
+  the draft as `release-evidence-selection.json` and rechecks it before publication. The operator
+  bundle tools (`operator-release-evidence.mjs`, `collect-operator-release-evidence.mjs`,
+  `Test-OperatorReportInputs.ps1`) and `docs/releases/operator-evidence.md` are removed.
 
 - Controlled-host local certification can resume failed phases or recover failed evidence uploads
   after verifying the same run, runner, workspace, toolchain, cached outputs and original receipts.

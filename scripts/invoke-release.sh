@@ -123,15 +123,15 @@ Run Set-Version.ps1 -Version $VERSION."
 fi
 ok "all four version sources read $VERSION"
 
-# ---- 3b. operator evidence before push/tag --------------------------------
-step "Operator release evidence"
-OPERATOR_REPOSITORY="$(gh repo view --json nameWithOwner --jq '.nameWithOwner')" || die "Cannot resolve the operator evidence repository."
-OPERATOR_ROOT="release-validation/operator-preflight"
-mkdir -p "$OPERATOR_ROOT"
-OPERATOR_OUTPUT="$OPERATOR_ROOT/$LOCAL_SHA-$(date +%s)-$$"
-node scripts/collect-operator-release-evidence.mjs "$OPERATOR_REPOSITORY" "$LOCAL_SHA" "$VERSION" "$OPERATOR_OUTPUT" ||
-  die "Operator evidence is missing, incomplete or changed. Complete its candidate draft before tagging; no certification was rerun."
-ok "operator checklist and retained reports verified"
+# ---- 3b. release evidence before push/tag ---------------------------------
+step "Release evidence"
+EVIDENCE_REPOSITORY="$(gh repo view --json nameWithOwner --jq '.nameWithOwner')" || die "Cannot resolve the release evidence repository."
+EVIDENCE_ROOT="release-validation/release-evidence-preflight"
+mkdir -p "$EVIDENCE_ROOT"
+EVIDENCE_OUTPUT="$EVIDENCE_ROOT/$LOCAL_SHA-$(date +%s)-$$.json"
+node scripts/collect-release-evidence.mjs collect "$EVIDENCE_REPOSITORY" "$LOCAL_SHA" "$EVIDENCE_OUTPUT" ||
+  die "Release Evidence is missing, failed or stale for this candidate, or CodeQL has open alerts. Dispatch Release Evidence on the candidate before tagging."
+ok "Release Evidence run and CodeQL alerts verified (the release-approval sign-off happens in Tag Release)"
 
 # ---- 4. resolve release notes --------------------------------------------
 step "Release notes"

@@ -18,7 +18,7 @@ for (const source of [catalog.replaceAll('\r\n', '\n'), catalog.replaceAll('\r\n
 assert.throws(() => syntaxIndex.extractStewardshipTags(catalog.replace('TableColumnScriptScopes, []),', 'TableColumnScriptScopes, [], []),')),
   /Unable to extract/, 'A changed record shape must fail instead of silently dropping an entry.');
 
-assert.equal(releaseAutomationChecks.length, 57);
+assert.equal(releaseAutomationChecks.length, 56);
 // Healthy checks reached 55 s on loaded CI runners; the deadline must stay a hang guard.
 assert.ok(checkTimeoutMs >= 3 * 55000, 'The per-check deadline must leave room for a loaded runner.');
 assert.equal(checksForArguments([]), sourceChecks);
@@ -33,7 +33,7 @@ for (const [index, check] of sourceChecks.entries()) {
 for (const args of [['--release-branch'], ['--release-branch', ''], ['--release-branch', '--skip'], ['--skip'], ['--release-branch', 'main', 'extra']]) {
   assert.throws(() => checksForArguments(args), /always runs the full source preflight/);
 }
-for (const name of ['dmg-staging', 'workflow-timeouts', 'msi-build-watchdog', 'operator-release-evidence', 'collected-operator-evidence', 'operator-report-inputs', 'certified-windows', 'certified-macos', 'release-draft-manifest', 'production-canary-evidence', 'certification-source', 'deployment-claims',
+for (const name of ['dmg-staging', 'workflow-timeouts', 'msi-build-watchdog', 'release-evidence-collector', 'release-evidence-reports', 'certified-windows', 'certified-macos', 'release-draft-manifest', 'production-canary-evidence', 'certification-source', 'deployment-claims',
   'submitted-evidence', 'engine-coverage', 'installer-sources', 'installer-actions', 'master-release', 'publish-release', 'sbom-output', 'changelog-compiler', 'vsix-module-identity']) {
   assert.equal(releaseAutomationChecks.filter(check => check.id === `test-${name}`).length, 1);
 }

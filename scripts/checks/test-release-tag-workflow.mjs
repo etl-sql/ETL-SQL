@@ -37,21 +37,26 @@ for (const [job, name, script] of [
   ['verify-candidate', 'Require the version tag to be free or already on the candidate', 'check-release-tag.mjs'],
   ['verify-candidate', 'Require exact-candidate CI and CodeQL evidence', 'collect-hosted-release-evidence.mjs'],
   ['verify-candidate', 'Require certified pre-tag Windows packages', 'collect-certified-windows.mjs'],
-  ['verify-operator', 'Require candidate operator submission', 'collect-operator-release-evidence.mjs'],
+  ['verify-release-evidence', 'Require a green Release Evidence run on the candidate', 'collect-release-evidence.mjs'],
 ]) {
   const step = stepOf(jobs, job, name);
   assert.match(step, new RegExp(`scripts/${script.replaceAll('.', '\\.')}`), name);
   assert.doesNotMatch(step, /continue-on-error|^        if:/m, `${name} can never be skipped`);
 }
 const release = read('.github/workflows/release.yml');
-for (const script of ['check-release-metadata.mjs', 'collect-hosted-release-evidence.mjs', 'collect-certified-windows.mjs', 'collect-operator-release-evidence.mjs']) {
+for (const script of ['check-release-metadata.mjs', 'collect-hosted-release-evidence.mjs', 'collect-certified-windows.mjs', 'collect-release-evidence.mjs']) {
   assert.ok(release.includes(`scripts/${script}`), `Release no longer runs ${script}; update Tag Release to match`);
 }
 
-// Only the tag job can write a ref or start a run, and only after both verification jobs passed.
-assert.match(jobs.tag, /^    needs: \[verify-candidate, verify-operator\]$/m);
+// The owner's sign-off: the approve job runs in the release-approval environment (required
+// reviewers) only after both verification jobs passed, and the tag job waits for it.
+assert.match(jobs.approve, /^    needs: \[verify-candidate, verify-release-evidence\]$/m);
+assert.match(jobs.approve, /^    environment: release-approval$/m);
+assert.match(jobs.approve, /^    permissions: \{\}$/m);
+// Only the tag job can write a ref or start a run, and only after the approval.
+assert.match(jobs.tag, /^    needs: \[verify-candidate, approve\]$/m);
 assert.match(jobs.tag, /^    permissions:\n      contents: write\n      actions: write\n/m);
-for (const job of ['verify-candidate', 'verify-operator']) assert.doesNotMatch(jobs[job], /git (?:tag|push)|gh workflow run|actions: write/, job);
+for (const job of ['verify-candidate', 'verify-release-evidence', 'approve']) assert.doesNotMatch(jobs[job], /git (?:tag|push)|gh workflow run|actions: write/, job);
 const start = runOf(stepOf(jobs, 'tag', 'Start Release on the tag'));
 assert.match(start, /gh workflow run release\.yml --repo "\$GITHUB_REPOSITORY" --ref "\$TAG_NAME" -f tag="\$TAG_NAME"/);
 

@@ -80,8 +80,9 @@ those rehearsals do not need to be repeated for each release and do not certify 
 > Since v0.22.0 the tag comes from GitHub, not a workstation. Run the **Tag Release** workflow
 > (`tag-release.yml`) on the release branch with `candidate_sha` set to the certified HEAD. It
 > checks final metadata, the tag (free, or already on the candidate), exact-candidate CI and CodeQL,
-> the certified Windows packages and the operator submission. Then it creates the annotated tag
-> and starts **Release** on it. Tags are immutable, so nothing is tagged until every check passes.
+> the certified Windows packages and a green **Release Evidence** run, then waits for the owner to
+> approve the `release-approval` environment. Then it creates the annotated tag and starts
+> **Release** on it. Tags are immutable, so nothing is tagged until every check passes.
 > A rerun reuses a tag already on the candidate. Release takes its body from
 > `docs/releases/vX.Y.Z.md`. Its Marketplace job publishes with the vsce version that packaged the
 > VSIXs and skips a version and platform the Marketplace already has, so it can be rerun.
@@ -91,8 +92,8 @@ those rehearsals do not need to be repeated for each release and do not certify 
 > checks that used to run only there (EBNF, SLT, 10M-row spill, Smoke and Standard scale) run in
 > the hosted **Engine Certification** CI job; third-party inventory drift runs in Build Verification
 > and local/container smoke parity in Docker Integration Tests. Release drivers provide no CI-wait
-> bypass. CI/CodeQL jobs, the operator submission and certified package promotion are enforced by
-> Release. Complete every applicable checkbox before tagging.
+> bypass. CI/CodeQL jobs, Release Evidence with its approval and certified package promotion are
+> enforced by Release. Complete every applicable checkbox before tagging.
 
 Release now requires the DEB installed-upgrade workflow and promotes its retained package by
 artifact ID. Candidate SHA, version, input hashes, successful receipt and package bytes must match;
@@ -502,7 +503,7 @@ retries preserve successful work from earlier attempts. It checks pagination and
 identity after collection to reject a concurrent retry. Failures print inspection and retry commands.
 Release retains the JSON as an artifact, attaches it to the draft and includes it in attestation
 and checksums. This is CI/CodeQL execution evidence, not proof of alert triage or completion of
-operator, local and delivery certifications. The [operator evidence gate](operator-evidence.md) enforces the separate submission and review inventory.
+the certifications in Release Evidence (see [Release Evidence and approval](#release-evidence-and-approval)).
 API contract: [workflow run attempts and jobs](https://docs.github.com/en/rest/actions/workflow-jobs).
 
 ### Recovering a failed MSI certification
@@ -737,14 +738,37 @@ keeps the logs, results and comparison reports. Release requires the job through
 This replaced the independent Windows workstation run in v0.22.0. Timing claims on fixed hardware
 still need the periodic performance certification below.
 
-### Operator report and review gate
+### Release Evidence and approval
 
-Prepare and seal the [operator submission](operator-evidence.md) for the frozen candidate. It is
-required before tagging and rechecked before publication. Deployment/canary/recovery reports are
-validated without retesting; conditional certification decisions retain named operator reviews,
-scope, commands, execution windows and files. Missing or inconsistent rows, changed evidence, an
-outdated previous-release diff or open CodeQL alerts block promotion. This does not replace
-trusted-host or live-topology evidence.
+Since v0.22.0 no release step runs on a workstation. Dispatch **Release Evidence**
+(`release-evidence.yml`) on the release branch with `candidate_sha` set to the frozen HEAD. It runs
+every certification that used to be an operator submission as hosted jobs, once per candidate:
+deployment profiles and transitions and their report contracts, production-canary contracts, Stress,
+Provider and Huge scale, the columnar gates, service capacity (reference and full baseline), the HA
+soak on a Compose topology and the billion-row memory-flatness proof. Each job gates on
+deterministic results only (rows, checksums, bounded memory, contract outcomes), never throughput.
+The whole run takes about 2–3 hours. Pushes to `release-evidence/**` branches only measure the
+jobs and never count as evidence.
+
+`scripts/collect-release-evidence.mjs` selects the latest dispatch for the exact candidate: every
+job in `scripts/release-evidence-policy.json` must pass within 7 days, every artifact must still
+exist with a digest, and CodeQL must have no open alerts on the release branch. Tag Release runs it,
+lists the six reviews below in its job summary, and then waits on the `release-approval`
+environment, whose required reviewer is the owner. Approve only after these reviews:
+
+- **source-and-security**: no unreviewed security-sensitive change since the previous release.
+- **dependency-and-license**: new or upgraded dependencies are in the inventory and NOTICES.
+- **evidence-redaction**: Release Evidence artifacts and logs carry no secrets or customer data.
+- **release-notes-and-upgrade-guidance**: notes, CHANGELOG and upgrade guidance match the scope.
+- **deployment-claims-and-overlays**: claims match the deployment evidence; no Shared SaaS or
+  hosted-production claim is promoted.
+- **codeql-alert-triage**: no open alerts (enforced), and dismissals since the previous release
+  have reasons.
+
+Release requires the same run and an approved Tag Release run for the candidate. It attaches
+`release-evidence-selection.json` (run, jobs, artifact digests, approver) to the draft, includes it
+in attestation and checksums, and rechecks before publication that the run, its artifacts and the
+approval are unchanged. A dry run rehearses the collector without the approval and never fails on it.
 
 ### Certification schedule and evidence ledger
 
@@ -886,10 +910,8 @@ the `Test-BillionRow*` commands and are not additional gates.
       not covered as well as what passed.
 - [ ] Profile, transition, platform, topology, configuration, commit, dirty state, and result match the
       release claim. Managed Dedicated and Shared SaaS are reviewed as separate claims.
-- [ ] Verify the [operator submission](operator-evidence.md), including every required report,
-      review and applicability row. Both drivers and Release enforce its candidate and diff identity.
-      Human decisions remain submitted attestations; the local Passed state alone does not prove
-      operator execution or live-topology certification.
+- [ ] Release Evidence passed on the exact candidate and the six reviews are done before approving
+      `release-approval` in Tag Release (see [Release Evidence and approval](#release-evidence-and-approval)).
 
 The gate covers (in order): asset-drift check, changelog compilation, **secret scan**,
 `dotnet restore`, dependency-audit self-test, NuGet dependency audit (no

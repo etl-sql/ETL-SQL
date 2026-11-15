@@ -149,59 +149,51 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  operator-evidence:
-    name: Verify operator release evidence
+  # Every certification as hosted jobs (W8): a green Release Evidence dispatch on the exact
+  # candidate, no open CodeQL alerts on its release branch, and the owner's release-approval sign-off
+  # from Tag Release. A dry run rehearses the collector without the approval and never fails on it.
+  release-evidence:
+    name: Verify release evidence
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 25
     permissions:
-      contents: write # GitHub requires write access to read unpublished evidence drafts.
+      contents: read
+      actions: read
       security-events: read
     outputs:
       artifact_id: ${{ steps.retain.outputs.artifact-id }}
-      manifest_sha256: ${{ steps.selection.outputs.manifest_sha256 }}
     steps:
       - uses: actions/checkout@v6
         timeout-minutes: 6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
-          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - name: Require candidate operator submission
-        if: env.DRY_RUN != 'true' # operator evidence is a human submission (W8)
-        id: selection
-        timeout-minutes: 22
-        shell: pwsh
+      - name: Require release evidence and approval for the candidate
+        timeout-minutes: 8
+        continue-on-error: ${{ inputs.dry_run == true }}
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
-        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-operator-release-evidence.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, $env:TAG_NAME.TrimStart('v'), 'selected-operator') -EvidenceDirectory release-validation/supervisors/operator -TimeoutSeconds 1200
-      - name: Retain verified operator submission
-        if: env.DRY_RUN != 'true' # operator evidence is a human submission (W8)
+          MODE: ${{ inputs.dry_run == true && 'collect' || 'collect-approved' }}
+        run: node scripts/collect-release-evidence.mjs "$MODE" "$GITHUB_REPOSITORY" "$SOURCE_SHA" release-validation/release-evidence-selection.json
+      - name: Retain selected release evidence
+        if: env.DRY_RUN != 'true'
         id: retain
         timeout-minutes: 5
         uses: actions/upload-artifact@v7
         with:
-          name: selected-operator-${{ github.run_id }}-${{ github.run_attempt }}
-          path: selected-operator/
+          name: release-evidence-selection-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-validation/release-evidence-selection.json
           if-no-files-found: error
-          retention-days: 30
-      - name: Retain operator diagnostics
-        if: always() && env.DRY_RUN != 'true'
-        timeout-minutes: 2
-        uses: actions/upload-artifact@v7
-        with:
-          name: operator-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
-          path: release-validation/supervisors/operator/
-          if-no-files-found: warn
           retention-days: 30
 
   prepare-release:
     name: Prepare GitHub Release
     timeout-minutes: 10
-    needs: [validate, operator-evidence]
+    needs: [validate, release-evidence]
     runs-on: ubuntu-latest
     steps:
       # The curated notes become the release body. The validate job already required them final.
@@ -268,7 +260,7 @@ jobs:
 
   certify-msi:
     name: Certify release MSI
-    needs: [validate, find-msi, operator-evidence]
+    needs: [validate, find-msi, release-evidence]
     if: needs.find-msi.outputs.artifact_id == ''
     permissions:
       contents: read
@@ -372,7 +364,7 @@ jobs:
 
   certify-deb:
     name: Certify release DEB
-    needs: [validate, find-deb, operator-evidence]
+    needs: [validate, find-deb, release-evidence]
     if: needs.find-deb.outputs.artifact_id == ''
     permissions:
       contents: read
@@ -666,18 +658,17 @@ jobs:
     name: Attest build provenance
     timeout-minutes: 85
     outputs:
-      operator_artifact_id: ${{ needs.operator-evidence.outputs.artifact_id }}
-      operator_manifest_sha256: ${{ needs.operator-evidence.outputs.manifest_sha256 }}
+      release_evidence_artifact_id: ${{ needs.release-evidence.outputs.artifact_id }}
       intel_selection_artifact_id: ${{ needs.upload-macos.outputs.intel_selection_artifact_id }}
       arm64_selection_artifact_id: ${{ needs.upload-macos.outputs.arm64_selection_artifact_id }}
       draft_manifest_sha256: ${{ steps.draft-manifest.outputs.sha256 }}
       draft_manifest_artifact_id: ${{ steps.retain-draft-manifest.outputs.artifact-id }}
-    needs: [validate, upload-windows, upload-macos, promote-msi, promote-deb, operator-evidence]
+    needs: [validate, upload-windows, upload-macos, promote-msi, promote-deb, release-evidence]
     # Reuse intentionally skips certification ancestors. Require every direct gate to pass.
     if: >-
       ${{ !cancelled() && needs.validate.result == 'success' && needs.upload-windows.result == 'success' &&
           needs.upload-macos.result == 'success' && needs.promote-msi.result == 'success' &&
-          needs.promote-deb.result == 'success' && needs.operator-evidence.result == 'success' }}
+          needs.promote-deb.result == 'success' && needs.release-evidence.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write       # mint the OIDC token that signs the attestation
@@ -782,28 +773,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/hosted-release-evidence.json --clobber
-      - name: Download verified operator evidence
-        if: env.DRY_RUN != 'true' # operator evidence is a human submission (W8)
+      - name: Download selected release evidence
+        if: env.DRY_RUN != 'true'
         uses: actions/download-artifact@v8
         with:
-          artifact-ids: ${{ needs.operator-evidence.outputs.artifact_id }}
-          path: operator-evidence
+          artifact-ids: ${{ needs.release-evidence.outputs.artifact_id }}
+          path: dist
           merge-multiple: true
-      - name: Verify and attach operator evidence to draft
-        if: env.DRY_RUN != 'true' # operator evidence is a human submission (W8)
-        timeout-minutes: 10
+      - name: Attach release evidence selection to draft
+        if: env.DRY_RUN != 'true'
+        timeout-minutes: 3
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
-          MANIFEST_SHA256: ${{ needs.operator-evidence.outputs.manifest_sha256 }}
-        run: |
-          set -euo pipefail
-          node scripts/operator-release-evidence.mjs verify operator-evidence/bundle "$SOURCE_SHA" "${TAG_NAME#v}"
-          test "$(sha256sum operator-evidence/bundle/manifest.json | cut -d ' ' -f 1)" = "$MANIFEST_SHA256"
-          test ! -e operator-release-evidence.zip
-          ( cd operator-evidence && zip -qr ../operator-release-evidence.zip bundle selection.json )
-          mv operator-release-evidence.zip dist/operator-release-evidence.zip
-          gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/operator-release-evidence.zip --clobber
+        run: gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/release-evidence-selection.json --clobber
       - name: Attest draft artifacts
         if: env.DRY_RUN != 'true' # attestations are permanent public records
         uses: actions/attest-build-provenance@v4
@@ -869,29 +851,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
         run: node scripts/collect-hosted-release-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-hosted-evidence.json
-      - name: Recheck operator evidence before publication
-        if: env.DRY_RUN != 'true' # operator evidence is a human submission (W8)
-        timeout-minutes: 22
-        shell: pwsh
+      - name: Download original release evidence selection
+        if: env.DRY_RUN != 'true'
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.attest-provenance.outputs.release_evidence_artifact_id }}
+          path: selected-release-evidence
+          merge-multiple: true
+      - name: Recheck release evidence and its draft attachment before publication
+        if: env.DRY_RUN != 'true'
+        timeout-minutes: 10
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
-          MANIFEST_SHA256: ${{ needs.attest-provenance.outputs.operator_manifest_sha256 }}
-        run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-operator-release-evidence.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, $env:TAG_NAME.TrimStart('v'), 'current-operator', $env:MANIFEST_SHA256) -EvidenceDirectory release-validation/supervisors/operator -TimeoutSeconds 1200
-      - name: Verify draft operator evidence attachment
-        if: env.DRY_RUN != 'true' # operator evidence is a human submission (W8)
-        timeout-minutes: 10
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          New-Item -ItemType Directory current-operator-attachment | Out-Null
-          gh release download $env:DRAFT_TAG --repo $env:GITHUB_REPOSITORY --pattern operator-release-evidence.zip --dir current-operator-attachment
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot download draft operator evidence.' }
-          node scripts/collect-operator-release-evidence.mjs extract-attachment current-operator-attachment/operator-release-evidence.zip current-operator-attachment/contents
-          if ($LASTEXITCODE -ne 0) { throw 'Draft operator evidence archive is unsafe or exceeds its limits.' }
-          node scripts/collect-operator-release-evidence.mjs verify-attachment current-operator-attachment/contents current-operator/selection.json
-          if ($LASTEXITCODE -ne 0) { throw 'Draft operator evidence differs from its verified origin.' }
+          set -euo pipefail
+          node scripts/collect-release-evidence.mjs recheck "$GITHUB_REPOSITORY" "$SOURCE_SHA" selected-release-evidence/release-evidence-selection.json
+          mkdir current-release-evidence
+          gh release download "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --pattern release-evidence-selection.json --dir current-release-evidence
+          cmp selected-release-evidence/release-evidence-selection.json current-release-evidence/release-evidence-selection.json
       - name: Download original certified Windows selection
         uses: actions/download-artifact@v8
         with:
