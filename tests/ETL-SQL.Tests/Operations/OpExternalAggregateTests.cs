@@ -53,6 +53,46 @@ namespace ETL_SQL.Tests.Operations.Operations
             }
         }
 
+        // A scalar aggregate keeps one running state, so partitioning its input to disk buys nothing.
+        // It did: a 1e9-row COUNT(*) in the hosted HA soak (run 43669451423) wrote every row to agg_
+        // partitions once the admission probe passed JoinSpillThreshold.
+        [Fact]
+        public async Task ScalarConstantMemoryAggregateStreamsPastTheProbeWithoutSpilling()
+        {
+            var (eval, _) = BuildContext();
+            eval.JoinSpillThreshold = 100;
+            var expected = Enumerable.Range(1, 5000).Where(v => v % 7 == 3).ToList();
+
+            await eval.Evaluate(TestHelpers.Parse(
+                "SELECT COUNT(*) AS c, SUM(value) AS s, MIN(value) AS mn, MAX(value) AS mx, AVG(value * 1.0) AS a, " +
+                "STDEV(value) AS sd FROM GENERATE_SERIES(1, 5000) WHERE value % 7 = 3;"));
+
+            var row = Assert.Single(eval.LastResult!.Rows);
+            Assert.Equal(expected.Count, Convert.ToInt32(row["c"]));
+            Assert.Equal(expected.Sum(), Convert.ToInt64(row["s"]));
+            Assert.Equal(expected.Min(), Convert.ToInt32(row["mn"]));
+            Assert.Equal(expected.Max(), Convert.ToInt32(row["mx"]));
+            Assert.Equal(expected.Average(), Convert.ToDouble(row["a"]), 6);
+            Assert.Equal(0, eval.Telemetry.TotalSpilledBytes);
+            Assert.DoesNotContain(eval.Telemetry.PlanDecisions, d => d.CandidatePath == "ExternalAggregate");
+        }
+
+        // DISTINCT, STRING_AGG and percentiles hold every value, so they still go to the external engine.
+        [Theory]
+        [InlineData("COUNT(DISTINCT value)", 714)]
+        [InlineData("COUNT(*) AS c, COUNT(DISTINCT value)", 714)]
+        public async Task ScalarAggregateHoldingEveryValueStillRoutesExternal(string select, int distinct)
+        {
+            var (eval, _) = BuildContext();
+            eval.JoinSpillThreshold = 100;
+
+            await eval.Evaluate(TestHelpers.Parse(
+                $"SELECT {select} AS d FROM GENERATE_SERIES(1, 5000) WHERE value % 7 = 3;"));
+
+            Assert.Equal(distinct, Convert.ToInt32(Assert.Single(eval.LastResult!.Rows)["d"]));
+            Assert.Contains(eval.Telemetry.PlanDecisions, d => d.CandidatePath == "ExternalAggregate");
+        }
+
         [Fact]
         public async Task ApplyAggregationExternal_GroupBy_ProducesCorrectGroups()
         {

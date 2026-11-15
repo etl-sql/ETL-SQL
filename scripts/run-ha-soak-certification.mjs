@@ -98,6 +98,7 @@ class Topology {
     this.portalUrl = `http://127.0.0.1:${this.env.PORT_PORTAL}`;
     this.orchestratorUrl = `http://127.0.0.1:${this.env.PORT_ORCH}`;
     this.token = null;
+    this.startedJobs = new Set(); // names of jobs the current scenario created
     this.assertion = null;
   }
 
@@ -196,6 +197,7 @@ class Topology {
 
   // A new job is due at once, so creating it starts its first run on whichever node claims the lease.
   async startJob(name, scriptText) {
+    this.startedJobs.add(name);
     await this.orchestrator('POST', '/api/scheduled-jobs', { name, scriptText, interval: 1, unit: 'DAY', maxRetries: 0 });
     return this.waitForRun(name);
   }
@@ -229,6 +231,21 @@ class Topology {
 
   async kill(name) {
     return this.orchestrator('POST', `/api/scheduled-jobs/${encodeURIComponent(name)}/kill`, undefined, { allowStatus: [202] });
+  }
+
+  // A scenario that fails part-way leaves its job running. That job keeps writing spill and holds
+  // a worker, so every later scenario would fail on its leftovers; stop it before the next begins.
+  async stopScenarioJobs() {
+    const stopped = [];
+    for (const name of this.startedJobs) {
+      const running = (await this.history(name, 50).catch(() => [])).filter(run => run.status === 'RUNNING' || !run.endTime);
+      if (running.length === 0) continue;
+      await this.kill(name).catch(() => {});
+      for (const run of running) await this.waitForEnd(name, run.id, 300000).catch(() => {});
+      stopped.push(name);
+    }
+    this.startedJobs.clear();
+    return stopped;
   }
 
   // ── Spill volume ──
@@ -415,13 +432,16 @@ function finish(evidence) {
   return evidence;
 }
 
-async function scenario(id, body) {
+async function scenario(id, body, topology) {
   const evidence = { id, startedAt: new Date().toISOString(), checks: [], measurements: {} };
   const started = Date.now();
   try {
     await body(evidence);
   } catch (error) {
     evidence.error = error.message;
+  } finally {
+    const stopped = await topology?.stopScenarioJobs();
+    if (stopped?.length) evidence.measurements.jobsStoppedAfterScenario = stopped;
   }
   evidence.elapsedMs = Date.now() - started;
   evidence.completedAt = new Date().toISOString();
@@ -492,7 +512,7 @@ async function mixedLargeJobs(topology, plan) {
     for (const result of results)
       check(evidence, `${result.workload} succeeded with its checksum`, result.status === 'SUCCESS', result.errorMessage || undefined);
     await assertSpillClean(topology, evidence);
-  });
+  }, topology);
 }
 
 // Waits until the running job reaches `point`, then cancels it through the load balancer.
@@ -566,7 +586,7 @@ async function cancelAt(topology, plan) {
     check(evidence, 'the cancelled run is not recorded as a success', end.status !== 'SUCCESS', end.status);
     check(evidence, 'the run stopped within 60 s of the cancel', Date.parse(end.endTime) - requestedAt < 60000);
     await assertSpillClean(topology, evidence);
-  });
+  }, topology);
 }
 
 // ── Gate 3: faults ───────────────────────────────────────────────────────────
@@ -943,7 +963,7 @@ export async function certify({ runId, imageTag = 'ha-cert', skipBuild = false, 
       for (const fault of plan.faults) {
         const inject = faults[fault.faultId];
         const result = inject
-          ? await scenario(fault.faultId, evidence => inject(topology, evidence))
+          ? await scenario(fault.faultId, evidence => inject(topology, evidence), topology)
           : finish({ id: fault.faultId, checks: [], error: 'No injection is implemented for this fault.', elapsedMs: 0 });
         results.push({ faultId: fault.faultId, category: fault.category, injectionPoint: fault.injectionPoint, ...result });
         console.log(`fault ${fault.faultId}: ${result.status}`);

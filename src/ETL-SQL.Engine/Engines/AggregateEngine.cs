@@ -393,6 +393,27 @@ public class AggregateEngine
 
     public bool IsWindowFunction(Expression expr) => WindowEngine.ContainsWindowFunction(expr);
 
+    /// <summary>
+    /// True when the expressions hold at least one aggregate and every aggregate keeps a fixed-size
+    /// running state (no <c>DISTINCT</c>, <c>STRING_AGG</c> or percentile, which hold every value).
+    /// Without GROUP BY such an aggregate needs O(1) memory whatever the input length.
+    /// </summary>
+    public bool HasOnlyConstantMemoryAggregates(IEnumerable<Expression?> expressions)
+    {
+        var aggregates = new List<FunctionCallExpression>();
+        foreach (var expression in expressions)
+            if (expression != null) CollectAggregates(expression, aggregates);
+        return aggregates.Count > 0 && aggregates.All(IsConstantMemoryAggregate);
+    }
+
+    private static bool IsConstantMemoryAggregate(FunctionCallExpression f)
+        => !f.IsDistinct && f.FunctionName.ToUpperInvariant() is
+            "COUNT" or "SUM" or "TOTAL" or "AVG" or "MIN" or "MAX" or "EVERY" or "ANY" or "SOME"
+            or "APPROX_COUNT_DISTINCT"
+            or "VAR" or "VARP" or "VAR_SAMP" or "VAR_POP"
+            or "STDEV" or "STDEVP" or "STDDEV" or "STDDEV_SAMP" or "STDDEV_POP"
+            or "CORR" or "COVAR_SAMP" or "COVAR_POP";
+
     private static bool IsAggregateFunction(FunctionCallExpression f)
     {
         return f.Window == null && IsAggregateFunctionName(f.FunctionName);
