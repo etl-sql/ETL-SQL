@@ -772,15 +772,17 @@ approval are unchanged. A dry run rehearses the collector without the approval a
 
 ### Certification schedule and evidence ledger
 
-Use this schedule on every release. “Separate workflow” means the work may run in CI or on a
-controlled operator host; it does **not** make the evidence optional. Every blocking artifact must
-name the exact clean candidate commit, its topology/platform, command, result, and uncovered scope.
-Missing, skipped, dirty, stale, or wrong-commit evidence is a release failure.
+Use this schedule on every release. Since v0.22.0 every row runs on GitHub-hosted runners: CI,
+CodeQL and the installer workflows on every push, and the rest in **Release Evidence** once per
+candidate (see [Release Evidence and approval](#release-evidence-and-approval)). The commands below
+reproduce a row locally for diagnosis; a local run is never release evidence. Every blocking
+artifact must name the exact clean candidate commit, its topology/platform, command, result, and
+uncovered scope. Missing, skipped, dirty, stale, or wrong-commit evidence is a release failure.
 Deployment-profile, provider-neutral fault, canary and enterprise producers capture the commit,
 working-tree fingerprint and cleanliness before testing, then recheck them before completing the
 report. Source drift or a failed Git lookup aborts the run and leaves its partial logs/results for
 diagnosis. An unchanged dirty run is development evidence. These boundary checks do not establish
-trusted-host provenance or replace the complete operator/package evidence review.
+trusted-host provenance or replace the Release Evidence and package review.
 Deployment-profile evidence archives require the full candidate SHA and its clean source fingerprint
 in top-level and nested certifications. Rerun older producers whose reports omit that fingerprint.
 
@@ -789,7 +791,8 @@ in top-level and nested certifications. Rerun older producers whose reports omit
 - [ ] **Engine Certification:** the hosted job above passed on the exact candidate.
       Evidence: its `engine-certification-<run>-<attempt>` artifact. Review any timing warnings.
 
-- [ ] **Deployment profiles:** all Solo, Team, Enterprise, and Managed Dedicated profile lanes pass:
+- [ ] **Deployment profiles:** all Solo, Team, Enterprise, and Managed Dedicated profile lanes pass
+      (Release Evidence job *Deployment Profiles*; *Report contracts* checks the merged claim index):
       ```powershell
       .\scripts\Test-DeploymentProfileCertification.ps1 -Profile All -ReleaseVersion x.y.z
       ```
@@ -803,7 +806,8 @@ in top-level and nested certifications. Rerun older producers whose reports omit
       .\scripts\Test-ProviderNeutralFaultCertification.ps1 -Profile All
       ```
 - [ ] **Production-canary contracts:** the plan, provisioning boundary, credential lifecycle, and all
-      external-health/report/job/Gateway/export/notification fault drills pass for the candidate SHA:
+      external-health/report/job/Gateway/export/notification fault drills pass for the candidate SHA
+      (Release Evidence job *Production-canary contracts*, checked by *Report contracts*):
       ```powershell
       .\scripts\Test-ProductionCanaryCertification.ps1
       ```
@@ -819,7 +823,7 @@ in top-level and nested certifications. Rerun older producers whose reports omit
       delivery, or hosted fleet recovery. Retain separate operator evidence before making those claims;
       a passing contract report cannot stand in for live hosted evidence.
 - [ ] **Deployment transitions and upgrades:** all supported transitions and N→N+1 profile upgrades
-      pass:
+      pass (Release Evidence job *Deployment Transitions*):
       ```powershell
       .\scripts\Test-DeploymentProfileCertification.ps1 -Transition All -ReleaseVersion x.y.z
       ```
@@ -839,9 +843,9 @@ in top-level and nested certifications. Rerun older producers whose reports omit
       `-ArtifactsPath` supplies a base for private fresh-build outputs. Existing `engine`/`portal`
       caches are preserved, including during `-NoBuild` and `-NoRestore` runs.
 - [ ] **Recovery drill:** `etl-sql admin restore --validate --report` passes against candidate backup
-      material, with the report retained under `artifacts/release-evidence/x.y.z/recovery/`.
-- [ ] **HA fault/recovery evidence:** the candidate's fault plan is run and its evidence validates.
-      Retain topology metadata, fault report, recovery/continuity result, and the output of:
+      material. The DEB Installed Upgrade workflow runs it on the candidate.
+- [ ] **HA fault/recovery evidence:** the candidate's fault plan is run and its evidence validates
+      (Release Evidence job *HA soak (Compose topology)*, gated by):
       ```powershell
       etl-sql admin ha-soak validate --run-root <run-root> --required-gate All `
         --markdown-report artifacts/release-evidence/x.y.z/ha/evidence-validation.md
@@ -870,32 +874,22 @@ with revised scripts, use the [retained-input MSI diagnostic dispatch](../../scr
 on a development branch. It reuses the installer pair without rebuilding and cannot certify a
 release. After a source fix, certify the new frozen candidate normally.
 
-#### Conditional certification—run when the affected surface changed
+#### Scale, capacity and memory certifications (Release Evidence, every candidate)
 
-Mark each row **Run** or **Not applicable**, and record the diff-based reason. “Not applicable” is a
-reviewed decision, not a silent omission.
+These used to be conditional or periodic workstation runs. Each now runs on every candidate as a
+Release Evidence job, sized to about a third of its job limit and gated on deterministic results
+(rows, checksums, bounded memory, failed requests), never throughput.
 
-| Certification | Trigger | Command / evidence |
+| Certification | Release Evidence job | Local reproduction |
 | :--- | :--- | :--- |
-| Stress scale | Evaluator, spill, memory governor, scheduler, temp-table, large-data, or relevant runtime changes | `Test-ScaleCertification.ps1 -Tier Stress`; retain its JSON/Markdown report and use `Test-ScaleCommitComparison.ps1 -Tier Stress` for affected-scenario regression claims. |
-| Provider scale | Connector/provider, batching, retry, timeout, pushdown, or serialization changes | `Test-ScaleCertification.ps1 -Tier Provider` plus the applicable Docker/provider lane. |
-| Columnar storage/operator gates | Columnar layout, scan, filter, projection, aggregate, join, or admission thresholds changed | `Test-ColumnarStorageGate.ps1` and/or `Test-ColumnarOperatorGate.ps1`; retain their reports. |
-| Spill allocation profile | Spill/temp-table allocation, GC, cleanup, or I/O changed | `Test-SpillAllocProfile.ps1`; compare with the checked-in allocation budget. |
-| Service capacity | Portal/Orchestrator concurrency, queues, admission, scheduling, caching, or API hot paths changed | `test-service-capacity.mjs`; retain JSON/Markdown plus `compare-capacity-results.mjs` output. |
-| Provider/OS packaging | Installer, RID publishing, native dependency, VSIX, or packaging changed | Run the affected package/install lane on every supported affected OS/architecture. |
-
-#### Periodic or performance-claim certification
-
-These are deliberately not ordinary per-release workstation phases. Run them on controlled hosts,
-retain commit-bound evidence, and require them for any release that changes the certified path or
-makes/renews the associated claim.
-
-| Certification | Required cadence |
-| :--- | :--- |
-| Huge scale | Scheduled baseline (at least quarterly), and whenever a release changes the relevant large-data execution path or publishes a new large-scale claim. Use `Test-ScaleCertification.ps1 -Tier Huge`. |
-| Billion-row certification | Before changing/publishing a billion-row claim and whenever its certified scan/spill/operator paths change. Run `Test-BillionRowCertification.ps1`, then validate with `Test-BillionRowEvidence.ps1` for the candidate commit. |
-| Sustained HA/capacity soak | Scheduled on the controlled HA environment and whenever HA capacity, recovery time, or failure-containment behavior changes. Validate the retained run with `etl-sql admin ha-soak validate`; do not cite an unvalidated soak. |
-| Full service-capacity baseline | Scheduled baseline (at least quarterly) and before publishing new Portal/Orchestrator throughput, concurrency, or latency claims. |
+| Stress and Provider scale | *Scale Stress*, *Scale Provider* | `Test-ScaleCertification.ps1 -Tier Stress` / `-Tier Provider` |
+| Huge scale | *Scale Huge &lt;scenario&gt;* (one job per scenario) | `Test-ScaleCertification.ps1 -Tier Huge -Scenario <name>` |
+| Columnar storage/operator gates | *Columnar Storage gate*, *Columnar Operator gate* | `Test-ColumnarStorageGate.ps1`, `Test-ColumnarOperatorGate.ps1` |
+| Service capacity and full baseline | *Service capacity (reference)*, *Service capacity (full)* | `run-service-capacity-certification.mjs` |
+| Sustained HA soak | *HA soak (Compose topology)* | `etl-sql admin ha-soak validate --required-gate All` on the run root |
+| Billion-row memory flatness | *Billion-row &lt;scenario&gt; (10M/100M rows)*, *Billion-row memory flatness* | `Test-BillionRowCertification.ps1` under the same memory cap |
+| Spill allocation profile | Engine Certification (CI, every push) | `Test-SpillAllocProfile.ps1` |
+| Provider/OS packaging | MSI, DEB and Native Package Certification workflows | the affected package/install lane |
 
 The `New-Ha*`, `Test-Ha*Plan`, workload-materialization, diagnostics, and runbook scripts are harness
 components, not separate product certifications. Their inexpensive self-tests remain grouped behind

@@ -73,6 +73,20 @@ await rejects(data => { data[`${actions}/runs/600/approvals`] = [[{ state: 'reje
 await rejects(data => { data[`${actions}/runs/600/approvals`] = [[]]; }, /No approved/, { requireApproval: true });
 await rejects(data => { data[`${actions}/workflows/tag-release.yml/runs?head_sha=${sha}&per_page=100`][0].workflow_runs[0].head_branch = 'main'; }, /No approved/, { requireApproval: true });
 
+// Rehearsal: only a missing dispatch is tolerated; CodeQL alerts and failed runs still fail.
+const missing = data => { data[`${actions}/workflows/release-evidence.yml/runs?head_sha=${sha}&per_page=100`] = [{ total_count: 0, workflow_runs: [] }]; };
+await rejects(missing, /Missing exact-candidate/);
+{
+  const data = fixture(); missing(data);
+  const rehearsal = await collect(data, { rehearsalBranch: branch });
+  assert.equal(rehearsal.run, null);
+  assert.equal(rehearsal.codeql.openAlerts, 0);
+}
+await rejects(data => { missing(data); data[alertsEndpoint] = [[{ number: 1 }]]; }, /open alert/, { rehearsalBranch: branch });
+await rejects(data => { data[`${actions}/runs/500/attempts/1/jobs?per_page=100`][0].jobs[1].conclusion = 'failure'; }, /failed|unsuccessful/, { rehearsalBranch: branch });
+await rejects(() => {}, /never requires approval/, { rehearsalBranch: branch, requireApproval: true });
+await rejects(() => {}, /names its release branch/, { rehearsalBranch: 'main' });
+
 const changed = structuredClone(approved); changed.run.attempt = 2;
 assert.throws(() => sameSelection(approved, changed), /changed/);
 const reArtifact = structuredClone(approved); reArtifact.artifacts[0].digest = `sha256:${'c'.repeat(64)}`;

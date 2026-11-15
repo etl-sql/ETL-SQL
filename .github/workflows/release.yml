@@ -151,7 +151,8 @@ jobs:
 
   # Every certification as hosted jobs (W8): a green Release Evidence dispatch on the exact
   # candidate, no open CodeQL alerts on its release branch, and the owner's release-approval sign-off
-  # from Tag Release. A dry run rehearses the collector without the approval and never fails on it.
+  # from Tag Release. A dry run skips the approval and tolerates only a missing evidence run (it runs
+  # once per candidate, not nightly); a failed run or open CodeQL alerts fail the rehearsal.
   release-evidence:
     name: Verify release evidence
     needs: validate
@@ -173,11 +174,10 @@ jobs:
           node-version: 22
       - name: Require release evidence and approval for the candidate
         timeout-minutes: 8
-        continue-on-error: ${{ inputs.dry_run == true }}
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
-          MODE: ${{ inputs.dry_run == true && 'collect' || 'collect-approved' }}
+          MODE: ${{ inputs.dry_run == true && 'rehearse' || 'collect-approved' }}
         run: node scripts/collect-release-evidence.mjs "$MODE" "$GITHUB_REPOSITORY" "$SOURCE_SHA" release-validation/release-evidence-selection.json
       - name: Retain selected release evidence
         if: env.DRY_RUN != 'true'

@@ -70,15 +70,27 @@ async function approval(repository, sha, branch, policy, query, now) {
   throw new Error(`No approved ${environment} deployment for ${sha} in a ${workflow} run on ${branch}. Run Tag Release and approve it.`);
 }
 
+// A rehearsal (release dry run) tolerates only a candidate that has no Release Evidence dispatch
+// yet: it runs once per candidate, not nightly. CodeQL alerts on the branch still fail it, and so
+// does a dispatch that failed, is stale or lost its artifacts.
 export async function collectReleaseEvidence(repository, sha, {
-  query = ghApi, now = Date.now(), policy = releaseEvidencePolicy, requireApproval = false,
+  query = ghApi, now = Date.now(), policy = releaseEvidencePolicy, requireApproval = false, rehearsalBranch,
 } = {}) {
   if (policy.schemaVersion !== 1 || policy.workflows?.length !== 1 || !policy.approval || !Array.isArray(policy.reviews) || policy.reviews.length !== 6) {
     throw new Error('Invalid release evidence policy.');
   }
+  if (rehearsalBranch !== undefined && (requireApproval || !/^release\/v\d+\.\d+\.\d+$/.test(rehearsalBranch))) throw new Error('A rehearsal names its release branch and never requires approval.');
   // History is only consulted for evidence reuse, which this policy does not allow.
-  const hosted = await collectHostedEvidence(repository, sha, { query, now, policy,
-    history: { isAncestor: () => false, changedPaths: () => { throw new Error('Release evidence is never reused.'); } } });
+  let hosted;
+  try {
+    hosted = await collectHostedEvidence(repository, sha, { query, now, policy,
+      history: { isAncestor: () => false, changedPaths: () => { throw new Error('Release evidence is never reused.'); } } });
+  } catch (error) {
+    if (rehearsalBranch === undefined || error.code !== 'MISSING_WORKFLOW_EVIDENCE') throw error;
+    return { schemaVersion: 1, scope: 'hosted-release-evidence', repository, sourceSha: sha, branch: rehearsalBranch,
+      collectedAt: new Date(now).toISOString(), run: null, artifacts: [], codeql: await openCodeqlAlerts(repository, rehearsalBranch, query),
+      reviews: policy.reviews, approval: null };
+  }
   const [run] = hosted.workflows;
   if (hosted.workflows.length !== 1 || run.reusedFor) throw new Error('Release evidence must come from one run on the candidate.');
   const retained = await artifacts(repository, run.id, query);
@@ -105,8 +117,8 @@ export function reviewChecklist(policy = releaseEvidencePolicy) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const [mode, repository, sha, file] = process.argv.slice(2);
-    if (process.argv.length !== 6 || !['collect', 'collect-approved', 'recheck'].includes(mode)) {
-      throw new Error('Usage: collect-release-evidence.mjs collect|collect-approved <owner/repo> <sha> <output.json> | recheck <owner/repo> <sha> <selection.json>');
+    if (process.argv.length !== 6 || !['collect', 'collect-approved', 'rehearse', 'recheck'].includes(mode)) {
+      throw new Error('Usage: collect-release-evidence.mjs collect|collect-approved|rehearse <owner/repo> <sha> <output.json> | recheck <owner/repo> <sha> <selection.json>');
     }
     if (mode === 'recheck') {
       const original = JSON.parse(readFileSync(file, 'utf8'));
@@ -114,7 +126,12 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       sameSelection(original, current);
       console.log(`Release evidence run ${current.run.id} is unchanged.`);
     } else {
-      const selection = await collectReleaseEvidence(repository, sha, { requireApproval: mode === 'collect-approved' });
+      const selection = await collectReleaseEvidence(repository, sha, { requireApproval: mode === 'collect-approved',
+        ...(mode === 'rehearse' ? { rehearsalBranch: process.env.GITHUB_REF_NAME } : {}) });
+      if (!selection.run) {
+        console.log(`No Release Evidence dispatch for ${sha} yet; it runs once per candidate. CodeQL has no open alerts on ${selection.branch}.`);
+        process.exit(0);
+      }
       const output = path.resolve(file);
       mkdirSync(path.dirname(output), { recursive: true });
       writeFileSync(output, JSON.stringify(selection, null, 2) + '\n');

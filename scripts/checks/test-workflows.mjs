@@ -87,7 +87,8 @@ assert.match(jobs.get('prepare-release'), /needs: \[validate, release-evidence\]
 for (const kind of ['msi', 'deb']) assert.match(jobs.get(`certify-${kind}`), /needs: \[validate, find-\w+, release-evidence\]/);
 assert.match(jobs.get('release-evidence'), /security-events: read/);
 assert.match(jobs.get('release-evidence'), /collect-release-evidence\.mjs "\$MODE"/);
-assert.match(jobs.get('release-evidence'), /MODE: \$\{\{ inputs\.dry_run == true && 'collect' \|\| 'collect-approved' \}\}/);
+assert.match(jobs.get('release-evidence'), /MODE: \$\{\{ inputs\.dry_run == true && 'rehearse' \|\| 'collect-approved' \}\}/);
+assert.doesNotMatch(jobs.get('release-evidence'), /continue-on-error/, 'A rehearsal must still fail on failed evidence or open CodeQL alerts.');
 assert.match(jobs.get('attest-provenance'), /Attach release evidence selection to draft/);
 assert.match(jobs.get('publish-release'), /collect-release-evidence\.mjs recheck/);
 assert.match(jobs.get('publish-release'), /cmp selected-release-evidence\/release-evidence-selection\.json current-release-evidence\/release-evidence-selection\.json/);

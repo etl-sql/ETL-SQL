@@ -27,7 +27,8 @@ stay in `ROADMAP.md` until selected.
 timebox 2026-11-07 to 2026-11-21.
 **Done when:** the nightly rehearsal is green 5 nights running, the v0.22.0 candidate passes every
 certification first time, no gate passes by waiver, and a script or doc fix reruns only its lanes.
-Cut line: W6–W8 move to the feature backlog if the timebox runs out.
+Cut line: W6 moves to the feature backlog if the timebox runs out. W8 is required for v0.22.0
+(owner, 2026-11-15): no release step runs on the owner's machine.
 
 - [ ] **W1 Nightly release rehearsal.** Running since 2026-11-08; first full pass including the
   release dry run on 2026-11-09 (nightly 42687964349). Release Evidence is not part of the nightly:
@@ -49,7 +50,7 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   their issues close (`playwright-wait` #74, `first-run-sign-in-wait` #75).
 - [ ] **W6 Performance certification redesign** (below the cut line). Deterministic metrics gate;
   timing by same-host interleaved A/B; no waivers.
-- [ ] **W8 Move the operator evidence to GitHub** (below the cut line). Owner decisions
+- [ ] **W8 Move the operator evidence to GitHub** (required for v0.22.0). Owner decisions
   2026-11-13: the goal is no release step on the owner's machine; every check moves, none is
   dropped. The 3 reports (deployment, canary, recovery) become hosted jobs; the 6 reviews become a
   GitHub environment approval on the release run; the 11 conditional certifications become hosted
@@ -87,7 +88,14 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   `scripts/collect-release-evidence.mjs`. The deployment/canary report-contract check is a hosted
   job (`Report contracts`). The operator submission and its tooling are removed. **Left:** one
   green HA soak (the faults after WorkerProcessCrashMidJob have never run hosted), then the first
-  green Release Evidence dispatch on the candidate.
+  green Release Evidence dispatch on the candidate. A partial rerun reads the earlier attempts'
+  artifacts; a release dry run fails on a failed evidence run or open CodeQL alerts and tolerates
+  only a candidate with no dispatch yet (Release Evidence runs once per candidate, not nightly).
+  After the other session commits its `ROADMAP.md` edits, add ROADMAP entries from the Codex
+  review (2026-11-15): an always-running merge gate required on `main` and release branches; a
+  PR regression lane for ordinary tests; contributor docs, PR template and hooks aligned with
+  GitHub as the gate; Dependabot for `scripts/typecheck`, `lint`, `codemirror`, `vsix` and Actions
+  pinned to commit SHAs.
 
 **Parked from the earlier "release in four hours" goal.** Each is picked up only if a workstream
 needs it, otherwise moves to `ROADMAP.md` after v0.22.0:
@@ -166,7 +174,7 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 [`Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/enterprise-release-evidence-checklist.md).
 
 - [ ] Run the release gates the checklist requires. Green CI, CodeQL and MSI count for the lanes they
-  run; run the CI-gap lanes and the operator certifications locally.
+  run; Release Evidence covers the certifications that used to run locally. No local run counts.
 - [ ] Run every delivery path on the final candidate, as the v0.21.0 delivery matrix did.
 - [ ] Build the deployment-profile claim matrix from evidence; promote no unfinished Shared SaaS or
   hosted-production outcome.
