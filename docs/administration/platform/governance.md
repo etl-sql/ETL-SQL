@@ -104,11 +104,12 @@ last-used/last-verified timestamps for governance review. Pair it with
 cluster-wide.
 
 Portal-cataloged entries can additionally carry **use grants** (Admin → Connections → Detail →
-Access, or `api/admin/connections/{alias}/acl`): an entry with no grants is usable by any caller
-(the default), while an entry with grants can only be expanded by administrators, its owner, or
-members of a granted group. The executing user's identity is checked at `SHARED:alias` expansion
-time, denials are audited (`SHARED_CONNECTION_USE_DENIED`) without resolving any secret, and
-executions without an injected identity are denied for restricted entries. Grants are group-based,
+Access, or `api/admin/connections/{alias}/acl`). Entries are deny-by-default: an entry with no
+grants can be expanded only by administrators and its owner, and an entry with grants also by
+members of a granted group. Grant a group `Use` before other authors can run scripts that name the
+alias. The executing user's identity is checked at `SHARED:alias` expansion time, denials are
+audited (`SHARED_CONNECTION_USE_DENIED`) without resolving any secret, and executions without an
+injected identity are denied. Grants are group-based,
 matching the folder/dataset permission model.
 
 Before disabling or deleting, check **impact** (the Impact button in either admin tab, or

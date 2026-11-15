@@ -57,6 +57,7 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
             await CreateSharedConnectionAsync(setup.Page, alias);
         }
         var authorId = await SignInAsPublisherAsync(page);
+        await GrantConnectionUseAsync(alias, authorId);
         var reportId = await CreateReportAsync(page, alias, authorId);
 
         await page.GotoWithDiagnosticsAsync($"/studio.html?reportId={reportId}");
@@ -292,6 +293,21 @@ public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
         "() => window.__STUDIO__.state.editorInstance.getValue()");
 
     private static string NormalizeEndings(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    // Shared connections are deny-by-default: an author who is neither an admin nor the owner
+    // needs a group grant, the way a deployment hands a connection to its report authors.
+    private async Task GrantConnectionUseAsync(string alias, int userId)
+    {
+        using var scope = fixture.Factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var connection = db.PortalSharedConnections.Single(c => c.Alias == alias);
+        var group = new Group { Name = $"journey_authors_{Guid.NewGuid():N}" };
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+        db.UserGroups.Add(new UserGroup { UserId = userId, GroupId = group.Id });
+        db.SharedConnectionAcls.Add(new SharedConnectionAcl { SharedConnectionId = connection.Id, GroupId = group.Id });
+        await db.SaveChangesAsync();
+    }
 
     private async Task<int> SignInAsPublisherAsync(IPage page)
     {

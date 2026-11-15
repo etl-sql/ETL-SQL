@@ -73,7 +73,10 @@ namespace ETL_SQL.Tests.Operations.Operations
             Assert.Equal(expected.Min(), Convert.ToInt32(row["mn"]));
             Assert.Equal(expected.Max(), Convert.ToInt32(row["mx"]));
             Assert.Equal(expected.Average(), Convert.ToDouble(row["a"]), 6);
-            Assert.Equal(0, eval.Telemetry.TotalSpilledBytes);
+            // Asserted on the routing, not on total spill bytes: the spill-certification lane caps
+            // in-memory batches, so the GENERATE_SERIES input may spill on its own.
+            Assert.Contains(eval.Telemetry.PlanDecisions,
+                d => d.OperatorId == "select.aggregate-stream" && d.Outcome == PlanDecisionOutcome.Accepted);
             Assert.DoesNotContain(eval.Telemetry.PlanDecisions, d => d.CandidatePath == "ExternalAggregate");
         }
 

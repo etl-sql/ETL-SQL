@@ -122,7 +122,8 @@ for SCRIPT_FILE in "${SCRIPTS[@]}"; do
 
     printf "Starting: %s ... " "$SCRIPT_NAME"
 
-    OUTPUT=$(ETL_SQL_MASTER_PASSWORD="$SAMPLE_SEAL_PASSWORD" ETLSQL_SECURITY_EVENT_OUTBOX_PATH="$SECURITY_EVENT_OUTBOX_PATH" Session__Root="$SESSION_ROOT" Orchestrator__DatabasePath="$ORCHESTRATOR_DATABASE_PATH" timeout 180 dotnet run --no-build --configuration "$CONFIGURATION" --project "$PROJECT_PATH" -- run "$SCRIPT_FILE" --silent 2>&1) && EXIT_CODE=$? || EXIT_CODE=$?
+    # The gate is the host administrator here: approve exactly the images the samples start.
+    OUTPUT=$(Governance__Docker__AllowedImages="mcr.microsoft.com/mssql/server:2022-latest,postgres:15-alpine" ETL_SQL_MASTER_PASSWORD="$SAMPLE_SEAL_PASSWORD" ETLSQL_SECURITY_EVENT_OUTBOX_PATH="$SECURITY_EVENT_OUTBOX_PATH" Session__Root="$SESSION_ROOT" Orchestrator__DatabasePath="$ORCHESTRATOR_DATABASE_PATH" timeout 180 dotnet run --no-build --configuration "$CONFIGURATION" --project "$PROJECT_PATH" -- run "$SCRIPT_FILE" --silent 2>&1) && EXIT_CODE=$? || EXIT_CODE=$?
 
     HAS_INTERNAL_ERROR=false
     if [[ "$OUTPUT" =~ "CRITICAL FAILURE" || "$OUTPUT" =~ "Unhandled exception" ]]; then
