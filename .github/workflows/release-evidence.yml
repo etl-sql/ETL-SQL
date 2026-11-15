@@ -165,16 +165,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         timeout-minutes: 5
-      # Every attempt: a partial rerun keeps the artifacts of jobs that passed earlier.
+      # Every attempt: a partial rerun keeps the artifacts of jobs that passed earlier. One download
+      # for all three reports: a pattern that matches a single artifact (the canary alone) unpacks
+      # it straight into `path` with no artifact-named folder, which the pruner cannot read.
       - uses: actions/download-artifact@v8
         timeout-minutes: 5
         with:
-          pattern: release-evidence-deployment-*-${{ github.run_id }}-*
-          path: release-validation/report-inputs
-      - uses: actions/download-artifact@v8
-        timeout-minutes: 5
-        with:
-          pattern: release-evidence-canary-${{ github.run_id }}-*
+          pattern: release-evidence-{deployment-*,canary}-${{ github.run_id }}-*
           path: release-validation/report-inputs
       - uses: actions/setup-node@v7
         with:
