@@ -26,6 +26,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [0.22.0] — 2026-11-04
 
+- The Orchestrator has a readiness probe, `GET /health/ready`: 200 when its job store answers a read
+  within 3 s, otherwise 503. The HA Compose haproxy checks it instead of the liveness-only
+  `/health`, so an Orchestrator that has lost PostgreSQL leaves rotation (HA fault
+  PostgresOutageBrief). The HA soak harness now reads job history before deleting a job,
+  identifies the sticky Portal node from its affinity cookie, and sizes the temp-root exhaustion
+  headroom so the free-space reserve trips.
+
 - Engine `DATE` values now use CLR `System.DateOnly` instead of `DateTime`, so
   `CAST(CAST('2024-01-08' AS DATE) AS STRING)` produces `'2024-01-08'` while `DATETIME` and
   `TIMESTAMP` continue to format as `'yyyy-MM-dd HH:mm:ss'`. Updated comparisons, `CompoundKey`

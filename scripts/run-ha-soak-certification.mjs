@@ -755,12 +755,13 @@ const faults = {
       }, { timeoutMs: 300000, intervalMs: 3000 });
       evidence.measurements.leaseOwnerAfterRecovery = recovered.current;
       evidence.measurements.recoveryMs = Date.parse(recovered.success.startTime) - crashedAt;
-      await topology.deleteJob(jobName);
     } finally {
       // Whatever failed above, the next fault needs both Orchestrators back.
       if (!topology.running(container)) sh('docker', ['start', container]);
     }
+    // Read the history before deleting the job: a deleted job has none (404).
     const runs = await topology.history(jobName, 50);
+    await topology.deleteJob(jobName);
     const crashed = runs.find(run => run.id === first.id);
     evidence.measurements.jobFinalState = crashed?.status;
     const successes = runs.filter(run => run.status === 'SUCCESS')
@@ -783,19 +784,12 @@ const faults = {
       .find(part => part.startsWith('ETLSQL_PORTAL_AFFINITY='));
     evidence.measurements.affinityCookieName = 'ETLSQL_PORTAL_AFFINITY';
     check(evidence, 'the Portal issued an affinity cookie', Boolean(cookie));
-    // Find the node behind the cookie: it is the one that answers when the others are paused.
-    const portals = topology.containers('portal');
-    let lost = null;
-    for (const candidate of portals) {
-      const others = portals.filter(container => container !== candidate);
-      for (const other of others) sh('docker', ['pause', other]);
-      try {
-        const probe = await topology.portal('GET', '/healthz', { cookie });
-        if (probe.status === 200) { lost = candidate; break; }
-      } finally {
-        for (const other of others) sh('docker', ['unpause', other]);
-      }
-    }
+    // The cookie value is the Portal node id, `<hostname>-<pid>-<guid>`, so it names the container.
+    // (Pausing the other nodes to find it does not work: a paused node fails haproxy's health check
+    // and the stick table re-learns the cookie from whichever node answers instead.)
+    const nodeId = cookie ? decodeURIComponent(cookie.slice('ETLSQL_PORTAL_AFFINITY='.length)) : '';
+    const lost = topology.containers('portal').find(container => nodeId.startsWith(`${topology.hostname(container)}-`)) ?? null;
+    evidence.measurements.affinityNodeId = nodeId;
     evidence.measurements.lostNodeId = lost ? topology.hostname(lost) : null;
     check(evidence, 'the sticky node was identified', Boolean(lost));
     if (!lost) return;
@@ -841,8 +835,9 @@ const faults = {
       evidence.measurements.leaderAfterFailover = next.current;
       evidence.measurements.failoverDurationMs = Date.parse(next.run.startTime) - stoppedAt;
       await sleep(70000); // one more occurrence on the survivor
+      const history = await topology.history(jobName, 50); // before the delete, which drops it
       await topology.deleteJob(jobName);
-      const runs = (await topology.history(jobName, 50)).filter(run => run.startTime)
+      const runs = history.filter(run => run.startTime)
         .map(run => [Date.parse(run.startTime), run.endTime ? Date.parse(run.endTime) : Date.now()]).sort((a, b) => a[0] - b[0]);
       const duplicates = runs.filter((span, index) => index > 0 && span[0] < runs[index - 1][1]).length;
       evidence.measurements.scheduledFireCount = runs.length;
@@ -864,7 +859,7 @@ const faults = {
     try {
       while (Date.now() - stoppedAt < 20000) {
         portalDuring.push((await topology.portal('GET', '/api/folders')).status);
-        orchestratorDuring.push(await fetch(new URL('/health', topology.orchestratorUrl), { signal: AbortSignal.timeout(10000) }).then(r => r.status).catch(() => 0));
+        orchestratorDuring.push(await fetch(new URL('/health/ready', topology.orchestratorUrl), { signal: AbortSignal.timeout(10000) }).then(r => r.status).catch(() => 0));
         await sleep(2000);
       }
     } finally {
@@ -889,7 +884,9 @@ const faults = {
 
   async TempRootExhaustion(topology, evidence) {
     // Room for a few extents, not the whole spill: the reserve stops the job before the disk fills.
-    topology.fillUntilFree(1024 * 1024 * 1024);
+    // 64 MB above the reserve; the compressed spill passes 64 MB early (see DiskFullDuringExtentWrite),
+    // while 1 GB held the whole run and it succeeded.
+    topology.fillUntilFree((SPILL_RESERVE_MB + 64) * 1024 * 1024);
     try {
       evidence.measurements.configuredTempRootLimitBytes = topology.freeBytes() - SPILL_RESERVE_MB * 1024 * 1024;
       evidence.measurements.expectedSpillBytes = 80_000_000 * 40;

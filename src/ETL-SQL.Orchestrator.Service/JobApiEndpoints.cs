@@ -114,6 +114,14 @@ namespace ETL_SQL.Orchestrator.Service
                 });
             }).WithName("health");
 
+            // Readiness: 503 while the job store cannot be read, so load balancers fail closed during a
+            // shared-database outage. /health above stays liveness-only (restart policies use it).
+            app.MapGet("/health/ready", async (IOrchestratorReadinessProbe probe, HttpContext ctx) =>
+                await OrchestratorReadiness.IsReadyAsync(probe, ctx.RequestAborted)
+                    ? Results.Ok(new { Status = "Ready" })
+                    : Results.Json(new { Status = "NotReady", Reason = "job-store-unavailable" },
+                        statusCode: StatusCodes.Status503ServiceUnavailable)).WithName("health-ready");
+
             app.MapGet("/metrics", (SchedulerService scheduler, ChildProcessTracker tracker) =>
             {
                 var m = scheduler.GetMetrics();

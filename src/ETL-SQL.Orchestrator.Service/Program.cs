@@ -92,6 +92,7 @@ try
     builder.Services.AddHardenedSandboxExecution(cfg);
     builder.Services.AddSingleton<OrchestratorObjectAuthorizationService>();
     builder.Services.AddSingleton(TimeProvider.System);
+    builder.Services.AddSingleton<IOrchestratorReadinessProbe, JobStoreReadinessProbe>();
     builder.Services.AddSingleton<IOrchestratorObjectAuthorizer>(sp =>
         sp.GetRequiredService<OrchestratorObjectAuthorizationService>());
 

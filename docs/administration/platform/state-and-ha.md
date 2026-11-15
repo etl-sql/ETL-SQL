@@ -128,6 +128,9 @@ Operational requirements:
 - Point load balancer health checks at `GET /healthz`. It returns HTTP 200 only when the Portal can
   reach PostgreSQL, shared snapshot storage, and the node-registry/lease store, and when the configured
   topology contract is satisfied. Use `GET /health` for richer monitoring.
+- Point Orchestrator load-balancer health checks at `GET /health/ready`. It returns 503 while the
+  node cannot read its job store, so a database outage takes it out of rotation. `GET /health` is
+  liveness only and stays 200; use it for restart policies.
 - Keep `Portal:Jwt:Secret`, `Portal:Dataset:AtRestKey`, `Portal:Storage:KeyRingPath`, and
   `Portal:Orchestrator:ApiKey` identical across Portal nodes.
 - Run Portal and Orchestrator under service identities that can read/write the configured PostgreSQL
