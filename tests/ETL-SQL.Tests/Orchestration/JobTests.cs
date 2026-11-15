@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
@@ -20,12 +22,12 @@ namespace ETL_SQL.Tests.Orchestration
 {
     public class JobTests
     {
-        private IServiceProvider CreateServiceProvider()
+        private IServiceProvider CreateServiceProvider(IDictionary<string, string?>? settings = null)
         {
             var services = new ServiceCollection();
             services.AddLogging();
 
-            var configuration = new ConfigurationBuilder().Build();
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(settings ?? new Dictionary<string, string?>()).Build();
             services.AddSingleton<IConfiguration>(configuration);
 
             services.AddSingleton<ETL_SQL.Common.ILogger>(new ETL_SQL.Common.EngineLogger());
@@ -78,6 +80,41 @@ namespace ETL_SQL.Tests.Orchestration
             }
 
             return services.BuildServiceProvider();
+        }
+
+        // The in-process Orchestrator runs every job through this adapter. It never disposed the
+        // run's session, so a long-lived Orchestrator kept each job's temp-table spill on disk
+        // (hosted HA soak, run 43648440192). The next run and the adapter's disposal release it.
+        [Fact]
+        public async Task AdapterReleasesARunsSpillOnTheNextRunAndOnDispose()
+        {
+            const string script = "SET TEMP_TABLE_SPILL_THRESHOLD = 10;\n" +
+                                  "SELECT value AS id INTO #t FROM GENERATE_SERIES(1, 500);\n" +
+                                  "SELECT COUNT(*) AS c FROM #t;";
+            // A persistent session keeps its spill for resume by design; this is the disposable root
+            // the HA topology's jobs used.
+            var adapter = Assert.IsType<ScriptExecutorAdapter>(CreateServiceProvider(
+                new Dictionary<string, string?> { ["Session:PersistenceDefault"] = "false" })
+                .GetRequiredService<IScriptExecutor>());
+
+            // Runs may share one spill root, so each assertion tracks a run's own files.
+            static string[] SpillFiles(string root) => Directory.Exists(root)
+                ? Directory.GetFiles(root, "*", SearchOption.AllDirectories)
+                : [];
+
+            Assert.True((await adapter.ExecuteTextAsync(script, jobName: "spill-first")).Success);
+            var root = adapter.LastEvaluator!.SpillStore.RootPath;
+            var firstRunFiles = SpillFiles(root);
+            Assert.NotEmpty(firstRunFiles);
+
+            Assert.True((await adapter.ExecuteTextAsync(script, jobName: "spill-second")).Success);
+            Assert.DoesNotContain(firstRunFiles, File.Exists);
+            var secondRunFiles = SpillFiles(adapter.LastEvaluator!.SpillStore.RootPath);
+            Assert.NotEmpty(secondRunFiles);
+
+            await adapter.DisposeAsync();
+            Assert.Null(adapter.LastEvaluator);
+            Assert.DoesNotContain(secondRunFiles, File.Exists);
         }
 
         [Fact]

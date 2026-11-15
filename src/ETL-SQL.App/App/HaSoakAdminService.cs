@@ -1330,9 +1330,11 @@ namespace ETL_SQL.App
         private static JsonArray GetDirectoryInventory(string root)
         {
             var result = new JsonArray();
-            foreach (var dir in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories))
+            // A mounted spill volume carries a root-owned lost+found; diagnostics must not stop on it.
+            var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 };
+            foreach (var dir in Directory.EnumerateDirectories(root, "*", options))
             {
-                var files = Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).Select(p => new FileInfo(p)).ToArray();
+                var files = Directory.EnumerateFiles(dir, "*", options).Select(p => new FileInfo(p)).ToArray();
                 result.Add(new JsonObject
                 {
                     ["path"] = RelativeLabel(dir),

@@ -22,13 +22,19 @@ namespace ETL_SQL.Orchestrator.Execution
     /// <see cref="ETL_SQL.Orchestrator.Scheduling.SchedulerService"/> for job execution.
     /// Wraps <see cref="ExecutionSession"/> and maps its rich result to the lightweight
     /// <see cref="ScriptExecutionResult"/> record expected by the scheduler.
+    ///
+    /// <para>Owns the session of its latest run. The run's evaluator stays readable through
+    /// <see cref="LastEvaluator"/> (a report builds its manifest from it) until the next run or
+    /// until the adapter's scope ends; disposing it drops the run's temp tables and deletes their
+    /// spill extents. Without that, a long-lived Orchestrator kept every job's spill on disk.</para>
     /// </summary>
-    public class ScriptExecutorAdapter : IScriptExecutor
+    public class ScriptExecutorAdapter : IScriptExecutor, IAsyncDisposable, IDisposable
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly CliContext _ctx;
         private readonly ILogger _logger;
         private readonly ILineageCatalogStore _catalog;
+        private ExecutionSession? _session;
         public Evaluator? LastEvaluator { get; private set; }
 
         public ScriptExecutorAdapter(IServiceProvider serviceProvider, CliContext ctx, ILogger logger, ILineageCatalogStore catalog)
@@ -89,7 +95,9 @@ namespace ETL_SQL.Orchestrator.Execution
                 if (!string.IsNullOrEmpty(sessionId))
                     _ctx.SessionId = sessionId;
 
+                await ReleaseSessionAsync();
                 var session = new ExecutionSession(_serviceProvider, _ctx, _logger);
+                _session = session;
                 var result = await session.ExecuteAsync(
                     scriptText, cancellationToken, jobName, queueWaitMs, executionIdentity,
                     variableOverrides, resume);
@@ -167,6 +175,27 @@ namespace ETL_SQL.Orchestrator.Execution
                     LastEvaluator?.Telemetry.SpillReadBytes ?? 0);
                 return output;
             }
+        }
+
+        private async ValueTask ReleaseSessionAsync()
+        {
+            var session = _session;
+            _session = null;
+            LastEvaluator = null;
+            if (session != null) await session.DisposeAsync();
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            GC.SuppressFinalize(this);
+            return ReleaseSessionAsync();
+        }
+
+        // A scope disposed synchronously calls this; the session's disposal does not need a context.
+        public void Dispose()
+        {
+            GC.SuppressFinalize(this);
+            ReleaseSessionAsync().AsTask().GetAwaiter().GetResult();
         }
 
         private static string? CurrentCorrelationId()
