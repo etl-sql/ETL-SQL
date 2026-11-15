@@ -27,6 +27,7 @@ assert.equal(measured.passed, true, renderMarkdown(measured));
 assert.deepEqual(measured.rows.map(row => row.metric), ['peakManagedHeapMB', 'peakManagedHeapMB', 'peakLiveHeapMB', 'peakLiveHeapMB',
   'peakLiveHeapMB', 'peakLiveHeapMB', 'peakLiveHeapMB']);
 assert.equal(measured.rows.find(row => row.scenario === 'ExternalJoin').limitMB, 4096);
+assert.equal(measured.rows.find(row => row.scenario === 'AllocProfile').limitMB, 256);
 
 const replace = (scenario, rows, values) => summaries.map(summary =>
   summary.scenario === scenario && summary.rows === rows ? { ...summary, ...values } : summary);
@@ -38,6 +39,10 @@ const failing = (list, pattern) => {
 failing(replace('ExternalSort', 100_000_000, { peakLiveHeapMB: 300 }), /ExternalSort: peakLiveHeapMB grew from 183\.1 MB/);
 failing(replace('ExternalJoin', 100_000_000, { peakLiveHeapMB: 4096 }), /ExternalJoin: .*limit 4096 MB/);
 failing(replace('ColumnarCore', 10_000_000, { passed: false }), /ColumnarCore: a run failed/);
+// AllocProfile's hosted peaks are bimodal (84.1 -> 165.4 MB, run 43669451423); a fixed ceiling passes them.
+assert.equal(gateFlatness(replace('AllocProfile', 100_000_000, { peakLiveHeapMB: 165.4 })).passed, true);
+failing(replace('AllocProfile', 100_000_000, { peakLiveHeapMB: 256.1 }), /AllocProfile: .*fixed ceiling 256 MB/);
+failing(replace('AllocProfile', 10_000_000, { peakLiveHeapMB: 300 }), /AllocProfile: peakLiveHeapMB was 300 MB/);
 failing(summaries.filter(summary => !(summary.scenario === 'AllocProfile' && summary.rows === 10_000_000)), /AllocProfile: needs exactly two runs/);
 failing(replace('EligibleWindowRowNumber', 100_000_000, { memoryBoundMB: 8192 }), /different memory bounds/);
 failing(replace('HighCardinalityGrouping', 100_000_000, { peakLiveHeapMB: null, peakManagedHeapMB: null }), /no comparable heap measurement/);

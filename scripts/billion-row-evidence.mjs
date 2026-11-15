@@ -11,6 +11,11 @@ export const scenarios = ['ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 
 // Owner decision 2026-11-14: the join's live heap grows with build partitions (about 0.6 MB each, up to
 // the 1,024-partition cap), bounded well under the cap. It passes by completing under the bound.
 export const boundedOnly = new Set(['ExternalJoin']);
+// Owner decision 2026-11-15: AllocProfile's peak live heap is bimodal (about 82 or 165 MB at 100M rows
+// across hosted runs 43639096544, 43648440192, 43669451423) and does not grow with rows. The peak is
+// the largest gen2 survivor, and the 100M run has ~4x the collections, so it catches the transient more
+// often. Both runs must stay under a fixed ceiling, about 1.5x the worst peak seen (175 MB).
+export const fixedCeilingMB = { AllocProfile: 256 };
 // Measured spread at 10M vs 100M rows (runs 43617518622, 43617518644): -11% to +14%.
 export const flatness = { maximumRatio: 1.25, allowanceMB: 32 };
 
@@ -82,11 +87,15 @@ export function gateFlatness(summaries) {
     if (boundedOnly.has(scenario)) {
       row.limitMB = large.memoryBoundMB;
       row.passed = row.largeMB < row.limitMB;
+    } else if (fixedCeilingMB[scenario] !== undefined && row.metric === 'peakLiveHeapMB') {
+      row.limitMB = fixedCeilingMB[scenario];
+      row.passed = row.smallMB <= row.limitMB && row.largeMB <= row.limitMB;
     } else {
       row.limitMB = Math.round((row.smallMB * flatness.maximumRatio + flatness.allowanceMB) * 10) / 10;
       row.passed = row.largeMB <= row.limitMB;
     }
-    if (!row.passed) failures.push(`${scenario}: ${row.metric} grew from ${row.smallMB} MB at ${small.rows} rows to ${row.largeMB} MB at ${large.rows} rows (limit ${row.limitMB} MB).`);
+    if (!row.passed && fixedCeilingMB[scenario] !== undefined && row.metric === 'peakLiveHeapMB') failures.push(`${scenario}: ${row.metric} was ${row.smallMB} MB at ${small.rows} rows and ${row.largeMB} MB at ${large.rows} rows (fixed ceiling ${row.limitMB} MB).`);
+    else if (!row.passed) failures.push(`${scenario}: ${row.metric} grew from ${row.smallMB} MB at ${small.rows} rows to ${row.largeMB} MB at ${large.rows} rows (limit ${row.limitMB} MB).`);
   }
   return { passed: failures.length === 0, rows, failures };
 }
@@ -94,7 +103,8 @@ export function gateFlatness(summaries) {
 export function renderMarkdown(result) {
   const lines = ['## Billion-row memory flatness', '',
     `Larger run may use at most ${flatness.maximumRatio}x the smaller run's peak plus ${flatness.allowanceMB} MB. ` +
-    `${[...boundedOnly].join(', ')} only has to stay under the memory bound (owner decision 2026-11-14).`, '',
+    `${[...boundedOnly].join(', ')} only has to stay under the memory bound (owner decision 2026-11-14). ` +
+    `${Object.entries(fixedCeilingMB).map(([name, mb]) => `${name} must stay at or under ${mb} MB in both runs`).join('; ')} (owner decision 2026-11-15).`, '',
     '| Scenario | Rows | Metric | Small MB | Large MB | Limit MB | Result |', '| :--- | :--- | :--- | ---: | ---: | ---: | :---: |'];
   for (const row of result.rows) {
     lines.push(`| ${row.scenario} | ${row.smallRows} / ${row.largeRows} | ${row.metric ?? '-'} | ${row.smallMB ?? '-'} | ${row.largeMB ?? '-'} | ${row.limitMB ?? '-'} | ${row.passed ? 'Pass' : 'FAIL'} |`);

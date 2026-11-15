@@ -73,6 +73,10 @@ Cut line: W6–W8 move to the feature backlog if the timebox runs out.
   is unexplained (not the open spill writers, a flat 30 MB; not background-GC accounting, 12 MB).
   Owner decision 2026-11-14: accepted as bounded (estimate 0.5–1 GB at the 1,024-partition cap,
   under the 4 GB cap); the join gates on completing under the cap, not on strict flatness.
+  AllocProfile's 100M live heap later proved bimodal (82 or 165 MB; hosted runs 43639096544,
+  43648440192, 43669451423) while 10M stayed 84–88 MB: the peak is the largest gen2 survivor and
+  the 100M run has ~4x the collections, so it catches the transient more often. Owner decision
+  2026-11-15: AllocProfile gates on a fixed 256 MB live-heap ceiling in both runs.
   AllocProfile fails at 10M only on the workstation machine-metric budget; the hosted job uses
   `-MachineMetricsReportOnly`. **Left:** size the other conditional certifications the same way;
   build the hosted jobs and the approval; remove the operator submission from `release.yml`.
