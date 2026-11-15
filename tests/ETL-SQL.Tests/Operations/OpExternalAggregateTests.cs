@@ -103,9 +103,10 @@ namespace ETL_SQL.Tests.Operations.Operations
                 TestHelpers.Parse(string.Format(shape, BillionRowCount)), cts.Token));
 
             stopwatch.Stop();
-            // flaky-time-bound-ok: a missed cancel streams 1e9 rows for many minutes; a honoured one
-            // ends seconds after the 10 s cancel, so 120 s leaves a wide gap either side.
-            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(120), $"cancel took {stopwatch.Elapsed}");
+            // A missed cancel streams 1e9 rows for many minutes; an honoured one ends seconds after
+            // the 10 s cancel, so 120 s leaves a wide gap either side.
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(120), // flaky-time-bound-ok: hang guard, minutes vs seconds
+                $"cancel took {stopwatch.Elapsed}");
             // 1e9 rows cannot finish in that time, so a run that returned without an error ignored the cancel.
             Assert.NotNull(error);
         }
