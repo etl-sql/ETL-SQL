@@ -1344,14 +1344,20 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             return false;
 
         bool previousDefaultAllow = _securityService.DefaultAllowPlaintextSecrets;
+        bool previousDefaultNoSaveSensitive = _securityService.DefaultNoSaveSensitive;
+        bool previousDefaultNoSaveConnection = _securityService.DefaultNoSaveConnection;
+        bool previousDefaultConnectionEncryption = _securityService.DefaultConnectionEncryption;
         if (AllowPlaintextSecrets && !previousDefaultAllow)
             _securityService.DefaultAllowPlaintextSecrets = true;
+        if (NoSaveSensitive && !previousDefaultNoSaveSensitive)
+            _securityService.DefaultNoSaveSensitive = true;
+        if (NoSaveConnection && !previousDefaultNoSaveConnection)
+            _securityService.DefaultNoSaveConnection = true;
+        if (ConnectionEncryption && !previousDefaultConnectionEncryption)
+            _securityService.DefaultConnectionEncryption = true;
 
         try
         {
-            if (_securityService.AllowsPlaintextSecrets(source))
-                return false;
-
             string? literalPassword = _securityService.ExtractLiteralUsePassword(source);
             string? sealPassword = !string.IsNullOrEmpty(ScriptPassword)
                 ? ScriptPassword
@@ -1393,6 +1399,9 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         finally
         {
             _securityService.DefaultAllowPlaintextSecrets = previousDefaultAllow;
+            _securityService.DefaultNoSaveSensitive = previousDefaultNoSaveSensitive;
+            _securityService.DefaultNoSaveConnection = previousDefaultNoSaveConnection;
+            _securityService.DefaultConnectionEncryption = previousDefaultConnectionEncryption;
         }
     }
 

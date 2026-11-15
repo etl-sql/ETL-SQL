@@ -106,7 +106,7 @@ public sealed class ScriptFirstRunSealingTests : IDisposable
     }
 
     [Fact]
-    public async Task FirstRun_WithAllowPlaintextSecretsOn_LeavesDiskUntouched()
+    public async Task FirstRun_WithAllowPlaintextSecretsOn_PreservesUsePassword_WhileEncryptingConnections()
     {
         var file = Path.Combine(_dir, "dev.etlsql");
         var raw = """
@@ -125,9 +125,12 @@ public sealed class ScriptFirstRunSealingTests : IDisposable
         var script = new Parser(new Lexer(raw).Tokenize(), raw).Parse();
         await evaluator.Evaluate(script);
 
-        Assert.Equal(raw, await File.ReadAllTextAsync(file));
+        var onDisk = await File.ReadAllTextAsync(file);
+        Assert.Contains("USE PASSWORD = 'dev-only-password';", onDisk, StringComparison.Ordinal);
+        Assert.Contains("ENC:", onDisk, StringComparison.Ordinal);
+        Assert.DoesNotContain("dev-db-pass", onDisk, StringComparison.Ordinal);
 
-        // Explicit script-level SET ALLOW_PLAINTEXT_SECRETS = ON also skips sealing on disk.
+        // With no unencrypted connection credentials, script-level SET ALLOW_PLAINTEXT_SECRETS = ON leaves disk untouched.
         var scriptOptInFile = Path.Combine(_dir, "dev-stmt.etlsql");
         var scriptOptIn = """
             SET ALLOW_PLAINTEXT_SECRETS = ON;
@@ -222,5 +225,32 @@ public sealed class ScriptFirstRunSealingTests : IDisposable
         {
             Program.ServiceProvider = previous;
         }
+    }
+
+    [Fact]
+    public async Task FirstRun_NoSaveSensitive_OverridesAllowPlaintextSecrets()
+    {
+        var file = Path.Combine(_dir, "nosave.etlsql");
+        var raw = """
+            SET ALLOW_PLAINTEXT_SECRETS = ON;
+            SET NO_SAVE_SENSITIVE = ON;
+            USE PASSWORD = 'dev-secret';
+            DECLARE @token SENSITIVE = 'secret-tok';
+            CREATE CONNECTION pg AS POSTGRES('Host=localhost;Password=db-pass');
+            """;
+        await File.WriteAllTextAsync(file, raw);
+
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.CurrentScriptPath = file;
+
+        Assert.True(await evaluator.SealCurrentScriptIfNeededAsync(default));
+
+        var onDisk = await File.ReadAllTextAsync(file);
+        Assert.Contains("USE PASSWORD PROMPT;", onDisk, StringComparison.Ordinal);
+        Assert.Contains("DECLARE @token SENSITIVE = '<secret>'", onDisk, StringComparison.Ordinal);
+        Assert.Contains("POSTGRES('Host=localhost;Password=<secret>')", onDisk, StringComparison.Ordinal);
+        Assert.DoesNotContain("ENC:", onDisk, StringComparison.Ordinal);
+        Assert.DoesNotContain("dev-secret", onDisk, StringComparison.Ordinal);
+        Assert.DoesNotContain("db-pass", onDisk, StringComparison.Ordinal);
     }
 }

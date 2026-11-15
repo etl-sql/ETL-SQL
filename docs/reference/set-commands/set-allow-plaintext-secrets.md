@@ -1,22 +1,22 @@
 # SET ALLOW_PLAINTEXT_SECRETS
-Unsafe local-development escape hatch. Controls whether plaintext secrets may remain in saved source files.
+Unsafe local-development escape hatch. Controls whether literal `USE PASSWORD = '...'` may remain in saved source instead of being rewritten to `USE PASSWORD PROMPT;`. Connection secrets still encrypt (`ENC:...`).
 
 ## Syntax
 ```text
-SET ALLOW_PLAINTEXT_SECRETS = ON|OFF;
+SET ALLOW_PLAINTEXT_SECRETS [=] ON|OFF;
 ```
 
 ## Parameters
-- **ON** — Unsafe local-development escape hatch that keeps plaintext secrets and literal `USE PASSWORD = '...'` on disk (emits warnings, may be forbidden by enterprise governance policy, and does not silence security or lint checks).
-- **OFF** — Default zero-trust behavior. Save tools (VS Code, ETL-SQL TUI Editor, ETL-SQL Studio) and first-run CLI/engine execution automatically rewrite `USE PASSWORD = '...'` to `USE PASSWORD PROMPT;` and encrypt plaintext secrets (`ENC:...`), clearing editor undo history.
+- **ON** — Keep literal `USE PASSWORD = '...'` on disk across saves and first-run execution (emits warnings, may be forbidden by enterprise governance policy, and does not silence security or lint checks). Connection credentials still encrypt (`ENC:...`) using that password (or prompt if no literal is present), unless `NO_SAVE_SENSITIVE` or `NO_SAVE_CONNECTION` replaces them with placeholders instead.
+- **OFF** — Default zero-trust behavior. Save tools (VS Code, ETL-SQL TUI Editor, ETL-SQL Studio) and first-run CLI/engine execution automatically rewrite `USE PASSWORD = '...'` to `USE PASSWORD PROMPT;` and encrypt plaintext connection secrets (`ENC:...`), clearing editor undo history.
 
 ## Example
 ```sql
--- Local development only — keep plaintext for convenience
+-- Local development only — keep USE PASSWORD on disk while still encrypting connection strings
 SET ALLOW_PLAINTEXT_SECRETS = ON;
 USE PASSWORD = 'dev-only';
 
--- Production — never allow plaintext (default)
+-- Production — rewrite USE PASSWORD = '...' to USE PASSWORD PROMPT; (default)
 SET ALLOW_PLAINTEXT_SECRETS = OFF;
 USE PASSWORD PROMPT;
 ```

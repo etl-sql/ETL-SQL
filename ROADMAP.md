@@ -557,11 +557,10 @@ option fails a truncated download.
 
 **Status:** Accepted  
 **Horizon:** Next (v0.23.0)  
-**Authoritative design:** [COMPRESS FILE / DIRECTORY](docs/reference/file-operations/compress-file.md),
-[DECOMPRESS FILE / DIRECTORY](docs/reference/file-operations/decompress-file.md),
+**Authoritative design:** [COMPRESS / DECOMPRESS FILE / DIRECTORY](docs/reference/file-operations/compress-file.md),
 [`FileOperationStatementHandler.cs`](src/ETL-SQL.Engine/Handlers/FileOperationStatementHandler.cs),
 [`DirectoryOperationStatementHandler.cs`](src/ETL-SQL.Engine/Handlers/DirectoryOperationStatementHandler.cs),
-and [`SafeZipExtractor.cs`](src/ETL-SQL.Core/IO/SafeZipExtractor.cs).
+and [`SafeZipExtractor.cs`](src/ETL-SQL.Engine/Services/SafeZipExtractor.cs).
 
 **Implemented baseline:** `COMPRESS FILE`, `COMPRESS DIRECTORY`, `DECOMPRESS FILE`, and
 `DECOMPRESS DIRECTORY` already support `.zip` archives (with `DELETE_SOURCE = ON | OFF`, `WHAT_IF`
@@ -606,7 +605,7 @@ Select individual IDs into `TODO.md` when scheduling.
 | :--- | :--- | :--- | :--- |
 | AR01 | **`.gz`, `.tar`, and `.tar.gz` (`.tgz`) support in `COMPRESS` and `DECOMPRESS`.** Detect archive format from the file extension (or an explicit `FORMAT = 'ZIP' \| 'GZIP' \| 'TAR' \| 'TAR_GZ'` option) in `FileOperationStatementHandler` and `DirectoryOperationStatementHandler`; stream single-file `.gz` via `GZipStream` and multi-entry `.tar` / `.tar.gz` via `System.Formats.Tar`, enforcing `SafeZipExtractor`-equivalent traversal, link-type, and decompression-ratio bounds. | — | M |
 | AR02 | **Archive entry inspection (`ARCHIVE_LIST`) and selective extraction (`PATTERN`).** Add a table-valued / collection function `ARCHIVE_LIST(path)` returning entry `Name`, `FullPath`, `Size`, `CompressedSize`, `LastModified`, and `IsDirectory` for `.zip`, `.tar`, and `.tar.gz` archives without extracting to disk; add `PATTERN = '<glob>'` and `OVERWRITE = ON \| OFF` options to `DECOMPRESS FILE` / `DECOMPRESS DIRECTORY`. | AR01 | S |
-| AR03 | **Optional `TO` destination defaults on `COMPRESS` and `DECOMPRESS`.** Make `TO <destination>` optional in the parser and handlers: `COMPRESS FILE 'x.csv'` defaults to `'x.csv.zip'` (or `.gz` when `FORMAT = 'GZIP'`), and `DECOMPRESS FILE 'x.csv.gz'` / `'x.zip'` defaults to stripping the archive suffix in the same directory; update `compress-file.md` and `decompress-file.md`. | AR01 | S |
+| AR03 | **Optional `TO` destination defaults on `COMPRESS` and `DECOMPRESS`.** Make `TO <destination>` optional in the parser and handlers: `COMPRESS FILE 'x.csv'` defaults to `'x.csv.zip'` (or `.gz` when `FORMAT = 'GZIP'`), and `DECOMPRESS FILE 'x.csv.gz'` / `'x.zip'` defaults to stripping the archive suffix in the same directory; update `compress-file.md`. | AR01 | S |
 
 **Acceptance evidence:** Round-trip SLT and unit tests pass for `.zip`, `.gz`, `.tar`, and `.tar.gz`
 across single files and directories; `ARCHIVE_LIST` enumerates entries without writing files;

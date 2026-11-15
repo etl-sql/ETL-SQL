@@ -501,7 +501,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 password: password
             }) as { encryptedText: string };
 
-            if (response && response.encryptedText) {
+            if (response && response.encryptedText && response.encryptedText !== text) {
                 const outcome = await replaceDocumentWithoutUndoHistory(editor, response.encryptedText);
                 if (outcome === 'failed') {
                     vscode.window.showErrorMessage("ETL-SQL: Could not rewrite the script with the secured connections.");

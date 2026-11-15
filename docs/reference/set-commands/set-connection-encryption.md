@@ -3,12 +3,12 @@ Controls whether `CREATE CONNECTION` targets and quoted option values are encryp
 
 ## Syntax
 ```text
-SET CONNECTION_ENCRYPTION = ON|OFF;
+SET CONNECTION_ENCRYPTION [=] ON|OFF;
 ```
 
 ## Parameters
-- **ON** — Encrypt connection targets and options on save.
-- **OFF** — Leave connection definitions unencrypted on save (default).
+- **ON** — Prompt for or use the single script/master password to encrypt the entire `CREATE CONNECTION` target and every quoted connection option (`SERVER`, `HOST`, `DATABASE`, `USER`, `PASSWORD`, etc.) on save, along with rewriting literal `USE PASSWORD = '...'` to `USE PASSWORD PROMPT;`. Overrides `SET ALLOW_PLAINTEXT_SECRETS = ON`.
+- **OFF** — Follow the default save-sealing policy (default): encrypt credentials (`Password`, `API_KEY`, connection strings with credentials) rather than non-secret connection properties unless `NO_SAVE_SENSITIVE` or `NO_SAVE_CONNECTION` is `ON`.
 
 ## Example
 ```sql

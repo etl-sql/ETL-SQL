@@ -6,7 +6,7 @@
 | :--- | :--- |
 | [SET ALLOW_FILE_OPERATIONS](set-allow-file-operations.md) | Overrides the runaway file-operation protection limit for the current session. |
 | [SET ALLOW_FILE_TYPE_ACCESS](set-allow-file-type-access.md) | Controls whether file extensions outside the global whitelist are permitted, or adds a specific extension to the session whitelist. |
-| [SET ALLOW_PLAINTEXT_SECRETS](set-allow-plaintext-secrets.md) | Unsafe local-development escape hatch. Controls whether plaintext secrets may remain in saved source files. |
+| [SET ALLOW_PLAINTEXT_SECRETS](set-allow-plaintext-secrets.md) | Unsafe local-development escape hatch. Preserves literal `USE PASSWORD = '...'` on save while still encrypting connection secrets. |
 | [SET ALLOW_RECURSIVE_LAYERS](set-allow-recursive-layers.md) | Overrides the directory recursion depth limit for the current session. |
 | [SET BATCHSIZE](set-batchsize.md) | Sets the number of rows per remote fetch batch for `SELECT ... FROM connection`. |
 | [SET CONNECTION_ENCRYPTION](set-connection-encryption.md) | Controls whether `CREATE CONNECTION` targets and quoted option values are encrypted on save using the script/master password. |
@@ -19,8 +19,8 @@
 | [SET MAX_PARALLEL_DEGREE](set-max-parallel-degree.md) | Sets the thread limit inside `PARALLEL BEGIN...END` blocks. |
 | [SET MAX_SMTP_EMAILS_PER_SCRIPT](set-max-smtp-emails.md) | Sets the anti-spam limit capping the number of emails a single script run may send. |
 | [SET MAX_STRING_RESULT_SIZE](set-max-string-result-size.md) | Sets the maximum length in bytes allowed for string results. |
-| [SET NO_SAVE_CONNECTION](set-no-save-connection.md) | Controls whether `CREATE CONNECTION` targets and quoted option values are replaced with placeholders on save. Use for source-controlled templates w... |
-| [SET NO_SAVE_SENSITIVE](set-no-save-sensitive.md) | Controls whether sensitive literals are scrubbed from saved source. When enabled, rewrites `USE PASSWORD` literals to `PROMPT` and replaces SENSITI... |
+| [SET NO_SAVE_CONNECTION](set-no-save-connection.md) | Superset of `NO_SAVE_SENSITIVE`: replaces `CREATE CONNECTION` targets, options, and sensitive literals with placeholders on save for shareable templates. |
+| [SET NO_SAVE_SENSITIVE](set-no-save-sensitive.md) | Replaces credential options, connection-string passwords, and `SENSITIVE`/`ENCRYPTED` literals with `<secret>` placeholders on save instead of encrypting them. |
 | [SET PROFILING](set-profiling.md) | Enables or disables per-statement timing collection. View results through `eng.profile`. |
 | [SET REGEX_MATCH_TIMEOUT](set-regex-match-timeout.md) | Sets the execution duration cap in milliseconds for regex evaluations to prevent denial-of-service from catastrophic backtracking. |
 | [SET REPORT](set-report.md) | Sets a report-level property for a `.rptsql` script: page metadata, branding, and the deterministic formatting every renderer uses. Unknown keys are rejected. |

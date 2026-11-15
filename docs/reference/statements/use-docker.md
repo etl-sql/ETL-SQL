@@ -24,6 +24,34 @@ DECLARE @conn VARCHAR(500) = mssql_db.CONNECTION_STRING;
 CREATE CONNECTION stage_db AS MSSQL(@conn);
 ```
 
+## Image Approval
+
+A container starts only if the host administrator approved its image. Without an approval the
+statement fails with `Docker image '<image>' is denied: explicit host-admin approval in
+Governance:Docker:AllowedImages is required.` An empty or missing list approves nothing.
+
+Approve images in `appsettings.json`:
+
+```json
+{
+  "Governance": {
+    "Docker": {
+      "AllowedImages": [ "mcr.microsoft.com/mssql/server:2022-latest", "postgres:15-alpine" ]
+    }
+  }
+}
+```
+
+or with an environment variable, comma-separated:
+`Governance__Docker__AllowedImages=mcr.microsoft.com/mssql/server:2022-latest,postgres:15-alpine`.
+
+An entry is `repository[:tag][@sha256:digest]`, `registry/*` for everything under a registry
+path, or `*` for any image. A tag or digest in the entry must match the image. Set
+`Governance:Docker:RequirePinnedDigest` to `true` to accept only images given by `@sha256:` digest.
+Under an enrolled organization policy, the governed `Security:AllowedDockerImages` list applies
+instead. The same approval covers `START_DOCKER` and `RESUME_DOCKER`. A catalog container tool
+always needs an `@sha256:` digest and is checked against this list when one is configured.
+
 ---
 
 ## Supported Images

@@ -333,6 +333,8 @@ foreach ($script in $etlScripts) {
         $procInfo.Environment["Session__Root"] = $sessionRoot
         $procInfo.Environment["Orchestrator__DatabasePath"] = $orchestratorDatabasePath
         $procInfo.Environment["ETL_SQL_MASTER_PASSWORD"] = $sampleSealPassword
+        # The gate is the host administrator here: approve exactly the images the samples start.
+        $procInfo.Environment["Governance__Docker__AllowedImages"] = 'mcr.microsoft.com/mssql/server:2022-latest,postgres:15-alpine'
 
         $proc = New-Object System.Diagnostics.Process
         $proc.StartInfo = $procInfo

@@ -146,7 +146,8 @@ export function analyzeSavePolicy(text: string): SavePolicyDecision {
         !state.noSaveSensitive &&
         !state.noSaveConnection &&
         !state.connectionEncryption &&
-        (state.hasPlainTextCreds || state.hasLiteralUsePassword)
+        !state.hasPlainTextCreds &&
+        state.hasLiteralUsePassword
     ) {
         return { action: 'warn-plaintext' };
     }

@@ -999,7 +999,7 @@ public partial class SecurityService
         if (NoSaveConnectionEnabled(text)) return false;
         if (ConnectionEncryptionEnabled(text) && MatchesOutsideStringLiterals(ConnRegex(), text).Any()) return true;
         if (NoSaveSensitiveEnabled(text)) return false;
-        return !AllowsPlaintextSecrets(text) && NeedsEncryption(text);
+        return NeedsEncryption(text);
     }
 
     /// <summary>
@@ -1023,22 +1023,21 @@ public partial class SecurityService
         var connectionEncryption = ConnectionEncryptionEnabled(text);
         var allowPlaintext = AllowsPlaintextSecrets(text);
 
-        if (allowPlaintext && !noSaveSensitive && !noSaveConnection && !connectionEncryption)
-            return text;
-
-        var secured = (allowPlaintext && !noSaveSensitive)
+        var secured = (allowPlaintext && !noSaveSensitive && !noSaveConnection)
             ? text
             : ReplaceOutsideStringLiterals(LiteralUsePasswordRegex(), text, _ => "USE PASSWORD PROMPT;");
 
         if (noSaveConnection)
         {
-            secured = ScrubConnectionDetails(secured);
+            secured = ScrubSensitiveLiterals(secured);
+            return ScrubConnectionDetails(secured);
         }
-        else if (connectionEncryption && !string.IsNullOrEmpty(password))
+
+        if (connectionEncryption && !string.IsNullOrEmpty(password))
         {
             secured = EncryptConnectionDetails(secured, password);
         }
-        else if (!allowPlaintext && !string.IsNullOrEmpty(password))
+        else if (!noSaveSensitive && !string.IsNullOrEmpty(password))
         {
             secured = EncryptScript(secured, password);
         }

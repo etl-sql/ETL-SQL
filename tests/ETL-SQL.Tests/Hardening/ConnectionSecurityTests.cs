@@ -184,13 +184,22 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
-        public void SecurityService_SecureScriptForSave_Preserves_UsePasswordLiteral_WhenAllowed()
+        public void SecurityService_SecureScriptForSave_Preserves_UsePasswordLiteral_WhenAllowed_WhileEncryptingSecrets()
         {
             var service = new SecurityService(NullLogger.Instance);
-            var sql = "SET ALLOW_PLAINTEXT_SECRETS = ON;\nUSE PASSWORD = 'dev-secret';";
-            var secured = service.SecureScriptForSave(sql, "master");
+            var sql = """
+                SET ALLOW_PLAINTEXT_SECRETS = ON;
+                USE PASSWORD = 'dev-secret';
+                CREATE CONNECTION c AS POSTGRES('Host=db;Password=db-pass;', PASSWORD='opt-pass');
+                """;
+            var outcome = service.TrySealScriptForSave(sql);
 
-            Assert.Contains("USE PASSWORD = 'dev-secret';", secured);
+            Assert.False(outcome.RequiresPassword);
+            Assert.Contains("USE PASSWORD = 'dev-secret';", outcome.ScriptText);
+            Assert.Contains("ENC:", outcome.ScriptText);
+            Assert.DoesNotContain("db-pass", outcome.ScriptText);
+            Assert.DoesNotContain("opt-pass", outcome.ScriptText);
+            Assert.True(service.RequiresSavePassword("SET ALLOW_PLAINTEXT_SECRETS = ON;\nCREATE CONNECTION c AS MSSQL(PASSWORD='pw');"));
         }
 
         [Fact]
@@ -226,6 +235,27 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public void SecurityService_SecureScriptForSave_NoSaveSensitive_WithUsePassword_ScrubsWithoutEncrypting()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var sql = """
+                SET NO_SAVE_SENSITIVE = ON;
+                USE PASSWORD = 'dev-secret';
+                DECLARE @token SENSITIVE = 'abc';
+                CREATE CONNECTION c AS POSTGRES('Host=db;Password=pw;', PASSWORD='pw2');
+                """;
+
+            var outcome = service.TrySealScriptForSave(sql);
+
+            Assert.False(outcome.RequiresPassword);
+            Assert.Contains("USE PASSWORD PROMPT;", outcome.ScriptText);
+            Assert.Contains("DECLARE @token SENSITIVE = '<secret>'", outcome.ScriptText);
+            Assert.Contains("POSTGRES('Host=db;Password=<secret>;', PASSWORD='<secret>')", outcome.ScriptText);
+            Assert.DoesNotContain("ENC:", outcome.ScriptText);
+            Assert.DoesNotContain("dev-secret", outcome.ScriptText);
+        }
+
+        [Fact]
         public void SecurityService_SecureScriptForSave_NoSaveConnection_ScrubsConnectionDetails()
         {
             var service = new SecurityService(NullLogger.Instance);
@@ -240,6 +270,30 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Contains("PASSWORD='<placeholder>'", secured);
             Assert.DoesNotContain("Host=db", secured);
             Assert.DoesNotContain("USERNAME='u'", secured);
+        }
+
+        [Fact]
+        public void SecurityService_SecureScriptForSave_NoSaveConnection_IsSupersetOfNoSaveSensitive()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var sql = """
+                SET ALLOW_PLAINTEXT_SECRETS = ON;
+                SET NO_SAVE_CONNECTION = ON;
+                USE PASSWORD = 'dev-secret';
+                DECLARE @token SENSITIVE = 'secret-val';
+                DECLARE @key ENCRYPTED = 'enc-val';
+                CREATE CONNECTION c AS POSTGRES('Host=db;Username=u;Password=p;', HOST='db', PASSWORD='p');
+                """;
+
+            var secured = service.SecureScriptForSave(sql, "");
+
+            Assert.Contains("USE PASSWORD PROMPT;", secured);
+            Assert.Contains("DECLARE @token SENSITIVE = '<secret>'", secured);
+            Assert.Contains("DECLARE @key ENCRYPTED = '<secret>'", secured);
+            Assert.Contains("POSTGRES('<connection>', HOST='<placeholder>', PASSWORD='<placeholder>')", secured);
+            Assert.DoesNotContain("dev-secret", secured);
+            Assert.DoesNotContain("secret-val", secured);
+            Assert.DoesNotContain("enc-val", secured);
         }
 
         [Fact]

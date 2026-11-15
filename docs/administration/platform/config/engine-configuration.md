@@ -64,10 +64,12 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 | :--- | :--- | :--- | :--- | :--- |
 | `Engine:ScriptHashPolicy` | string | `Warn` | — | Behavior when running scripts with modified hashes: `Warn`, `Block`, or `Ignore`. |
 | `Engine:CaseSensitiveComparison` | boolean | `false` | `SET CASE_SENSITIVE = ON\|OFF` | Controls case sensitivity inside in-memory engine expressions. |
-| `Engine:AllowPlaintextSecrets` | boolean | `false` | `SET ALLOW_PLAINTEXT_SECRETS = ON\|OFF` | Blocks scripts from containing raw plaintext connection strings. |
-| `Engine:NoSaveSensitive` | boolean | `false` | `SET NO_SAVE_SENSITIVE = ON\|OFF` | Blocks storing credentials in workspace memory caches. |
-| `Engine:NoSaveConnection` | boolean | `false` | `SET NO_SAVE_CONNECTION = ON\|OFF` | Blocks saving connections to file or database stores. |
-| `Engine:ConnectionEncryption` | boolean | `false` | `SET CONNECTION_ENCRYPTION = ON\|OFF` | Encrypts local connection configuration keys. |
+| `Engine:AllowPlaintextSecrets` | boolean | `false` | `SET ALLOW_PLAINTEXT_SECRETS = ON\|OFF` | When `true`, allows literal `USE PASSWORD = '...'` to stay in saved source while still encrypting connection secrets (`ENC:...`). |
+| `Engine:NoSaveSensitive` | boolean | `false` | `SET NO_SAVE_SENSITIVE = ON\|OFF` | Replaces sensitive credential options and `SENSITIVE`/`ENCRYPTED` variable literals with `<secret>` placeholders on save. |
+| `Engine:NoSaveConnection` | boolean | `false` | `SET NO_SAVE_CONNECTION = ON\|OFF` | Superset of `NoSaveSensitive`; replaces `CREATE CONNECTION` targets, quoted options, and sensitive literals with placeholders on save. |
+| `Engine:ConnectionEncryption` | boolean | `false` | `SET CONNECTION_ENCRYPTION = ON\|OFF` | Encrypts all `CREATE CONNECTION` targets and quoted options on save using the script/master password. |
+| `Governance:Docker:AllowedImages` | string array | empty | — | Docker images a standalone host approves for `USE DOCKER`, `START_DOCKER` and `RESUME_DOCKER` (container tools are also checked against it when set). Empty approves nothing. Entries are `repository[:tag][@sha256:digest]`, `registry/*`, or `*`. See [Image Approval](../../../reference/statements/use-docker.md#image-approval). |
+| `Governance:Docker:RequirePinnedDigest` | boolean | `false` | — | Accept only Docker images given by `@sha256:` digest. |
 
 ---
 

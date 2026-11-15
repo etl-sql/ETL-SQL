@@ -62,9 +62,25 @@ describe('savePolicy', () => {
         expect(extractLiteralUsePassword(sql)).toBe(`p'w'!`);
     });
 
-    it('warns instead of auto-sealing when ALLOW_PLAINTEXT_SECRETS is ON and no stricter flags apply', () => {
+    it('warns instead of auto-sealing when ALLOW_PLAINTEXT_SECRETS is ON and only literal USE PASSWORD exists', () => {
         const sql = `SET ALLOW_PLAINTEXT_SECRETS = ON;\nUSE PASSWORD = 'dev';`;
         expect(analyzeSavePolicy(sql)).toEqual({ action: 'warn-plaintext' });
+    });
+
+    it('still auto-seals connection credentials when ALLOW_PLAINTEXT_SECRETS is ON', () => {
+        const sql = `SET ALLOW_PLAINTEXT_SECRETS = ON;\nUSE PASSWORD = 'dev';\nCREATE CONNECTION pg AS POSTGRES('Host=db;Password=pw');`;
+        expect(analyzeSavePolicy(sql)).toEqual({
+            action: 'auto-seal',
+            needsPassword: true,
+            literalUsePassword: 'dev'
+        });
+
+        const noLiteral = `SET ALLOW_PLAINTEXT_SECRETS = ON;\nCREATE CONNECTION pg AS POSTGRES('Host=db;Password=pw');`;
+        expect(analyzeSavePolicy(noLiteral)).toEqual({
+            action: 'auto-seal',
+            needsPassword: true,
+            literalUsePassword: undefined
+        });
     });
 
     it('auto-seals when ALLOW_PLAINTEXT_SECRETS was toggled back OFF', () => {
