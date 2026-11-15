@@ -93,13 +93,13 @@
     {
       "sample": 1,
       "exitCode": 0,
-      "rawLog": "/home/runner/work/ETL-SQL/ETL-SQL/release-validation/scale-measure/TempTableRoundTrip/run/temp-table-round-trip/raw-output.txt",
+      "rawLog": "release-validation/scale-measure/TempTableRoundTrip/run/temp-table-round-trip/raw-output.txt",
       "children": [
         {
           "name": "TempTableSpill",
           "filter": "FullyQualifiedName=ETL_SQL.Tests.Scale.ScaleCertificationTests.Cert_Smoke_TempTableSpill_50kRows_CorrectCount",
           "exitCode": 0,
-          "rawLog": "/home/runner/work/ETL-SQL/ETL-SQL/release-validation/scale-measure/TempTableRoundTrip/run/temp-table-round-trip/raw-output-sample1-TempTableSpill.txt",
+          "rawLog": "release-validation/scale-measure/TempTableRoundTrip/run/temp-table-round-trip/raw-output-sample1-TempTableSpill.txt",
           "metrics": [
             {
               "scenario": "TempTableSpill_100000000_SELECT_INTO",
