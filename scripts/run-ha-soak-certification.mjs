@@ -166,8 +166,8 @@ class Topology {
     return { 'X-Orchestrator-Key': this.env.ORCH_API_KEY, 'X-Orchestrator-Identity': this.assertion.value };
   }
 
-  async orchestrator(method, route, body, { allowStatus = [] } = {}) {
-    const headers = await this.orchestratorHeaders();
+  async orchestrator(method, route, body, { allowStatus = [], headers: extra = {} } = {}) {
+    const headers = { ...(await this.orchestratorHeaders()), ...extra };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     const response = await fetch(new URL(route, this.orchestratorUrl), {
       method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30000),
@@ -231,6 +231,21 @@ class Topology {
 
   async kill(name) {
     return this.orchestrator('POST', `/api/scheduled-jobs/${encodeURIComponent(name)}/kill`, undefined, { allowStatus: [202] });
+  }
+
+  // Deleting a job needs If-Match with its current version (428 without it). A run finishing
+  // between the read and the delete bumps the version, so a conflict is read again and retried.
+  async deleteJob(name) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { json } = await this.orchestrator('GET', '/api/scheduled-jobs?limit=1000');
+      const job = (json ?? []).find(entry => (entry.name ?? entry.Name) === name);
+      if (!job) return;
+      const version = job.version ?? job.Version;
+      const { status } = await this.orchestrator('DELETE', `/api/scheduled-jobs/${encodeURIComponent(name)}`, undefined,
+        { allowStatus: [204, 404, 409], headers: { 'If-Match': `"${version}"` } });
+      if (status !== 409) return;
+    }
+    throw new Error(`Job ${name} kept changing; it could not be deleted.`);
   }
 
   // A scenario that fails part-way leaves its job running. That job keeps writing spill and holds
@@ -730,16 +745,21 @@ const faults = {
     await sleep(5000);
     sh('docker', ['kill', '--signal', 'KILL', container]);
     const crashedAt = Date.now();
-    const recovered = await until('another node to run the job', async () => {
-      const current = topology.leaseOwner(jobName);
-      const runs = await topology.history(jobName);
-      const success = runs.find(run => run.id !== first.id && run.status === 'SUCCESS');
-      return current && current !== owner && success ? { current, success } : null;
-    }, { timeoutMs: 300000, intervalMs: 3000 });
-    evidence.measurements.leaseOwnerAfterRecovery = recovered.current;
-    evidence.measurements.recoveryMs = Date.parse(recovered.success.startTime) - crashedAt;
-    await topology.orchestrator('DELETE', `/api/scheduled-jobs/${encodeURIComponent(jobName)}`, undefined, { allowStatus: [204] });
-    if (!topology.running(container)) sh('docker', ['start', container]);
+    let recovered;
+    try {
+      recovered = await until('another node to run the job', async () => {
+        const current = topology.leaseOwner(jobName);
+        const runs = await topology.history(jobName);
+        const success = runs.find(run => run.id !== first.id && run.status === 'SUCCESS');
+        return current && current !== owner && success ? { current, success } : null;
+      }, { timeoutMs: 300000, intervalMs: 3000 });
+      evidence.measurements.leaseOwnerAfterRecovery = recovered.current;
+      evidence.measurements.recoveryMs = Date.parse(recovered.success.startTime) - crashedAt;
+      await topology.deleteJob(jobName);
+    } finally {
+      // Whatever failed above, the next fault needs both Orchestrators back.
+      if (!topology.running(container)) sh('docker', ['start', container]);
+    }
     const runs = await topology.history(jobName, 50);
     const crashed = runs.find(run => run.id === first.id);
     evidence.measurements.jobFinalState = crashed?.status;
@@ -821,7 +841,7 @@ const faults = {
       evidence.measurements.leaderAfterFailover = next.current;
       evidence.measurements.failoverDurationMs = Date.parse(next.run.startTime) - stoppedAt;
       await sleep(70000); // one more occurrence on the survivor
-      await topology.orchestrator('DELETE', `/api/scheduled-jobs/${encodeURIComponent(jobName)}`, undefined, { allowStatus: [204] });
+      await topology.deleteJob(jobName);
       const runs = (await topology.history(jobName, 50)).filter(run => run.startTime)
         .map(run => [Date.parse(run.startTime), run.endTime ? Date.parse(run.endTime) : Date.now()]).sort((a, b) => a[0] - b[0]);
       const duplicates = runs.filter((span, index) => index > 0 && span[0] < runs[index - 1][1]).length;
@@ -965,9 +985,18 @@ export async function certify({ runId, imageTag = 'ha-cert', skipBuild = false, 
         const result = inject
           ? await scenario(fault.faultId, evidence => inject(topology, evidence), topology)
           : finish({ id: fault.faultId, checks: [], error: 'No injection is implemented for this fault.', elapsedMs: 0 });
-        results.push({ faultId: fault.faultId, category: fault.category, injectionPoint: fault.injectionPoint, ...result });
-        console.log(`fault ${fault.faultId}: ${result.status}`);
-        await waitForTopology(topology); // the next fault starts from a healthy topology
+        const entry = { faultId: fault.faultId, category: fault.category, injectionPoint: fault.injectionPoint, ...result };
+        results.push(entry);
+        writeJson(path.join(dir, fault.faultId, 'result.json'), entry); // kept even if a later step aborts
+        console.log(`fault ${fault.faultId}: ${result.status}${result.error ? ` (${result.error})` : ''}`);
+        try {
+          await waitForTopology(topology); // the next fault starts from a healthy topology
+        } catch (error) {
+          for (const skipped of plan.faults.slice(plan.faults.indexOf(fault) + 1))
+            results.push(finish({ faultId: skipped.faultId, id: skipped.faultId, checks: [], elapsedMs: 0,
+              error: `Not run: the topology did not recover after ${fault.faultId} (${error.message}).` }));
+          break;
+        }
       }
       const passed = results.every(result => result.passed);
       writeReport(dir, 'fault-report', { ...reportShell(runId, plan.mode, 'fault-injection'), status: passed ? 'Passed' : 'Failed', passed, faults: results },
