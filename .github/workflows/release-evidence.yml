@@ -165,27 +165,39 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         timeout-minutes: 5
+      # Every attempt: a partial rerun keeps the artifacts of jobs that passed earlier.
       - uses: actions/download-artifact@v8
         timeout-minutes: 5
         with:
-          pattern: release-evidence-deployment-*-${{ github.run_id }}-${{ github.run_attempt }}
+          pattern: release-evidence-deployment-*-${{ github.run_id }}-*
           path: release-validation/report-inputs
       - uses: actions/download-artifact@v8
         timeout-minutes: 5
         with:
-          name: release-evidence-canary-${{ github.run_id }}-${{ github.run_attempt }}
-          path: release-validation/report-inputs/release-evidence-canary-${{ github.run_id }}-${{ github.run_attempt }}
+          pattern: release-evidence-canary-${{ github.run_id }}-*
+          path: release-validation/report-inputs
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Keep the latest attempt of each report
+        timeout-minutes: 2
+        run: node scripts/latest-attempt-artifacts.mjs release-validation/report-inputs "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
       - name: Validate deployment and canary reports
         timeout-minutes: 5
         shell: pwsh
         env:
           VERSION: ${{ needs.candidate.outputs.version }}
-          RUN_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           $inputs = 'release-validation/report-inputs'
-          $deployment = { param($kind) "$inputs/release-evidence-deployment-$kind-$env:RUN_SUFFIX/artifacts/release-evidence/$env:VERSION/deployment-profiles" }
-          ./scripts/Test-ReleaseEvidenceReports.ps1 -ProfileRoot (& $deployment 'Profile') -TransitionRoot (& $deployment 'Transition') `
-            -CanaryRoot "$inputs/release-evidence-canary-$env:RUN_SUFFIX/run" -CandidateSha $env:GITHUB_SHA -Version $env:VERSION `
+          function Get-Input([string]$Prefix) {
+            $found = @(Get-ChildItem -LiteralPath $inputs -Directory | Where-Object Name -Like "$Prefix-$env:GITHUB_RUN_ID-*")
+            if ($found.Count -ne 1) { throw "Expected one $Prefix artifact, found $($found.Count)." }
+            $found[0].FullName
+          }
+          $profiles = "artifacts/release-evidence/$env:VERSION/deployment-profiles"
+          ./scripts/Test-ReleaseEvidenceReports.ps1 -ProfileRoot (Join-Path (Get-Input 'release-evidence-deployment-Profile') $profiles) `
+            -TransitionRoot (Join-Path (Get-Input 'release-evidence-deployment-Transition') $profiles) `
+            -CanaryRoot (Join-Path (Get-Input 'release-evidence-canary') 'run') -CandidateSha $env:GITHUB_SHA -Version $env:VERSION `
             -OutDir release-validation/report-contracts/deployment-profiles
       - name: Retain merged claims index
         if: always()
@@ -462,10 +474,14 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      # Every attempt: "Re-run failed jobs" keeps the passing scenarios' attempt-1 artifacts.
       - uses: actions/download-artifact@v8
         with:
-          pattern: release-evidence-billion-row-*-${{ github.run_id }}-${{ github.run_attempt }}
+          pattern: release-evidence-billion-row-*-${{ github.run_id }}-*
           path: release-validation/billion-row-runs
+      - name: Keep the latest attempt of each scenario run
+        timeout-minutes: 2
+        run: node scripts/latest-attempt-artifacts.mjs release-validation/billion-row-runs "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
       - name: Gate peak memory across row counts
         timeout-minutes: 5
         run: |
