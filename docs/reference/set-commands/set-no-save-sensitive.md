@@ -7,7 +7,7 @@ SET NO_SAVE_SENSITIVE [=] ON|OFF;
 ```
 
 ## Parameters
-- **ON** — Replace credential options (`PASSWORD`, `PWD`, `API_KEY`, `APIKEY`, `TOKEN`, `ACCESS_TOKEN`, `SECRET`, `CLIENT_SECRET`, `PASSPHRASE`, `PRIVATE_KEY`), connection-string `Password=`/`Pwd=` segments, and `DECLARE @var SENSITIVE|ENCRYPTED = '...'` literals with `<secret>` placeholders on save (without encrypting or prompting for a save password), and rewrite literal `USE PASSWORD = '...'` to `USE PASSWORD PROMPT;`. Overrides `SET ALLOW_PLAINTEXT_SECRETS = ON`.
+- **ON** — Replace credential options (`PASSWORD`, `PWD`, `API_KEY`, `APIKEY`, `TOKEN`, `ACCESS_TOKEN`, `SECRET`, `CLIENT_SECRET`, `PASSPHRASE`, `PRIVATE_KEY`), in each `CREATE CONNECTION` target the URL userinfo password (`postgres://u:<secret>@host`), every connection-string key that names a credential (`Password`, `Pwd`, `AccountKey`, `SharedAccessSignature`, `Client Secret`, `Access Token`, …), and the whole value of a connector that takes no file path (an opaque token), and `DECLARE @var SENSITIVE|ENCRYPTED = '...'` literals with `<secret>` placeholders on save (without encrypting or prompting for a save password), and rewrite literal `USE PASSWORD = '...'` to `USE PASSWORD PROMPT;`. Overrides `SET ALLOW_PLAINTEXT_SECRETS = ON`.
 - **OFF** — Encrypt connection credentials (`ENC:...`) using the script/master password on save and first-run execution (default). Literal `USE PASSWORD = '...'` is rewritten to `USE PASSWORD PROMPT;` unless `SET ALLOW_PLAINTEXT_SECRETS = ON`.
 
 ## Example

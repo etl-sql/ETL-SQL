@@ -234,6 +234,36 @@ namespace ETL_SQL.Tests.Hardening
             Assert.False(service.RequiresSavePassword(sql));
         }
 
+        // Scrubbing replaced encryption here, so it must reach every credential encryption sealed:
+        // URL userinfo, connection-string keys other than Password/Pwd, and opaque tokens.
+        [Theory]
+        [InlineData("POSTGRES('postgres://app:url-pass@db:5432/sales')", "url-pass", "postgres://app:<secret>@db:5432/sales")]
+        [InlineData("AZUREBLOB('DefaultEndpointsProtocol=https;AccountName=acct;AccountKey=acct-key==;')", "acct-key", "AccountName=acct;AccountKey=<secret>;")]
+        [InlineData("AZUREBLOB('BlobEndpoint=https://a.blob;SharedAccessSignature=sv=2024&sig=sas-sig')", "sas-sig", "BlobEndpoint=https://a.blob;SharedAccessSignature=<secret>")]
+        [InlineData("MSSQL('Server=.;Client Secret=cs-val;Access Token=at-val')", "-val", "Server=.;Client Secret=<secret>;Access Token=<secret>")]
+        [InlineData("MOCKDB('opaque-token-123')", "opaque-token-123", "MOCKDB('<secret>')")]
+        public void SecurityService_SecureScriptForSave_NoSaveSensitive_ScrubsEveryCredentialEncryptionSealed(
+            string connection, string secret, string expected)
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var sql = $"SET NO_SAVE_SENSITIVE = ON;\nCREATE CONNECTION c AS {connection};";
+
+            var secured = service.SecureScriptForSave(sql, "save-pass");
+
+            Assert.DoesNotContain(secret, secured);
+            Assert.Contains(expected, secured);
+            Assert.DoesNotContain("ENC:", secured);
+        }
+
+        [Fact]
+        public void SecurityService_SecureScriptForSave_NoSaveSensitive_LeavesFilePathsReadable()
+        {
+            var service = new SecurityService(NullLogger.Instance);
+            var sql = "SET NO_SAVE_SENSITIVE = ON;\nCREATE CONNECTION c AS CSV('data/in.csv');";
+
+            Assert.Contains("CSV('data/in.csv')", service.SecureScriptForSave(sql, "save-pass"));
+        }
+
         [Fact]
         public void SecurityService_SecureScriptForSave_NoSaveSensitive_WithUsePassword_ScrubsWithoutEncrypting()
         {

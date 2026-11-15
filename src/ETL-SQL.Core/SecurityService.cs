@@ -1043,9 +1043,60 @@ public partial class SecurityService
         }
 
         if (noSaveSensitive)
-            secured = ScrubSensitiveLiterals(secured);
+            secured = ScrubSensitiveLiterals(ScrubConnectionTargetSecrets(secured));
 
         return secured;
+    }
+
+    private static readonly string[] CredentialKeyFragments =
+        ["password", "pwd", "key", "secret", "token", "signature", "credential", "passphrase"];
+
+    private static bool IsCredentialKey(string key)
+    {
+        var k = key.Trim();
+        return k.Equals("sas", StringComparison.OrdinalIgnoreCase)
+            || CredentialKeyFragments.Any(f => k.Contains(f, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Scrubs, in each connection's positional target, every credential <see cref="EncryptScript"/>
+    /// would have sealed: URL userinfo passwords, connection-string keys that name a credential
+    /// (not only <c>Password</c>/<c>Pwd</c>), and opaque values of connectors that take no file
+    /// path. Hosts, databases and file paths stay readable.
+    /// </summary>
+    private static string ScrubConnectionTargetSecrets(string text)
+    {
+        return ReplaceOutsideStringLiterals(ConnRegex(), text, m =>
+        {
+            var isFilePathConnector = FilePathConnectorTypes.Contains(m.Groups["type"].Value);
+            var newContent = ReplaceFirstQuotedString(m.Groups[2].Value, (q, inner) =>
+            {
+                if (IsSealedOrIndirectCredential(inner)) return $"{q}{inner}{q}";
+                var url = UrlWithPasswordRegex().Match(inner);
+                if (url.Success)
+                {
+                    var schemeEnd = inner.IndexOf("://", StringComparison.Ordinal) + 3;
+                    var colon = inner.IndexOf(':', schemeEnd);
+                    var at = url.Index + url.Length - 1;
+                    return $"{q}{inner[..(colon + 1)]}<secret>{inner[at..]}{q}";
+                }
+                if (inner.Contains('='))
+                {
+                    var parts = inner.Split(';');
+                    for (var i = 0; i < parts.Length; i++)
+                    {
+                        var eq = parts[i].IndexOf('=');
+                        if (eq > 0 && IsCredentialKey(parts[i][..eq]))
+                            parts[i] = parts[i][..(eq + 1)] + "<secret>";
+                    }
+                    return $"{q}{string.Join(';', parts)}{q}";
+                }
+                if (!isFilePathConnector && !Path.HasExtension(inner))
+                    return $"{q}<secret>{q}";
+                return $"{q}{inner}{q}";
+            });
+            return m.Groups[1].Value + newContent + m.Groups[3].Value;
+        });
     }
 
     /// <summary>
