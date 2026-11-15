@@ -138,6 +138,7 @@ jobs:
     permissions: {}
     steps:
       - name: Record approval
+        timeout-minutes: 2
         run: echo "Release approved for $GITHUB_SHA."
 
   # 4. Tag the candidate and start Release on the tag. A tag pushed with the Actions token does not
