@@ -71,11 +71,22 @@ namespace ETL_SQL.Orchestrator
             LocalRoot = configuration["Governance:ConnectionCatalog:LocalRoot"]
         };
 
-        public static ToolCatalogOptions BuildToolCatalogOptions(IConfiguration configuration) => new()
+        public static ToolCatalogOptions BuildToolCatalogOptions(IConfiguration configuration)
         {
-            Provider = configuration["Governance:Tools:Provider"],
-            LocalRoot = configuration["Governance:Tools:LocalRoot"] ?? configuration["Governance:Tools:OsStoreRoot"]
-        };
+            var ownershipRaw = configuration["Governance:Tools:OwnershipMode"];
+            var ownershipMode = Enum.TryParse<ToolCatalogOwnershipMode>(ownershipRaw, ignoreCase: true, out var parsed)
+                ? parsed
+                : ToolCatalogOwnershipMode.MachineAdministrator;
+
+            return new()
+            {
+                Provider = configuration["Governance:Tools:Provider"],
+                LocalRoot = configuration["Governance:Tools:LocalRoot"] ?? configuration["Governance:Tools:OsStoreRoot"],
+                OwnershipMode = ownershipMode,
+                ServiceIdentity = configuration["Governance:Tools:ServiceIdentity"],
+                ValidateOwnership = configuration.GetValue<bool?>("Governance:Tools:ValidateOwnership") ?? true
+            };
+        }
 
         public static IServiceCollection AddEtlSqlEngine(this IServiceCollection services, IConfiguration configuration)
         {

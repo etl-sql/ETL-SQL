@@ -26,10 +26,18 @@ internal static class ToolAdminService
 
             if (!string.IsNullOrWhiteSpace(providerName))
             {
+                var ownershipMode = Enum.TryParse<ToolCatalogOwnershipMode>(
+                    config?["Governance:Tools:OwnershipMode"], ignoreCase: true, out var parsed)
+                    ? parsed
+                    : ToolCatalogOwnershipMode.MachineAdministrator;
+
                 catalog = ToolCatalogProviderFactory.Create(new ToolCatalogOptions
                 {
                     Provider = providerName,
-                    LocalRoot = localRoot
+                    LocalRoot = localRoot,
+                    OwnershipMode = ownershipMode,
+                    ServiceIdentity = config?["Governance:Tools:ServiceIdentity"],
+                    ValidateOwnership = config?.GetValue<bool?>("Governance:Tools:ValidateOwnership") ?? true
                 });
             }
         }
@@ -62,16 +70,17 @@ internal static class ToolAdminService
         CliContext ctx,
         IToolCatalogProvider? catalog,
         ILogger logger,
-        CancellationToken ct)
+        CancellationToken ct,
+        Func<bool>? isElevated = null)
     {
         switch (action)
         {
             case "admin-machine-tool-list":
                 return await ListAsync(catalog, logger, ct);
             case "admin-machine-tool-set":
-                return await SetAsync(ctx, catalog, logger, ct);
+                return await SetAsync(ctx, catalog, logger, ct, isElevated ?? AdministrativePrivilege.IsElevated);
             case "admin-machine-tool-delete":
-                return await DeleteAsync(ctx, catalog, logger, ct);
+                return await DeleteAsync(ctx, catalog, logger, ct, isElevated ?? AdministrativePrivilege.IsElevated);
             default:
                 logger.WriteLine($"Unknown tool command: {action}", ConsoleColor.Red);
                 return 1;
@@ -101,10 +110,45 @@ internal static class ToolAdminService
         }
     }
 
-    private static async Task<int> SetAsync(CliContext ctx, IToolCatalogProvider? catalog, ILogger logger, CancellationToken ct)
+    private static bool AuthorizeCatalogMutation(
+        string? toolName,
+        IToolCatalogProvider? catalog,
+        ILogger logger,
+        Func<bool> isElevated)
+    {
+        var requiresAdmin = catalog is not LocalToolCatalogProvider local
+            || local.OwnershipMode == ToolCatalogOwnershipMode.MachineAdministrator;
+
+        if (!requiresAdmin || isElevated())
+            return true;
+
+        var actor = ProcessActor.Current;
+        SecurityEventRuntime.Emit(SecurityEventContract.Create(
+            SecurityEventSeverity.Warning,
+            SecurityEventType.OperationDenied,
+            actor,
+            actor,
+            $"Tool:{toolName ?? "*"}",
+            SecurityEventDecision.Denied,
+            "Machine tool catalog mutation denied: elevated Administrator or root privileges are required."));
+        logger.WriteLine(
+            "Machine tool catalog mutation requires an elevated Administrator or root process.",
+            ConsoleColor.Red);
+        return false;
+    }
+
+    private static async Task<int> SetAsync(
+        CliContext ctx,
+        IToolCatalogProvider? catalog,
+        ILogger logger,
+        CancellationToken ct,
+        Func<bool> isElevated)
     {
         if (catalog is not IWritableToolCatalogProvider writable)
             return LifecycleUnsupported(catalog, logger);
+
+        if (!AuthorizeCatalogMutation(ctx.ToolName?.Trim(), catalog, logger, isElevated))
+            return 1;
 
         if (string.IsNullOrWhiteSpace(ctx.ToolName))
         {
@@ -162,10 +206,18 @@ internal static class ToolAdminService
         }
     }
 
-    private static async Task<int> DeleteAsync(CliContext ctx, IToolCatalogProvider? catalog, ILogger logger, CancellationToken ct)
+    private static async Task<int> DeleteAsync(
+        CliContext ctx,
+        IToolCatalogProvider? catalog,
+        ILogger logger,
+        CancellationToken ct,
+        Func<bool> isElevated)
     {
         if (catalog is not IWritableToolCatalogProvider writable)
             return LifecycleUnsupported(catalog, logger);
+
+        if (!AuthorizeCatalogMutation(ctx.ToolName?.Trim(), catalog, logger, isElevated))
+            return 1;
 
         if (string.IsNullOrWhiteSpace(ctx.ToolName))
         {

@@ -54,10 +54,12 @@ public partial class SpillStore : ISpillStore
     private bool _usingTemporaryFallback;
     private readonly object _initLock = new();
     private readonly object _spillWriteGate = new();
+    private readonly Queue<TaskCompletionSource<bool>> _spillWriteWaiters = new();
     private readonly IExecutionContext _context;
     private bool _disposed;
     private int _activeSpillWrites;
     private int _waitingSpillWrites;
+    private long _bytesSinceReserveCheck;
 
     public bool IsPersistent { get; set; }
 
@@ -198,15 +200,14 @@ public partial class SpillStore : ISpillStore
             ? context.SessionRoot
             : Path.Combine(context.SessionRoot, context.SessionId);
 
-    private static byte[] NormalizeAesKey(byte[]? key, string sessionId)
+    private static byte[] NormalizeAesKey(byte[]? key, string _)
     {
         if (key is { Length: 16 or 24 or 32 }) return key;
 
-        using var sha256 = SHA256.Create();
         if (key is { Length: > 0 })
-            return sha256.ComputeHash(key);
+            return SHA256.HashData(key);
 
-        return sha256.ComputeHash(Encoding.UTF8.GetBytes("ETL-SQL-SPILL:" + sessionId));
+        throw new ExecutionException("Persistent spill encryption key is missing or empty.");
     }
 
     public Task<ISpillWriter> CreateWriterAsync(string chunkName) =>
@@ -266,6 +267,20 @@ public partial class SpillStore : ISpillStore
         }
     }
 
+    private void TrackBytesWrittenAndCheckReserve(long bytesDelta)
+    {
+        if (bytesDelta <= 0 || _context.SpillMinimumFreeBytes <= 0 || _cachedRootPath == null)
+            return;
+
+        const long checkIntervalBytes = 4L * 1024 * 1024;
+        var accumulated = Interlocked.Add(ref _bytesSinceReserveCheck, bytesDelta);
+        if (accumulated >= checkIntervalBytes)
+        {
+            Interlocked.Exchange(ref _bytesSinceReserveCheck, 0);
+            AdmitNewExtent();
+        }
+    }
+
     private ValueTask<SpillWriteSlot> AcquireWriteSlotAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -288,6 +303,7 @@ public partial class SpillStore : ISpillStore
 
     private async ValueTask<SpillWriteSlot> WaitForWriteSlotAsync(CancellationToken cancellationToken)
     {
+        TaskCompletionSource<bool>? waiter = null;
         try
         {
             while (true)
@@ -299,25 +315,30 @@ public partial class SpillStore : ISpillStore
                     if (_activeSpillWrites < limit)
                     {
                         _activeSpillWrites++;
-                        _waitingSpillWrites--;
-                        if (_context.AdaptiveExecutionEnabled)
-                            _context.AdaptiveMetrics.ReportQueueDepth(_waitingSpillWrites);
                         return new SpillWriteSlot(this);
                     }
+
+                    waiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _spillWriteWaiters.Enqueue(waiter);
                 }
 
-                await Task.Delay(10, cancellationToken);
+                await waiter.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
         }
         catch
         {
+            waiter?.TrySetCanceled(cancellationToken);
+            WakeNextWriteWaiter();
+            throw;
+        }
+        finally
+        {
             lock (_spillWriteGate)
             {
-                _waitingSpillWrites = Math.Max(0, _waitingSpillWrites - 1);
+                _waitingSpillWrites--;
                 if (_context.AdaptiveExecutionEnabled)
                     _context.AdaptiveMetrics.ReportQueueDepth(_waitingSpillWrites);
             }
-            throw;
         }
     }
 
@@ -327,6 +348,24 @@ public partial class SpillStore : ISpillStore
         {
             if (_activeSpillWrites > 0)
                 _activeSpillWrites--;
+        }
+
+        WakeNextWriteWaiter();
+    }
+
+    private void WakeNextWriteWaiter()
+    {
+        while (true)
+        {
+            TaskCompletionSource<bool>? waiter;
+            lock (_spillWriteGate)
+            {
+                if (!_spillWriteWaiters.TryDequeue(out waiter))
+                    return;
+            }
+
+            if (waiter.TrySetResult(true))
+                return;
         }
     }
 
@@ -368,9 +407,11 @@ public partial class SpillStore : ISpillStore
             var before = Inner.BytesWritten;
             var started = Stopwatch.GetTimestamp();
             await Inner.WriteRowAsync(row);
+            var delta = Inner.BytesWritten - before;
             Context.AdaptiveMetrics.ReportSpillWrite(
-                Inner.BytesWritten - before,
+                delta,
                 Stopwatch.GetElapsedTime(started));
+            Store.TrackBytesWrittenAndCheckReserve(delta);
         }
 
         public async Task WriteRowsAsync(IEnumerable<Row> rows)
@@ -379,9 +420,17 @@ public partial class SpillStore : ISpillStore
             // Timed whether or not adaptive execution is on: the profile reports spill write cost.
             var before = Inner.BytesWritten;
             var started = Stopwatch.GetTimestamp();
-            await Inner.WriteRowsAsync(rows);
+            // Keep reserve checks inside enumeration: a caller may stream an entire external
+            // operator through this single call.
+            foreach (var row in rows)
+            {
+                var rowBefore = Inner.BytesWritten;
+                await Inner.WriteRowAsync(row);
+                Store.TrackBytesWrittenAndCheckReserve(Inner.BytesWritten - rowBefore);
+            }
+            var delta = Inner.BytesWritten - before;
             Context.AdaptiveMetrics.ReportSpillWrite(
-                Inner.BytesWritten - before,
+                delta,
                 Stopwatch.GetElapsedTime(started));
         }
 
@@ -405,9 +454,11 @@ public partial class SpillStore : ISpillStore
             var before = Inner.BytesWritten;
             var started = Stopwatch.GetTimestamp();
             await columnar.WriteBatchAsync(batch);
+            var delta = Inner.BytesWritten - before;
             Context.AdaptiveMetrics.ReportSpillWrite(
-                Inner.BytesWritten - before,
+                delta,
                 Stopwatch.GetElapsedTime(started));
+            Store.TrackBytesWrittenAndCheckReserve(delta);
         }
     }
 

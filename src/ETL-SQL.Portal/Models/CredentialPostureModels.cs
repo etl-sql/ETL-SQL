@@ -35,8 +35,8 @@ public sealed record SecretPostureDto(
 /// page shows it on its own.
 /// </param>
 /// <param name="UsableWithoutGrant">
-/// True when the connection has no ACL rows, in which case every authenticated caller may use it.
-/// Not a defect — it is the documented default — but it belongs next to the credential it guards.
+/// Retained for DTO compatibility; shared connections are deny-by-default and never open to all
+/// users without a grant (only administrators and owners may use ungranted entries).
 /// </param>
 public sealed record ConnectionPostureDto(
     string Alias,

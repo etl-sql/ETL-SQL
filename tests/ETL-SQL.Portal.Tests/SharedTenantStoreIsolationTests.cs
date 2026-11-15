@@ -60,7 +60,14 @@ public sealed class SharedTenantStoreIsolationTests : IDisposable
 
         Assert.Equal("alpha.db", (await alpha.ExportAsync()).Single().Target);
         Assert.Equal("beta.db", (await beta.ExportAsync()).Single().Target);
-        Assert.Equal(["warehouse"], await alpha.ListUsableAliasesAsync(null));
+        var adminIdentity = new ETL_SQL.Core.Governance.ExecutionIdentity
+        {
+            EffectiveUser = "admin",
+            RealUser = "admin",
+            IsAdmin = true
+        };
+        Assert.Empty(await alpha.ListUsableAliasesAsync(null));
+        Assert.Equal(["warehouse"], await alpha.ListUsableAliasesAsync(adminIdentity));
         Assert.Equal(2, await db.PortalSharedConnections.CountAsync());
 
         await alpha.DeleteAsync("warehouse");

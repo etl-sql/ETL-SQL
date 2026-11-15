@@ -124,8 +124,8 @@ public sealed class PortalConnectionCatalogService(
 
     /// <summary>
     /// Lists the aliases this identity may actually use, applying the same rule as
-    /// <see cref="EnforceUseAclAsync"/>: ungranted entries are open to all, granted entries need
-    /// admin, ownership, or group membership. Used to populate the editor's schema explorer
+    /// <see cref="EnforceUseAclAsync"/>: connections are deny-by-default and require an admin,
+    /// entry owner, or membership in a granted group. Used to populate the editor's schema explorer
     /// without disclosing the existence of connections the caller cannot use.
     /// </summary>
     public async Task<IReadOnlyList<string>> ListUsableAliasesAsync(
@@ -162,20 +162,36 @@ public sealed class PortalConnectionCatalogService(
 
     private static bool CanUse(PortalSharedConnection entity, ExecutionIdentity? identity, IReadOnlyCollection<int> groupIds)
     {
-        if (entity.Acls.Count == 0) return true;
         if (identity is null) return false;
         if (identity.IsAdmin) return true;
         if (entity.OwnerUserId != null && identity.EffectiveUserId == entity.OwnerUserId) return true;
+        if (entity.Acls.Count == 0) return false;
         if (identity.EffectiveUserId is int)
             return entity.Acls.Any(a => groupIds.Contains(a.GroupId));
         return entity.Acls.Any(a => identity.HasGroup(a.Group.Name));
     }
 
     /// <summary>Resolution path for script execution; the last-used touch is best-effort.</summary>
-    public async Task<SharedConnectionDefinition> ResolveDefinitionAsync(
+    public Task<SharedConnectionDefinition> ResolveDefinitionAsync(
         string alias,
         ExecutionIdentity? identity = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ResolveDefinitionCoreAsync(alias, identity, enforceAcl: true, cancellationToken);
+
+    /// <summary>
+    /// Resolution path for trusted Portal host system deliveries (e.g., admin notifications and
+    /// subscription email transport) resolving an operator-configured connection alias.
+    /// </summary>
+    internal Task<SharedConnectionDefinition> ResolveSystemDefinitionAsync(
+        string alias,
+        CancellationToken cancellationToken = default) =>
+        ResolveDefinitionCoreAsync(alias, identity: null, enforceAcl: false, cancellationToken);
+
+    private async Task<SharedConnectionDefinition> ResolveDefinitionCoreAsync(
+        string alias,
+        ExecutionIdentity? identity,
+        bool enforceAcl,
+        CancellationToken cancellationToken)
     {
         var entity = await db.PortalSharedConnections
             .Include(c => c.Acls).ThenInclude(a => a.Group)
@@ -185,7 +201,8 @@ public sealed class PortalConnectionCatalogService(
         if (entity.Disabled)
             throw new InvalidOperationException($"Shared connection '{alias}' is disabled.");
 
-        await EnforceUseAclAsync(entity, identity, cancellationToken);
+        if (enforceAcl)
+            await EnforceUseAclAsync(entity, identity, cancellationToken);
 
         var (options, gateway) = DeserializeOptionsAndGateway(entity);
         if (gateway is not null)
@@ -234,17 +251,15 @@ public sealed class PortalConnectionCatalogService(
     }
 
     /// <summary>
-    /// Entries without grants are usable by any caller. Entries with grants require an admin, the
-    /// entry owner, or membership in a granted group; identity-less callers are denied.
+    /// Shared connections are deny-by-default: even when no group grants exist, only an admin or
+    /// the entry owner may resolve the connection. Identity-less callers and non-member users are
+    /// denied, and revoking the last group grant returns the connection to admin/owner-only access.
     /// </summary>
     private async Task EnforceUseAclAsync(
         PortalSharedConnection entity,
         ExecutionIdentity? identity,
         CancellationToken cancellationToken)
     {
-        if (entity.Acls.Count == 0)
-            return;
-
         if (identity != null)
         {
             if (identity.IsAdmin)
@@ -252,19 +267,22 @@ public sealed class PortalConnectionCatalogService(
             if (entity.OwnerUserId != null && identity.EffectiveUserId == entity.OwnerUserId)
                 return;
 
-            if (identity.EffectiveUserId is int userId)
+            if (entity.Acls.Count > 0)
             {
-                var groupIds = await db.UserGroups
-                    .AsNoTracking()
-                    .Where(ug => ug.UserId == userId)
-                    .Select(ug => ug.GroupId)
-                    .ToListAsync(cancellationToken);
-                if (entity.Acls.Any(a => groupIds.Contains(a.GroupId)))
+                if (identity.EffectiveUserId is int userId)
+                {
+                    var groupIds = await db.UserGroups
+                        .AsNoTracking()
+                        .Where(ug => ug.UserId == userId)
+                        .Select(ug => ug.GroupId)
+                        .ToListAsync(cancellationToken);
+                    if (entity.Acls.Any(a => groupIds.Contains(a.GroupId)))
+                        return;
+                }
+                else if (entity.Acls.Any(a => identity.HasGroup(a.Group.Name)))
+                {
                     return;
-            }
-            else if (entity.Acls.Any(a => identity.HasGroup(a.Group.Name)))
-            {
-                return;
+                }
             }
         }
 

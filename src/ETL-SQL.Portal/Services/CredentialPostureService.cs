@@ -74,7 +74,7 @@ public sealed class CredentialPostureService(
                 connection.Disabled,
                 references,
                 unresolved,
-                UsableWithoutGrant: connection.Acls.Count == 0,
+                UsableWithoutGrant: false,
                 GrantedGroups: connection.Acls.Count,
                 connection.LastVerifiedAtUtc,
                 connection.LastUsedAtUtc,

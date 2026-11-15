@@ -108,6 +108,16 @@ before certification; recovery rehearsal timings.
   the join 335 GB; the join spent 337 s of 896 s in GC pauses. Peak memory stays low, so nothing
   breaks, but these are the slowest scenarios (15–21 min) and the cheapest to speed up. Profile
   with `Test-SpillAllocProfile.ps1` and the scenario tests in `BillionRowCertificationTests`.
+  Codex/Gemini review candidates: `ExternalSortEngine.MergeChunksAsync` strips sort-key columns
+  and intermediate merges re-add them; inspect `Row.RemoveColumn` dictionary materialization and
+  retain keys through intermediate passes if semantics allow. Measure boxing/materialization in
+  `ArrowSpillReader.ExtractValue` and string-serialized `decimal` columns in
+  `ArrowSpillWriter`; evaluate columnar batch reads for sort/window, bounded buffer
+  reuse, and packed join storage using shared buffers plus offsets instead of one array per row.
+  Preserve final output schema, scalar fidelity, comparison semantics and cancellation. Compare
+  allocation counts and correct outputs first; use repeated same-host A/B runs for timing. Multi-day
+  architectural slices (framed spill encryption, byte-budgeted batches, late materialization) are
+  tracked in [`ROADMAP.md`](ROADMAP.md#engine--security--encrypted-spill-framing-byte-budgeted-scale-and-plaintext-memory-hygiene).
 
 ### 3. Flaky tests — the dedicated fix
 
@@ -136,8 +146,6 @@ sample on a shared runner.
   runtime because `@tailwindcss/vite` and `tailwindcss` (build plugins that need `vite`) are in
   `dependencies` of `src/etl-sql-vscode/ui/package.json`; moving them to `devDependencies`
   fixes the label, if no build installs with `--omit=dev`.
-
----
 
 ## v0.22.0 Release — run on the final candidate
 

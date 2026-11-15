@@ -149,7 +149,10 @@ namespace ETL_SQL.Tests.Statements
         [Fact]
         public async Task TestWhatIfDockerSuppression()
         {
-            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var ev = DependencyInjectionSetup.BuildServiceProvider(new Dictionary<string, string?>
+            {
+                ["Governance:Docker:AllowedImages:0"] = "postgres:latest"
+            }).GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("SET WHAT_IF ON;"));
 
             // USE DOCKER should be suppressed

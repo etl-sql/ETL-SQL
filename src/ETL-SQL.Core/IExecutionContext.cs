@@ -632,6 +632,7 @@ public interface IDockerManager : IAsyncDisposable
     Task ResumeContainer(string scope, string? alias, System.Threading.CancellationToken cancellationToken = default);
     Task CloseContainers(string scope, string? nameOrAlias = null, System.Threading.CancellationToken cancellationToken = default);
     string? GetConnectionString(string scope, string alias);
+    string? GetImageName(string scope, string? alias) => null;
     Dictionary<string, string> GetState(string scope);
     void LoadState(string scope, Dictionary<string, string> connectionStrings, string? lastConnectionString);
 }

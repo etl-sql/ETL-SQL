@@ -76,6 +76,7 @@ public sealed record OrganizationPolicyDocument
             values["Security:AllowedHosts"] = RemoteExecution.AllowedHosts;
         values["Security:RequireWhatIfForDestructiveStatements"] = MutationGuardrails.RequireWhatIfForDestructiveStatements;
         values["Security:RequireTransactionForMutations"] = MutationGuardrails.RequireTransactionForMutations;
+        values["Security:RequireSpillEncryption"] = MutationGuardrails.RequireSpillEncryption;
         values["Audit:RemoteDeliveryRequired"] = MutationGuardrails.RequireRemoteAuditForMutations;
         if (!string.IsNullOrWhiteSpace(SecurityEvents.CollectorEndpoint))
             values["SecurityEvents:CollectorEndpoint"] = SecurityEvents.CollectorEndpoint;
@@ -307,6 +308,7 @@ public sealed record MutationGuardrailPolicySection
     public bool RequireWhatIfForDestructiveStatements { get; init; } = true;
     public bool RequireTransactionForMutations { get; init; } = true;
     public bool RequireRemoteAuditForMutations { get; init; }
+    public bool RequireSpillEncryption { get; init; }
 }
 
 public sealed record SecurityEventPolicySection

@@ -138,7 +138,7 @@ public sealed class ColumnBuffer<T> : IColumnBuffer where T : unmanaged
 
         if (!_pooled) return;
         if (values != null)
-            ArrayPool<T>.Shared.Return(values, clearArray: false);
+            ArrayPool<T>.Shared.Return(values, clearArray: true);
         if (bitmap != null)
             ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
     }
@@ -208,8 +208,8 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
         }
         catch
         {
-            ArrayPool<int>.Shared.Return(offsets, clearArray: false);
-            ArrayPool<byte>.Shared.Return(data, clearArray: false);
+            ArrayPool<int>.Shared.Return(offsets, clearArray: true);
+            ArrayPool<byte>.Shared.Return(data, clearArray: true);
             ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
             throw;
         }
@@ -262,8 +262,8 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
         }
         catch
         {
-            ArrayPool<int>.Shared.Return(copiedOffsets, clearArray: false);
-            ArrayPool<byte>.Shared.Return(copiedData, clearArray: false);
+            ArrayPool<int>.Shared.Return(copiedOffsets, clearArray: true);
+            ArrayPool<byte>.Shared.Return(copiedData, clearArray: true);
             ArrayPool<byte>.Shared.Return(nullBitmap, clearArray: true);
             throw;
         }
@@ -334,8 +334,8 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
         }
         catch
         {
-            ArrayPool<int>.Shared.Return(offsets, clearArray: false);
-            ArrayPool<byte>.Shared.Return(data, clearArray: false);
+            ArrayPool<int>.Shared.Return(offsets, clearArray: true);
+            ArrayPool<byte>.Shared.Return(data, clearArray: true);
             ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
             throw;
         }
@@ -392,8 +392,8 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
         }
         catch
         {
-            ArrayPool<int>.Shared.Return(offsets, clearArray: false);
-            ArrayPool<byte>.Shared.Return(data, clearArray: false);
+            ArrayPool<int>.Shared.Return(offsets, clearArray: true);
+            ArrayPool<byte>.Shared.Return(data, clearArray: true);
             ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
             throw;
         }
@@ -415,8 +415,8 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
         }
         catch
         {
-            ArrayPool<int>.Shared.Return(offsets, clearArray: false);
-            ArrayPool<byte>.Shared.Return(data, clearArray: false);
+            ArrayPool<int>.Shared.Return(offsets, clearArray: true);
+            ArrayPool<byte>.Shared.Return(data, clearArray: true);
             ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
             throw;
         }
@@ -430,8 +430,8 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
         _offsets = null;
         _data = null;
         _nullBitmap = null;
-        if (offsets != null) ArrayPool<int>.Shared.Return(offsets, clearArray: false);
-        if (data != null) ArrayPool<byte>.Shared.Return(data, clearArray: false);
+        if (offsets != null) ArrayPool<int>.Shared.Return(offsets, clearArray: true);
+        if (data != null) ArrayPool<byte>.Shared.Return(data, clearArray: true);
         if (bitmap != null) ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
     }
 

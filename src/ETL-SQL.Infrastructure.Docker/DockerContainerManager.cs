@@ -26,12 +26,20 @@ public class DockerContainerManager : IDockerManager
     // alias, the last container and the container itself belong to one tenant's scope.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, IContainer> _activeContainers = new(StringComparer.OrdinalIgnoreCase);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _connectionStrings = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _containerImages = new(StringComparer.OrdinalIgnoreCase);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string? Alias, string? ConnectionString)> _last = new(StringComparer.Ordinal);
     public bool HasActiveContainers => !_activeContainers.IsEmpty;
     private const char ScopeSeparator = '\u001f';
 
     public string? GetLastConnectionString(string scope) => _last.TryGetValue(scope, out var last) ? last.ConnectionString : null;
     public string? GetLastAlias(string scope) => _last.TryGetValue(scope, out var last) ? last.Alias : null;
+    public string? GetImageName(string scope, string? alias)
+    {
+        var target = alias ?? GetLastAlias(scope);
+        if (string.IsNullOrWhiteSpace(target))
+            return null;
+        return _containerImages.TryGetValue(ScopedKey(scope, target), out var image) ? image : null;
+    }
 
     private static string ScopedKey(string scope, string key) => scope + ScopeSeparator + key;
     private static string ScopePrefix(string scope) => scope + ScopeSeparator;
@@ -94,6 +102,7 @@ public class DockerContainerManager : IDockerManager
             _logger.Info("Using existing session Docker container for {Key}.", name);
             string activeConnStr = _connectionStrings.TryGetValue(key, out var cached) ? cached : GetConnectionString(activeContainer, imageName, null);
             _connectionStrings[key] = activeConnStr;
+            _containerImages[key] = imageName;
             Remember(scope, name, activeConnStr);
             return activeConnStr;
         }
@@ -106,6 +115,7 @@ public class DockerContainerManager : IDockerManager
         {
             _logger.Info("Re-attached to existing Docker container: {ContainerName}", containerName);
             _connectionStrings[key] = existingConnStr;
+            _containerImages[key] = imageName;
             Remember(scope, name, existingConnStr);
             return existingConnStr;
         }
@@ -165,6 +175,7 @@ public class DockerContainerManager : IDockerManager
             if (retryConnStr != null)
             {
                 _connectionStrings[key] = retryConnStr;
+                _containerImages[key] = imageName;
                 Remember(scope, name, retryConnStr);
                 return retryConnStr;
             }
@@ -181,6 +192,7 @@ public class DockerContainerManager : IDockerManager
 
         string connectionString = GetConnectionString(container, imageName, credentials);
         _connectionStrings[key] = connectionString;
+        _containerImages[key] = imageName;
         Remember(scope, name, connectionString);
         return connectionString;
     }
@@ -235,6 +247,11 @@ public class DockerContainerManager : IDockerManager
                 // Credentials are generated per start, so a container from an earlier session
                 // carries its own: read them back from the environment it was created with.
                 var inspected = await client.Containers.InspectContainerAsync(target.ID, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(inspected.Config?.Image)
+                    && !ETL_SQL.Core.Governance.ProcessPolicyRules.DockerImageMatches(imageName, inspected.Config.Image))
+                {
+                    return null;
+                }
                 credentials = CredentialsFromEnvironment(imageName, credentials, inspected.Config?.Env);
                 if (credentials is null) return null;
 
@@ -328,6 +345,7 @@ public class DockerContainerManager : IDockerManager
             catch (Exception ex) { _logger.Debug("[DockerContainerManager] Container cleanup error for '{ContainerKey}': {Message}", kvp.Key, ex.Message); }
             _activeContainers.TryRemove(kvp.Key, out _);
             _connectionStrings.TryRemove(kvp.Key, out _);
+            _containerImages.TryRemove(kvp.Key, out _);
         }
     }
 

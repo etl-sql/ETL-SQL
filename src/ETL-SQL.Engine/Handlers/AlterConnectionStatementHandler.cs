@@ -19,10 +19,12 @@ namespace ETL_SQL.Engine.Handlers;
 public class AlterConnectionStatementHandler(
     IConnectorRegistry connectorRegistry,
     ILogger logger,
-    ISecretProvider? secretProvider = null) : IStatementHandler
+    ISecretProvider? secretProvider = null,
+    IConnectionCatalogProvider? connectionCatalog = null) : IStatementHandler
 {
     private readonly IConnectorRegistry _connectorRegistry = connectorRegistry;
     private readonly ILogger _logger = logger;
+    private readonly IConnectionCatalogProvider? _connectionCatalog = connectionCatalog;
     private readonly ConnectionSecretResolver _secretResolver = new(secretProvider);
 
     public Type SupportedStatementType => typeof(AlterConnectionStatement);
@@ -37,6 +39,11 @@ public class AlterConnectionStatementHandler(
         if (!context.Connections.TryGetValue(stmt.ConnectionName, out var existingDs) || existingDs == null)
             throw new ExecutionException(
                 $"Cannot ALTER CONNECTION '{stmt.ConnectionName}': connection does not exist.",
+                null, stmt.Line, stmt.Column);
+
+        if (context.CatalogBackedConnections.ContainsKey(stmt.ConnectionName))
+            throw new ExecutionException(
+                $"Connection '{stmt.ConnectionName}' is backed by a SHARED: catalog entry and cannot be modified with ALTER CONNECTION.",
                 null, stmt.Line, stmt.Column);
 
         // Start from the existing state — type, path, and options are all inherited
@@ -66,8 +73,12 @@ public class AlterConnectionStatementHandler(
             target = context.DecryptValue(target);
         }
         target = Interpolate(target ?? "", context);
-        target = await _secretResolver.ResolveTargetAsync(target, context.CancellationToken);
-        options = await _secretResolver.ResolveOptionsAsync(options, context.CancellationToken);
+        target = await _secretResolver.ResolveTargetAsync(
+            target, context.CancellationToken, connectionType,
+            allowCatalogAuthorizedSecrets: false, identity: context.ExecutionIdentity, connectionCatalog: _connectionCatalog);
+        options = await _secretResolver.ResolveOptionsAsync(
+            options, context.CancellationToken, connectionType,
+            allowCatalogAuthorizedSecrets: false, identity: context.ExecutionIdentity, connectionCatalog: _connectionCatalog);
 
         // Resolve path for file-based connectors
         if (FileConnectorTypes.Contains(connectionType ?? string.Empty))

@@ -29,6 +29,7 @@ public class DropConnectionStatementHandler(ILogger logger) : IStatementHandler
         {
             await ds.DisposeAsync();
             connections.Remove(stmt.ConnectionName);
+            context.CatalogBackedConnections.Remove(stmt.ConnectionName);
             _logger.WriteLine($"Connection {stmt.ConnectionName} dropped.", ConsoleColor.Yellow);
         }
         else if (!stmt.IfExists)

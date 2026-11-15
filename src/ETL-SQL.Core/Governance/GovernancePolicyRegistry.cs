@@ -209,6 +209,14 @@ public sealed class GovernancePolicyRegistry : IGovernancePolicyRegistry
             defaultValue: true);
 
         yield return new(
+            "Security:RequireSpillEncryption",
+            GovernancePolicyScope.Security,
+            GovernancePolicyClassification.Locked,
+            GovernancePolicyValueKind.Boolean,
+            "Requires disk spill storage to remain encrypted and blocks SET SPILL_ENCRYPTION OFF.",
+            defaultValue: false);
+
+        yield return new(
             "Security:MaxSmtpEmailsPerScript",
             GovernancePolicyScope.Connector,
             GovernancePolicyClassification.Constrained,

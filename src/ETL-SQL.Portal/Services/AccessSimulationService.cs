@@ -101,7 +101,7 @@ public sealed class AccessSimulationService(
                     Usable: !summary.Disabled && usable.Contains(summary.Alias),
                     Reason: summary.Disabled ? "Connection is disabled."
                         : usable.Contains(summary.Alias)
-                            ? isAdmin ? "Administrator." : "Granted through a group, or unrestricted."
+                            ? isAdmin ? "Administrator." : "Granted through a group or owner."
                             : "No group grant."))
         ];
     }

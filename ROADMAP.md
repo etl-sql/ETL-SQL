@@ -276,13 +276,136 @@ Select individual IDs into `TODO.md` when scheduling.
 | TR05 | **Shared scalar `CLEAN_TEXT` / `STANDARDIZE` functions in `SELECT` and multi-column `TRANSFORM ... USING CLEAN`.** Register scalar standard-library functions `CLEAN_TEXT(value [, rules])` and `STANDARDIZE(value, format)` (usable inline in `SELECT`, `WHERE`, `JOIN`, and `GROUP BY` for `TRIM`, `COLLAPSE_WHITESPACE`, `STRIP_CONTROL`, `NULL_IF_EMPTY`, case folding, `PHONE`, `EMAIL`, `POSTAL_CODE`), and wire `TRANSFORM #target [FROM #source] USING CLEAN (COLS = '*' \| 'col1,col2', RULES = '...')` to apply the same engine across multiple or all string columns in one statement. | TR02, TR03 | M |
 | TR06 | **Add `TRANSFORM ... USING UNPIVOT` (`MELT`).** Reshape wide columns (`ID_COLS`, `VALUE_COLS`, `NAME_COL`, `VALUE_COL`, `INCLUDE_NULLS = OFF \| ON`) into normalized key/value rows with preserved schema types and SLT coverage. | TR02, TR03 | S |
 | TR07 | **Add `TRANSFORM ... USING BIN` (`BUCKETIZE`) and `USING OUTLIERS`.** Implement `BIN` (`VALUE_COL`, `BINS`, `METHOD = 'EQUAL_WIDTH' \| 'QUANTILE' \| 'THRESHOLDS'`, `BY_GROUP`) emitting `Bin_Start`, `Bin_End`, and `Bin_Label` columns directly consumable by GoG ranged-rect histograms; implement `OUTLIERS` (`METHOD = 'IQR' \| 'Z_SCORE' \| 'PERCENTILE'`, `ACTION = 'CLIP' \| 'FLAG' \| 'FILTER' \| 'NULL'`, `BY_GROUP`). | TR01, TR03 | M |
-| TR08 | **Add `TRANSFORM ... USING IMPUTE` and `USING SPLIT` (`EXPLODE`).** Implement multi-column missing-value replacement (`IMPUTE` with `METHOD = 'MEAN' \| 'MEDIAN' \| 'MODE' \| 'CONSTANT'`, `BY_GROUP`) and delimited/JSON array splitting (`SPLIT` with `MODE = 'ROWS' \| 'COLUMNS'`). | TR01, TR03 | M |
+| TR08 | **Add `TRANSFORM ... USING IMPUTE` and `USING SPLIT` (`EXPLODE`).** Implement multi-column missing-value replacement (`IMPUTE` with `METHOD = 'MEAN' \| 'MEDIAN' \| 'MODE' \| 'CONSTANT'`, `BY_GROUP`) and delimited string / nested JSON array row and column expansion (`SPLIT` with `MODE = 'ROWS' \| 'COLUMNS'`, `DELIMITER` or `JSON_PATH`, optional 1-based `INDEX_COL`, and preserved parent key columns so webhook/REST payloads with nested object arrays can be flattened without external scripts). | TR01, TR03 | M |
 | TR09 | **Add `TRANSFORM ... USING MASK_PII` and `USING SCD2`.** Provide declarative column masking (`REDACT_EMAIL`, `MASK_LAST_4`, `HASH_SHA256`, `PERTURB_DATE`) and Type-2 Slowly Changing Dimension merging (`KEY_COLS`, `TRACK_COLS`, `EFFECTIVE_DATE` managing `EffectiveFrom`, `EffectiveTo`, `IsCurrent`). | TR02, TR03 | M |
 
 **Acceptance evidence:** All `TRANSFORM` algorithms preserve `NULL` semantics, column data types,
 `SET WHAT_IF ON` non-mutation, and lineage/LSP scope schemas; `CLEAN_TEXT`/`STANDARDIZE` work both
 in `SELECT` expressions and table-wide `TRANSFORM ... USING CLEAN`; and positive + `statement error`
 SLT tests in `tests/slt_data/transform.test` pass.
+
+### Engine & Security — Encrypted Spill Framing, Byte-Budgeted Scale, and Plaintext Memory Hygiene
+
+**Status:** Accepted  
+**Horizon:** Next (v0.23.0)  
+**Scheduling:** Backlog for prioritization after v0.22.0 ships; small triage items are tracked in `TODO.md` §2.1.  
+**Authoritative design:** [Engine Architecture](docs/architecture/engine.md),
+[Orchestrator Architecture](docs/architecture/orchestrator.md), and
+[v0.21.0 Performance Results](docs/releases/v0.21.0-performance-results.md).
+
+**Implemented baseline:** `SpillStore` and `AuthenticatedSpillEncryption` write Arrow record batches
+through GZip compression and encrypt-then-MAC (`ETLSPL02`: AES-256-CBC + HMAC-SHA256 with per-chunk
+HKDF-derived keys binding the header, chunk name, and ciphertext). `SpillFanOut` caps open partition
+writers at 64 per operator, `SpillRootOwnership` isolates per-process spill directories, and the
+10M/100M scale certification passes under a 4 GB `DOTNET_GCHeapHardLimit`.
+
+**Problem and intended outcome:** The combined v0.22.0 scale and security reviews (Codex and Gemini,
+2026-11-14) confirmed that the Arrow → compress → encrypt-then-MAC pipeline is the right foundation
+for privacy-first billion-row processing, and identified four areas to harden security policy, cut
+spill I/O and GC churn, and isolate concurrent Orchestrator workloads:
+1. **Spill security policy, key derivation, and plaintext memory hygiene:**
+   - `SetSpillOptionStatementHandler` allows any script to run `SET SPILL_ENCRYPTION OFF`, with no
+     deployment-policy floor for administrators who require encrypted spills at all times.
+   - `SpillStore.NormalizeAesKey` falls back to `SHA256("ETL-SQL-SPILL:" + sessionId)` when given an
+     empty persistent session key, deriving a predictable key from the session ID alone instead of
+     failing closed.
+   - `ColumnBuffer<T>.Dispose` and `Utf8ColumnBuffer.Dispose` (`ColumnBatch.cs`) return arrays to
+     `ArrayPool.Shared` with `clearArray: false`, leaving plaintext values in shared process memory,
+     and operator documentation does not yet cover swap/pagefile encryption and crash-dump settings.
+2. **Two-pass whole-file MAC verification, compression level tuning, and disk-reserve gaps:**
+   - `AuthenticatedSpillEncryption.CreateReaderAsync` scans an entire encrypted spill chunk to
+     verify its trailing HMAC-SHA256 tag, seeks back to byte 58, and reads the entire file a second
+     time to decrypt. On multi-gigabyte chunks this doubles disk read traffic, evicts OS page cache,
+     and delays the first output row.
+   - Both spill writers hardcode `GZipStream(..., CompressionLevel.Optimal)` (`SpillStore.cs`), while
+     `SpillCompressionAssessmentTests` measures compression with `SpillEncryptionEnabled = false` instead
+     of the production encrypted pipeline.
+   - `SpillStore.AdmitNewExtent` checks `SpillMinimumFreeDiskMB` only when a file is first created,
+     not as an open extent grows across thousands of `FlushBatchAsync` calls, and
+     `WaitForWriteSlotAsync` polls with `Task.Delay(10)`.
+3. **Row-only batch sizing, spill volume, and managed-heap allocation churn at 100M+ rows:**
+   - Batching by row count alone (`10,000` rows) treats narrow numeric rows and wide string rows
+     identically across input batches, Arrow builders, compression buffers, and partition queues.
+   - External operators carry full rows into spill files where late materialization, early column
+     pruning, or bounded Arrow dictionary encoding for repeated strings would shrink total spill
+     bytes before compression and encryption run.
+   - `ArrowSpillWriter` serializes `decimal` values as `StringType` (`ToString`/`decimal.Parse` per
+     cell), `ArrowSpillReader` copies `RecordBatch` buffers into fresh arrays before wrapping them in
+     `ColumnBatch`, `ExternalSortEngine.MergeChunksToFileAsync` strips and re-adds `_SYS_SK_*`
+     columns on intermediate merge passes (forcing `Row.RemoveColumn` dictionary allocations), and
+     `ExternalJoinEngine.PackedBuildTable` allocates per-row `byte[]` arrays and `List<int>` buckets.
+4. **Concurrent workload admission and short-job progress under heavy spilling:**
+   - `NodeCapacityMonitor.IsOverloaded` checks only the Orchestrator process's own CPU and memory
+     load, ignoring child worker CPU (`HostCpuPercent`) and spill disk free space
+     (`SpillDiskFreeBytes`).
+   - `MemoryGovernor.Ceiling` reads the static total budget while external operators maintain local
+     guards outside `IMemoryGrantArbiter`, and `JobThrottle` uses a single FIFO slot pool where
+     multi-minute spilling jobs can delay short interactive or scheduled jobs.
+
+The outcome is mandatory spill encryption when required by deployment policy, fail-closed key
+validation, single-pass framed authenticated encryption, byte-budgeted columnar operators with
+significantly lower GC allocation churn, and responsive concurrent job scheduling under heavy spill
+load.
+
+**Why next:** The 10M/100M scale certification passes within the 4 GB cap for v0.22.0. While
+targeted defects and measurements are triaged in `TODO.md` §2.1, the versioned spill format
+(`ETLSPL03`), byte-budgeted operator pipelines, and columnar storage changes are multi-day
+architectural slices scheduled for v0.23.0 to keep the v0.22.0 candidate frozen.
+
+**Boundaries:**
+- Encryption remains on by default and compress-before-encrypt stays mandatory; never write an
+  unauthenticated or unencrypted intermediate spill file when encryption is enabled.
+- No new third-party cryptography or compression dependencies without following the third-party
+  dependency policy (§11); built-in .NET primitives (`AesGcm`, `HMACSHA256`, `HKDF`, `GZipStream`,
+  `BrotliStream`, `ZLibStream`) are preferred.
+- Preserve exact SQL scalar semantics (`decimal` scale, `NULL` ordering, collation, and
+  cancellation) across all external operators.
+
+**Dependencies:** `SpillStore`, `AuthenticatedSpillEncryption`, `SetSpillOptionStatementHandler`,
+`ColumnBatch`, `ExternalSortEngine`, `ExternalJoinEngine`, `ExternalWindowEngine`,
+`MemoryGrantArbiter`, `NodeCapacityMonitor`, and `JobThrottle`.
+
+**Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
+Select individual IDs into `TODO.md` when scheduling.
+
+#### Spill security policy, key derivation, and plaintext memory hygiene
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SP01 | **Enforce deployment-level spill encryption policy and fail closed on empty keys.** Add a configuration/policy floor (e.g., `Security:RequireSpillEncryption` / `OperationPolicyBoundary`) so `SetSpillOptionStatementHandler` rejects `SET SPILL_ENCRYPTION OFF` when policy requires encryption; remove the `SHA256("ETL-SQL-SPILL:" + sessionId)` fallback in `SpillStore.NormalizeAesKey` and throw if a valid key is not supplied. | — | S |
+| SP02 | **Clear pooled buffers on dispose and document plaintext memory boundaries.** Pass `clearArray: true` when returning pooled buffers in `ColumnBatch` (`ColumnBuffer<T>.Dispose`, `Utf8ColumnBuffer.Dispose`) and spill/packing paths when encryption or sensitive-data mode is active; bound retained pooled buffer sizes; and document OS swap/pagefile encryption and crash-dump hardening in `docs/administration/`. | SP01 | S |
+
+#### Single-pass framed authenticated encryption and compression tuning
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SP03 | **Decide versioned framed spill format (`ETLSPL03`) and compression level defaults.** Specify a bounded frame format (e.g., 64–256 KB frames using `AesGcm` or per-frame Encrypt-then-MAC) that binds chunk name, monotonic frame index, and final-frame completion marker so truncation, reordering, or cross-chunk splicing fails closed on the first read pass. Benchmark `CompressionLevel.Fastest` vs `Optimal` with encryption enabled in `SpillCompressionAssessmentTests`. | — | D |
+| SP04 | **Implement single-pass framed spill encryption (`ETLSPL03`).** Implement the accepted framed writer and streaming reader in `AuthenticatedSpillEncryption` so `CreateReaderAsync` verifies and decrypts each frame in one pass without pre-scanning and seeking back across multi-GB files; test mid-stream tampering, frame reordering, prefix truncation, wrong session key, and renamed chunks. | SP03 | M |
+| SP05 | **Configurable and adaptive spill compression with end-to-end encrypted benchmarks.** Replace hardcoded `CompressionLevel.Optimal` in `SpillStore` with configurable/adaptive compression settings (`Fastest` default under high CPU pressure), and update `SpillCompressionAssessmentTests` to measure the production `Arrow -> Compress -> Encrypt` pipeline across concurrent writers. | SP03 | S |
+
+#### Byte-budgeted batches, spill volume reduction, and allocation-free operator storage
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SP06 | **Byte-budgeted batch sizing and bounded inter-stage queues.** Size batches by byte footprint as well as row count across input readers, `ArrowSpillWriter` builders, compression buffers, and partition writers; bound queues between pipeline stages so fast upstream readers cannot outrun encrypted spill sinks on wide string columns. | — | M |
+| SP07 | **Reduce spill volume via projection pruning and bounded dictionary encoding.** Carry only required columns through `ExternalJoinEngine`, `ExternalSortEngine`, and `ExternalWindowEngine` (delaying full row reconstruction where correctness permits), and evaluate bounded Arrow dictionary encoding for repeated low-cardinality strings with a fallback for high-cardinality columns. | SP06 | M |
+| SP08 | **Binary `decimal` serialization in Arrow spills and zero-copy `ColumnBatch` handoff.** Store `decimal` columns in `ArrowSpillWriter`/`ArrowSpillReader` using their 16-byte binary/decimal representation instead of `StringArray` (`ToString`/`decimal.Parse`), and transfer or wrap `RecordBatch` buffers directly into `ColumnBatch` without double-copying every column array. | — | S |
+| SP09 | **Eliminate intermediate sort-merge column stripping and join build-table object churn.** Retain `_SYS_SK_*` sort keys through intermediate merge passes in `ExternalSortEngine.MergeChunksToFileAsync` (stripping only on the final pass), evaluate a normalized 64-bit key prefix in the tournament tree, and replace per-row `byte[]` + `List<int>` buckets in `ExternalJoinEngine.PackedBuildTable` with budget-capped pooled `byte[]` slabs and flat index arrays. | SP08 | M |
+
+#### Storage guardrails and concurrent Orchestrator workload isolation
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SP10 | **Continuous disk-reserve enforcement, eager partition deletion, and event-driven write slots.** Check free disk space periodically during extent growth in `SpillStore` (not only at `CreateWriterAsync`), delete consumed build/probe partitions and superseded repartition files in `ExternalJoinEngine` as soon as their readers close, and replace `Task.Delay(10)` polling in `SpillStore.WaitForWriteSlotAsync` with an event-driven queue that respects adaptive concurrency limits. | — | M |
+| SP11 | **Host-wide capacity admission, shared memory grants, and short-job lane reservation.** Incorporate child-worker CPU (`HostCpuPercent`), configured spill-volume free space (`SpillDiskFreeBytes`), and aggregate worker memory reservations into `NodeCapacityMonitor.IsOverloaded` with hysteresis; wire in-process external operators into `IMemoryGrantArbiter`; coalesce `ChildProcessTracker.Unregister` spill sweeps; and reserve capacity or weight admission in `JobThrottle` so heavy spilling jobs cannot starve short runs. | — | M |
+
+**Acceptance evidence:** `SET SPILL_ENCRYPTION OFF` is rejected when deployment policy requires
+encryption, and empty persistent keys fail closed; `ETLSPL03` framed spill files authenticate and
+decrypt in a single pass and reject any byte flip, frame reorder, truncation, or chunk rename;
+`SpillCompressionAssessmentTests` runs with encryption enabled; 100M-row sort, window, and join
+scenarios in `BillionRowCertificationTests` show measurable reductions in total allocated bytes and
+GC pause time with identical checksums under the 4 GB cap; and the HA soak proves bounded short-job
+latency while heavy spilling jobs run concurrently.
 
 ### Standard Library — File and Path Function Completeness
 
@@ -325,16 +448,9 @@ out of this entry unless a connector exposes it.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| FN01 | **Done in v0.22.0.** **`PATH_FILENAME_NO_EXT(path)`.** Returns the file name without its extension (`orders.csv` → `orders`). Signature, return type, and example in the reference; `LanguageMetadata` entry. | — | S |
-| FN02 | **Done in v0.22.0.** **`FILE_CREATED(path)`.** Returns the creation timestamp as a `DATETIME`, the counterpart of `FILE_MODIFIED`. Same authorization and error behavior as `FILE_MODIFIED`. | — | S |
-| FN03 | **Done in v0.22.0.** **`PATH_CHANGE_EXTENSION(path, ext)`.** Replaces or removes the extension; accepts `'.bak'` and `'bak'`. | — | S |
-| FN04 | **`PATH_ROOT`, `PATH_IS_ABSOLUTE`, `PATH_NORMALIZE`.** Pure string functions. `PATH_NORMALIZE` must match `CAST(... AS PATH)`; decide whether it is needed at all. | FN01 | S |
-| FN05 | **`FILE_READONLY(path)` and `FILE_ACCESSED(path)`.** Read-only flag and last access time. Confirm the `DIRECTORY` connector columns and the functions agree. | FN02 | S |
+| FN04 | **`PATH_ROOT`, `PATH_IS_ABSOLUTE`, `PATH_NORMALIZE`.** Pure string functions. `PATH_NORMALIZE` must match `CAST(... AS PATH)`; decide whether it is needed at all. | — | S |
+| FN05 | **`FILE_READONLY(path)` and `FILE_ACCESSED(path)`.** Read-only flag and last access time. Confirm the `DIRECTORY` connector columns and the functions agree. | — | S |
 | FN06 | **`DIRECTORY_SIZE` and `DIRECTORY_FILE_COUNT`.** Optional `recursive` flag like `FILE_LIST`. Honors the file-operation and recursion limits in the Zero-Trust guardrails. | — | S |
-| FN07 | **Done in v0.22.0.** **`FILE_LINE_COUNT(path [, header_rows])`.** Wanted for flat-file validation (row-count checks before load). `header_rows` is an integer, default `0`, which counts every line. A value of `n` leaves out the first `n` lines, so a one-row header, a multi-row header, or a banner above the data all work. The count never goes below `0` (a file with fewer than `n` lines returns `0`); a negative or non-integer `header_rows` is an error; `NULL` returns `NULL`. Streams the file once, never loads it whole, and honors cancellation. Settle in the first hour: how a trailing newline and a final line without one count, and which line endings (`\n`, `\r\n`, `\r`) are recognized. Same authorization and missing-file behavior as `FILE_SIZE`. | — | S |
-| FN08 | **Done in v0.22.0.** **`REMOTE_FILE_SIZE` and `REMOTE_FILE_MODIFIED`.** Scalar lookups over `ListFilesAsync` for FTP, SFTP, and cloud connections. | — | S |
-| FN09 | **Done in v0.22.0.** **`REMOTE_DIRECTORY_EXISTS`.** `IRemoteFileSystem.DirectoryExistsAsync` exists, but `REMOTE_FILE_EXISTS` is the only registered remote check and its help text claims to cover directories. Decide whether to split or fix the text. | — | S |
-| FN10 | **Done in v0.22.0.** **Remove the duplicate `FILE_EXISTS` / `DIRECTORY_EXISTS` registration.** Both are registered in `FileFunctions.cs` and `StandardFunctions.System.cs`; keep one, and confirm which behavior wins today. | — | S |
 
 **Acceptance evidence:** Each function has a reference page that follows the function reference
 template (signature, parameters, return type, `NULL` behavior, a copy-pasteable example,
@@ -350,18 +466,14 @@ is the reference page, and [`ExtensionParser.cs`](src/ETL-SQL.Core/Parser/Compon
 and [`FileOperationStatementHandler.cs`](src/ETL-SQL.Engine/Handlers/FileOperationStatementHandler.cs)
 are what runs today.
 
-**Problem and intended outcome:** Checked against source on 2026-11-13. The reference page documents
-`ENCRYPT FILE ... WITH (DELETE_SOURCE, ALGORITHM, KEYFILE, PASSWORD)`. The parser accepts
-`ENCRYPT FILE src TO dest [PASSWORD x | PASSWORD(x)] [KEYFILE x] [PGP_KEY x]
-[WITH (OVERWRITE, DATE_SUFFIX, SUFFIX_SEPARATOR)] [AT conn] [IF EXISTS]`. In `WITH`, any other key is
-parsed and dropped without an error, so `DELETE_SOURCE = ON` does nothing and the plaintext stays on disk.
-`KEYFILE` is an SSH key and `PGP_KEY` is the PGP key, the reverse of what the page says. `ALGORITHM` is
-not read. With no `TO`, the statement does nothing and raises no error, including under `SET WHAT_IF ON`.
-The outcome: the documented statement is the working statement, an option that is not honored is an
-error, and the two-step encrypt or decrypt has the options users expect.
+**Problem and intended outcome:** v0.22.0 made the documented statement the working statement:
+the reference page matches the parser, an unknown `WITH` key is an error, `DELETE_SOURCE` and the
+default destination work, failures name their cause, and PGP encrypt-and-sign and decrypt-and-verify
+ship. What is left is one design decision each on `ALGORITHM` and `TO DIRECTORY`, documenting the
+connector write-time options, and detached signatures. The outcome: the two-step encrypt or decrypt
+has the options users expect and every connector page says how to encrypt on write.
 
-**Why next:** The silent no-ops leave plaintext in places a script author believes it was removed. The
-docs fix alone is small and can ship first.
+**Why next:** FO07 is documentation of a working feature; the rest are small and independent.
 
 **Boundaries:**
 - Encrypting on write through a connector (`ENCRYPT = ON`) is separate and already works for
@@ -377,27 +489,20 @@ docs fix alone is small and can ship first.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| FO01 | **Done in v0.22.0.** **Rewrite `encrypt-file.md` to the real syntax.** Use the clause form (`PASSWORD`, `KEYFILE` for SSH, `PGP_KEY` for PGP), remove `ALGORITHM` and the `WITH` keys the engine ignores until FO03/FO05 land, fix the vendor-drop example so it deletes the plaintext with `DELETE FILE`, and document `ENCRYPT DIRECTORY` / `DECRYPT DIRECTORY` (password only today). `OVERWRITE` defaults to `ON` in the handler; `compress-file.md` says `OFF`, so correct whichever page is wrong. Follow the [function and statement templates](docs/templates/statement-reference-template.md) and every example must run. | — | S |
-| FO02 | **Done in v0.22.0.** **Unknown `WITH` option is an error.** `ParseFileOperationOptions` discards unknown keys. Reject them for every file operation with a message naming the accepted keys, then check the directory-operation parser for the same pattern. Parser, `EbnfConformanceTests`, and a `statement error` test. | — | S |
-| FO03 | **Done in v0.22.0** (`COMPRESS` and `DECOMPRESS` take it too; a directory source or an output over the source is refused). **`DELETE_SOURCE = ON \| OFF` (default `OFF`) on `ENCRYPT FILE` and `DECRYPT FILE`.** The source is deleted only after the destination is written and closed, never when the operation fails, and `SET WHAT_IF ON` logs it without deleting. Decide in the same change whether `COMPRESS` and `DECOMPRESS` take it. | FO02 | S |
-| FO04 | **Done in v0.22.0.** **Default destination when `TO` is omitted.** Never encrypt in place and never overwrite the source. `ENCRYPT FILE` writes next to the source with a method suffix appended: `.pgp` for `PGP_KEY`, `.enc` for `PASSWORD`; settle the suffix for an SSH `KEYFILE`. `DECRYPT FILE` with no `TO` removes a recognized suffix (`.pgp`, `.enc`) and raises an error for any other name rather than guessing. An existing destination follows `OVERWRITE`. `WHAT_IF` shows the derived path. | FO02 | S |
 | FO05 | **`ALGORITHM` decision.** `CryptoUtils.EncryptFile` and `DecryptFile` take an optional `HashAlgorithmName` the statement never passes. Decide whether to expose it (and what it controls) or leave it out of the language. The method already follows from the clause given, so `ALGORITHM = 'AES256' \| 'PGP'` as documented is not needed. | — | D |
-| FO06 | **Done in v0.22.0** (PGP also left a partial output file; fixed). **`DECRYPT FILE` failure messages.** Check what a wrong password, a wrong key, and a file that was never encrypted report today; each should name the cause without echoing key material. One test per case. | — | S |
 | FO07 | **Document write-time `COMPRESS` and `ENCRYPT` on connectors.** Confirm which file connectors take both options (`FLATFILE`, `EXCEL`, `AVRO` list them; `JSON`, `XML`, and `PARQUET` call the encryption service), that compress runs before encrypt on write, and that read reverses it. Add the options and an "easy button" example to each connector page, with the mutually exclusive options called out. | — | S |
-| FO08 | **`TO DIRECTORY` for `ENCRYPT`/`DECRYPT` and `COMPRESS`/`DECOMPRESS`.** Today `TO DIRECTORY` and `DATE_SUFFIX` throw for anything but copy, move and rename. Decide whether to allow them; if not, the reference states it. | FO04 | D |
-| FO09 | **Done in v0.22.0** (owner: the master password is never a file passphrase). **Session password for files.** `ENCRYPT`/`DECRYPT FILE` and `DIRECTORY` fall back to `SecurityService.MasterPassword` when `PASSWORD` is absent, but `USE PASSWORD` sets `ScriptPassword` and the CLI's `--pass` sets the evaluator's `MasterPassword`, so on the CLI the fallback never has a value and the statement fails asking for `PASSWORD`. Decide whether the session password should apply; then either wire it through or remove the fallback and the "configured master password" wording from the error. Found writing FO01. | — | S |
-| FO10 | **Done in v0.22.0** (owner: allow `.pub` and `.pem`). **Generated public keys are blocked by the file-type list.** `CREATE SSH_KEY_PAIR` writes `id_rsa.pub`, and `.pub` (and `.pem`) are not in `SecurityService.AllowedExtensions`, so `ENCRYPT FILE ... KEYFILE 'id_rsa.pub'` needs `SET ALLOW_FILE_TYPE_ACCESS = '.pub'`. Owner call on adding `.pub`/`.pem` to the default list (`.key`, `.asc` and `.gpg` are already in it). Found writing FO01. | — | S |
-| FO11 | **Done in v0.22.0** (encrypt-and-sign and decrypt-and-verify; PgpCore also left plaintext behind on a failed check, now written via a temp file. Detached `SIGN FILE` / `VERIFY FILE SIGNATURE` not built.) **PGP sign and verify (owner 2026-11-13).** Many vendors require files that are encrypted and signed, and an inbound file is only trustworthy if its signature checks. `ENCRYPT FILE src TO dst PGP_KEY 'partner_public.asc' SIGNING_KEY 'our_private.asc' [SIGNING_PASSWORD x]` encrypts and signs in one pass. `DECRYPT FILE src TO dst PGP_KEY 'our_private.asc' [PASSWORD x] VERIFY_KEY 'partner_public.asc'` fails and writes no output when the signature is missing, made by another key, or does not match. Use PgpCore's `EncryptAndSignAsync` and `DecryptAndVerifyAsync` (already a dependency; no new package). `SIGNING_KEY`/`VERIFY_KEY` are PGP only and are syntax errors with `PASSWORD`-only or `KEYFILE` encryption. Optional in the same change if small: `SIGN FILE` / `VERIFY FILE SIGNATURE` for a detached `.sig` without encryption. Reference page, grammar, help text, `LanguageMetadata`, and tests for a good signature, a wrong signer, a tampered file and an unsigned file. Never echo key material in errors. | FO02 | M |
+| FO12 | **Detached `SIGN FILE` / `VERIFY FILE SIGNATURE`.** A `.sig` without encryption, left out of FO11 (encrypt-and-sign and decrypt-and-verify shipped in v0.22.0). PGP only, through PgpCore; reference page, grammar, help text, `LanguageMetadata`, and tests for a good signature, a wrong signer, a tampered file and a missing signature. Never echo key material in errors. | — | S |
+| FO08 | **`TO DIRECTORY` for `ENCRYPT`/`DECRYPT` and `COMPRESS`/`DECOMPRESS`.** Today `TO DIRECTORY` and `DATE_SUFFIX` throw for anything but copy, move and rename. Decide whether to allow them; if not, the reference states it. | — | D |
 
-**Acceptance evidence:** Every example on the reference pages runs as written; an unsupported `WITH`
-key fails with a clear error; `DELETE_SOURCE = ON` removes the source only after a successful write and
-not under `WHAT_IF`; an omitted `TO` produces the documented path or error and never alters the
-source; and the tests in `CompressAfterEncryptRuleTests` that omit `TO` still pass.
+**Acceptance evidence:** `ALGORITHM` and `TO DIRECTORY` each have a recorded decision and the
+reference states it; every file connector page that takes `COMPRESS`/`ENCRYPT` documents both with a
+runnable example; a detached signature verifies, and a wrong signer, a tampered file and a missing
+signature each fail with no key material in the error.
 
 ### File Operations — Managing Remote File Trees over SFTP, FTP, and Cloud Connections
 
 **Status:** Accepted  
-**Horizon:** Next (RF01 and RF02), Later (the rest)  
+**Horizon:** Later  
 **Authoritative design:** none yet; [SFTP](docs/reference/connectors/services/sftp.md),
 [FTP](docs/reference/connectors/services/ftp.md), and [TRANSFER](docs/reference/file-operations/transfer.md)
 are the references. [`IRemoteFileSystem`](src/ETL-SQL.Core/Data/IRemoteFileSystem.cs) is the contract.
@@ -409,14 +514,12 @@ rename, create and delete directory). `SEND FILE`/`RECEIVE FILE` take `*` and `?
 cover managing a remote tree: `COPY FILE ... AT conn` and every remote directory operation except
 create and delete fail with "not supported on remote systems", `SYNC DIRECTORY` has no remote handling,
 wildcard receive does not descend into subfolders, and listings carry only name, path, size, modified
-time, and a directory flag. The FTP page tells users to set `USE_SSL=TRUE`; the connector accepts only
-`EXPLICIT`, `ON`, or `IMPLICIT` and treats anything else as no encryption, so following the page sends
-credentials in clear text. The outcome: a script can copy, mirror, and verify a remote tree with the
+time, and a directory flag. The outcome: a script can copy, mirror, and verify a remote tree with the
 same statements it uses locally, and the connector pages describe the options the code reads.
 
-**Why this horizon:** RF01 is a documentation defect with a security effect and RF02 is a
-small connector change; both are Next. The feature work has working alternatives (download and
-re-upload, `FOREACH` over a listing) and is Later.
+**Why this horizon:** The FTP documentation, `USE_SSL`, timeout, TLS-certificate and rename
+defects shipped as fixes in v0.22.0. What is left is feature work with working alternatives
+(download and re-upload, `FOREACH` over a listing).
 
 **Boundaries:**
 - No new protocol or library. FluentFTP and SSH.NET provide what is needed; a new third-party
@@ -429,14 +532,13 @@ re-upload, `FOREACH` over a listing) and is Later.
 - Each statement and function change ships with its reference page, following the
   [documentation standard and templates](docs/templates/statement-reference-template.md).
 
-**Dependencies:** FN08/FN09 (remote file functions) share the listing metadata work in RF05.
+**Dependencies:** none. `REMOTE_FILE_SIZE`, `REMOTE_FILE_MODIFIED` and `REMOTE_DIRECTORY_EXISTS`
+(v0.22.0) read the same listing metadata RF05 extends.
 
 **Backlog (select IDs, not the family):**
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| RF01 | **Done in v0.22.0.** **Fix the FTP page and reject bad `USE_SSL` values.** Document the options the connector reads: `USE_SSL = OFF \| EXPLICIT \| IMPLICIT` (`ON` is accepted as `EXPLICIT`) and `PASSIVE = ON \| OFF` (default `ON`), not `USE_PASSIVE` or `USE_SSL=TRUE`. Remove the "use SFTP instead" line under FTPS. A value other than the accepted ones is an error, not plaintext. List `TIMEOUT_SECONDS` once RF02 lands. Both authentication patterns stay documented. | — | S |
-| RF02 | **Done in v0.22.0.** **FTP `TIMEOUT_SECONDS` and TLS certificate handling.** Read `TIMEOUT_SECONDS` (default `30`) like the other connectors. Decide how an invalid FTPS certificate behaves today and expose the choice (strict by default; a pin or an explicit opt-out, mirroring `HOST_KEY_FINGERPRINT` / `ALLOW_UNPINNED_HOST_KEY`). | RF01 | S |
 | RF03 | **Verify SFTP and FTP listings.** SSH.NET `ListDirectory` normally returns `.` and `..`; the SFTP listing does not filter them. Add a test over a recorded or containerized server, drop the dot entries from `REMOTE_FILE_LIST`, `SELECT` over the connection, and `IsDirectory` handling, and confirm FTP matches. | — | S |
 | RF04 | **Remote `COPY FILE`.** Same-connection copy (`COPY FILE a TO b AT conn`) by download to a bounded temp stream and upload, or a server-side copy where the protocol has one (S3, Azure Blob, SharePoint). Cross-connection copy follows the same path. Overwrite follows `OVERWRITE`; default `ON` as locally. | — | M |
 | RF05 | **Richer remote metadata.** Extend `FileMetaData` with creation time (where reported), permissions, owner, and a symlink flag; `NULL` where the protocol cannot supply it. `REMOTE_FILE_LIST` and the connection `SELECT` expose the new columns and the lineage and LSP column lists follow. | — | M |
@@ -444,14 +546,132 @@ re-upload, `FOREACH` over a listing) and is Later.
 | RF07 | **Remote directory rename, move, and copy.** `RENAME DIRECTORY`, `MOVE DIRECTORY`, and `COPY DIRECTORY` with `AT conn`. Rename and move use the server rename; copy is built on RF04 and RF06. | RF04, RF06 | M |
 | RF08 | **Remote `SYNC DIRECTORY`.** Mirror local to remote and remote to local by size and modified time, with `WHAT_IF` showing the plan. Deletions on the destination need an explicit option and pass the same guard as `DELETE FILE`. | RF05, RF06 | M |
 | RF09 | **Verify a transfer.** An option on `SEND FILE`/`RECEIVE FILE` (and the `VERIFY FILE INTEGRITY` counterpart) that compares size and, where the server offers it, a checksum after the transfer, and removes a partial local file on failure. Decide whether to support resume of large downloads here or leave it out. | RF05 | M |
-| RF10 | **Done in v0.22.0** (SFTP had the same bug and is fixed too). **FTP rename without losing the destination.** `RenameFileAsync` deletes an existing destination before renaming. Rename to a temporary name first or fail without deleting. | — | S |
 | RF11 | **Decision: remote command execution.** Whether a connection type that runs a single approved command over SSH belongs in the product, and under what allow-list and audit rules. Output is a proposal and an estimate only. | — | D |
 
-**Acceptance evidence:** The FTP page matches what `FtpConnector` reads and a wrong `USE_SSL` value
-fails; an SFTP and an FTP listing contain only real entries, proven against a test server; `COPY FILE`
+**Acceptance evidence:** An SFTP and an FTP listing contain only real entries, proven against a test server; `COPY FILE`
 and the directory operations work with `AT conn` on SFTP, FTP, and one cloud connection; a remote
 `SYNC DIRECTORY` plan under `WHAT_IF` matches what the real run does; and the transfer verification
 option fails a truncated download.
+
+### File Operations — Archive Listing, Selective Extraction, and `.gz` / `.tar.gz` Support
+
+**Status:** Accepted  
+**Horizon:** Next (v0.23.0)  
+**Authoritative design:** [COMPRESS FILE / DIRECTORY](docs/reference/file-operations/compress-file.md),
+[DECOMPRESS FILE / DIRECTORY](docs/reference/file-operations/decompress-file.md),
+[`FileOperationStatementHandler.cs`](src/ETL-SQL.Engine/Handlers/FileOperationStatementHandler.cs),
+[`DirectoryOperationStatementHandler.cs`](src/ETL-SQL.Engine/Handlers/DirectoryOperationStatementHandler.cs),
+and [`SafeZipExtractor.cs`](src/ETL-SQL.Core/IO/SafeZipExtractor.cs).
+
+**Implemented baseline:** `COMPRESS FILE`, `COMPRESS DIRECTORY`, `DECOMPRESS FILE`, and
+`DECOMPRESS DIRECTORY` already support `.zip` archives (with `DELETE_SOURCE = ON | OFF`, `WHAT_IF`
+preview, and `SafeZipExtractor` zip-slip path-traversal validation).
+
+**Problem and intended outcome:** Checked against source on 2026-11-14:
+1. **No `.gz`, `.tar`, or `.tar.gz` (`.tgz`) support.** `FileOperationStatementHandler` and
+   `DirectoryOperationStatementHandler` use `System.IO.Compression.ZipFile` / `ZipArchive` exclusively,
+   and `compress-file.md` explicitly states that `.gz` archives are unsupported. Linux/cloud data drops
+   and vendor feeds routinely arrive as `.csv.gz` or `.tar.gz`, forcing authors to fall back to an
+   approved external tool (`gzip`/`tar` via `EXECUTE TOOL`).
+2. **No archive inspection or selective extraction.** Scripts cannot inspect the contents of a vendor
+   archive before extracting (`ARCHIVE_LIST(path)`), nor can `DECOMPRESS FILE` extract only matching
+   entries (`PATTERN = '*.csv'`) without unpacking the entire archive to disk.
+3. **`TO` destination is always required.** Unlike `ENCRYPT FILE` / `DECRYPT FILE` (v0.22.0),
+   `COMPRESS FILE 'a.csv'` and `DECOMPRESS FILE 'a.csv.gz'` require an explicit `TO` path even when
+   the default target (`a.csv.zip` / `a.csv.gz` or stripping the archive extension) is unambiguous.
+
+The outcome is native `.gz`, `.tar`, and `.tar.gz` compression and decompression using built-in .NET
+runtime libraries (`System.IO.Compression.GZipStream` and `System.Formats.Tar`), archive entry
+listing without extraction, and selective wildcard extraction.
+
+**Why next:** Prioritized as a direct v0.23.0 "go do" to eliminate one of the most common reasons an
+ETL author would otherwise need an external script or OS utility, with zero new third-party NuGet
+dependencies.
+
+**Boundaries:**
+- Use built-in .NET `System.IO.Compression` (`.zip`, `.gz`) and `System.Formats.Tar` (`.tar`,
+  `.tar.gz` / `.tgz`). Do not add a third-party archive dependency for `.7z` or `.rar`.
+- Every extraction path (`.zip`, `.tar`, `.tar.gz`, `.gz`) must enforce `IExecutionContext.ResolvePath()`,
+  reject path-traversal (`..`), rooted entries, and symlink/hardlink escape attempts, and bound
+  decompressed output size and entry count against zip/tar-bomb inputs.
+
+**Dependencies:** `FileOperationStatementHandler`, `DirectoryOperationStatementHandler`,
+`SafeZipExtractor`, `Parser` (optional `TO` and `WITH` options on `COMPRESS` / `DECOMPRESS`), and
+`FunctionRegistry`.
+
+**Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
+Select individual IDs into `TODO.md` when scheduling.
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| AR01 | **`.gz`, `.tar`, and `.tar.gz` (`.tgz`) support in `COMPRESS` and `DECOMPRESS`.** Detect archive format from the file extension (or an explicit `FORMAT = 'ZIP' \| 'GZIP' \| 'TAR' \| 'TAR_GZ'` option) in `FileOperationStatementHandler` and `DirectoryOperationStatementHandler`; stream single-file `.gz` via `GZipStream` and multi-entry `.tar` / `.tar.gz` via `System.Formats.Tar`, enforcing `SafeZipExtractor`-equivalent traversal, link-type, and decompression-ratio bounds. | — | M |
+| AR02 | **Archive entry inspection (`ARCHIVE_LIST`) and selective extraction (`PATTERN`).** Add a table-valued / collection function `ARCHIVE_LIST(path)` returning entry `Name`, `FullPath`, `Size`, `CompressedSize`, `LastModified`, and `IsDirectory` for `.zip`, `.tar`, and `.tar.gz` archives without extracting to disk; add `PATTERN = '<glob>'` and `OVERWRITE = ON \| OFF` options to `DECOMPRESS FILE` / `DECOMPRESS DIRECTORY`. | AR01 | S |
+| AR03 | **Optional `TO` destination defaults on `COMPRESS` and `DECOMPRESS`.** Make `TO <destination>` optional in the parser and handlers: `COMPRESS FILE 'x.csv'` defaults to `'x.csv.zip'` (or `.gz` when `FORMAT = 'GZIP'`), and `DECOMPRESS FILE 'x.csv.gz'` / `'x.zip'` defaults to stripping the archive suffix in the same directory; update `compress-file.md` and `decompress-file.md`. | AR01 | S |
+
+**Acceptance evidence:** Round-trip SLT and unit tests pass for `.zip`, `.gz`, `.tar`, and `.tar.gz`
+across single files and directories; `ARCHIVE_LIST` enumerates entries without writing files;
+`DECOMPRESS FILE ... WITH (PATTERN = '*.csv')` extracts only matching entries; and malicious
+`../` or symlink tar/zip entries are rejected before touching the filesystem.
+
+### File Connectors — Multi-Sheet Excel Workbooks, Sheet Discovery, and Banner-Row Skipping
+
+**Status:** Accepted  
+**Horizon:** Later  
+**Authoritative design:** [Excel Connector Reference](docs/reference/connectors/files/excel.md),
+[`ExcelConnector.cs`](src/ETL-SQL.Connectors.Files/Excel/ExcelConnector.cs), and
+[`ExcelDataSource.cs`](src/ETL-SQL.Connectors.Files/Excel/ExcelDataSource.cs).
+
+**Implemented baseline:** `ExcelConnector` and `ExcelDataSource` already read single worksheets by
+name (`SHEET = 'Sales'`), cell range (`RANGE = 'A1:F500'`), and header mode (`HEADER = ON | OFF`)
+with schema-drift handling (`STRICT_SCHEMA`, `IGNORE_EXTRA_COLUMNS`, `NULL_MISSING_COLUMNS`,
+`MAP_BY_HEADER_NAME`), and stream single-sheet `.xlsx` writes via `MiniExcel.SaveAsAsync`.
+
+**Problem and intended outcome:** Checked against source on 2026-11-14:
+1. **Writing a sheet destroys other sheets in the workbook.** `ExcelDataSource.WriteBatchesCore`
+   (`ExcelDataSource.cs` lines 485–496) opens `FileMode.Create` and writes a single-entry dictionary
+   `new Dictionary<string, object> { [sheetName] = ... }`, wiping out any other worksheets that
+   already existed in the `.xlsx` file.
+2. **No table-qualified sheet addressing (`xl_conn.<SheetName>`) or SQL sheet discovery.**
+   `ExcelDataSource.WithTable(string tableName)` (line 39) returns `this` and ignores `tableName`, so
+   scripts must declare a separate `CREATE CONNECTION` for each worksheet instead of querying or
+   inserting into `xl_conn.Summary` and `xl_conn.Detail`. Although `ExcelDataSource.GetTablesAsync()`
+   (line 631) already enumerates worksheet names via `ExcelDataReader`, scripts have no
+   `EXCEL_SHEET_LIST(path)` function or `xl_conn._sheets` metadata view to loop over dynamic tabs
+   with `FOREACH`.
+3. **`START_ROW` and `SHEET_INDEX` are documented in `excel.md` but unimplemented in code.**
+   `docs/reference/connectors/files/excel.md` (lines 50–51) instructs users to set `SHEET_INDEX` and
+   `START_ROW` to skip title banners above the header row, but `ExcelConnector.AllowedOptions` and
+   `ExcelDataSource` reject or ignore both keys.
+
+The outcome is non-destructive multi-sheet `.xlsx` writes, `xl_conn.<SheetName>` addressing,
+`START_ROW` / `SHEET_INDEX` support matching the documentation, and script-accessible sheet
+discovery.
+
+**Why later:** Single-sheet `.xlsx` read/write and `RANGE = 'A4:Z1000'` already cover standard tabular
+workbooks; multi-sheet workbook preservation and dynamic tab discovery are ergonomic "nice to have"
+improvements for finance/accounting workbooks.
+
+**Boundaries:**
+- Keep `ExcelDataReader` + `MiniExcel` as the streaming reader/writer foundation; do not introduce a
+  DOM-heavy Excel library that loads entire multi-hundred-thousand-row sheets into memory.
+- Formulas, pivot caches, macros (`.xlsm`), and cell styling remain out of scope for ETL data
+  writebacks.
+
+**Dependencies:** `ExcelConnector`, `ExcelDataSource`, and `FunctionRegistry`.
+
+**Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
+Select individual IDs into `TODO.md` when scheduling.
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| XL01 | **Multi-sheet preservation on write and `xl_conn.<SheetName>` table routing.** Update `ExcelDataSource.WithTable(tableName)` to bind the target worksheet name so `SELECT * FROM xl_conn.Sheet2` and `INSERT INTO xl_conn.Sheet2` address individual sheets on a single connection; update `ExcelDataSource.WriteBatchesCore` so writing to a named sheet in an existing `.xlsx` file preserves other worksheets (with an explicit `OVERWRITE_WORKBOOK = ON \| OFF` or `OVERWRITE_SHEET = ON \| OFF` control). | — | M |
+| XL02 | **Implement `START_ROW` and `SHEET_INDEX` options.** Add `START_ROW` (1-based row number where the header or data begins, skipping banner rows without requiring an explicit `RANGE` end cell) and `SHEET_INDEX` (1-based worksheet position when tab names vary) to `ExcelConnector.AllowedOptions` and `ExcelDataSource`, bringing code into parity with `docs/reference/connectors/files/excel.md`. | — | S |
+| XL03 | **Workbook sheet discovery (`EXCEL_SHEET_LIST`).** Expose the worksheet enumeration already implemented in `ExcelDataSource.GetTablesAsync()` as a script-callable `EXCEL_SHEET_LIST(path)` function (and/or `SELECT * FROM xl_conn._sheets`) returning `SheetIndex` and `SheetName` so `FOREACH` loops can ingest workbooks with unknown tab names. | XL01 | S |
+
+**Acceptance evidence:** Writing two tables to `xl_conn.Summary` and `xl_conn.Detail` produces a
+single `.xlsx` file containing both worksheets; `START_ROW = 5` and `SHEET_INDEX = 2` read messy
+workbooks as documented in `excel.md`; and a `FOREACH` loop over `EXCEL_SHEET_LIST` ingests all tabs
+from a multi-sheet fixture.
 
 ### Database Connectors — Documentation Parity, Write-Path Clarity, and Credential Gaps
 
@@ -1087,6 +1307,178 @@ the fix needs a tamper-evident hand-off, too much for v0.22.0.
 
 **Acceptance evidence:** A spawn-mode test where a run executes as its caller and is refused an
 object the caller cannot use; and a test where a forged, altered or expired envelope is refused.
+
+### Security & Governance — Shared Connection Authorization, Secret Access Control, and Local Vault Isolation
+
+**Status:** Accepted  
+**Horizon:** Next (v0.23.0)  
+**Scheduling:** Backlog for prioritization after v0.22.0 ships; immediate fixes for default-open Portal ACLs, option/endpoint overrides, and direct `SECRET:` bypasses are tracked in `TODO.md` §5.  
+**Authoritative design:** [Governance Administration](docs/administration/platform/governance.md),
+[SaaS Tenant Isolation Architecture](docs/architecture/saas-tenant-isolation.md),
+[Portal Architecture](docs/architecture/portal.md), and
+[Connector Standards](docs/architecture/standards/connectors-standards.md).
+
+**Implemented baseline:** `IConnectionCatalogProvider` and `SharedConnectionExpander` resolve
+`SHARED:alias` references into cataloged definitions whose credential fields hold `SECRET:name` (or
+`ENC:`) references. `PortalCatalogConnectionProvider` checks per-connection group ACLs against
+`ExecutionIdentity` when grants exist, `PortalInteractiveRunPolicy` blocks `CREATE CONNECTION` in
+ad hoc Designer query runs, and `OsSecretStoreProvider` / `LocalConnectionCatalogProvider` store
+machine-protected files on disk.
+
+**Problem and intended outcome:** The combined v0.22.0 shared-connection and secret security review
+(Codex and Gemini, 2026-11-14) evaluated whether finding or authoring a script that references
+`SHARED:alias` or `SECRET:name` allows unauthorized credential use across Portal, Orchestrator, and
+workstation vaults:
+1. **Portal connections default to open, and removing the last grant reopens them:**
+   - `PortalConnectionCatalogService.EnforceUseAclAsync` (`src/ETL-SQL.Portal/Services/PortalConnectionCatalogService.cs:240`)
+     and `CanUse` (`line 163`) immediately allow any caller when `entity.Acls.Count == 0`. A newly
+     created connection is open to every user in the tenant until a grant is added, and revoking the
+     last group grant flips a restricted connection back to unrestricted (`PortalConnectionCatalogApiTests.cs:232`).
+2. **Direct `SECRET:` references are not identity-checked or bound to `SHARED:` ACLs:**
+   - `ISecretProvider.ResolveAsync(name, ct)` (`src/ETL-SQL.Core/Governance/SecretProviders.cs:17`)
+     and `PortalSecretStoreService.ResolveAsync` (`src/ETL-SQL.Portal/Services/PortalSecretStoreService.cs:97`)
+     check tenant, existence, and disabled status, but receive no `ExecutionIdentity` and enforce no
+     per-secret ACL or owning-connection check. Any surface that can run `CREATE CONNECTION` (such
+     as `PortalDesignerPreviewService`, published reports, or Orchestrator jobs) can reference
+     `SECRET:name` directly in a new connection declaration and bypass the `SHARED:` connection's ACL.
+3. **Shared connection destinations and `ALTER CONNECTION` are not locked:**
+   - `SharedConnectionExpander.ExpandAsync` (`src/ETL-SQL.Engine/Services/SharedConnectionExpander.cs:92`)
+     blocks overrides of sensitive fields (`PASSWORD`, `API_KEY`), but lets a script override
+     non-sensitive endpoint/target options (`HOST`, `SERVER`, `PORT`, `DATABASE`, `URL`, `BASE_URL`).
+   - `AlterConnectionStatementHandler` (`src/ETL-SQL.Engine/Handlers/AlterConnectionStatementHandler.cs:42`)
+     and `CREATE OR ALTER` in `CreateConnectionStatementHandler` (`line 56`) inherit `existingDs.Options`
+     (which already holds the decrypted secret value) without checking `context.CatalogBackedConnections`,
+     letting a script redirect a shared connection's credentials to another destination.
+4. **Local and Orchestrator catalogs ignore `ExecutionIdentity`, and machine-scoped Windows vaults lack NTFS ACL hardening:**
+   - `LocalConnectionCatalogProvider.ResolveAsync` (`src/ETL-SQL.Core/Governance/ConnectionCatalog.cs:68`)
+     ignores `ExecutionIdentity`, and non-revision Orchestrator jobs in `SchedulerService` (`line 984`)
+     execute with `executionIdentity: null`.
+   - `OsSecretStoreProvider` and `LocalConnectionCatalogProvider` always call `CryptoUtils.ProtectMachine`
+     (`DataProtectionScope.LocalMachine` / `DPAPI-M:` on Windows). While Unix writes set `0600`
+     (`UserRead | UserWrite`), Windows writes do not set restrictive NTFS ACLs on the directory or
+     files, and personal workstation users have no `DataProtectionScope.CurrentUser` vault option to
+     isolate their secrets from other OS accounts on the same machine.
+5. **Cached Portal report snapshots do not re-check `SHARED:` connection ACLs:**
+   - `ReportIdentitySensitivity.IsRunLiveAsync` (`src/ETL-SQL.Portal/Services/ReportIdentitySensitivity.cs:12`)
+     only scans for RLS identity functions (`CURRENT_USER()`, `USER_GROUPS()`). A report that queries
+     an ACL-restricted `SHARED:` connection without calling RLS functions saves a shared snapshot in
+     `ExecutionController.GetSnapshot` (`line 174`) that any user with folder `Read` permission can view.
+
+The outcome is deny-by-default connection sharing (with explicit opt-in for tenant-wide connections),
+locked catalog destinations across `CREATE` and `ALTER`, identity-aware secret resolution that cannot
+bypass connection ACLs, user-scoped workstation vaults with hardened Windows NTFS permissions for
+machine stores, and connection-ACL enforcement on report snapshots and Orchestrator runs.
+
+**Why next:** The three immediate bypasses (default-open/last-grant reopen, destination/alter
+overrides, and unguarded direct `SECRET:` resolution) are queued in `TODO.md` §5; the broader
+data-model and cross-host changes (secret-level ACLs, user-scoped vs. machine-scoped local vault
+modes, Orchestrator job-principal binding, and snapshot ACL checks) are scheduled for v0.23.0.
+
+**Boundaries:**
+- Keep `SHARED:alias` and `SECRET:name` syntax unchanged.
+- On personal workstations using the local vault, the OS user account remains the primary boundary
+  between processes running as that same user; separate OS accounts are required when untrusted local
+  processes must not share a user vault.
+
+**Dependencies:** `PortalConnectionCatalogService`, `PortalSecretStoreService`,
+`SharedConnectionExpander`, `ConnectionSecretResolver`, `CreateConnectionStatementHandler`,
+`AlterConnectionStatementHandler`, `LocalConnectionCatalogProvider`, `OsSecretStoreProvider`,
+`SchedulerService`, and `ExecutionController`.
+
+**Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
+Select individual IDs into `TODO.md` when scheduling.
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SC01 | **Deny-by-default Portal `SHARED:` ACLs and explicit unrestricted sharing.** Add an explicit `AllowAllUsers` flag (default `false`) on `PortalSharedConnection` so newly created connections and connections whose last group ACL is revoked only allow Admin and `OwnerUserId` unless unrestricted sharing is explicitly enabled; update `PortalConnectionCatalogApiTests`. | — | S |
+| SC02 | **Lock `SHARED:` connection destinations and block `ALTER` / `CREATE OR ALTER` on catalog connections.** Disallow script-supplied option overrides on `SHARED:` connections in `SharedConnectionExpander.ExpandAsync` (or lock all catalog-defined options and endpoint/target fields), and reject `ALTER CONNECTION` and `CREATE OR ALTER CONNECTION` when `context.CatalogBackedConnections` contains the connection name. | — | S |
+| SC03 | **Identity-aware `SECRET:` authorization and catalog-bound secret resolution.** Thread `ExecutionIdentity?` through `ISecretProvider.ResolveAsync` and `ConnectionSecretResolver`; in `PortalStoreSecretProvider` / `PortalSecretStoreService`, require either a secret-level grant or an active catalog-expansion context from an authorized `SHARED:` connection so scripts cannot dereference `SECRET:name` directly to bypass connection ACLs. | SC01 | M |
+| SC04 | **User-scoped workstation vault option and Windows NTFS ACL hardening for machine stores.** Support a `CurrentUser` protection scope (`CryptoUtils.Protect` / `DPAPI:`) in `OsSecretStoreProvider` and `LocalConnectionCatalogProvider` for personal workstation installs (CLI, VS Code, Desktop Studio); for `LocalMachine` (`ProtectMachine` / `DPAPI-M:`) service stores on Windows, apply explicit `DirectorySecurity`/`FileSecurity` ACLs (Administrators, SYSTEM, and the service account only, with inheritance disabled) matching Unix `0600`. | — | S |
+| SC05 | **Enforce `SHARED:` connection ACLs on Orchestrator runs and cached Portal report snapshots.** Bind scheduled and triggered Orchestrator jobs in `SchedulerService` to an explicit owning `ExecutionIdentity` (and enforce connection ACLs in the Orchestrator catalog), and update `ExecutionController.GetSnapshot` / `GetManifest` so reports using ACL-restricted `SHARED:` connections verify the caller's connection `Use` permission before serving a cached snapshot. | SC01, [Caller Identity for Process-Spawned Orchestrator Runs](#security--caller-identity-for-process-spawned-orchestrator-runs) | M |
+
+**Acceptance evidence:** A newly created Portal `SHARED:` connection and a connection whose last
+group ACL is revoked both deny non-owner/non-admin callers unless unrestricted sharing is explicitly
+enabled; scripts cannot override `HOST`/`SERVER`/`Target` on a `SHARED:` connection via `CREATE` or
+`ALTER CONNECTION`; a script that references `SECRET:name` directly is denied when the caller lacks
+permission on the owning connection/secret; Windows `OsSecretStore` / `LocalCatalog` directories
+reject read access from other local non-admin accounts; and cached report snapshots for restricted
+`SHARED:` connections refuse viewers who lack connection `Use` permission.
+
+### Security — External Tool Permissions, Artifact Identity, and Launch Contracts
+
+**Status:** Accepted
+
+**Horizon:** Next
+
+**Authoritative design:** [Deployment profiles](docs/architecture/deployment-profiles.md) and
+[machine-tool contract](docs/reference/statements/ddl/create-tool.md). The
+[existing certification record](docs/architecture/decisions/governed-custom-tool-runner-certification.md)
+needs the evidence correction tracked in TODO XT06; it is not proof of the missing controls below.
+
+**Problem and intended outcome:** The 2026-11-14 Codex/Gemini review found that the local tool
+catalog accepts an execution identity but does not authorize individual callers, native tools are
+not pinned to reviewed binary/script contents, and native `WORKING_DIR` is silently replaced by a
+temporary scratch directory. The outcome is explicit permission to use a tool, verifiable approved
+artifacts, and predictable launch behavior. Immediate catalog traversal, `WHAT_IF`, Docker approval,
+administrator ownership/lookup, argument safety and resource-bound fixes live only in
+[TODO.md §6](TODO.md#6-external-tool-approval-and-execution-safety), XT01–XT06.
+
+**Why next:** Per-principal grants and artifact versioning require catalog and execution contracts.
+They extend the immediate administrator-owned allowlist boundary. Working-directory behavior is a
+separate correctness fix; do not delay the immediate security fixes for that redesign.
+
+**Boundaries:** Approval is permission to invoke a defined operation, not proof that the executable
+is harmless. Local processes under the same OS account still share that account's authority.
+`RUN SCRIPT` executes ETL-SQL under engine/file/bundle policy, not arbitrary OS scripts through the
+tool catalog. Do not introduce a general shell, weaken argument separation, or claim ordinary
+containers/native child processes are a hostile-tenant boundary. The typed parameter checks needed
+to close unsafe invocations are XT05, not deferred to this initiative.
+
+**Dependencies:** `IToolCatalogProvider`, `ExecutionIdentity`, `ToolAdminService`,
+`ExecuteToolStatementHandler`, and the host identity/sandbox contracts. Reuse the existing identity
+propagation work; decide catalog storage and grant representation before implementing a new provider.
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| XT07 | **Per-tool use permissions.** Define grants for users/groups/service identities on shared hosts; keep administration separate from invocation. Resolve under the verified effective caller, deny missing/unauthorized identities for restricted tools, and audit denial/revocation. Document the explicit owner-account model for standalone catalogs. Prove two callers can use different approved tools and that scheduled/spawned runs retain the intended principal. | XT01, XT04; host identity propagation | M |
+| XT08 | **Pin reviewed native artifacts and control updates.** Bind approval to executable and fixed script content/version, including interpreter identity where applicable. Validate changes before launch, fail closed on mismatch, and define administrator reapproval/rotation. Address replacement between verification and execution through protected artifact storage or an equivalent enforceable launch contract; hash checking alone is insufficient. Test changed binaries/scripts and approved upgrades. | XT04, XT05 | M |
+| XT09 | **Separate working directory, approved assets and disposable scratch.** Resolve the documented `WORKING_DIR` behavior currently overwritten for native tools. Either honor a validated administrator-owned directory or explicitly retire that option with migration guidance; define relative-script resolution and argument-template quoting, including paths with spaces. Keep scratch separately owned and clean up only that generated directory, never the configured working directory. Test success, timeout and cancellation and update executable examples to match. | XT04, XT05 | M |
+
+**Acceptance evidence:** Restricted tools deny ungranted callers even when the alias is known;
+revocation takes effect on subsequent invocations; changed native artifacts require reapproval;
+valid paths/arguments remain intact; and working-directory/cleanup tests prove approved assets are
+never removed as scratch. Apply the breaking-change protocol when existing scripts/configuration
+change behavior. No production claim closes on a source inspection or a mocked process test alone.
+
+### Product Coverage — Measure the Need for External ETL Tools
+
+**Status:** Exploring
+
+**Horizon:** Later
+
+**Authoritative design:** No new architecture accepted; use the current
+[syntax index](docs/syntax-index.md), [file operations](docs/reference/file-operations/README.md),
+[connectors](docs/reference/connectors/README.md) and [function reference](docs/reference/functions/README.md).
+
+**Problem and intended outcome:** Built-in file handling, transfers, APIs, transformations,
+validation and orchestration plausibly cover most traditional SSIS script-task needs. The review's
+80% estimate is a hypothesis, not measured parity. Establish which recurring tasks still force users
+to request an external tool and choose small built-in additions from demonstrated demand.
+
+**Why later:** Coverage measurement does not block the security fixes and should use real workflow
+examples, not a feature-count target. **Boundaries:** No general-purpose scripting runtime, promise
+to replace every SDK, or automatic implementation of the remaining 20%.
+
+**Dependencies:** A representative, sanitized set of prior ETL/SSIS script tasks or approved-tool
+requests, plus the existing capability references and focused tests.
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| XC01 | **Measure coverage and rank actual gaps.** Classify representative tasks as built-in, composable with built-ins, or external-required; prove representative mappings with runnable fixtures. Record sample size, task frequency and effort weighting separately. Produce a short ranked proposal for recurring gaps; specialized SDKs, formats, OCR/ML and OS administration may remain approved external tools. | Sanitized workflow sample | D |
+
+**Acceptance evidence:** Publish the sample definition and reproducible task mappings, distinguish
+functional correctness from operational suitability, and report the observed coverage without
+claiming universal SSIS parity. Schedule any resulting feature separately.
 
 ### Portal, Orchestrator & Studio — Unified Operations Console, Catalog-Job Cohesion, and SaaS Authoring Boundary
 

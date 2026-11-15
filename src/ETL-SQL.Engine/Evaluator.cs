@@ -721,7 +721,10 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         _options.BatchSize = BatchSize;
         _options.SubqueryCacheSize = DefaultThresholds.SubqueryCacheSize(config);
         _options.TempTableSpillThresholdRows = TempTableSpillThresholdRows;
-        SpillEncryptionEnabled = DefaultThresholds.SpillEncryptionEnabled(config);
+        SpillEncryptionEnabled = (ExecutionPolicy?.IsEnrolled == true
+            && ExecutionPolicy.GovernedValues.TryGetValue("Security:RequireSpillEncryption", out var reqSpillEnc)
+            && bool.TryParse(reqSpillEnc, out var reqSpillBool) && reqSpillBool)
+            || DefaultThresholds.SpillEncryptionEnabled(config);
         SpillCompressionEnabled = DefaultThresholds.SpillCompressionEnabled(config);
         SpillFormat = DefaultThresholds.SpillFormat(config);
         SpillMinimumFreeBytes = DefaultThresholds.SpillMinimumFreeDiskMB(config) * 1024L * 1024L;

@@ -14,7 +14,10 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
         string target,
         CancellationToken cancellationToken,
         string? connectorType = null,
-        IReadOnlyCollection<string>? entrySensitiveFields = null)
+        IReadOnlyCollection<string>? entrySensitiveFields = null,
+        bool allowCatalogAuthorizedSecrets = false,
+        ExecutionIdentity? identity = null,
+        IConnectionCatalogProvider? connectionCatalog = null)
     {
         if (string.IsNullOrEmpty(target))
             return target;
@@ -23,17 +26,24 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
             return CapabilityReference.ResolvePath(target);
 
         if (IsSecretReference(target))
+        {
+            EnsureDirectSecretAuthorized(allowCatalogAuthorizedSecrets, identity, connectionCatalog);
             return await ResolveSecretValueAsync(target, cancellationToken).ConfigureAwait(false);
+        }
 
         return await ReplaceConnectionStringSecretFieldsAsync(
-            target, connectorType, entrySensitiveFields, cancellationToken).ConfigureAwait(false);
+            target, connectorType, entrySensitiveFields, allowCatalogAuthorizedSecrets, identity, connectionCatalog, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task<Dictionary<string, string>> ResolveOptionsAsync(
         Dictionary<string, string> options,
         CancellationToken cancellationToken,
         string? connectorType = null,
-        IReadOnlyCollection<string>? entrySensitiveFields = null)
+        IReadOnlyCollection<string>? entrySensitiveFields = null,
+        bool allowCatalogAuthorizedSecrets = false,
+        ExecutionIdentity? identity = null,
+        IConnectionCatalogProvider? connectionCatalog = null)
     {
         var resolved = new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase);
         foreach (var (key, value) in options)
@@ -59,6 +69,7 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
             if (!IsResolvableField(key, connectorType, entrySensitiveFields))
                 throw UnresolvedSecretReferenceError(key);
 
+            EnsureDirectSecretAuthorized(allowCatalogAuthorizedSecrets, identity, connectionCatalog);
             resolved[key] = await ResolveSecretValueAsync(value, cancellationToken).ConfigureAwait(false);
         }
 
@@ -91,6 +102,9 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
         string target,
         string? connectorType,
         IReadOnlyCollection<string>? entrySensitiveFields,
+        bool allowCatalogAuthorizedSecrets,
+        ExecutionIdentity? identity,
+        IConnectionCatalogProvider? connectionCatalog,
         CancellationToken cancellationToken)
     {
         var matches = ConnectionStringSecretFieldRegex().Matches(target);
@@ -104,6 +118,7 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
             if (!IsResolvableField(key, connectorType, entrySensitiveFields))
                 throw UnresolvedSecretReferenceError(key);
 
+            EnsureDirectSecretAuthorized(allowCatalogAuthorizedSecrets, identity, connectionCatalog);
             var reference = match.Groups["value"].Value;
             var secret = await ResolveSecretValueAsync(reference, cancellationToken).ConfigureAwait(false);
             resolved = resolved.Remove(match.Groups["value"].Index, match.Groups["value"].Length)
@@ -112,6 +127,48 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
 
         return resolved;
     }
+
+    private void EnsureDirectSecretAuthorized(
+        bool allowCatalogAuthorizedSecrets,
+        ExecutionIdentity? identity,
+        IConnectionCatalogProvider? connectionCatalog)
+    {
+        if (allowCatalogAuthorizedSecrets)
+            return;
+
+        // When running under an authenticated execution identity or against a governed shared catalog
+        // / Portal secret store, scripts must not bypass SHARED: ACLs via raw SECRET: references.
+        var isGovernedCatalog = connectionCatalog is not null
+            && connectionCatalog is not LocalConnectionCatalogProvider
+            && !string.Equals(connectionCatalog.ProviderName, "Unconfigured", StringComparison.OrdinalIgnoreCase);
+        var isPortalSecretStore = string.Equals(secretProvider?.ProviderName, "PortalStore", StringComparison.OrdinalIgnoreCase);
+
+        if (identity is null && !isGovernedCatalog && !isPortalSecretStore)
+            return;
+
+        if (identity is { IsAdmin: true })
+            return;
+
+        var actor = string.IsNullOrWhiteSpace(identity?.RealUser) ? "unknown" : identity.RealUser;
+        var effective = string.IsNullOrWhiteSpace(identity?.EffectiveUser) ? actor : identity.EffectiveUser;
+        SecurityEventRuntime.Emit(SecurityEventContract.Create(
+            SecurityEventSeverity.Error,
+            SecurityEventType.OperationDenied,
+            actor,
+            effective,
+            "SECRET_REFERENCE",
+            SecurityEventDecision.Denied,
+            $"DIRECT_SECRET_USE_DENIED: Provider={secretProvider?.ProviderName ?? "(none)"}; Catalog={connectionCatalog?.ProviderName ?? "(none)"}") with
+        {
+            HostName = Environment.MachineName
+        });
+
+        throw new ExecutionException(
+            "Direct SECRET: references in scripts require administrator authorization. Reference an authorized SHARED: catalog connection instead.");
+    }
+
+    internal static bool IsSecretReference(string value) =>
+        value.Trim().StartsWith(SecretPrefix, StringComparison.OrdinalIgnoreCase);
 
     // A SECRET: reference on a field outside the resolvable set would otherwise reach the
     // connector as the literal text "SECRET:name" — reject it up front instead.
@@ -134,9 +191,6 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
         SecretRedactor.RegisterRuntimeSecret(result.Value);
         return result.Value;
     }
-
-    private static bool IsSecretReference(string value) =>
-        value.Trim().StartsWith(SecretPrefix, StringComparison.OrdinalIgnoreCase);
 
     [GeneratedRegex(@"(?i)(?:^|;)\s*(?<key>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<quote>['""]?)(?<value>SECRET:[^;'""]+)\k<quote>")]
     private static partial Regex ConnectionStringSecretFieldRegex();

@@ -27,6 +27,7 @@ public class CreateConnectionStatementHandler(
     private readonly IConnectorRegistry _connectorRegistry = connectorRegistry;
     private readonly ILogger _logger = logger;
     private readonly IConfiguration? _config = config;
+    private readonly IConnectionCatalogProvider? _connectionCatalog = connectionCatalog;
     private readonly ConnectionSecretResolver _secretResolver = new(secretProvider);
     private readonly SharedConnectionExpander _sharedExpander = new(connectionCatalog);
 
@@ -55,6 +56,11 @@ public class CreateConnectionStatementHandler(
 
         if (IsUpsertMode(effectiveMode) && alreadyExists)
         {
+            if (context.CatalogBackedConnections.ContainsKey(stmt.ConnectionName))
+                throw new ExecutionException(
+                    $"Connection '{stmt.ConnectionName}' is backed by a SHARED: catalog entry and cannot be modified with CREATE OR ALTER CONNECTION.",
+                    null, stmt.Line, stmt.Column);
+
             // CREATE OR ALTER with existing connection — patches and preserves options
             if (existingDataSource == null) throw new ExecutionException($"Connection '{stmt.ConnectionName}' exists but its data source is null.");
             connectionType ??= existingDataSource.ConnectorType;
@@ -103,6 +109,7 @@ public class CreateConnectionStatementHandler(
         target = Interpolate(target ?? "", context);
         IReadOnlyCollection<string>? entrySensitiveFields = null;
         GatewayResourceBinding? gatewayBinding = null;
+        bool isCatalogExpanded = false;
         if (SharedConnectionExpander.IsSharedReference(target))
         {
             var expanded = await _sharedExpander.ExpandAsync(
@@ -111,6 +118,7 @@ public class CreateConnectionStatementHandler(
             options = expanded.Options;
             entrySensitiveFields = expanded.SensitiveFields;
             gatewayBinding = expanded.Gateway;
+            isCatalogExpanded = true;
             // Remember that this alias came from the governed catalog. A durable artifact written
             // later in the run (a quarantine replay manifest) can then say its target is reopenable
             // through the same governed path, instead of a reader inferring it from the alias — a
@@ -136,10 +144,12 @@ public class CreateConnectionStatementHandler(
         }
 
         target = await _secretResolver.ResolveTargetAsync(
-            target, context.CancellationToken, connectionType, entrySensitiveFields);
+            target, context.CancellationToken, connectionType, entrySensitiveFields,
+            allowCatalogAuthorizedSecrets: isCatalogExpanded, context.ExecutionIdentity, _connectionCatalog);
         if (options != null)
             options = await _secretResolver.ResolveOptionsAsync(
-                options, context.CancellationToken, connectionType, entrySensitiveFields);
+                options, context.CancellationToken, connectionType, entrySensitiveFields,
+                allowCatalogAuthorizedSecrets: isCatalogExpanded, context.ExecutionIdentity, _connectionCatalog);
 
         var connector = _connectorRegistry.GetConnector(connectionType ?? string.Empty);
         if (connector == null)

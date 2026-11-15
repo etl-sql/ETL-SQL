@@ -688,9 +688,10 @@ public class PortalSharedConnection : IVersionedEntity
 public enum SharedConnectionPermission { Use = 0 }
 
 /// <summary>
-/// A per-connection use grant (group-scoped, like <see cref="DatasetAcl"/>). An entry with no
-/// grants is usable by any caller; an entry with grants requires an admin, its owner, or a
-/// member of a granted group — and a caller without an injected identity is denied.
+/// A per-connection use grant (group-scoped, like <see cref="DatasetAcl"/>). Shared connections are
+/// deny-by-default: an entry with no grants is usable only by an admin or its owner, and an entry
+/// with grants requires an admin, its owner, or a member of a granted group. Callers without an
+/// injected identity are denied.
 /// </summary>
 public class SharedConnectionAcl
 {

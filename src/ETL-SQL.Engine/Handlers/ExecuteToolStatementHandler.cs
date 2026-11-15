@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
@@ -20,7 +22,7 @@ namespace ETL_SQL.Engine.Handlers;
 /// Runs a registered tool process, streams data to it via stdin (JSON Lines),
 /// and collects results from stdout (JSON Lines).
 /// </summary>
-public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? catalog = null, IConfiguration? config = null, ICapabilityTokenIssuer? tokenIssuer = null, IToolProcessFactory? processFactory = null) : IStatementHandler
+public partial class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? catalog = null, IConfiguration? config = null, ICapabilityTokenIssuer? tokenIssuer = null, IToolProcessFactory? processFactory = null) : IStatementHandler
 {
     private readonly ILogger _logger = logger;
     private readonly IConfiguration? _config = config;
@@ -68,8 +70,8 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         // Resolve parameters. COMPAT_BREAK: 0.22.0 — the ARGS template is split into arguments
-        // before values are substituted, so a value with spaces stays one argument instead of
-        // adding arguments the tool definition never declared.
+        // before values are substituted in a single pass, and parameter roles/flags are validated
+        // against the approved tool contract.
         var argValues = new Dictionary<string, string>();
         if (stmt.Parameters != null)
         {
@@ -86,7 +88,56 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
                 argValues[kvp.Key] = val?.ToString() ?? string.Empty;
             }
         }
-        var args = BuildArguments(argsTemplate, argValues);
+
+        string? containerImage = null;
+        string? containerRuntime = null;
+        string? containerMemoryArg = null;
+        string? containerCpusArg = null;
+        long? containerPidsLimit = null;
+        bool isolateNetwork = true;
+        string? resolvedNativeCommand = null;
+
+        if (toolType == "CONTAINER")
+        {
+            containerImage = GetOptionString(toolDef.Options, "IMAGE");
+            if (string.IsNullOrWhiteSpace(containerImage))
+                throw new ExecutionException($"Tool '{stmt.ToolAlias}' of type CONTAINER is missing the IMAGE option.", null, stmt.Line, stmt.Column);
+
+            ProcessPolicyRules.EnforceContainerToolImage(context, containerImage, _config);
+
+            isolateNetwork = GetOptionBoolean(toolDef.Options, "ISOLATE_NETWORK") ?? true;
+            (containerCpusArg, containerMemoryArg, containerPidsLimit, containerRuntime) =
+                ValidateAndResolveContainerLimits(toolDef, isolateNetwork, stmt);
+        }
+        else
+        {
+            ValidateNativeIsolationContract(toolDef, context, stmt);
+            var ownershipMode = ResolveOwnershipMode(catalog, _config);
+            resolvedNativeCommand = ToolPathGuard.ValidateNativeCommandPath(
+                command,
+                ownershipMode,
+                requireExists: _processFactory is ToolProcessFactory,
+                verifyWriteBoundary: true);
+
+            var scriptPath = GetOptionString(toolDef.Options, "SCRIPT_PATH");
+            if (!string.IsNullOrWhiteSpace(scriptPath))
+            {
+                ToolPathGuard.ValidateNativeCommandPath(
+                    scriptPath,
+                    ownershipMode,
+                    requireExists: _processFactory is ToolProcessFactory,
+                    verifyWriteBoundary: true);
+            }
+        }
+
+        var args = ValidateAndBuildArguments(toolDef, toolType == "CONTAINER" ? command : resolvedNativeCommand!, argsTemplate, argValues);
+
+        if (context.IsWhatIf)
+        {
+            var targetSummary = toolType == "CONTAINER" ? containerImage : resolvedNativeCommand;
+            context.Log($"WHAT IF: Would execute tool '{stmt.ToolAlias}' ({toolType}) targeting '{targetSummary}' with {args.Count} argument(s).");
+            return;
+        }
 
         context.Log($"Executing tool '{stmt.ToolAlias}'...");
 
@@ -101,20 +152,16 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
 
         if (toolType == "CONTAINER")
         {
-            var image = GetOptionString(toolDef.Options, "IMAGE");
-            if (string.IsNullOrWhiteSpace(image))
-                throw new ExecutionException($"Tool '{stmt.ToolAlias}' of type CONTAINER is missing the IMAGE option.", null, stmt.Line, stmt.Column);
-
-            // 1. Pinned images
-            if (!image.Contains("@sha256:"))
-                throw new ExecutionException($"Tool '{stmt.ToolAlias}' of type CONTAINER must use a pinned image digest (e.g. @sha256:...).", null, stmt.Line, stmt.Column);
-
-            var isolateNetwork = GetOptionBoolean(toolDef.Options, "ISOLATE_NETWORK") ?? true;
-
             startInfo.FileName = "docker";
             foreach (var arg in new[] { "run", "-i", "--rm", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true" })
             {
                 startInfo.ArgumentList.Add(arg);
+            }
+
+            if (!string.IsNullOrWhiteSpace(containerRuntime))
+            {
+                startInfo.ArgumentList.Add("--runtime");
+                startInfo.ArgumentList.Add(containerRuntime);
             }
 
             // 2. Non-root identity
@@ -122,7 +169,17 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
             startInfo.ArgumentList.Add("--user");
             startInfo.ArgumentList.Add(runAsUser);
 
-            // 3. Isolated scratch
+            // 3. Container CPU, memory, and PID ceilings
+            startInfo.ArgumentList.Add("--cpus");
+            startInfo.ArgumentList.Add(containerCpusArg!);
+            startInfo.ArgumentList.Add("--memory");
+            startInfo.ArgumentList.Add(containerMemoryArg!);
+            startInfo.ArgumentList.Add("--memory-swap");
+            startInfo.ArgumentList.Add(containerMemoryArg!);
+            startInfo.ArgumentList.Add("--pids-limit");
+            startInfo.ArgumentList.Add(containerPidsLimit!.Value.ToString(CultureInfo.InvariantCulture));
+
+            // 4. Isolated scratch
             startInfo.ArgumentList.Add("--tmpfs");
             startInfo.ArgumentList.Add("/tmp:rw,noexec,nosuid,size=65536k");
 
@@ -165,7 +222,7 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
                 startInfo.ArgumentList.Add(workingDir);
             }
 
-            startInfo.ArgumentList.Add(image);
+            startInfo.ArgumentList.Add(containerImage!);
 
             if (!string.IsNullOrWhiteSpace(command))
             {
@@ -179,13 +236,13 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
         }
         else
         {
-            startInfo.FileName = command;
+            startInfo.FileName = resolvedNativeCommand!;
             foreach (var arg in args)
             {
                 startInfo.ArgumentList.Add(arg);
             }
 
-            // Sanitized environment: explicitly clear and only allowlist PATH
+            // Sanitized environment: explicitly clear and do not rely on ambient PATH for binary lookup.
             var path = startInfo.EnvironmentVariables.ContainsKey("PATH") ? startInfo.EnvironmentVariables["PATH"] : null;
             startInfo.EnvironmentVariables.Clear();
             if (path != null) startInfo.EnvironmentVariables["PATH"] = path;
@@ -564,21 +621,436 @@ public class ExecuteToolStatementHandler(ILogger logger, IToolCatalogProvider? c
     }
 
     /// <summary>
-    /// Splits the ARGS template on spaces, then replaces each <c>{NAME}</c> placeholder inside
-    /// each argument. A value never adds an argument; an argument left empty is dropped.
+    /// Splits the ARGS template on spaces, then performs a single-pass replacement of each
+    /// <c>{NAME}</c> placeholder inside each token. Values never introduce new arguments or expand
+    /// nested placeholders; an argument left empty is dropped.
     /// </summary>
     internal static List<string> BuildArguments(string template, IReadOnlyDictionary<string, string> values)
     {
-        var args = template.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
-        foreach (var (name, value) in values)
+        var tokens = template.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var result = new List<string>(tokens.Length);
+        foreach (var token in tokens)
         {
-            var placeholder = $"{{{name}}}";
-            for (int i = 0; i < args.Count; i++)
-                args[i] = args[i].Replace(placeholder, value);
+            var replaced = PlaceholderRegex().Replace(token, match =>
+            {
+                var key = match.Groups[1].Value;
+                return values.TryGetValue(key, out var val) ? val : match.Value;
+            });
+            if (!string.IsNullOrEmpty(replaced))
+                result.Add(replaced);
         }
-        args.RemoveAll(string.IsNullOrEmpty);
-        return args;
+
+        return result;
     }
+
+    internal List<string> ValidateAndBuildArguments(
+        ToolDefinition toolDef,
+        string command,
+        string template,
+        IReadOnlyDictionary<string, string> values)
+    {
+        var allowCallerCodeArgs = GetOptionBoolean(toolDef.Options, "ALLOW_CALLER_CODE_ARGS") ?? false;
+        var supportsEndOfOptions = GetOptionBoolean(toolDef.Options, "SUPPORTS_END_OF_OPTIONS") ?? false;
+        var maxParamLength = (int)Math.Clamp(
+            GetOptionLong(toolDef.Options, "MAX_PARAM_LENGTH")
+                ?? _config?.GetValue<int?>("Tools:Limits:MaxParamLength")
+                ?? 4096L,
+            1, 1_048_576);
+
+        var roles = ParseParamRoles(GetOptionString(toolDef.Options, "PARAM_ROLES"));
+        foreach (var (paramName, value) in values)
+        {
+            ValidateParameterValue(paramName, value, maxParamLength, roles, allowCallerCodeArgs);
+        }
+
+        var tokens = template.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        var isInterpreter = IsInterpreterCommand(command);
+        var hasFixedScriptBeforeParam = false;
+        var pastEndOfOptions = false;
+        var endOfOptionsInsertIndex = -1;
+
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            var token = tokens[i];
+            if (token == "--")
+            {
+                pastEndOfOptions = true;
+                continue;
+            }
+
+            var placeholders = PlaceholderRegex().Matches(token);
+            if (placeholders.Count == 0)
+            {
+                if (!token.StartsWith('-') && !token.StartsWith('/'))
+                    hasFixedScriptBeforeParam = true;
+                continue;
+            }
+
+            var eqIdx = token.IndexOf('=');
+            if (token.StartsWith('-') || token.StartsWith('/'))
+            {
+                if (eqIdx < 0 || placeholders.Cast<Match>().Any(m => m.Index < eqIdx))
+                {
+                    throw new ExecutionException(
+                        $"Tool '{toolDef.Name}' template token '{token}' cannot substitute parameters into an option switch name.");
+                }
+
+                if (isInterpreter && !allowCallerCodeArgs && IsInterpreterExecSwitch(token[..eqIdx]))
+                {
+                    throw new ExecutionException(
+                        $"Tool '{toolDef.Name}' cannot pass caller parameters to interpreter execution switch '{token[..eqIdx]}' without explicit ALLOW_CALLER_CODE_ARGS authorization.");
+                }
+            }
+
+            var prevToken = i > 0 ? tokens[i - 1] : null;
+            var isInterpreterExecSwitch = isInterpreter && prevToken != null && IsInterpreterExecSwitch(prevToken);
+            if (isInterpreterExecSwitch && !allowCallerCodeArgs)
+            {
+                throw new ExecutionException(
+                    $"Tool '{toolDef.Name}' cannot pass caller parameters to interpreter execution switch '{prevToken}' without explicit ALLOW_CALLER_CODE_ARGS authorization.");
+            }
+
+            var isPurePlaceholder = token.Length > 2
+                && token[0] == '{'
+                && token[^1] == '}'
+                && placeholders.Count == 1;
+
+            if (isInterpreter && isPurePlaceholder && !pastEndOfOptions && !hasFixedScriptBeforeParam && !allowCallerCodeArgs)
+            {
+                var paramName = placeholders[0].Groups[1].Value;
+                if (!IsConstrainedScalarRole(roles, paramName))
+                {
+                    throw new ExecutionException(
+                        $"Tool '{toolDef.Name}' cannot pass caller parameter '{{{paramName}}}' as an interpreter entrypoint/script argument without explicit ALLOW_CALLER_CODE_ARGS authorization.");
+                }
+            }
+
+            if (supportsEndOfOptions && !pastEndOfOptions && endOfOptionsInsertIndex < 0
+                && isPurePlaceholder && (prevToken == null || !IsFlagTakingValue(prevToken)))
+            {
+                endOfOptionsInsertIndex = i;
+            }
+        }
+
+        if (endOfOptionsInsertIndex >= 0 && !tokens.Contains("--"))
+        {
+            tokens.Insert(endOfOptionsInsertIndex, "--");
+        }
+
+        var result = new List<string>(tokens.Count);
+        foreach (var token in tokens)
+        {
+            var replaced = PlaceholderRegex().Replace(token, match =>
+            {
+                var key = match.Groups[1].Value;
+                return values.TryGetValue(key, out var val) ? val : match.Value;
+            });
+            if (!string.IsNullOrEmpty(replaced))
+                result.Add(replaced);
+        }
+
+        return result;
+    }
+
+    private (string Cpus, string MemoryArg, long PidsLimit, string? Runtime) ValidateAndResolveContainerLimits(
+        ToolDefinition toolDef,
+        bool isolateNetwork,
+        ExecuteToolStatement stmt)
+    {
+        var profile = GetOptionString(toolDef.Options, "ISOLATION_PROFILE")
+            ?? _config?["Tools:Limits:RequiredIsolationProfile"];
+
+        string? hardenedRuntime = null;
+        if (!string.IsNullOrWhiteSpace(profile))
+        {
+            if (profile.Equals("Hardened", StringComparison.OrdinalIgnoreCase)
+                || profile.Equals("HardenedSandbox", StringComparison.OrdinalIgnoreCase)
+                || profile.Equals("HardenedShared", StringComparison.OrdinalIgnoreCase)
+                || profile.Equals("HostileTenant", StringComparison.OrdinalIgnoreCase))
+            {
+                var configuredRuntime = _config?["Tools:Limits:HardenedContainerRuntime"];
+                var mounts = GetOptionString(toolDef.Options, "CAPABILITY_MOUNTS");
+                var hasNetworkCapability = (GetOptionString(toolDef.Options, "CAPABILITIES") ?? string.Empty)
+                    .Contains("NETWORK", StringComparison.OrdinalIgnoreCase);
+
+                if (string.IsNullOrWhiteSpace(configuredRuntime) || !isolateNetwork || hasNetworkCapability || !string.IsNullOrWhiteSpace(mounts))
+                {
+                    throw new ExecutionException(
+                        $"Tool '{stmt.ToolAlias}' claims isolation profile '{profile}', which cannot be enforced without a configured hardened OCI runtime and full network/mount isolation.",
+                        null, stmt.Line, stmt.Column);
+                }
+
+                hardenedRuntime = configuredRuntime.Trim();
+            }
+            else if (!profile.Equals("ContainerStandard", StringComparison.OrdinalIgnoreCase)
+                && !profile.Equals("IsolatedContainer", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ExecutionException(
+                    $"Tool '{stmt.ToolAlias}' specifies unsupported container isolation profile '{profile}'.",
+                    null, stmt.Line, stmt.Column);
+            }
+        }
+
+        var defaultMemoryMb = _config?.GetValue<long?>("Tools:Limits:DefaultContainerMemoryMb") ?? 512L;
+        var maxMemoryMb = _config?.GetValue<long?>("Tools:Limits:MaxContainerMemoryMb") ?? 4096L;
+        var requestedMemoryMb = GetOptionLong(toolDef.Options, "MEMORY_MB") ?? defaultMemoryMb;
+        if (toolDef.Options.TryGetValue("MEMORY_MB", out var rawMem) && !long.TryParse(rawMem, out _))
+            throw new ExecutionException($"Tool '{stmt.ToolAlias}' has invalid MEMORY_MB '{rawMem}'.", null, stmt.Line, stmt.Column);
+        if (requestedMemoryMb <= 0 || requestedMemoryMb > maxMemoryMb)
+        {
+            throw new ExecutionException(
+                $"Tool '{stmt.ToolAlias}' container memory limit {requestedMemoryMb}MB is outside the approved range (1..{maxMemoryMb}MB).",
+                null, stmt.Line, stmt.Column);
+        }
+
+        var defaultCpus = _config?.GetValue<double?>("Tools:Limits:DefaultContainerCpus") ?? 1.0d;
+        var maxCpus = _config?.GetValue<double?>("Tools:Limits:MaxContainerCpus") ?? 4.0d;
+        double requestedCpus = defaultCpus;
+        if (toolDef.Options.TryGetValue("CPUS", out var rawCpus))
+        {
+            if (!double.TryParse(rawCpus, NumberStyles.Float, CultureInfo.InvariantCulture, out requestedCpus)
+                || !double.IsFinite(requestedCpus))
+            {
+                throw new ExecutionException($"Tool '{stmt.ToolAlias}' has invalid CPUS value '{rawCpus}'.", null, stmt.Line, stmt.Column);
+            }
+        }
+        if (requestedCpus <= 0 || requestedCpus > maxCpus)
+        {
+            throw new ExecutionException(
+                $"Tool '{stmt.ToolAlias}' container CPU limit {requestedCpus.ToString(CultureInfo.InvariantCulture)} is outside the approved range (0..{maxCpus.ToString(CultureInfo.InvariantCulture)}].",
+                null, stmt.Line, stmt.Column);
+        }
+
+        var defaultPids = _config?.GetValue<long?>("Tools:Limits:DefaultContainerPidsLimit") ?? 128L;
+        var maxPids = _config?.GetValue<long?>("Tools:Limits:MaxContainerPidsLimit") ?? 1024L;
+        var requestedPids = GetOptionLong(toolDef.Options, "PIDS_LIMIT") ?? defaultPids;
+        if (toolDef.Options.TryGetValue("PIDS_LIMIT", out var rawPids) && !long.TryParse(rawPids, out _))
+            throw new ExecutionException($"Tool '{stmt.ToolAlias}' has invalid PIDS_LIMIT '{rawPids}'.", null, stmt.Line, stmt.Column);
+        if (requestedPids <= 0 || requestedPids > maxPids)
+        {
+            throw new ExecutionException(
+                $"Tool '{stmt.ToolAlias}' container PID limit {requestedPids} is outside the approved range (1..{maxPids}).",
+                null, stmt.Line, stmt.Column);
+        }
+
+        return (
+            requestedCpus.ToString("0.###", CultureInfo.InvariantCulture),
+            $"{requestedMemoryMb.ToString(CultureInfo.InvariantCulture)}m",
+            requestedPids,
+            hardenedRuntime);
+    }
+
+    private void ValidateNativeIsolationContract(ToolDefinition toolDef, IExecutionContext context, ExecuteToolStatement stmt)
+    {
+        var hasTenant = !string.IsNullOrWhiteSpace(context.StorageCapability?.Tenant?.Tenant.Value)
+            || !string.IsNullOrWhiteSpace(context.ExecutionIdentity?.TenantId);
+        if (hasTenant && _config?.GetValue<bool>("Tools:AllowNativeToolsForTenants") != true)
+        {
+            throw new ExecutionException(
+                $"Native EXECUTABLE tool '{stmt.ToolAlias}' is restricted to dedicated trusted host execution and cannot run inside multi-tenant contexts.",
+                null, stmt.Line, stmt.Column);
+        }
+
+        var profile = GetOptionString(toolDef.Options, "ISOLATION_PROFILE")
+            ?? _config?["Tools:Limits:RequiredIsolationProfile"];
+        if (!string.IsNullOrWhiteSpace(profile)
+            && !profile.Equals("TrustedNative", StringComparison.OrdinalIgnoreCase)
+            && !profile.Equals("DedicatedTrusted", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ExecutionException(
+                $"Native EXECUTABLE tool '{stmt.ToolAlias}' cannot satisfy claimed isolation profile '{profile}'.",
+                null, stmt.Line, stmt.Column);
+        }
+
+        if (toolDef.Options.ContainsKey("MEMORY_MB")
+            || toolDef.Options.ContainsKey("CPUS")
+            || toolDef.Options.ContainsKey("PIDS_LIMIT")
+            || toolDef.Options.ContainsKey("ISOLATE_NETWORK"))
+        {
+            throw new ExecutionException(
+                $"Native EXECUTABLE tool '{stmt.ToolAlias}' declares container resource or network isolation options that native OS execution cannot enforce.",
+                null, stmt.Line, stmt.Column);
+        }
+    }
+
+    private static ToolCatalogOwnershipMode ResolveOwnershipMode(IToolCatalogProvider? catalogProvider, IConfiguration? configuration)
+    {
+        if (catalogProvider is LocalToolCatalogProvider local)
+            return local.OwnershipMode;
+
+        if (Enum.TryParse<ToolCatalogOwnershipMode>(configuration?["Governance:Tools:OwnershipMode"], ignoreCase: true, out var configured))
+            return configured;
+
+        return ToolCatalogOwnershipMode.PersonalWorkstation;
+    }
+
+    private static Dictionary<string, string> ParseParamRoles(string? raw)
+    {
+        var roles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(raw))
+            return roles;
+
+        foreach (var entry in raw.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var kv = entry.Split('=', 2, StringSplitOptions.TrimEntries);
+            if (kv.Length == 2 && !string.IsNullOrWhiteSpace(kv[0]) && !string.IsNullOrWhiteSpace(kv[1]))
+                roles[kv[0]] = kv[1];
+        }
+
+        return roles;
+    }
+
+    private static void ValidateParameterValue(
+        string paramName,
+        string value,
+        int maxLength,
+        IReadOnlyDictionary<string, string> roles,
+        bool allowCallerCodeArgs)
+    {
+        if (value.Length > maxLength)
+        {
+            throw new ExecutionException(
+                $"Parameter '{paramName}' exceeds maximum allowed length of {maxLength} characters.");
+        }
+
+        if (value.IndexOfAny(['\0', '\r', '\n']) >= 0)
+        {
+            throw new ExecutionException(
+                $"Parameter '{paramName}' contains prohibited control characters.");
+        }
+
+        var role = roles.TryGetValue(paramName, out var declared) ? declared.Trim() : "DATA";
+        if (role.Equals("CODE", StringComparison.OrdinalIgnoreCase)
+            || role.Equals("SCRIPT", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!allowCallerCodeArgs)
+            {
+                throw new ExecutionException(
+                    $"Parameter '{paramName}' has role '{role}', which requires explicit ALLOW_CALLER_CODE_ARGS authorization.");
+            }
+            return;
+        }
+
+        if (role.Equals("NUMBER", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!SignedNumberRegex().IsMatch(value.Trim()))
+                throw new ExecutionException($"Parameter '{paramName}' must be a valid number.");
+            return;
+        }
+
+        if (role.StartsWith("ENUM(", StringComparison.OrdinalIgnoreCase) && role.EndsWith(')'))
+        {
+            var inner = role[5..^1];
+            var allowed = inner.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (!allowed.Any(item => string.Equals(item, value, StringComparison.Ordinal)))
+            {
+                throw new ExecutionException(
+                    $"Parameter '{paramName}' value '{value}' is not in the approved enum set [{inner}].");
+            }
+            return;
+        }
+
+        if (role.Equals("PATH", StringComparison.OrdinalIgnoreCase))
+        {
+            if (value.Contains("..", StringComparison.Ordinal))
+                throw new ExecutionException($"Path parameter '{paramName}' cannot contain relative parent traversal ('..').");
+            if (IsOptionShapedValue(value))
+                throw new ExecutionException($"Parameter '{paramName}' cannot supply an option flag ('{value}').");
+            return;
+        }
+
+        // Default DATA role: preserve legitimate negative numbers and paths, while blocking option flags.
+        if (IsOptionShapedValue(value))
+        {
+            throw new ExecutionException(
+                $"Parameter '{paramName}' cannot supply an option switch or flag ('{value}').");
+        }
+    }
+
+    private static bool IsConstrainedScalarRole(IReadOnlyDictionary<string, string> roles, string paramName)
+    {
+        if (!roles.TryGetValue(paramName, out var role))
+            return false;
+
+        return role.Equals("NUMBER", StringComparison.OrdinalIgnoreCase)
+            || (role.StartsWith("ENUM(", StringComparison.OrdinalIgnoreCase) && role.EndsWith(')'));
+    }
+
+    private static bool IsOptionShapedValue(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0)
+            return false;
+
+        if (trimmed.StartsWith("--", StringComparison.Ordinal))
+            return true;
+
+        if (trimmed[0] == '-')
+            return !SignedNumberRegex().IsMatch(trimmed);
+
+        if (trimmed[0] == '/' && DosSwitchRegex().IsMatch(trimmed))
+            return true;
+
+        return false;
+    }
+
+    private static bool IsInterpreterCommand(string command)
+    {
+        var exe = Path.GetFileNameWithoutExtension(command.Trim());
+        return exe.Equals("python", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("python3", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("python2", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("py", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("node", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("nodejs", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("bash", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("sh", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("dash", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("zsh", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("ash", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("ksh", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("pwsh", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("powershell", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("cmd", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("ruby", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("perl", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("php", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("lua", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("awk", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("gawk", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("env", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("xargs", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("cscript", StringComparison.OrdinalIgnoreCase)
+            || exe.Equals("wscript", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsInterpreterExecSwitch(string token) =>
+        token.Equals("-c", StringComparison.OrdinalIgnoreCase)
+        || token.Equals("-e", StringComparison.OrdinalIgnoreCase)
+        || token.Equals("--eval", StringComparison.OrdinalIgnoreCase)
+        || token.Equals("--exec", StringComparison.OrdinalIgnoreCase)
+        || token.Equals("-exec", StringComparison.OrdinalIgnoreCase)
+        || token.Equals("/c", StringComparison.OrdinalIgnoreCase)
+        || token.Equals("/k", StringComparison.OrdinalIgnoreCase)
+        || token.Equals("-command", StringComparison.OrdinalIgnoreCase)
+        || token.Equals("-encodedcommand", StringComparison.OrdinalIgnoreCase)
+        || token.Equals("-enc", StringComparison.OrdinalIgnoreCase)
+        || token.Equals("-m", StringComparison.OrdinalIgnoreCase)
+        || token.Equals("-r", StringComparison.OrdinalIgnoreCase)
+        || token.Equals("-f", StringComparison.OrdinalIgnoreCase)
+        || token.Equals("--file", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsFlagTakingValue(string token) =>
+        (token.StartsWith('-') || token.StartsWith('/')) && !token.Contains('=');
+
+    [GeneratedRegex(@"\{([A-Za-z0-9_]+)\}")]
+    private static partial Regex PlaceholderRegex();
+
+    [GeneratedRegex(@"^-?(?:\d+(?:\.\d+)?|\.\d+)$")]
+    private static partial Regex SignedNumberRegex();
+
+    [GeneratedRegex(@"^/[A-Za-z]{1,2}$")]
+    private static partial Regex DosSwitchRegex();
 
     private static void AddContainerSecret(ProcessStartInfo startInfo, string name, string value)
     {

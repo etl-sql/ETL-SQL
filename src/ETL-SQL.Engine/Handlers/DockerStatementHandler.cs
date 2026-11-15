@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -10,11 +11,13 @@ namespace ETL_SQL.Engine.Handlers;
 public class DockerStatementHandler : IStatementHandler
 {
     private readonly ILogger _logger;
+    private readonly IConfiguration? _config;
     public Type SupportedStatementType => typeof(DockerStatement);
 
-    public DockerStatementHandler(ILogger logger)
+    public DockerStatementHandler(ILogger logger, IConfiguration? config = null)
     {
         _logger = logger;
+        _config = config;
     }
 
     /// <summary>Executes the DOCKER RUN statement, resolving the image and starting the container.</summary>
@@ -30,9 +33,9 @@ public class DockerStatementHandler : IStatementHandler
             throw new ExecutionException("Docker image name cannot be null or empty.");
         }
 
-        // Enterprise image allowlist — checked before any action (including WHAT IF) so a denied
+        // Image approval — checked before any action (including WHAT IF) so a denied
         // image is reported deterministically without touching Docker.
-        ETL_SQL.Core.Governance.ProcessPolicyRules.EnforceDockerImage(context, imageName);
+        ETL_SQL.Core.Governance.ProcessPolicyRules.EnforceDockerImage(context, imageName, _config);
 
         // Start the container and track it in the evaluator's manager
         _logger.WriteLine($"Initializing Docker container: {imageName} with alias {dockerStmt.Alias ?? "none"}...", ConsoleColor.Cyan);

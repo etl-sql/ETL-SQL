@@ -98,7 +98,7 @@ public sealed class NodeCapacityMonitor : INodeCapacityMonitor
                 memoryLoad,
                 cpuPercent,
                 Environment.ProcessorCount,
-                memoryLoad >= 95 || cpuPercent >= 95,
+                memoryLoad >= 95 || cpuPercent >= 95 || (hostCpuPercent ?? 0d) >= 95,
                 now)
             {
                 // Free disk is the most outage-critical host signal. Sample the state volume (app/DB

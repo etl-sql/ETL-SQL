@@ -17,7 +17,10 @@ public class DockerTenantScopeTests
     [Fact]
     public async Task SameAliasInTwoTenantsKeepsRowsLastConnectionsAndLifecycleSeparate()
     {
-        await using var services = (ServiceProvider)DependencyInjectionSetup.BuildServiceProvider();
+        await using var services = (ServiceProvider)DependencyInjectionSetup.BuildServiceProvider(new Dictionary<string, string?>
+        {
+            ["Governance:Docker:AllowedImages:0"] = "postgres:15-alpine"
+        });
         var first = services.GetRequiredService<Evaluator>();
         var second = services.GetRequiredService<Evaluator>();
         Assert.NotSame(first, second);

@@ -88,7 +88,11 @@ public static class DefaultThresholds
         => config?.GetValue<long?>("Engine:TempTableSpillThresholdRows") ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;
 
     public static bool SpillEncryptionEnabled(IConfiguration? config)
-        => config?.GetValue<bool>("Security:SpillEncryptionEnabled") ?? true;
+        => RequireSpillEncryption(config) || (config?.GetValue<bool>("Security:SpillEncryptionEnabled") ?? true);
+
+    public static bool RequireSpillEncryption(IConfiguration? config)
+        => (config?.GetValue<bool?>("Security:RequireSpillEncryption") ?? false)
+            || (config?.GetValue<bool?>("Governance:Spill:RequireEncryption") ?? false);
 
     public static bool SpillCompressionEnabled(IConfiguration? config)
         => config?.GetValue<bool>("Security:SpillCompressionEnabled") ?? true;
