@@ -433,6 +433,10 @@ SET TELEMETRY = OFF;";
 
             var docker = new Mock<IDockerManager>();
             var sessions = new Mock<ISessionStateManager>();
+            // A persistent session's spill is encrypted with the manager's key, and an empty key now
+            // fails closed. Derive one per session so a reopened session reads its own extents.
+            sessions.Setup(m => m.GetSpillKey(It.IsAny<string>()))
+                .Returns((string id) => SHA256.HashData(Encoding.UTF8.GetBytes("slt-spill:" + id)));
             var pushdown = new Mock<ExecutePushdownStatementHandler>(l);
             var bufferManager = new Mock<IBufferManager>();
 
