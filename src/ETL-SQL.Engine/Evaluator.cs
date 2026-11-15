@@ -1610,7 +1610,11 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 
     public async Task EvaluateStatement(Statement statement, CancellationToken cancellationToken = default)
     {
-        CancellationToken = cancellationToken;
+        // Evaluate sets the run's token before any statement. Block, IF, loop and procedure handlers
+        // dispatch their bodies without one; overwriting with None there disarmed every
+        // cancellation check inside them, so only a token that can cancel replaces the run's.
+        if (cancellationToken.CanBeCanceled)
+            CancellationToken = cancellationToken;
         // NOTE: ThrowIfCancellationRequested() is intentionally NOT called here for the hot-loop path.
         // The outer batch loop (Evaluate) already checks before dispatching each statement.
         // Callers that need an extra check (e.g., deeply nested recursive calls) may call it

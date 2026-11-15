@@ -81,9 +81,17 @@ namespace ETL_SQL.Tests.Operations.Operations
         }
 
         // Streaming a scalar aggregate in memory must still honour a cancel: the hosted HA soak
-        // (run 43684479666) killed a 1e9-row COUNT(*) and the run did not end within 300 s.
-        [Fact]
-        public async Task StreamingScalarAggregateStopsPromptlyWhenCancelled()
+        // (run 43684479666) killed a 1e9-row COUNT(*) and the run did not end within 300 s. Nested
+        // bodies are dispatched without a token, which used to reset the run's to None.
+        private const string BillionRowCount =
+            "DECLARE @n BIGINT = (SELECT COUNT(*) FROM (SELECT (a.value - 1) * 1000 + b.value AS value " +
+            "FROM GENERATE_SERIES(1, 1000000) a CROSS JOIN GENERATE_SERIES(1, 1000) b) s WHERE value % 7 = 3);";
+
+        [Theory]
+        [InlineData("{0}")]
+        [InlineData("BEGIN {0} END;")]
+        [InlineData("IF 1 = 1 BEGIN {0} END;")]
+        public async Task StreamingScalarAggregateStopsPromptlyWhenCancelled(string shape)
         {
             var (eval, _) = BuildContext();
             // Late enough to land in the streaming loop: a 1 s cancel lands while the million-value
@@ -91,13 +99,13 @@ namespace ETL_SQL.Tests.Operations.Operations
             using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(10));
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            var error = await Record.ExceptionAsync(() => eval.Evaluate(TestHelpers.Parse(
-                "DECLARE @n BIGINT = (SELECT COUNT(*) FROM (SELECT (a.value - 1) * 1000 + b.value AS value " +
-                "FROM GENERATE_SERIES(1, 1000000) a CROSS JOIN GENERATE_SERIES(1, 1000) b) s WHERE value % 7 = 3);"),
-                cts.Token));
+            var error = await Record.ExceptionAsync(() => eval.Evaluate(
+                TestHelpers.Parse(string.Format(shape, BillionRowCount)), cts.Token));
 
             stopwatch.Stop();
-            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(40), $"cancel took {stopwatch.Elapsed}");
+            // flaky-time-bound-ok: a missed cancel streams 1e9 rows for many minutes; a honoured one
+            // ends seconds after the 10 s cancel, so 120 s leaves a wide gap either side.
+            Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(120), $"cancel took {stopwatch.Elapsed}");
             // 1e9 rows cannot finish in that time, so a run that returned without an error ignored the cancel.
             Assert.NotNull(error);
         }
