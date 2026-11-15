@@ -91,11 +91,7 @@ Cut line: W6 moves to the feature backlog if the timebox runs out. W8 is require
   green Release Evidence dispatch on the candidate. A partial rerun reads the earlier attempts'
   artifacts; a release dry run fails on a failed evidence run or open CodeQL alerts and tolerates
   only a candidate with no dispatch yet (Release Evidence runs once per candidate, not nightly).
-  After the other session commits its `ROADMAP.md` edits, add ROADMAP entries from the Codex
-  review (2026-11-15): an always-running merge gate required on `main` and release branches; a
-  PR regression lane for ordinary tests; contributor docs, PR template and hooks aligned with
-  GitHub as the gate; Dependabot for `scripts/typecheck`, `lint`, `codemirror`, `vsix` and Actions
-  pinned to commit SHAs.
+  The Codex review's merge-gate, PR-test, contributor-doc and Dependabot gaps are ROADMAP RG01–RG04.
 
 **Parked from the earlier "release in four hours" goal.** Each is picked up only if a workstream
 needs it, otherwise moves to `ROADMAP.md` after v0.22.0:

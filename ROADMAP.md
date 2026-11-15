@@ -114,7 +114,7 @@ to feature work without a release sprint every month.
 **Dependencies:** the existing `nightly-release.yml` and its scheduler, the candidate supervisor,
 `release.yml` and its `publish-marketplace` job, and the MSI and DEB certification workflows.
 
-**Vertical delivery slices** (plan section 4; W6–W8 move to the backlog if the two-week timebox
+**Vertical delivery slices** (plan section 4; W6–W7 move to the backlog if the two-week timebox
 runs out):
 1. W0: failure census since v0.21.0, to confirm the order below with data.
 2. W1: extend the nightly run into a full release rehearsal (native packages, every post-tag
@@ -125,8 +125,10 @@ runs out):
 6. W4b/W4c: remove the workstation from the release path; tag and publish from GitHub only, with
    the Marketplace job hardened (pinned `vsce`, safe reruns).
 7. W5: flaky tests fixed at the cause, including the pre-push fixtures that inherit `GIT_DIR`.
-8. Below the cut line: W6 performance certification redesign (deterministic hard gates, same-host
-   A/B timing), W7 fast pre-push hook and local gate hygiene, W8 evidence scaled to current claims.
+8. W8 (required for v0.22.0, owner 2026-11-15): every operator certification as a hosted Release
+   Evidence job and the six reviews as a `release-approval` environment approval.
+9. Below the cut line: W6 performance certification redesign (deterministic hard gates, same-host
+   A/B timing), W7 fast pre-push hook and local gate hygiene.
 
 **Acceptance evidence** (two weeks from 2026-11-07, with a re-plan check at the end of week 1):
 the nightly rehearsal is green five nights running with no manual help; the v0.22.0 candidate
@@ -137,6 +139,53 @@ and no command on the owner's machine.
 **Lessons kept from v0.21.0:** defects surfaced only at certification (shift installer and Portal
 lanes to nightly); hosted runners lost mid-step need watchdogs that upload evidence first; local
 memory pressure made the workstation a bottleneck; release metadata edits must be one command.
+
+### Release Engineering — Enforced Merge Gates and a GitHub-First Contributor Workflow
+
+**Status:** Accepted  
+**Horizon:** Next (v0.23.0)  
+**Authoritative design:** none yet; follows the
+[release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md) and its
+"CI certifies, the workstation does not" rule.
+
+**Problem and intended outcome:** A process review (Codex, 2026-11-15) found that releases are
+gated, but merges are not. `release/v0.22.0` has no branch protection. `main` requires 7 checks but
+omits browser contracts, Portal journeys and native package certification, and its required
+Enterprise Certification jobs skip on PRs, which GitHub counts as passing. Engine Coverage also
+skips on PRs, so an ordinary new unit test outside Engine Smoke and the selected certification
+suites may first run after merge. Contributor docs disagree with the workflow: `CONTRIBUTING.md`
+omits Node 22 and browser-asset preparation (a clean-clone build fails) and describes an obsolete
+formatting hook, the PR template asks for an unrestricted `dotnet test`, and the pre-push hook
+still needs the full toolchain even for documentation changes. Dependabot covers the extension and
+UI npm projects but not `scripts/typecheck`, `scripts/lint`, `scripts/codemirror` or `scripts/vsix`,
+and third-party Actions are pinned by tag, not commit SHA. The outcome: one always-running gate
+decides every merge, PRs run the tests their changes affect, and local tooling is light and optional.
+
+**Why next:** none of this blocks v0.22.0: Release requires exact-candidate CI, CodeQL and Release
+Evidence whatever was merged. It does let a defect merge and surface only on the candidate, which
+costs a release restart.
+
+**Boundaries:**
+- One required aggregate check per branch, not a growing list of job names to keep in sync.
+- Skipped is not passed: the gate fails when a lane its changes select did not run.
+- Expensive scale, soak and installer certification keep their own schedules (CI push, Release
+  Evidence, nightly); the PR lane covers deterministic tests only.
+- Local hooks stay seconds-fast and optional; GitHub is the authoritative gate.
+
+**Dependencies:** `ci.yml` and `ci-impact.json` lane selection, `select-ci-lanes.mjs`,
+`hosted-release-policy.json`, `.github/dependabot.yml`, the pre-push hook (`Test-PrePush.ps1`),
+`CONTRIBUTING.md`, `AGENTS.md` and the PR template.
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| RG01 | **Always-running merge gate.** Add a CI job that always runs and fails unless every lane selected for the change passed (skipped only when the change did not select it). Require it on `main` and `release/*` through a ruleset; drop the per-job required checks it replaces. Prove with a PR that skips a selected lane and is blocked. | — | S |
+| RG02 | **PR regression lane for ordinary tests.** Run the deterministic unit/integration tests of the projects a PR affects (from `ci-impact.json`), so a new test runs before merge. Keep Engine Coverage's full sharding for pushes. Prove with a PR whose only change is a failing new test outside the smoke filters. | RG01 | M |
+| RG03 | **Align contributor docs, template and hooks with GitHub as the gate.** `CONTRIBUTING.md` builds from a clean clone (Node 22, `sync-assets.js`), the PR template asks for targeted runs, `AGENTS.md` agrees, and the pre-push hook skips heavy preflight for docs-only changes. Prove with a clean-clone build and a docs-only push timing. | — | S |
+| RG04 | **Dependency and Action maintenance.** Add Dependabot npm entries for `scripts/typecheck`, `scripts/lint`, `scripts/codemirror` and `scripts/vsix`; pin third-party Actions to commit SHAs with Dependabot `github-actions` updates. Prove with the first update PRs passing RG01. | — | S |
+
+**Acceptance evidence:** a PR that skips a selected lane or adds a failing ordinary test is
+blocked by the single required check on `main` and `release/*`; a clean clone builds by following
+`CONTRIBUTING.md`; Dependabot opens update PRs for all six npm projects and the pinned Actions.
 
 ### Windows Installer — The MSI Copies Files and Registers Services Only
 
@@ -288,31 +337,36 @@ SLT tests in `tests/slt_data/transform.test` pass.
 
 **Status:** Accepted  
 **Horizon:** Next (v0.23.0)  
-**Scheduling:** Backlog for prioritization after v0.22.0 ships; small triage items are tracked in `TODO.md` §2.1.  
+**Scheduling:** Backlog for prioritization after v0.22.0 ships; active scale triage is tracked in `TODO.md` §2.
+
 **Authoritative design:** [Engine Architecture](docs/architecture/engine.md),
 [Orchestrator Architecture](docs/architecture/orchestrator.md), and
 [v0.21.0 Performance Results](docs/releases/v0.21.0-performance-results.md).
 
 **Implemented baseline:** `SpillStore` and `AuthenticatedSpillEncryption` write Arrow record batches
 through GZip compression and encrypt-then-MAC (`ETLSPL02`: AES-256-CBC + HMAC-SHA256 with per-chunk
-HKDF-derived keys binding the header, chunk name, and ciphertext). `SpillFanOut` caps open partition
-writers at 64 per operator, `SpillRootOwnership` isolates per-process spill directories, and the
-10M/100M scale certification passes under a 4 GB `DOTNET_GCHeapHardLimit`.
+HKDF-derived keys binding the header, chunk name, and ciphertext). `SpillFanOut` sizes per-partition
+flush buffers from a shared row allowance with a minimum flush size; it does not cap open writers.
+`SpillRootOwnership` isolates per-process spill directories, and the
+10M/100M scale certification passes under a 4 GB `DOTNET_GCHeapHardLimit`. This is operator-scale
+evidence, not proof of concurrent-job fairness or a server-wide memory ceiling.
+
+The scale/concurrency fixes recorded in [CHANGELOG.md](CHANGELOG.md) also implement deployment and
+enterprise spill-encryption floors, rejection of empty persistent spill keys (former SP01), and
+clearing pooled `ColumnBatch` arrays on disposal. `NodeCapacityMonitor.IsOverloaded` includes host
+CPU; `SpillStore` rechecks disk reserves during writes at a 4 MiB tracked-byte interval and uses
+event-driven, cancellation-aware write waiters. These are baseline behavior to preserve, not work
+to repeat in SP02, SP10, or SP11.
 
 **Problem and intended outcome:** The combined v0.22.0 scale and security reviews (Codex and Gemini,
-2026-11-14) confirmed that the Arrow → compress → encrypt-then-MAC pipeline is the right foundation
-for privacy-first billion-row processing, and identified four areas to harden security policy, cut
-spill I/O and GC churn, and isolate concurrent Orchestrator workloads:
-1. **Spill security policy, key derivation, and plaintext memory hygiene:**
-   - `SetSpillOptionStatementHandler` allows any script to run `SET SPILL_ENCRYPTION OFF`, with no
-     deployment-policy floor for administrators who require encrypted spills at all times.
-   - `SpillStore.NormalizeAesKey` falls back to `SHA256("ETL-SQL-SPILL:" + sessionId)` when given an
-     empty persistent session key, deriving a predictable key from the session ID alone instead of
-     failing closed.
-   - `ColumnBuffer<T>.Dispose` and `Utf8ColumnBuffer.Dispose` (`ColumnBatch.cs`) return arrays to
-     `ArrayPool.Shared` with `clearArray: false`, leaving plaintext values in shared process memory,
-     and operator documentation does not yet cover swap/pagefile encryption and crash-dump settings.
-2. **Two-pass whole-file MAC verification, compression level tuning, and disk-reserve gaps:**
+2026-11-14), followed by the concurrent-resource review on 2026-11-15, identified the remaining
+work to bound memory, cut spill I/O and GC churn, and keep other Orchestrator jobs progressing:
+
+1. **Remaining plaintext memory hygiene:**
+   - Clearing `ColumnBatch` buffers is implemented; spill/packing buffer ownership and retained
+     pool sizes still need an audit. Operator guidance must cover swap/pagefile encryption and
+     crash-dump settings without claiming that managed memory is protected from host administrators.
+2. **Two-pass whole-file MAC verification, compression tuning, and retained spill files:**
    - `AuthenticatedSpillEncryption.CreateReaderAsync` scans an entire encrypted spill chunk to
      verify its trailing HMAC-SHA256 tag, seeks back to byte 58, and reads the entire file a second
      time to decrypt. On multi-gigabyte chunks this doubles disk read traffic, evicts OS page cache,
@@ -320,9 +374,8 @@ spill I/O and GC churn, and isolate concurrent Orchestrator workloads:
    - Both spill writers hardcode `GZipStream(..., CompressionLevel.Optimal)` (`SpillStore.cs`), while
      `SpillCompressionAssessmentTests` measures compression with `SpillEncryptionEnabled = false` instead
      of the production encrypted pipeline.
-   - `SpillStore.AdmitNewExtent` checks `SpillMinimumFreeDiskMB` only when a file is first created,
-     not as an open extent grows across thousands of `FlushBatchAsync` calls, and
-     `WaitForWriteSlotAsync` polls with `Task.Delay(10)`.
+   - `ExternalJoinEngine` retains consumed build/probe partitions and superseded repartition files
+     until final cleanup, increasing peak disk occupancy even though write-time reserve checks exist.
 3. **Row-only batch sizing, spill volume, and managed-heap allocation churn at 100M+ rows:**
    - Batching by row count alone (`10,000` rows) treats narrow numeric rows and wide string rows
      identically across input batches, Arrow builders, compression buffers, and partition queues.
@@ -335,24 +388,48 @@ spill I/O and GC churn, and isolate concurrent Orchestrator workloads:
      columns on intermediate merge passes (forcing `Row.RemoveColumn` dictionary allocations), and
      `ExternalJoinEngine.PackedBuildTable` allocates per-row `byte[]` arrays and `List<int>` buckets.
 4. **Concurrent workload admission and short-job progress under heavy spilling:**
-   - `NodeCapacityMonitor.IsOverloaded` checks only the Orchestrator process's own CPU and memory
-     load, ignoring child worker CPU (`HostCpuPercent`) and spill disk free space
-     (`SpillDiskFreeBytes`).
-   - `MemoryGovernor.Ceiling` reads the static total budget while external operators maintain local
-     guards outside `IMemoryGrantArbiter`, and `JobThrottle` uses a single FIFO slot pool where
-     multi-minute spilling jobs can delay short interactive or scheduled jobs.
+   - Host CPU participates in admission, but configured spill-volume free space, aggregate worker
+     memory reservations, and admission hysteresis remain missing. `SpillDiskFreeBytes` samples the
+     platform temp volume, which may differ from the configured spill volume.
+   - `MemoryGovernor.Ceiling` takes the smaller enabled operator/process limit, but external
+     operators' local guards do not reserve against `IMemoryGrantArbiter`. `JobThrottle` uses one
+     shared slot pool with polling/backoff, not a guaranteed FIFO or short-job lane. Separate worker
+     processes also have separate arbiters; a process-local budget is not a host-wide reservation.
+5. **Operator and resource-control bypasses (2026-11-15 review):**
+   - **Top-N (SP12):** `SelectExecutionEngine.TopNFromStream` retains `offset + limit` rows without
+     byte accounting or a memory reservation; deep pagination can retain nearly the entire input.
+   - **Windows (SP13):** `ProcessBucketOrderedValueReplay` retains a whole ordering peer group for
+     `FIRST_VALUE`/`LAST_VALUE`, and unsupported window combinations load an entire spill bucket
+     with `ToListAsync`. Neither path bounds retained rows by a byte grant.
+   - **Cursor admission (SP14):** External operators hold cursor slots while consuming upstream
+     operators that may need more slots. Saturated nested pipelines can wait on their own capacity;
+     `IBufferManager` callers also cannot pass cancellation to the concrete implementation's overload.
+   - **Aggregates (SP15):** `AggregatePartitionGoverned` uses the whole process budget for its row
+     fallback instead of the effective operator ceiling; the grouping-set branch supplies no memory
+     ceiling to `AggregateEngine`. Native/fallback transitions need the same reservation contract.
+   - **Memory coordination (SP16):** `BufferManager.ReserveMemoryAsync` has no production callers,
+     leaving its global limit, hysteresis, and system-memory floor disconnected from allocations.
+     `DefaultSystemResources` reports total available capacity rather than current free memory.
 
-The outcome is mandatory spill encryption when required by deployment policy, fail-closed key
-validation, single-pass framed authenticated encryption, byte-budgeted columnar operators with
-significantly lower GC allocation churn, and responsive concurrent job scheduling under heavy spill
-load.
+**Review evidence:** Temporary probes against the existing Release build retained 1,000 wide rows
+in Top-N (`offset = 990`, `limit = 10`) and in a single `FIRST_VALUE` peer group under a 1 MiB
+grant: estimated row footprints were 8.1 MiB and 8.2 MiB respectively. Nested sorts timed out on
+three rows with one cursor slot. The 29 existing resource-control tests passed; these probes are
+reproduction starting points, not retained regressions or mixed-workload certification.
+
+The remaining outcome is single-pass framed authenticated encryption, byte-budgeted operators
+with lower allocation churn, enforced shared resource limits, and responsive concurrent job
+scheduling under heavy spill load while preserving the implemented security floor.
 
 **Why next:** The 10M/100M scale certification passes within the 4 GB cap for v0.22.0. While
-targeted defects and measurements are triaged in `TODO.md` §2.1, the versioned spill format
+targeted defects and measurements are triaged in `TODO.md` §2, the versioned spill format
 (`ETLSPL03`), byte-budgeted operator pipelines, and columnar storage changes are multi-day
-architectural slices scheduled for v0.23.0 to keep the v0.22.0 candidate frozen.
+architectural slices for v0.23.0 planning while keeping the v0.22.0 candidate frozen.
+SP12–SP16 are P1 resource-control gaps to prioritize during sprint selection. Completion of the
+isolated scale scenarios does not close them or SP11's concurrent-workload requirements.
 
 **Boundaries:**
+
 - Encryption remains on by default and compress-before-encrypt stays mandatory; never write an
   unauthenticated or unencrypted intermediate spill file when encryption is enabled.
 - No new third-party cryptography or compression dependencies without following the third-party
@@ -360,10 +437,14 @@ architectural slices scheduled for v0.23.0 to keep the v0.22.0 candidate frozen.
   `BrotliStream`, `ZLibStream`) are preferred.
 - Preserve exact SQL scalar semantics (`decimal` scale, `NULL` ordering, collation, and
   cancellation) across all external operators.
+- Unsupported large operator shapes must fail explicitly within configured bounds, never silently
+  truncate output or fall back to an unbounded materialization. Preserve documented governor-policy
+  semantics; any policy change follows the breaking-change protocol.
 
 **Dependencies:** `SpillStore`, `AuthenticatedSpillEncryption`, `SetSpillOptionStatementHandler`,
-`ColumnBatch`, `ExternalSortEngine`, `ExternalJoinEngine`, `ExternalWindowEngine`,
-`MemoryGrantArbiter`, `NodeCapacityMonitor`, and `JobThrottle`.
+`ColumnBatch`, `SelectExecutionEngine`, `ExternalSortEngine`, `ExternalJoinEngine`,
+`ExternalWindowEngine`, `ExternalAggregateEngine`, `MemoryGrantArbiter`, `IBufferManager`,
+`DefaultSystemResources`, `NodeCapacityMonitor`, and `JobThrottle`.
 
 **Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
 Select individual IDs into `TODO.md` when scheduling.
@@ -372,8 +453,7 @@ Select individual IDs into `TODO.md` when scheduling.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| SP01 | **Enforce deployment-level spill encryption policy and fail closed on empty keys.** Add a configuration/policy floor (e.g., `Security:RequireSpillEncryption` / `OperationPolicyBoundary`) so `SetSpillOptionStatementHandler` rejects `SET SPILL_ENCRYPTION OFF` when policy requires encryption; remove the `SHA256("ETL-SQL-SPILL:" + sessionId)` fallback in `SpillStore.NormalizeAesKey` and throw if a valid key is not supplied. | — | S |
-| SP02 | **Clear pooled buffers on dispose and document plaintext memory boundaries.** Pass `clearArray: true` when returning pooled buffers in `ColumnBatch` (`ColumnBuffer<T>.Dispose`, `Utf8ColumnBuffer.Dispose`) and spill/packing paths when encryption or sensitive-data mode is active; bound retained pooled buffer sizes; and document OS swap/pagefile encryption and crash-dump hardening in `docs/administration/`. | SP01 | S |
+| SP02 | **Finish buffer hygiene beyond the cleared `ColumnBatch` baseline.** Audit remaining spill/packing pool returns and retained buffer sizes; clear plaintext buffers on return and bound retention where missing. Add focused ownership/disposal regressions for changed paths and document OS swap/pagefile encryption and crash-dump hardening in `docs/administration/`. Preserve the implemented encryption floor and empty-key rejection. | — | S |
 
 #### Single-pass framed authenticated encryption and compression tuning
 
@@ -396,16 +476,34 @@ Select individual IDs into `TODO.md` when scheduling.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| SP10 | **Continuous disk-reserve enforcement, eager partition deletion, and event-driven write slots.** Check free disk space periodically during extent growth in `SpillStore` (not only at `CreateWriterAsync`), delete consumed build/probe partitions and superseded repartition files in `ExternalJoinEngine` as soon as their readers close, and replace `Task.Delay(10)` polling in `SpillStore.WaitForWriteSlotAsync` with an event-driven queue that respects adaptive concurrency limits. | — | M |
-| SP11 | **Host-wide capacity admission, shared memory grants, and short-job lane reservation.** Incorporate child-worker CPU (`HostCpuPercent`), configured spill-volume free space (`SpillDiskFreeBytes`), and aggregate worker memory reservations into `NodeCapacityMonitor.IsOverloaded` with hysteresis; wire in-process external operators into `IMemoryGrantArbiter`; coalesce `ChildProcessTracker.Unregister` spill sweeps; and reserve capacity or weight admission in `JobThrottle` so heavy spilling jobs cannot starve short runs. | — | M |
+| SP10 | **Delete consumed join partitions eagerly.** Delete consumed build/probe partitions and superseded repartition files in `ExternalJoinEngine` as soon as their readers close and replay no longer needs them. Verify reduced peak live spill bytes, unchanged join results, and cleanup on success, cancellation, and failure. Preserve the implemented periodic disk-reserve checks and event-driven write waiters. | — | M |
+| SP11 | **Host-wide admission and short-job progress.** Preserve the host CPU check; add configured spill-volume free space and aggregate worker memory reservations to admission with hysteresis. Use SP16's shared accounting, coalesce `ChildProcessTracker.Unregister` spill sweeps, and reserve capacity or weight admission in `JobThrottle`. Validate heavy spilling jobs alongside short runs in both in-process and child-worker execution; one worker's process-local grant must not stand in for a host-wide reservation. | SP16 | M |
+
+#### Close operator and resource-control bypasses
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SP12 | **Bound Top-N and deep pagination by bytes.** Account for retained rows, sort keys, and heap storage in `TopNFromStream`; reserve against the operator and shared grants. When `offset + limit` cannot fit, transition to bounded external sorting without losing the retained prefix or unread input. Regress large offsets, wide rows, exact output ordering/counts, cancellation, and reservation release under a tiny grant. | — | M |
+| SP13 | **Bound window peers and fallback buckets.** Stream `FIRST_VALUE` without retaining a whole peer group where semantics permit; use bounded spill/replay for `LAST_VALUE` peers. Replace unguarded bucket `ToListAsync` with byte admission and a bounded supported path or explicit resource-limit failure. Regress all-equal ordering keys, wide rows below the row threshold, and mixed window functions under a tiny grant; assert exact results against a small in-memory oracle and cleanup after cancellation/failure. | — | M |
+| SP14 | **Prevent cursor hold-and-wait in nested pipelines.** Make cursor admission safe for complete operator pipelines so an outer window/sort/join cannot hold the last slot while waiting on its upstream operator. Expose and propagate cancellation through `IBufferManager` and all engine callers. Regress nested sorts and window-to-sort execution with one slot, competing pipelines at capacity, cancellation while queued, and restoration of all permits after failure. | — | M |
+| SP15 | **Apply one aggregate memory contract across execution paths.** Honor the effective operator ceiling and shared reservations in ordinary aggregation, native-to-row fallback, and grouping sets. Account for retained group state and result materialization; repartition where possible and enforce the configured policy when no bounded path exists. Regress high cardinality, an operator grant smaller than the process grant, native rejection/fallback, and grouping sets; verify exact aggregate results and reservation release. | — | M |
+| SP16 | **Connect production allocations to one memory coordinator.** Consolidate `BufferManager` memory limits/floor/hysteresis with the active `IMemoryGrantArbiter` contract and wire external operator allocations into shared reservations. Define precedence for existing settings and avoid double accounting or waiting while holding memory needed for progress. Replace total-capacity reporting with current host/container memory headroom. Use deterministic pressure fixtures to prove that configured limits affect real operators, recovery resumes admission, and success/cancellation/failure release reservations; include concurrent jobs and compatibility documentation. | — | M |
 
 **Acceptance evidence:** `SET SPILL_ENCRYPTION OFF` is rejected when deployment policy requires
 encryption, and empty persistent keys fail closed; `ETLSPL03` framed spill files authenticate and
 decrypt in a single pass and reject any byte flip, frame reorder, truncation, or chunk rename;
 `SpillCompressionAssessmentTests` runs with encryption enabled; 100M-row sort, window, and join
 scenarios in `BillionRowCertificationTests` show measurable reductions in total allocated bytes and
-GC pause time with identical checksums under the 4 GB cap; and the HA soak proves bounded short-job
-latency while heavy spilling jobs run concurrently.
+GC pause time with identical checksums under the 4 GB cap. SP12–SP16 add retained regressions for
+the small review reproducers, configured byte limits, cancellation, and resource release; helper-only
+tests do not substitute for exercising production operator paths.
+
+Concurrent-workload evidence must pin the heavy sort/join workload, short-job mix, execution mode,
+host resources, configured limits, and acceptance criteria before running. Record combined host and
+worker memory, spill-volume headroom, short-job queue/completion latency, cancellation latency, and
+exact output checksums. Prove admission and reservation invariants deterministically, and evaluate
+latency with repeated same-host runs. Isolated 10M/100M operator passes alone cannot establish that
+heavy jobs leave capacity for short jobs.
 
 ### Standard Library — File and Path Function Completeness
 
