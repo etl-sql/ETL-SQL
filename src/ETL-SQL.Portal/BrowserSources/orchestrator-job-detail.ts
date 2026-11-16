@@ -3,6 +3,7 @@ import type { ApiRequestOptions } from './portal-http.js';
 import { escHtml, fmtDt, renderJobAuditTrail, renderWatermarksTable } from './orchestrator-admin-ui.js';
 import { accessPanelHtml, ownerLabel } from './orchestrator-acl-ui.js';
 import { jobVersion, requireMutationStatus } from './orchestrator-job-actions.js';
+import { targetKindLabel } from './orchestrator-job-table.js';
 import { readCatalogJson, readNotifications, readSchedules } from './orchestrator-catalog-responses.js';
 import { readAudit, readDependencyChain, readGrants, readHistory, readJobStates, readNotificationLinks,
     readQualityFailures, readQualityStatuses, readScheduleLinks } from './orchestrator-detail-responses.js';
@@ -530,10 +531,9 @@ export function createJobDetail(options: JobDetailOptions) {
 
     // ── Open and close ────────────────────────────────────────────────────────
     function header(value: Job) {
-        const bundle = value.jobType === 1 || (value.targetPath ?? '').startsWith('bundle://');
         box('detailJobName').textContent = value.name;
         box('detailJobDisplayName').textContent = value.displayName && value.displayName !== value.name ? value.displayName : '';
-        box('metaTargetKind').textContent = bundle ? 'Bundle' : 'Script';
+        box('metaTargetKind').textContent = targetKindLabel(value.jobType, value.targetPath);
         box('metaSandboxProfile').textContent = sandboxProfile(value.options);
         box('metaVersion').textContent = `v${value.version}`;
         box('metaOwner').textContent = ownerLabel(value.createdBy);

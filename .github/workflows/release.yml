@@ -50,7 +50,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 9
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ inputs.dry_run && inputs.candidate_sha || env.TAG_NAME }}
           fetch-depth: 0
@@ -86,7 +86,7 @@ jobs:
           "source_sha=$sha" >> $env:GITHUB_OUTPUT
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -111,7 +111,7 @@ jobs:
       - name: Retain selected hosted evidence
         timeout-minutes: 5
         id: hosted-evidence
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: hosted-release-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/hosted-release-evidence.json
@@ -130,7 +130,7 @@ jobs:
       - name: Retain certified Windows selection
         timeout-minutes: 5
         id: windows-evidence
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: certified-windows-selection-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/selected-windows/certified-windows-selection.json
@@ -140,7 +140,7 @@ jobs:
       - name: Upload source preflight logs
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-preflight-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -165,11 +165,11 @@ jobs:
     outputs:
       artifact_id: ${{ steps.retain.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Require release evidence and approval for the candidate
@@ -183,7 +183,7 @@ jobs:
         if: env.DRY_RUN != 'true'
         id: retain
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-evidence-selection-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/release-evidence-selection.json
@@ -200,7 +200,7 @@ jobs:
       - name: Checkout release notes
         if: env.DRY_RUN != 'true'
         timeout-minutes: 5
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
           sparse-checkout: docs/releases
@@ -239,7 +239,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
       - name: Find successful certification for this commit
@@ -283,7 +283,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
 
@@ -298,7 +298,7 @@ jobs:
           if ($env:RECEIPT_ID -notmatch '^[1-9][0-9]*$') { throw 'Certification receipt ID is missing or invalid.' }
 
       - name: Download certified installers
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.find-msi.outputs.artifact_id || needs.certify-msi.outputs.artifact_id }}
           run-id: ${{ needs.find-msi.outputs.run_id || github.run_id }}
@@ -306,7 +306,7 @@ jobs:
           path: candidate
 
       - name: Download certification receipt
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.find-msi.outputs.receipt_id || needs.certify-msi.outputs.receipt_id }}
           run-id: ${{ needs.find-msi.outputs.run_id || github.run_id }}
@@ -338,11 +338,11 @@ jobs:
       run_id: ${{ steps.find.outputs.run_id }}
       receipt_id: ${{ steps.find.outputs.receipt_id }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 15
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Select exact-candidate DEB certification
@@ -385,11 +385,11 @@ jobs:
     outputs:
       artifact_id: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 15
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Require DEB candidate and receipt IDs
@@ -399,14 +399,14 @@ jobs:
           RECEIPT_ID: ${{ needs.find-deb.outputs.receipt_id || needs.certify-deb.outputs.receipt_id }}
         run: |
           [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] && [[ "$RECEIPT_ID" =~ ^[1-9][0-9]*$ ]]
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.find-deb.outputs.artifact_id || needs.certify-deb.outputs.artifact_id }}
           run-id: ${{ needs.find-deb.outputs.run_id || github.run_id }}
           github-token: ${{ github.token }}
           path: candidate
           merge-multiple: true
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.find-deb.outputs.receipt_id || needs.certify-deb.outputs.receipt_id }}
           run-id: ${{ needs.find-deb.outputs.run_id || github.run_id }}
@@ -440,11 +440,11 @@ jobs:
     outputs:
       manifest_sha256: ${{ needs.validate.outputs.windows_manifest_sha256 }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 8
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Require retained Windows artifact ID
@@ -452,7 +452,7 @@ jobs:
         env:
           ARTIFACT_ID: ${{ needs.validate.outputs.windows_artifact_id }}
         run: '[[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]'
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.validate.outputs.windows_artifact_id }}
           run-id: ${{ needs.validate.outputs.windows_run_id }}
@@ -494,11 +494,11 @@ jobs:
       manifest_sha256: ${{ steps.selection.outputs.manifest_sha256 }}
       selection_artifact_id: ${{ steps.receipt.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Require certified pre-tag macOS packages
@@ -512,7 +512,7 @@ jobs:
       - name: Retain certified macOS selection
         id: receipt
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: certified-osx-x64-selection-${{ github.run_id }}-${{ github.run_attempt }}
           path: selected/certified-osx-x64-selection.json
@@ -521,7 +521,7 @@ jobs:
       - name: Retain selection diagnostics
         if: always()
         timeout-minutes: 2
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: certified-osx-x64-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/supervisors/osx-x64/
@@ -539,11 +539,11 @@ jobs:
       manifest_sha256: ${{ steps.selection.outputs.manifest_sha256 }}
       selection_artifact_id: ${{ steps.receipt.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Require certified pre-tag macOS packages
@@ -557,7 +557,7 @@ jobs:
       - name: Retain certified macOS selection
         id: receipt
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: certified-osx-arm64-selection-${{ github.run_id }}-${{ github.run_attempt }}
           path: selected/certified-osx-arm64-selection.json
@@ -566,7 +566,7 @@ jobs:
       - name: Retain selection diagnostics
         if: always()
         timeout-minutes: 2
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: certified-osx-arm64-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/supervisors/osx-arm64/
@@ -584,11 +584,11 @@ jobs:
       intel_selection_artifact_id: ${{ needs.select-macos-intel.outputs.selection_artifact_id }}
       arm64_selection_artifact_id: ${{ needs.select-macos-arm64.outputs.selection_artifact_id }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 8
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Require retained native artifact IDs
@@ -600,14 +600,14 @@ jobs:
           [[ "$INTEL_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
           [[ "$ARM64_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
           [[ "$INTEL_ARTIFACT_ID" != "$ARM64_ARTIFACT_ID" ]]
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.select-macos-intel.outputs.artifact_id }}
           run-id: ${{ needs.select-macos-intel.outputs.run_id }}
           github-token: ${{ github.token }}
           path: candidate/intel
           merge-multiple: true
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.select-macos-arm64.outputs.artifact_id }}
           run-id: ${{ needs.select-macos-arm64.outputs.run_id }}
@@ -678,7 +678,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 8
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
       - name: Download draft release assets
@@ -692,7 +692,7 @@ jobs:
             --pattern '*.dmg' --pattern '*.vsix' --pattern 'msi-certification-inputs.json' --pattern 'msi-certification.json' \
             --pattern 'deb-certification-inputs.json' --pattern 'deb-certification.json' \
             --pattern 'windows-package-inputs.json' --pattern 'osx-*-package-inputs.json'
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Verify draft Windows packages against retained build
@@ -726,25 +726,25 @@ jobs:
           Copy-Item dist/msi-certification-inputs.json candidate/candidate.json
           ./scripts/MsiCandidate.ps1 -Mode VerifyPublished -Directory candidate -SourceSha $env:SOURCE_SHA -PublishedMsi "dist/ETL-SQL-$env:TAG_NAME-x64-Setup.msi"
       - name: Download verified hosted evidence
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.validate.outputs.hosted_evidence_artifact_id }}
           path: dist
           merge-multiple: true
       - name: Download certified Windows selection
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.validate.outputs.windows_selection_artifact_id }}
           path: dist
           merge-multiple: true
       - name: Download certified osx-x64 selection
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.upload-macos.outputs.intel_selection_artifact_id }}
           path: dist
           merge-multiple: true
       - name: Download certified osx-arm64 selection
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.upload-macos.outputs.arm64_selection_artifact_id }}
           path: dist
@@ -775,7 +775,7 @@ jobs:
         run: gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/hosted-release-evidence.json --clobber
       - name: Download selected release evidence
         if: env.DRY_RUN != 'true'
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.release-evidence.outputs.artifact_id }}
           path: dist
@@ -788,7 +788,7 @@ jobs:
         run: gh release upload "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" dist/release-evidence-selection.json --clobber
       - name: Attest draft artifacts
         if: env.DRY_RUN != 'true' # attestations are permanent public records
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: 'dist/*'
       # The per-platform build jobs each run publish-release.ps1, which wipes release/, so the
@@ -816,7 +816,7 @@ jobs:
           echo "sha256=$digest" >> "$GITHUB_OUTPUT"
       - name: Retain verified draft manifest
         id: retain-draft-manifest
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: verified-draft-${{ github.run_id }}-${{ github.run_attempt }}
           path: verified-draft.json
@@ -838,11 +838,11 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ needs.validate.outputs.source_sha }}
           fetch-depth: 0
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Recheck hosted evidence before publication
@@ -853,7 +853,7 @@ jobs:
         run: node scripts/collect-hosted-release-evidence.mjs "$GITHUB_REPOSITORY" "$SOURCE_SHA" current-hosted-evidence.json
       - name: Download original release evidence selection
         if: env.DRY_RUN != 'true'
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.attest-provenance.outputs.release_evidence_artifact_id }}
           path: selected-release-evidence
@@ -871,7 +871,7 @@ jobs:
           gh release download "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --pattern release-evidence-selection.json --dir current-release-evidence
           cmp selected-release-evidence/release-evidence-selection.json current-release-evidence/release-evidence-selection.json
       - name: Download original certified Windows selection
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.validate.outputs.windows_selection_artifact_id }}
           path: selected-windows
@@ -895,7 +895,7 @@ jobs:
           node scripts/collect-certified-windows.mjs verify-draft current-windows-draft current-windows/certified-windows-selection.json
           node scripts/check-windows-package-origin.mjs current-windows-draft/msi-certification-inputs.json current-windows/certified-windows-selection.json "$SOURCE_SHA" "${TAG_NAME#v}"
       - name: Download original certified osx-x64 selection
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.attest-provenance.outputs.intel_selection_artifact_id }}
           path: selected-macos
@@ -908,7 +908,7 @@ jobs:
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-certified-macos.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, $env:TAG_NAME.TrimStart('v'), 'osx-x64', 'current-macos', 'selected-macos/certified-osx-x64-selection.json') -EvidenceDirectory release-validation/supervisors/osx-x64 -TimeoutSeconds 900
       - name: Download original certified osx-arm64 selection
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.attest-provenance.outputs.arm64_selection_artifact_id }}
           path: selected-macos
@@ -921,7 +921,7 @@ jobs:
           SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/collect-certified-macos.mjs', $env:GITHUB_REPOSITORY, $env:SOURCE_SHA, $env:TAG_NAME.TrimStart('v'), 'osx-arm64', 'current-macos', 'selected-macos/certified-osx-arm64-selection.json') -EvidenceDirectory release-validation/supervisors/osx-arm64 -TimeoutSeconds 900
       - name: Download pinned verified draft manifest
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           artifact-ids: ${{ needs.attest-provenance.outputs.draft_manifest_artifact_id }}
           path: verified-draft
@@ -946,7 +946,7 @@ jobs:
       - name: Retain publication diagnostics
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: publication-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/supervisors/

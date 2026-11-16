@@ -443,7 +443,7 @@ exit ([int]$env:FIXTURE_EXIT)
   assert.match(retryUpload, /^        id: package_upload_retry$/m);
   assert.match(earlyDiagnostics, /^        continue-on-error: true$/m);
   for (const step of [primaryUpload, retryUpload]) {
-    assert.match(step, /^        uses: actions\/upload-artifact@v7$/m);
+    assert.match(step, /^        uses: actions\/upload-artifact@[0-9a-f]{40}(?:\s+#\s*v7)?$/m);
     assert.match(step, /^        continue-on-error: true$/m);
     assert.match(step, /^          compression-level: 0$/m);
     assert.match(step, /^          if-no-files-found: error$/m);

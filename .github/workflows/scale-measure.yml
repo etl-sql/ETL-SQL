@@ -66,7 +66,7 @@ jobs:
           - HighCardinalityGrouping
           - EligibleWindowRowNumber
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 15
 
       # Spilling scenarios need tens of GB. The Ubuntu image ships toolchains this job never uses.
@@ -78,7 +78,7 @@ jobs:
           sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           df -h /
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Install browser compiler
@@ -88,7 +88,7 @@ jobs:
         timeout-minutes: 8
         run: node scripts/sync-assets.js
 
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
       - name: Restore
@@ -171,7 +171,7 @@ jobs:
 
       - name: Upload measurements
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: scale-measure-${{ matrix.scenario }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/scale-measure/

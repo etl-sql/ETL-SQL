@@ -146,6 +146,21 @@ public sealed class OrchestratorCatalogReadTests(OrchestratorGrantAdministration
         Assert.Equal(expected != HttpStatusCode.OK, body["error"] is not null);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.OK)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public async Task BundleFilesProxyPreservesTheVersionRouteAndServiceStatus(HttpStatusCode status)
+    {
+        using var portal = new FailingOrchestratorFactory(status);
+        using var client = portal.CreateClient();
+        using var response = await GetAsync(client, await AdminTokenAsync(client), "bundles/sales/versions/3/files");
+        Assert.Equal(status, response.StatusCode);
+        Assert.Equal("/api/bundles/sales/versions/3/files", portal.LastServicePath);
+        var body = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+        Assert.Equal("fixture", body["error"]!.GetValue<string>());
+    }
+
     private static async Task<HttpResponseMessage> GetAsync(HttpClient client, string token, string catalog)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/orchestrator/{catalog}");
@@ -175,6 +190,8 @@ public sealed class OrchestratorCatalogReadTests(OrchestratorGrantAdministration
     /// <summary>A Portal whose configured Orchestrator answers every call with one fixed status.</summary>
     private sealed class FailingOrchestratorFactory(HttpStatusCode status) : PortalWebFactory
     {
+        public string? LastServicePath { get; private set; }
+
         protected override void CustomizePortalConfig(PortalConfig config)
         {
             config.Orchestrator.ApiUrl = "http://orchestrator.test";
@@ -183,13 +200,16 @@ public sealed class OrchestratorCatalogReadTests(OrchestratorGrantAdministration
 
         protected override void CustomizeServices(IServiceCollection services) =>
             services.AddHttpClient<OrchestratorProxyService>()
-                .ConfigurePrimaryHttpMessageHandler(() => new FixedStatusHandler(status));
+                .ConfigurePrimaryHttpMessageHandler(() => new FixedStatusHandler(status, path => LastServicePath = path));
     }
 
-    private sealed class FixedStatusHandler(HttpStatusCode status) : HttpMessageHandler
+    private sealed class FixedStatusHandler(HttpStatusCode status, Action<string?> recordPath) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(status) { Content = JsonContent.Create(new { error = "fixture" }) });
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            recordPath(request.RequestUri?.AbsolutePath);
+            return Task.FromResult(new HttpResponseMessage(status) { Content = JsonContent.Create(new { error = "fixture" }) });
+        }
     }
 }

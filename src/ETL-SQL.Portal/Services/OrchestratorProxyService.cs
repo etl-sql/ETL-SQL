@@ -502,6 +502,12 @@ public class OrchestratorProxyService(
         catch (Exception ex) { logger.LogDebug(ex, "Failed to list versions for bundle {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
     }
 
+    public async Task<HttpResponseMessage?> GetBundleFilesResponseAsync(string name, int version, CancellationToken ct = default)
+    {
+        try { return await SendAsync(HttpMethod.Get, $"api/bundles/{Uri.EscapeDataString(name)}/versions/{version}/files", cancellationToken: ct); }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to list files for bundle {Name} v{Version}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name), version); return null; }
+    }
+
     public async Task<HttpResponseMessage?> GetBundleDependenciesResponseAsync(string name, int version, CancellationToken ct = default)
     {
         try { return await SendAsync(HttpMethod.Get, $"api/bundles/{Uri.EscapeDataString(name)}/versions/{version}/dependencies", cancellationToken: ct); }

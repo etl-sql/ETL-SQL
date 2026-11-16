@@ -675,6 +675,10 @@ public class OrchestratorController(
     public Task<IActionResult> GetBundleVersions(string name, CancellationToken ct) =>
         RelayAsync(() => proxy.GetBundleVersionsResponseAsync(name, ct));
 
+    [HttpGet("bundles/{name}/versions/{version:int}/files")]
+    public Task<IActionResult> GetBundleFiles(string name, int version, CancellationToken ct) =>
+        RelayAsync(() => proxy.GetBundleFilesResponseAsync(name, version, ct));
+
     [HttpGet("bundles/{name}/versions/{version:int}/dependencies")]
     public Task<IActionResult> GetBundleDependencies(string name, int version, CancellationToken ct) =>
         RelayAsync(() => proxy.GetBundleDependenciesResponseAsync(name, version, ct));

@@ -380,12 +380,10 @@ public class ExternalWindowEngine
 
     private static bool IsRunningAggregateCompatible(FunctionCallExpression f)
     {
-        if (f.Window?.Frame is not WindowFrame frame) return false;
-        if (f.IsDistinct
-            || frame.Type != WindowFrameType.ROWS
-            || frame.StartBound != WindowFrameBoundType.UNBOUNDED_PRECEDING
-            || frame.EndBound is not null and not WindowFrameBoundType.CURRENT_ROW
-            || frame.Exclusion != WindowFrameExclusion.NoOthers)
+        // COMPAT_BREAK: 0.23.0 — RANGE now uses bounded peer replay instead of materializing the bucket.
+        if (f.Window == null || f.IsDistinct
+            || (!IsCumulativeRowsFrame(f.Window.Frame)
+                && !(f.Window.OrderBy is { Count: > 0 } && IsDefaultRunningFrame(f.Window.Frame))))
             return false;
 
         return f.FunctionName.ToUpperInvariant() switch
@@ -873,6 +871,12 @@ public class ExternalWindowEngine
         object?[]? prevSortKeys = null;
         var runningAggregates = new Dictionary<string, StreamingWindowAggregate>(StringComparer.OrdinalIgnoreCase);
         var slidingAggregates = new Dictionary<string, SlidingWindowAggregate>(StringComparer.OrdinalIgnoreCase);
+        var rangeRunningFuncs = group.Columns
+            .Select(c => (FunctionCallExpression)c.Expression)
+            .Where(f => IsRunningAggregateCompatible(f)
+                && (f.Window?.Frame == null || f.Window.Frame.Type == WindowFrameType.RANGE))
+            .ToList();
+        await using var peerBuffer = rangeRunningFuncs.Count > 0 ? new WindowPeerBuffer(this) : null;
         var maxLagOffset = group.Columns
             .Select(c => (FunctionCallExpression)c.Expression)
             .Where(f => f.FunctionName.Equals("LAG", StringComparison.OrdinalIgnoreCase))
@@ -912,6 +916,33 @@ public class ExternalWindowEngine
                 }
             }
 
+            bool samePeer = true;
+            if (prevRow != null && !partitionChanged && group.Signature.OrderBy != null && group.Signature.OrderBy.Count > 0)
+            {
+                for (int k = 0; k < group.Signature.OrderBy.Count; k++)
+                {
+                    if (prevSortKeys != null && _context.CompareConstants(currentSortKeys[k], prevSortKeys[k]) != 0)
+                    {
+                        samePeer = false;
+                        break;
+                    }
+                }
+            }
+
+            if (peerBuffer is { Count: > 0 } && (partitionChanged || !samePeer))
+            {
+                await foreach (var buffered in peerBuffer.ReadAsync())
+                {
+                    foreach (var rf in rangeRunningFuncs)
+                    {
+                        var key = rf.ToSql().ToUpperInvariant();
+                        buffered[$"WINDOW_{key}"] = runningAggregates[key].GetValue(rf.FunctionName);
+                    }
+                    yield return buffered;
+                }
+                await peerBuffer.ClearAsync();
+            }
+
             if (partitionChanged || prevRow == null)
             {
                 rowNumber = 1;
@@ -926,23 +957,10 @@ public class ExternalWindowEngine
             else
             {
                 rowNumber++;
-                if (group.Signature.OrderBy != null && group.Signature.OrderBy.Count > 0)
+                if (!samePeer)
                 {
-                    bool samePeer = true;
-                    for (int k = 0; k < group.Signature.OrderBy.Count; k++)
-                    {
-                        if (prevSortKeys != null && _context.CompareConstants(currentSortKeys[k], prevSortKeys[k]) != 0)
-                        {
-                            samePeer = false;
-                            break;
-                        }
-                    }
-
-                    if (!samePeer)
-                    {
-                        currentDenseRank++;
-                        currentRank = rowNumber;
-                    }
+                    currentDenseRank++;
+                    currentRank = rowNumber;
                 }
             }
 
@@ -1034,7 +1052,10 @@ public class ExternalWindowEngine
                 row[$"WINDOW_{f.ToSql().ToUpperInvariant()}"] = winVal;
             }
 
-            yield return row;
+            if (peerBuffer != null)
+                await peerBuffer.AddAsync(row);
+            else
+                yield return row;
             if (maxLagOffset > 0)
             {
                 lagHistory.Enqueue(row);
@@ -1045,6 +1066,85 @@ public class ExternalWindowEngine
             prevPartitionKeys = currentPartitionKeys;
             prevSortKeys = currentSortKeys;
         }
+
+        if (peerBuffer is { Count: > 0 })
+        {
+            await foreach (var buffered in peerBuffer.ReadAsync())
+            {
+                foreach (var rf in rangeRunningFuncs)
+                {
+                    var key = rf.ToSql().ToUpperInvariant();
+                    buffered[$"WINDOW_{key}"] = runningAggregates[key].GetValue(rf.FunctionName);
+                }
+                yield return buffered;
+            }
+        }
+    }
+
+    // RANGE needs the final aggregate for every tied row. A peer group can be the entire
+    // partition, so it must obey the same spill threshold as the window operator.
+    private sealed class WindowPeerBuffer(ExternalWindowEngine owner) : IAsyncDisposable
+    {
+        private readonly List<Row> _rows = [];
+        private readonly int _limit = Math.Max(1, owner._context.WindowSpillThreshold);
+        private string? _chunk;
+        private ISpillWriter? _writer;
+        public long Count { get; private set; }
+
+        public async Task AddAsync(Row row)
+        {
+            if (_writer == null && _rows.Count >= _limit)
+            {
+                _chunk = $"window_peers_{Guid.NewGuid():N}";
+                _writer = await owner._context.SpillStore.CreateWriterAsync(_chunk, _limit);
+                await _writer.WriteRowsAsync(_rows);
+                _rows.Clear();
+            }
+            if (_writer != null)
+                await _writer.WriteRowAsync(row);
+            else
+                _rows.Add(row);
+            Count++;
+        }
+
+        public async IAsyncEnumerable<Row> ReadAsync()
+        {
+            if (_writer != null)
+            {
+                await _writer.DisposeAsync();
+                _writer = null;
+            }
+            if (_chunk != null)
+            {
+                await foreach (var row in owner.ReadPartitionStream(_chunk))
+                    yield return row;
+            }
+            else
+            {
+                foreach (var row in _rows) yield return row;
+            }
+        }
+
+        public async ValueTask ClearAsync()
+        {
+            try
+            {
+                if (_writer != null) await _writer.DisposeAsync();
+            }
+            finally
+            {
+                _writer = null;
+                _rows.Clear();
+                Count = 0;
+                if (_chunk != null)
+                {
+                    owner._context.SpillStore.DeleteChunk(_chunk);
+                    _chunk = null;
+                }
+            }
+        }
+
+        public ValueTask DisposeAsync() => ClearAsync();
     }
 
     private async IAsyncEnumerable<Row> ProcessBucketLeadSpill(string name, WindowGroup group)

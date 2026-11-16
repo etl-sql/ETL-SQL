@@ -196,7 +196,38 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
       if (catalog) return catalogRoute(catalog[1], catalog[1] === 'schedules' ? schedules : notifications, path, method, init);
       if (path === '/api/orchestrator/scripts') return failure === 'pickers-unavailable' ? json({ error: 'Script unavailable.' }, 503)
         : json({ files: ['etl/daily_sales.etlsql', 'etl/hourly_orders.etlsql'] });
-      if (path === '/api/orchestrator/bundles') return json([{ bundleName: 'sales_bundle', version: 1 }, { bundleName: 'sales_bundle', version: 2 }]);
+      if (path === '/api/orchestrator/bundles') return json([
+        { bundleName: 'sales_bundle', version: 1, entryPath: 'main.etlsql' },
+        { bundleName: 'sales_bundle', version: 2, entryPath: 'main.etlsql' }
+      ]);
+      const bundleVersionsMatch = /^\/api\/orchestrator\/bundles\/([^/]+)\/versions$/.exec(path);
+      if (bundleVersionsMatch) {
+        if (readsPaused) await new Promise(resolve => pendingReads.push(resolve));
+        const bundleName = decodeURIComponent(bundleVersionsMatch[1]);
+        if (bundleName !== 'sales_bundle') return json([]);
+        if (failure === 'bundle-version-removed') return json([
+          { bundleName: 'sales_bundle', version: 1, entryPath: 'legacy.etlsql' }
+        ]);
+        return json([
+          { bundleName: 'sales_bundle', version: 2, entryPath: 'main.etlsql' },
+          { bundleName: 'sales_bundle', version: 1, entryPath: 'legacy.etlsql' }
+        ]);
+      }
+      const bundleFilesMatch = /^\/api\/orchestrator\/bundles\/([^/]+)\/versions\/(\d+)\/files$/.exec(path);
+      if (bundleFilesMatch) {
+        if (readsPaused) await new Promise(resolve => pendingReads.push(resolve));
+        const bundleName = decodeURIComponent(bundleFilesMatch[1]);
+        const version = Number(bundleFilesMatch[2]);
+        if (bundleName !== 'sales_bundle') return json({ error: 'Bundle not found.' }, 404);
+        return json(version === 2
+          ? [
+              { bundleName: 'sales_bundle', version: 2, virtualPath: 'main.etlsql', content: '', contentHash: 'sha256:a', sizeBytes: 10, contentType: 'text/plain' },
+              { bundleName: 'sales_bundle', version: 2, virtualPath: 'sub/backfill.etlsql', content: '', contentHash: 'sha256:b', sizeBytes: 12, contentType: 'text/plain' }
+            ]
+          : [
+              { bundleName: 'sales_bundle', version: 1, virtualPath: 'legacy.etlsql', content: '', contentHash: 'sha256:c', sizeBytes: 10, contentType: 'text/plain' }
+            ]);
+      }
       if (path === '/api/orchestrator/service/stop') {
         if (paused) await new Promise(resolve => pending.push(resolve));
         return failure === 'failed' ? json({ error: 'The Orchestrator service refused the stop request.' }, 500)
@@ -208,7 +239,8 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
         if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
         if (jobs.some(item => item.name === body.name)) return relayed(`Job '${body.name}' already exists.`, 409);
         jobs.push({ id: `job-${jobs.length}`, name: body.name, script: '', interval: body.interval ?? 1, unit: body.unit ?? 'HOUR', isEnabled: true,
-          maxRetries: body.maxRetries, retryDelaySeconds: body.retryDelaySeconds, hashPolicy: body.hashPolicy, version: 1, jobType: 0,
+          maxRetries: body.maxRetries, retryDelaySeconds: body.retryDelaySeconds, hashPolicy: body.hashPolicy, version: 1,
+          jobType: String(body.jobType ?? '').toUpperCase() === 'REPORT' ? 1 : 0,
           targetPath: body.targetPath, displayName: body.displayName, createdBy: 'user:sandbox-admin', lastRun: null, nextRun: null });
         details[body.name] = { schedules: [], notifications: [], state: [], history: [], grants: [] };
         return new Response(null, { status: 201 });

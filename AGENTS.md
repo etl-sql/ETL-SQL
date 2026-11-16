@@ -663,8 +663,9 @@ To prevent cross-platform CI failures and avoid wasting 1-hour GitHub Actions ru
    - When writing C# tests that read markdown or text files from disk via `File.ReadAllText()`, never assume `\r\n` or `\n`. Always use `.Replace("\r\n", "\n")` or regex `\r?\n` for cross-platform stability.
 5. **Pre-Push Validation**:
    - The pre-push hook runs the fast tier: an environment check (`scripts/Test-Environment.ps1`),
-     source preflight and formatting. It has measured about three minutes. CI runs everything else
-     and is what certifies a commit.
+     lane selection (`scripts/select-ci-lanes.mjs` — exiting immediately on docs-only changes),
+     source preflight, and formatting for code/config changes. CI runs the full impacted lanes and
+     is what certifies a commit.
    - Before a risky or broad batch, run the complete local set: `.\scripts\Test-PrePush.ps1` (or
      push with `ETLSQL_PREPUSH_FULL=1`). It adds the browser type and lint gates, the consumer
      contracts, smoke tests and, when selected, the extension and browser checks; broad runs have

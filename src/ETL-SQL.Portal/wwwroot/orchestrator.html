@@ -693,8 +693,16 @@
         <input id="cj-description" type="text" placeholder="Summary of what this pipeline accomplishes...">
       </div>
 
-      <!-- A published bundle is not offered as a target until the dialog writes orch:// URIs (ROADMAP OR01). -->
+      <!-- Target Kind: Script vs Bundle vs Report -->
       <div class="form-row">
+        <div class="form-group" style="flex:1">
+          <label for="cj-target-kind">Target Type</label>
+          <select id="cj-target-kind">
+            <option value="Script" selected>Script File (.etlsql)</option>
+            <option value="Bundle">Published Bundle (orch://)</option>
+            <option value="Report">Report Refresh (REPORT)</option>
+          </select>
+        </div>
         <div class="form-group" style="flex:1">
           <label for="cj-sandbox-profile">Sandbox Isolation Profile</label>
           <select id="cj-sandbox-profile">
@@ -719,6 +727,40 @@
           <label for="cj-script-path">Or server path manually</label>
           <input id="cj-script-path" type="text" placeholder="relative/path/to/script.etlsql">
         </div>
+      </div>
+
+      <!-- Bundle Target Inputs -->
+      <div id="cj-bundle-target-row" style="display:none">
+        <div class="form-row">
+          <div class="form-group" style="flex:2">
+            <label for="cj-bundle-select">Published Bundle</label>
+            <select id="cj-bundle-select">
+              <option value="">— Select published bundle —</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1">
+            <label for="cj-bundle-version">Version</label>
+            <select id="cj-bundle-version" disabled>
+              <option value="">— Latest —</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:2">
+            <label for="cj-bundle-entry">Entry Script</label>
+            <select id="cj-bundle-entry" disabled>
+              <option value="">— Default entry —</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="cj-bundle-uri">Or bundle URI (orch://)</label>
+          <input id="cj-bundle-uri" type="text" placeholder="orch://bundle_name@1/main.etlsql">
+        </div>
+      </div>
+
+      <!-- Report Target Inputs -->
+      <div id="cj-report-target-row" class="form-group" style="display:none">
+        <label for="cj-report-path">Report Target Path <span style="color:var(--portal-danger)">*</span></label>
+        <input id="cj-report-path" type="text" placeholder="/Reports/Finance/DailySales">
       </div>
 
       <div id="cj-preview-wrap" style="display:none" class="cj-preview-section">

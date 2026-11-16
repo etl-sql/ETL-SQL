@@ -10,6 +10,7 @@ This directory contains execution baseline reports and test result datasets for 
 
 | Document | Description |
 | :--- | :--- |
+| [Smoke Spill GC-Pause Investigation](spill-gc-pause-investigation-2026-11-16.md) | Review of the unresolved baseline gap; fixed-binary controls contradict attribution to .NET 10.0.14. |
 | [Paired GC Investigation](gc-paired-comparison-2026-10-27.md) | Source-control/candidate captures and 40 fixed-binary runtime controls investigate a failed workstation gate; original failures and baselines remain retained. |
 | [Scale Baseline Calibration](scale-baseline-calibration-2026-10-23.md) | Accepted Smoke/Standard calibration and promoted references, with earlier failed controls retained. |
 | [Smoke Scale Order Independence](scale-order-independence-2026-10-22.md) | Fresh-process Smoke captures pass all directional timing checks; earlier failed experiments remain recorded. |

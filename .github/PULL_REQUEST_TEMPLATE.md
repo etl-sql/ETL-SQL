@@ -13,13 +13,13 @@ Fixes # (issue number)
 
 ## Verification Checklist
 
-Before submitting this PR, please check that you have completed the following verification steps:
+Run targeted checks locally matching your change; GitHub Actions runs the full impacted CI lanes as the merge gate:
 
-- [ ] **Compilation**: Project builds cleanly without compile warnings or errors (`dotnet build`).
-- [ ] **Tests**: All tests pass (`dotnet test`).
-- [ ] **Asset Sync**: If modifying report runtime assets under `src/ETL-SQL.ReportRuntime/Resources/Shared/`, did you run the sync script? (`node .\scripts\sync-assets.js` and `node .\scripts\sync-assets.js -Check`).
-- [ ] **Syntax Index**: If modifying C# syntax tokens in `LanguageMetadata.cs`, did you run the index generator? (`node .\scripts\generate-syntax-index.js`).
-- [ ] **Doc Sanity**: Documentation tests and link checking pass successfully.
+- [ ] **Compilation**: Clean build passes after browser asset preparation (`npm ci --prefix scripts/typecheck`, `node scripts/sync-assets.js`, `node scripts/sync-assets.js -Check`, `dotnet build ETL-SQL.slnx`).
+- [ ] **Targeted Tests**: Targeted tests for changed projects/filters pass (`dotnet test tests/<Project>/<Project>.csproj --filter "..."`).
+- [ ] **Browser Assets & Gates**: If modifying shared assets or browser TypeScript/JavaScript, ran `node scripts/sync-assets.js`, `node scripts/sync-assets.js -Check`, `node scripts/typecheck-browser.mjs`, and `node scripts/lint-browser.mjs`.
+- [ ] **Syntax Index**: If modifying C# syntax tokens, ran `node scripts/generate-syntax-index.js`.
+- [ ] **Doc Sanity**: Documentation links and doc checks pass for doc updates.
 
 ## Security & Guardrail Check
 

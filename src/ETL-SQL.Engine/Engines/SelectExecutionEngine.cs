@@ -132,9 +132,17 @@ public class SelectExecutionEngine
             // Intentional materialization: GROUP BY / WINDOW / ORDER BY require random access.
 
             // Phase 4 (runtime): Apply LeftSingle predicates to the input stream before any hash
-            // table is built, reducing the number of rows probed through each right-side table.
-            var leftPreds = PredicatePushdownOptimizer.GetSingleSourcePredicates(logicalPlan, fromName)
-                .Select(p => p.Predicate).ToList();
+            // table is built, unless a RIGHT or FULL outer join needs all left rows to decide matches
+            // (filtering a null-extended left side pre-join would turn non-matching left rows into
+            // synthetic unmatched right rows).
+            // COMPAT_BREAK: 0.23.0 — preserve matches before filtering a null-extended left side.
+            bool hasRightOrFullOuterJoin = stmt.Joins.Any(j =>
+                j.JoinType.Contains("RIGHT", StringComparison.OrdinalIgnoreCase)
+                || j.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase));
+            var leftPreds = hasRightOrFullOuterJoin
+                ? new List<Expression>()
+                : PredicatePushdownOptimizer.GetSingleSourcePredicates(logicalPlan, fromName)
+                    .Select(p => p.Predicate).ToList();
             var joinInput = leftPreds.Count > 0
                 ? WhereStream(inputStream, CombineAnds(leftPreds), _context)
                 : inputStream;

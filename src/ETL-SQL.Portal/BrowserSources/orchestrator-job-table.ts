@@ -2,6 +2,16 @@ import { escHtml, fmtDt } from './orchestrator-admin-ui.js';
 import { ownerLabel } from './orchestrator-acl-ui.js';
 import { isObject } from './http-error.js';
 
+export type TargetKindLabel = 'Report' | 'Bundle' | 'Script';
+
+/** Resolves a job's operator-facing target kind from its persisted JobTargetKind and URI scheme. */
+export function targetKindLabel(jobType: 0 | 1 | number, targetPath?: string | null): TargetKindLabel {
+    if (jobType === 1) return 'Report';
+    const path = (targetPath ?? '').trim().toLowerCase();
+    if (path.startsWith('orch://') || path.startsWith('bundle://')) return 'Bundle';
+    return 'Script';
+}
+
 export function jobSchedule(job: JobDefinition): string {
     if (!job.interval) return 'Manual';
     const unit = (job.unit || 'HOUR').toLowerCase();
@@ -17,7 +27,9 @@ export function renderScheduledJobsTable(jobs: readonly JobDefinition[], selecte
       ${jobs.map(job => {
         const display = job.displayName || job.name;
         const path = job.targetPath || '';
-        const bundle = path.startsWith('bundle://');
+        const kind = targetKindLabel(job.jobType, path);
+        const badgeLabel = kind === 'Report' ? '📊 Report' : kind === 'Bundle' ? '📦 Bundle' : '📜 Script';
+        const badgeBackground = kind === 'Bundle' ? 'var(--portal-accent-soft)' : 'var(--portal-surface-subtle)';
         let sandbox = 'Default';
         if (job.options) {
             try {
@@ -30,7 +42,7 @@ export function renderScheduledJobsTable(jobs: readonly JobDefinition[], selecte
           <td><strong>${escHtml(display)}</strong>
             ${display !== job.name ? `<div style="font-size:.78em;color:var(--portal-muted)">${escHtml(job.name)}</div>` : ''}</td>
           <td><div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-            <span class="badge" style="font-size:.75em;background:${bundle ? 'var(--portal-accent-soft)' : 'var(--portal-surface-subtle)'}">${bundle ? '📦 Bundle' : '📜 Script'}</span>
+            <span class="badge" style="font-size:.75em;background:${badgeBackground}">${badgeLabel}</span>
             ${sandbox !== 'Default' ? `<span class="badge badge-accent" style="font-size:.72em">${escHtml(sandbox)}</span>` : ''}</div>
             ${path ? `<div style="font-size:.72em;color:var(--portal-muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(path)}">${escHtml(path)}</div>` : ''}</td>
           <td class="orch-owner-cell" title="${escHtml(ownerLabel(job.createdBy))}">${escHtml(ownerLabel(job.createdBy))}</td>

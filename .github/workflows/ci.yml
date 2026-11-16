@@ -43,11 +43,11 @@ jobs:
       lanes: ${{ steps.impact.outputs.lanes }}
       browser_shards: ${{ steps.impact.outputs.browser_shards }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 13
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       # Event values are passed as data, never interpolated into shell source.
@@ -91,7 +91,7 @@ jobs:
         run: node scripts/release-preflight.mjs --release-branch "$ETLSQL_RELEASE_BRANCH"
       - name: Upload preflight logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: source-preflight-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/preflight/
@@ -108,10 +108,10 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -177,7 +177,7 @@ jobs:
 
       - name: Retain build diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -192,7 +192,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 15
       - uses: ./.github/actions/prepare-test-project
         with:
@@ -211,7 +211,7 @@ jobs:
       - name: Retain Portal smoke diagnostics
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: portal-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/portal-smoke/
@@ -229,7 +229,7 @@ jobs:
       matrix:
         group: [1, 2, 3]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 15
       - uses: ./.github/actions/prepare-test-project
         with:
@@ -244,7 +244,7 @@ jobs:
       - name: Retain engine group results
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: engine-coverage-group-${{ matrix.group }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/engine-coverage/
@@ -253,7 +253,7 @@ jobs:
       - name: Retain engine group diagnostics
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: engine-coverage-diagnostics-${{ matrix.group }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -277,7 +277,7 @@ jobs:
       matrix:
         group: [1, 2, 3]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 15
       - uses: ./.github/actions/prepare-test-project
         with:
@@ -297,7 +297,7 @@ jobs:
       - name: Retain spill group diagnostics
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: spill-certification-${{ matrix.group }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -326,11 +326,11 @@ jobs:
           if ($env:BUILD_RESULT -cne 'success' -or $env:PORTAL_RESULT -cne 'success') { throw 'Build or Portal smoke worker did not pass.' }
           $expectedEngine = if ($env:CI_EVENT -ceq 'pull_request') { 'skipped' } else { 'success' }
           if ($env:ENGINE_RESULT -cne $expectedEngine) { throw 'Engine coverage workers did not reach the required state.' }
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 15
       - name: Download all retained engine group attempts
         if: github.event_name != 'pull_request'
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: engine-coverage-group-*-${{ github.run_id }}-*
           path: release-validation/engine-groups
@@ -350,7 +350,7 @@ jobs:
         run: ./scripts/Invoke-CertificationProcess.ps1 -ScriptPath scripts/Test-CoverageGate.ps1 -ScriptArguments @('-CoverageDirectory', 'coverage', '-MinimumLineCoverage', '70') -EvidenceDirectory release-validation/coverage-aggregate -TimeoutSeconds 300
       - name: Retain aggregate coverage evidence
         if: always() && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: engine-coverage-aggregate-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -367,12 +367,12 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 15
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
       - name: Install browser compiler
@@ -389,7 +389,7 @@ jobs:
         run: node scripts/verify-source-only-preparation.mjs --evidence artifacts/browser-assets-source-only.json
 
       - name: Upload browser asset ownership and hashes
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: browser-asset-ownership-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -439,7 +439,7 @@ jobs:
 
       - name: Retain consumer contract diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: consumer-contracts-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/consumer-contracts/
@@ -459,7 +459,7 @@ jobs:
 
       - name: Retain HA contract diagnostics
         if: always() && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ha-contracts-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/ha-contracts/
@@ -477,10 +477,10 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -570,7 +570,7 @@ jobs:
 
       - name: Retain extension CI diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: vscode-checks-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/vscode/
@@ -595,10 +595,10 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -611,7 +611,7 @@ jobs:
         run: node scripts/sync-assets.js
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
 
@@ -663,7 +663,7 @@ jobs:
 
       - name: Retain sample diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: sample-diagnostics-${{ matrix.platform }}-${{ github.run_attempt }}
           path: release-validation/samples
@@ -687,10 +687,10 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -707,7 +707,7 @@ jobs:
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/sync-assets.js') -EvidenceDirectory artifacts/browser-shard/preparation -TimeoutSeconds 360
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
 
@@ -726,7 +726,7 @@ jobs:
       # Keyed on the Microsoft.Playwright version in Directory.Packages.props: bumping the package
       # must fetch a matching browser build rather than reuse the previous one.
       - name: Cache Playwright browsers
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~\AppData\Local\ms-playwright
           key: playwright-windows-${{ hashFiles('Directory.Packages.props') }}
@@ -757,7 +757,7 @@ jobs:
 
       - name: Retain browser shard diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: browser-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/browser-shard/
@@ -771,9 +771,9 @@ jobs:
     if: always() && needs.source-preflight.result == 'success' && contains(fromJSON(needs.source-preflight.outputs.lanes || '[]'), 'portal-browser-journey') && needs.source-preflight.outputs.browser_shards == '[1,2,3]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 8
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Require all browser jobs to pass
@@ -781,7 +781,7 @@ jobs:
         env:
           SHARD_RESULT: ${{ needs.portal-browser-journey.result }}
         run: test "$SHARD_RESULT" = success
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: browser-shard-*-${{ github.run_id }}-*
           path: browser-evidence
@@ -810,10 +810,10 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -830,12 +830,12 @@ jobs:
         run: ./scripts/Invoke-CertificationProcess.ps1 -Command node -CommandArguments @('scripts/sync-assets.js') -EvidenceDirectory "release-validation/studio-performance/$env:STUDIO_PLATFORM/preparation" -TimeoutSeconds 360
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
 
       - name: Cache Playwright Chromium
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ runner.temp }}/ms-playwright
           key: playwright-chromium-${{ matrix.platform }}-${{ hashFiles('Directory.Packages.props') }}
@@ -855,7 +855,7 @@ jobs:
 
       - name: Retain Studio performance diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: studio-performance-diagnostics-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/studio-performance/
@@ -863,7 +863,7 @@ jobs:
 
       - name: Upload Studio performance evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: studio-performance-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/studio-performance/${{ matrix.platform }}.json
@@ -882,10 +882,10 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -898,7 +898,7 @@ jobs:
         run: node scripts/sync-assets.js
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
 
@@ -958,7 +958,7 @@ jobs:
 
       - name: Retain engine certification evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: engine-certification-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/engine-certification/
@@ -982,10 +982,10 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -998,7 +998,7 @@ jobs:
         run: node scripts/sync-assets.js
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
 
@@ -1013,7 +1013,7 @@ jobs:
 
       - name: Retain enterprise process diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: enterprise-diagnostics-${{ matrix.platform }}-${{ github.run_attempt }}
           path: release-validation/enterprise
@@ -1022,7 +1022,7 @@ jobs:
 
       - name: Retain enterprise certification evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: enterprise-certification-${{ matrix.platform }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: certification-results/enterprise-hardening/ci-${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.platform }}
@@ -1039,7 +1039,7 @@ jobs:
     steps:
       - name: Checkout
         timeout-minutes: 15
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       # CI 41860496118 (2026-11-04) ran out of disk extracting the .NET SDK image. Remove
       # preinstalled toolchains this job never uses, and record free space before and after the
@@ -1053,7 +1053,7 @@ jobs:
           df -h /
 
       - name: Set up browser compiler runtime
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
 
@@ -1066,7 +1066,7 @@ jobs:
         run: node scripts/sync-assets.js
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
 
@@ -1176,7 +1176,7 @@ jobs:
 
       - name: Retain Docker integration diagnostics
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: integration-diagnostics-${{ github.run_attempt }}
           # test-lane-results holds the TRX files and any flaky-tests.jsonl from retry-once.

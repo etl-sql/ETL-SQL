@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.23.0 — Semantic: join filtering, merge joins and window spill correctness
+- **What changed**: Pre-join filtering no longer removes left-side matches needed by RIGHT/FULL joins, and unknown source schemas no longer cause speculative identifier qualification. Merge SEMI/ANTI joins return only qualifying left rows, and mixed-type compound sort keys use a transitive type order. Ordered running RANGE aggregates can spill tied peers while retaining their shared aggregate result.
+- **Who is affected**: Queries using these join paths or mixed-type composite keys; large ordered window queries with tied keys.
+- **Migration**: Recheck results that depended on the old incorrect join filtering or merge behavior. Use explicit table aliases for ambiguous column names. No syntax change is required.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.22.0 — Runtime: machine-bound encrypted files use format ETLSQLMF4
 - **What changed**: Machine-bound file encryption (`ENCRYPT = MACHINE`) used one key for both AES and HMAC. It now derives separate keys with HKDF and writes the `ETLSQLMF4` header. Files written with `ETLSQLMF3` are refused.
 - **Who is affected**: Anyone holding machine-bound encrypted export files written before v0.22.0. In-memory machine-bound values are unaffected.

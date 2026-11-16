@@ -74,8 +74,8 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
 | RG01 | **Always-running merge gate.** Add a CI job that always runs and fails unless every lane selected for the change passed (skipped only when the change did not select it). Require it on `main` and `release/*` through a ruleset; drop the per-job required checks it replaces. Prove with a PR that skips a selected lane and is blocked. | — | S |
-| RG03 | **Align contributor docs, template and hooks with GitHub as the gate.** `CONTRIBUTING.md` builds from a clean clone (Node 22, `sync-assets.js`), the PR template asks for targeted runs, `AGENTS.md` agrees, and the pre-push hook skips heavy preflight for docs-only changes. Prove with a clean-clone build and a docs-only push timing. | — | S |
-| RG04 | **Dependency and Action maintenance.** Add Dependabot npm entries for `scripts/typecheck`, `scripts/lint`, `scripts/codemirror` and `scripts/vsix`; pin third-party Actions to commit SHAs with Dependabot `github-actions` updates. Prove with the first update PRs passing RG01. | — | S |
+| RG03 | **Align contributor docs, template and hooks with GitHub as the gate.** Updated `CONTRIBUTING.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `AGENTS.md`, and `scripts/Test-PrePush.ps1` (73/73 `test-ci-impact.mjs` + `test-environment-preflight.mjs` pass). **Left:** prove with a clean-clone Node 22 build and a docs-only push timing. | — | S |
+| RG04 | **Dependency and Action maintenance.** Added Dependabot npm entries for `scripts/typecheck`, `scripts/lint`, `scripts/codemirror`, and `scripts/vsix`, and pinned third-party Actions across `.github/` to commit SHAs (`check-workflows.mjs`, `test-workflows.mjs`, `test-workflow-timeouts.mjs`, and `test-installer-actions.mjs` pass). **Left:** prove with the first update PRs passing RG01. | — | S |
 
 ### 1.3 Full script and test review
 
@@ -85,11 +85,7 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
   v0.22.0 tooling review already swept, and write the review plan (what is read, by whom, what
   counts as a finding) with an estimate. **Finish line:** a plan in `docs/releases/` that the owner
   accepts.
-- [ ] **Open items from the v0.22.0 tooling review.** `Compare-CertBaseline.ps1` warns on a new
-  scenario with no baseline but does not flag a baseline scenario missing from the new report.
-  Recheck on the paths the review names (they did not reproduce on temp tables): WHERE pushdown
-  with a shared column name, SEMI/ANTI `NULL` keys and residual `ON` terms, composite sort-merge join
-  at 3,000 rows, running `SUM() OVER (ORDER BY)`.
+- [x] **Open items from the v0.22.0 tooling review.** (`Compare-CertBaseline.ps1` now warns `MISSING_NEW_SCENARIO` on baseline scenarios absent from the current report; fixed all four SQL review paths with `ToolingReviewSqlPathTests`: outer-join / unknown-schema qualification & `LeftSingle` pre-join pushdown guard, `LEFT SEMI`/`LEFT ANTI` handling in `JoinEngine.PerformMergeJoin`, transitive type-ranked `CompoundKey.CompareValues`, and `ExternalWindowEngine.ProcessBucketDeepSpill` `RANGE` peer-group folding — Reviewed with 81 targeted cases passing across SQL-path, join, pushdown and window tests; RANGE eligibility and bounded peer-spill cleanup are covered.)
 
 ### 1.4 Security: spawned-run identity and the local vault
 
@@ -140,21 +136,11 @@ Named a v0.23.0 priority when v0.22.0 was scoped; it has no plan yet.
 
 ### 1.8 Orchestrator New Job bundle target
 
-v0.22.0 removed the bundle target from the New Job dialog until this lands.
-
-| ID | Chunk and finish line | Depends on | Size |
-| :--- | :--- | :--- | :--- |
-| OR01 | **Fix Portal New Job bundle URIs (`orch://`) and target kind labeling.** Update `readBundleChoices` (`orchestrator-create-job.ts`) and the New Job modal to emit canonical `orch://<bundle>@<version>/<entryPath>` URIs (with version and entry-script selection) matching `BundleUri.TryParse`; support `JobType = REPORT` in New Job creation; and fix `orchestrator-job-detail.ts` so `jobType === 1` displays `'Report'` while `orch://` targets display `'Bundle'`. v0.22.0 removed the bundle target from the dialog until this lands. | — | S |
+- [x] **OR01: Portal New Job bundle URIs (`orch://`), Report target creation, and target kind labeling.** Restored the bundle target in `orchestrator-create-job.ts` and `#createJobModal` with `readBundleChoices` / `readBundleVersions` / `readBundleFiles`, Portal proxy route `GET /api/orchestrator/bundles/{name}/versions/{version}/files`, canonical `orch://<bundle>@<version>/<entryPath>` URIs matching `BundleUri.TryParse`, `JobType = REPORT` support, and `'Report'` / `'Bundle'` / `'Script'` labeling across `orchestrator-job-detail.ts` and `orchestrator-job-table.ts` (browser type/lint gates clean, JS owner/activity checks pass, 36/36 Playwright sandbox browser tests and 52/52 Portal integration tests pass; delayed catalog reads preserve manual URIs and refresh removed-version selections).
 
 ### 1.9 Spill GC-pause gap
 
-- [ ] **Explain the spill GC-pause gap.** The smoke check fails four spill metrics with no engine
-  change: `TempTableSpill_50000_SELECT_INTO GC_PAUSE_MS` (stored 4.7 ms, measured 10.6–12.2 ms),
-  `SpillCleanupSuccess_50000 GC_PAUSE_MS` (4.8 ms against 14.2–14.5 ms),
-  `SpillCleanupSuccess_50000 ELAPSED_MS` (47 ms against 57–59 ms) and its derived
-  `ROWS_PER_SECOND`. Allocations and checksums match; the cause is unproven. Accepted as one known
-  gap for v0.22.0 (owner, 2026-11-03/04); v0.23.0 needs the cause or a re-baseline with a stated
-  reason.
+- [ ] **Explain the spill GC-pause gap.** Reopened after review: the retained fixed-binary .NET 10.0.13/10.0.14 controls both reproduce elevated pauses, contradicting the proposed runtime-version root cause. The four Smoke spill metric gaps remain unresolved. **Left:** isolate the cause with controlled captures or accept a justified recalibration. See [the reviewed investigation](docs/benchmarks/spill-gc-pause-investigation-2026-11-16.md).
 
 ## Tier 2 — next
 

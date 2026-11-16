@@ -202,12 +202,16 @@ public sealed class OrchestratorPageOwnerSandboxTests(SandboxStoryFixture fixtur
         await Expect(page.Locator("#cj-interval")).ToHaveValueAsync("1");
         await Expect(page.Locator("#cj-at-time")).ToHaveValueAsync("");
         await page.Locator("#cj-sched-mode-shared").CheckAsync();
+        await page.Locator("#cj-target-kind").SelectOptionAsync("Bundle");
         await page.Locator("#cj-cancelBtn").ClickAsync();
         await page.Locator("#newJobBtn").ClickAsync();
         await Expect(page.Locator("#cj-sched-mode-inline")).ToBeCheckedAsync();
         await Expect(page.Locator("#cj-inline-sched-wrap")).ToBeVisibleAsync();
         await Expect(page.Locator("#cj-shared-sched-wrap")).ToBeHiddenAsync();
+        await Expect(page.Locator("#cj-target-kind")).ToHaveValueAsync("Script");
         await Expect(page.Locator("#cj-script-target-row")).ToBeVisibleAsync();
+        await Expect(page.Locator("#cj-bundle-target-row")).ToBeHiddenAsync();
+        await Expect(page.Locator("#cj-report-target-row")).ToBeHiddenAsync();
         Assert.Empty(session.PageErrors);
     }
 
@@ -300,18 +304,95 @@ public sealed class OrchestratorPageOwnerSandboxTests(SandboxStoryFixture fixtur
     }
 
     [Fact]
-    public async Task TheNewJobDialogDoesNotOfferABundleTarget()
+    public async Task ABundleJobEmitsCanonicalOrchUriWithVersionAndEntrySelection()
     {
-        // The dialog used to save bundle://<name>/latest, which no part of the service resolves, so
-        // every bundle job it created failed at run time. Bundles return with orch:// URIs (OR01).
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await OpenAsync(page);
         await page.Locator("#newJobBtn").ClickAsync();
         await Expect(page.Locator("#cj-script-select option")).ToHaveCountAsync(3);
-        await Expect(page.Locator("#createJobModal")).Not.ToContainTextAsync("bundle", new() { IgnoreCase = true });
-        Assert.Equal(0, await page.EvaluateAsync<int>(
-            "() => window.__orchestratorMock.calls.filter(call => call.path === '/api/orchestrator/bundles').length"));
+        await Expect(page.Locator("#cj-bundle-select option")).ToHaveCountAsync(2);
+        await Expect(page.Locator("#cj-bundle-select option").Nth(1)).ToHaveTextAsync("sales_bundle (latest: v2)");
+
+        await page.Locator("#cj-name").FillAsync("bundled_sales");
+        await page.Locator("#cj-target-kind").SelectOptionAsync("Bundle");
+        await Expect(page.Locator("#cj-bundle-target-row")).ToBeVisibleAsync();
+        await page.Locator("#cj-bundle-select").SelectOptionAsync("orch://sales_bundle@2/main.etlsql");
+        await Expect(page.Locator("#cj-bundle-version option")).ToHaveCountAsync(2);
+        await Expect(page.Locator("#cj-bundle-entry option")).ToHaveCountAsync(2);
+        await Expect(page.Locator("#cj-bundle-uri")).ToHaveValueAsync("orch://sales_bundle@2/main.etlsql");
+
+        // Changing entry script within v2 updates the canonical orch:// URI.
+        await page.Locator("#cj-bundle-entry").SelectOptionAsync("sub/backfill.etlsql");
+        await Expect(page.Locator("#cj-bundle-uri")).ToHaveValueAsync("orch://sales_bundle@2/sub/backfill.etlsql");
+        await page.Locator("#cj-saveBtn").ClickAsync();
+        await WaitForMessageAsync(page, "Job 'bundled_sales' created.");
+        Assert.Equal("Script|orch://sales_bundle@2/sub/backfill.etlsql", await page.EvaluateAsync<string>(
+            "() => { const body = window.__orchestratorMock.calls.find(call => call.method === 'POST' && call.path === '/api/orchestrator/jobs').body; return body.jobType + '|' + body.targetPath; }"));
+
+        // Opening the bundle job detail panel labels orch:// targets as 'Bundle'.
+        await page.Locator("tr.job-row[data-name='bundled_sales'] td").First.ClickAsync();
+        await Expect(page.Locator("#metaTargetKind")).ToHaveTextAsync("Bundle");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AManualBundleUriSurvivesDelayedCatalogReads()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenAsync(page);
+        await page.Locator("#newJobBtn").ClickAsync();
+        await page.Locator("#cj-target-kind").SelectOptionAsync("Bundle");
+        await page.EvaluateAsync("() => window.__orchestratorMock.pauseReads()");
+        await page.Locator("#cj-bundle-select").SelectOptionAsync("orch://sales_bundle@2/main.etlsql");
+        await page.WaitForFunctionAsync("() => window.__orchestratorMock.pendingReads > 0");
+        await page.Locator("#cj-bundle-uri").FillAsync("orch://custom@3/entry.etlsql");
+        await page.EvaluateAsync("() => window.__orchestratorMock.releaseReads()");
+        await Expect(page.Locator("#cj-bundle-entry option")).ToHaveCountAsync(2);
+        await Expect(page.Locator("#cj-bundle-uri")).ToHaveValueAsync("orch://custom@3/entry.etlsql");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task ARemovedBundleVersionRefreshesTheEntryAndSubmittedUri()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenAsync(page, "bundle-version-removed");
+        await page.Locator("#newJobBtn").ClickAsync();
+        await page.Locator("#cj-name").FillAsync("remaining_bundle");
+        await page.Locator("#cj-target-kind").SelectOptionAsync("Bundle");
+        await page.Locator("#cj-bundle-select").SelectOptionAsync("orch://sales_bundle@2/main.etlsql");
+        await Expect(page.Locator("#cj-bundle-version")).ToHaveValueAsync("1");
+        await Expect(page.Locator("#cj-bundle-entry")).ToHaveValueAsync("legacy.etlsql");
+        await Expect(page.Locator("#cj-bundle-uri")).ToHaveValueAsync("orch://sales_bundle@1/legacy.etlsql");
+        await page.Locator("#cj-saveBtn").ClickAsync();
+        await WaitForMessageAsync(page, "Job 'remaining_bundle' created.");
+        Assert.Equal("orch://sales_bundle@1/legacy.etlsql", await page.EvaluateAsync<string>(
+            "() => window.__orchestratorMock.calls.find(call => call.method === 'POST' && call.path === '/api/orchestrator/jobs').body.targetPath"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task AReportJobSendsJobTypeReportAndDetailLabelsItReport()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await OpenAsync(page);
+        await page.Locator("#newJobBtn").ClickAsync();
+        await page.Locator("#cj-name").FillAsync("monthly_exec_report");
+        await page.Locator("#cj-target-kind").SelectOptionAsync("Report");
+        await Expect(page.Locator("#cj-report-target-row")).ToBeVisibleAsync();
+        await page.Locator("#cj-report-path").FillAsync("/Reports/Executive/Monthly");
+        await page.Locator("#cj-saveBtn").ClickAsync();
+        await WaitForMessageAsync(page, "Job 'monthly_exec_report' created.");
+        Assert.Equal("REPORT|/Reports/Executive/Monthly", await page.EvaluateAsync<string>(
+            "() => { const body = window.__orchestratorMock.calls.find(call => call.method === 'POST' && call.path === '/api/orchestrator/jobs').body; return body.jobType + '|' + body.targetPath; }"));
+
+        // Opening a Report job (jobType === 1) displays 'Report' rather than 'Bundle'.
+        await page.Locator("tr.job-row[data-name='monthly_exec_report'] td").First.ClickAsync();
+        await Expect(page.Locator("#metaTargetKind")).ToHaveTextAsync("Report");
         Assert.Empty(session.PageErrors);
     }
 

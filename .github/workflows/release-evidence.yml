@@ -45,7 +45,7 @@ jobs:
     outputs:
       version: ${{ steps.identity.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 5
       - name: Confirm candidate identity
         id: identity
@@ -71,12 +71,12 @@ jobs:
       matrix:
         kind: [Profile, Transition]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 10
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
       - name: Install browser compiler
@@ -100,7 +100,7 @@ jobs:
       - name: Retain deployment evidence
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-evidence-deployment-${{ matrix.kind }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -116,12 +116,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 10
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6
         with:
           dotnet-version: 10.0.x
       - name: Install browser compiler
@@ -148,7 +148,7 @@ jobs:
       - name: Retain canary evidence
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-evidence-canary-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/canary/
@@ -163,17 +163,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 5
       # Every attempt: a partial rerun keeps the artifacts of jobs that passed earlier. One download
       # for all three reports: a pattern that matches a single artifact (the canary alone) unpacks
       # it straight into `path` with no artifact-named folder, which the pruner cannot read.
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         timeout-minutes: 5
         with:
           pattern: release-evidence-{deployment-*,canary}-${{ github.run_id }}-*
           path: release-validation/report-inputs
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       - name: Keep the latest attempt of each report
@@ -199,7 +199,7 @@ jobs:
       - name: Retain merged claims index
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-evidence-report-contracts-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/report-contracts/deployment-profiles/claims-index.json
@@ -216,7 +216,7 @@ jobs:
       matrix:
         tier: [Stress, Provider]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 10
       - name: Free disk space
         timeout-minutes: 10
@@ -234,7 +234,7 @@ jobs:
       - name: Retain scale evidence
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-evidence-scale-${{ matrix.tier }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/scale-${{ matrix.tier }}/
@@ -254,7 +254,7 @@ jobs:
       matrix:
         scenario: [ExternalSort, ExternalAggregate, ExternalJoin, TempTableSpill, StreamingSelect, WindowFunction, CsvIngest, ParquetRoundTrip, ReportDatasetSnapshotReload, CubeGroupingSets, ScalarSubqueryCache, SpillCleanupSuccess, SpillCleanupFailure]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 10
       - name: Free disk space
         timeout-minutes: 10
@@ -271,7 +271,7 @@ jobs:
       - name: Retain scale evidence
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-evidence-scale-Huge-${{ matrix.scenario }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/scale-Huge-${{ matrix.scenario }}/
@@ -288,7 +288,7 @@ jobs:
       matrix:
         gate: [Storage, Operator]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 10
       - uses: ./.github/actions/build-release
         with:
@@ -307,7 +307,7 @@ jobs:
       - name: Retain columnar evidence
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-evidence-columnar-${{ matrix.gate }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/columnar-${{ matrix.gate }}/
@@ -327,7 +327,7 @@ jobs:
       matrix:
         profile: [reference, full]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 10
       - uses: ./.github/actions/build-release
         with:
@@ -341,7 +341,7 @@ jobs:
       - name: Retain service-capacity evidence
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-evidence-service-capacity-${{ matrix.profile }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/service-capacity-${{ matrix.profile }}/
@@ -357,7 +357,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 10
       - name: Free disk space
         timeout-minutes: 10
@@ -396,7 +396,7 @@ jobs:
       - name: Retain HA evidence
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-evidence-ha-soak-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/ha-soak/
@@ -414,7 +414,7 @@ jobs:
         scenario: [ColumnarCore, TempTableRoundTrip, AllocProfile, ExternalSort, ExternalJoin, HighCardinalityGrouping, EligibleWindowRowNumber]
         rows: ['10000000', '100000000']
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 10
       # Spilling scenarios need tens of GB. The Ubuntu image ships toolchains this job never uses.
       - name: Free disk space
@@ -452,7 +452,7 @@ jobs:
       - name: Retain billion-row evidence
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-evidence-billion-row-${{ matrix.scenario }}-${{ matrix.rows }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/billion-row/
@@ -466,13 +466,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         timeout-minutes: 5
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
       # Every attempt: "Re-run failed jobs" keeps the passing scenarios' attempt-1 artifacts.
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: release-evidence-billion-row-*-${{ github.run_id }}-*
           path: release-validation/billion-row-runs
@@ -491,7 +491,7 @@ jobs:
       - name: Retain flatness result
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-evidence-billion-row-flatness-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-validation/billion-row-flatness/

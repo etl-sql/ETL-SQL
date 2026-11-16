@@ -456,14 +456,22 @@ Test-ReportMetadata $base $new
 $suppressPerformanceFailures = $PerformanceReportOnly -or ($hardwareMismatch -and -not $AllowHardwareMismatch)
 $suppressionNote = if ($PerformanceReportOnly) { 'Performance is report-only in this run.' } else { 'Performance failure suppressed because baseline hardware differs.' }
 
+$baseList = @()
 $baseMap = @{}
 foreach ($scenario in @($base.scenarios)) {
     $name = Get-ScenarioName $scenario
     if ($name) {
         $rows = Get-ScenarioRowCount $scenario
         $key = if ($null -ne $rows) { "$name|$rows" } else { "$name|" }
-        $baseMap[$key] = $scenario
-        if (-not $baseMap.ContainsKey("$name|")) { $baseMap["$name|"] = $scenario }
+        $entry = [pscustomobject]@{
+            Scenario = $scenario
+            Name = $name
+            Key = $key
+            Matched = $false
+        }
+        $baseList += $entry
+        $baseMap[$key] = $entry
+        if (-not $baseMap.ContainsKey("$name|")) { $baseMap["$name|"] = $entry }
     }
 }
 
@@ -473,13 +481,16 @@ foreach ($scenario in @($new.scenarios)) {
 
     $rows = Get-ScenarioRowCount $scenario
     $key = if ($null -ne $rows) { "$name|$rows" } else { "$name|" }
-    $baselineScenario = $baseMap[$key]
-    if ($null -eq $baselineScenario) { $baselineScenario = $baseMap["$name|"] }
+    $baseEntry = $baseMap[$key]
+    if ($null -eq $baseEntry) { $baseEntry = $baseMap["$name|"] }
 
-    if ($null -eq $baselineScenario) {
+    if ($null -eq $baseEntry) {
         Add-Issue 'WARN' $name 'MISSING_BASELINE' 'missing' 'present' $null 'New scenario has no checked-in baseline yet.'
         continue
     }
+
+    $baseEntry.Matched = $true
+    $baselineScenario = $baseEntry.Scenario
 
     $baselinePassed = Get-CorrectnessPassed $baselineScenario
     $currentPassed = Get-CorrectnessPassed $scenario
@@ -547,6 +558,12 @@ foreach ($scenario in @($new.scenarios)) {
         $spread = Get-MetricSpread $baselineScenario 'gcPauseMs'
         if ($spread -eq 0.0) { $spread = Get-MetricSpread $baselineScenario 'gcPause' }
         Compare-HigherIsWorse $name 'GC_PAUSE_MS' $baselineGc $currentGc 20.0 35.0 $suppressPerformanceFailures ' ms' $spread
+    }
+}
+
+foreach ($baseEntry in $baseList) {
+    if (-not $baseEntry.Matched) {
+        Add-Issue 'WARN' $baseEntry.Name 'MISSING_NEW_SCENARIO' 'present' 'missing' $null 'Baseline scenario is missing from the current report.'
     }
 }
 

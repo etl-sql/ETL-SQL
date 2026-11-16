@@ -541,9 +541,14 @@ public class JoinEngine
         TableSchema? combinedSchema = sortedLeft.Count > 0 && sortedRight.Count > 0
             ? BuildCombinedSchema(sortedLeft[0], sortedRight[0]) : null;
 
+        // COMPAT_BREAK: 0.23.0 — merge SEMI/ANTI joins emit only matched/unmatched left rows.
+        bool isSemi = IsSemiJoin(join.JoinType);
+        bool isAnti = IsAntiJoin(join.JoinType);
+        bool leftOnly = isSemi || isAnti;
+
         var nextRows = new List<Row>();
-        var matchedLeft = new HashSet<Row>();
-        var matchedRight = new HashSet<Row>();
+        var matchedLeft = new HashSet<Row>(ReferenceEqualityComparer.Instance);
+        var matchedRight = new HashSet<Row>(ReferenceEqualityComparer.Instance);
 
         int i = 0, j = 0;
         while (i < sortedLeft.Count && j < sortedRight.Count)
@@ -565,9 +570,10 @@ public class JoinEngine
                         var combined = CombineRows(sortedLeft[i], sortedRight[j], combinedSchema);
                         if (await _context.EvaluateCondition(join.Condition, combined))
                         {
-                            nextRows.Add(combined);
                             matchedLeft.Add(sortedLeft[i]);
                             matchedRight.Add(sortedRight[j]);
+                            if (!leftOnly)
+                                nextRows.Add(combined);
                         }
                         j++;
                     }
@@ -576,17 +582,30 @@ public class JoinEngine
             }
         }
 
-        if (IsLeftOuter(join.JoinType))
+        if (isSemi)
         {
-            foreach (var left in leftRows) if (!matchedLeft.Contains(left)) nextRows.Add(Unmatched(left, combinedSchema, shape));
+            foreach (var left in leftRows)
+                if (matchedLeft.Contains(left)) nextRows.Add(left.Clone());
         }
-        if (IsRightOuter(join.JoinType))
+        else if (isAnti)
         {
-            foreach (var right in rightRows)
-                if (!matchedRight.Contains(right))
-                    nextRows.Add(combinedSchema != null
-                        ? CombineRows(new Row(combinedSchema), right, combinedSchema)
-                        : shape.Unmatched(right));
+            foreach (var left in leftRows)
+                if (!matchedLeft.Contains(left)) nextRows.Add(left.Clone());
+        }
+        else
+        {
+            if (IsLeftOuter(join.JoinType))
+            {
+                foreach (var left in leftRows) if (!matchedLeft.Contains(left)) nextRows.Add(Unmatched(left, combinedSchema, shape));
+            }
+            if (IsRightOuter(join.JoinType))
+            {
+                foreach (var right in rightRows)
+                    if (!matchedRight.Contains(right))
+                        nextRows.Add(combinedSchema != null
+                            ? CombineRows(new Row(combinedSchema), right, combinedSchema)
+                            : shape.Unmatched(right));
+            }
         }
 
         return nextRows;
