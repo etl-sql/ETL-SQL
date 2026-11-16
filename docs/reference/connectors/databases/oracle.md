@@ -13,6 +13,7 @@ pre-configured **TNS** alias. Supports full SQL pushdown, transactions, and conn
 | `TNS_NAME` | Oracle TNS alias | Yes (TNS pattern) |
 | `USER` | Login username | Yes |
 | `PASSWORD` | Login password | Yes |
+| `TIMEOUT_SECONDS` | Command/query execution timeout in seconds (default: `30`) | No |
 | `TABLE` | Default table context (e.g. `SCHEMA.TABLE`) | No |
 | `POOLING` | Enable connection pooling (`TRUE`/`FALSE`) | No |
 | `MIN_POOL_SIZE` | Minimum connections in the pool | No |
@@ -25,15 +26,15 @@ pre-configured **TNS** alias. Supports full SQL pushdown, transactions, and conn
 
 ## Authentication
 
-Oracle supports standard user credentials and wallet-based authentication:
-- **Standard Credentials**: Set `USER` and `PASSWORD` with `HOST`, `PORT`, and `SERVICE_NAME` (or `SID`).
-- **Oracle Wallet**: Use `WALLET_LOCATION` with SSL/TCPS for Oracle Autonomous Cloud Database (ADW/ATP).
+Oracle supports Easy Connect and TNS authentication:
+- **Easy Connect**: Set `USER` and `PASSWORD` with `HOST`, `PORT`, and `SERVICE_NAME` (supports `'ENC:...'`, `'SECRET:...'`, or `'${ENV}'` with `Security:AllowedEnvVars`).
+- **TNS Alias**: Set `TNS_NAME`, `USER`, and `PASSWORD` (or pass a raw connection string in the positional form).
 
 ## Examples
 
 ```sql
--- Service Name pattern (structured)
-CREATE CONNECTION o_dev AS ORACLE(HOST='oradb.local', PORT=1521, SERVICE_NAME='ORCL', USER='app_user', PASSWORD='pwd');
+-- Service Name pattern using a secret reference (or '${ORACLE_PASSWORD}' / 'ENC:...')
+CREATE CONNECTION o_dev AS ORACLE(HOST='oradb.local', PORT=1521, SERVICE_NAME='ORCL', USER='app_user', PASSWORD='SECRET:prod/oracle/app_user');
 
 -- TNS Name pattern (traditional)
 CREATE CONNECTION o_prod AS ORACLE('Data Source=MyTNS;User Id=app_user;Password=pwd;');

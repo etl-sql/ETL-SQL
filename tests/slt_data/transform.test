@@ -420,3 +420,110 @@ USING ROLLING_AGGREGATE (
 query II
 SELECT * FROM #empty_roll;
 ----
+
+
+# 10. TR01/TR02 Regressions: NULL handling, duplicate dates, month-end, in-place, grain
+statement ok
+CREATE TABLE #t_null_norm (Id INT, Val DECIMAL(18, 2));
+
+statement ok
+INSERT INTO #t_null_norm VALUES (1, 10), (2, NULL), (3, 30);
+
+statement ok
+TRANSFORM #null_norm_out
+FROM #t_null_norm
+USING NORMALIZE (
+  VALUE_COL = 'Val',
+  METHOD = 'MIN_MAX'
+);
+
+query IRR
+SELECT Id, Val, Val_Normalized FROM #null_norm_out ORDER BY Id;
+----
+1
+10.000
+0.000
+2
+NULL
+NULL
+3
+30.000
+1.000
+
+statement ok
+TRANSFORM #t_null_norm
+USING SHARE_OF_TOTAL (
+  VALUE_COL = 'Val'
+);
+
+query IRR
+SELECT Id, Val, Val_Share FROM #t_null_norm ORDER BY Id;
+----
+1
+10.000
+0.250
+2
+NULL
+NULL
+3
+30.000
+0.750
+
+statement ok
+CREATE TABLE #t_mom_me (Dt DATE, Val DECIMAL(18, 2));
+
+statement ok
+INSERT INTO #t_mom_me VALUES
+  ('2026-01-31', 100),
+  ('2026-02-28', 150),
+  ('2026-03-31', NULL);
+
+statement ok
+TRANSFORM #mom_me_out
+FROM #t_mom_me
+USING PERIOD_COMPARISON (
+  DATE_COL = 'Dt',
+  VALUE_COL = 'Val',
+  PERIOD = 'MONTH'
+);
+
+query TRRR
+SELECT CAST(Dt AS STRING), Val, Val_Diff, Val_Pct FROM #mom_me_out ORDER BY Dt;
+----
+2026-01-31
+100.000
+NULL
+NULL
+2026-02-28
+150.000
+50.000
+50.000
+2026-03-31
+NULL
+NULL
+NULL
+
+statement error
+TRANSFORM #err_opt
+FROM #t_null_norm
+USING NORMALIZE (
+  VALUE_COL = 'Val',
+  UNKNOWN_OPTION = 'X'
+);
+
+statement error
+TRANSFORM #err_grp
+FROM #t_null_norm
+USING SHARE_OF_TOTAL (
+  VALUE_COL = 'Val',
+  BY_GROUP = 'NoSuchCol'
+);
+
+statement error
+TRANSFORM #err_win
+FROM #t_roll
+USING ROLLING_AGGREGATE (
+  VALUE_COL = 'Val',
+  ORDER_COL = 'Seq',
+  WINDOW_SIZE = 0
+);

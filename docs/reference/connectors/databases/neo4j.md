@@ -27,6 +27,11 @@ Aliases: `NEO`
 `USER` and `PASSWORD` are passed to the Neo4j driver as an auth token and are not embedded in the
 stored connection URI.
 
+> [!NOTE]
+> `CONNECTION_STRING` / `URI` and structured `HOST` / `PORT` / `PROTOCOL` options are mutually
+> exclusive: when `CONNECTION_STRING` or `URI` is supplied, `HOST`, `PORT`, and `PROTOCOL` are
+> ignored.
+
 Regular `SELECT` statements against `graph.NODE_*` and `graph.EDGE_*` read through the connector's
 virtual table layer. Use `EXECUTE graph BEGIN ... END` for native Cypher pass-through. Truncating a
 table-scoped source such as `graph.NODE_CUSTOMER` deletes only that label; truncating the root
@@ -64,18 +69,18 @@ Graph entities are mapped to virtual tables:
 
 ## Authentication
 
-Neo4j supports basic authentication:
-- **Basic Auth**: Supply `USER` (default `neo4j`) and `PASSWORD` options.
-- **Encryption**: Set `ENCRYPTION=TRUE` for Neo4j AuraDB or secure Bolt listeners.
+Neo4j supports basic authentication and URI-scheme TLS:
+- **Basic Auth**: Supply `USER` (default `neo4j`) and `PASSWORD` options (supports `'ENC:...'`, `'SECRET:...'`, or `'${ENV}'` with `Security:AllowedEnvVars`).
+- **Encryption**: TLS comes from the URI scheme (`neo4j+s://`, `bolt+s://`, `neo4j+ssc://`, or `bolt+ssc://`, or `PROTOCOL='neo4j+s'` / `'bolt+s'`) rather than a separate option.
 
 ## Examples
 
 ```sql
--- Ingest customers as graph nodes
+-- Ingest customers as graph nodes using TLS URI and a secret reference
 CREATE CONNECTION graph AS NEO4J(
-    URI='bolt://localhost:7687',
+    URI='neo4j+s://graph.internal:7687',
     USER='neo4j',
-    PASSWORD='password',
+    PASSWORD='SECRET:prod/neo4j/password',
     KEY_COLUMNS='customer_id'
 );
 INSERT INTO graph.NODE_CUSTOMER (customer_id, name, city)
@@ -94,7 +99,7 @@ END;
 ## Troubleshooting
 
 - **Invalid Credentials**: Verify password against Neo4j Browser or Aura console.
-- **Bolt Protocol Error**: Ensure connecting to bolt/neo4j URI protocol (e.g. `bolt://host:7687`).
+- **Bolt Protocol Error**: Ensure connecting to bolt/neo4j URI protocol (e.g. `bolt://host:7687` or `neo4j+s://host:7687`).
 - **Cypher Pushdown**: Write native Cypher within `EXECUTE neo_conn BEGIN ... END`.
 
 ## References

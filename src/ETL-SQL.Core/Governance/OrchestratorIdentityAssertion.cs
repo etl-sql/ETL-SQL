@@ -145,16 +145,16 @@ public static class OrchestratorIdentityAssertion
             throw new ArgumentException("Orchestrator identity signing secret must contain at least 32 UTF-8 bytes.", nameof(signingSecret));
     }
 
-    private static byte[] Sign(string encodedPayload, string signingSecret)
+    internal static byte[] Sign(string encodedPayload, string signingSecret)
     {
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(signingSecret));
         return hmac.ComputeHash(Encoding.ASCII.GetBytes(encodedPayload));
     }
 
-    private static string Base64UrlEncode(ReadOnlySpan<byte> bytes) =>
+    internal static string Base64UrlEncode(ReadOnlySpan<byte> bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    private static byte[] Base64UrlDecode(string value)
+    internal static byte[] Base64UrlDecode(string value)
     {
         var normalized = value.Replace('-', '+').Replace('_', '/');
         normalized += (normalized.Length % 4) switch { 2 => "==", 3 => "=", 0 => "", _ => throw new FormatException() };

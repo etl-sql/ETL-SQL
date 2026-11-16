@@ -19,7 +19,10 @@ public sealed class FileOperationWithOptionTests
     [Theory]
     [InlineData("ENCRYPT DIRECTORY 'a' TO 'b' PASSWORD 'p' WITH (DELETE_SOURCE = ON);", "ENCRYPT DIRECTORY", "DELETE_SOURCE", "OVERWRITE")]
     [InlineData("ENCRYPT FILE 'a.csv' TO 'a.enc' PASSWORD 'p' WITH (DATE_SUFFIX = 'yyyyMMdd');", "ENCRYPT FILE", "DATE_SUFFIX", "OVERWRITE, DELETE_SOURCE")]
-    [InlineData("COMPRESS FILE 'a.csv' TO 'a.gz' WITH (FORMAT = 'GZIP');", "COMPRESS FILE", "FORMAT", "OVERWRITE, DELETE_SOURCE")]
+    [InlineData("COMPRESS FILE 'a.csv' TO 'a.zip' WITH (PATTERN = '*.csv');", "COMPRESS FILE", "PATTERN", "OVERWRITE, DELETE_SOURCE, FORMAT")]
+    [InlineData("DECOMPRESS FILE 'a.zip' TO 'out' WITH (BOGUS = 'X');", "DECOMPRESS FILE", "BOGUS", "OVERWRITE, DELETE_SOURCE, FORMAT, PATTERN")]
+    [InlineData("COMPRESS DIRECTORY 'd' TO 'd.tar' WITH (PATTERN = '*.csv');", "COMPRESS DIRECTORY", "PATTERN", "OVERWRITE, FORMAT")]
+    [InlineData("DECOMPRESS DIRECTORY 'd.tar' TO 'out' WITH (DELETE_SOURCE = ON);", "DECOMPRESS DIRECTORY", "DELETE_SOURCE", "OVERWRITE, FORMAT, PATTERN")]
     [InlineData("COPY FILE 'a' TO 'b' WITH (OVERWRITE = ON, OVERWITE = ON);", "COPY FILE", "OVERWITE", "OVERWRITE, DATE_SUFFIX, SUFFIX_SEPARATOR")]
     [InlineData("COPY DIRECTORY 'a' TO 'b' WITH (RECURSE = ON);", "COPY DIRECTORY", "RECURSE", "OVERWRITE")]
     [InlineData("COPY DIRECTORY 'a' TO 'b' WITH (RECURSIVE = OFF);", "COPY DIRECTORY", "RECURSIVE", "OVERWRITE")]
@@ -40,6 +43,10 @@ public sealed class FileOperationWithOptionTests
     }
 
     [Theory]
+    [InlineData("COMPRESS FILE 'a.csv' TO 'a.gz' WITH (FORMAT = 'GZIP', OVERWRITE = ON, DELETE_SOURCE = OFF);")]
+    [InlineData("DECOMPRESS FILE 'a.tar.gz' TO 'out' WITH (FORMAT = 'TAR_GZ', PATTERN = '*.csv', OVERWRITE = OFF);")]
+    [InlineData("COMPRESS DIRECTORY 'd' TO 'd.tar.gz' WITH (FORMAT = 'TAR_GZ', OVERWRITE = ON);")]
+    [InlineData("DECOMPRESS DIRECTORY 'd.tar.gz' TO 'out' WITH (FORMAT = 'TAR_GZ', PATTERN = '*.csv', OVERWRITE = OFF);")]
     [InlineData("COPY FILE 'a' TO DIRECTORY 'b' WITH (overwrite = ON, Date_Suffix = 'yyyyMMdd', SUFFIX_SEPARATOR = '-');")]
     [InlineData("ENCRYPT DIRECTORY 'a' TO 'b' PASSWORD 'p' WITH (OVERWRITE = ON);")]
     [InlineData("ENCRYPT FILE 'a' TO 'b' PGP_KEY 'pub.asc';")]

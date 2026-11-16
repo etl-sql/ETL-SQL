@@ -10,6 +10,7 @@ using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Functions;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Functions
 {
@@ -28,6 +29,7 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("REMOTE_FILE_SIZE", RemoteFileSize, "REMOTE_FILE_SIZE(connection, path): Returns the size in bytes of a remote file, or NULL if not found.");
             registry.RegisterWithHelp("REMOTE_FILE_MODIFIED", RemoteFileModified, "REMOTE_FILE_MODIFIED(connection, path): Returns the last modified timestamp of a remote file as a DATETIME, or NULL if not found or unavailable.");
             registry.RegisterWithHelp("FILE_LIST", FileList, "FILE_LIST(path, [recursive]): Returns a table of files in a local directory.");
+            registry.RegisterWithHelp("ARCHIVE_LIST", ArchiveList, "ARCHIVE_LIST(path): Returns a table of archive entries (Name, FullPath, Size, CompressedSize, LastModified, IsDirectory) for .zip, .tar, .tar.gz, .tgz, or .gz files without extracting to disk.");
             registry.RegisterWithHelp("DIRECTORY", FileList, "DIRECTORY(path, [recursive]): Alias for FILE_LIST.");
             registry.RegisterWithHelp("FILE_EXISTS", FileExists, "FILE_EXISTS(path): Returns true if the file exists.");
             registry.RegisterWithHelp("DIRECTORY_EXISTS", DirectoryExists, "DIRECTORY_EXISTS(path): Returns true if the directory exists.");
@@ -322,6 +324,42 @@ namespace ETL_SQL.Engine.Functions
                     ["LastModified"] = fi.LastWriteTime
                 });
             }
+            return table;
+        }
+
+        private static async Task<object?> ArchiveList(List<object?> args, IExecutionContext context)
+        {
+            var table = new DataTable();
+            table.SetColumns(new[] { "Name", "FullPath", "Size", "CompressedSize", "LastModified", "IsDirectory" });
+
+            if (args.Count < 1 || args[0] == null) return table;
+            string rawPath = args[0]?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(rawPath)) return table;
+
+            string resolvedPath = AuthorizeLocalPath(context, rawPath, FileSystemAccessKind.Read);
+            if (!File.Exists(resolvedPath))
+            {
+                throw new ExecutionException($"Archive file not found: {rawPath}");
+            }
+
+            string? formatArg = args.Count >= 2 ? args[1]?.ToString() : null;
+            var format = SafeArchiveService.ResolveFormat(formatArg, resolvedPath, defaultToZipIfUnknown: false);
+            var entries = SafeArchiveService.ListEntries(resolvedPath, format, context.CancellationToken);
+
+            foreach (var entry in entries)
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                await table.AddRowAsync(new Row
+                {
+                    ["Name"] = entry.Name,
+                    ["FullPath"] = entry.FullPath,
+                    ["Size"] = entry.Size,
+                    ["CompressedSize"] = entry.CompressedSize,
+                    ["LastModified"] = entry.LastModified,
+                    ["IsDirectory"] = entry.IsDirectory
+                });
+            }
+
             return table;
         }
 

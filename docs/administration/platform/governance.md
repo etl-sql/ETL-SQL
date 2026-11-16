@@ -28,7 +28,7 @@ Supported providers:
 | Provider | Required settings | Operational notes |
 | :--- | :--- | :--- |
 | `Environment` | Optional `EnvironmentPrefix` | Secret names are uppercased; `.` and `-` become `_`. With the prefix above, `SECRET:sales_db_password` resolves from `ETLSQL_SECRET_SALES_DB_PASSWORD`. |
-| `OsSecretStore` | `OsStoreRoot` | Stores protected values under a fully qualified local directory. Values are encrypted machine-scoped (DPAPI `LocalMachine` on Windows, machine-id-derived AES-256-GCM elsewhere), so an administrator can write secrets that a differently privileged service account reads back; restrict the directory with filesystem ACLs since any account on the host that can read the files can decrypt them. On Unix, secret files are written owner-read/write only. Values written by releases before machine scoping are user-scoped and stay readable by the account that wrote them; rotating a secret upgrades it to machine scope. The store is never read as plaintext — unrecognized file contents fail closed. |
+| `OsSecretStore` | `OsStoreRoot`; optional `ProtectionScope`, `ServiceIdentity` | Stores protected values under a fully qualified local directory. Defaults to `ProtectionScope=LocalMachine` (DPAPI `LocalMachine` on Windows, machine-id-derived AES-256-GCM elsewhere), so an administrator can write secrets that a differently privileged service account reads back. On Windows, `LocalMachine` stores disable inheritance and grant access only to `Administrators`, `SYSTEM`, and the configured `ServiceIdentity` (read access); on Unix, directories are created `0700` and secret files `0600`. Set `ProtectionScope=CurrentUser` for personal workstation installs (CLI, VS Code, Desktop Studio) to encrypt with `DataProtectionScope.CurrentUser` (`DPAPI:`) and grant directory/file access to the current user, `SYSTEM`, and `Administrators` only. Values written by releases before machine scoping remain readable by the account that wrote them; rotating a secret upgrades it to the configured scope. The store is never read as plaintext — unrecognized file contents fail closed. |
 | `HttpsVault` | `VaultEndpoint`; optional `VaultBearerToken` | The endpoint must be HTTPS. The provider requests `<VaultEndpoint>/<secret-name>` and accepts either a raw response body or JSON `{ "value": "secret" }`. |
 | `PortalStore` | none (Portal host only) | Stores secrets encrypted in the Portal database using the cluster-wide Data Protection key ring — the supported multi-node path without an external vault. Managed through `api/admin/secrets` (set, list metadata, verify, verify-all, disable, enable, delete; values are never returned after write, and every mutation is audited). The `secret-store-keyring` health check under `GET /health` decrypt-probes every stored secret so an HA node with a wrong `Portal:Storage:KeyRingPath` fails fast; run `POST api/admin/secrets/verify-all` after a backup/restore to prove the restored key ring can decrypt every value without printing them. Not available to standalone CLI/Orchestrator deployments. |
 
@@ -66,9 +66,11 @@ re-enables it. Secret values are never echoed, logged, or included in error mess
 
 An administrator can catalog a connection once — the SSRS shared data source model — so users
 reference it without knowing the credentials. Configure the catalog with
-`Governance:ConnectionCatalog:Provider=Local` and `Governance:ConnectionCatalog:LocalRoot=<dir>`
-(machine-encrypted entries, same trust boundary as the OS secret store — restrict the directory
-with filesystem ACLs), then manage entries from the CLI:
+`Governance:ConnectionCatalog:Provider=Local` and `Governance:ConnectionCatalog:LocalRoot=<dir>`.
+Like the OS secret store, it defaults to `ProtectionScope=LocalMachine` with optional
+`ServiceIdentity` (granting Windows NTFS access only to `Administrators`, `SYSTEM`, and `ServiceIdentity`,
+with inheritance disabled) and supports `ProtectionScope=CurrentUser` for personal workstation installs.
+Then manage entries from the CLI:
 
 ```powershell
 etl-sql admin machine connection set --alias sales_dw --type MSSQL --option SERVER=sql01 --option DATABASE=Sales --option USER=etl_worker --option PASSWORD=SECRET:sales_db_password

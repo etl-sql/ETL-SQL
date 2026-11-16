@@ -1463,6 +1463,10 @@ public sealed record FileOperationStatement : Statement
     public Expression? VerifyKey { get; init; }
     /// <summary>ENCRYPT, DECRYPT, COMPRESS, DECOMPRESS: delete the source once the output is written (ROADMAP FO03).</summary>
     public Expression? DeleteSource { get; init; }
+    /// <summary>COMPRESS, DECOMPRESS: explicit archive format ('ZIP', 'GZIP', 'TAR', 'TAR_GZ').</summary>
+    public Expression? Format { get; init; }
+    /// <summary>DECOMPRESS: wildcard/glob pattern selecting archive entries to extract.</summary>
+    public Expression? Pattern { get; init; }
     public Expression? DateSuffix { get; }
     public Expression? SuffixSeparator { get; }
     public bool DestinationIsDirectory { get; }
@@ -1496,6 +1500,10 @@ public sealed record DirectoryOperationStatement : Statement
     public Expression? Password { get; }
     public Expression? KeyFile { get; }
     public Expression? PgpKey { get; }
+    /// <summary>COMPRESS, DECOMPRESS DIRECTORY: explicit archive format ('ZIP', 'TAR', 'TAR_GZ').</summary>
+    public Expression? Format { get; init; }
+    /// <summary>DECOMPRESS DIRECTORY: wildcard/glob pattern selecting archive entries to extract.</summary>
+    public Expression? Pattern { get; init; }
     public bool IfExists { get; set; }
     public string? ConnectionName { get; }
 

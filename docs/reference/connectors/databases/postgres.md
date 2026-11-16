@@ -14,25 +14,30 @@ Aliases: `NPSQL`, `PG`
 | `USER` | Login username | Yes |
 | `PASSWORD` | Login password | Yes |
 | `PORT` | Listening port (default: `5432`) | No |
+| `TIMEOUT_SECONDS` | Command/query execution timeout in seconds (default: `30`) | No |
 | `TABLE` | Default table context | No |
 | `POOLING` | Enable connection pooling (`TRUE`/`FALSE`) | No |
 | `MIN_POOL_SIZE` | Minimum pool size | No |
 | `MAX_POOL_SIZE` | Maximum pool size | No |
 | `CONNECTION_IDLE_LIFETIME` | Seconds before an idle connection is pruned | No |
-| `SSL_MODE` | `DISABLE`, `PREFER`, `REQUIRE`, `VERIFY_CA`, `VERIFY_FULL` | No |
+| `SSL_MODE` | `Disable`, `Prefer`, `Require`, `VerifyCA`, `VerifyFull` | No |
 | `TRUST_SERVER_CERTIFICATE` | Bypass certificate validation (`TRUE`/`FALSE`) | No |
+
+> [!NOTE]
+> Use either structured options (`HOST`, `DATABASE`, `USER`, `PASSWORD`, ...) or a positional
+> provider connection string, not both.
 
 ## Authentication
 
 PostgreSQL supports standard credentials and SSL authentication:
-- **Standard Authentication**: Set `USER` and `PASSWORD` options with `HOST` and `DATABASE`.
-- **SSL / TLS**: Set `SSL_MODE` (`DISABLE`, `PREFER`, `REQUIRE`, `VERIFY_CA`, `VERIFY_FULL`) and optional `TRUST_SERVER_CERTIFICATE`.
+- **Standard Authentication**: Set `USER` and `PASSWORD` options with `HOST` and `DATABASE` (supports `'ENC:...'`, `'SECRET:...'`, or `'${ENV}'` with `Security:AllowedEnvVars`).
+- **SSL / TLS**: Set `SSL_MODE` (`Disable`, `Prefer`, `Require`, `VerifyCA`, `VerifyFull`) and optional `TRUST_SERVER_CERTIFICATE`.
 
 ## Examples
 
 ```sql
--- Structured
-CREATE CONNECTION pg_db AS POSTGRES(HOST='10.0.0.5', PORT=5432, DATABASE='inventory', USER='admin', PASSWORD='s3cr3t');
+-- Structured options using an allow-listed environment variable (Security:AllowedEnvVars)
+CREATE CONNECTION pg_db AS POSTGRES(HOST='10.0.0.5', PORT=5432, DATABASE='inventory', USER='admin', PASSWORD='${PG_PASSWORD}');
 
 -- Traditional string
 CREATE CONNECTION pg_legacy AS POSTGRES('Host=localhost;Database=mydb;Username=etl;Password=pass');

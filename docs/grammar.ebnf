@@ -225,10 +225,12 @@ email_statement = "SEND" "EMAIL" "TO" expression "FROM" expression "SUBJECT" exp
 email_value_list = expression | "[" [ expression_list ] "]" ;
 file_operation_statement = ( "COPY" | "MOVE" | "RENAME" ) "FILE" expression [ "TO" [ "DIRECTORY" ] expression ]
                            [ file_operation_options ] [ "AT" identifier ]
-                         | ( "COMPRESS" | "DECOMPRESS" ) "FILE" expression [ "TO" expression ] [ transform_options ] [ "AT" identifier ]
+                         | ( "COMPRESS" | "DECOMPRESS" ) "FILE" expression [ "TO" [ "DIRECTORY" ] expression ] [ archive_options ] [ "AT" identifier ]
                          | "DELETE" "FILE" [ "IF" "EXISTS" ] expression [ "AT" identifier ]
                          | "ENCRYPT" "FILE" expression [ "TO" expression ] [ encrypt_key_clause ] [ transform_options ] [ "AT" identifier ]
                          | "DECRYPT" "FILE" expression [ "TO" expression ] [ decrypt_key_clause ] [ transform_options ] [ "AT" identifier ] ;
+archive_options = "WITH" "(" archive_option { "," archive_option } ")" ;
+archive_option = ( "OVERWRITE" | "DELETE_SOURCE" | "FORMAT" | "PATTERN" ) "=" expression ;
 transform_options = "WITH" "(" transform_option { "," transform_option } ")" ;
 transform_option = ( "OVERWRITE" | "DELETE_SOURCE" ) "=" expression ;
 overwrite_option = "WITH" "(" "OVERWRITE" "=" expression ")" ;
@@ -267,8 +269,10 @@ drop_statement = "DROP" local_drop_kind [ "IF" "EXISTS" ] identifier
                | "DROP" "SNAPSHOT" "FOR" "REPORT" string_literal ;
 local_drop_kind = "CONNECTION" | "PROCEDURE" | "FUNCTION" | "VIEW" | "VISUAL" | "PAGE" | "CONTAINER" | "STYLE" | "BUTTON" | "NAVIGATION" | "TEMPLATE" | "THEME" | "JOB" | "BOOKMARK" ;
 create_directory_statement = "CREATE" "DIRECTORY" expression [ "WITH" "(" "OVERWRITE" "=" expression ")" ] [ "AT" identifier ] ;
-directory_operation_statement = ( "COPY" | "MOVE" | "RENAME" | "COMPRESS" | "DECOMPRESS" ) "DIRECTORY" expression [ "TO" expression ]
+directory_operation_statement = ( "COPY" | "MOVE" | "RENAME" ) "DIRECTORY" expression [ "TO" expression ]
                                 [ directory_operation_options ] [ "AT" identifier ]
+                              | ( "COMPRESS" | "DECOMPRESS" ) "DIRECTORY" expression [ "TO" expression ]
+                                [ archive_options ] [ "AT" identifier ]
                               | "DELETE" "DIRECTORY" [ "IF" "EXISTS" ] expression [ "AT" identifier ]
                               | "DELETE" "DIRECTORY_CONTENTS" expression [ "WITH" "(" "RECURSIVE" "=" expression ")" ]
                               | ( "ENCRYPT" | "DECRYPT" ) "DIRECTORY" expression [ "TO" expression ] [ password_clause ]
@@ -886,14 +890,14 @@ container_clause = "STYLE" ( "=" identifier | style_body )
                  | "VISIBLE" [ "=" ] ( "ON" | "OFF" )
                  | "ICON" "=" string_literal
                  | "LAYOUT" "(" [ container_layout_item { "," container_layout_item } ] ")"
-                 | "ACTIONS" "(" report_action_binding { "," report_action_binding } ")"
                  | "OPTIONS" "(" [ report_option { "," report_option } ] ")" ;
 container_layout_item = "STRUCTURE" "=" string_literal
                       | "MAP" "(" container_slot_binding { "," container_slot_binding } ")"
                       | "PINNABLE" "=" ( "ON" | "OFF" )
                       | identifier [ "=" ] ( identifier | string_literal | number ) ;
-container_slot_binding = ( string_literal | identifier ) "=" identifier
-                         [ "(" report_option { "," report_option } ")" ] ;
+container_slot_binding = string_literal "=" identifier
+                         [ "(" container_slot_option { "," container_slot_option } ")" ] ;
+container_slot_option = ( "ICON" | "BADGE" ) "=" ( string_literal | identifier | number ) ;
 create_navigation_statement = "CREATE" "NAVIGATION" identifier "AS" navigation_type "(" { navigation_clause [ "," ] } ")" ;
 navigation_type = "TAB" | "BUTTON" | "LINK" ;
 navigation_clause = "ORIENTATION" "=" ( "HORIZONTAL" | "VERTICAL" ) | "DEFAULT" "=" identifier

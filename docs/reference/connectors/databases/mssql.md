@@ -10,11 +10,13 @@ Aliases: `SQL`, `SQLSERVER`
 | Option | Description | Mandatory |
 | :--- | :--- | :---: |
 | `SERVER` | Server name or IP address | Yes (structured) |
+| `PORT` | Listening port (default: `1433`) | No |
 | `DATABASE` | Target database name | Yes (structured) |
 | `USER` | SQL authentication username | No |
 | `PASSWORD` | SQL authentication password | No |
 | `TRUSTED_CONNECTION` | Use Windows Integrated Security (`TRUE`/`FALSE`) | No |
-| `USE_SSL` | Enable SSL encryption for the connection (`TRUE`/`FALSE`) | No |
+| `ENCRYPT` | Enable TLS encryption for the connection (`TRUE`/`FALSE`) | No |
+| `USE_SSL` | Enable SSL/TLS encryption for the connection (`TRUE`/`FALSE`) | No |
 | `TRUST_SERVER_CERTIFICATE` | Bypass SSL certificate validation (`TRUE`/`FALSE`) | No |
 | `APPLICATION_INTENT` | `READWRITE` or `READONLY` (for AG replicas) | No |
 | `MULTI_SUBNET_FAILOVER` | Optimize failover for multi-subnet clusters (`TRUE`/`FALSE`) | No |
@@ -33,21 +35,21 @@ Aliases: `SQL`, `SQLSERVER`
 ## Authentication
 
 SQL Server supports two mutually exclusive authentication methods:
-- **SQL Authentication**: Set `USER` and `PASSWORD`.
+- **SQL Authentication**: Set `USER` and `PASSWORD` (supports `'ENC:...'`, `'SECRET:...'`, or `'${ENV}'` with `Security:AllowedEnvVars`).
 - **Integrated Security (Windows Authentication)**: Set `TRUSTED_CONNECTION=TRUE` and omit `USER`/`PASSWORD`.
 
 ## Examples
 
 ```sql
--- Standard SQL authentication
-CREATE CONNECTION m_sales AS MSSQL(SERVER='sql01', DATABASE='SalesDB', USER='etl_worker', PASSWORD='s3cr3t');
+-- Standard SQL authentication using a secret reference (or '${MSSQL_PASSWORD}' / 'ENC:...')
+CREATE CONNECTION m_sales AS MSSQL(SERVER='sql01', DATABASE='SalesDB', USER='etl_worker', PASSWORD='SECRET:prod/mssql/etl_worker');
 
 -- Windows Integrated Security (traditional string)
 CREATE CONNECTION m_hr AS MSSQL('Server=sql01;Database=HR;Trusted_Connection=True;');
 
 -- Read-only replica with SSL
 CREATE CONNECTION m_ro AS MSSQL(SERVER='sql01', DATABASE='DW', TRUSTED_CONNECTION=TRUE,
-         APPLICATION_INTENT=READONLY, USE_SSL=TRUE, TRUST_SERVER_CERTIFICATE=TRUE);
+         APPLICATION_INTENT=READONLY, ENCRYPT=TRUE, TRUST_SERVER_CERTIFICATE=TRUE);
 
 SELECT order_id, customer, amount INTO #orders FROM m_sales.dbo.Orders WHERE order_date >= @start;
 EXECUTE m_sales.dbo.UpdateSummary;

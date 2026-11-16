@@ -156,23 +156,23 @@ Reusable data preparation and transformation pipelines located in [`samples/tran
 
 ### [transforms/transform_rolling_aggregate.etlsql](../../../samples/transforms/transform_rolling_aggregate.etlsql)
 **Purpose**: Built-in rolling aggregation transform.
-- Uses `TRANSFORM source USING ROLLING_AGGREGATE(...)` to calculate moving window averages and sums without manual window syntax.
+- Uses `TRANSFORM #target FROM #source USING ROLLING_AGGREGATE(...)` to calculate moving window averages and sums without manual window syntax.
 
 ### [transforms/transform_pivot.etlsql](../../../samples/transforms/transform_pivot.etlsql)
 **Purpose**: Reshaping normalized long records into wide columnar summaries.
-- Uses `TRANSFORM source USING PIVOT(...)` with declarative row dimensions, column pivots, and aggregation functions.
+- Uses `TRANSFORM #target FROM #source USING PIVOT(...)` with declarative row dimensions, column pivots, and aggregation functions.
 
 ### [transforms/transform_fill_dates.etlsql](../../../samples/transforms/transform_fill_dates.etlsql)
 **Purpose**: Time-series gap filling.
-- Uses `TRANSFORM source USING FILL_DATES(...)` to fill missing calendar intervals and backfill or zero-fill null values.
+- Uses `TRANSFORM #target FROM #source USING FILL_DATES(...)` to fill missing calendar intervals and backfill or zero-fill null values.
 
 ### [transforms/transform_deduplicate.etlsql](../../../samples/transforms/transform_deduplicate.etlsql)
 **Purpose**: Declarative row deduplication.
-- Uses `TRANSFORM source USING DEDUPLICATE(KEYS = (...), ORDER_BY = (...), STRATEGY = 'LATEST')` for deterministic record deduplication.
+- Uses `TRANSFORM #target FROM #source USING DEDUPLICATE(KEY_COLS = '...', ORDER_BY = '...', KEEP = 'FIRST')` for deterministic record deduplication.
 
 ### [transforms/transform_normalize.etlsql](../../../samples/transforms/transform_normalize.etlsql)
 **Purpose**: Feature scaling and statistical normalization.
-- Uses `TRANSFORM source USING NORMALIZE(COLUMNS = (...), METHOD = 'MINMAX')` (and `'ZSCORE'`) for machine learning and modeling pipelines.
+- Uses `TRANSFORM #target FROM #source USING NORMALIZE(VALUE_COL = '...', METHOD = 'MIN_MAX')` (and `'Z_SCORE'`) for machine learning and modeling pipelines.
 
 ## Visual Gallery Reference
 

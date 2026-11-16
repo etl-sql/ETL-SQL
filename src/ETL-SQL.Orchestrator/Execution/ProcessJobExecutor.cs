@@ -11,8 +11,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Profiling;
 using ETL_SQL.Core.Quality;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -36,6 +38,7 @@ namespace ETL_SQL.Orchestrator.Execution
         private readonly ProcessJobExecutorOptions _options;
         private readonly ChildProcessTracker _tracker;
         private readonly ILogger<ProcessJobExecutor> _logger;
+        private readonly IConfiguration? _configuration;
         private static readonly object CleanupLock = new();
         private static DateTime _lastTempScriptCleanupUtc = DateTime.MinValue;
 
@@ -47,11 +50,13 @@ namespace ETL_SQL.Orchestrator.Execution
         public ProcessJobExecutor(
             IOptions<ProcessJobExecutorOptions> options,
             ChildProcessTracker tracker,
-            ILogger<ProcessJobExecutor> logger)
+            ILogger<ProcessJobExecutor> logger,
+            IConfiguration? configuration = null)
         {
             _options = options.Value;
             _tracker = tracker;
             _logger = logger;
+            _configuration = configuration;
 
             var templateWarning = DescribeArgumentsTemplateRisk(_options.ArgumentsTemplate);
             if (templateWarning is not null) _logger.LogWarning("{Warning}", templateWarning);
@@ -121,53 +126,120 @@ namespace ETL_SQL.Orchestrator.Execution
             CancellationToken cancellationToken,
             string? jobName,
             long queueWaitMs,
-            ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity,
+            ExecutionIdentity? executionIdentity,
             IReadOnlyDictionary<string, string>? variableOverrides,
             bool resume)
         {
-            // Out-of-process execution does not carry an execution identity across the process
-            // boundary. Dropping it is not failing closed: the identity is also the run's tenant
-            // binding and its per-object authority, and the child has neither, so it would run the
-            // caller's text in the unbound scope with no object checks at all. A run that names an
-            // identity (an ad-hoc submission, a revision run) is refused here instead, as the sandbox
-            // refuses one it cannot carry. Scheduled runs pass no identity and are unaffected.
+            string? signingSecret = null;
             if (executionIdentity is not null)
             {
-                _logger.LogWarning(
-                    "Job {JobName}: refused because out-of-process execution cannot carry the caller's execution identity.",
-                    jobName ?? "(ad hoc)");
-                return new ScriptExecutionResult(
-                    false, 0, IdentityNotCarriedMessage, SessionId: sessionId, RetryAllowed: false);
+                signingSecret = ResolveSigningSecret();
+                if (string.IsNullOrWhiteSpace(signingSecret))
+                {
+                    _logger.LogWarning(
+                        "Job {JobName}: refused because out-of-process execution cannot carry the caller's execution identity without Orchestrator:IdentitySigningSecret.",
+                        jobName ?? "(ad hoc)");
+                    return new ScriptExecutionResult(
+                        false, 0, IdentityNotCarriedMessage, SessionId: sessionId, RetryAllowed: false);
+                }
             }
 
             CleanupOldTempScripts(force: false);
 
-            // Write script to a temp file — ETL-SQL.exe run expects a file path
-            var tempFile = Path.Combine(Path.GetTempPath(), $"etlsql-job-{Guid.NewGuid():N}.etlsql");
+            // Isolate each job's temp script and caller identity envelope in a dedicated per-run directory
+            // so child snapshot cleanup stays scoped to this run and does not walk shared %TEMP%.
+            var runDir = Path.Combine(Path.GetTempPath(), $"etlsql-job-run-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(runDir);
+            var tempFile = Path.Combine(runDir, "job.etlsql");
+            string? envelopeFile = null;
             try
             {
-                await File.WriteAllTextAsync(tempFile, scriptText, Encoding.UTF8, cancellationToken);
+                var scriptBytes = Encoding.UTF8.GetBytes(scriptText);
+                await File.WriteAllBytesAsync(tempFile, scriptBytes, cancellationToken);
+
+                async Task<string?> WriteCallerEnvelopeAsync()
+                {
+                    if (executionIdentity is null)
+                        return null;
+
+                    var scriptHash = ProcessCallerIdentityEnvelope.ComputeScriptHash(scriptBytes);
+                    var signedEnvelope = ProcessCallerIdentityEnvelope.Create(
+                        executionIdentity, jobName, scriptHash, signingSecret!);
+                    var path = Path.Combine(runDir, "caller.tok");
+                    await File.WriteAllTextAsync(path, signedEnvelope, Encoding.UTF8, cancellationToken);
+                    var protector = new OsLocalStoreProtector();
+                    protector.ProtectFile(
+                        path, LocalVaultProtectionScope.CurrentUser, serviceIdentity: null);
+                    protector.ProtectDirectory(
+                        runDir, LocalVaultProtectionScope.CurrentUser, serviceIdentity: null);
+                    return path;
+                }
+
+                envelopeFile = await WriteCallerEnvelopeAsync();
+
                 if (_options.UseWarmRunner)
                 {
                     try
                     {
                         return await RunWarmProcessAsync(
                             tempFile, sessionId, cancellationToken, jobName, queueWaitMs,
-                            variableOverrides, resume);
+                            variableOverrides, resume, envelopeFile, signingSecret);
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
                         _logger.LogWarning(ex, "Warm job runner failed; falling back to one-shot process execution.");
+                        if (executionIdentity is not null)
+                            envelopeFile = await WriteCallerEnvelopeAsync();
                     }
                 }
 
                 return await RunProcessAsync(
-                    tempFile, sessionId, cancellationToken, queueWaitMs, variableOverrides, resume);
+                    tempFile, sessionId, cancellationToken, jobName, queueWaitMs,
+                    variableOverrides, resume, envelopeFile, signingSecret);
             }
             finally
             {
-                try { File.Delete(tempFile); } catch { /* best effort */ }
+                try { Directory.Delete(runDir, recursive: true); } catch { /* best effort */ }
             }
+        }
+
+        private string? ResolveSigningSecret()
+        {
+            var candidate = !string.IsNullOrWhiteSpace(_options.IdentitySigningSecret)
+                ? _options.IdentitySigningSecret
+                : _configuration?["Orchestrator:IdentitySigningSecret"];
+            if (string.IsNullOrWhiteSpace(candidate))
+                return null;
+
+            try
+            {
+                OrchestratorIdentityAssertion.ValidateSecret(candidate);
+                return candidate;
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+        }
+
+        private void ApplyChildHostEnvironment(ProcessStartInfo psi, string? signingSecret)
+        {
+            if (!string.IsNullOrWhiteSpace(signingSecret))
+                psi.EnvironmentVariables["Orchestrator__IdentitySigningSecret"] = signingSecret;
+
+            if (_configuration is null)
+                return;
+
+            ForwardIfSet(psi, "Orchestrator:DatabasePath", "Orchestrator__DatabasePath");
+            ForwardIfSet(psi, "Orchestrator:Database:Provider", "Orchestrator__Database__Provider");
+            ForwardIfSet(psi, "Orchestrator:Database:ConnectionString", "Orchestrator__Database__ConnectionString");
+        }
+
+        private void ForwardIfSet(ProcessStartInfo psi, string configKey, string envKey)
+        {
+            var value = _configuration?[configKey];
+            if (!string.IsNullOrWhiteSpace(value))
+                psi.EnvironmentVariables[envKey] = value;
         }
 
         private void CleanupOldTempScripts(bool force)
@@ -184,17 +256,32 @@ namespace ETL_SQL.Orchestrator.Execution
             try
             {
                 var cutoff = now - TimeSpan.FromHours(24);
-                foreach (var path in Directory.EnumerateFiles(Path.GetTempPath(), "etlsql-job-*.etlsql", SearchOption.TopDirectoryOnly))
+                foreach (var pattern in new[] { "etlsql-job-*.etlsql", "etlsql-identity-*.tok" })
                 {
-                    try
+                    foreach (var dir in Directory.EnumerateDirectories(Path.GetTempPath(), "etlsql-job-run-*", SearchOption.TopDirectoryOnly))
                     {
-                        var lastWrite = File.GetLastWriteTimeUtc(path);
-                        if (lastWrite < cutoff)
-                            File.Delete(path);
+                        try
+                        {
+                            if (Directory.GetLastWriteTimeUtc(dir) < cutoff)
+                                Directory.Delete(dir, recursive: true);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogDebug(ex, "Unable to delete stale Orchestrator job temp directory {Path}", dir);
+                        }
                     }
-                    catch (Exception ex)
+                    foreach (var path in Directory.EnumerateFiles(Path.GetTempPath(), pattern, SearchOption.TopDirectoryOnly))
                     {
-                        _logger.LogDebug(ex, "Unable to delete stale Orchestrator job temp script {Path}", path);
+                        try
+                        {
+                            var lastWrite = File.GetLastWriteTimeUtc(path);
+                            if (lastWrite < cutoff)
+                                File.Delete(path);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogDebug(ex, "Unable to delete stale Orchestrator job temp file {Path}", path);
+                        }
                     }
                 }
             }
@@ -208,9 +295,12 @@ namespace ETL_SQL.Orchestrator.Execution
             string scriptFile,
             string? sessionId,
             CancellationToken ct,
+            string? jobName = null,
             long queueWaitMs = 0,
             IReadOnlyDictionary<string, string>? variableOverrides = null,
-            bool resume = false)
+            bool resume = false,
+            string? envelopeFile = null,
+            string? signingSecret = null)
         {
             var exePath = ResolveExecutablePath();
             var argList = BuildArguments(
@@ -240,6 +330,14 @@ namespace ETL_SQL.Orchestrator.Execution
             {
                 psi.EnvironmentVariables["ETLSQL_QUEUE_WAIT_MS"] = queueWaitMs.ToString();
             }
+            if (!string.IsNullOrWhiteSpace(envelopeFile))
+            {
+                psi.EnvironmentVariables[ProcessCallerIdentityEnvelope.EnvRequired] = "1";
+                psi.EnvironmentVariables[ProcessCallerIdentityEnvelope.EnvFile] = envelopeFile;
+                if (!string.IsNullOrWhiteSpace(jobName))
+                    psi.EnvironmentVariables[ProcessCallerIdentityEnvelope.EnvJobId] = jobName;
+            }
+            ApplyChildHostEnvironment(psi, signingSecret);
             foreach (var arg in argList)
                 psi.ArgumentList.Add(arg);
 
@@ -310,16 +408,41 @@ namespace ETL_SQL.Orchestrator.Execution
             string? jobName,
             long queueWaitMs,
             IReadOnlyDictionary<string, string>? variableOverrides,
-            bool resume)
+            bool resume,
+            string? envelopeFile = null,
+            string? signingSecret = null)
         {
             var exePath = ResolveExecutablePath();
-            var key = $"{Path.GetFullPath(exePath)}|{Math.Max(1, _options.WarmRunnerPoolSize)}|{Math.Max(1, _options.WarmRunnerStartupTimeoutSeconds)}";
+            var childEnv = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(signingSecret))
+                childEnv["Orchestrator__IdentitySigningSecret"] = signingSecret;
+            if (_configuration is not null)
+            {
+                foreach (var (cfgKey, envKey) in new[]
+                         {
+                             ("Orchestrator:DatabasePath", "Orchestrator__DatabasePath"),
+                             ("Orchestrator:Database:Provider", "Orchestrator__Database__Provider"),
+                             ("Orchestrator:Database:ConnectionString", "Orchestrator__Database__ConnectionString")
+                         })
+                {
+                    var val = _configuration[cfgKey];
+                    if (!string.IsNullOrWhiteSpace(val))
+                        childEnv[envKey] = val;
+                }
+            }
+
+            var envFingerprint = childEnv.Count == 0
+                ? string.Empty
+                : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                    Encoding.UTF8.GetBytes(string.Join(";", childEnv.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}")))))[..16];
+            var key = $"{Path.GetFullPath(exePath)}|{Math.Max(1, _options.WarmRunnerPoolSize)}|{Math.Max(1, _options.WarmRunnerStartupTimeoutSeconds)}|{envFingerprint}";
             var pool = WarmRunnerPools.GetOrAdd(key, _ => new WarmRunnerPool(
                 exePath,
                 Math.Max(1, _options.WarmRunnerPoolSize),
                 TimeSpan.FromSeconds(Math.Max(1, _options.WarmRunnerStartupTimeoutSeconds)),
                 _tracker,
-                _logger));
+                _logger,
+                childEnv));
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             if (_options.TimeoutSeconds > 0)
@@ -336,7 +459,8 @@ namespace ETL_SQL.Orchestrator.Execution
                         queueWaitMs,
                         _options.WarmRunnerBatchSize,
                         variableOverrides,
-                        resume),
+                        resume,
+                        envelopeFile),
                     cts.Token);
             }
             catch (OperationCanceledException)
@@ -624,6 +748,8 @@ namespace ETL_SQL.Orchestrator.Execution
         public int WarmRunnerStartupTimeoutSeconds { get; set; } = 10;
         /// <summary>Batch size passed to warm runner execution sessions. Values less than 1 use the engine default.</summary>
         public int WarmRunnerBatchSize { get; set; } = 10000;
+        /// <summary>Optional HMAC secret used to sign single-use caller identity envelopes when spawning child processes (falls back to Orchestrator:IdentitySigningSecret).</summary>
+        public string? IdentitySigningSecret { get; set; }
     }
 
     internal sealed class WarmRunnerPool : IDisposable
@@ -632,6 +758,7 @@ namespace ETL_SQL.Orchestrator.Execution
         private readonly TimeSpan _startupTimeout;
         private readonly ChildProcessTracker _tracker;
         private readonly ILogger _logger;
+        private readonly IReadOnlyDictionary<string, string>? _environmentOverrides;
         private readonly SemaphoreSlim _slots;
         private readonly ConcurrentBag<WarmRunnerClient> _idle = new();
         private readonly ConcurrentDictionary<WarmRunnerClient, byte> _all = new();
@@ -641,12 +768,14 @@ namespace ETL_SQL.Orchestrator.Execution
             int poolSize,
             TimeSpan startupTimeout,
             ChildProcessTracker tracker,
-            ILogger logger)
+            ILogger logger,
+            IReadOnlyDictionary<string, string>? environmentOverrides = null)
         {
             _exePath = exePath;
             _startupTimeout = startupTimeout;
             _tracker = tracker;
             _logger = logger;
+            _environmentOverrides = environmentOverrides;
             _slots = new SemaphoreSlim(Math.Max(1, poolSize));
         }
 
@@ -712,7 +841,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 }
             }
 
-            var started = await WarmRunnerClient.StartAsync(_exePath, _startupTimeout, _logger, ct);
+            var started = await WarmRunnerClient.StartAsync(_exePath, _startupTimeout, _logger, _environmentOverrides, ct);
             _all[started] = 0;
             return started;
         }
@@ -754,7 +883,19 @@ namespace ETL_SQL.Orchestrator.Execution
         public int ProcessId => _process.Id;
         public bool IsUsable => !_killed && !_process.HasExited;
 
-        public static async Task<WarmRunnerClient> StartAsync(string exePath, TimeSpan startupTimeout, ILogger logger, CancellationToken ct)
+        public static Task<WarmRunnerClient> StartAsync(
+            string exePath,
+            TimeSpan startupTimeout,
+            ILogger logger,
+            CancellationToken ct) =>
+            StartAsync(exePath, startupTimeout, logger, environmentOverrides: null, ct);
+
+        public static async Task<WarmRunnerClient> StartAsync(
+            string exePath,
+            TimeSpan startupTimeout,
+            ILogger logger,
+            IReadOnlyDictionary<string, string>? environmentOverrides,
+            CancellationToken ct)
         {
             var psi = new ProcessStartInfo(exePath)
             {
@@ -765,6 +906,11 @@ namespace ETL_SQL.Orchestrator.Execution
                 CreateNoWindow = true,
                 WorkingDirectory = Path.GetDirectoryName(exePath) ?? Directory.GetCurrentDirectory()
             };
+            if (environmentOverrides != null)
+            {
+                foreach (var (k, v) in environmentOverrides)
+                    psi.EnvironmentVariables[k] = v;
+            }
             psi.ArgumentList.Add("runner");
 
             var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
@@ -901,7 +1047,8 @@ namespace ETL_SQL.Orchestrator.Execution
         long QueueWaitMs,
         int BatchSize,
         IReadOnlyDictionary<string, string>? VariableOverrides = null,
-        bool Resume = false);
+        bool Resume = false,
+        string? IdentityEnvelopeFile = null);
 
     internal sealed record WarmRunnerResponse(
         string Type,

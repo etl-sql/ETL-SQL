@@ -106,7 +106,9 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
             services.RemoveAll<INodeCapacityMonitor>();
             services.AddSingleton<INodeCapacityMonitor>(new PortalTestCapacityMonitor());
             services.AddSingleton<IConnectionCatalogProvider>(
-                new LocalConnectionCatalogProvider(Path.Combine(TempDir, "connections")));
+                new LocalConnectionCatalogProvider(
+                    Path.Combine(TempDir, "connections"),
+                    ETL_SQL.Core.Governance.LocalVaultProtectionScope.CurrentUser));
         });
     }
 

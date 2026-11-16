@@ -442,7 +442,27 @@ namespace ETL_SQL.App
                     evaluator.SessionId = ctx.SessionId;
                     evaluator.CurrentScriptPath = ctx.ScriptFile.FullName;
                     evaluator.ExecutionIdentity = await SandboxWorkerIdentityLoader.ReadAsync(
-                        ctx.ScriptFile.FullName, CancellationToken.None);
+                        ctx.ScriptFile.FullName, CancellationToken.None)
+                        ?? await ProcessCallerIdentityLoader.ReadAndConsumeAsync(
+                            ctx.ScriptFile.FullName,
+                            envelopeFileOverride: null,
+                            Environment.GetEnvironmentVariable(ETL_SQL.Core.Governance.ProcessCallerIdentityEnvelope.EnvJobId) ?? ctx.JobName,
+                            engineConfig["Orchestrator:IdentitySigningSecret"],
+                            CancellationToken.None);
+
+                    if (evaluator.ExecutionIdentity is { } callerIdentity && !string.IsNullOrWhiteSpace(callerIdentity.TenantId))
+                    {
+                        var trustedTenant = ETL_SQL.Core.Multitenancy.TenantId.FromTrustedSource(callerIdentity.TenantId).Value;
+                        if (!string.IsNullOrWhiteSpace(ctx.SaasTenantId)
+                            && !string.Equals(ctx.SaasTenantId, trustedTenant, StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new UnauthorizedAccessException("Caller identity tenant does not match the execution context tenant.");
+                        }
+
+                        ctx.SaasTenantId = trustedTenant;
+                        evaluator.CheckpointKeyScope ??= trustedTenant;
+                        evaluator.SecurityService.ProtectionMode = ETL_SQL.Services.PathProtectionMode.Defined;
+                    }
 
                     if (long.TryParse(Environment.GetEnvironmentVariable("ETLSQL_QUEUE_WAIT_MS"), out var envQueueWait))
                     {
@@ -473,7 +493,7 @@ namespace ETL_SQL.App
                                 var jobLabel = ctx.JobName ?? Path.GetFileName(ctx.ScriptFile.FullName);
                                 var boundJob = ctx.JobName is null
                                     ? null
-                                    : await historyStore.GetJobAsync(null, ctx.JobName);
+                                    : await historyStore.GetJobAsync(evaluator.ExecutionIdentity?.TenantId, ctx.JobName);
                                 if (boundJob is not null)
                                 {
                                     // The engine keys durable job state (watermarks above all) on
@@ -960,7 +980,7 @@ namespace ETL_SQL.App
                             dataQualityColumnMetrics = evaluator?.DataQuality.ColumnMetrics,
                             dataQualityRuleFailures = evaluator?.DataQuality.FailureMetrics,
                             statementMetrics = CollectStatementMetrics(evaluator, runFailed: true),
-                            retryAllowed = true
+                            retryAllowed = ex is not UnauthorizedAccessException
                         }));
                     }
                     else

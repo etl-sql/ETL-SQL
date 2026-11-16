@@ -10,7 +10,7 @@ public class SecretAdminServiceTests
     [Fact]
     public async Task SetVerifyRotateDisableDelete_FullLifecycle()
     {
-        var provider = new OsSecretStoreProvider(TempRoot());
+        var provider = new OsSecretStoreProvider(TempRoot(), LocalVaultProtectionScope.CurrentUser);
         var logger = new CapturingLogger();
 
         Assert.Equal(0, await Run("set-secret", "db_password", "first-value", provider, logger));
@@ -43,7 +43,7 @@ public class SecretAdminServiceTests
     [Fact]
     public async Task RotateSecret_RequiresExistingSecret()
     {
-        var provider = new OsSecretStoreProvider(TempRoot());
+        var provider = new OsSecretStoreProvider(TempRoot(), LocalVaultProtectionScope.CurrentUser);
         var logger = new CapturingLogger();
 
         Assert.Equal(1, await Run("rotate-secret", "missing", "value", provider, logger));
@@ -66,7 +66,7 @@ public class SecretAdminServiceTests
     [Fact]
     public async Task MissingName_Fails()
     {
-        var provider = new OsSecretStoreProvider(TempRoot());
+        var provider = new OsSecretStoreProvider(TempRoot(), LocalVaultProtectionScope.CurrentUser);
         var logger = new CapturingLogger();
 
         Assert.Equal(1, await Run("set-secret", null, "value", provider, logger));
@@ -76,7 +76,7 @@ public class SecretAdminServiceTests
     [Fact]
     public async Task OsSecretStoreProvider_DisableAndReenableLifecycle()
     {
-        var provider = new OsSecretStoreProvider(TempRoot());
+        var provider = new OsSecretStoreProvider(TempRoot(), LocalVaultProtectionScope.CurrentUser);
 
         await provider.StoreAsync("api_token", "token-value");
         Assert.Equal(SecretLifecycleStatus.Active, await provider.GetStatusAsync("api_token"));

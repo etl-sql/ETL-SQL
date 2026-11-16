@@ -1,6 +1,6 @@
 # TOP_N_OTHERS
 
-Reduces high-cardinality values by aggregating low-volume categories into a single row. Useful for keeping pie and bar charts clean.
+Reduces high-cardinality values by aggregating categories by `(BY_GROUP, CATEGORY_COL)`, keeping the top N categories and rolling all remaining categories into a single `'Others'` row at the same aggregated grain. Useful for keeping pie and bar charts clean.
 
 ```sql
 TRANSFORM #target

@@ -49,27 +49,12 @@ namespace ETL_SQL.Orchestrator
         /// options. Shared with hosts (e.g. the Portal) that override the provider at
         /// resolve time but fall back to the factory-based default for non-host-specific kinds.
         /// </summary>
-        public static SecretProviderOptions BuildSecretProviderOptions(IConfiguration configuration) => new()
-        {
-            Provider = configuration["Governance:Secrets:Provider"]
-                ?? configuration["Secrets:Provider"]
-                ?? "Environment",
-            EnvironmentPrefix = configuration["Governance:Secrets:EnvironmentPrefix"]
-                ?? configuration["Secrets:EnvironmentPrefix"],
-            OsStoreRoot = configuration["Governance:Secrets:OsStoreRoot"]
-                ?? configuration["Secrets:OsStoreRoot"],
-            VaultEndpoint = configuration["Governance:Secrets:VaultEndpoint"]
-                ?? configuration["Secrets:VaultEndpoint"],
-            VaultBearerToken = configuration["Governance:Secrets:VaultBearerToken"]
-                ?? configuration["Secrets:VaultBearerToken"]
-        };
+        public static SecretProviderOptions BuildSecretProviderOptions(IConfiguration configuration) =>
+            SecretProviderOptions.FromConfiguration(key => configuration[key]);
 
         /// <summary>Maps the Governance:ConnectionCatalog configuration section to catalog options.</summary>
-        public static ConnectionCatalogOptions BuildConnectionCatalogOptions(IConfiguration configuration) => new()
-        {
-            Provider = configuration["Governance:ConnectionCatalog:Provider"],
-            LocalRoot = configuration["Governance:ConnectionCatalog:LocalRoot"]
-        };
+        public static ConnectionCatalogOptions BuildConnectionCatalogOptions(IConfiguration configuration) =>
+            ConnectionCatalogOptions.FromConfiguration(key => configuration[key]);
 
         public static ToolCatalogOptions BuildToolCatalogOptions(IConfiguration configuration)
         {
@@ -239,6 +224,10 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<ITenantJobEvidenceStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IJobCatalogStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IOrchestratorAuthorizationStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
+            services.AddSingleton<IOrchestratorObjectAuthorizer>(sp =>
+                new OrchestratorObjectAuthorizer(
+                    sp.GetRequiredService<IOrchestratorAuthorizationStore>(),
+                    allowAnonymousWhenUnbound: true));
             services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<ILineageCatalogStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<ITenantLineageCatalogStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());

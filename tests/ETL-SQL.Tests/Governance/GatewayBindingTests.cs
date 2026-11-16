@@ -117,7 +117,7 @@ public sealed class GatewayBindingTests : IDisposable
     [Fact]
     public async Task Catalog_RefusesToStoreAGatewayEntryCarryingAnEndpoint()
     {
-        var catalog = new LocalConnectionCatalogProvider(_root);
+        var catalog = new LocalConnectionCatalogProvider(_root, LocalVaultProtectionScope.CurrentUser);
         var definition = new SharedConnectionDefinition(
             "sales_prod", "POSTGRES", Target: null,
             new Dictionary<string, string> { ["HOST"] = "db.corp.internal" },
@@ -135,7 +135,7 @@ public sealed class GatewayBindingTests : IDisposable
     [Fact]
     public async Task Catalog_RoundTripsAGatewayBindingWithoutGainingAnEndpoint()
     {
-        var catalog = new LocalConnectionCatalogProvider(_root);
+        var catalog = new LocalConnectionCatalogProvider(_root, LocalVaultProtectionScope.CurrentUser);
         await catalog.StoreAsync(new SharedConnectionDefinition(
             "sales_prod", "POSTGRES", Target: null,
             new Dictionary<string, string> { ["SCHEMA"] = "dbo" },
@@ -158,7 +158,7 @@ public sealed class GatewayBindingTests : IDisposable
     public async Task Catalog_PersistedGatewayEntryLeaksNoAddressToDisk()
     {
         // Whatever the storage format, the bytes on disk must not contain a routable destination.
-        var catalog = new LocalConnectionCatalogProvider(_root);
+        var catalog = new LocalConnectionCatalogProvider(_root, LocalVaultProtectionScope.CurrentUser);
         await catalog.StoreAsync(new SharedConnectionDefinition(
             "sales_prod", "POSTGRES", Target: null,
             new Dictionary<string, string> { ["SCHEMA"] = "dbo" },
@@ -178,7 +178,7 @@ public sealed class GatewayBindingTests : IDisposable
     {
         // Promotion changes the binding, not the script: the same alias is direct in one environment
         // and Gateway-bound in another, and a caller resolves it identically either way.
-        var catalog = new LocalConnectionCatalogProvider(_root);
+        var catalog = new LocalConnectionCatalogProvider(_root, LocalVaultProtectionScope.CurrentUser);
 
         await catalog.StoreAsync(new SharedConnectionDefinition(
             "sales_prod", "POSTGRES", "Host=db.dev.internal;Database=Sales",
@@ -210,7 +210,7 @@ public sealed class GatewayBindingTests : IDisposable
     {
         // Routing is an administrative fact in the catalog. A script that names gateway-shaped
         // options is simply passing options; it must not gain a Gateway binding for the connection.
-        var catalog = new LocalConnectionCatalogProvider(_root);
+        var catalog = new LocalConnectionCatalogProvider(_root, LocalVaultProtectionScope.CurrentUser);
         await catalog.StoreAsync(new SharedConnectionDefinition(
             "sales_prod", "POSTGRES", "Host=db.dev.internal;Database=Sales",
             new Dictionary<string, string>(), Disabled: false));
@@ -237,7 +237,7 @@ public sealed class GatewayBindingTests : IDisposable
         // The local-bypass case: the entry deliberately carries no endpoint, and the script supplies
         // one. Falling back to a direct connection would route tenant data to whatever the script
         // named, so resolution must refuse outright while no Gateway data plane exists.
-        var catalog = new LocalConnectionCatalogProvider(_root);
+        var catalog = new LocalConnectionCatalogProvider(_root, LocalVaultProtectionScope.CurrentUser);
         await catalog.StoreAsync(new SharedConnectionDefinition(
             "sales_prod", "POSTGRES", Target: null, new Dictionary<string, string>(),
             Disabled: false, SensitiveFields: null,

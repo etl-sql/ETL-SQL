@@ -17,13 +17,17 @@ Aliases: `MONGO`
 | `HOST` | MongoDB hostname (alternative to connection string) | No |
 | `PORT` | MongoDB port (alternative to connection string, default: `27017`) | No |
 | `USER` | Username for authentication | No |
-| `PASSWORD` | Password for authentication (supports `ENC:`) | No |
+| `PASSWORD` | Password for authentication (supports `'ENC:...'`, `'SECRET:...'`, or `'${ENV}'`) | No |
 | `TIMEOUT_SECONDS` | Connection timeout limit in seconds (default: `30`) | No |
+
+> [!NOTE]
+> `CONNECTION_STRING` (or a positional URI) and structured `HOST` / `PORT` options are mutually
+> exclusive: when `CONNECTION_STRING` is provided, `HOST` and `PORT` are ignored.
 
 ## Authentication
 
 MongoDB supports standard connection string authentication and credential options:
-- **Username / Password**: Supply credentials in the connection string (`mongodb://user:pass@host:port/db`) or via `USER` and `PASSWORD` options.
+- **Username / Password**: Supply credentials in the connection string (`mongodb://user:pass@host:port/db`) or via `USER` and `PASSWORD` options (using `'ENC:...'`, `'SECRET:...'`, or `'${ENV}'` with `Security:AllowedEnvVars`).
 - **SCRAM-SHA-256 / SCRAM-SHA-1**: Default authentication mechanism supported across standalone and replica-set clusters.
 
 ## Examples
@@ -32,12 +36,12 @@ MongoDB supports standard connection string authentication and credential option
 -- Connection using standard Mongo URI
 CREATE CONNECTION mongo_uri AS MONGODB('mongodb://localhost:27017', DATABASE='inventory', COLLECTION='products');
 
--- Connection using structured host/credentials options
+-- Connection using structured host/credentials options and quoted ENC: secret
 CREATE CONNECTION mongo_struct AS MONGODB(
     HOST = 'localhost',
     PORT = '27017',
     USER = 'db_admin',
-    PASSWORD = ENC:U2FsdGVkX1+...,
+    PASSWORD = 'ENC:U2FsdGVkX1+exampleCiphertext==',
     DATABASE = 'inventory',
     COLLECTION = 'products',
     TIMEOUT_SECONDS = 15

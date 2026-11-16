@@ -144,6 +144,11 @@ public class FileOperationStatementHandler(
             return;
         }
 
+        string? formatOpt = stmt.Format != null ? (await context.EvaluateValue(stmt.Format, new Row()))?.ToString() : null;
+        string? patternOpt = stmt.Pattern != null ? (await context.EvaluateValue(stmt.Pattern, new Row()))?.ToString() : null;
+        ArchiveFormat? archiveFormat = null;
+        bool decompressGzipToFile = false;
+
         string sourceVal = sourceOperand.RawValue;
         string source = sourceOperand.ResolvedPath;
         string? destVal = destOperand.RawValue != null ? destOperand.ResolvedPath : null;
@@ -159,9 +164,32 @@ public class FileOperationStatementHandler(
         {
             dest = DeriveDefaultCryptoDestination(stmt, source, sourceVal);
         }
+        else if (stmt.Type == FileOpType.Compress)
+        {
+            archiveFormat = SafeArchiveService.ResolveFormat(formatOpt, dest, defaultToZipIfUnknown: true);
+            if (dest == null && stmt.Destination == null)
+            {
+                dest = SafeArchiveService.DeriveDefaultCompressDestination(source, archiveFormat.Value, Directory.Exists(source));
+            }
+        }
+        else if (stmt.Type == FileOpType.Decompress)
+        {
+            archiveFormat = SafeArchiveService.ResolveFormat(formatOpt, source, defaultToZipIfUnknown: false);
+            if (dest == null && stmt.Destination == null)
+            {
+                dest = SafeArchiveService.DeriveDefaultDecompressDestination(source, sourceVal);
+            }
+            if (archiveFormat == ArchiveFormat.Gzip && dest != null)
+            {
+                bool looksLikeDir = stmt.DestinationIsDirectory
+                    || (destVal != null && (destVal.EndsWith('/') || destVal.EndsWith('\\')))
+                    || Directory.Exists(dest);
+                decompressGzipToFile = !looksLikeDir;
+            }
+        }
         if (dest != null && stmt.Type != FileOpType.Rename)
         {
-            var destinationAccess = stmt.Type == FileOpType.Decompress
+            var destinationAccess = stmt.Type == FileOpType.Decompress && !decompressGzipToFile
                 ? FileSystemAccessKind.Extract
                 : FileSystemAccessKind.Write;
             dest = pathAuthorizer.Authorize(context, dest, destinationAccess,
@@ -295,6 +323,7 @@ public class FileOperationStatementHandler(
                 case FileOpType.Compress:
                     if (dest != null)
                     {
+                        var compressFormat = archiveFormat ?? SafeArchiveService.ResolveFormat(formatOpt, dest, defaultToZipIfUnknown: true);
                         var compressDest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write);
                         // Security Hardening: Block writing to script files and dangerous types
                         context.SecurityService.ValidateWriteAccess(compressDest.CanonicalPath);
@@ -311,33 +340,42 @@ public class FileOperationStatementHandler(
                             pathAuthorizer.DeleteValidatedFile(context, deleteDest);
                         }
 
+                        if (!Directory.Exists(source) && !File.Exists(source))
+                        {
+                            throw new ExecutionException($"Source for COMPRESS FILE does not exist: {source}");
+                        }
+
                         await using var destStream = pathAuthorizer.OpenValidatedWrite(context, compressDest,
                             truncate: true, failIfExists: true);
                         if (Directory.Exists(source))
                         {
-                            System.IO.Compression.ZipFile.CreateFromDirectory(source, destStream);
-                        }
-                        else if (File.Exists(source))
-                        {
-                            using var archive = new ZipArchive(destStream, ZipArchiveMode.Create);
-                            archive.CreateEntryFromFile(source, Path.GetFileName(source));
+                            await SafeArchiveService.CompressDirectoryAsync(source, destStream, compressFormat, context.CancellationToken);
                         }
                         else
                         {
-                            throw new ExecutionException($"Source for COMPRESS FILE does not exist: {source}");
+                            await SafeArchiveService.CompressFileAsync(source, destStream, compressFormat, context.CancellationToken);
                         }
                     }
                     break;
                 case FileOpType.Decompress:
                     if (dest != null)
                     {
+                        var decompressFormat = archiveFormat ?? SafeArchiveService.ResolveFormat(formatOpt, source, defaultToZipIfUnknown: false);
                         // Security Hardening: Block writing to script files and dangerous types
                         context.SecurityService.ValidateWriteAccess(dest);
                         context.SecurityService.ValidateFileType(dest);
 
                         if (File.Exists(source))
                         {
-                            SafeZipExtractor.Extract(source, dest, overwrite, context, pathAuthorizer);
+                            SafeArchiveService.ExtractArchive(
+                                source,
+                                dest,
+                                decompressFormat,
+                                overwrite,
+                                context,
+                                pathAuthorizer,
+                                patternOpt,
+                                decompressGzipToFile);
                             context.Log($"File decompressed: {source} -> {dest}", ConsoleColor.Green);
                         }
                         else

@@ -15,7 +15,7 @@ Aliases: `MARIADB`
 | `USER` / `UID` | Login username | Yes (structured) |
 | `PASSWORD` | Login password | Yes (structured) |
 | `PORT` | Listening port (default: `3306`) | No |
-| `SSL_MODE` | TLS mode: `NONE`, `PREFERRED`, `REQUIRED`, `VERIFYCA`, `VERIFYFULL` (default: `PREFERRED`) | No |
+| `SSL_MODE` | TLS mode: `None`, `Preferred`, `Required`, `VerifyCA`, `VerifyFull` (default: `Preferred`) | No |
 | `ALLOW_PUBLIC_KEY_RETRIEVAL` | Allow RSA public key retrieval from server (`TRUE`/`FALSE`, default: `FALSE`) | No |
 | `ALLOW_USER_VARIABLES` | Allow user-defined variables like `@var` inside queries (`TRUE`/`FALSE`, default: `FALSE`) | No |
 | `TIMEOUT_SECONDS` | Command timeout in seconds (default: `30`) | No |
@@ -26,17 +26,22 @@ Aliases: `MARIADB`
 | `CONNECTION_LIFETIME` | Maximum age in seconds for a pooled connection | No |
 | `TABLE` | Default table context | No |
 
+> [!NOTE]
+> `HOST` and `SERVER` are synonyms (`HOST` takes precedence if both are set), and `USER` and `UID`
+> are synonyms (`USER` takes precedence). Use structured options or a positional connection string,
+> not both.
+
 ## Authentication
 
 MySQL supports standard user authentication and SSL:
-- **Standard Authentication**: Set `USER` and `PASSWORD` options.
-- **SSL / TLS**: Set `SSL_MODE` (`REQUIRED`, `VERIFY_CA`, `VERIFY_IDENTITY`) and optional `SSL_CA` path.
+- **Standard Authentication**: Set `USER` (or `UID`) and `PASSWORD` options (supports `'ENC:...'`, `'SECRET:...'`, or `'${ENV}'` with `Security:AllowedEnvVars`).
+- **SSL / TLS**: Set `SSL_MODE` (`None`, `Preferred`, `Required`, `VerifyCA`, `VerifyFull`).
 
 ## Examples
 
 ```sql
--- Structured property connection
-CREATE CONNECTION mysql_db AS MYSQL(HOST='127.0.0.1', PORT=3306, DATABASE='inventory', USER='etl_user', PASSWORD='s3cr3t', ALLOW_PUBLIC_KEY_RETRIEVAL=TRUE);
+-- Structured property connection using allow-listed environment variable (Security:AllowedEnvVars)
+CREATE CONNECTION mysql_db AS MYSQL(HOST='127.0.0.1', PORT=3306, DATABASE='inventory', USER='etl_user', PASSWORD='${MYSQL_PASSWORD}', ALLOW_PUBLIC_KEY_RETRIEVAL=TRUE);
 
 -- Traditional connection string
 CREATE CONNECTION mysql_legacy AS MYSQL('Server=localhost;Database=mydb;Uid=etl;Pwd=pass;AllowUserVariables=True;');

@@ -202,7 +202,7 @@ namespace ETL_SQL.Tests.Orchestration
                     Recipient: "ops@example.com"));
                 await store.AddJobNotificationAsync(job.Name, "NotifyOps", NotificationTrigger.Completion);
 
-                var connectionCatalog = new LocalConnectionCatalogProvider(catalogRoot);
+                var connectionCatalog = new LocalConnectionCatalogProvider(catalogRoot, LocalVaultProtectionScope.CurrentUser);
                 await connectionCatalog.StoreAsync(new SharedConnectionDefinition(
                     "notify_webhook",
                     "WEBHOOK",
@@ -426,7 +426,7 @@ namespace ETL_SQL.Tests.Orchestration
                     "notify_mail",
                     Recipient: "recipient@example.com"));
 
-                var connectionCatalog = new LocalConnectionCatalogProvider(catalogRoot);
+                var connectionCatalog = new LocalConnectionCatalogProvider(catalogRoot, LocalVaultProtectionScope.CurrentUser);
                 await connectionCatalog.StoreAsync(new SharedConnectionDefinition(
                     "notify_mail",
                     "SMTP",
@@ -493,7 +493,7 @@ namespace ETL_SQL.Tests.Orchestration
                     Recipient: "recipient@example.com",
                     IsEnabled: false));
 
-                var connectionCatalog = new LocalConnectionCatalogProvider(catalogRoot);
+                var connectionCatalog = new LocalConnectionCatalogProvider(catalogRoot, LocalVaultProtectionScope.CurrentUser);
                 await connectionCatalog.StoreAsync(new SharedConnectionDefinition(
                     "notify_mail",
                     "SMTP",
@@ -554,7 +554,7 @@ namespace ETL_SQL.Tests.Orchestration
 
         private static async Task<LocalConnectionCatalogProvider> CreateNotificationConnectionCatalogAsync(string catalogRoot)
         {
-            var connectionCatalog = new LocalConnectionCatalogProvider(catalogRoot);
+            var connectionCatalog = new LocalConnectionCatalogProvider(catalogRoot, LocalVaultProtectionScope.CurrentUser);
             await connectionCatalog.StoreAsync(new SharedConnectionDefinition(
                 "notify_webhook",
                 "WEBHOOK",

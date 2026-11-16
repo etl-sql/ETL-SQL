@@ -9,16 +9,20 @@ password, and private-key JWT (recommended for production).
 | Option | Description | Mandatory |
 | :--- | :--- | :---: |
 | `HOST` | Account identifier — plain (`myorg-myaccount`) or full FQDN (`myorg-myaccount.snowflakecomputing.com`). The `.snowflakecomputing.com` suffix is stripped automatically. | Yes |
+| `ACCOUNT` | Snowflake account name override (useful with local emulators) | No |
+| `PORT` | Optional Snowflake service port (useful with local emulators) | No |
+| `PROTOCOL` | Optional protocol (`https` or `http`, useful with local emulators) | No |
 | `USERNAME` | Snowflake login name | Yes |
 | `PASSWORD` | Password (for username/password auth) | Cond. |
 | `PRIVATE_KEY_FILE` | Path to RSA private key PEM file (enables JWT auth; takes precedence over `PASSWORD`) | Cond. |
 | `WAREHOUSE` | Virtual warehouse for query execution (e.g. `COMPUTE_WH`) | No |
 | `DATABASE` | Target database | No |
 | `SCHEMA` | Target schema (defaults to `PUBLIC`) | No |
+| `TIMEOUT_SECONDS` | Command/query execution timeout in seconds (default: `1800`, or `Connectors:DataWarehouse:DefaultCommandTimeoutSeconds`) | No |
 
 > [!NOTE]
-> Either `PASSWORD` or `PRIVATE_KEY_FILE` must be supplied. If both are present, `PRIVATE_KEY_FILE`
-> wins and `PASSWORD` is ignored.
+> `PASSWORD` and `PRIVATE_KEY_FILE` are mutually exclusive authentication modes. If both are
+> present, `PRIVATE_KEY_FILE` wins and `PASSWORD` is ignored.
 
 > [!TIP]
 > For production workloads, use key-pair authentication. Generate an RSA key pair, upload the public
@@ -27,19 +31,19 @@ password, and private-key JWT (recommended for production).
 
 ## Authentication
 
-Snowflake supports two primary authentication modes:
-- **Username / Password**: Supply `USER` and `PASSWORD`.
-- **Key-Pair Authentication**: Supply `PRIVATE_KEY_FILE` (and optional `PRIVATE_KEY_PASSPHRASE`) for automated non-interactive pipelines.
+Snowflake supports two mutually exclusive authentication modes:
+- **Username / Password**: Supply `USERNAME` and `PASSWORD` (supports `'ENC:...'`, `'SECRET:...'`, or `'${ENV}'` with `Security:AllowedEnvVars`).
+- **Key-Pair Authentication**: Supply `USERNAME` and `PRIVATE_KEY_FILE` (unencrypted PKCS#8 PEM private key path) for automated non-interactive pipelines.
 
 ## Examples
 
 ```sql
--- Username + password
-CREATE CONNECTION sf AS SNOWFLAKE(HOST='myorg-myaccount', USERNAME='etl_user', PASSWORD='s3cr3t',
-         DATABASE='PROD', SCHEMA='STAGING', WAREHOUSE='LOAD_WH');
+-- Username + password using a secret reference (or '${SNOWFLAKE_PASSWORD}' / 'ENC:...')
+CREATE CONNECTION sf AS SNOWFLAKE(HOST='myorg-myaccount', USERNAME='etl_user', PASSWORD='SECRET:prod/snowflake/password',
+         DATABASE='PROD', SCHEMA='STAGING', WAREHOUSE='LOAD_WH', TIMEOUT_SECONDS=1800);
 
 -- Private-key JWT (recommended for production)
-CREATE CONNECTION sf AS SNOWFLAKE(HOST='myorg-myaccount.snowflakecomputing.com',
+CREATE CONNECTION sf_jwt AS SNOWFLAKE(HOST='myorg-myaccount.snowflakecomputing.com',
          USERNAME='etl_user',
          PRIVATE_KEY_FILE='/etc/certs/snowflake_rsa_key.p8',
          DATABASE='ANALYTICS', WAREHOUSE='TRANSFORM_WH');
@@ -75,7 +79,7 @@ The keywords `TOP` and `NOLOCK` are excluded (T-SQL only). Use `LIMIT` for row c
 ## Troubleshooting
 
 - **JWT Token Expired / Invalid Key**: Verify private key format (PKCS#8 PEM) and matching public key registered on Snowflake user.
-- **Role / Warehouse Not Found**: Confirm `ROLE` and `WAREHOUSE` exist and user has usage permissions.
+- **Warehouse Not Found**: Confirm `WAREHOUSE` exists and user has usage permissions.
 - **Case Sensitivity**: Object identifiers in Snowflake default to uppercase unless quoted.
 
 ## References

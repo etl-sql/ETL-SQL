@@ -18,19 +18,25 @@ identity) when no credential file is provided.
 | `DATASET` | Default dataset (equivalent to schema). Required for schema introspection and write operations. | No |
 | `CREDENTIAL_FILE` | Path to service account JSON key file. Omit to use ADC (Cloud Run, GKE workload identity, `gcloud auth application-default login`). | No |
 | `LOCATION` | BigQuery job location: `US`, `EU`, `us-central1`, etc. Defaults to `US`. | No |
+| `TIMEOUT_SECONDS` | Command/query timeout in seconds (default: `1800`, or `Connectors:DataWarehouse:DefaultCommandTimeoutSeconds`) | No |
+
+> [!NOTE]
+> `CREDENTIAL_FILE` and Application Default Credentials (ADC) are mutually exclusive authentication
+> paths: omit `CREDENTIAL_FILE` to use ambient ADC, or supply `CREDENTIAL_FILE` to authenticate with
+> an explicit service-account JSON key file.
 
 ## Authentication
 
-BigQuery supports two primary authentication methods:
-- **Service Account Key**: Pass the local JSON key file path using `KEY_FILE`.
-- **Application Default Credentials (ADC)**: When running on GCP (GCE, Cloud Run, GKE) or after running `gcloud auth application-default login`, omit `KEY_FILE` to use implicit ambient credentials.
+BigQuery supports two mutually exclusive authentication methods:
+- **Service Account Key**: Pass the local JSON key file path using `CREDENTIAL_FILE` (or `${ENV}` allow-listed in `Security:AllowedEnvVars`, or `'SECRET:...'`).
+- **Application Default Credentials (ADC)**: When running on GCP (GCE, Cloud Run, GKE) or after running `gcloud auth application-default login`, omit `CREDENTIAL_FILE` to use implicit ambient credentials.
 
 ## Examples
 
 ```sql
--- Service-account auth with a fixed dataset
+-- Service-account auth using an allow-listed environment variable path (Security:AllowedEnvVars)
 CREATE CONNECTION bq AS BIGQUERY(PROJECT_ID='my-gcp-project', DATASET='analytics',
-         CREDENTIAL_FILE='/etc/sa/bigquery-sa.json', LOCATION='US');
+         CREDENTIAL_FILE='${BQ_SA_KEY_PATH}', LOCATION='US', TIMEOUT_SECONDS=1800);
 
 -- ADC (workload identity / developer machine)
 CREATE CONNECTION bq AS BIGQUERY(PROJECT_ID='my-gcp-project', DATASET='analytics');

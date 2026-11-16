@@ -93,6 +93,10 @@ public class DirectoryOperationStatementHandler(
         string pathVal = sourceDs != null ? sourceDs.Path : ((await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "");
         string path = context.ResolvePath(pathVal);
 
+        string? formatOpt = stmt.Format != null ? (await context.EvaluateValue(stmt.Format, new Row()))?.ToString() : null;
+        string? patternOpt = stmt.Pattern != null ? (await context.EvaluateValue(stmt.Pattern, new Row()))?.ToString() : null;
+        ArchiveFormat? archiveFormat = null;
+
         string? destVal = null;
         if (stmt.Destination != null)
         {
@@ -117,6 +121,32 @@ public class DirectoryOperationStatementHandler(
             : FileSystemAccessKind.Read;
         path = pathAuthorizer.Authorize(context, path, sourceAccess,
             validateFileType: stmt.Type == DirectoryOpType.Decompress).CanonicalPath;
+
+        if (stmt.Type == DirectoryOpType.Compress)
+        {
+            archiveFormat = SafeArchiveService.ResolveFormat(formatOpt, dest, defaultToZipIfUnknown: true);
+            if (archiveFormat == ArchiveFormat.Gzip)
+            {
+                throw new ExecutionException("GZIP format compresses a single file only. Use ZIP, TAR, or TAR_GZ to compress a directory.");
+            }
+            if (dest == null && stmt.Destination == null)
+            {
+                dest = SafeArchiveService.DeriveDefaultCompressDestination(path, archiveFormat.Value, isDirectory: true);
+            }
+        }
+        else if (stmt.Type == DirectoryOpType.Decompress)
+        {
+            archiveFormat = SafeArchiveService.ResolveFormat(formatOpt, path, defaultToZipIfUnknown: false);
+            if (archiveFormat == ArchiveFormat.Gzip)
+            {
+                throw new ExecutionException("GZIP is a single-file format. Use DECOMPRESS FILE for .gz files.");
+            }
+            if (dest == null && stmt.Destination == null)
+            {
+                dest = SafeArchiveService.DeriveDefaultDecompressDestination(path, pathVal);
+            }
+        }
+
         if (dest != null && stmt.Type != DirectoryOpType.Rename)
         {
             var destinationAccess = stmt.Type == DirectoryOpType.Decompress
@@ -244,6 +274,7 @@ public class DirectoryOperationStatementHandler(
                 case DirectoryOpType.Compress:
                     if (dest != null)
                     {
+                        var compressFormat = archiveFormat ?? SafeArchiveService.ResolveFormat(formatOpt, dest, defaultToZipIfUnknown: true);
                         var compressDest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write,
                             validateFileType: true);
                         // Security Hardening: Block writing to script files
@@ -259,21 +290,33 @@ public class DirectoryOperationStatementHandler(
                             context.SecurityService.ValidateWriteAccess(deleteDest.CanonicalPath);
                             pathAuthorizer.DeleteValidatedFile(context, deleteDest);
                         }
+                        if (!Directory.Exists(path))
+                        {
+                            throw new ExecutionException($"Source directory for COMPRESS DIRECTORY does not exist: {path}");
+                        }
                         await using var destStream = pathAuthorizer.OpenValidatedWrite(context, compressDest,
                             truncate: true, failIfExists: true);
-                        System.IO.Compression.ZipFile.CreateFromDirectory(path, destStream);
+                        await SafeArchiveService.CompressDirectoryAsync(path, destStream, compressFormat, context.CancellationToken);
                         _logger.WriteLine($"Directory compressed: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
                 case DirectoryOpType.Decompress:
                     if (dest != null)
                     {
+                        var decompressFormat = archiveFormat ?? SafeArchiveService.ResolveFormat(formatOpt, path, defaultToZipIfUnknown: false);
                         // Security Hardening: Block writing to script files
                         context.SecurityService.ValidateWriteAccess(dest);
 
                         if (File.Exists(path))
                         {
-                            SafeZipExtractor.Extract(path, dest, overwrite, context, pathAuthorizer);
+                            SafeArchiveService.ExtractArchive(
+                                path,
+                                dest,
+                                decompressFormat,
+                                overwrite,
+                                context,
+                                pathAuthorizer,
+                                patternOpt);
                             _logger.WriteLine($"Directory decompressed: {path} -> {dest}", ConsoleColor.Green);
                         }
                         else

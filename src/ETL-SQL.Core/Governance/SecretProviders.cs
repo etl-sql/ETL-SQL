@@ -68,8 +68,15 @@ public sealed class EnvironmentSecretProvider(
     }
 }
 
-public sealed class OsSecretStoreProvider(string rootDirectory) : ISecretLifecycleProvider
+public sealed class OsSecretStoreProvider(
+    string rootDirectory,
+    LocalVaultProtectionScope protectionScope = LocalVaultProtectionScope.LocalMachine,
+    string? serviceIdentity = null,
+    ILocalStoreProtector? protector = null) : ISecretLifecycleProvider
 {
+    private readonly ILocalStoreProtector _protector = protector ?? new OsLocalStoreProtector();
+
+    public LocalVaultProtectionScope ProtectionScope => protectionScope;
     public string ProviderName => "OsSecretStore";
 
     public async Task<SecretResolutionResult> ResolveAsync(string name, CancellationToken cancellationToken = default)
@@ -99,11 +106,12 @@ public sealed class OsSecretStoreProvider(string rootDirectory) : ISecretLifecyc
             throw new ArgumentException("Secret value cannot be null or empty.", nameof(value));
 
         var path = GetSecretPath(name);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var protectedValue = CryptoUtils.ProtectMachine(value, name);
+        var directory = Path.GetDirectoryName(path)!;
+        Directory.CreateDirectory(directory);
+        var protectedValue = LocalStoreProtection.ProtectValue(value, name, protectionScope);
         await File.WriteAllTextAsync(path, protectedValue, cancellationToken).ConfigureAwait(false);
-        if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        _protector.ProtectFile(path, protectionScope, serviceIdentity);
+        _protector.ProtectDirectory(directory, protectionScope, serviceIdentity);
 
         // Storing a value re-enables a previously disabled secret.
         var disabledPath = GetDisabledPath(name);
@@ -143,7 +151,9 @@ public sealed class OsSecretStoreProvider(string rootDirectory) : ISecretLifecyc
         if (!File.Exists(path))
             throw new KeyNotFoundException($"Secret '{name}' was not found in the OS secret store.");
 
-        File.Move(path, GetDisabledPath(name), overwrite: true);
+        var disabledPath = GetDisabledPath(name);
+        File.Move(path, disabledPath, overwrite: true);
+        _protector.ProtectFile(disabledPath, protectionScope, serviceIdentity);
         return Task.CompletedTask;
     }
 
@@ -158,6 +168,7 @@ public sealed class OsSecretStoreProvider(string rootDirectory) : ISecretLifecyc
             throw new KeyNotFoundException($"Secret '{name}' was not found in the OS secret store.");
 
         File.Move(disabledPath, path);
+        _protector.ProtectFile(path, protectionScope, serviceIdentity);
         return Task.CompletedTask;
     }
 
@@ -275,8 +286,34 @@ public sealed class SecretProviderOptions
     public string Provider { get; set; } = "Environment";
     public string? EnvironmentPrefix { get; set; }
     public string? OsStoreRoot { get; set; }
+    public LocalVaultProtectionScope ProtectionScope { get; set; } = LocalVaultProtectionScope.LocalMachine;
+    public string? ServiceIdentity { get; set; }
     public string? VaultEndpoint { get; set; }
     public string? VaultBearerToken { get; set; }
+
+    public static SecretProviderOptions FromConfiguration(Func<string, string?> getSetting)
+    {
+        ArgumentNullException.ThrowIfNull(getSetting);
+        return new()
+        {
+            Provider = getSetting("Governance:Secrets:Provider")
+                ?? getSetting("Secrets:Provider")
+                ?? "Environment",
+            EnvironmentPrefix = getSetting("Governance:Secrets:EnvironmentPrefix")
+                ?? getSetting("Secrets:EnvironmentPrefix"),
+            OsStoreRoot = getSetting("Governance:Secrets:OsStoreRoot")
+                ?? getSetting("Secrets:OsStoreRoot"),
+            ProtectionScope = LocalStoreProtection.ParseProtectionScope(
+                getSetting("Governance:Secrets:ProtectionScope")
+                ?? getSetting("Secrets:ProtectionScope")),
+            ServiceIdentity = getSetting("Governance:Secrets:ServiceIdentity")
+                ?? getSetting("Secrets:ServiceIdentity"),
+            VaultEndpoint = getSetting("Governance:Secrets:VaultEndpoint")
+                ?? getSetting("Secrets:VaultEndpoint"),
+            VaultBearerToken = getSetting("Governance:Secrets:VaultBearerToken")
+                ?? getSetting("Secrets:VaultBearerToken")
+        };
+    }
 }
 
 public sealed class SecretProviderFactory(HttpClient httpClient)
@@ -289,7 +326,9 @@ public sealed class SecretProviderFactory(HttpClient httpClient)
         {
             "ENVIRONMENT" => new EnvironmentSecretProvider(options.EnvironmentPrefix),
             "OSSECRETSTORE" => new OsSecretStoreProvider(
-                options.OsStoreRoot ?? throw new InvalidOperationException("OS secret store root is required.")),
+                options.OsStoreRoot ?? throw new InvalidOperationException("OS secret store root is required."),
+                options.ProtectionScope,
+                options.ServiceIdentity),
             "HTTPSVAULT" => new HttpsVaultSecretProvider(
                 ParseVaultEndpoint(options.VaultEndpoint),
                 httpClient,

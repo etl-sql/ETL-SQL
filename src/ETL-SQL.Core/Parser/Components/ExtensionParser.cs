@@ -228,6 +228,7 @@ public class ExtensionParser : ParserComponent
 
         Expression? source = null, dest = null, overwrite = null, password = null, keyFile = null, pgpKey = null;
         Expression? dateSuffix = null, suffixSeparator = null, signingKey = null, signingPassword = null, verifyKey = null, deleteSource = null;
+        Expression? format = null, pattern = null;
         string? connectionName = null;
         bool isFunctionStyle = Match(TokenType.LPAREN);
         if (isFunctionStyle)
@@ -290,11 +291,15 @@ public class ExtensionParser : ParserComponent
                     var options = type switch
                     {
                         FileOpType.Copy or FileOpType.Move or FileOpType.Rename => ParseWithOptions(name, "OVERWRITE", "DATE_SUFFIX", "SUFFIX_SEPARATOR"),
-                        FileOpType.Encrypt or FileOpType.Decrypt or FileOpType.Compress or FileOpType.Decompress => ParseWithOptions(name, "OVERWRITE", "DELETE_SOURCE"),
+                        FileOpType.Encrypt or FileOpType.Decrypt => ParseWithOptions(name, "OVERWRITE", "DELETE_SOURCE"),
+                        FileOpType.Compress => ParseWithOptions(name, "OVERWRITE", "DELETE_SOURCE", "FORMAT"),
+                        FileOpType.Decompress => ParseWithOptions(name, "OVERWRITE", "DELETE_SOURCE", "FORMAT", "PATTERN"),
                         _ => ParseWithOptions(name, "OVERWRITE"),
                     };
                     overwrite = options.GetValueOrDefault("OVERWRITE") ?? overwrite;
                     deleteSource = options.GetValueOrDefault("DELETE_SOURCE") ?? deleteSource;
+                    format = options.GetValueOrDefault("FORMAT") ?? format;
+                    pattern = options.GetValueOrDefault("PATTERN") ?? pattern;
                     dateSuffix = options.GetValueOrDefault("DATE_SUFFIX") ?? dateSuffix;
                     suffixSeparator = options.GetValueOrDefault("SUFFIX_SEPARATOR") ?? suffixSeparator;
                 }
@@ -318,6 +323,8 @@ public class ExtensionParser : ParserComponent
             SigningPassword = signingPassword,
             VerifyKey = verifyKey,
             DeleteSource = deleteSource,
+            Format = format,
+            Pattern = pattern,
             Line = startToken.Line,
             Column = startToken.Column,
         };
@@ -387,6 +394,7 @@ public class ExtensionParser : ParserComponent
         };
 
         Expression? path = null, extra = null, overwrite = null, recursive = null, password = null, keyFile = null, pgpKey = null;
+        Expression? format = null, pattern = null;
         string? connectionName = null;
         bool ifExists = false;
         bool isFunctionStyle = Match(TokenType.LPAREN);
@@ -438,11 +446,18 @@ public class ExtensionParser : ParserComponent
                 else if (Match(TokenType.RECURSIVE) || MatchIdentifier("RECURSIVE")) { recursive = ParseExpression(); }
                 else if (Match(TokenType.WITH))
                 {
-                    var options = type == DirectoryOpType.DeleteContents
-                        ? ParseWithOptions(DirectoryStatementName(type), "RECURSIVE")
-                        : ParseWithOptions(DirectoryStatementName(type), "OVERWRITE");
+                    var dirStmtName = DirectoryStatementName(type);
+                    var options = type switch
+                    {
+                        DirectoryOpType.DeleteContents => ParseWithOptions(dirStmtName, "RECURSIVE"),
+                        DirectoryOpType.Compress => ParseWithOptions(dirStmtName, "OVERWRITE", "FORMAT"),
+                        DirectoryOpType.Decompress => ParseWithOptions(dirStmtName, "OVERWRITE", "FORMAT", "PATTERN"),
+                        _ => ParseWithOptions(dirStmtName, "OVERWRITE"),
+                    };
                     overwrite = options.GetValueOrDefault("OVERWRITE") ?? overwrite;
                     recursive = options.GetValueOrDefault("RECURSIVE") ?? recursive;
+                    format = options.GetValueOrDefault("FORMAT") ?? format;
+                    pattern = options.GetValueOrDefault("PATTERN") ?? pattern;
                 }
                 else if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
                 else if (path == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
@@ -462,7 +477,13 @@ public class ExtensionParser : ParserComponent
         }
 
         if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-        return new DirectoryOperationStatement(type, path, extra, overwrite, recursive, password, keyFile, pgpKey, ifExists, connectionName) { Line = startToken.Line, Column = startToken.Column };
+        return new DirectoryOperationStatement(type, path, extra, overwrite, recursive, password, keyFile, pgpKey, ifExists, connectionName)
+        {
+            Format = format,
+            Pattern = pattern,
+            Line = startToken.Line,
+            Column = startToken.Column
+        };
 
     }
 

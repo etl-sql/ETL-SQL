@@ -192,11 +192,9 @@ internal static class PiiSchemaScanner
             throw new InvalidOperationException("Database scans require --table so only the requested schema is accessed.");
 
         var configuration = Program.ServiceProvider.GetService<IConfiguration>();
-        var catalog = ConnectionCatalogProviderFactory.Create(new ConnectionCatalogOptions
-        {
-            Provider = configuration?["Governance:ConnectionCatalog:Provider"],
-            LocalRoot = configuration?["Governance:ConnectionCatalog:LocalRoot"]
-        }) ?? throw new InvalidOperationException("No shared connection catalog is configured.");
+        var catalog = ConnectionCatalogProviderFactory.Create(
+            ConnectionCatalogOptions.FromConfiguration(key => configuration?[key]))
+            ?? throw new InvalidOperationException("No shared connection catalog is configured.");
         var definition = await catalog.ResolveAsync(alias, evaluator.ExecutionIdentity, cancellationToken);
         var connectionName = $"__pii_scan_{Guid.NewGuid():N}";
         var script = $"CREATE CONNECTION {connectionName} AS {definition.ConnectorType}('SHARED:{alias}');";

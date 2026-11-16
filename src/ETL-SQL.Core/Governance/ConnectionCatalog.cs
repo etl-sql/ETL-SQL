@@ -57,8 +57,15 @@ public interface IWritableConnectionCatalogProvider : IConnectionCatalogProvider
 /// written by the admin CLI and read by script execution. Same trust boundary as
 /// <see cref="OsSecretStoreProvider"/>: machine-scope crypto plus filesystem ACLs.
 /// </summary>
-public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWritableConnectionCatalogProvider
+public sealed class LocalConnectionCatalogProvider(
+    string rootDirectory,
+    LocalVaultProtectionScope protectionScope = LocalVaultProtectionScope.LocalMachine,
+    string? serviceIdentity = null,
+    ILocalStoreProtector? protector = null) : IWritableConnectionCatalogProvider
 {
+    private readonly ILocalStoreProtector _protector = protector ?? new OsLocalStoreProtector();
+
+    public LocalVaultProtectionScope ProtectionScope => protectionScope;
     public string ProviderName => "LocalCatalog";
 
     private sealed record EntryPayload(
@@ -99,17 +106,19 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
         GatewayBindingValidator.EnsureValid(definition.Gateway, definition.Target, definition.Options);
 
         var path = GetEntryPath(definition.Alias);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var directory = Path.GetDirectoryName(path)!;
+        Directory.CreateDirectory(directory);
         var payload = new EntryPayload(
             definition.ConnectorType.Trim(),
             definition.Target,
             new Dictionary<string, string>(definition.Options, StringComparer.OrdinalIgnoreCase),
             definition.SensitiveFields?.ToList(),
             definition.Gateway);
-        var protectedValue = CryptoUtils.ProtectMachine(JsonSerializer.Serialize(payload), definition.Alias);
+        var protectedValue = LocalStoreProtection.ProtectValue(
+            JsonSerializer.Serialize(payload), definition.Alias, protectionScope);
         await File.WriteAllTextAsync(path, protectedValue, cancellationToken).ConfigureAwait(false);
-        if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        _protector.ProtectFile(path, protectionScope, serviceIdentity);
+        _protector.ProtectDirectory(directory, protectionScope, serviceIdentity);
 
         // Storing an entry re-enables a previously disabled alias.
         var disabledPath = GetDisabledPath(definition.Alias);
@@ -171,7 +180,9 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
         if (!File.Exists(path))
             throw new KeyNotFoundException($"Shared connection '{alias}' was not found in the connection catalog.");
 
-        File.Move(path, GetDisabledPath(alias), overwrite: true);
+        var disabledPath = GetDisabledPath(alias);
+        File.Move(path, disabledPath, overwrite: true);
+        _protector.ProtectFile(disabledPath, protectionScope, serviceIdentity);
         return Task.CompletedTask;
     }
 
@@ -186,6 +197,7 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
             throw new KeyNotFoundException($"Shared connection '{alias}' was not found in the connection catalog.");
 
         File.Move(disabledPath, path);
+        _protector.ProtectFile(path, protectionScope, serviceIdentity);
         return Task.CompletedTask;
     }
 
@@ -291,6 +303,21 @@ public sealed class ConnectionCatalogOptions
 {
     public string? Provider { get; set; }
     public string? LocalRoot { get; set; }
+    public LocalVaultProtectionScope ProtectionScope { get; set; } = LocalVaultProtectionScope.LocalMachine;
+    public string? ServiceIdentity { get; set; }
+
+    public static ConnectionCatalogOptions FromConfiguration(Func<string, string?> getSetting)
+    {
+        ArgumentNullException.ThrowIfNull(getSetting);
+        return new()
+        {
+            Provider = getSetting("Governance:ConnectionCatalog:Provider"),
+            LocalRoot = getSetting("Governance:ConnectionCatalog:LocalRoot"),
+            ProtectionScope = LocalStoreProtection.ParseProtectionScope(
+                getSetting("Governance:ConnectionCatalog:ProtectionScope")),
+            ServiceIdentity = getSetting("Governance:ConnectionCatalog:ServiceIdentity")
+        };
+    }
 }
 
 public static class ConnectionCatalogProviderFactory
@@ -305,7 +332,9 @@ public static class ConnectionCatalogProviderFactory
         return options.Provider.Trim().ToUpperInvariant() switch
         {
             "LOCAL" => new LocalConnectionCatalogProvider(
-                options.LocalRoot ?? throw new InvalidOperationException("Connection catalog local root is required.")),
+                options.LocalRoot ?? throw new InvalidOperationException("Connection catalog local root is required."),
+                options.ProtectionScope,
+                options.ServiceIdentity),
             "PORTAL" => throw new InvalidOperationException(
                 "The Portal connection catalog provider is only available inside the Portal host."),
             _ => throw new InvalidOperationException($"Connection catalog provider '{options.Provider}' is not supported.")

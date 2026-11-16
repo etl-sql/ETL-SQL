@@ -13,25 +13,32 @@ a native ETL-SQL connector.
 | `SERVER` | Server name or IP | No |
 | `PORT` | Listening port | No |
 | `DATABASE` | Database name or file path | No |
-| `UID` | Login username | No |
-| `PASSWORD` | Login password | No |
+| `UID` / `USER` | Login username (`UID` and `USER` are synonyms) | No |
+| `PASSWORD` / `PWD` | Login password (`PWD` is the ODBC-native pass-through keyword) | No |
 | `CONNECT_TIMEOUT` | Login timeout in seconds | No |
+| `TIMEOUT_SECONDS` | Command/query execution timeout in seconds (default: `30`) | No |
+| `TABLE` | Default table context | No |
+| `HTTPPATH` | HTTP endpoint path (used by Spark/Databricks ODBC drivers) | No |
+| `AUTHMECH` | Driver-native authentication mechanism (e.g. `3` for PAT auth) | No |
+| `SSL` | Driver-native TLS setting (e.g. `1`) | No |
 
 > [!NOTE]
-> For DSN-less connections you must provide `DRIVER` and at least one identifying property (`SERVER`
-> or `DATABASE`).
+> `DSN` and `DRIVER` are mutually exclusive connection modes: use `DSN` for pre-configured system
+> or user DSNs, or use `DRIVER` with at least one identifying property (`SERVER` or `DATABASE`) for
+> DSN-less connections. `UID`/`USER` and `PASSWORD`/`PWD` are synonym pairs (`PWD` is kept for
+> ODBC driver pass-through compatibility).
 
 ## Authentication
 
 ODBC authentication depends on the underlying driver and DSN:
 - **DSN Connection**: References a system or user DSN with configured credentials or prompt.
-- **Driver-Native Pass-Through**: Supply connection string keywords including `UID`, `PWD`, or `Trusted_Connection`.
+- **Driver-Native Pass-Through**: Supply `UID`/`USER` and `PASSWORD`/`PWD` (supports `'ENC:...'`, `'SECRET:...'`, or `'${ENV}'` with `Security:AllowedEnvVars`), plus driver-specific keys such as `AUTHMECH`.
 
 ## Examples
 
 ```sql
--- DSN pattern
-CREATE CONNECTION odbc_prod AS ODBC(DSN='ProdSales', UID='etl', PASSWORD='pwd');
+-- DSN pattern using a secret reference
+CREATE CONNECTION odbc_prod AS ODBC(DSN='ProdSales', UID='etl', PASSWORD='SECRET:prod/odbc/password');
 
 -- DSN-less SQLite
 CREATE CONNECTION my_sqlite AS ODBC(DRIVER='{SQLite3 ODBC Driver}', DATABASE='C:\Data\local.db');
@@ -74,8 +81,8 @@ CREATE CONNECTION synapse AS ODBC(DRIVER='{ODBC Driver 18 for SQL Server}',
 CREATE CONNECTION databricks AS ODBC(DRIVER='{Simba Spark ODBC Driver}',
          SERVER='adb-1234567890.1.azuredatabricks.net',
          PORT='443',
-         HTTPPath='/sql/1.0/warehouses/abcdef123456',
-         AuthMech='3', UID='token', PASSWORD='${DATABRICKS_PAT}',
+         HTTPPATH='/sql/1.0/warehouses/abcdef123456',
+         AUTHMECH='3', UID='token', PASSWORD='${DATABRICKS_PAT}',
          SSL='1', TIMEOUT_SECONDS='1800');
 
 -- Trino / Starburst
@@ -100,7 +107,7 @@ CREATE CONNECTION dremio AS ODBC(DRIVER='{Dremio ODBC Driver 64-bit}',
 
 - **Driver Not Found**: Ensure 64-bit ODBC driver matching the ETL-SQL runtime architecture is installed.
 - **Architecture Mismatch**: 32-bit drivers cannot be loaded by a 64-bit .NET runtime.
-- **Timeout**: Set `TIMEOUT_SECONDS` in connection options to override driver default.
+- **Timeout**: Set `TIMEOUT_SECONDS` in connection options to override the 30-second default.
 
 ## References
 

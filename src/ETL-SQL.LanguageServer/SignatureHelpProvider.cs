@@ -133,6 +133,7 @@ namespace ETL_SQL.LSP
             { "FILE_EXISTS",             ("FILE_EXISTS(path)",                              "Returns 1 if the file exists.",                            new[] { "path" }) },
             { "DIRECTORY_EXISTS",        ("DIRECTORY_EXISTS(path)",                         "Returns 1 if the directory exists.",                       new[] { "path" }) },
             { "FILE_LIST",               ("FILE_LIST(path [, recursive])",                  "Returns a list of files in a directory.",                  new[] { "path", "recursive" }) },
+            { "ARCHIVE_LIST",            ("ARCHIVE_LIST(path)",                             "Lists entries in a .zip, .tar, .tar.gz, or .gz archive.",  new[] { "path" }) },
             { "REMOTE_FILE_LIST",        ("REMOTE_FILE_LIST(connectionName [, path])",      "Returns files from a remote connection.",                  new[] { "connectionName", "path" }) },
             { "REMOTE_FILE_EXISTS",      ("REMOTE_FILE_EXISTS(connectionName, path)",       "Returns 1 if the remote file exists.",                     new[] { "connectionName", "path" }) },
             { "REMOTE_DIRECTORY_EXISTS", ("REMOTE_DIRECTORY_EXISTS(connectionName, path)",  "Returns 1 if the remote directory exists.",                new[] { "connectionName", "path" }) },

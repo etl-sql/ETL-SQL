@@ -854,6 +854,8 @@ public static class AstSerializer
         var opts = new List<string>();
         if (s.Overwrite != null) opts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
         if (s.DeleteSource != null) opts.Add($"DELETE_SOURCE={s.DeleteSource.ToSql()}");
+        if (s.Format != null) opts.Add($"FORMAT={s.Format.ToSql()}");
+        if (s.Pattern != null) opts.Add($"PATTERN={s.Pattern.ToSql()}");
         if (s.DateSuffix != null) opts.Add($"DATE_SUFFIX={s.DateSuffix.ToSql()}");
         if (s.SuffixSeparator != null) opts.Add($"SUFFIX_SEPARATOR={s.SuffixSeparator.ToSql()}");
         var options = opts.Count > 0 ? " WITH(" + string.Join(", ", opts) + ")" : "";
@@ -873,6 +875,8 @@ public static class AstSerializer
         var opts = new List<string>();
         if (s.Overwrite != null) opts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
         if (s.Recursive != null) opts.Add($"RECURSIVE={s.Recursive.ToSql()}");
+        if (s.Format != null) opts.Add($"FORMAT={s.Format.ToSql()}");
+        if (s.Pattern != null) opts.Add($"PATTERN={s.Pattern.ToSql()}");
         var with = opts.Count > 0 ? " WITH(" + string.Join(", ", opts) + ")" : "";
         var ifExists = s.IfExists ? " IF EXISTS" : "";
         var at = s.ConnectionName != null ? " AT " + s.ConnectionName : "";
