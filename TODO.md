@@ -9,7 +9,7 @@ GitHub issues (#74, #75, #92, #93), not TODO rows.
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [After v0.22.0](#after-v0220--release-follow-ups) | Follow-ups the v0.22.0 release exposed | 3 |
+| [After v0.22.0](#after-v0220--release-follow-ups) | Follow-ups the v0.22.0 release exposed | 2 |
 | [Carried to v0.23.0](#carried-to-v0230--open) | Open work carried from v0.22.0 | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
@@ -43,11 +43,11 @@ and the Marketplace retry. Each has a fix on `main` (below) or an open item.
 Done on `main` after the release: Release calls `publish-marketplace.yml`, and packaging and
 publishing both use vsce 4.1.1; CodeQL #586 and #587 fixed in code; every release-branch push runs
 MSI in full and dispatches native and DEB; `AGENTS.md` §16.3 says to register dispatch-only
-workflows on `main` when they are created.
+workflows on `main` when they are created; "Enterprise Certification (windows|linux)" are no longer
+required checks on `main` (owner, 2026-11-16): they never report on pull requests, so every PR
+needed an admin bypass. They still run on release-branch pushes and count as release evidence.
+ROADMAP RG01 replaces the per-job required checks with one merge gate.
 
-- [ ] **Required checks on `main`.** "Enterprise Certification (windows|linux)" never report on pull
-  requests (the job is skipped before its matrix expands), so every PR to `main` needs an admin
-  bypass. **Left:** the fix the owner picks, or ROADMAP RG01.
 - [ ] **Marketplace verification of v0.22.0.** As of 2026-11-16 18:00 UTC only `darwin-arm64` is
   public; `darwin-x64`, `linux-x64` and `win32-x64` were accepted 16:16–16:19 but are not yet
   validated. **Left:** confirm all four are public; re-dispatch `publish-marketplace.yml` with
