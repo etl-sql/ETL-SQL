@@ -113,5 +113,9 @@ assert.match(marketplace, /^  workflow_call:\n    inputs:\n      tag:\n/m);
 assert.match(marketplace, /--signer-workflow "\$GITHUB_REPOSITORY\/\.github\/workflows\/release\.yml" --source-ref "refs\/tags\/\$TAG_NAME"/);
 const publishes = marketplace.match(/@vscode\/vsce@\S+ publish[^\n]*/g);
 assert.deepEqual(publishes, [`@vscode/vsce@${vsce} publish --oidc --skip-duplicate --packagePath "$vsix"`]);
+// "Published" from vsce is only an accepted upload: v0.22.0 went green with 3 of 4 targets never listed.
+// Each target must show as validated in the public gallery before the next upload.
+assert.match(marketplace, /until listed "\$version" "\$target"; do/, 'Marketplace publish waits for each target to validate');
+assert.match(marketplace, /if listed "\$version" "\$target"; then\n\s+echo .*already live; skipping/, 'Marketplace publish skips targets already live');
 
 console.log('Tag Release: dispatch-only on a release-branch HEAD, every Release gate before the tag, tag reused never moved, Release started on the tag; Marketplace publish pinned and rerunnable.');
