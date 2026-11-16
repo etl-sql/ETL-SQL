@@ -967,46 +967,21 @@ jobs:
           gh release edit $env:DRAFT_TAG --repo $env:GITHUB_REPOSITORY --draft=false "--latest=$latest"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot publish draft release.' }
 
-  # 7. Publish certified VS Code extensions to Visual Studio Marketplace via OIDC Trusted Publishing.
-  # vsce is pinned to the version that packages them (scripts/vsix/package.json). --skip-duplicate
-  # skips a VSIX whose version and platform the Marketplace already has, so a rerun after a partial
-  # failure publishes only what is missing.
+  # 7. Publish the certified VS Code extensions of the published release to the Visual Studio
+  # Marketplace. publish-marketplace.yml is the one publisher: it verifies the VSIX provenance from
+  # this workflow on the tag, publishes with the vsce that packaged them (scripts/vsix/package.json)
+  # and --skip-duplicate, so dispatching it by hand retries a partial failure without a new tag.
   publish-marketplace:
     name: Publish VS Code Extensions to Marketplace
-    timeout-minutes: 20
     needs: [publish-release]
     if: ${{ !cancelled() && needs.publish-release.result == 'success' && !inputs.dry_run }}
-    runs-on: ubuntu-latest
     permissions:
       contents: read
+      attestations: read
       id-token: write
-    steps:
-      - name: Download certified VSIX packages
-        timeout-minutes: 10
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir dist
-          gh release download "$DRAFT_TAG" --repo "$GITHUB_REPOSITORY" --dir dist --pattern '*.vsix'
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      - name: Publish platform VSIXs via OIDC Trusted Publishing
-        timeout-minutes: 10
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          vsix_files=(dist/*.vsix)
-          if [ ${#vsix_files[@]} -eq 0 ]; then
-            echo "::error::No VSIX packages found in release assets."
-            exit 1
-          fi
-          for vsix in "${vsix_files[@]}"; do
-            echo "Publishing $(basename "$vsix") to Visual Studio Marketplace via OIDC..."
-            npx --yes @vscode/vsce@4.0.0 publish --oidc --skip-duplicate --packagePath "$vsix"
-          done
+    uses: ./.github/workflows/publish-marketplace.yml
+    with:
+      tag: ${{ inputs.tag || github.ref_name }}
 
   # 8. A dry run deletes its own draft. It refuses anything that is not a dry-run draft.
   discard-dry-run-draft:

@@ -136,7 +136,7 @@ exact pins alongside the extension and UI version ranges.
 Its transitive `brace-expansion` dependency is locked to 5.0.12 (MIT), which includes
 the nested-brace recursion and quadratic rewrite security fixes.
 
-The unsigned VSIX toolchain in `scripts/vsix/package.json` pins `@vscode/vsce` 4.0.0,
+The unsigned VSIX toolchain in `scripts/vsix/package.json` pins `@vscode/vsce` 4.1.1,
 `yauzl` 3.4.0, and `xml2js` 0.6.2, each under MIT. The packager's proprietary
 `@vscode/vsce-sign` dependency and its platform binaries are excluded. An Apache-2.0
 module authored in this repository supplies that import and rejects all signing and
