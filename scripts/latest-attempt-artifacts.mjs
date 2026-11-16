@@ -9,12 +9,12 @@ import { fileURLToPath } from 'node:url';
 
 export function supersededArtifacts(names, runId, currentAttempt) {
   if (!/^\d+$/.test(String(runId)) || !Number.isSafeInteger(currentAttempt) || currentAttempt < 1) throw new Error('Invalid run identity.');
-  const suffix = new RegExp(`^(.+)-${runId}-(\\d+)$`);
+  // A fixed pattern; the run id is compared as text, never compiled into a RegExp.
   const latest = new Map();
   for (const name of names) {
-    const match = name.match(suffix);
-    if (!match) throw new Error(`Artifact ${name} does not belong to run ${runId}.`);
-    const attempt = Number(match[2]);
+    const match = name.match(/^(.+)-(\d+)-(\d+)$/);
+    if (!match || match[2] !== String(runId)) throw new Error(`Artifact ${name} does not belong to run ${runId}.`);
+    const attempt = Number(match[3]);
     if (attempt < 1 || attempt > currentAttempt) throw new Error(`Artifact ${name} names an attempt outside 1..${currentAttempt}.`);
     const kept = latest.get(match[1]);
     if (!kept || attempt > kept.attempt) latest.set(match[1], { name, attempt });

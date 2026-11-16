@@ -23,10 +23,21 @@ const samples = {
   'hdiutil-busy': { log: 'hdiutil: create failed - Resource busy' },
   'apt-mirror-dns': { log: "  Temporary failure resolving 'security.ubuntu.com'" },
   'windows-payload-dependency': { log: '[stderr] Shared Windows payload selection failed; no rebuild fallback is permitted.' },
-  'playwright-wait': { log: 'Microsoft.Playwright.PlaywrightException : net::ERR_NO_BUFFER_SPACE at http://127.0.0.1:5123/' },
-  'first-run-sign-in-wait': { log: '  - waiting for Locator("#changeForm") to be visible' },
 };
 for (const [id, input] of Object.entries(samples)) assert.equal(classifyFailure(input)?.id, id);
+// Removed 2026-11-16 (#74, #75): no recurrence, so these browser failures are defects again.
+for (const log of ['Microsoft.Playwright.PlaywrightException : net::ERR_NO_BUFFER_SPACE at http://127.0.0.1:5123/',
+  '  - waiting for Locator("#changeForm") to be visible',
+  'ETL_SQL.Portal.BrowserTests.ReportLibrarySandboxTests.TheFolderTreeShowsSubfoldersAndOpensThemByMouseAndKeyboard [FAIL]']) {
+  assert.equal(classifyFailure({ log }), null, log);
+}
+
+// The flaky-rerun path stays tested while no real flaky signature exists: a test-only entry,
+// removed again before the end of this file.
+const fixtureFlaky = { id: 'fixture-flaky', kind: 'flaky', source: 'log', pattern: /FIXTURE_FLAKY_FAILURE/,
+  evidence: 'test fixture', issue: 'https://github.com/etl-sql/ETL-SQL/issues/0' };
+const flakyLog = '[stdout] \x1b[31mFIXTURE_FLAKY_FAILURE in Portal Browser Journey\x1b[0m';
+candidateFailureSignatures.push(fixtureFlaky);
 // Fixed causes are defects again: a Studio budget missed by the median of three rounds, and a
 // preflight check that outlives its 180 s hang guard.
 // So is any other Playwright wait: the signature used to match every locator or timeout failure.
@@ -89,7 +100,7 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
 {
   const state = {};
   const shard = attempt => run(7, 'Release Certification', 'completed', 'failure', [
-    job('Full CI / Portal Browser Journey (1/3)', 'failure', { log: 'Microsoft.Playwright.PlaywrightException : net::ERR_NO_BUFFER_SPACE at http://127.0.0.1:5123/' }),
+    job('Full CI / Portal Browser Journey (1/3)', 'failure', { log: 'FIXTURE_FLAKY_FAILURE' }),
     job('Full CI / Portal Browser Journey', 'failure', { minute: 20 }),
     job('Full CI / Studio Performance Budgets (macos)', 'cancelled', { annotations: ['The job was not acquired by Runner of type hosted even after multiple attempts'] }),
   ], attempt);
@@ -206,7 +217,7 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
 {
   const sha = 'c'.repeat(40);
   const runs = [{ id: 21, name: 'Release Certification', head_sha: sha, status: 'completed', conclusion: 'failure', run_attempt: 1, html_url: 'u21' }];
-  const coloured = '2026-11-03T20:46:59Z [stdout] \x1b[31m[xUnit.net 00:00:49.23]       Microsoft.Playwright.PlaywrightException : net::ERR_NO_BUFFER_SPACE at http://127.0.0.1:5123/\x1b[0m';
+  const coloured = `2026-11-03T20:46:59Z ${flakyLog}`;
   const query = (args, options = {}) => {
     const route = args.find(a => a.startsWith('repos/')) ?? '';
     if (route.includes('/actions/runs?head_sha=')) return JSON.stringify({ workflow_runs: runs });
@@ -219,7 +230,7 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
   assert.ok(!snapshot.runs[0].jobs[0].log.includes('\x1b'), 'colour codes are stripped before classification');
   const { actions, outcome } = decide(snapshot, {});
   assert.equal(outcome, 'running');
-  assert.deepEqual(actions.map(a => a.type), ['rerun'], 'a coloured Playwright wait failure is a known flake, not a defect');
+  assert.deepEqual(actions.map(a => a.type), ['rerun'], 'a coloured known-flaky failure is a known flake, not a defect');
 }
 
 // 8. MSI 41860496122 attempt 2 (2026-11-04): the payload job's checkout timed out, then the summary
@@ -268,12 +279,12 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
   assert.equal(judged.actions.at(-1).job.name, 'Publish Windows payload');
 }
 
-// 9. The release-branch push starts native and DEB certification itself, titled "(push)", only when
-// the CI impact map says packages changed and the pushed commit is still the branch HEAD.
+// 9. Every release-branch push starts native and DEB certification itself, titled "(push)", even a
+// docs-only push (Release needs exact-candidate package runs), unless a newer push moved the HEAD.
 {
   const read = name => readFileSync(new URL(`../../${name}`, import.meta.url), 'utf8').replaceAll('\r\n', '\n');
   const workflow = read('.github/workflows/candidate-supervisor.yml');
-  const step = workflow.split(/^      - /m).find(block => block.startsWith('name: Dispatch native and DEB certification when packages are affected\n'));
+  const step = workflow.split(/^      - /m).find(block => block.startsWith('name: Dispatch native and DEB certification\n'));
   assert.ok(step, 'candidate-supervisor.yml: missing the package dispatch step');
   const commands = step.match(/^        run: \|\n((?:          [^\n]*\n|\n)+)/m)[1].replace(/^          /gm, '');
   for (const name of ['native-packages', 'deb-upgrade']) {
@@ -285,38 +296,32 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
   const bash = process.platform === 'win32' && existsSync('C:/Program Files/Git/bin/bash.exe') ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
   const root = mkdtempSync(path.join(tmpdir(), 'supervisor-dispatch-'));
   const sha = 'e'.repeat(40);
-  const execute = ({ before = 'f'.repeat(40), native = true, head = sha }) => {
+  const execute = ({ head = sha } = {}) => {
     const log = path.join(root, 'calls.log').replaceAll('\\', '/');
     rmSync(log, { force: true });
-    const mock = `node() {
-  printf 'node %s\\n' "$*" >> "${log}"
-  if [ "$1" = -p ]; then echo "$NATIVE"; fi
-}
+    const mock = `node() { printf 'node %s\\n' "$*" >> "${log}"; }
 git() { printf 'git %s\\n' "$*" >> "${log}"; printf '%s\\trefs/heads/release/v1.2.3\\n' "$HEAD_SHA"; }
 gh() { printf 'gh %s\\n' "$*" >> "${log}"; }
 `;
     const result = spawnSync(bash, ['-c', mock + commands], { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 15000,
       env: { ...process.env, GITHUB_SHA: sha, GITHUB_REF_NAME: 'release/v1.2.3', GITHUB_REPOSITORY: 'owner/repo',
-        BEFORE_SHA: before, NATIVE: String(native), HEAD_SHA: head } });
+        HEAD_SHA: head } });
     assert.equal(result.error, undefined);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     return existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : [];
   };
   try {
-    let calls = execute({});
-    assert.equal(calls[0], `node scripts/select-ci-lanes.mjs --head ${sha} --output package-impact.json --base ${'f'.repeat(40)}`);
+    const calls = execute();
+    assert.ok(!calls.some(call => call.startsWith('node ')), 'no impact selection: every push certifies packages');
     assert.deepEqual(calls.filter(call => call.startsWith('gh ')), [
       'gh workflow run native-packages.yml --repo owner/repo --ref release/v1.2.3 -f from_push=true',
       'gh workflow run deb-upgrade.yml --repo owner/repo --ref release/v1.2.3 -f from_push=true']);
-    // A new branch or force push has no usable base, so the selection covers everything.
-    calls = execute({ before: '0'.repeat(40) });
-    assert.equal(calls[0], `node scripts/select-ci-lanes.mjs --head ${sha} --output package-impact.json`);
-    assert.equal(calls.filter(call => call.startsWith('gh ')).length, 2);
-    assert.ok(!execute({ native: false }).some(call => call.startsWith('gh ') || call.startsWith('git ')), 'docs-only push starts nothing');
     assert.ok(!execute({ head: 'a'.repeat(40) }).some(call => call.startsWith('gh ')), 'a moved branch is left to the newer push');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 }
+
+candidateFailureSignatures.splice(candidateFailureSignatures.indexOf(fixtureFlaky), 1);
 
 console.log('Candidate supervisor: known infrastructure/flaky/dependent failures rerun within their budgets, real defects cancel only the long package runs and open one issue, gate jobs behind a known failure are not defects.');

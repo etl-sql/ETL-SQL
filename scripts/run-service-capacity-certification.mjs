@@ -90,6 +90,16 @@ export function materializeWorkload(workload, { portal, orchestrator, apiKey, pa
 
 function secret(bytes = 24) { return randomBytes(bytes).toString('base64url'); }
 
+// One read, no exists-then-read race: a workload that failed before writing its report has none.
+function readReportIfPresent(file) {
+  let text;
+  try { text = readFileSync(file, 'utf8'); } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+  return JSON.parse(text);
+}
+
 function startService(name, project, dll, env, logDirectory) {
   const out = openSync(path.join(logDirectory, `${name}.log`), 'a');
   const child = spawn('dotnet', [dll], { cwd: path.join(root, project), env: { ...process.env, ...env }, stdio: ['ignore', out, out] });
@@ -261,7 +271,7 @@ export async function certify({ profile, outDir, configuration = 'Release' }) {
         await run(process.execPath, ['scripts/test-service-capacity.mjs', '--config', config, '--out-dir', workloadDir], { log: path.join(logs, `${name}.log`), timeoutMs: 3600000 });
       } catch (error) { failure = error.message; }
       const reportPath = path.join(workloadDir, 'capacity-report.json');
-      const report = existsSync(reportPath) ? JSON.parse(readFileSync(reportPath, 'utf8')) : null;
+      const report = readReportIfPresent(reportPath);
       // The report records the config path it ran with; it points into the discarded state directory.
       if (report) { report.configPath = workloadPath; writeFileSync(reportPath, JSON.stringify(report, null, 2)); }
       const breaches = failure ? [failure] : errorBreaches(report);

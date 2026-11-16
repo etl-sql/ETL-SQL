@@ -1,15 +1,16 @@
 # ETL-SQL Development TODO List
 
-The execution ledger for v0.22.0: only work that still needs doing. Progress narrative and
+The execution ledger for v0.23.0: only work that still needs doing. Progress narrative and
 finished items live in Git history, `CHANGELOG.md`, the
 [release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md), the
 [flaky-test record](docs/releases/flaky-test-stability.md) and the
-[v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md).
+[v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md). Flaky-test watch items are
+GitHub issues (#92), not TODO rows.
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
-| [At release](#v0220-release--run-on-the-final-candidate) | Checks that only mean something on the final candidate | 7 |
-| [Carried to v0.23.0](#carried-to-v0230--open-not-release-blockers) | Open work that does not block the tag | 11 |
+| [After v0.22.0](#after-v0220--release-follow-ups) | Follow-ups the v0.22.0 release exposed | 2 |
+| [Carried to v0.23.0](#carried-to-v0230--open) | Open work carried from v0.22.0 | 5 |
 
 Rules: each item says what is left, not what was done. When an item is verified, record the
 outcome in `CHANGELOG.md` (or the record doc for its section) and delete it. Deferred initiatives
@@ -17,54 +18,65 @@ stay in `ROADMAP.md` until selected.
 
 ---
 
-## v0.22.0 Release — run on the final candidate
+## v0.22.0 release timeline
 
-Nothing here can be closed early: each item is evidence about the candidate that ships.
-Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.md) and
-[`Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/enterprise-release-evidence-checklist.md).
+Released 2026-11-16 from candidate `0a1507282` (docs-only reconcile on `2e418162b`). Against the
+§1 goal (release within 8 hours of the candidate with the same evidence): **missed**, about 14 h
+from candidate commit to published release and 15 h to the Marketplace.
 
-- [ ] Run the release gates the checklist requires. Green CI, CodeQL and MSI count for the lanes they
-  run; Release Evidence covers the certifications that used to run locally. No local run counts.
-- [ ] A green Release Evidence dispatch on the final candidate (HA soak first green on
-  2026-11-15, run 43739492532), then a green release dry run on it: the first run of the W8
-  `release-evidence` job in `release.yml`.
-- [ ] W4c's done-when: Tag Release on the candidate, the `release-approval` review checklist
-  completed and approved, Release publishes to the Marketplace with no command on the owner's
-  machine.
-- [ ] Run every delivery path on the final candidate, as the v0.21.0 delivery matrix did.
-- [ ] Build the deployment-profile claim matrix from evidence; promote no unfinished Shared SaaS or
-  hosted-production outcome.
-- [ ] Verify third-party notices and inventory, secret scanning, SBOM, checksums, attestation,
-  installers, release notes, upgrade guidance and changelog for the shipped scope.
-- [ ] Record the release timeline against the §1 goal (`TODO.md` and `ROADMAP.md` reconciled
-  2026-11-15).
+| UTC, 2026-11-16 | Step |
+| :--- | :--- |
+| 01:26 | Candidate `0a1507282` committed and pushed. CI reused the `2e418162b` run 43770097519 (W2). |
+| 01:29–03:38 | Release Evidence 43786591392 green. |
+| 10:30 | Release dry run 43849469513 failed: no exact-candidate native package run (the docs-only push skipped native, DEB and full MSI). MSI, native and DEB dispatched by hand. |
+| 12:27 | Dry run 43866681695 failed on 2 open CodeQL alerts (#586, #587); the owner dismissed them for this candidate. |
+| 12:57–13:47 | Dry run 43871241433 green (first real run of the W8 `release-evidence` job). |
+| 14:40–15:07 | Tag Release 43888292114, after a stub PR registered the dispatch-only workflow on `main` (404 before). Approved; tag `v0.22.0` created. |
+| 15:07–15:24 | Release 43893010630 published the GitHub Release; its Marketplace job failed (vsce 4.0.0 OIDC exchange, 400). |
+| 16:11–16:19 | Publish to Marketplace 43904773280 (vsce 4.1.1, PR #90) published all four VSIXs. Then `release/v0.22.0` merged to `main` (PR #91). |
 
-## Carried to v0.23.0 — open, not release blockers
+Lost time: the missing package dispatches, the CodeQL dismissal, the Tag Release registration PR
+and the Marketplace retry. Each has a fix on `main` (below) or an open item.
 
-Reconciled 2026-11-15 on the final candidate. Nothing below blocks the v0.22.0 tag; each item says
-what is left.
+## After v0.22.0 — release follow-ups
+
+Done on `main` after the release: Release calls `publish-marketplace.yml`, and packaging and
+publishing both use vsce 4.1.1; CodeQL #586 and #587 fixed in code; every release-branch push runs
+MSI in full and dispatches native and DEB; `AGENTS.md` §16.3 says to register dispatch-only
+workflows on `main` when they are created; "Enterprise Certification (windows|linux)" are no longer
+required checks on `main` (owner, 2026-11-16): they never report on pull requests, so every PR
+needed an admin bypass. They still run on release-branch pushes and count as release evidence.
+ROADMAP RG01 replaces the per-job required checks with one merge gate.
+
+- [ ] **Marketplace verification of v0.22.0.** As of 2026-11-16 18:00 UTC only `darwin-arm64` is
+  public; `darwin-x64`, `linux-x64` and `win32-x64` were accepted 16:16–16:19 but are not yet
+  validated. **Left:** confirm all four are public; re-dispatch `publish-marketplace.yml` with
+  `tag=v0.22.0` if one failed verification (`--skip-duplicate` keeps the published ones).
+- [ ] **First release through the Marketplace call.** v0.23.0 is the first Release that calls
+  `publish-marketplace.yml`. Keep the Marketplace trusted-publisher entries for both
+  `release.yml` and `publish-marketplace.yml` until it has published; then delete the one the
+  OIDC token does not use.
+
+## Carried to v0.23.0 — open
 
 ### 1. Release reliability
 
 **Plan:** [`docs/architecture/roadmaps/release-reliability-plan.md`](docs/architecture/roadmaps/release-reliability-plan.md).
-W0, W3, W4b and W8 are done (W8: every operator certification is a hosted Release Evidence job;
-the six reviews are the `release-approval` environment approval). W6 and W7 moved to
+W0, W2, W3, W4b, W4c and W8 are done. W2: the docs-only candidate `0a1507282` reused the
+`2e418162b` CI run 43770097519 and `collect-hosted-release-evidence` accepted it. W4c: Tag Release,
+Release and the Marketplace publish ran with no command on the owner's machine (the Marketplace
+through the dispatched retry). W5: the supervisor's flaky signatures (#74, #75) were removed after
+no recurrence; the flake-rate measurement is #92. W6 and W7 moved to
 [`ROADMAP.md`](ROADMAP.md#release-engineering--routine-github-built-releases) as below-the-cut-line
 work.
 
 - [ ] **W1 Five green nights running.** Not met for v0.22.0: 2 of the last 5 nights were green;
   2 failures were our own pushes mid-rehearsal ("release/v0.22.0 moved"), 1 was the certification
-  wait step (43247226793). Owner, 2026-11-15: not a release blocker; v0.22.0 closes on its own
-  release dry run and Release Evidence. **Left:** the streak on the v0.23.0 branch, and a
-  rehearsal that does not fail when the branch moves under it.
-- [ ] **W2 Reuse evidence when inputs did not change.** **Left:** confirm the first real reuse
-  (the 2026-11-15 docs-only reconcile commit is the first candidate).
+  wait step (43247226793). **Left:** the streak on the v0.23.0 branch, and a rehearsal that does
+  not fail when the branch moves under it.
 - [ ] **W4 Release tooling tested on real output.** **Left:** the native Windows and macOS
   collectors and the draft-manifest check (about 1 GB of packages per platform); a recorded
-  replay of `collect-release-evidence.mjs` from the first real v0.22.0 run.
-- [ ] **W5 Flaky tests fixed at the cause.** **Left:** flake rate from nightly runs; the three
-  instrumented failures (FolderTree, first sign-in, FTP) when they next fail; remove the two flaky
-  signatures when their issues close (`playwright-wait` #74, `first-run-sign-in-wait` #75).
+  replay of `collect-release-evidence.mjs` from the first real v0.22.0 run (dry run 43871241433).
 
 ### 2. Order-independent scale certification
 
@@ -99,32 +111,3 @@ work.
   allocation counts and correct outputs first; use repeated same-host A/B runs for timing. Multi-day
   architectural slices (framed spill encryption, byte-budgeted batches, late materialization) are
   tracked in [`ROADMAP.md`](ROADMAP.md#engine--security--encrypted-spill-framing-byte-budgeted-scale-and-plaintext-memory-hygiene).
-
-### 3. Flaky tests — the dedicated fix
-
-**Record:** [flaky-test stability](docs/releases/flaky-test-stability.md).
-**Rule (owner, 2026-11-03):** a time check must fail only when the code got slower. Hang guards
-use a generous limit; performance budgets use repeated samples or work counts, not one wall-clock
-sample on a shared runner.
-
-- [ ] **First-run sign-in.** `PortalBrowserFixture.SignInAsync` timed out waiting for `#changeForm`
-  (CI 41744076759). A timeout now reports the sign-in button text and any error shown. **Left:**
-  read that report on the next failure; keep the `first-run-sign-in-wait` signature until then.
-- [ ] **Windows browser lane: `ERR_NO_BUFFER_SPACE`, navigation timeouts, missing chart payload.**
-  The Chromium mitigation is in and failures now keep transport/process snapshots. **Left:**
-  capture the next hosted failure, find the cause, and close with consecutive-run evidence.
-- [ ] **`DesktopStudioJourneyTests` exit timeout.** A forced exit no longer waits on the final
-  heartbeat, which reproduced the timeout locally. **Left:** confirm on hosted runs; the hosted
-  cause is unproven.
-
-### 4. Dependency alerts
-
-- [ ] **After the release: confirm the 23 Dependabot alerts close when v0.22.0 merges to `main`.** Triaged
-  2026-11-13: every alert is on an old version on `main`, and `release/v0.22.0` already has the
-  fixed version of each (`vite` 8.3.5, `@vitest/mocker` 4.1.12, `undici` 7.30.1,
-  `serialize-javascript` 7.1.4, `@azure/msal-node` 7.1.1, `qs` 6.16.1). Nothing to dismiss. All
-  are build or test tools; none ships in the VSIX. Optional cleanup: the `ui` alerts for `vite` say
-  runtime because `@tailwindcss/vite` and `tailwindcss` (build plugins that need `vite`) are in
-  `dependencies` of `src/etl-sql-vscode/ui/package.json`; moving them to `devDependencies`
-  fixes the label, if no build installs with `--omit=dev`.
-

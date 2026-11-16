@@ -47,8 +47,9 @@ diagnosed recovery. These are scheduling budgets, not measured acceptance or per
 tests. Claims requiring a long controlled-host soak need their own capacity plan. Record queue,
 execution and operator delays separately; report a missed target instead of widening the target.
 
-A push to a release branch starts native package and DEB certification itself when the CI impact
-map says a packaged path changed (titled "(push)"), as MSI does. A docs-only push starts neither.
+Every push to a release branch runs MSI in full and starts native package and DEB certification
+itself (titled "(push)"), even a docs-only push: Release and Tag Release accept only exact-candidate
+package runs, and native win-x64 waits for the Windows payload a full MSI run publishes.
 Dispatch only the producers still missing for the frozen candidate; first inspect existing exact-SHA
 runs to avoid duplicates. Full CI dispatch is journaled by the shared helper:
 
@@ -84,8 +85,13 @@ those rehearsals do not need to be repeated for each release and do not certify 
 > approve the `release-approval` environment. Then it creates the annotated tag and starts
 > **Release** on it. Tags are immutable, so nothing is tagged until every check passes.
 > A rerun reuses a tag already on the candidate. Release takes its body from
-> `docs/releases/vX.Y.Z.md`. Its Marketplace job publishes with the vsce version that packaged the
-> VSIXs and skips a version and platform the Marketplace already has, so it can be rerun.
+> `docs/releases/vX.Y.Z.md`. Its Marketplace job calls **Publish to Marketplace**
+> (`publish-marketplace.yml`), which verifies the VSIX provenance from Release on the tag,
+> publishes with the vsce version that packaged the VSIXs and skips a version and platform the
+> Marketplace already has. To retry a failed publish, dispatch it on `main` with `tag=vX.Y.Z`.
+> Keep Marketplace trusted-publisher entries for both `publish-marketplace.yml` (dispatch) and
+> `release.yml` (the caller when Release runs it) until a tagged release has published through
+> the call.
 >
 > Since v0.22.0 the local pre-release gate (`Test-PreRelease.ps1`) is an optional developer tool.
 > Release drivers no longer read its state, and no workstation run is part of the release. The

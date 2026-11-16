@@ -11,7 +11,11 @@
 // have no log).
 // Add an entry only with the run that proved it, so the list stays reviewable. Remove it once the
 // cause is fixed, as on 2026-11-09 for the Studio millisecond budgets (now the median of three
-// rounds) and the preflight per-check deadline (now a 180 s hang guard).
+// rounds) and the preflight per-check deadline (now a 180 s hang guard). Remove a flaky entry too
+// when its failure stops recurring: on 2026-11-16 `playwright-wait` (#74: folder tree,
+// ERR_NO_BUFFER_SPACE, navigation timeouts) and `first-run-sign-in-wait` (#75) went after 137
+// first-attempt browser-journey passes with none of them; their tests now report the state needed
+// to diagnose a recurrence.
 export const candidateFailureSignatures = [
   {
     id: 'checkout-timeout', kind: 'infra', source: 'log',
@@ -43,21 +47,6 @@ export const candidateFailureSignatures = [
     pattern: /Shared Windows payload selection failed|Windows payload publication failed/,
     waitFor: { workflow: 'MSI In-Place Upgrade', job: 'Publish Windows payload' },
     evidence: 'Native Package Certification 41710853145 win-x64 after MSI payload checkout timeout, 2026-11-03',
-  },
-  {
-    // Narrowed 2026-11-11 from every Playwright locator or timeout failure, which gave any browser
-    // regression a free rerun. Only the failures still without a cause fix match: the folder-tree
-    // test, a Windows socket-buffer exhaustion, and a navigation that timed out.
-    id: 'playwright-wait', kind: 'flaky', source: 'log',
-    pattern: /TheFolderTreeShowsSubfoldersAndOpensThemByMouseAndKeyboard|net::ERR_NO_BUFFER_SPACE|Timeout \d+ms exceeded\.\s+Call log:\s+- navigating to /,
-    evidence: 'CI 42609393604 Portal Browser Journey 3/3 (folder tree), 2026-11-09; Windows browser lane ERR_NO_BUFFER_SPACE and navigation timeouts (docs/releases/flaky-test-stability.md)',
-    issue: 'https://github.com/etl-sql/ETL-SQL/issues/74',
-  },
-  {
-    id: 'first-run-sign-in-wait', kind: 'flaky', source: 'log',
-    pattern: /waiting for Locator\("#changeForm"\) to be visible/,
-    evidence: 'CI 41744076759 Portal Browser Journey 3/3, 2026-11-04 (same shard passed on 2026-11-03 rounds 4 and 5)',
-    issue: 'https://github.com/etl-sql/ETL-SQL/issues/75',
   },
 ];
 

@@ -101,7 +101,16 @@ try {
 const vsce = JSON.parse(read('scripts/vsix/package.json')).devDependencies?.['@vscode/vsce']
   ?? JSON.parse(read('scripts/vsix/package.json')).dependencies?.['@vscode/vsce'];
 assert.match(vsce, /^\d+\.\d+\.\d+$/, 'scripts/vsix pins an exact vsce');
-const marketplace = jobsOf(release)['publish-marketplace'];
+// Release delegates to publish-marketplace.yml, the one publisher (also dispatchable to retry).
+const marketplaceCall = jobsOf(release)['publish-marketplace'];
+assert.match(marketplaceCall, /^    uses: \.\/\.github\/workflows\/publish-marketplace\.yml$/m);
+assert.match(marketplaceCall, /^    needs: \[publish-release\]$/m);
+assert.match(marketplaceCall, /^      tag: \$\{\{ inputs\.tag \|\| github\.ref_name \}\}$/m);
+assert.match(marketplaceCall, /^    permissions:\n      contents: read\n      attestations: read\n      id-token: write\n/m);
+assert.ok(!/@vscode\/vsce@/.test(release), 'Release must not publish with its own vsce');
+const marketplace = read('.github/workflows/publish-marketplace.yml');
+assert.match(marketplace, /^  workflow_call:\n    inputs:\n      tag:\n/m);
+assert.match(marketplace, /--signer-workflow "\$GITHUB_REPOSITORY\/\.github\/workflows\/release\.yml" --source-ref "refs\/tags\/\$TAG_NAME"/);
 const publishes = marketplace.match(/@vscode\/vsce@\S+ publish[^\n]*/g);
 assert.deepEqual(publishes, [`@vscode/vsce@${vsce} publish --oidc --skip-duplicate --packagePath "$vsix"`]);
 

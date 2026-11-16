@@ -7,7 +7,7 @@
     "npm": "10.x"
   },
   "devDependencies": {
-    "@vscode/vsce": "4.0.0",
+    "@vscode/vsce": "4.1.1",
     "@vscode/vsce-sign": "file:./unsigned-signing",
     "xml2js": "0.6.2",
     "yauzl": "3.4.0"

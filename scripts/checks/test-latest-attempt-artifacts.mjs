@@ -9,6 +9,9 @@ assert.deepEqual(supersededArtifacts(names, 77, 2), ['release-evidence-billion-r
 assert.deepEqual(supersededArtifacts(names.slice(0, 2), 77, 1), []);
 assert.throws(() => supersededArtifacts(['release-evidence-billion-row-ExternalSort-10000000-78-1'], 77, 1), /does not belong/);
 assert.throws(() => supersededArtifacts(['release-evidence-canary-77-3'], 77, 2), /outside/);
+// The run id must match a whole name segment, not the tail of a longer number.
+assert.throws(() => supersededArtifacts(['release-evidence-canary-177-1'], 77, 1), /does not belong/);
+assert.throws(() => supersededArtifacts(['release-evidence-canary-77-1'], '7.', 1), /Invalid run identity/);
 
 // Every consumer of matrix artifacts in Release Evidence must read all attempts and prune.
 const workflow = readFileSync(new URL('../../.github/workflows/release-evidence.yml', import.meta.url), 'utf8');

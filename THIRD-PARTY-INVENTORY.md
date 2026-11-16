@@ -133,7 +133,7 @@ Downloaded for workflow validation only; not redistributed with the application.
 | @vitejs/plugin-react | ^6.0.3 | development | MIT | https://www.npmjs.com/package/@vitejs/plugin-react | src/etl-sql-vscode/ui/package.json |
 | @vitest/coverage-v8 | ^4.1.12 | development | MIT | https://www.npmjs.com/package/@vitest/coverage-v8 | src/etl-sql-vscode/package.json |
 | @vscode/test-electron | ^3.1.0 | development | MIT | https://www.npmjs.com/package/@vscode/test-electron | src/etl-sql-vscode/package.json |
-| @vscode/vsce | 4.0.0 | development | MIT | https://www.npmjs.com/package/@vscode/vsce | scripts/vsix/package.json |
+| @vscode/vsce | 4.1.1 | development | MIT | https://www.npmjs.com/package/@vscode/vsce | scripts/vsix/package.json |
 | @vscode/webview-ui-toolkit | ^1.4.0 | runtime | MIT | https://www.npmjs.com/package/@vscode/webview-ui-toolkit | src/etl-sql-vscode/ui/package.json |
 | clsx | ^2.1.1 | runtime | MIT | https://www.npmjs.com/package/clsx | src/etl-sql-vscode/ui/package.json |
 | eslint | ^10.6.0; 10.10.0 | development | MIT | https://www.npmjs.com/package/eslint | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json; scripts/lint/package.json |
