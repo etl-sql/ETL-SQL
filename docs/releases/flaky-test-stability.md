@@ -574,3 +574,26 @@ Instrumented, root cause not yet found. Each now fails with the state needed to 
 Not test flakes: checkout and disk-cleanup action timeouts, lost runners, a full disk, and the
 2026-11-03 `documentation`, `flaky-delays` and `DocSanityTests…DeveloperSpecificPaths` failures,
 which were real defects on those commits and are fixed.
+
+### Supervisor flaky signatures removed (2026-11-16)
+
+A scan of every failed job on `release/v0.22.0` from 2026-11-03 to the release (all workflows, all
+run attempts, 184 jobs) found no recurrence of the folder-tree failure, the first sign-in timeout,
+`ERR_NO_BUFFER_SPACE` or a navigation timeout after the instrumentation above landed (2026-11-09).
+Over the same period 43 CI runs passed 137 Portal Browser Journey shard jobs on the first attempt.
+The `playwright-wait` (#74) and `first-run-sign-in-wait` (#75) signatures are removed, so the
+supervisor no longer reruns these failures: a recurrence is a defect, and its report carries the
+diagnostics above. The in-shard method retry is unchanged. No flaky signature remains.
+
+The browser failures in that window that were not these flakes were real defects, fixed:
+`SandboxStoryTests.Studio_Mounts_SwitchesProjections_AndScansSecrets` (2026-11-14, after the
+sealing change: the test expected the old seal dialog title, `2d459ce00`, then the story had no
+mock for `POST /api/designer/seal`, `c4f207d59`) and `StudioContinuousJourneyTests` (2026-11-15,
+the publisher used an ungranted shared connection after deny-by-default; `907722b06`).
+
+One is unexplained and tracked in #92:
+`StudioSsisJourneyTests.AnIfIsGivenAnElseAndEachBranchATask` (CI 43617316996 attempt 1, Portal
+Browser Journey (2/3), 2026-11-14). Dragging `load_primary` onto the IF card `orders_ready` changed
+nothing within 15 s and showed no toast, so the drag never reached the canvas; the in-shard retry
+passed. One failure in about 140 shard jobs. A drag that starts while the map is still laying out
+the just-added card is the likely cause, unproven; no change until it recurs.

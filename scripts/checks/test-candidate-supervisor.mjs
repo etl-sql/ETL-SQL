@@ -23,10 +23,21 @@ const samples = {
   'hdiutil-busy': { log: 'hdiutil: create failed - Resource busy' },
   'apt-mirror-dns': { log: "  Temporary failure resolving 'security.ubuntu.com'" },
   'windows-payload-dependency': { log: '[stderr] Shared Windows payload selection failed; no rebuild fallback is permitted.' },
-  'playwright-wait': { log: 'Microsoft.Playwright.PlaywrightException : net::ERR_NO_BUFFER_SPACE at http://127.0.0.1:5123/' },
-  'first-run-sign-in-wait': { log: '  - waiting for Locator("#changeForm") to be visible' },
 };
 for (const [id, input] of Object.entries(samples)) assert.equal(classifyFailure(input)?.id, id);
+// Removed 2026-11-16 (#74, #75): no recurrence, so these browser failures are defects again.
+for (const log of ['Microsoft.Playwright.PlaywrightException : net::ERR_NO_BUFFER_SPACE at http://127.0.0.1:5123/',
+  '  - waiting for Locator("#changeForm") to be visible',
+  'ETL_SQL.Portal.BrowserTests.ReportLibrarySandboxTests.TheFolderTreeShowsSubfoldersAndOpensThemByMouseAndKeyboard [FAIL]']) {
+  assert.equal(classifyFailure({ log }), null, log);
+}
+
+// The flaky-rerun path stays tested while no real flaky signature exists: a test-only entry,
+// removed again before the end of this file.
+const fixtureFlaky = { id: 'fixture-flaky', kind: 'flaky', source: 'log', pattern: /FIXTURE_FLAKY_FAILURE/,
+  evidence: 'test fixture', issue: 'https://github.com/etl-sql/ETL-SQL/issues/0' };
+const flakyLog = '[stdout] \x1b[31mFIXTURE_FLAKY_FAILURE in Portal Browser Journey\x1b[0m';
+candidateFailureSignatures.push(fixtureFlaky);
 // Fixed causes are defects again: a Studio budget missed by the median of three rounds, and a
 // preflight check that outlives its 180 s hang guard.
 // So is any other Playwright wait: the signature used to match every locator or timeout failure.
@@ -89,7 +100,7 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
 {
   const state = {};
   const shard = attempt => run(7, 'Release Certification', 'completed', 'failure', [
-    job('Full CI / Portal Browser Journey (1/3)', 'failure', { log: 'Microsoft.Playwright.PlaywrightException : net::ERR_NO_BUFFER_SPACE at http://127.0.0.1:5123/' }),
+    job('Full CI / Portal Browser Journey (1/3)', 'failure', { log: 'FIXTURE_FLAKY_FAILURE' }),
     job('Full CI / Portal Browser Journey', 'failure', { minute: 20 }),
     job('Full CI / Studio Performance Budgets (macos)', 'cancelled', { annotations: ['The job was not acquired by Runner of type hosted even after multiple attempts'] }),
   ], attempt);
@@ -206,7 +217,7 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
 {
   const sha = 'c'.repeat(40);
   const runs = [{ id: 21, name: 'Release Certification', head_sha: sha, status: 'completed', conclusion: 'failure', run_attempt: 1, html_url: 'u21' }];
-  const coloured = '2026-11-03T20:46:59Z [stdout] \x1b[31m[xUnit.net 00:00:49.23]       Microsoft.Playwright.PlaywrightException : net::ERR_NO_BUFFER_SPACE at http://127.0.0.1:5123/\x1b[0m';
+  const coloured = `2026-11-03T20:46:59Z ${flakyLog}`;
   const query = (args, options = {}) => {
     const route = args.find(a => a.startsWith('repos/')) ?? '';
     if (route.includes('/actions/runs?head_sha=')) return JSON.stringify({ workflow_runs: runs });
@@ -219,7 +230,7 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
   assert.ok(!snapshot.runs[0].jobs[0].log.includes('\x1b'), 'colour codes are stripped before classification');
   const { actions, outcome } = decide(snapshot, {});
   assert.equal(outcome, 'running');
-  assert.deepEqual(actions.map(a => a.type), ['rerun'], 'a coloured Playwright wait failure is a known flake, not a defect');
+  assert.deepEqual(actions.map(a => a.type), ['rerun'], 'a coloured known-flaky failure is a known flake, not a defect');
 }
 
 // 8. MSI 41860496122 attempt 2 (2026-11-04): the payload job's checkout timed out, then the summary
@@ -310,5 +321,7 @@ gh() { printf 'gh %s\\n' "$*" >> "${log}"; }
     rmSync(root, { recursive: true, force: true });
   }
 }
+
+candidateFailureSignatures.splice(candidateFailureSignatures.indexOf(fixtureFlaky), 1);
 
 console.log('Candidate supervisor: known infrastructure/flaky/dependent failures rerun within their budgets, real defects cancel only the long package runs and open one issue, gate jobs behind a known failure are not defects.');

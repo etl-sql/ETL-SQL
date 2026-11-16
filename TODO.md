@@ -5,7 +5,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 [release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md), the
 [flaky-test record](docs/releases/flaky-test-stability.md) and the
 [v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md). Flaky-test watch items are
-GitHub issues (#74, #75, #92), not TODO rows.
+GitHub issues (#92), not TODO rows.
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
@@ -65,7 +65,8 @@ ROADMAP RG01 replaces the per-job required checks with one merge gate.
 W0, W2, W3, W4b, W4c and W8 are done. W2: the docs-only candidate `0a1507282` reused the
 `2e418162b` CI run 43770097519 and `collect-hosted-release-evidence` accepted it. W4c: Tag Release,
 Release and the Marketplace publish ran with no command on the owner's machine (the Marketplace
-through the dispatched retry). W5 moved to GitHub issues (#74, #75, #92). W6 and W7 moved to
+through the dispatched retry). W5: the supervisor's flaky signatures (#74, #75) were removed after
+no recurrence; the flake-rate measurement is #92. W6 and W7 moved to
 [`ROADMAP.md`](ROADMAP.md#release-engineering--routine-github-built-releases) as below-the-cut-line
 work.
 
