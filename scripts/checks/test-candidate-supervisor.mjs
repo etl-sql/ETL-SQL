@@ -268,12 +268,12 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
   assert.equal(judged.actions.at(-1).job.name, 'Publish Windows payload');
 }
 
-// 9. The release-branch push starts native and DEB certification itself, titled "(push)", only when
-// the CI impact map says packages changed and the pushed commit is still the branch HEAD.
+// 9. Every release-branch push starts native and DEB certification itself, titled "(push)", even a
+// docs-only push (Release needs exact-candidate package runs), unless a newer push moved the HEAD.
 {
   const read = name => readFileSync(new URL(`../../${name}`, import.meta.url), 'utf8').replaceAll('\r\n', '\n');
   const workflow = read('.github/workflows/candidate-supervisor.yml');
-  const step = workflow.split(/^      - /m).find(block => block.startsWith('name: Dispatch native and DEB certification when packages are affected\n'));
+  const step = workflow.split(/^      - /m).find(block => block.startsWith('name: Dispatch native and DEB certification\n'));
   assert.ok(step, 'candidate-supervisor.yml: missing the package dispatch step');
   const commands = step.match(/^        run: \|\n((?:          [^\n]*\n|\n)+)/m)[1].replace(/^          /gm, '');
   for (const name of ['native-packages', 'deb-upgrade']) {
@@ -285,34 +285,26 @@ for (const log of ['FAIL upgrade: no one-time sign-in for an existing Portal',
   const bash = process.platform === 'win32' && existsSync('C:/Program Files/Git/bin/bash.exe') ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
   const root = mkdtempSync(path.join(tmpdir(), 'supervisor-dispatch-'));
   const sha = 'e'.repeat(40);
-  const execute = ({ before = 'f'.repeat(40), native = true, head = sha }) => {
+  const execute = ({ head = sha } = {}) => {
     const log = path.join(root, 'calls.log').replaceAll('\\', '/');
     rmSync(log, { force: true });
-    const mock = `node() {
-  printf 'node %s\\n' "$*" >> "${log}"
-  if [ "$1" = -p ]; then echo "$NATIVE"; fi
-}
+    const mock = `node() { printf 'node %s\\n' "$*" >> "${log}"; }
 git() { printf 'git %s\\n' "$*" >> "${log}"; printf '%s\\trefs/heads/release/v1.2.3\\n' "$HEAD_SHA"; }
 gh() { printf 'gh %s\\n' "$*" >> "${log}"; }
 `;
     const result = spawnSync(bash, ['-c', mock + commands], { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 15000,
       env: { ...process.env, GITHUB_SHA: sha, GITHUB_REF_NAME: 'release/v1.2.3', GITHUB_REPOSITORY: 'owner/repo',
-        BEFORE_SHA: before, NATIVE: String(native), HEAD_SHA: head } });
+        HEAD_SHA: head } });
     assert.equal(result.error, undefined);
     assert.equal(result.status, 0, result.stdout + result.stderr);
     return existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : [];
   };
   try {
-    let calls = execute({});
-    assert.equal(calls[0], `node scripts/select-ci-lanes.mjs --head ${sha} --output package-impact.json --base ${'f'.repeat(40)}`);
+    const calls = execute();
+    assert.ok(!calls.some(call => call.startsWith('node ')), 'no impact selection: every push certifies packages');
     assert.deepEqual(calls.filter(call => call.startsWith('gh ')), [
       'gh workflow run native-packages.yml --repo owner/repo --ref release/v1.2.3 -f from_push=true',
       'gh workflow run deb-upgrade.yml --repo owner/repo --ref release/v1.2.3 -f from_push=true']);
-    // A new branch or force push has no usable base, so the selection covers everything.
-    calls = execute({ before: '0'.repeat(40) });
-    assert.equal(calls[0], `node scripts/select-ci-lanes.mjs --head ${sha} --output package-impact.json`);
-    assert.equal(calls.filter(call => call.startsWith('gh ')).length, 2);
-    assert.ok(!execute({ native: false }).some(call => call.startsWith('gh ') || call.startsWith('git ')), 'docs-only push starts nothing');
     assert.ok(!execute({ head: 'a'.repeat(40) }).some(call => call.startsWith('gh ')), 'a moved branch is left to the newer push');
   } finally {
     rmSync(root, { recursive: true, force: true });

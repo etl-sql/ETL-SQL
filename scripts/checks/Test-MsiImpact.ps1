@@ -97,6 +97,8 @@ try {
     foreach ($case in @(
         @{ Event = 'workflow_dispatch'; Call = 'false'; Forced = $true },
         @{ Event = 'push'; Call = 'true'; Forced = $true },
+        # A release-branch push is a candidate: even docs-only, Release needs its full MSI run.
+        @{ Event = 'push'; Call = 'false'; Forced = $true },
         @{ Event = 'pull_request'; Call = 'false'; Forced = $false }
     )) {
         $env:EVENT_NAME = $case.Event

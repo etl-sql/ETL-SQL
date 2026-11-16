@@ -47,8 +47,9 @@ diagnosed recovery. These are scheduling budgets, not measured acceptance or per
 tests. Claims requiring a long controlled-host soak need their own capacity plan. Record queue,
 execution and operator delays separately; report a missed target instead of widening the target.
 
-A push to a release branch starts native package and DEB certification itself when the CI impact
-map says a packaged path changed (titled "(push)"), as MSI does. A docs-only push starts neither.
+Every push to a release branch runs MSI in full and starts native package and DEB certification
+itself (titled "(push)"), even a docs-only push: Release and Tag Release accept only exact-candidate
+package runs, and native win-x64 waits for the Windows payload a full MSI run publishes.
 Dispatch only the producers still missing for the frozen candidate; first inspect existing exact-SHA
 runs to avoid duplicates. Full CI dispatch is journaled by the shared helper:
 

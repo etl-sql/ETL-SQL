@@ -21,8 +21,9 @@ concurrency:
 
 jobs:
   # Native packages and DEB have no push trigger: their release evidence must be a dispatched run.
-  # Start them here when the CI impact map says the push changed something packaged, as MSI does on
-  # its own push. A docs-only push skips them; the nightly covers the branch HEAD.
+  # Every release-branch push starts both, as every push runs MSI in full: Release and Tag Release
+  # require exact-candidate package runs, so even a docs-only candidate needs them (v0.22.0's
+  # docs-only candidate was refused until they were dispatched by hand).
   start-packages:
     name: Start package certification
     runs-on: ubuntu-latest
@@ -31,28 +32,14 @@ jobs:
       - uses: actions/checkout@v6
         timeout-minutes: 8
         with:
-          fetch-depth: 0
-          filter: blob:none
           sparse-checkout: scripts
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - name: Dispatch native and DEB certification when packages are affected
+      - name: Dispatch native and DEB certification
         timeout-minutes: 5
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          BEFORE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
-          args=(--head "$GITHUB_SHA" --output package-impact.json)
-          # No usable base selects everything, so a new branch or a force push still certifies packages.
-          if [[ -n "$BEFORE_SHA" && ! "$BEFORE_SHA" =~ ^0+$ ]]; then args+=(--base "$BEFORE_SHA"); fi
-          node scripts/select-ci-lanes.mjs "${args[@]}"
-          if [ "$(node -p "require('./package-impact.json').nativePackages")" != true ]; then
-            echo "No packaged path changed since $BEFORE_SHA; package certification not started."
-            exit 0
-          fi
           # A dispatch runs the branch HEAD. If a newer push moved it, that push starts its own.
           head="$(git ls-remote origin "refs/heads/$GITHUB_REF_NAME" | cut -f1)"
           if [ "$head" != "$GITHUB_SHA" ]; then

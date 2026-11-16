@@ -4,7 +4,8 @@ name: MSI In-Place Upgrade
 # assert anything — roughly 26 minutes. Shared package-impact rules select changes that can affect
 # the payload; classified documentation and browser-test-only edits skip the expensive jobs.
 # The workflow itself always runs for pull requests so the final gate reports success when the
-# certification is intentionally skipped. Release calls and manual dispatches run it in full.
+# certification is intentionally skipped. Release-branch pushes, release calls and manual dispatches
+# run it in full.
 on:
   push:
     branches:
@@ -89,7 +90,6 @@ jobs:
         shell: pwsh
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BEFORE_SHA: ${{ github.event.before }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           RELEASE_CALL: ${{ inputs.source_sha != '' }}
         run: |
@@ -99,18 +99,16 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $actualSha -cne $env:CERTIFICATION_SHA) {
             throw 'MSI checkout does not match the candidate SHA.'
           }
-          $force = $env:EVENT_NAME -eq 'workflow_dispatch' -or $env:RELEASE_CALL -eq 'true'
+          # A release-branch push is a release candidate: Release needs its full MSI run and the
+          # Windows payload it publishes (native win-x64 waits on it), even for a docs-only push.
+          $force = $env:EVENT_NAME -in @('workflow_dispatch', 'push') -or $env:RELEASE_CALL -eq 'true'
           if ($force) {
             'should_run=true' >> $env:GITHUB_OUTPUT
-            Write-Host 'Running full MSI certification for a release call or manual dispatch.'
+            Write-Host 'Running full MSI certification for a release-branch push, release call or manual dispatch.'
             exit 0
           }
 
-          $baseSha = if ($env:EVENT_NAME -eq 'pull_request') {
-            if (-not [string]::IsNullOrWhiteSpace($env:BASE_SHA)) { $env:BASE_SHA } else { "origin/$env:GITHUB_BASE_REF" }
-          } else {
-            $env:BEFORE_SHA
-          }
+          $baseSha = if (-not [string]::IsNullOrWhiteSpace($env:BASE_SHA)) { $env:BASE_SHA } else { "origin/$env:GITHUB_BASE_REF" }
           if ([string]::IsNullOrWhiteSpace($baseSha) -or $baseSha -match '^0+$') {
             'should_run=true' >> $env:GITHUB_OUTPUT
             Write-Host 'No comparison base; full MSI certification is required.'
