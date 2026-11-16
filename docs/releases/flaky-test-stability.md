@@ -394,8 +394,9 @@ class load and shared background-service state from its startup/shutdown observa
   discard/cancel confirmation also pass locally. Shutdown-wait failures retain the existing bounded
   transport/resource snapshot. The [original job log](https://github.com/etl-sql/ETL-SQL/actions/runs/39131831664/job/117688413031)
   records only the wait timeout, with no failed-request detail, so it cannot establish that a
-  heartbeat failure caused that hosted incident. Hosted diagnosis and consecutive-run evidence
-  remain required before closure.
+  heartbeat failure caused that hosted incident. **Closed 2026-11-16 (#93):** from the fix
+  (`61a7df60f`, 2026-10-24) to the release, 82 `release/v0.22.0` CI runs had 234 first-attempt
+  Portal Browser Journey shard passes and 29 failures, none of them this test.
 
   The release candidate's first CI attempt (`cd1770eac`, run 39143534977) failed single browser
   tests on timeouts; the rerun of the failed jobs passed. Same deferral.
@@ -567,7 +568,8 @@ Instrumented, root cause not yet found. Each now fails with the state needed to 
 - `PortalBrowserFixture.SignInAsync` first sign-in (CI 41744076759): `55381a37d` says whether the
   login request was still pending or was refused.
 - `FtpIntegrationTests.ValidCredentials_ListRoot_Succeeds` (CI 42502883560): `7f2553f48` names the
-  port that refused.
+  port that refused. Not recurred: 37 consecutive first-attempt Docker Integration Tests runs on
+  `release/v0.22.0` passed after it (2026-11-09 to 2026-11-16); closed as not reproduced.
 
 Not test flakes: checkout and disk-cleanup action timeouts, lost runners, a full disk, and the
 2026-11-03 `documentation`, `flaky-delays` and `DocSanityTests…DeveloperSpecificPaths` failures,

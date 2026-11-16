@@ -5,7 +5,7 @@ finished items live in Git history, `CHANGELOG.md`, the
 [release reliability plan](docs/architecture/roadmaps/release-reliability-plan.md), the
 [flaky-test record](docs/releases/flaky-test-stability.md) and the
 [v0.22.0 tooling review](docs/releases/v0.22.0-tooling-review.md). Flaky-test watch items are
-GitHub issues (#74, #75, #92, #93), not TODO rows.
+GitHub issues (#74, #75, #92), not TODO rows.
 
 | Group | What is in it | Open |
 | :--- | :--- | :---: |
