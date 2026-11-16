@@ -1,0 +1,23 @@
+name: Tag Release
+
+# Register the manual entry point while its implementation is certified on release branches.
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: 'Certified release-branch HEAD to tag (full 40-character SHA)'
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  select-release-branch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require the release branch implementation
+        timeout-minutes: 1
+        run: |
+          echo '::error::Select the matching release branch when dispatching this workflow. The default branch only registers this entry point.'
+          exit 1
